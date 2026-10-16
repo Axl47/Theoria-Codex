@@ -324,13 +324,11 @@ internal class SearchSuggestionCoordinator(
         if (featured.isNotEmpty()) {
             tagSuggestionStore.putFaceted(mode.source, featured, TagSuggestionOrigin.FEATURED)
         }
-        val suggestions = (featured + tagSuggestionStore.getFaceted(
-            mode.source,
-            FACETED_AUTOCOMPLETE_LIMIT,
-            scope,
-        )).distinctBy { suggestion ->
-            Triple(suggestion.facet, suggestion.sourceNamespace, normalizeMatchToken(suggestion.text))
-        }.take(FACETED_AUTOCOMPLETE_LIMIT)
+        val suggestions = rankFacetedTagSuggestions(
+            featured + tagSuggestionStore.getFaceted(mode.source, Int.MAX_VALUE, scope),
+            prefix = "",
+            limit = FACETED_AUTOCOMPLETE_LIMIT,
+        )
         return SearchAutocompleteResult(
             input,
             scope,
@@ -350,10 +348,10 @@ internal class SearchSuggestionCoordinator(
         if (mode == null || adapter == null || scope == null) {
             return SearchAutocompleteResult(input, selectedScope)
         }
-        val suggestions = tagSuggestionStore.getFaceted(
-            mode.source,
-            FACETED_AUTOCOMPLETE_LIMIT,
-            scope,
+        val suggestions = rankFacetedTagSuggestions(
+            tagSuggestionStore.getFaceted(mode.source, Int.MAX_VALUE, scope),
+            prefix = "",
+            limit = FACETED_AUTOCOMPLETE_LIMIT,
         )
         return SearchAutocompleteResult(
             input,
@@ -412,7 +410,7 @@ internal class SearchSuggestionCoordinator(
                 val enabled = effectiveEnabledSources(sourceScope)
                 if (enabled.isEmpty()) return@coroutineScope emptyList()
                 val cached = enabled.associateWith {
-                    tagSuggestionStore.getTrending(it, TRENDING_PER_SOURCE_CACHE_LIMIT)
+                    rankedTrending(it, TRENDING_PER_SOURCE_CACHE_LIMIT)
                 }
                 enabled.filter { source ->
                     shouldRefreshTrending(source, now, forceRefresh, cached[source].orEmpty())
@@ -421,17 +419,17 @@ internal class SearchSuggestionCoordinator(
                 }.awaitAll()
                 interleaveTagSuggestions(
                     enabled.map { source ->
-                        source to tagSuggestionStore.getTrending(source, TRENDING_PER_SOURCE_CACHE_LIMIT)
+                        source to rankedTrending(source, TRENDING_PER_SOURCE_CACHE_LIMIT)
                     },
                     UNIFIED_TRENDING_LIMIT,
                 )
             }
             is QueryMode.Source -> {
-                val cached = tagSuggestionStore.getTrending(mode.source, SOURCE_TRENDING_LIMIT)
+                val cached = rankedTrending(mode.source, SOURCE_TRENDING_LIMIT)
                 if (shouldRefreshTrending(mode.source, now, forceRefresh, cached)) {
                     fetchTrendingForSource(mode.source, SOURCE_TRENDING_LIMIT)
                 }
-                tagSuggestionStore.getTrending(mode.source, SOURCE_TRENDING_LIMIT)
+                rankedTrending(mode.source, SOURCE_TRENDING_LIMIT)
             }
         }
     }
@@ -444,13 +442,16 @@ internal class SearchSuggestionCoordinator(
             val enabled = effectiveEnabledSources(sourceScope)
             interleaveTagSuggestions(
                 enabled.map { source ->
-                    source to tagSuggestionStore.getTrending(source, TRENDING_PER_SOURCE_CACHE_LIMIT)
+                    source to rankedTrending(source, TRENDING_PER_SOURCE_CACHE_LIMIT)
                 },
                 UNIFIED_TRENDING_LIMIT,
             )
         }
-        is QueryMode.Source -> tagSuggestionStore.getTrending(mode.source, SOURCE_TRENDING_LIMIT)
+        is QueryMode.Source -> rankedTrending(mode.source, SOURCE_TRENDING_LIMIT)
     }
+
+    private fun rankedTrending(source: SourceKey, limit: Int): List<TagSuggestion> =
+        rankTagSuggestions(tagSuggestionStore.getTrending(source, Int.MAX_VALUE), prefix = "", limit = limit)
 
     private fun shouldRefreshTrending(
         source: SourceKey,

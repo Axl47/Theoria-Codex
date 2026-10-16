@@ -13,7 +13,8 @@ fun rankTagSuggestions(
 ): List<TagSuggestion> {
     if (limit <= 0) return emptyList()
     val indexed = suggestions.mapIndexedNotNull { index, suggestion ->
-        suggestion.matchQuality(prefix)?.let { quality -> RankedSuggestion(suggestion, quality, index) }
+        val quality = if (prefix.isBlank()) MatchQuality.PREFIX else suggestion.matchQuality(prefix)
+        quality?.let { RankedSuggestion(suggestion, it, index) }
     }
     return indexed
         .distinctBy { ranked -> normalizeMatchToken(ranked.suggestion.text) }

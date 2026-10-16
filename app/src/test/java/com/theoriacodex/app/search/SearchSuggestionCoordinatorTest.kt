@@ -12,6 +12,45 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class SearchSuggestionCoordinatorTest {
     @Test
+    fun `fresh and cached trending sort counts within each provider`() = runTest {
+        val gelbooru = TestAdapter(SourceKey.GELBOORU).apply {
+            autocomplete = listOf(
+                TagSuggestion("small", "trending", 2),
+                TagSuggestion("popular", "trending", 100),
+                TagSuggestion("unknown", "trending", null),
+            )
+        }
+        val pixiv = TestAdapter(SourceKey.PIXIV).apply {
+            autocomplete = listOf(
+                TagSuggestion("pixiv first", "trending", null),
+                TagSuggestion("pixiv second", "trending", null),
+            )
+        }
+        val coordinator = testSearchCoordinator(
+            TestRegistry(listOf(gelbooru, pixiv)),
+            tagSuggestionStore = RecordingTagStore(),
+        )
+        coordinator.initializeRoute()
+        val sourceQuery = query(SourceKey.GELBOORU, "")
+        val sourceScope = SearchSourceScope.Single(SourceKey.GELBOORU)
+        val expected = listOf("popular", "small", "unknown")
+
+        assertEquals(expected, coordinator.fetchTrending(sourceQuery, sourceScope).map(TagSuggestion::text))
+        assertEquals(expected, coordinator.cachedTrending(sourceQuery, sourceScope).map(TagSuggestion::text))
+
+        val unifiedScope = SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV))
+        val unifiedExpected = listOf("popular", "pixiv first", "small", "pixiv second", "unknown")
+        assertEquals(
+            unifiedExpected,
+            coordinator.fetchTrending(unifiedQuery(""), unifiedScope).map(TagSuggestion::text),
+        )
+        assertEquals(
+            unifiedExpected,
+            coordinator.cachedTrending(unifiedQuery(""), unifiedScope).map(TagSuggestion::text),
+        )
+    }
+
+    @Test
     fun `unified suggestions publish fast provider before slow provider completes`() = runTest {
         val fast = TestAdapter(SourceKey.PIXIV).apply {
             autocompleteResponseDelayMs = 100L

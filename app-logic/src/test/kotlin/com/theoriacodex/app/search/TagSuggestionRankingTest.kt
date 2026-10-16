@@ -1,6 +1,8 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -66,6 +68,42 @@ class TagSuggestionRankingTest {
         assertEquals(
             listOf("gel_one", "pixiv_one", "gel_two", "pixiv_two"),
             combined.map(TagSuggestion::text),
+        )
+    }
+
+    @Test
+    fun `blank input sorts known counts descending before limiting and preserves ties`() {
+        val suggestions = listOf(
+            suggestion("unknown first"),
+            suggestion("small", 2),
+            suggestion("popular first", 100),
+            suggestion("popular second", 100),
+            suggestion("zero", 0),
+            suggestion("unknown second"),
+        )
+
+        assertEquals(
+            listOf("popular first", "popular second", "small", "zero", "unknown first", "unknown second"),
+            rankTagSuggestions(suggestions, "", 10).map(TagSuggestion::text),
+        )
+        assertEquals(
+            listOf("popular first", "popular second"),
+            rankTagSuggestions(suggestions, "", 2).map(TagSuggestion::text),
+        )
+    }
+
+    @Test
+    fun `featured facets sort by count and retain provider order without counts`() {
+        val suggestions = listOf(
+            FacetedTagSuggestion("unknown first", SearchFacet.TAG, count = null),
+            FacetedTagSuggestion("small", SearchFacet.TAG, count = 2),
+            FacetedTagSuggestion("popular", SearchFacet.TAG, count = 100),
+            FacetedTagSuggestion("unknown second", SearchFacet.TAG, count = null),
+        )
+
+        assertEquals(
+            listOf("popular", "small", "unknown first", "unknown second"),
+            rankFacetedTagSuggestions(suggestions, "", 10).map(FacetedTagSuggestion::text),
         )
     }
 
