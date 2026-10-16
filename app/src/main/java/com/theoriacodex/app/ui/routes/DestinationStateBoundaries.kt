@@ -13,6 +13,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.theoriacodex.app.appshell.PendingIncomingUri
+import com.theoriacodex.app.codex.sortLiveCodexPosts
 import com.theoriacodex.app.codex.CodexCollectionSource
 import com.theoriacodex.app.codex.CodexCollectionPresentation
 import com.theoriacodex.app.codex.CodexActionOptions
@@ -187,8 +188,8 @@ internal fun CodexDestinationStateBoundary(
     val savedSearches = remember(data.savedSearches) { data.savedSearches.observeSavedSearches() }
         .collectAsStateWithLifecycle(initialValue = null).value ?: return
     val availableSources = availableSourcesState.value
-    val source = remember(data.codexRepository, data.storageDirectory) {
-        CodexCollectionSource(data.codexRepository, data.storageDirectory)
+    val source = remember(data.codexRepository, data.storageDirectory, data.cacheRepository) {
+        CodexCollectionSource(data.codexRepository, data.storageDirectory, data.cacheRepository)
     }
     DestinationStateBoundary(settingsState) {
         val profile = settings.activeRecommendationProfile()
@@ -385,8 +386,8 @@ private fun rememberCodexCollectionState(
     refreshKey: Any? = Unit,
 ): CodexCollectionPresentation {
     val ids = remember(codices) { codices.mapTo(linkedSetOf(), Codex::codexId) }
-    val summaries = remember(data.codexRepository, ids, refreshKey) {
-        CodexCollectionSource(data.codexRepository, data.storageDirectory).observe(ids)
+    val summaries = remember(data.codexRepository, data.cacheRepository, ids, refreshKey) {
+        CodexCollectionSource(data.codexRepository, data.storageDirectory, data.cacheRepository).observe(ids)
     }
     return key(ids, refreshKey) {
         summaries.collectAsStateWithLifecycle(initialValue = CodexCollectionPresentation()).value
@@ -412,7 +413,7 @@ private fun FollowedCodexDestinationStateBoundary(
             settings.followedCreators, filters.followedSources.toSet(), filters.followedAuthors.toSet(),
         )
     }
-    androidx.compose.runtime.LaunchedEffect(selected, available) { owner.synchronize(selected, available) }
+    androidx.compose.runtime.LaunchedEffect(selected, available, sort) { owner.synchronize(selected, available, sort) }
     val feed = owner.state.collectAsStateWithLifecycle().value
     val posts = remember(feed.posts, sort) {
         sortLiveCodexPosts(feed.posts, sort)

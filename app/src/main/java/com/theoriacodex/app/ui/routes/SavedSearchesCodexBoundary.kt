@@ -5,6 +5,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.theoriacodex.app.codex.sortLiveCodexPosts
 import com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID
 import com.theoriacodex.app.codex.SavedSearchesCodexViewModel
 import com.theoriacodex.app.di.DataDependencies
@@ -14,7 +15,6 @@ import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.app.source.creatorBrowsingSources
 import com.theoriacodex.domain.model.Codex
-import com.theoriacodex.domain.model.Post
 
 @Composable
 internal fun SavedSearchesCodexBoundary(
@@ -38,7 +38,7 @@ internal fun SavedSearchesCodexBoundary(
         val excluded = filters.excludedSavedSearches.toSet()
         entries.filterNot { it.id in excluded }
     }
-    LaunchedEffect(selected, settings.runtime, available) { owner.synchronize(selected, settings, available) }
+    LaunchedEffect(selected, settings.runtime, available, sort) { owner.synchronize(selected, settings, available, sort) }
     val feed = owner.state.collectAsStateWithLifecycle().value
     val posts = remember(feed.posts, sort) { sortLiveCodexPosts(feed.posts, sort) }
     content(CodexDetailDestinationState(
@@ -48,10 +48,4 @@ internal fun SavedSearchesCodexBoundary(
         resolveUnknownAnimatedDurations = settings.contentFilters.resolveUnknownAnimatedDurations,
         savedSearchOwner = owner, savedSearches = entries, loading = feed.loading,
     ))
-}
-
-internal fun sortLiveCodexPosts(posts: List<Post>, sort: CodexSortMode): List<Post> = when (sort) {
-    CodexSortMode.NEWEST_SAVED -> posts.sortedByDescending { it.createdAtEpochMs }
-    CodexSortMode.OLDEST_SAVED -> posts.sortedBy { it.createdAtEpochMs }
-    CodexSortMode.BY_SOURCE -> posts.sortedBy { it.id.source.ordinal }
 }

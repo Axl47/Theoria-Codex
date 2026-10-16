@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModelStore
 import com.theoriacodex.app.search.TestAdapter
 import com.theoriacodex.app.search.TestRegistry
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.CacheRepository
 import com.theoriacodex.data.repository.CacheSnapshot
 import com.theoriacodex.data.repository.FollowedCreator
@@ -33,6 +34,48 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class FollowedCodexViewModelTest {
+    @Test fun `cover follows the first sorted feed post without refetching on a sort change`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        try {
+            var calls = 0
+            val cache = TrackingCacheRepository()
+            val owner = owner(cache) { _, _ ->
+                calls++
+                Page(listOf(testPost(SourceKey.PIXIV, "old").copy(createdAtEpochMs = 10),
+                    testPost(SourceKey.PIXIV, "new").copy(createdAtEpochMs = 20)), null)
+            }
+            store.put("owner", owner)
+            val selected = listOf(follow("1"))
+            owner.synchronize(selected, setOf(SourceKey.PIXIV))
+            advanceUntilIdle()
+            assertEquals(listOf(FOLLOWED_CODEX_ID to "new"), cache.namedCalls)
+            owner.synchronize(selected, setOf(SourceKey.PIXIV), CodexSortMode.OLDEST_SAVED)
+            advanceUntilIdle()
+            assertEquals(listOf(FOLLOWED_CODEX_ID to "new", FOLLOWED_CODEX_ID to "old"), cache.namedCalls)
+            assertEquals(1, calls)
+        } finally { store.clear(); Dispatchers.resetMain() }
+    }
+
+    @Test fun `first admitted post updates the cover while another author is still loading`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        try {
+            val cache = TrackingCacheRepository()
+            val owner = owner(cache) { creator, _ ->
+                if (creator.profileId == "2") delay(10_000)
+                Page(listOf(testPost(SourceKey.PIXIV, creator.profileId!!)), null)
+            }
+            store.put("owner", owner)
+            owner.synchronize(listOf(follow("1"), follow("2")), setOf(SourceKey.PIXIV))
+            runCurrent()
+            assertTrue(owner.state.value.loading)
+            assertEquals(listOf(FOLLOWED_CODEX_ID to "1"), cache.namedCalls)
+            advanceUntilIdle()
+            assertEquals(listOf(FOLLOWED_CODEX_ID to "1"), cache.namedCalls)
+        } finally { store.clear(); Dispatchers.resetMain() }
+    }
+
     @Test fun `initial posts cache the first followed cover without pagination replacing it`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val store = ViewModelStore()

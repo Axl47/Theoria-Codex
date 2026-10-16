@@ -116,6 +116,8 @@ Viewer OCR and translation have been removed from Settings and Viewer, including
 
 Wait for the first authoritative Codex collection list and Saved Searches list before composing the Library grid. An initial empty placeholder still renders the synthetic Followed tile; measuring that grid can clamp a restored scroll index or make the Followed key become the anchor when collections arrive. Retain the grid's existing saveable state and distinguish loading from an authoritative empty library. `CodexLibraryScrollReturnTest` covers repeated detail return and saved-instance restoration with delayed repository emission.
 
+Virtual Codex covers publish as soon as the first root post is admitted, using the feed's selected sort order; paging must not replace that entry cover. Named-thumbnail writes and clears emit a process-only cache revision even when image counts/bytes do not change. Library observes that revision independently of membership summaries, and local cover requests include it in their image-cache identity. A named cover may switch posts, so it replaces old bytes with the new post's pointer; ordinary sparse post-cache saves still retain downloaded bytes.
+
 ## Recents Section Identity
 
 Recents source filtering matches posts by canonical source and searches by recorded participating sources, preserving exact multi-source/FYP replay payloads. Viewer launches receive the displayed filtered section list and its index together; never apply a filtered index to the unfiltered history. Clear remains section-wide and is labeled accordingly when a source filter is active.

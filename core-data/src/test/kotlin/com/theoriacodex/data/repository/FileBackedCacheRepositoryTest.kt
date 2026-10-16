@@ -8,6 +8,28 @@ import org.junit.Test
 
 internal class FileBackedCacheRepositoryTest : FileBackedRepositoryTestFixture() {
     @Test
+    fun `named covers replace previous post bytes and publish pointer-only replacements`() = runTest {
+        val dir = tempDir("named-cover-")
+        val repository = FileBackedCacheRepository(dir)
+        val original = dir.resolve("original.jpg").apply { writeText("old-image") }
+        repository.cacheNamedThumbnail("system:followed", samplePost("old", original.absolutePath))
+        val firstRevision = repository.observeNamedThumbnailRevisions().first()
+        val newer = samplePost("new", null)
+        repository.cacheNamedThumbnail("system:followed", newer)
+        val files = dir.resolve("cache/thumbnails").listFiles().orEmpty()
+        assertEquals(listOf("system:followed_PIXIV.url"), files.map(File::getName))
+        assertEquals(newer.preview.url, files.single().readText())
+        val snapshot = repository.observeSnapshot().first()
+        val secondRevision = repository.observeNamedThumbnailRevisions().first()
+        repository.cacheNamedThumbnail("system:followed", newer.copy(preview = newer.preview.copy(url = "https://example.com/latest.jpg")))
+        assertEquals(snapshot, repository.observeSnapshot().first())
+        assertEquals(firstRevision + 1, secondRevision)
+        assertEquals(secondRevision + 1, repository.observeNamedThumbnailRevisions().first())
+        repository.clearThumbnailCache()
+        assertEquals(secondRevision + 2, repository.observeNamedThumbnailRevisions().first())
+    }
+
+    @Test
     fun `cache repository writes entries and survives restart`() = runTest {
         val dir = tempDir("cache-store-")
         val sourceFile = File(dir, "source-thumb.jpg")

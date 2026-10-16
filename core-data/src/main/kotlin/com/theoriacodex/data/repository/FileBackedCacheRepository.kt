@@ -9,6 +9,8 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -23,6 +25,7 @@ class FileBackedCacheRepository(
     private val fullDir = baseDirectory.resolve("cache/full")
     private val thumbnails = CachedMediaDirectory(thumbnailDir)
     private val fullImages = CachedMediaDirectory(fullDir)
+    private val namedThumbnailRevision = MutableStateFlow(0L)
     private val snapshotFlow = MutableStateFlow(CacheSnapshot(thumbnailCount = 0, fullImageCount = 0))
 
     init {
@@ -34,6 +37,8 @@ class FileBackedCacheRepository(
             }
         }
     }
+
+    override fun observeNamedThumbnailRevisions(): Flow<Long> = namedThumbnailRevision.asStateFlow()
 
     override fun observeSnapshot(): Flow<CacheSnapshot> = snapshotFlow
 
@@ -53,9 +58,11 @@ class FileBackedCacheRepository(
                     key = key,
                     localPath = post.preview.localPath,
                     fallbackUrl = post.preview.url,
+                    retainExistingBytes = replacePrefix == null,
                 )
                 if (replacePrefix != null) {
                     thumbnails.removeOtherKeys(replacePrefix, key)
+                    namedThumbnailRevision.update { it + 1 }
                 }
                 currentSnapshot()
             }
@@ -81,6 +88,7 @@ class FileBackedCacheRepository(
         mutex.withLock {
             snapshotFlow.value = withContext(ioDispatcher) {
                 thumbnails.clear()
+                namedThumbnailRevision.update { it + 1 }
                 currentSnapshot()
             }
         }
@@ -100,6 +108,7 @@ class FileBackedCacheRepository(
         key: String,
         localPath: String?,
         fallbackUrl: String?,
+        retainExistingBytes: Boolean = true,
     ) {
         val existing = index.files(key)
         val localFile = localPath?.let(::File)?.takeIf(::hasUsableBytes)
@@ -110,8 +119,8 @@ class FileBackedCacheRepository(
                 Files.copy(localFile.toPath(), output.toPath(), REPLACE_EXISTING)
             }
         } else {
-            // A sparse route snapshot must not replace downloaded bytes with a remote pointer.
-            existing.firstOrNull { file -> file.extension != "url" && hasUsableBytes(file) }
+            // Ordinary sparse saves retain bytes; a named cover may now represent a different post.
+            existing.firstOrNull { file -> retainExistingBytes && file.extension != "url" && hasUsableBytes(file) }
                 ?: index.directory.resolve("$key.url").also { it.writeText(fallbackUrl.orEmpty()) }
         }
         existing.filterNot { it == retained }.forEach { file -> file.delete(); index.update(file) }

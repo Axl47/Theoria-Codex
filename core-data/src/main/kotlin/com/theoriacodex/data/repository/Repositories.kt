@@ -469,6 +469,8 @@ data class CacheSnapshot(
 )
 
 interface CacheRepository {
+    /** Process-only invalidation for named covers, including URL-pointer writes with unchanged byte counts. */
+    fun observeNamedThumbnailRevisions(): Flow<Long> = flowOf(0L)
     fun observeSnapshot(): Flow<CacheSnapshot>
     suspend fun cacheThumbnail(post: Post)
     suspend fun cacheNamedThumbnail(name: String, post: Post) {

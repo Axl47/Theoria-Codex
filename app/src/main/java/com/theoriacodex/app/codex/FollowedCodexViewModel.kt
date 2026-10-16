@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.CacheRepository
 import com.theoriacodex.data.repository.FollowedCreator
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
@@ -28,7 +29,8 @@ internal class FollowedCodexViewModel(
     private var follows: List<FollowedCreator> = emptyList()
     private var availableSources: Set<SourceKey>? = null
 
-    fun synchronize(selected: List<FollowedCreator>, available: Set<SourceKey>) {
+    fun synchronize(selected: List<FollowedCreator>, available: Set<SourceKey>, sort: CodexSortMode = CodexSortMode.NEWEST_SAVED) {
+        feed.updateCoverSort(sort)
         // Check/visit metadata must not restart an otherwise identical feed.
         val identity = selected.map { it.membershipId to it.creator }
         if (identity == follows.map { it.membershipId to it.creator } && available == availableSources) return

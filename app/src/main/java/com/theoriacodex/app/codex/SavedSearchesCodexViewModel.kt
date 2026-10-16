@@ -6,6 +6,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.CacheRepository
 import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.domain.model.SourceKey
@@ -27,7 +28,9 @@ internal class SavedSearchesCodexViewModel(
     private var available: Set<SourceKey>? = null
     private var runtime: com.theoriacodex.data.repository.SourceRuntimeSettings? = null
 
-    fun synchronize(selected: List<SavedSearchEntry>, settings: AppSettings, sources: Set<SourceKey>) {
+    fun synchronize(selected: List<SavedSearchEntry>, settings: AppSettings, sources: Set<SourceKey>,
+        sort: CodexSortMode = CodexSortMode.NEWEST_SAVED) {
+        feed.updateCoverSort(sort)
         loader.updateAvailableSources(sources)
         coordinator.updateEnvironment(settings.copy(runtime = settings.runtime.copy(
             enabledSources = settings.runtime.enabledSources.intersect(sources),

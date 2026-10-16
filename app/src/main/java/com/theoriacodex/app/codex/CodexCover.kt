@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.app.media.normalizeMediaUrl
 import com.theoriacodex.app.media.previewMediaDeliveryPlan
@@ -18,11 +19,12 @@ import com.theoriacodex.domain.model.SourceKey
 import java.io.File
 
 internal sealed interface CodexCoverCandidate {
-    data class LocalFile(val file: File) : CodexCoverCandidate
+    data class LocalFile(val file: File, val cacheRevision: Long = 0L) : CodexCoverCandidate
 
     data class RemoteImage(
         val source: SourceKey,
         val url: String,
+        val cacheRevision: Long = 0L,
     ) : CodexCoverCandidate
 }
 
@@ -50,6 +52,7 @@ internal fun resolveCodexCoverCandidates(
 internal fun resolveNamedCodexCoverCandidates(
     storageDirectory: File,
     name: String,
+    cacheRevision: Long = 0L,
 ): List<CodexCoverCandidate> {
     val thumbnailDirectory = storageDirectory.resolve("cache/thumbnails")
     return SourceKey.entries.flatMap { source ->
@@ -59,12 +62,12 @@ internal fun resolveNamedCodexCoverCandidates(
                 .firstOrNull { file ->
                     file.isFile && file.name.startsWith("$key.") && file.extension != "url"
                 }
-                ?.let { add(CodexCoverCandidate.LocalFile(it)) }
+                ?.let { add(CodexCoverCandidate.LocalFile(it, cacheRevision)) }
             thumbnailDirectory.resolve("$key.url")
                 .takeIf(File::exists)
                 ?.let { runCatching { it.readText().trim() }.getOrNull() }
                 ?.takeIf(String::isNotBlank)
-                ?.let { addLocationCandidate(source, it) }
+                ?.let { addLocationCandidate(source, it, cacheRevision) }
         }
     }
 }
@@ -103,13 +106,14 @@ private fun MutableList<CodexCoverCandidate>.addPostCoverCandidates(
 private fun MutableList<CodexCoverCandidate>.addLocationCandidate(
     source: SourceKey,
     location: String,
+    cacheRevision: Long = 0L,
 ) {
     val normalized = normalizeMediaUrl(source, location)?.takeIf(String::isNotBlank) ?: return
     val localFile = File(normalized)
     if (localFile.exists()) {
-        add(CodexCoverCandidate.LocalFile(localFile))
+        add(CodexCoverCandidate.LocalFile(localFile, cacheRevision))
     } else {
-        add(CodexCoverCandidate.RemoteImage(source = source, url = normalized))
+        add(CodexCoverCandidate.RemoteImage(source = source, url = normalized, cacheRevision = cacheRevision))
     }
 }
 
@@ -143,8 +147,9 @@ internal fun CodexCoverImage(
     )
 }
 
-private fun CodexCoverCandidate.toImageModel(context: Context): Any = when (this) {
-    is CodexCoverCandidate.LocalFile -> file
+internal fun CodexCoverCandidate.toImageModel(context: Context): ImageRequest = when (this) {
+    is CodexCoverCandidate.LocalFile -> ImageRequest.Builder(context).data(file)
+        .memoryCacheKey("codex-cover:${file.absolutePath}:${file.lastModified()}:${file.length()}:$cacheRevision").build()
     is CodexCoverCandidate.RemoteImage -> MediaRequestFactory.imageRequest(
         context = context,
         url = url,

@@ -2,13 +2,23 @@ package com.theoriacodex.app.codex
 
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.coroutines.mapConcurrent
+import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+
+internal fun sortLiveCodexPosts(posts: List<Post>, sort: CodexSortMode): List<Post> = posts.sortedWith(liveCodexOrder(sort))
+
+private fun liveCodexOrder(sort: CodexSortMode): Comparator<Post> = when (sort) {
+    CodexSortMode.NEWEST_SAVED -> compareByDescending { it.createdAtEpochMs }
+    CodexSortMode.OLDEST_SAVED -> compareBy { it.createdAtEpochMs }
+    CodexSortMode.BY_SOURCE -> compareBy { it.id.source.ordinal }
+}
 
 internal data class LiveCodexFeedState(
     val posts: List<Post> = emptyList(),
@@ -43,10 +53,19 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
     private var branches = linkedMapOf<String, B>()
     private var job: Job? = null
     private var generation = 0L
+    private var coverPostId: PostId? = null
+    private var coverSort = CodexSortMode.NEWEST_SAVED
+
+    fun updateCoverSort(sort: CodexSortMode) {
+        if (coverSort == sort) return
+        coverSort = sort
+        scope.launch { cacheFirstPost(generation, root = true) }
+    }
 
     fun reset(initial: List<B>) {
         job?.cancel()
         generation++
+        coverPostId = null
         branches = initial.associateByTo(linkedMapOf()) { it.id }
         mutableState.value = LiveCodexFeedState(generation = generation)
         load(branches.keys.toList(), retry = false, cacheInitialCover = true)
@@ -72,15 +91,24 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
                     if (generation == admitted) {
                         branches[id] = result
                         publish(loading = true)
+                        cacheFirstPost(admitted, cacheInitialCover)
                     }
                 }
             } finally {
                 if (generation == admitted) {
                     publish(loading = false)
-                    if (cacheInitialCover) state.value.posts.firstOrNull()?.let { runCatchingPreservingCancellation { cacheCover(it) } }
                 }
             }
         }
+    }
+
+    private suspend fun cacheFirstPost(admitted: Long, root: Boolean) {
+        if (generation != admitted) return
+        val post = state.value.posts.minWithOrNull(liveCodexOrder(coverSort)) ?: return
+        if (post.id == coverPostId || (!root && coverPostId != null)) return
+        coverPostId = post.id
+        val result = runCatchingPreservingCancellation { cacheCover(post) }
+        if (result.isFailure && generation == admitted && coverPostId == post.id) coverPostId = null
     }
 
     private fun publish(loading: Boolean) {
