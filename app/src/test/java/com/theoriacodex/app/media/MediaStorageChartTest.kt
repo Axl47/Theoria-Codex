@@ -21,13 +21,15 @@ class MediaStorageChartTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
-    fun `pie legend shows each category exact byte count and percentage and updates after clearing`() {
+    fun `donut legend shows each category exact byte count and percentage and updates after clearing`() {
         val breakdown = mutableStateOf(mediaStorageBreakdown(500, 200, 150, 100, 50))
         val originalLocale = Locale.getDefault()
         Locale.setDefault(Locale.US)
         try {
             compose.setContent { TheoriaNightTheme { MediaStorageChart(breakdown.value) } }
             compose.onNodeWithTag("media-storage-chart").assertExists()
+            compose.onNodeWithTag("media-storage-total").assertExists()
+            compose.onNodeWithText("1,000 bytes total").assertExists()
             listOf("Offline copies", "Image cache", "Video cache", "GIF cache", "Animation cache").forEach {
                 compose.onNodeWithText(it).assertExists()
             }

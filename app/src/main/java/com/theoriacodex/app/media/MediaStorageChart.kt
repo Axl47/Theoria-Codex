@@ -9,13 +9,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -42,30 +46,55 @@ internal fun MediaStorageChart(breakdown: MediaStorageBreakdown) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("Media storage", style = MaterialTheme.typography.titleMedium)
-        Text(
-            "$total total (${numbers.format(breakdown.totalBytes)} bytes)",
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        Canvas(
+        Box(
             modifier = Modifier
-                .size(176.dp)
+                .size(208.dp)
                 .align(Alignment.CenterHorizontally)
-                .testTag("media-storage-chart")
-                .semantics { contentDescription = "Media storage chart. $total total. Breakdown listed below." },
+                .testTag("media-storage-chart"),
+            contentAlignment = Alignment.Center,
         ) {
-            if (breakdown.totalBytes == 0L) {
-                drawCircle(emptyColor)
-            } else {
-                var startAngle = -90f
-                breakdown.categories.forEach { usage ->
-                    val sweep = (breakdown.percentage(usage) * 3.6).toFloat()
-                    if (sweep > 0f) {
-                        drawArc(colors.getValue(usage.category), startAngle, sweep, useCenter = true)
-                        startAngle += sweep
+            Canvas(
+                modifier = Modifier.matchParentSize()
+                    .semantics { contentDescription = "Media storage chart. $total total. Breakdown listed below." },
+            ) {
+                val stroke = Stroke(width = 24.dp.toPx())
+                val inset = stroke.width / 2f
+                val arcSize = Size(size.width - stroke.width, size.height - stroke.width)
+                if (breakdown.totalBytes == 0L) {
+                    drawCircle(emptyColor, radius = size.minDimension / 2f - inset, style = stroke)
+                } else {
+                    var startAngle = -90f
+                    breakdown.categories.forEach { usage ->
+                        val sweep = (breakdown.percentage(usage) * 3.6).toFloat()
+                        if (sweep > 0f) {
+                            drawArc(
+                                color = colors.getValue(usage.category),
+                                startAngle = startAngle,
+                                sweepAngle = sweep,
+                                useCenter = false,
+                                topLeft = Offset(inset, inset),
+                                size = arcSize,
+                                style = stroke,
+                            )
+                            startAngle += sweep
+                        }
                     }
                 }
             }
+            Column(
+                modifier = Modifier.width(144.dp).testTag("media-storage-total"),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(total, style = MaterialTheme.typography.titleLarge)
+                Text("Used", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
+        Text(
+            "${numbers.format(breakdown.totalBytes)} bytes total",
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         if (breakdown.totalBytes == 0L) {
             Text("No managed media stored yet.", style = MaterialTheme.typography.bodyMedium)
         }
