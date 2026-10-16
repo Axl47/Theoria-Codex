@@ -3,6 +3,8 @@ package com.theoriacodex.data.android.room
 import androidx.room.withTransaction
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.theoriacodex.data.repository.CodexCleaningRequest
+import com.theoriacodex.data.repository.CodexCleaningSnapshot
 import com.theoriacodex.data.repository.CodexBulkImportResult
 import com.theoriacodex.data.repository.CodexBulkReorderResult
 import com.theoriacodex.data.repository.CodexLikeSyncResult
@@ -51,6 +53,44 @@ class RoomCodexLikesRepository(
     private val postCodec = LocalPostPayloadCodec(gson)
     private val sharedPostPayloads = SharedPostPayloadWriter(dao, LocalPostPayloadCodec(gson))
     private val summaries = RoomCodexSummaryQueries(dao, LocalPostPayloadCodec(gson))
+
+    override suspend fun cleanCodex(request: CodexCleaningRequest): CodexCleaningSnapshot = database.withTransaction {
+        writeGuard.requireProfileWritable(request.profileId)
+        (request.comparisonIds + request.targetId).forEach { id ->
+            check(dao.codex(id) != null) { "A selected Codex no longer exists" }
+        }
+        val rows = dao.overlappingItems(request.targetId, request.comparisonIds.sorted())
+        val items = rows.map { checkNotNull(it.toDomainOrNull()) }
+        val posts = rows.map { row ->
+            codec.decodePost(checkNotNull(dao.post(row.source, row.sourcePostId)))
+        }
+        val likes = if (request.targetId == ProfileLibraryIds.likes(request.profileId)) {
+            rows.mapNotNull { row ->
+                dao.likedPost(request.profileId, row.source, row.sourcePostId)?.let { checkNotNull(codec.decodeLike(it)) }
+            }
+        } else emptyList()
+        rows.forEach { row -> dao.deleteCodexItem(request.targetId, row.source, row.sourcePostId) }
+        likes.forEach { like -> dao.deleteLike(request.profileId, like.postId.source.name, like.postId.sourcePostId) }
+        // Comparison memberships still own these shared posts; no payload or offline file is removed.
+        CodexCleaningSnapshot(request, items, posts, likes)
+    }
+
+    override suspend fun restoreCleanedCodex(snapshot: CodexCleaningSnapshot) {
+        database.withTransaction {
+            val request = snapshot.request
+            writeGuard.requireProfileWritable(request.profileId)
+            check(dao.codex(request.targetId) != null) { "The cleaned Codex no longer exists" }
+            check(snapshot.items.all { it.codexId == request.targetId })
+            restoreItems(snapshot.items, snapshot.posts)
+            snapshot.likes.forEach { like ->
+                check(request.targetId == ProfileLibraryIds.likes(request.profileId) && like.profileId == request.profileId)
+                dao.insertLike(LikedPostEntity(
+                    like.profileId, like.postId.source.name, like.postId.sourcePostId,
+                    like.likedAtEpochMs, codec.encodeTags(like.tags),
+                ))
+            }
+        }
+    }
 
     override suspend fun removeProfileLibrary(profileId: String) {
         database.withTransaction {

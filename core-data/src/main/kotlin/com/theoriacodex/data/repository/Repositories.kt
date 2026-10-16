@@ -282,6 +282,12 @@ data class CodexProfileDeleteResult(
  * store, without making Room or another database part of the domain-facing API.
  */
 interface CodexLikesTransactions {
+    /** Atomically snapshots and removes target memberships also present in any comparison Codex. */
+    suspend fun cleanCodex(request: CodexCleaningRequest): CodexCleaningSnapshot
+
+    /** Restores removed rows without overwriting newer memberships or Likes. */
+    suspend fun restoreCleanedCodex(snapshot: CodexCleaningSnapshot)
+
     /** Deletes every profile-owned collection and Like in one transaction, preserving shared Posts. */
     suspend fun removeProfileLibrary(profileId: String)
 

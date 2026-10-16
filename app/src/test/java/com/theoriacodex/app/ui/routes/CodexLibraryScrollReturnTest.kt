@@ -93,6 +93,7 @@ class CodexLibraryScrollReturnTest {
                                         onRenameCodex = { _, _ -> },
                                         onSetAutomaticTag = { _, _, _ -> },
                                         onDeleteCodex = {},
+                                        onCleanCodex = { _, _ -> },
                                     )
                                 }
                             }

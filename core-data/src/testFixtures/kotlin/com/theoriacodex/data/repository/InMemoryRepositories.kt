@@ -596,6 +596,23 @@ class InMemoryLikesRepository(
         }
     }
 
+    suspend fun removeLikes(profileId: String, postIds: Set<PostId>) {
+        mutex.withLock {
+            likesByProfile.value = likesByProfile.value + (profileId to likesByProfile.value[profileId].orEmpty().filterKeys {
+                it !in postIds
+            })
+        }
+    }
+
+    suspend fun restoreLikes(likes: List<LikedPost>) {
+        mutex.withLock {
+            likes.groupBy(LikedPost::profileId).forEach { (profileId, rows) ->
+                val current = likesByProfile.value[profileId].orEmpty()
+                likesByProfile.value = likesByProfile.value + (profileId to (rows.associateBy(LikedPost::postId) + current))
+            }
+        }
+    }
+
     suspend fun clearLikes(profileId: String) {
         mutex.withLock {
             likesByProfile.value = likesByProfile.value - RepositoryPolicies.normalizeProfileId(profileId)

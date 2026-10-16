@@ -10,6 +10,7 @@ import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.SourceKey
 
 internal class CodexListUiState(initialCodices: List<Codex>) {
+    var cleaningTargetId by mutableStateOf<String?>(null)
     var showCreateDialog by mutableStateOf(false)
     var renameTarget by mutableStateOf<Codex?>(null)
     var deleteTarget by mutableStateOf<Codex?>(null)
@@ -24,6 +25,7 @@ internal class CodexListUiState(initialCodices: List<Codex>) {
     var itemHeightPx by mutableFloatStateOf(1f)
 
     fun synchronizeCodices(codices: List<Codex>) {
+        if (codices.none { it.codexId == cleaningTargetId }) cleaningTargetId = null
         if (!reorderMode) {
             reorderDraft = codices
             return
@@ -112,6 +114,7 @@ internal data class CodexListActions(
     val renameCodex: (String, String) -> Unit,
     val setAutomaticTag: (String, CodexAutomaticTag, Boolean) -> Unit,
     val deleteCodex: (String) -> Unit,
+    val cleanCodex: (String, Set<String>) -> Unit,
     val makeAvailableOffline: ((String) -> Unit)? = null,
 )
 

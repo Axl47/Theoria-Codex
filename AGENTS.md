@@ -257,6 +257,8 @@ Codex Automatic rules are source-aware grouped canonical tag memberships owned b
 
 Codex detail filtering is route-local and uses the shared feed filter FAB/sheet. Repository observation remains the authority for Newest, Oldest, and By source ordering; local filters preserve that order. Source options are the enabled sources represented in the collection. Language and Full Color are offered only when enabled NHentai or Hitomi posts are represented, and unsupported-source posts do not match an active capability filter. Animated-duration resolution runs through the navigation-scoped bounded enrichment owner without rewriting durable Codex snapshots. Viewer launch must receive the exact visible ordered post list and index from the screen rather than reopening the unfiltered repository snapshot.
 
+Codex cleaning subtracts the union of selected comparison memberships from one target using canonical provider-qualified post identities. Snapshot, membership removal, and matching Likes removal share one `CodexLikesTransactions` commit. Likes is both a valid target and comparison source; only cleaning the Likes target unlikes matches. Undo restores original saved/liked timestamps and tags without replacing newer rows or recreating a deleted target. Comparison Codices and automatic-rule definitions remain unchanged.
+
 ## Releases
 
 GitHub prereleases are created only by pushing an annotated `vX.Y.Z` tag. The tagged commit must declare the same `versionName`, its calculated Android `versionCode` (`1_500_000_000 + major * 10_000 + minor * 100 + patch`), and a curated `release-notes/vX.Y.Z.md` file. Do not use a low sequential version code: existing installs and the updater already compare against this high SemVer-derived range.

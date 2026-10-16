@@ -103,6 +103,11 @@ public interface CodexLikesDao {
     @Query("SELECT * FROM codex_items WHERE codex_id = :codexId")
     List<CodexItemEntity> itemsForCodex(String codexId);
 
+    @Query("SELECT target.* FROM codex_items AS target WHERE target.codex_id = :targetId "
+            + "AND EXISTS (SELECT 1 FROM codex_items AS other WHERE other.codex_id IN (:comparisonIds) "
+            + "AND other.source = target.source AND other.source_post_id = target.source_post_id)")
+    List<CodexItemEntity> overlappingItems(String targetId, List<String> comparisonIds);
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     long insertCodexItem(CodexItemEntity entity);
 

@@ -245,6 +245,18 @@ internal fun CodexListOverlays(
     actions: CodexListActions,
 ) {
     val codices = presentation.codices
+    codices.firstOrNull { it.codexId == state.cleaningTargetId }?.let { target ->
+        CodexCleaningSheet(
+            target = target,
+            codices = codices,
+            isLikesCodex = target.codexId == presentation.likesCodexId,
+            onDismiss = { state.cleaningTargetId = null },
+            onClean = { comparisonIds ->
+                state.cleaningTargetId = null
+                actions.cleanCodex(target.codexId, comparisonIds)
+            },
+        )
+    }
     CodexNameOverlays(state, actions)
     CodexDeleteConfirmation(state, presentation.likesCodexId, actions.deleteCodex)
 
@@ -363,6 +375,9 @@ private fun CodexActionSheet(
                 overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
+            TextButton(onClick = { state.actionTarget = null; state.cleaningTargetId = codex.codexId }) {
+                Text("Clean Codex")
+            }
             actions.makeAvailableOffline?.let { makeOffline ->
                 TextButton(onClick = { state.actionTarget = null; makeOffline(codex.codexId) }) {
                     Text("Make available offline")

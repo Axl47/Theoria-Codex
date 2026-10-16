@@ -297,7 +297,8 @@ internal fun TheoriaAppContent(
         key = "codex-command-owner",
         factory = viewModelFactory {
             initializer { CodexCommandViewModel(dataDependencies.codexRepository,
-                workflowDependencies.likesCodexSync::clearProfile, workflowDependencies.codexTransfer::reorderVisibleCodices) }
+                workflowDependencies.likesCodexSync::clearProfile, workflowDependencies.codexTransfer::reorderVisibleCodices,
+                workflowDependencies.codexCleaning) }
         },
     )
     val postMutationOwner = viewModel<PostMutationViewModel>(
@@ -1425,6 +1426,9 @@ internal fun TheoriaAppContent(
                                                 scope.launch(start = CoroutineStart.UNDISPATCHED) {
                                                     searchFromCodex(source, includeTags)
                                                 }
+                                            },
+                                            onCleanCodex = { targetId, comparisonIds ->
+                                                codexCommandOwner.clean(state.activeProfile.profileId, targetId, comparisonIds)
                                             },
                                             onCommitReorder = codexCommandOwner::reorder,
                                             onCreateCodex = { name -> codexCommandOwner.create(state.activeProfile.profileId, name) },

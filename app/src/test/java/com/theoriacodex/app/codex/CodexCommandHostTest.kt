@@ -5,6 +5,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.lifecycle.ViewModelStore
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.data.repository.InMemoryCodexLikesTransactions
 import com.theoriacodex.data.repository.InMemoryCodexRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -29,7 +30,7 @@ class CodexCommandHostTest {
         val post = testPost()
         repository.addItem("saved", post)
         val original = repository.observeCodexItems("saved").first()
-        val owner = CodexCommandViewModel(repository, {}, {})
+        val owner = CodexCommandViewModel(repository, {}, {}, CodexCleaningService(InMemoryCodexLikesTransactions(repository)))
         val owners = ViewModelStore().apply { put("commands", owner) }
         val snackbar = SnackbarHostState()
         val deleted = mutableListOf<String>()

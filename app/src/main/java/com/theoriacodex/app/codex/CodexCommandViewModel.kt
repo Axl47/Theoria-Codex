@@ -2,6 +2,8 @@ package com.theoriacodex.app.codex
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.theoriacodex.data.repository.CodexCleaningRequest
+import com.theoriacodex.data.repository.CodexCleaningSnapshot
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.CodexAutomaticTag
@@ -16,6 +18,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 internal sealed interface CodexCommand {
+    data class Clean(val request: CodexCleaningRequest) : CodexCommand
+    data class RestoreCleaned(val snapshot: CodexCleaningSnapshot) : CodexCommand
     data class Create(val id: String, val name: String) : CodexCommand
     data class Rename(val id: String, val name: String) : CodexCommand
     data class AutomaticTag(val id: String, val tag: CodexAutomaticTag, val enabled: Boolean) : CodexCommand
@@ -31,10 +35,17 @@ internal data class CodexCommandFeedback(
     val command: CodexCommand,
     val succeeded: Boolean,
     val undo: CodexCommand? = null,
+    val removedCount: Int = 0,
 ) {
     val action: CodexCommand? get() = if (succeeded) undo else command
     val actionLabel: String? get() = if (!succeeded) "Retry" else if (undo != null) "Undo" else null
     val message: String get() = when (command) {
+        is CodexCommand.Clean -> when {
+            !succeeded -> "Could not clean Codex"
+            removedCount == 0 -> "No matching posts to remove"
+            else -> "$removedCount ${if (removedCount == 1) "post" else "posts"} removed from Codex"
+        }
+        is CodexCommand.RestoreCleaned -> if (succeeded) "Cleaned posts restored" else "Could not restore cleaned posts"
         is CodexCommand.Create -> if (succeeded) "Codex created" else "Could not create Codex"
         is CodexCommand.Rename -> if (succeeded) "Codex renamed" else "Could not rename Codex"
         is CodexCommand.AutomaticTag -> if (succeeded) "Automatic tag updated" else "Could not update automatic tag"
@@ -51,6 +62,7 @@ internal class CodexCommandViewModel(
     private val repository: CodexRepository,
     private val clearLikes: suspend (String) -> Unit,
     private val commitReorder: suspend (List<String>) -> Unit,
+    private val cleaning: CodexCleaningService,
     scopeOverride: CoroutineScope? = null,
 ) : ViewModel() {
     private val scope = scopeOverride ?: viewModelScope
@@ -58,6 +70,10 @@ internal class CodexCommandViewModel(
     private var nextId = 0L
     private val mutableFeedback = MutableStateFlow<List<CodexCommandFeedback>>(emptyList())
     val feedback = mutableFeedback.asStateFlow()
+
+    fun clean(profileId: String, targetId: String, comparisonIds: Set<String>) = submit(
+        CodexCommand.Clean(CodexCleaningRequest(profileId, targetId, comparisonIds.toSet())),
+    )
 
     fun create(profileId: String, name: String) = submit(CodexCommand.Create(profileScopedCodexId(profileId), name))
     fun rename(id: String, name: String) = submit(CodexCommand.Rename(id, name))
@@ -83,14 +99,25 @@ internal class CodexCommandViewModel(
         scope.launch {
             mutex.withLock {
                 val result = runCatchingPreservingCancellation { execute(command) }
-                val feedback = CodexCommandFeedback(++nextId, command, result.isSuccess, result.getOrNull())
+                val outcome = result.getOrNull()
+                val feedback = CodexCommandFeedback(++nextId, command, result.isSuccess, outcome?.undo, outcome?.removedCount ?: 0)
                 mutableFeedback.update { it + feedback }
             }
         }
     }
 
-    private suspend fun execute(command: CodexCommand): CodexCommand? {
+    private data class Outcome(val undo: CodexCommand? = null, val removedCount: Int = 0)
+
+    private suspend fun execute(command: CodexCommand): Outcome {
         when (command) {
+            is CodexCommand.Clean -> {
+                val snapshot = cleaning.clean(command.request)
+                return Outcome(
+                    undo = snapshot.takeIf { it.items.isNotEmpty() }?.let(CodexCommand::RestoreCleaned),
+                    removedCount = snapshot.items.size,
+                )
+            }
+            is CodexCommand.RestoreCleaned -> cleaning.restore(command.snapshot)
             is CodexCommand.Create -> repository.ensureCodex(command.id, command.name)
             is CodexCommand.Rename -> repository.renameCodex(command.id, command.name)
             is CodexCommand.AutomaticTag -> repository.setAutomaticTag(command.id, command.tag, command.enabled)
@@ -99,10 +126,10 @@ internal class CodexCommandViewModel(
             is CodexCommand.Reorder -> commitReorder(command.visibleIds)
             is CodexCommand.Remove -> {
                 repository.removeItems(command.id, command.items.mapTo(linkedSetOf()) { it.postId })
-                return CodexCommand.Restore(command.items, command.posts)
+                return Outcome(CodexCommand.Restore(command.items, command.posts))
             }
             is CodexCommand.Restore -> repository.restoreItems(command.items, command.posts)
         }
-        return null
+        return Outcome()
     }
 }

@@ -2,6 +2,7 @@ package com.theoriacodex.app.codex
 
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.CodexRepository
+import com.theoriacodex.data.repository.InMemoryCodexLikesTransactions
 import com.theoriacodex.data.repository.InMemoryCodexRepository
 import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.Post
@@ -22,7 +23,7 @@ import org.junit.Test
 class CodexRemovalWorkflowTest {
     @Test fun `retained reorder invokes its transaction once and acknowledges completion`() = runTest {
         val orders = mutableListOf<List<String>>()
-        val owner = CodexCommandViewModel(InMemoryCodexRepository(), {}, { orders += it }, this)
+        val owner = CodexCommandViewModel(InMemoryCodexRepository(), {}, { orders += it }, CodexCleaningService(InMemoryCodexLikesTransactions()), this)
         val submitted = mutableListOf("b", "a")
         owner.reorder(submitted)
         submitted.clear()
@@ -55,7 +56,7 @@ class CodexRemovalWorkflowTest {
                 stored.restoreItems(items, posts)
             }
         }
-        val owner = CodexCommandViewModel(repository, {}, {}, this)
+        val owner = CodexCommandViewModel(repository, {}, {}, CodexCleaningService(InMemoryCodexLikesTransactions(repository)), this)
         owner.remove(codex.codexId, original, selected)
         runCurrent()
         assertEquals(original, stored.observeCodexItems(codex.codexId).first())
@@ -89,7 +90,7 @@ class CodexRemovalWorkflowTest {
                 stored.renameCodex(codexId, name)
             }
         }
-        val owner = CodexCommandViewModel(repository, {}, {}, this)
+        val owner = CodexCommandViewModel(repository, {}, {}, CodexCleaningService(InMemoryCodexLikesTransactions(repository)), this)
         val collector = backgroundScope.launch { owner.feedback.collect() }
         owner.rename("captured", "After")
         runCurrent()
@@ -119,7 +120,7 @@ class CodexRemovalWorkflowTest {
         val owner = CodexCommandViewModel(repository, { profile ->
             profiles += profile
             if (profiles.size == 1) error("disk unavailable")
-        }, {}, this)
+        }, {}, CodexCleaningService(InMemoryCodexLikesTransactions(repository)), this)
         owner.create("original-profile", "New")
         owner.delete(likesCodexIdForProfile("original-profile"), "original-profile")
         runCurrent()

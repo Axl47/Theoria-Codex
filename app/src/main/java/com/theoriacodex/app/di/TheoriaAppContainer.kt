@@ -34,6 +34,7 @@ import com.theoriacodex.app.update.UpdateStateStore
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.CacheRepository
 import com.theoriacodex.data.repository.CodexRepository
+import com.theoriacodex.app.codex.CodexCleaningService
 import com.theoriacodex.data.repository.CodexLikesTransactions
 import com.theoriacodex.data.repository.FileBackedCacheRepository
 import com.theoriacodex.data.repository.FileBackedQueryRepository
@@ -127,6 +128,7 @@ data class FeatureDependencies(
 )
 
 data class WorkflowDependencies(
+    val codexCleaning: CodexCleaningService,
     val likesCodexSync: LikesCodexSyncService,
     val codexTransfer: CodexTransferService,
     val profileBackup: ProfileBackupService? = null,
@@ -344,6 +346,7 @@ internal class DefaultTheoriaAppContainer(
     )
 
     override val workflows = WorkflowDependencies(
+        codexCleaning = CodexCleaningService(codexLikesTransactions),
         likesCodexSync = LikesCodexSyncService(
             transactions = codexLikesTransactions,
             codexRepository = codexRepository,

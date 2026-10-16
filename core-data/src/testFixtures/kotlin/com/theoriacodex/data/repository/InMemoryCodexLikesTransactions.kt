@@ -8,6 +8,26 @@ class InMemoryCodexLikesTransactions(
     val codices: CodexRepository = InMemoryCodexRepository(),
     val likes: InMemoryLikesRepository = InMemoryLikesRepository(),
 ) : CodexLikesTransactions {
+    override suspend fun cleanCodex(request: CodexCleaningRequest): CodexCleaningSnapshot {
+        (request.comparisonIds + request.targetId).forEach { check(codices.observeCodex(it).first() != null) }
+        val compared = request.comparisonIds.flatMap { codices.observeCodexItems(it).first() }.map { it.postId }.toSet()
+        val items = codices.observeCodexItems(request.targetId).first().filter { it.postId in compared }
+        val posts = items.map { checkNotNull(codices.getPost(it.postId)) }
+        val removedLikes = if (request.targetId == ProfileLibraryIds.likes(request.profileId)) {
+            val ids = items.map { it.postId }.toSet()
+            likes.observeLikes(request.profileId).first().filter { it.postId in ids }
+        } else emptyList()
+        codices.removeItems(request.targetId, items.map { it.postId }.toSet())
+        likes.removeLikes(request.profileId, removedLikes.map { it.postId }.toSet())
+        return CodexCleaningSnapshot(request, items, posts, removedLikes)
+    }
+
+    override suspend fun restoreCleanedCodex(snapshot: CodexCleaningSnapshot) {
+        check(codices.observeCodex(snapshot.request.targetId).first() != null)
+        codices.restoreItems(snapshot.items, snapshot.posts)
+        likes.restoreLikes(snapshot.likes)
+    }
+
     override suspend fun removeProfileLibrary(profileId: String) {
         codices.observeCodices().first().filter { ProfileLibraryIds.belongsTo(it.codexId, profileId) }
             .forEach { codices.deleteCodex(it.codexId) }
