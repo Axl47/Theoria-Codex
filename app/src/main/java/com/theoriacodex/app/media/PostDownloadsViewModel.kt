@@ -28,9 +28,10 @@ internal class PostDownloadsViewModel(
     // Retain the ViewModel Job and serialize commands with worker continuations off Main.
     private val queueScope = CoroutineScope(viewModelScope.coroutineContext + Dispatchers.IO.limitedParallelism(1))
     val feedback = MutationFeedback()
+    private val backend = AndroidPostDownloadBackend(context.applicationContext, readSettings, resolvePost, exportAnimation)
     private val queue = PostDownloadQueue(
         scope = queueScope,
-        backend = AndroidPostDownloadBackend(context.applicationContext, readSettings, resolvePost, exportAnimation),
+        backend = backend,
         jobStore = FileBackedPostDownloadJobStore(File(context.filesDir, "theoria_codex/download_jobs.json")),
     )
     val batches = queue.batches
@@ -43,13 +44,24 @@ internal class PostDownloadsViewModel(
         }
     }
 
-    fun submitPosts(posts: List<Post>, title: String = "Save to device") {
-        command { queue.submit(title, posts.map { PostDownloadRequest(it) }) }
+    fun submitPosts(posts: List<Post>, title: String = "Save to device", originLabel: String = "Downloads") {
+        command { queue.submit(title, posts.map { PostDownloadRequest(it, originLabel = originLabel) }) }
     }
 
-    fun submitViewerMedia(post: Post, media: ImageRef, pageIndex: Int, totalPages: Int) {
+    fun submitViewerMedia(post: Post, media: ImageRef, pageIndex: Int, totalPages: Int, originLabel: String = "Viewer") {
         command {
-            queue.submit("Save to device", listOf(PostDownloadRequest(post, SelectedDownloadMedia(media, pageIndex, totalPages))))
+            queue.submit("Save to device", listOf(PostDownloadRequest(post, SelectedDownloadMedia(media, pageIndex, totalPages), originLabel = originLabel)))
+        }
+    }
+
+    suspend fun localFile(item: PostDownloadItem): DownloadedPostFile? = backend.localFile(item)
+
+    fun remove(itemIds: Set<Long>, deleteFiles: Boolean) {
+        command {
+            queue.removeItems(itemIds, deleteFiles)
+            if (queue.batches.value.any { batch -> batch.items.any { it.id in itemIds } }) {
+                feedback.add("Some downloads could not be removed. Check file access and try again.")
+            }
         }
     }
 
@@ -128,6 +140,13 @@ internal class AndroidPostDownloadBackend(
                 totalBytes = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)),
             )
         }
+    }
+
+    suspend fun localFile(item: PostDownloadItem): DownloadedPostFile? =
+        withContext(Dispatchers.IO) { PostDownloadFiles(context).find(item) }
+
+    override suspend fun deleteFile(item: PostDownloadItem) {
+        withContext(Dispatchers.IO) { PostDownloadFiles(context).delete(item) }
     }
 
     override suspend fun cancel(downloadId: Long) = withContext(Dispatchers.IO) {

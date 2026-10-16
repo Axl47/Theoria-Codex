@@ -37,6 +37,14 @@ internal class AnimationExportDestination(private val context: Context) {
         }
     }
 
+    fun deleteCompleted(marker: String) {
+        val key = markerKey(marker)
+        val private = privateFile("", key)
+        if (private.exists() && !private.delete()) throw IOException("Could not delete animation export")
+        val uri = findRow(key, complete = true) ?: return
+        if (resolver.delete(uri, null, null) != 1) throw IOException("Could not delete animation export")
+    }
+
     private fun findCompletedKey(key: String): Uri? {
         val file = privateFile("", key)
         if (file.isFile && file.length() > 0) return Uri.fromFile(file)

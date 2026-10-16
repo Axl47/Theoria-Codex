@@ -317,3 +317,10 @@ Viewer completion, ready and failure events carry session, media key, and load g
 Automatic PiP is bound to the mounted Viewer video player, including its current playback intent, readiness and error state. Android 12+ uses native auto-entry; older supported versions enter from `onUserLeaveHint`. Old page disposal must not disarm a newer player's binding. Keep playback through Android 12's pause-before-PiP callback order, but retain unconditional stop-time pausing and clear auto-entry when the renderer departs; feed autoplay never arms PiP.
 
 Adaptive navigation retains one content slot across bottom-bar/rail changes, and feed lanes derive from available pane width while preserving canonical indices and simultaneous visible autoplay. Build and Robolectric evidence do not establish live PiP transitions or hardware playback performance; device acceptance still requires the isolated packaged-ID preflight.
+
+
+## Downloads Library
+
+Downloads journal operational identities and bounded launch-origin labels only; never persist provider media URLs, headers, local paths or complete Post graphs in `download_jobs.json`. Version 3 keeps versions 1/2 readable with a neutral origin. Preserve origin through gallery expansion, and retain process-only parent-to-page aliases while those pages exist so a pending removal confirmation cannot silently miss an expanded gallery.
+
+History removal cancels and joins active workers before dropping records, while preserving completed files. Explicit file deletion resolves tracked DownloadManager IDs or marker-bound animation destinations; permission failures retain the row for another removal attempt and must not turn a completed download into a retryable network transfer. FileProvider roots stay restricted to app download/export directories. Download taps prefer a readable local file and fall back to a static canonical-post Viewer session, retaining the selected gallery page. UI-only removal must never call completed-file deletion.

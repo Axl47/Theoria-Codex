@@ -12,6 +12,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
@@ -34,6 +35,10 @@ import com.theoriacodex.app.media.MediaCacheMaintenance
 import com.theoriacodex.app.media.OfflineStorageViewModel
 import com.theoriacodex.app.media.OfflineStorageSummary
 import com.theoriacodex.app.media.OfflineStorageSheet
+import kotlinx.coroutines.launch
+import com.theoriacodex.app.media.PostDownloadItem
+import com.theoriacodex.app.media.openPostDownload
+import com.theoriacodex.app.media.openDownloadedPostFile
 import kotlinx.coroutines.flow.first
 
 /** Activity-owned transfer work with shell-owned Android document pickers and transient dialogs. */
@@ -130,7 +135,10 @@ internal fun LibraryTransferSettings(tools: LibraryTransferTools) {
 }
 
 @Composable
-internal fun LibraryTransferDialogs(tools: LibraryTransferTools) {
+internal fun LibraryTransferDialogs(tools: LibraryTransferTools, onOpenPost: suspend (PostDownloadItem) -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var openingDownload by remember { mutableStateOf(false) }
     tools.offline?.let { owner ->
         val state by owner.state.collectAsStateWithLifecycle()
         if (state.isOpen) OfflineStorageSheet(
@@ -140,7 +148,30 @@ internal fun LibraryTransferDialogs(tools: LibraryTransferTools) {
     }
     if (tools.showDownloads) {
         val batches by tools.downloads.batches.collectAsStateWithLifecycle()
-        DownloadJobsSheet(batches, tools.downloads::cancel, tools.downloads::retryFailed) { tools.showDownloads = false }
+        DownloadJobsSheet(
+            batches = batches,
+            onCancel = tools.downloads::cancel,
+            onRetryFailed = tools.downloads::retryFailed,
+            onOpen = { item ->
+                if (!openingDownload) {
+                    openingDownload = true
+                    scope.launch {
+                        try {
+                            openPostDownload(item, tools.downloads::localFile,
+                                openFile = { openDownloadedPostFile(context, it) },
+                                openPost = {
+                                    tools.showDownloads = false
+                                    onOpenPost(it)
+                                },
+                            )
+                        } finally { openingDownload = false }
+                    }
+                }
+            },
+            onRemove = tools.downloads::remove,
+            localFile = tools.downloads::localFile,
+            onDismiss = { tools.showDownloads = false },
+        )
     }
     tools.backup?.let { owner ->
         val state by owner.state.collectAsStateWithLifecycle()

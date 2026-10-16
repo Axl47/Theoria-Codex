@@ -54,6 +54,57 @@ class AnimationExportDestinationTest {
         ShadowContentResolver.registerProviderInternal("media", provider)
     }
 
+    @Test fun `saved export opens through its tracked content URI and missing file uses post fallback`() = runTest {
+        val destination = AnimationExportDestination(context)
+        val uri = destination.save("local.mp4", marker) { write(it, "complete") }
+        val item = PostDownloadItem(2, PostDownloadRequest(testPost(), marker = marker), PostDownloadStatus.SAVED)
+        val files = PostDownloadFiles(context)
+        val local = requireNotNull(files.find(item))
+        assertEquals(uri, local.uri)
+        assertEquals("video/mp4", local.mime)
+        var fileOpens = 0
+        var postOpens = 0
+        openPostDownload(item, { files.find(it) }, { fileOpens++; true }, { postOpens++ })
+        assertEquals(1, fileOpens)
+        assertEquals(0, postOpens)
+        openPostDownload(item, { files.find(it) }, { false }, { postOpens++ })
+        assertEquals(1, postOpens)
+        provider.file(uri).delete()
+        openPostDownload(item, { files.find(it) }, { error("Missing file must not open") }, { postOpens++ })
+        assertEquals(2, postOpens)
+        destination.deleteCompleted(marker)
+        assertNull(destination.findCompleted(marker))
+    }
+
+    @Test fun `cancelled file lookup never opens a replacement post`() = runTest {
+        val item = PostDownloadItem(2, PostDownloadRequest(testPost()))
+        val result = runCatching {
+            openPostDownload(item, { throw kotlinx.coroutines.CancellationException() },
+                { error("Cancelled") }, { error("Cancelled") })
+        }
+        assertTrue(result.exceptionOrNull() is kotlinx.coroutines.CancellationException)
+    }
+
+    @Test fun `explicit export deletion removes only its tracked destination and is safe to repeat`() {
+        val destination = AnimationExportDestination(context)
+        val first = destination.save("delete.mp4", marker) { write(it, "first") }
+        val otherMarker = UUID.randomUUID().toString()
+        val other = destination.save("keep.mp4", otherMarker) { write(it, "other") }
+        destination.deleteCompleted(marker)
+        assertNull(destination.findCompleted(marker))
+        assertTrue(!provider.file(first).exists())
+        assertEquals(other, destination.findCompleted(otherMarker))
+        destination.deleteCompleted(marker)
+    }
+
+    @Test fun `explicit private export deletion removes the marker-bound file`() {
+        provider.failInsert = true
+        val destination = AnimationExportDestination(context)
+        val uri = destination.save("private.mp4", marker) { write(it, "private") }
+        destination.deleteCompleted(marker)
+        assertTrue(!File(requireNotNull(uri.path)).exists())
+    }
+
     @Test fun `publication acknowledgement loss and reopening never encode or insert twice`() {
         var encodes = 0
         provider.losePublishAcknowledgement = true

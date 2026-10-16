@@ -17,6 +17,47 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PostDownloadRecoveryTest {
+    @Test fun `removal reconciles a native enqueue gap and does not drop an unidentified transfer`() = runTest {
+        val store = object : PostDownloadJobStore {
+            override suspend fun load() = listOf(PostDownloadBatch(1, "Gap", listOf(PostDownloadItem(2,
+                PostDownloadRequest(testPost(), restored = true), PostDownloadStatus.FAILED, enqueuePending = true))))
+            override suspend fun save(batches: List<PostDownloadBatch>) = Unit
+        }
+        var found: Long? = null
+        var deleted: Long? = null
+        val backend = object : PostDownloadBackend {
+            override suspend fun prepare(request: PostDownloadRequest): PreparedPostDownload = error("No duplicate transfer")
+            override suspend fun findTransfer(marker: String) = found
+            override suspend fun snapshot(downloadId: Long) = DownloadTransferSnapshot(PostDownloadStatus.SAVED)
+            override suspend fun cancel(downloadId: Long) = Unit
+            override suspend fun deleteFile(item: PostDownloadItem) { deleted = item.downloadId }
+        }
+        val queue = PostDownloadQueue(backgroundScope, backend, jobStore = store)
+        queue.removeItems(setOf(2L), deleteFiles = true)
+        assertEquals(1, queue.batches.value.single().items.size)
+        assertEquals(null, deleted)
+        found = 99L
+        queue.removeItems(setOf(2L), deleteFiles = true)
+        assertEquals(99L, deleted)
+        assertTrue(queue.batches.value.isEmpty())
+    }
+
+    @Test fun `origin metadata round trips while legacy jobs use a neutral origin`() = runTest {
+        val directory = Files.createTempDirectory("download-origins").toFile()
+        try {
+            val file = directory.resolve("queue.json")
+            val store = FileBackedPostDownloadJobStore(file)
+            store.save(listOf(PostDownloadBatch(1, "Save", listOf(PostDownloadItem(2,
+                PostDownloadRequest(testPost(), originLabel = "Codex · Favorites"), PostDownloadStatus.SAVED)))))
+            assertEquals("Codex · Favorites", store.load().single().items.single().request.originLabel)
+            val legacy = com.google.gson.JsonParser.parseString(file.readText()).asJsonObject
+            legacy.addProperty("version", 2)
+            legacy.getAsJsonArray("batches")[0].asJsonObject.getAsJsonArray("items")[0].asJsonObject.remove("origin")
+            file.writeText(legacy.toString())
+            assertEquals("Downloads", store.load().single().items.single().request.originLabel)
+        } finally { directory.deleteRecursively() }
+    }
+
     @Test fun `retry keeps a completed export identity across a failed acknowledgement and process restart`() = runTest {
         val directory = Files.createTempDirectory("export-recovery").toFile()
         val firstScope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))

@@ -1,15 +1,29 @@
 package com.theoriacodex.app.media
 
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -17,10 +31,21 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.theoriacodex.app.source.displayName
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import java.util.Locale
 
 @Composable
@@ -29,9 +54,9 @@ internal fun DownloadJobsButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val activeCount = batches.sumOf { batch -> batch.items.count { it.active } }
+    val count = batches.sumOf { it.items.size }
     OutlinedButton(onClick = onClick, modifier = modifier) {
-        Text(if (activeCount > 0) "Downloads ($activeCount)" else "Downloads")
+        Text(if (count > 0) "Downloads ($count)" else "Downloads")
     }
 }
 
@@ -41,69 +66,134 @@ internal fun DownloadJobsSheet(
     batches: List<PostDownloadBatch>,
     onCancel: (Long) -> Unit,
     onRetryFailed: (Long) -> Unit,
+    onOpen: (PostDownloadItem) -> Unit,
+    onRemove: (Set<Long>, Boolean) -> Unit,
+    localFile: suspend (PostDownloadItem) -> DownloadedPostFile?,
     onDismiss: () -> Unit,
 ) {
+    val items = remember(batches) { batches.asReversed().flatMap { it.items } }
+    var showBulkActions by remember { mutableStateOf(false) }
+    var actionItemId by remember { mutableStateOf<Long?>(null) }
+    var deleteIds by remember { mutableStateOf<Set<Long>?>(null) }
+    val actionItem = items.firstOrNull { it.id == actionItemId }
+    val actionBatch = batches.firstOrNull { batch -> batch.items.any { it.id == actionItemId } }
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 640.dp).padding(horizontal = 20.dp)) {
-            item {
-                Text("Downloads", style = MaterialTheme.typography.titleLarge)
-                Text("Keep the app open until all items are saved.", style = MaterialTheme.typography.bodyMedium)
-                Text("Post and collection downloads include every gallery page. Existing files are kept.", style = MaterialTheme.typography.bodySmall)
+        Column(
+            modifier = Modifier.fillMaxWidth().heightIn(max = 640.dp).padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Downloads", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                Box {
+                    IconButton(onClick = { showBulkActions = true }, enabled = items.isNotEmpty()) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Manage all downloads")
+                    }
+                    DropdownMenu(expanded = showBulkActions, onDismissRequest = { showBulkActions = false }) {
+                        DropdownMenuItem(text = { Text("Delete all files") }, onClick = {
+                            deleteIds = items.mapTo(mutableSetOf()) { it.id }; showBulkActions = false
+                        })
+                        DropdownMenuItem(text = { Text("Remove all from Downloads") }, onClick = {
+                            onRemove(items.mapTo(mutableSetOf()) { it.id }, false); showBulkActions = false
+                        })
+                        if (batches.any { it.active }) DropdownMenuItem(text = { Text("Cancel all downloads") }, onClick = {
+                            batches.filter { it.active }.forEach { onCancel(it.id) }; showBulkActions = false
+                        })
+                        if (batches.any { it.failedCount > 0 }) DropdownMenuItem(text = { Text("Retry all failed") }, onClick = {
+                            batches.filter { it.failedCount > 0 }.forEach { onRetryFailed(it.id) }; showBulkActions = false
+                        })
+                    }
+                }
             }
-            if (batches.isEmpty()) item { Text("Saved files will appear here and in your device’s Downloads folder.") }
-            batches.asReversed().forEach { batch ->
-                item(key = "batch-${batch.id}") { DownloadBatchHeader(batch, onCancel, onRetryFailed) }
-                items(batch.items, key = { "download-${it.id}" }) { DownloadItemRow(it) }
-                item(key = "divider-${batch.id}") { HorizontalDivider(Modifier.padding(vertical = 12.dp)) }
+            Row(
+                modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                HorizontalDivider(modifier = Modifier.weight(1f))
+                Text(items.size.toString(), modifier = Modifier.testTag("download-count"), style = MaterialTheme.typography.labelLarge)
+            }
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2), modifier = Modifier.fillMaxWidth().weight(1f, fill = false).testTag("downloads-grid"),
+                horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                items(items, key = PostDownloadItem::id) { item ->
+                    DownloadItemCard(item, localFile, onClick = { onOpen(item) }, onLongClick = { actionItemId = item.id })
+                }
             }
         }
+    }
+    if (actionItem != null) AlertDialog(
+        onDismissRequest = { actionItemId = null },
+        title = { Text("Download actions") },
+        text = {
+            Column {
+                TextButton(onClick = { deleteIds = setOf(actionItem.id); actionItemId = null }) { Text("Delete file") }
+                TextButton(onClick = { onRemove(setOf(actionItem.id), false); actionItemId = null }) { Text("Remove from Downloads") }
+                if (actionItem.active && actionBatch != null) TextButton(onClick = { onCancel(actionBatch.id); actionItemId = null }) {
+                    Text("Cancel batch")
+                }
+                if (actionItem.status == PostDownloadStatus.FAILED && actionBatch != null) TextButton(onClick = {
+                    onRetryFailed(actionBatch.id); actionItemId = null
+                }) { Text("Retry failed") }
+            }
+        },
+        confirmButton = { TextButton(onClick = { actionItemId = null }) { Text("Close") } },
+    )
+    deleteIds?.let { ids ->
+        AlertDialog(
+            onDismissRequest = { deleteIds = null },
+            title = { Text(if (ids.size == 1) "Delete downloaded file?" else "Delete ${ids.size} downloaded files?") },
+            text = { Text("Delete these files from the device and remove their download records? Active downloads will be cancelled.") },
+            confirmButton = { TextButton(onClick = { onRemove(ids, true); deleteIds = null }) { Text("Delete files") } },
+            dismissButton = { TextButton(onClick = { deleteIds = null }) { Text("Cancel") } },
+        )
     }
 }
 
 @Composable
-private fun DownloadBatchHeader(batch: PostDownloadBatch, onCancel: (Long) -> Unit, onRetryFailed: (Long) -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(batch.title, style = MaterialTheme.typography.titleMedium)
-        Text(
-            "${batch.savedCount} of ${batch.items.size} saved" +
-                (if (batch.existingCount > 0) " · ${batch.existingCount} already exist" else "") +
-                (if (batch.failedCount > 0) " · ${batch.failedCount} failed" else ""),
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        if (batch.active) LinearProgressIndicator(
-            progress = { batch.settledCount.toFloat() / batch.items.size.coerceAtLeast(1) },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (batch.active) TextButton(onClick = { onCancel(batch.id) }) { Text("Cancel remaining") }
-            if (batch.failedCount > 0) TextButton(onClick = { onRetryFailed(batch.id) }) { Text("Retry failed") }
+private fun DownloadItemCard(
+    item: PostDownloadItem,
+    localFile: suspend (PostDownloadItem) -> DownloadedPostFile?,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
+    val context = LocalContext.current
+    val preview = item.request.post.preview
+    val local by produceState<DownloadedPostFile?>(null, item.id, item.status) {
+        if (preview.url == null && preview.localPath == null &&
+            item.status in setOf(PostDownloadStatus.SAVED, PostDownloadStatus.ALREADY_EXISTS)) {
+            value = runCatchingPreservingCancellation { localFile(item) }.getOrNull()
         }
     }
-}
-
-@Composable
-private fun DownloadItemRow(item: PostDownloadItem) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            item.request.post.title?.takeIf { it.isNotBlank() } ?: "Post ${item.request.post.id.sourcePostId}",
-            style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            buildString {
-                append(item.request.post.id.source.displayName())
-                item.request.selectedMedia?.takeIf { it.totalPages > 1 }?.let { append(" · Page ${it.pageIndex + 1}") }
-                append(" · ${downloadItemStatusLabel(item)}")
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = if (item.status == PostDownloadStatus.FAILED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        if (item.status == PostDownloadStatus.DOWNLOADING) {
-            val total = item.totalBytes
-            if (total == null) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-            else LinearProgressIndicator(
-                progress = { (item.downloadedBytes.toFloat() / total).coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth(),
-            )
+    val model = remember(item.request, local, context) {
+        preview.localPath ?: preview.url?.let {
+            MediaRequestFactory.imageRequest(context, it, item.request.post.id.source, crossfade = false, staticAnimatedWebPFrame = true)
+        } ?: local?.uri
+    }
+    Card(modifier = Modifier.fillMaxWidth().testTag("download:${item.id}")
+        .combinedClickable(onClick = onClick, onLongClick = onLongClick, onLongClickLabel = "Manage download")) {
+        Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f), contentAlignment = Alignment.Center) {
+            Icon(Icons.Default.Image, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (model != null) AsyncImage(model = model, contentDescription = null,
+                modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        }
+        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(item.request.post.title?.takeIf(String::isNotBlank) ?: "Post ${item.request.post.id.sourcePostId}",
+                style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("${item.request.post.id.source.displayName()} · ${item.request.originLabel}",
+                style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            item.request.selectedMedia?.takeIf { it.totalPages > 1 }?.let {
+                Text("Page ${it.pageIndex + 1} of ${it.totalPages}", style = MaterialTheme.typography.labelSmall)
+            }
+            if (item.message != null || item.status !in setOf(PostDownloadStatus.SAVED, PostDownloadStatus.ALREADY_EXISTS)) {
+                Text(item.message ?: downloadItemStatusLabel(item), style = MaterialTheme.typography.bodySmall,
+                    color = if (item.status == PostDownloadStatus.FAILED || !item.active && item.message != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (item.active) {
+                val total = item.totalBytes
+                if (item.status == PostDownloadStatus.DOWNLOADING && total != null && total > 0) {
+                    LinearProgressIndicator(progress = { (item.downloadedBytes.toFloat() / total).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
+                } else LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
         }
     }
 }

@@ -472,7 +472,14 @@ internal fun TheoriaAppContent(
     }
 
     fun requestSaveToDevice(post: Post) {
-        libraryTransfers.downloads.submitPosts(listOf(post))
+        val origin = if (navController.currentBackStackEntry?.destination?.route == AppRoute.CreatorProfile) {
+            "Creator profile"
+        } else when (homeTabRoute) {
+            TopLevelDestination.ForYou.route -> "FYP"
+            TopLevelDestination.Recents.route -> "Recents"
+            else -> "Search"
+        }
+        libraryTransfers.downloads.submitPosts(listOf(post), originLabel = origin)
         libraryTransfers.showDownloads = true
     }
 
@@ -605,7 +612,8 @@ internal fun TheoriaAppContent(
             return
         }
 
-        libraryTransfers.downloads.submitPosts(posts, "Codex downloads")
+        val name = dataDependencies.codexRepository.observeCodices().first().firstOrNull { it.codexId == codexId }?.name
+        libraryTransfers.downloads.submitPosts(posts, "Codex downloads", "Codex · ${name ?: "Collection"}")
         libraryTransfers.showDownloads = true
     }
 
@@ -1543,7 +1551,8 @@ internal fun TheoriaAppContent(
                                     requestSaveToCodex(posts, excludedCodexId = codexId)
                                 },
                                 onSavePostToDevice = { post ->
-                                    requestSaveToDevice(post)
+                                    libraryTransfers.downloads.submitPosts(listOf(post), originLabel = "Codex · ${state.codex?.name ?: "Collection"}")
+                                    libraryTransfers.showDownloads = true
                                 },
                                 onPostUrlCopied = { recordPostUrlCopy() },
                                 onOpenCreatorProfile = { creator ->
@@ -1720,7 +1729,22 @@ internal fun TheoriaAppContent(
                                     onDownloadMedia = { request ->
                                         if (request == null) snackbarHostState.showSnackbar("Media is still loading.")
                                         else {
-                                            libraryTransfers.downloads.submitViewerMedia(request.post, request.media, request.pageIndex, request.totalPages)
+                                            val launch = activeViewerOwner?.session?.value?.context
+                                            val origin = when (launch?.streamSource) {
+                                                ViewerStreamSource.SEARCH -> "Search"
+                                                ViewerStreamSource.FOR_YOU -> "FYP"
+                                                ViewerStreamSource.CODEX -> {
+                                                    val id = launch.queryHash.removePrefix("codex:")
+                                                    val name = dataDependencies.codexRepository.observeCodices().first()
+                                                        .firstOrNull { it.codexId == id }?.name
+                                                    "Codex · ${name ?: "Collection"}"
+                                                }
+                                                ViewerStreamSource.CREATOR_PROFILE -> "Creator profile"
+                                                ViewerStreamSource.RECENTS -> "Recents"
+                                                ViewerStreamSource.RELATED -> "Related posts"
+                                                null -> "Viewer"
+                                            }
+                                            libraryTransfers.downloads.submitViewerMedia(request.post, request.media, request.pageIndex, request.totalPages, origin)
                                             libraryTransfers.showDownloads = true
                                         }
                                     },
@@ -1856,7 +1880,27 @@ internal fun TheoriaAppContent(
                 )
             }
 
-            LibraryTransferDialogs(libraryTransfers)
+            LibraryTransferDialogs(libraryTransfers) { item ->
+                val resolved = runCatchingPreservingCancellation {
+                    viewerRouteWorkflow.resolvePost(item.request.post.id, ViewerStreamSource.RECENTS)
+                }.getOrNull()
+                if (resolved == null) {
+                    snackbarHostState.showSnackbar("This post could not be opened. Try again.")
+                } else {
+                    if (navController.currentBackStackEntry?.destination?.route == AppRoute.Viewer) {
+                        activeViewerOwner?.clearSession()
+                        viewerSessionOwner.clear()
+                        navController.popBackStack(AppRoute.Viewer, inclusive = true)
+                    }
+                    val context = ViewerLaunchContext("downloads:${item.id}", 0, ViewerStreamSource.RECENTS, 0)
+                    viewerSessionOwner.retain(ViewerSession(
+                        posts = listOf(resolved), context = context, liveSearchBinding = false,
+                        initialMediaIndex = item.request.selectedMedia?.pageIndex ?: 0,
+                    ))
+                    dataDependencies.uiRestoreRepository.setViewerLaunchContext(context)
+                    navController.navigate(AppRoute.Viewer)
+                }
+            }
             CredentialRecoveryOverlay(
                 owner = settingsOwner,
                 recoveryState = sourceDependencies.accounts.recoveryState,

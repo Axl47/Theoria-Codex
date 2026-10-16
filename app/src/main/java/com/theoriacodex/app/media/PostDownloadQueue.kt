@@ -22,7 +22,7 @@ import kotlinx.coroutines.yield
 
 internal data class PostDownloadRequest(val post: Post, val selectedMedia: SelectedDownloadMedia? = null,
     val marker: String = UUID.randomUUID().toString(), val restored: Boolean = false,
-    val untrackedPreparation: Boolean = false)
+    val untrackedPreparation: Boolean = false, val originLabel: String = "Downloads")
 internal data class SelectedDownloadMedia(val media: ImageRef, val pageIndex: Int, val totalPages: Int)
 
 internal enum class PostDownloadStatus { QUEUED, PREPARING, DOWNLOADING, WAITING, SAVED, ALREADY_EXISTS, FAILED, CANCELLED }
@@ -67,6 +67,7 @@ internal interface PostDownloadBackend {
     suspend fun snapshot(downloadId: Long): DownloadTransferSnapshot
     /** Remove incomplete transfers only; completed public files must remain on the device. */
     suspend fun cancel(downloadId: Long)
+    suspend fun deleteFile(item: PostDownloadItem) { error("File deletion is unavailable") }
 }
 
 /** All calls and state updates use the owner's dispatcher. Two workers bound preparation and transfers. */
@@ -81,6 +82,7 @@ internal class PostDownloadQueue(
     val batches = mutableBatches.asStateFlow()
     private val workers = mutableMapOf<Long, Job>()
     private val locations = mutableMapOf<Long, Pair<Int, Int>>()
+    private val expandedItems = mutableMapOf<Long, Set<Long>>()
     private var nextId = 0L
     private val persistence = Mutex()
     private val restoration = Mutex()
@@ -148,6 +150,44 @@ internal class PostDownloadQueue(
             .filter { it.status == PostDownloadStatus.FAILED }
         failed.forEach { retryItem(it) }
         checkpoint()
+        schedule()
+    }
+
+    /** Stop workers before record removal; history-only clearing never deletes completed files. */
+    suspend fun removeItems(itemIds: Set<Long>, deleteFiles: Boolean) {
+        restore()
+        // A confirmation can outlive the parent row while a gallery becomes page downloads.
+        val selectedIds = itemIds.flatMapTo(mutableSetOf()) { expandedItems[it].orEmpty() + it }
+        val selected = mutableBatches.value.flatMap { it.items }.filter { it.id in selectedIds }
+        selected.filter { it.active }.forEach { item ->
+            update(item.id) { it.copy(status = PostDownloadStatus.CANCELLED, message = null) }
+            workers[item.id]?.cancel()
+        }
+        checkpoint()
+        selected.forEach { workers[it.id]?.join() }
+        val removed = mutableSetOf<Long>()
+        selected.forEach { original ->
+            val item = currentItem(original.id) ?: return@forEach
+            val result = com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation {
+                val nativeId = item.downloadId ?: if (item.enqueuePending) backend.findTransfer(item.request.marker) else null
+                check(!item.enqueuePending || nativeId != null) { "Android could not identify this transfer" }
+                val target = item.copy(downloadId = nativeId)
+                cancelNativeTransfer(target)
+                if (deleteFiles) backend.deleteFile(target)
+            }
+            if (result.isSuccess) removed += item.id
+            else update(item.id) { it.copy(message = "Could not remove this download. Check file access and try again.") }
+        }
+        val previous = mutableBatches.value
+        mutableBatches.value = previous.mapNotNull { batch ->
+            batch.copy(items = batch.items.filterNot { it.id in removed }).takeIf { it.items.isNotEmpty() }
+        }
+        rebuildLocations()
+        try { checkpoint() } catch (error: Exception) {
+            mutableBatches.value = previous
+            rebuildLocations()
+            throw error
+        }
         schedule()
     }
 
@@ -260,13 +300,15 @@ internal class PostDownloadQueue(
     }
 
     private fun expandGallery(itemId: Long, pages: List<PostDownloadRequest>) {
+        val origin = currentItem(itemId)?.request?.originLabel ?: return
         require(pages.isNotEmpty() && pages.all { it.selectedMedia != null })
         mutableBatches.value = mutableBatches.value.map { batch ->
             if (batch.items.none { it.id == itemId }) return@map batch
             val seen = batch.items.filterNot { it.id == itemId }
                 .mapTo(mutableSetOf()) { it.request.post.id to it.request.selectedMedia?.pageIndex }
             val children = pages.filter { seen.add(it.post.id to it.selectedMedia?.pageIndex) }
-                .map { PostDownloadItem(id = ++nextId, request = it) }
+                .map { PostDownloadItem(id = ++nextId, request = it.copy(originLabel = origin)) }
+            expandedItems[itemId] = children.mapTo(mutableSetOf()) { it.id }
             batch.copy(items = batch.items.flatMap { if (it.id == itemId) children else listOf(it) })
         }
         rebuildLocations()
@@ -277,6 +319,7 @@ internal class PostDownloadQueue(
         mutableBatches.value.forEachIndexed { batchIndex, batch ->
             batch.items.forEachIndexed { itemIndex, item -> locations[item.id] = batchIndex to itemIndex }
         }
+        expandedItems.entries.removeAll { (_, children) -> children.none { it in locations } }
     }
 
     private fun currentItem(itemId: Long): PostDownloadItem? {

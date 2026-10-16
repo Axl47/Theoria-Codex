@@ -6,4 +6,8 @@
     <files-path
         name="codex_exports"
         path="theoria_codex/exports/" />
+    <external-path name="downloaded_media" path="Download/TheoriaCodex/" />
+    <external-files-path name="private_downloads" path="Download/" />
+    <external-files-path name="animation_exports" path="Movies/TheoriaCodex/" />
+    <files-path name="fallback_animation_exports" path="TheoriaCodex/" />
 </paths>

@@ -25,7 +25,7 @@ internal class FileBackedPostDownloadJobStore(private val file: File,
         require(file.length() <= 8L * 1024 * 1024) { "Download queue is too large" }
         val root = JsonParser.parseString(file.readText(Charsets.UTF_8)).asJsonObject
         val version = root.get("version").asInt
-        require(version in 1..2) { "Unsupported download queue version" }
+        require(version in 1..3) { "Unsupported download queue version" }
         val batches = root.getAsJsonArray("batches")
         require(batches.size() <= 200) { "Too many download batches" }
         var itemCount = 0
@@ -51,7 +51,8 @@ internal class FileBackedPostDownloadJobStore(private val file: File,
                 PostDownloadItem(row.get("id").asLong,
                     PostDownloadRequest(post, selected, row.get("marker").asString, restored = true,
                         untrackedPreparation = row.get("untrackedPreparation")?.asBoolean == true ||
-                            version == 1 && status in setOf(PostDownloadStatus.PREPARING, PostDownloadStatus.FAILED)),
+                            version == 1 && status in setOf(PostDownloadStatus.PREPARING, PostDownloadStatus.FAILED),
+                        originLabel = row.get("origin")?.asString?.take(200) ?: "Downloads"),
                     restoredStatus, row.get("downloadId")?.asLong, enqueuePending = row.get("enqueuePending")?.asBoolean ?: false)
             }
             PostDownloadBatch(batch.get("id").asLong, batch.get("title").asString, items)
@@ -64,7 +65,7 @@ internal class FileBackedPostDownloadJobStore(private val file: File,
     override suspend fun save(batches: List<PostDownloadBatch>) {
         require(batches.size <= 200 && batches.sumOf { it.items.size } <= 20_000) { "The download queue is full" }
         val root = JsonObject().apply {
-            addProperty("version", 2)
+            addProperty("version", 3)
             add("batches", JsonArray().apply { batches.forEach { batch -> add(JsonObject().apply {
                 addProperty("id", batch.id)
                 addProperty("title", batch.title.take(200))
@@ -74,6 +75,7 @@ internal class FileBackedPostDownloadJobStore(private val file: File,
                     addProperty("postId", item.request.post.id.sourcePostId)
                     item.request.post.title?.let { addProperty("title", it.take(240)) }
                     addProperty("marker", item.request.marker)
+                    addProperty("origin", item.request.originLabel.take(200))
                     if (item.request.untrackedPreparation) addProperty("untrackedPreparation", true)
                     addProperty("status", item.status.name)
                     item.downloadId?.let { addProperty("downloadId", it) }

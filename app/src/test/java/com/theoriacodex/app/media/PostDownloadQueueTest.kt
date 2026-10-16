@@ -198,9 +198,10 @@ class PostDownloadQueueTest {
         }
         val gallery = request(1).post.copy(media = List(3) { MEDIA.copy(url = "https://example.test/$it.jpg") }, mediaCount = 3)
         val queue = PostDownloadQueue(backgroundScope, backend)
-        val batchId = requireNotNull(queue.submit("Gallery", listOf(PostDownloadRequest(gallery))))
+        val batchId = requireNotNull(queue.submit("Gallery", listOf(PostDownloadRequest(gallery, originLabel = "Codex · Favorites"))))
         runCurrent()
         assertEquals(3, queue.batches.value.single().items.size)
+        assertTrue(queue.batches.value.single().items.all { it.request.originLabel == "Codex · Favorites" })
         assertEquals(listOf(null, 0, 1), backend.requests.map { it.selectedMedia?.pageIndex })
         backend.states[1] = DownloadTransferSnapshot(PostDownloadStatus.SAVED)
         backend.states[2] = DownloadTransferSnapshot(PostDownloadStatus.FAILED)
@@ -234,7 +235,92 @@ class PostDownloadQueueTest {
         assertTrue(backend.cancelled.isEmpty())
     }
 
+    @Test
+    fun `history clearing stops active work but keeps completed destinations and is durable`() = runTest {
+        val backend = FakeBackend()
+        backend.states[1] = DownloadTransferSnapshot(PostDownloadStatus.SAVED)
+        var persisted = emptyList<PostDownloadBatch>()
+        val store = object : PostDownloadJobStore {
+            override suspend fun load() = persisted
+            override suspend fun save(batches: List<PostDownloadBatch>) { persisted = batches }
+        }
+        val queue = PostDownloadQueue(backgroundScope, backend, jobStore = store)
+        queue.submit("Mixed", listOf(request(1), request(2), request(3)))
+        runCurrent()
+        val items = queue.batches.value.single().items
+        queue.removeItems(items.mapTo(mutableSetOf()) { it.id }, deleteFiles = false)
+        runCurrent()
+
+        assertTrue(queue.batches.value.isEmpty())
+        assertTrue(persisted.isEmpty())
+        assertTrue(backend.deleted.isEmpty())
+        assertEquals(PostDownloadStatus.SAVED, backend.states.getValue(1).status)
+        val prepared = backend.prepared.toList()
+        advanceTimeBy(5_000)
+        runCurrent()
+        assertEquals(prepared, backend.prepared)
+    }
+
+    @Test
+    fun `bulk deletion removes successes and retains failed file deletion for retry`() = runTest {
+        val backend = FakeBackend().apply {
+            states[1] = DownloadTransferSnapshot(PostDownloadStatus.SAVED)
+            states[2] = DownloadTransferSnapshot(PostDownloadStatus.SAVED)
+            failDeletePost = "2"
+        }
+        val queue = PostDownloadQueue(backgroundScope, backend)
+        queue.submit("Saved", listOf(request(1), request(2)))
+        runCurrent()
+        val ids = queue.batches.value.single().items.mapTo(mutableSetOf()) { it.id }
+        queue.removeItems(ids, deleteFiles = true)
+        val failed = queue.batches.value.single().items.single()
+        assertEquals("2", failed.request.post.id.sourcePostId)
+        assertEquals(PostDownloadStatus.SAVED, failed.status)
+        assertTrue(failed.message.orEmpty().contains("Could not remove"))
+        assertEquals(listOf("1"), backend.deleted)
+        backend.failDeletePost = null
+        queue.removeItems(setOf(failed.id), deleteFiles = true)
+        assertTrue(queue.batches.value.isEmpty())
+        assertEquals(listOf("1", "2"), backend.deleted)
+    }
+
+    @Test
+    fun `clearing during preparation waits for cancellation before removing its record`() = runTest {
+        val backend = FakeBackend()
+        var departed = false
+        backend.prepareOverride = {
+            try { kotlinx.coroutines.awaitCancellation() } finally { departed = true }
+        }
+        val queue = PostDownloadQueue(backgroundScope, backend)
+        queue.submit("Preparing", listOf(request(1)))
+        runCurrent()
+        val id = queue.batches.value.single().items.single().id
+        queue.removeItems(setOf(id), deleteFiles = false)
+        assertTrue(departed)
+        assertTrue(queue.batches.value.isEmpty())
+    }
+
+    @Test
+    fun `a removal confirmation for an expanded gallery still removes its page downloads`() = runTest {
+        val backend = FakeBackend()
+        backend.prepareOverride = { request ->
+            if (request.selectedMedia == null) PreparedPostDownload.Gallery(galleryDownloadPages(request.post))
+            else PreparedPostDownload.Saved
+        }
+        val gallery = request(1).post.copy(media = List(3) { MEDIA }, mediaCount = 3)
+        val queue = PostDownloadQueue(backgroundScope, backend)
+        queue.submit("Gallery", listOf(PostDownloadRequest(gallery)))
+        val originalId = queue.batches.value.single().items.single().id
+        runCurrent()
+        assertEquals(3, queue.batches.value.single().items.size)
+        queue.removeItems(setOf(originalId), deleteFiles = true)
+        assertTrue(queue.batches.value.isEmpty())
+        assertEquals(3, backend.deleted.size)
+    }
+
     private class FakeBackend : PostDownloadBackend {
+        val deleted = mutableListOf<String>()
+        var failDeletePost: String? = null
         val prepared = mutableListOf<String>()
         val requests = mutableListOf<PostDownloadRequest>()
         val cancelled = mutableListOf<Long>()
@@ -252,6 +338,11 @@ class PostDownloadQueueTest {
             states[downloadId] ?: DownloadTransferSnapshot(PostDownloadStatus.DOWNLOADING)
 
         override suspend fun cancel(downloadId: Long) { cancelled += downloadId }
+        override suspend fun deleteFile(item: PostDownloadItem) {
+            val postId = item.request.post.id.sourcePostId
+            if (postId == failDeletePost) throw java.io.IOException("File access denied")
+            deleted += postId
+        }
     }
 
     private fun request(id: Int) = PostDownloadRequest(
