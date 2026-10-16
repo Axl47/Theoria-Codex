@@ -15,7 +15,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -24,14 +23,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-
-@Composable
-internal fun OfflineStorageControls(state: OfflineStorageUiState, onManage: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        OfflineStorageSummary(state)
-        OutlinedButton(onClick = onManage) { Text("Manage storage") }
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,7 +73,7 @@ internal fun OfflineStorageSheet(
 }
 
 @Composable
-private fun OfflineStorageSummary(state: OfflineStorageUiState) {
+internal fun OfflineStorageSummary(state: OfflineStorageUiState) {
     val size = Formatter.formatShortFileSize(LocalContext.current, state.offline.bytes)
     Text("Offline: $size · ${state.offline.postCount} posts · ${state.offline.mediaCount} media files")
 }

@@ -3,6 +3,10 @@ package com.theoriacodex.app.ui
 import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -11,6 +15,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -26,7 +32,7 @@ import com.theoriacodex.app.media.DownloadJobsSheet
 import com.theoriacodex.app.media.PostDownloadsViewModel
 import com.theoriacodex.app.media.MediaCacheMaintenance
 import com.theoriacodex.app.media.OfflineStorageViewModel
-import com.theoriacodex.app.media.OfflineStorageControls
+import com.theoriacodex.app.media.OfflineStorageSummary
 import com.theoriacodex.app.media.OfflineStorageSheet
 import kotlinx.coroutines.flow.first
 
@@ -102,10 +108,21 @@ internal fun libraryStorageSummary(tools: LibraryTransferTools): String? {
 internal fun LibraryTransferSettings(tools: LibraryTransferTools) {
     tools.offline?.let { owner ->
         val state by owner.state.collectAsStateWithLifecycle()
-        OfflineStorageControls(state, owner::open)
+        OfflineStorageSummary(state)
     }
     val batches by tools.downloads.batches.collectAsStateWithLifecycle()
-    DownloadJobsButton(batches = batches, onClick = { tools.showDownloads = true })
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        tools.offline?.let { owner ->
+            OutlinedButton(onClick = owner::open, modifier = Modifier.weight(1f)) {
+                Text("Manage storage")
+            }
+        }
+        DownloadJobsButton(
+            batches = batches,
+            onClick = { tools.showDownloads = true },
+            modifier = Modifier.weight(1f),
+        )
+    }
     tools.backup?.let { owner ->
         val state by owner.state.collectAsStateWithLifecycle()
         BackupControls(state, owner::showExportOptions, tools.chooseBackup)

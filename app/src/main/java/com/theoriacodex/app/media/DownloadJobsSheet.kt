@@ -24,9 +24,15 @@ import com.theoriacodex.app.source.displayName
 import java.util.Locale
 
 @Composable
-internal fun DownloadJobsButton(batches: List<PostDownloadBatch>, onClick: () -> Unit) {
+internal fun DownloadJobsButton(
+    batches: List<PostDownloadBatch>,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val activeCount = batches.sumOf { batch -> batch.items.count { it.active } }
-    OutlinedButton(onClick = onClick) { Text(if (activeCount > 0) "Downloads ($activeCount)" else "Downloads") }
+    OutlinedButton(onClick = onClick, modifier = modifier) {
+        Text(if (activeCount > 0) "Downloads ($activeCount)" else "Downloads")
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
