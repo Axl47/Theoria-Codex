@@ -487,7 +487,9 @@ internal fun ViewerScreen(
                 onQualitySelected = { selected, height -> quality = selected; qualityHeight = height },
                 modifier = Modifier.align(Alignment.TopCenter),
                 source = selectedPost.id.source.displayName(),
-                indexLabel = "${selectedMediaIndex + 1} / ${selectedPostMedia.size}",
+                indexLabel = if (selectedPostMedia.size > 1) {
+                    "${selectedMediaIndex + 1} / ${selectedPostMedia.size}"
+                } else null,
                 onBack = ::requestDismissViewer,
                 liked = selectedPostLiked,
                 onToggleLike = {

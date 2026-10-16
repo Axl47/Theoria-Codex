@@ -44,7 +44,7 @@ internal fun closestViewerPlaybackRate(rate: Float): ViewerPlaybackRate {
 @Composable
 internal fun ViewerChrome(
     source: String,
-    indexLabel: String,
+    indexLabel: String?,
     onBack: () -> Unit,
     liked: Boolean,
     actionsMenuExpanded: Boolean,
@@ -76,7 +76,7 @@ internal fun ViewerChrome(
 ) {
     SecondaryScreenAppBar(
         modifier = modifier,
-        title = "$source • $indexLabel",
+        title = if (indexLabel != null) "$source • $indexLabel" else source,
         onBack = onBack,
         containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
     ) {
