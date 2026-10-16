@@ -50,20 +50,7 @@ internal fun OfflineStorageSheet(
                 state.message?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
             }
             item {
-                state.disposable?.let { cache ->
-                    MediaStorageChart(
-                        mediaStorageBreakdown(
-                            offlineBytes = state.offline.bytes,
-                            imageBytes = cache.imageBytes,
-                            videoBytes = cache.videoBytes,
-                            gifBytes = cache.gifBytes,
-                            animationBytes = cache.animationBytes,
-                        ),
-                    )
-                } ?: Text(
-                    if (state.refreshing) "Calculating media storage…" else "Storage breakdown unavailable. Reopen storage to try again.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                OfflineStorageBreakdown(state)
             }
             item {
                 DisposableCacheControls(state, onClearDisposable)
@@ -87,6 +74,24 @@ internal fun OfflineStorageSheet(
     state.pendingRemoval?.let { target ->
         OfflineRemovalDialog(target, state.controlsEnabled, onConfirmRemoval, onDismissRemoval)
     }
+}
+
+@Composable
+private fun OfflineStorageBreakdown(state: OfflineStorageUiState) {
+    state.disposable?.let { cache ->
+        MediaStorageChart(
+            mediaStorageBreakdown(
+                offlineBytes = state.offline.bytes,
+                imageBytes = cache.imageBytes,
+                videoBytes = cache.videoBytes,
+                gifBytes = cache.gifBytes,
+                animationBytes = cache.animationBytes,
+            ),
+        )
+    } ?: Text(
+        if (state.refreshing) "Calculating media storage…" else "Storage breakdown unavailable. Reopen storage to try again.",
+        style = MaterialTheme.typography.bodyMedium,
+    )
 }
 
 @Composable

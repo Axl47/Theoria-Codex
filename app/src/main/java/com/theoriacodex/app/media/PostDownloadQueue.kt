@@ -183,10 +183,15 @@ internal class PostDownloadQueue(
             batch.copy(items = batch.items.filterNot { it.id in removed }).takeIf { it.items.isNotEmpty() }
         }
         rebuildLocations()
-        try { checkpoint() } catch (error: Exception) {
-            mutableBatches.value = previous
-            rebuildLocations()
-            throw error
+        var committed = false
+        try {
+            checkpoint()
+            committed = true
+        } finally {
+            if (!committed) {
+                mutableBatches.value = previous
+                rebuildLocations()
+            }
         }
         schedule()
     }

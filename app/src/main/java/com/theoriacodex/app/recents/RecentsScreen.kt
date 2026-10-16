@@ -128,13 +128,7 @@ fun RecentsScreen(
     val onPinSearch: ((RecentSearchEntry) -> Unit)? = onSaveSearch?.let {
         { entry: RecentSearchEntry -> searchToPin = entry }
     }
-    val hasContent = when (filter) {
-        RecentsFilter.WATCHED -> watchedPosts.isNotEmpty()
-        RecentsFilter.CODEX -> codexPosts.isNotEmpty()
-        RecentsFilter.FYP -> fypSearches.isNotEmpty()
-        RecentsFilter.SEARCHES -> searches.isNotEmpty()
-        RecentsFilter.ALL -> activity.isNotEmpty()
-    }
+    val hasContent = recentsHasContent(filter, watchedPosts, codexPosts, searches, fypSearches, activity)
 
     Column(
         modifier = Modifier
@@ -142,24 +136,12 @@ fun RecentsScreen(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("Recents", style = MaterialTheme.typography.titleLarge)
-            if (onSaveSearch != null) {
-                TextButton(onClick = { showSavedSearches = true }) { Text("Saved searches") }
-            }
-            TextButton(
-                enabled = hasContent,
-                onClick = {
-                    onClear(filter.clearTarget)
-                },
-            ) {
-                Text(if (selectedSource == null) "Clear" else "Clear section")
-            }
-        }
+        RecentsHeader(
+            hasContent = hasContent,
+            sourceFiltered = selectedSource != null,
+            onOpenSavedSearches = onSaveSearch?.let { { showSavedSearches = true } },
+            onClear = { onClear(filter.clearTarget) },
+        )
 
         SourceSelector(
             selectedSource = selectedSource,
@@ -296,16 +278,13 @@ fun RecentsScreen(
     }
 
     if (showSavedSearches) {
-        SavedSearchSheet(
+        RecentsSavedSearchPicker(
             searches = savedSearches,
             onDismiss = { showSavedSearches = false },
-            onOpen = { entry ->
-                showSavedSearches = false
-                if (entry.search.kind == RecentSearchKind.FYP) onOpenFypSearch(entry.search)
-                else onOpenSearch(entry.search)
-            },
+            onOpenSearch = onOpenSearch,
+            onOpenFypSearch = onOpenFypSearch,
             onRename = { searchToRename = it },
-            onRemove = { onRemoveSavedSearch(it.id) },
+            onRemoveSavedSearch = onRemoveSavedSearch,
         )
     }
     searchToPin?.let { entry ->
@@ -329,6 +308,63 @@ fun RecentsScreen(
                 searchToRename = null
             },
         )
+    }
+}
+
+@Composable
+private fun RecentsHeader(
+    hasContent: Boolean, sourceFiltered: Boolean,
+    onOpenSavedSearches: (() -> Unit)?, onClear: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Recents", style = MaterialTheme.typography.titleLarge)
+        if (onOpenSavedSearches != null) {
+            TextButton(onClick = onOpenSavedSearches) { Text("Saved searches") }
+        }
+        TextButton(
+            enabled = hasContent,
+            onClick = {
+                onClear()
+            },
+        ) {
+            Text(if (sourceFiltered) "Clear section" else "Clear")
+        }
+    }
+}
+
+@Composable
+private fun RecentsSavedSearchPicker(
+    searches: List<SavedSearchEntry>, onDismiss: () -> Unit,
+    onOpenSearch: (RecentSearchEntry) -> Unit, onOpenFypSearch: (RecentSearchEntry) -> Unit,
+    onRename: (SavedSearchEntry) -> Unit, onRemoveSavedSearch: (String) -> Unit,
+) {
+    SavedSearchSheet(
+        searches = searches,
+        onDismiss = onDismiss,
+        onOpen = { entry ->
+            onDismiss()
+            if (entry.search.kind == RecentSearchKind.FYP) onOpenFypSearch(entry.search)
+            else onOpenSearch(entry.search)
+        },
+        onRename = onRename,
+        onRemove = { onRemoveSavedSearch(it.id) },
+    )
+}
+
+private fun recentsHasContent(
+    filter: RecentsFilter, watchedPosts: List<RecentPostEntry>, codexPosts: List<RecentPostEntry>,
+    searches: List<RecentSearchEntry>, fypSearches: List<RecentSearchEntry>, activity: List<RecentActivityEntry>,
+): Boolean {
+    return when (filter) {
+        RecentsFilter.WATCHED -> watchedPosts.isNotEmpty()
+        RecentsFilter.CODEX -> codexPosts.isNotEmpty()
+        RecentsFilter.FYP -> fypSearches.isNotEmpty()
+        RecentsFilter.SEARCHES -> searches.isNotEmpty()
+        RecentsFilter.ALL -> activity.isNotEmpty()
     }
 }
 

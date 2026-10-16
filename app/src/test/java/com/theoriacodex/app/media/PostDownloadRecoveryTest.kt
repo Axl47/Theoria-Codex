@@ -3,7 +3,11 @@ package com.theoriacodex.app.media
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.domain.model.ImageRef
 import java.nio.file.Files
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -17,6 +21,42 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PostDownloadRecoveryTest {
+    @Test fun `cancelling the removal checkpoint restores history and permits a later retry`() = runTest {
+        val original = listOf(PostDownloadBatch(1, "Saved", listOf(PostDownloadItem(2,
+            PostDownloadRequest(testPost()), PostDownloadStatus.SAVED))))
+        val savingRemoval = CompletableDeferred<Unit>()
+        var stored = original
+        var suspendRemoval = true
+        val store = object : PostDownloadJobStore {
+            override suspend fun load() = stored
+            override suspend fun save(batches: List<PostDownloadBatch>) {
+                if (batches.isEmpty() && suspendRemoval) {
+                    savingRemoval.complete(Unit)
+                    awaitCancellation()
+                }
+                stored = batches
+            }
+        }
+        val backend = object : PostDownloadBackend {
+            override suspend fun prepare(request: PostDownloadRequest): PreparedPostDownload = error("Already saved")
+            override suspend fun snapshot(downloadId: Long): DownloadTransferSnapshot = error("No native transfer")
+            override suspend fun cancel(downloadId: Long) = error("No native transfer")
+            override suspend fun deleteFile(item: PostDownloadItem) = error("History removal must keep files")
+        }
+        val queue = PostDownloadQueue(backgroundScope, backend, jobStore = store)
+        val removal = launch { queue.removeItems(setOf(2L), deleteFiles = false) }
+        savingRemoval.await()
+        assertTrue(queue.batches.value.isEmpty())
+        removal.cancelAndJoin()
+        assertTrue(removal.isCancelled)
+        assertEquals(original, queue.batches.value)
+        assertEquals(original, stored)
+        suspendRemoval = false
+        queue.removeItems(setOf(2L), deleteFiles = false)
+        assertTrue(queue.batches.value.isEmpty())
+        assertTrue(stored.isEmpty())
+    }
+
     @Test fun `removal reconciles a native enqueue gap and does not drop an unidentified transfer`() = runTest {
         val store = object : PostDownloadJobStore {
             override suspend fun load() = listOf(PostDownloadBatch(1, "Gap", listOf(PostDownloadItem(2,
