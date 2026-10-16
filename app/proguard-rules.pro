@@ -40,6 +40,14 @@
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
+-keepclassmembers class com.theoriacodex.data.repository.CodexStatistics {
+    <init>();
+    @com.google.gson.annotations.SerializedName <fields>;
+}
+-keepclassmembers class com.theoriacodex.data.repository.CodexPostStatistics {
+    <init>();
+    @com.google.gson.annotations.SerializedName <fields>;
+}
 -keepclassmembers class com.theoriacodex.data.repository.StatisticsTagCountRecord {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;

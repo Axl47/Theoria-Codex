@@ -1,5 +1,10 @@
 package com.theoriacodex.app.statistics
 
+import com.theoriacodex.data.repository.CodexStatistics
+import com.theoriacodex.data.repository.CodexPostStatistics
+import com.theoriacodex.data.repository.ViewerLaunchContext
+import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.data.repository.LifetimeStatistics
 import com.theoriacodex.data.repository.StatisticsTagKey
 import com.theoriacodex.data.repository.UsageDurationDelta
@@ -28,7 +33,22 @@ data class CodexUsageStatistic(
     val entryCount: Long,
 )
 
+data class CodexStatisticsSummary(
+    val codexId: String,
+    val name: String,
+    val entries: Long,
+    val browsingMs: Long,
+    val watchingMs: Long,
+    val postsSeen: Long,
+    val topOpened: List<CodexPostStatistic>,
+    val topVideos: List<CodexPostStatistic>,
+    val topImages: List<CodexPostStatistic>,
+)
+
+data class CodexPostStatistic(val key: String, val label: String, val value: Long, val percentage: Int)
+
 data class StatisticsSummary(
+    val codices: List<CodexStatisticsSummary> = emptyList(),
     val appOpenCount: Long = 0L,
     val totalForegroundMs: Long = 0L,
     val browsingMs: Long = 0L,
@@ -76,6 +96,7 @@ object StatisticsProjection {
             )
         }
         return StatisticsSummary(
+            codices = codexStatistics(lifetime, savedContent.codices),
             appOpenCount = lifetime.appOpenCount,
             totalForegroundMs = lifetime.totalForegroundMs.saturatingAdd(liveUsage.totalMs),
             browsingMs = lifetime.browsingMs.saturatingAdd(liveUsage.browsingMs),
@@ -185,3 +206,37 @@ private fun Long.saturatingAdd(delta: Long): Long {
 }
 
 private const val TOP_TAG_LIMIT = 5
+
+/** Profile-visible collections sorted by cumulative watching time, with deterministic ties. */
+fun codexStatistics(lifetime: LifetimeStatistics, codices: List<Codex>): List<CodexStatisticsSummary> =
+    codices.map { codex ->
+        val stats = lifetime.codexStatistics[codex.codexId] ?: CodexStatistics()
+        CodexStatisticsSummary(
+            codex.codexId, codex.name, lifetime.codexEntryCounts[codex.codexId] ?: 0L,
+            stats.browsingMs, stats.watchingMs, stats.posts.values.sumOf { it.opens },
+            codexPostRows(stats.posts) { it.opens },
+            codexPostRows(stats.posts) { it.videoMs },
+            codexPostRows(stats.posts) { it.imageMs },
+        )
+    }.sortedWith(compareByDescending<CodexStatisticsSummary> { it.watchingMs }
+        .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }.thenBy { it.codexId })
+
+private fun codexPostRows(
+    posts: Map<String, CodexPostStatistics>,
+    value: (CodexPostStatistics) -> Long,
+): List<CodexPostStatistic> {
+    val total = posts.values.sumOf(value)
+    return posts.entries.filter { value(it.value) > 0L }
+        .sortedWith(compareByDescending<Map.Entry<String, CodexPostStatistics>> {
+            value(it.value)
+        }.thenBy { it.key }).take(5).map { (key, post) ->
+            CodexPostStatistic(key, post.label.ifBlank { key }, value(post), percentage(value(post), total))
+        }
+}
+
+/** Only direct Codex launches carry collection attribution; Recents keeps its own launch identity. */
+fun statisticsCodexId(context: ViewerLaunchContext?): String? =
+    context?.takeIf { it.streamSource == ViewerStreamSource.CODEX }
+        ?.queryHash?.takeIf { it.startsWith("codex:") }?.removePrefix("codex:")?.takeIf(String::isNotBlank)
+
+fun statisticsPostKey(id: PostId): String = "${id.source.name}:${id.sourcePostId}"

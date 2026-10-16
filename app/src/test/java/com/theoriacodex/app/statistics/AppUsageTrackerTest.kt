@@ -10,6 +10,43 @@ import org.junit.Test
 
 class AppUsageTrackerTest {
     @Test
+    fun `codex timing follows collection and selected media and excludes background and unrelated routes`() = runTest {
+        var time = 0L
+        val repository = InMemoryStatisticsRepository()
+        val tracker = AppUsageTracker(repository, this, { time }, tickIntervalMs = 0L)
+        suspend fun target(value: com.theoriacodex.data.repository.CodexUsageTarget?) {
+            tracker.onCodexTargetChanged(value)
+            tracker.awaitIdle()
+        }
+        tracker.onForeground()
+        target(com.theoriacodex.data.repository.CodexUsageTarget("first"))
+        time = 100L
+        target(com.theoriacodex.data.repository.CodexUsageTarget("first", "PIXIV:1", video = true))
+        time = 350L
+        target(com.theoriacodex.data.repository.CodexUsageTarget("first", "PIXIV:1"))
+        time = 400L
+        tracker.onBackground()
+        tracker.awaitIdle()
+        time = 10_000L
+        tracker.onForeground()
+        tracker.awaitIdle()
+        time = 10_050L
+        target(com.theoriacodex.data.repository.CodexUsageTarget("second"))
+        time = 10_100L
+        target(null)
+        time = 20_000L
+        tracker.onBackground()
+        tracker.awaitIdle()
+        val stats = repository.observeStatistics().first().codexStatistics
+        assertEquals(100L, stats.getValue("first").browsingMs)
+        assertEquals(350L, stats.getValue("first").watchingMs)
+        assertEquals(250L, stats.getValue("first").posts.getValue("PIXIV:1").videoMs)
+        assertEquals(100L, stats.getValue("first").posts.getValue("PIXIV:1").imageMs)
+        assertEquals(50L, stats.getValue("second").browsingMs)
+        tracker.close()
+    }
+
+    @Test
     fun `foreground timing uses mutually exclusive categories and ignores duplicate lifecycle events`() = runTest {
         var elapsedMs = 0L
         val repository = InMemoryStatisticsRepository()

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.settings
 
+import com.theoriacodex.app.statistics.codexStatistics
 import com.theoriacodex.app.codex.codexBelongsToProfile
 import com.theoriacodex.app.statistics.AppUsageTracker
 import com.theoriacodex.app.statistics.StatisticsProjection
@@ -36,7 +37,15 @@ internal class SettingsStatisticsSource(
             .map { StatisticsProjection.prepareContent(it.codices, it.posts) }
             .flowOn(computationDispatcher)
         val settled = combine(statisticsRepository.observeStatistics(), content) { lifetime, saved ->
-            StatisticsProjection.build(lifetime = lifetime, savedContent = saved)
+            StatisticsProjection.build(lifetime = lifetime, savedContent = saved).copy(
+                codices = codexStatistics(lifetime,
+                    (saved.codices + listOf(
+                        Codex(com.theoriacodex.app.codex.SAVED_CODEX_ID, "Saved", 0L),
+                        Codex(com.theoriacodex.app.codex.FOLLOWED_CODEX_ID, "Followed", 0L),
+                        Codex(com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID, "Saved Searches", 0L),
+                    )).distinctBy(Codex::codexId),
+                ),
+            )
         }.flowOn(computationDispatcher)
         return combine(settled, appUsageTracker.liveUsage) { summary, usage -> summary.withLiveUsage(usage) }
     }

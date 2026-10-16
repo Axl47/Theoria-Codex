@@ -108,6 +108,25 @@ class ViewerRouteRestorationUiTest {
         }
     }
 
+    @Test fun `Codex viewing publishes canonical attribution and clears it on exit despite retained pages`() {
+        var owner: ViewerRouteOwnerHandle? = null
+        var target: com.theoriacodex.data.repository.CodexUsageTarget? = null
+        withRoute(
+            launchSession = session.copy(context = session.context.copy(
+                queryHash = "codex:collection", streamSource = ViewerStreamSource.CODEX,
+            )),
+            onUsage = { target = it }, onOwner = { owner = it },
+        ) {
+            compose.runOnIdle {
+                assertEquals("collection", target?.codexId)
+                assertEquals("${post.id.source.name}:${post.id.sourcePostId}", target?.postKey)
+                assertEquals(false, target?.video)
+                requireNotNull(owner).clearSession()
+            }
+            compose.runOnIdle { assertNull(target) }
+        }
+    }
+
     private fun coldOwner(): ViewerViewModel {
         val saved = SavedStateHandle()
         ViewerViewModel(saved).replaceSession(session)
@@ -122,6 +141,8 @@ class ViewerRouteRestorationUiTest {
     }
 
     private fun withRoute(
+        launchSession: ViewerSession = session,
+        onUsage: (com.theoriacodex.data.repository.CodexUsageTarget?) -> Unit = {},
         coldOwner: ViewerViewModel? = null,
         restore: suspend () -> ViewerSession? = { error("A live handoff or exit must not restore") },
         onDismiss: suspend () -> Unit = {},
@@ -130,7 +151,7 @@ class ViewerRouteRestorationUiTest {
         verify: () -> Unit,
     ) {
         val retention = ViewerSessionRetentionViewModel()
-        if (coldOwner == null) retention.retain(session)
+        if (coldOwner == null) retention.retain(launchSession)
         val durations = MediaDurationCoordinator(MediaDurationAcquirer { error("Static post must not acquire duration") })
         try {
             compose.setContent {
@@ -146,7 +167,7 @@ class ViewerRouteRestorationUiTest {
                         dependencies = ViewerRouteDependencies(
                             retention, ViewerPostResolver { _, _ -> post },
                             ViewerMediaPrefetcher { _, _ -> ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED) },
-                            durations, restoreSession = { restore() },
+                            durations, restoreSession = { restore() }, onCodexUsageTargetChanged = onUsage,
                         ),
                         renderConfig = ViewerRouteRenderConfig(creatorBrowsingSources = emptySet()),
                         liveSourceState = ViewerRouteLiveSourceState(),

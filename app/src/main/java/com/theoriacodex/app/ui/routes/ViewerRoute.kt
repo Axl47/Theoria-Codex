@@ -1,5 +1,8 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.data.repository.CodexUsageTarget
+import com.theoriacodex.app.statistics.statisticsCodexId
+import com.theoriacodex.app.statistics.statisticsPostKey
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
@@ -59,6 +62,7 @@ internal data class ViewerRouteDependencies(
     val mediaDurationCoordinator: MediaDurationCoordinator,
     val restoreSession: suspend (ViewerRestorationRequest) -> ViewerSession?,
     val canonicalizePost: (Post) -> Post = { it },
+    val onCodexUsageTargetChanged: (CodexUsageTarget?) -> Unit = {},
 )
 
 /** Immutable values consumed by the Viewer renderer. */
@@ -378,6 +382,16 @@ internal fun ViewerRoute(
             -> Unit
         }
     }
+
+    val usageCodexId = statisticsCodexId(session?.context)
+    val usagePost = viewerState.currentPage?.post
+    val usageMedia = viewerState.currentPage?.selectedMedia?.ref
+    val usageTarget = usageCodexId?.let { id -> usagePost?.let { post ->
+        CodexUsageTarget(
+            id, statisticsPostKey(post.id), usageMedia?.let { com.theoriacodex.app.media.isVideoMediaRef(it) } == true,
+        )
+    } }
+    LaunchedEffect(usageTarget) { dependencies.onCodexUsageTargetChanged(usageTarget) }
 
     val activeSession = session
     if (activeSession == null && viewerState.pages.isEmpty()) {

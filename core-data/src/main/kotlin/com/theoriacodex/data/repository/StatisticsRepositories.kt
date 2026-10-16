@@ -43,6 +43,7 @@ internal data class StatisticsTagCountRecord(
 )
 
 internal data class StatisticsStoreRecord(
+    @field:SerializedName("codexStatistics") val codexStatistics: Map<String, CodexStatistics> = emptyMap(),
     @field:SerializedName("appOpenCount") val appOpenCount: Long = 0L,
     @field:SerializedName("totalForegroundMs") val totalForegroundMs: Long = 0L,
     @field:SerializedName("browsingMs") val browsingMs: Long = 0L,
@@ -72,6 +73,7 @@ internal data class StatisticsStoreRecord(
         }
         return StatisticsPolicies.normalize(
             LifetimeStatistics(
+                codexStatistics = codexStatistics,
                 appOpenCount = appOpenCount,
                 totalForegroundMs = totalForegroundMs,
                 browsingMs = browsingMs,
@@ -128,6 +130,7 @@ internal data class StatisticsStoreRecord(
         fun fromDomain(statistics: LifetimeStatistics): StatisticsStoreRecord {
             val normalized = StatisticsPolicies.normalize(statistics)
             return StatisticsStoreRecord(
+                codexStatistics = normalized.codexStatistics,
                 appOpenCount = normalized.appOpenCount,
                 totalForegroundMs = normalized.totalForegroundMs,
                 browsingMs = normalized.browsingMs,
@@ -199,6 +202,32 @@ internal object StatisticsPolicies {
                 normalizedId to normalizedCount
             }.toMap(),
         )
+    }
+
+    fun addCodexUsage(current: LifetimeStatistics, target: CodexUsageTarget, durationMs: Long): LifetimeStatistics {
+        if (target.codexId.isBlank() || durationMs <= 0L) return current
+        val previous = current.codexStatistics[target.codexId] ?: CodexStatistics()
+        val next = if (target.postKey == null) previous.copy(browsingMs = previous.browsingMs.saturatingAdd(durationMs))
+        else {
+            val post = previous.posts[target.postKey] ?: CodexPostStatistics(label = target.postKey)
+            previous.copy(
+                watchingMs = previous.watchingMs.saturatingAdd(durationMs),
+                posts = previous.posts + (target.postKey to post.copy(
+                    videoMs = post.videoMs.saturatingAdd(if (target.video) durationMs else 0L),
+                    imageMs = post.imageMs.saturatingAdd(if (target.video) 0L else durationMs),
+                )),
+            )
+        }
+        return current.copy(codexStatistics = current.codexStatistics + (target.codexId to next))
+    }
+
+    fun recordCodexPostOpen(current: LifetimeStatistics, codexId: String, postKey: String, label: String): LifetimeStatistics {
+        if (codexId.isBlank() || postKey.isBlank()) return current
+        val previous = current.codexStatistics[codexId] ?: CodexStatistics()
+        val post = previous.posts[postKey] ?: CodexPostStatistics()
+        return current.copy(codexStatistics = current.codexStatistics + (codexId to previous.copy(
+            posts = previous.posts + (postKey to post.copy(label = label.take(160), opens = post.opens.saturatingAdd(1L))),
+        )))
     }
 
     fun recordAppOpen(current: LifetimeStatistics): LifetimeStatistics {
@@ -332,6 +361,14 @@ class DataStoreStatisticsRepository(
 
     override fun observeStatistics(): Flow<LifetimeStatistics> {
         return records.map(StatisticsDataStoreFile::toDomain).distinctUntilChanged()
+    }
+
+    override suspend fun addCodexUsage(target: CodexUsageTarget, durationMs: Long) = mutate {
+        StatisticsPolicies.addCodexUsage(it, target, durationMs)
+    }
+
+    override suspend fun recordCodexPostOpen(codexId: String, postKey: String, label: String) = mutate {
+        StatisticsPolicies.recordCodexPostOpen(it, codexId, postKey, label)
     }
 
     override suspend fun recordAppOpen() = mutate(StatisticsPolicies::recordAppOpen)

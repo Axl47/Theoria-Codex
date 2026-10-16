@@ -1,6 +1,7 @@
 package com.theoriacodex.app.statistics
 
 import android.os.SystemClock
+import com.theoriacodex.data.repository.CodexUsageTarget
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.data.repository.UsageDurationDelta
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -53,6 +54,10 @@ class AppUsageTracker internal constructor(
         events.trySend(UsageEvent.CategoryChanged(category))
     }
 
+    fun onCodexTargetChanged(target: CodexUsageTarget?) {
+        events.trySend(UsageEvent.TargetChanged(target))
+    }
+
     internal fun refreshLiveUsage() {
         events.trySend(UsageEvent.Refresh)
     }
@@ -83,6 +88,14 @@ class AppUsageTracker internal constructor(
         UsageEvent.Foreground -> handleForeground(state)
         UsageEvent.Background -> handleBackground(state)
         is UsageEvent.CategoryChanged -> handleCategoryChanged(state, event.category)
+        is UsageEvent.TargetChanged -> {
+            if (state.target == event.target) state else {
+                val nextStart = if (state.foreground) flushInterval(state.intervalStartedAtMs, state.category, state.target)
+                    else state.intervalStartedAtMs
+                mutableLiveUsage.value = UsageDurationDelta()
+                state.copy(target = event.target, intervalStartedAtMs = nextStart)
+            }
+        }
         UsageEvent.Refresh -> refreshLiveUsage(state)
         is UsageEvent.Barrier -> state.also { event.completion.complete(Unit) }
     }
@@ -96,7 +109,7 @@ class AppUsageTracker internal constructor(
 
     private suspend fun handleBackground(state: UsageTrackingState): UsageTrackingState {
         if (!state.foreground) return state
-        val nextStart = flushInterval(state.intervalStartedAtMs, state.category)
+        val nextStart = flushInterval(state.intervalStartedAtMs, state.category, state.target)
         mutableLiveUsage.value = UsageDurationDelta()
         return state.copy(foreground = false, intervalStartedAtMs = nextStart)
     }
@@ -107,7 +120,7 @@ class AppUsageTracker internal constructor(
     ): UsageTrackingState {
         if (state.category == category) return state
         val nextStart = if (state.foreground) {
-            flushInterval(state.intervalStartedAtMs, state.category)
+            flushInterval(state.intervalStartedAtMs, state.category, state.target)
         } else {
             state.intervalStartedAtMs
         }
@@ -127,11 +140,15 @@ class AppUsageTracker internal constructor(
     private suspend fun flushInterval(
         startedAtMs: Long,
         category: StatisticsUsageCategory?,
+        target: CodexUsageTarget?,
     ): Long {
         val now = elapsedRealtime()
         val delta = usageDelta(now - startedAtMs, category)
         if (delta.totalMs > 0L) {
             runCatchingPreservingCancellation { repository.addUsageDuration(delta) }
+        }
+        if (target != null && delta.totalMs > 0L) {
+            runCatchingPreservingCancellation { repository.addCodexUsage(target, delta.totalMs) }
         }
         return now
     }
@@ -151,6 +168,7 @@ internal fun usageDelta(
 }
 
 private sealed interface UsageEvent {
+    data class TargetChanged(val target: CodexUsageTarget?) : UsageEvent
     data object Foreground : UsageEvent
     data object Background : UsageEvent
     data class CategoryChanged(val category: StatisticsUsageCategory?) : UsageEvent
@@ -159,6 +177,7 @@ private sealed interface UsageEvent {
 }
 
 private data class UsageTrackingState(
+    val target: CodexUsageTarget? = null,
     val foreground: Boolean = false,
     val category: StatisticsUsageCategory? = null,
     val intervalStartedAtMs: Long,

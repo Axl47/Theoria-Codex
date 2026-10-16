@@ -14,6 +14,32 @@ import org.junit.Test
 
 class StatisticsProjectionTest {
     @Test
+    fun `individual codices rank by watching and top five retain full breakdown denominators`() {
+        val posts = (1..6).associate { index ->
+            "PIXIV:$index" to com.theoriacodex.data.repository.CodexPostStatistics(
+                label = "Post $index", opens = index.toLong(), videoMs = index * 100L,
+            )
+        }
+        val rows = codexStatistics(LifetimeStatistics(
+            codexEntryCounts = mapOf("first" to 4L),
+            codexStatistics = mapOf(
+                "first" to com.theoriacodex.data.repository.CodexStatistics(100L, 2100L, posts),
+                "second" to com.theoriacodex.data.repository.CodexStatistics(0L, 3000L),
+                "hidden" to com.theoriacodex.data.repository.CodexStatistics(0L, 9000L),
+            ),
+        ), listOf(codex("first", "First"), codex("second", "Second")))
+        assertEquals(listOf("second", "first"), rows.map { it.codexId })
+        val first = rows.last()
+        assertEquals(4L, first.entries)
+        assertEquals(21L, first.postsSeen)
+        assertEquals(5, first.topOpened.size)
+        assertEquals("Post 6", first.topOpened.first().label)
+        assertEquals(29, first.topOpened.first().percentage)
+        assertEquals(600L, first.topVideos.first().value)
+        assertEquals(emptyList<CodexPostStatistic>(), first.topImages)
+    }
+
+    @Test
     fun `projection combines live usage and deduplicates saved posts across Codices`() {
         val shared = post(SourceKey.PIXIV, "1", listOf("Blue Hair", "portrait"))
         val other = post(SourceKey.GELBOORU, "2", listOf("blue_hair"))

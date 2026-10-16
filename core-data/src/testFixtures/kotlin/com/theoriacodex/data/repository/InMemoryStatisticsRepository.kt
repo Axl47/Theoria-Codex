@@ -14,6 +14,14 @@ class InMemoryStatisticsRepository(
 
     override fun observeStatistics(): Flow<LifetimeStatistics> = mutableStatistics
 
+    override suspend fun addCodexUsage(target: CodexUsageTarget, durationMs: Long) = mutate {
+        StatisticsPolicies.addCodexUsage(it, target, durationMs)
+    }
+
+    override suspend fun recordCodexPostOpen(codexId: String, postKey: String, label: String) = mutate {
+        StatisticsPolicies.recordCodexPostOpen(it, codexId, postKey, label)
+    }
+
     override suspend fun recordAppOpen() = mutate(StatisticsPolicies::recordAppOpen)
 
     override suspend fun addUsageDuration(delta: UsageDurationDelta) = mutate { current ->

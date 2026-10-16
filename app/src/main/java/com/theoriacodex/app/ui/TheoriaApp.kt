@@ -837,8 +837,13 @@ internal fun TheoriaAppContent(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
     val currentRoute = currentDestination?.route
-    LaunchedEffect(appUsageTracker, currentRoute, homeTabRoute) {
+    val statisticsCodexId = backStackEntry?.arguments?.getString("codexId")
+    LaunchedEffect(appUsageTracker, currentRoute, homeTabRoute, statisticsCodexId) {
         appUsageTracker.onCategoryChanged(statisticsUsageCategory(currentRoute, homeTabRoute))
+        if (currentRoute != AppRoute.Viewer) {
+            appUsageTracker.onCodexTargetChanged(statisticsCodexId?.takeIf { currentRoute == AppRoute.CodexDetail }
+                ?.let { com.theoriacodex.data.repository.CodexUsageTarget(it) })
+        }
     }
     val showBottomBar = currentRoute == AppRoute.Home
     val currentContext = LocalContext.current
@@ -1678,6 +1683,11 @@ internal fun TheoriaAppContent(
                             ) { state ->
                                 ViewerRoute(
                                 dependencies = ViewerRouteDependencies(
+                                    onCodexUsageTargetChanged = { target ->
+                                        if (navController.currentDestination?.route == AppRoute.Viewer) {
+                                            appUsageTracker.onCodexTargetChanged(target)
+                                        }
+                                    },
                                     sessionRetentionOwner = viewerSessionOwner,
                                     canonicalizePost = { post -> featureDependencies.offlineMedia?.withoutOfflineLocations(post) ?: post },
                                     postResolver = viewerRouteWorkflow,

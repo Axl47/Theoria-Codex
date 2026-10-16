@@ -635,6 +635,7 @@ private fun TagStatisticsGroup(statistics: StatisticsSummary) {
 @Composable
 private fun CodexStatisticsGroup(statistics: StatisticsSummary) {
     StatisticsGroupTitle("Codex Stats")
+    IndividualCodexStatistics(statistics.codices)
     CodexUsageStat("Most Used Codex", statistics.mostUsedCodex)
     CodexUsageStat("Least Used Codex", statistics.leastUsedCodex)
     Text("Top Sources in Codex", style = MaterialTheme.typography.bodyMedium)

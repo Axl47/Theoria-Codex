@@ -195,7 +195,23 @@ data class UsageDurationDelta(
     val codexMs: Long = 0L,
 )
 
+data class CodexPostStatistics(
+    @field:com.google.gson.annotations.SerializedName("label") val label: String = "",
+    @field:com.google.gson.annotations.SerializedName("opens") val opens: Long = 0L,
+    @field:com.google.gson.annotations.SerializedName("videoMs") val videoMs: Long = 0L,
+    @field:com.google.gson.annotations.SerializedName("imageMs") val imageMs: Long = 0L,
+)
+
+data class CodexStatistics(
+    @field:com.google.gson.annotations.SerializedName("browsingMs") val browsingMs: Long = 0L,
+    @field:com.google.gson.annotations.SerializedName("watchingMs") val watchingMs: Long = 0L,
+    @field:com.google.gson.annotations.SerializedName("posts") val posts: Map<String, CodexPostStatistics> = emptyMap(),
+)
+
+data class CodexUsageTarget(val codexId: String, val postKey: String? = null, val video: Boolean = false)
+
 data class LifetimeStatistics(
+    val codexStatistics: Map<String, CodexStatistics> = emptyMap(),
     val appOpenCount: Long = 0L,
     val totalForegroundMs: Long = 0L,
     val browsingMs: Long = 0L,
@@ -217,6 +233,8 @@ data class LifetimeStatistics(
 /** Local-only cumulative statistics. Feature data remains authoritative for current library composition. */
 interface StatisticsRepository {
     fun observeStatistics(): Flow<LifetimeStatistics>
+    suspend fun addCodexUsage(target: CodexUsageTarget, durationMs: Long)
+    suspend fun recordCodexPostOpen(codexId: String, postKey: String, label: String)
     suspend fun recordAppOpen()
     suspend fun addUsageDuration(delta: UsageDurationDelta)
     suspend fun recordWatchedPost(source: SourceKey, tags: Set<String>)

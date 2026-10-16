@@ -1,5 +1,7 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.app.statistics.statisticsCodexId
+import com.theoriacodex.app.statistics.statisticsPostKey
 import android.content.Context
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.di.SourceDependencies
@@ -227,6 +229,14 @@ internal class ViewerRouteWorkflow(
     ) {
         val origin = session?.context?.streamSource ?: ViewerStreamSource.SEARCH
         recordReadingPosition(post, viewedMediaNumber, session)
+        statisticsCodexId(session?.context)?.let { codexId ->
+            runCatchingPreservingCancellation {
+                data.statisticsRepository.recordCodexPostOpen(
+                    codexId, statisticsPostKey(post.id),
+                    post.title?.takeIf(String::isNotBlank) ?: "${post.id.source.name} ${post.id.sourcePostId}",
+                )
+            }
+        }
         runCatchingPreservingCancellation {
             data.statisticsRepository.recordWatchedPost(
                 source = post.id.source,
