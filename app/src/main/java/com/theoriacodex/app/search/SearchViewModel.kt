@@ -7,6 +7,7 @@ import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.theoriacodex.app.search.state.withAcceptedSearchHistory
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchDraftContext
 import com.theoriacodex.app.search.state.SearchDraftReducer
@@ -237,6 +238,9 @@ internal class SearchViewModel(
                 clearSuggestionState()
             }
 
+            SearchAction.UndoSearch -> mutableState.value.takeIf { it.canUndoSearch }?.searchHistory?.lastOrNull()?.let {
+                applyHistoricalQuery(it.query, it.sourceScope, undo = true)
+            }
             SearchAction.ApplyDraft -> applyDraft()
 
             is SearchAction.ApplyHistoricalQuery -> acceptHistoricalQuery(action)
@@ -424,7 +428,7 @@ internal class SearchViewModel(
         applyHistoricalQuery(action.query, action.sourceScope)
     }
 
-    private fun applyHistoricalQuery(query: Query, sourceScope: SearchSourceScope) {
+    private fun applyHistoricalQuery(query: Query, sourceScope: SearchSourceScope, undo: Boolean = false) {
         val reduction = SearchDraftReducer.restoreDraft(
             state = mutableState.value,
             query = query,
@@ -440,6 +444,7 @@ internal class SearchViewModel(
             effectChannel.trySend(SearchEffect.ShowMessage("Multi-Search sources are unavailable"))
             return
         }
+        cancelAutocomplete()
         mutableState.value = reduction.state.copy(
             query = reduction.state.query.copy(draftSourceScope = restoredScope),
         )
@@ -450,6 +455,7 @@ internal class SearchViewModel(
             query = current.query.draft,
             sourceScope = current.query.draftSourceScope,
             persistAcceptedResult = true,
+            undo = undo,
         )
     }
 
@@ -626,6 +632,7 @@ internal class SearchViewModel(
         query: Query,
         sourceScope: com.theoriacodex.app.search.state.SearchSourceScope,
         persistAcceptedResult: Boolean,
+        undo: Boolean = false,
         onSuccess: suspend () -> Unit = {},
         relatedResetReason: String = "root search ($kind)",
     ) {
@@ -639,7 +646,7 @@ internal class SearchViewModel(
         val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
             try {
                 executeRootRequest(
-                    requestId, query, sourceScope, expectedExecutionKey, persistAcceptedResult, onSuccess,
+                    requestId, query, sourceScope, expectedExecutionKey, persistAcceptedResult, undo, onSuccess,
                 )
             } catch (_: TimeoutCancellationException) {
                 failRequestIfCurrent(requestId, ROOT_REQUEST_TIMEOUT_MESSAGE)
@@ -663,7 +670,7 @@ internal class SearchViewModel(
 
     private suspend fun executeRootRequest(
         requestId: Long, query: Query, sourceScope: SearchSourceScope,
-        expectedExecutionKey: String, persistAcceptedResult: Boolean, onSuccess: suspend () -> Unit,
+        expectedExecutionKey: String, persistAcceptedResult: Boolean, undo: Boolean, onSuccess: suspend () -> Unit,
     ) = withTimeout(rootRequestTimeoutMs) {
         val result = executionService.executeInitial(query, sourceScope)
         coroutineContext.ensureActive()
@@ -676,8 +683,10 @@ internal class SearchViewModel(
             executionService.persistAppliedSearch(result.query, result.sourceScope, result.executionKey)
         }
         if (!isAdmittedResult(requestId, result, expectedExecutionKey)) return@withTimeout
+        val previous = mutableState.value
         val succeeded = completeRequest(requestId, result, expectedExecutionKey)
         if (persistAcceptedResult) {
+            mutableState.value = mutableState.value.withAcceptedSearchHistory(previous, undo)
             savedStateHandle[SearchSavedStateKeys.SCROLL_INDEX] = 0
             savedStateHandle[SearchSavedStateKeys.SCROLL_OFFSET] = 0
             reduce(SearchStateChange.ScrollResetRequested)

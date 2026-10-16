@@ -84,6 +84,8 @@ The Search route applies persisted scroll position once when the route is restor
 
 The collapsed Search field renders applied context through its existing unfocused placeholder slot. Build that summary only from `applied` query/source state plus current visibility-filter state; never copy the summary into the real text input or present draft terms as applied. Keep it one line with ellipsis and do not add a separate applied-query row.
 
+Search Undo keeps at most 20 previous query/source-scope pairs in the navigation-scoped Search session. Record a backward step only after an explicit root result passes admission and persistence; draft edits, same-query refresh, paging, retries and stale/cancelled work add no steps. Undo reuses historical-query validation and the normal applied-query/scroll publication path, consuming one step only when its replay is admitted. Retain grouped terms and temporary Multi-Search scope, and never retain result pages or provider continuations as history.
+
 ## Related Post Shelves
 
 Search, For You and Creator Profile may show one transient provider-native related shelf only after the local Like/Codex transaction commits a transition to liked. Derive support from `RelatedPostsSourceAdapter`, deliver the typed outcome to the exact originating route owner, preserve provider order, and reject stale generations. Never send a remote Pixiv bookmark or Gelbooru favorite.

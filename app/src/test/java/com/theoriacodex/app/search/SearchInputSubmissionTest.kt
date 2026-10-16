@@ -25,6 +25,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.search.state.SearchHistoryEntry
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchSuggestionsUiState
 import com.theoriacodex.app.search.state.SearchUiState
@@ -40,6 +41,35 @@ import org.robolectric.annotation.Config
 @Config(application = Application::class, sdk = [27, 35])
 class SearchInputSubmissionTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test
+    fun `Undo is left of Reset and dispatches only when history is available and idle`() {
+        val state = mutableStateOf(SearchUiState())
+        val actions = mutableListOf<SearchAction>()
+        compose.setContent { MaterialTheme { Box(Modifier.size(400.dp, 700.dp)) {
+            SearchScreen(
+                state = state.value, creatorBrowsingSources = emptySet(), onAction = { actions += it },
+                resolvePostById = { null }, recoverPostMedia = { _, _ -> null },
+                tagVideoCountProvider = { _, _ -> null }, fetchTagVideoCounts = { _, _ -> emptyMap() },
+                onOpenCreatorProfile = {}, onOpenLegacyCreatorProfile = {},
+                onRequestSaveToCodex = {}, onSaveToDevice = {},
+            )
+        } } }
+        compose.onNodeWithTag("Search query input").performClick()
+        val undo = compose.onNodeWithText("Undo")
+        undo.assertIsNotEnabled()
+        compose.runOnIdle {
+            val query = state.value.query.applied
+            state.value = state.value.copy(searchHistory = listOf(SearchHistoryEntry(query, state.value.query.appliedSourceScope)))
+        }
+        undo.assertIsEnabled()
+        assertTrue(undo.fetchSemanticsNode().boundsInRoot.right <= compose.onNodeWithText("Reset").fetchSemanticsNode().boundsInRoot.left)
+        compose.runOnIdle { state.value = state.value.copy(execution = state.value.execution.copy(activeRequestId = 10)) }
+        undo.assertIsNotEnabled()
+        compose.runOnIdle { state.value = state.value.copy(execution = state.value.execution.copy(activeRequestId = null)) }
+        undo.assertIsEnabled().performClick()
+        compose.runOnIdle { assertEquals(1, actions.count { it == SearchAction.UndoSearch }) }
+    }
 
     @Test
     fun `IME submits current input after eligibility changes and rejects earlier empty or blocked input`() {

@@ -574,17 +574,28 @@ fun SearchScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        TextButton(
-                            onClick = {
-                                inputFocus.clear()
-                                onAction(SearchAction.ClearDraft)
-                                onAction(SearchAction.ClearAutocomplete)
-                                showFilterSheet = false
-                                scope.launch { resetScrollToTop() }
-                            },
-                            enabled = state.hasPendingChanges,
-                        ) {
-                            Text("Reset")
+                        Row {
+                            TextButton(
+                                enabled = state.canUndoSearch,
+                                onClick = {
+                                    inputFocus.clear()
+                                    onAction(SearchAction.UndoSearch)
+                                    onAction(SearchAction.ClearAutocomplete)
+                                    showFilterSheet = false
+                                },
+                            ) { Text("Undo") }
+                            TextButton(
+                                onClick = {
+                                    inputFocus.clear()
+                                    onAction(SearchAction.ClearDraft)
+                                    onAction(SearchAction.ClearAutocomplete)
+                                    showFilterSheet = false
+                                    scope.launch { resetScrollToTop() }
+                                },
+                                enabled = state.hasPendingChanges,
+                            ) {
+                                Text("Reset")
+                            }
                         }
                         TextButton(onClick = {
                             applyDraft()

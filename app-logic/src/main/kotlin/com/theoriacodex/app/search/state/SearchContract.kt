@@ -28,7 +28,10 @@ data class SearchUiState(
     val execution: SearchExecutionUiState = SearchExecutionUiState(),
     val restoration: SearchRestorationUiState = SearchRestorationUiState.NotStarted,
     val relatedPosts: RelatedPostsUiState = RelatedPostsUiState.Idle,
+    val searchHistory: List<SearchHistoryEntry> = emptyList(),
 ) {
+    val canUndoSearch: Boolean get() = searchHistory.isNotEmpty() && execution.activeRequestId == null
+
     val loading: Boolean
         get() = execution.activeKind != null && execution.activeKind != SearchRequestKind.PAGE
 
@@ -182,6 +185,7 @@ sealed interface SearchAction {
     data class IncludeSuggestion(val suggestion: FacetedTagSuggestion) : SearchAction
     data class ExcludeSuggestion(val suggestion: FacetedTagSuggestion) : SearchAction
     data object ClearAutocomplete : SearchAction
+    data object UndoSearch : SearchAction
     data object ApplyDraft : SearchAction
     data class ApplyHistoricalQuery(
         val query: Query,
