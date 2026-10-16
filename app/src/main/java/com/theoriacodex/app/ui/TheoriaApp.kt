@@ -1302,16 +1302,16 @@ internal fun TheoriaAppContent(
                                                     topLevelPagerState.scrollToPage(targetIndex)
                                                 }
                                             },
-                                            onOpenWatchedPost = { index ->
+                                            onOpenWatchedPost = { entries, index ->
                                                 openRecentSection(
-                                                    state.watchedPosts,
+                                                    entries,
                                                     index,
                                                     RecentPostSection.WATCHED,
                                                 )
                                             },
-                                            onOpenCodexPost = { index ->
+                                            onOpenCodexPost = { entries, index ->
                                                 openRecentSection(
-                                                    state.codexPosts,
+                                                    entries,
                                                     index,
                                                     RecentPostSection.CODEX,
                                                 )

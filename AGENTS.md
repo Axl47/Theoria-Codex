@@ -114,6 +114,8 @@ Wait for the first authoritative Codex collection list before composing the Libr
 
 ## Recents Section Identity
 
+Recents source filtering matches posts by canonical source and searches by recorded participating sources, preserving exact multi-source/FYP replay payloads. Viewer launches receive the displayed filtered section list and its index together; never apply a filtered index to the unfiltered history. Clear remains section-wide and is labeled accordingly when a source filter is active.
+
 Last reading position is independent from highest-page progress. `ReadingPositionRepository` stores the last one-based media number by canonical post and Recents section; Start over resets only this position. Viewer persists the selected canonical ID and a bounded ordered ID window for cold restoration, preserving launch filtering/order instead of rebuilding a different feed by index. Creator navigation identity must be restorable before rendering its route. Viewer save callbacks carry the active launch context, never the already-consumed pending handoff.
 
 Named saved searches are device-wide like Recents, bounded independently, and reuse `RecentSearchPayloadCodec` for exact grouped, Multi-Search, and FYP replay. History clearing and pruning never remove pins. Backup merges must preserve exact source order and source-specific FYP tags.

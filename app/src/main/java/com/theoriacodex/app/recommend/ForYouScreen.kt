@@ -1,6 +1,5 @@
 package com.theoriacodex.app.recommend
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,18 +8,13 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -37,10 +31,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.AnimatedDurationRange
@@ -67,11 +57,11 @@ import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
 import com.theoriacodex.app.ui.components.FeedLoadingState
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
+import com.theoriacodex.app.ui.components.SourceSelector
 import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.ui.components.TwoColumnProjectedPostStaggeredGrid
 import com.theoriacodex.app.ui.components.RelatedPostsShelf
 import com.theoriacodex.app.ui.components.rememberRelatedFeedPresentation
-import com.theoriacodex.app.ui.components.expandableControlSemantics
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.CreatorProfile
@@ -449,59 +439,17 @@ internal fun ForYouSourceSelector(
     onExpandedChange: (Boolean) -> Unit,
     onSourceSelected: (SourceKey?) -> Unit,
 ) {
-    val selectedLabel = selectedSource?.displayName() ?: "Unified"
-    Box {
-        Row(
-            modifier = Modifier
-                .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                .semantics {
-                    contentDescription = "Select For You source"
-                }
-                .expandableControlSemantics(
-                    expanded = expanded,
-                    description = "${if (expanded) "Expanded" else "Collapsed"}; " +
-                        "$selectedLabel selected",
-                    onExpandedChange = onExpandedChange,
-                )
-                .clickable(
-                    enabled = enabled,
-                    role = Role.DropdownList,
-                    onClick = { onExpandedChange(true) },
-                )
-                .padding(vertical = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = selectedLabel,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Icon(
-                imageVector = Icons.Default.ArrowDropDown,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(18.dp)
-                    .testTag("For You source icon"),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { onExpandedChange(false) },
-        ) {
-            DropdownMenuItem(
-                text = { Text("Unified") },
-                onClick = { onSourceSelected(null) },
-            )
-            availableSources.forEach { source ->
-                DropdownMenuItem(
-                    text = { Text(source.displayName()) },
-                    onClick = { onSourceSelected(source) },
-                )
-            }
-        }
-    }
+    SourceSelector(
+        selectedSource = selectedSource,
+        availableSources = availableSources,
+        allSourcesLabel = "Unified",
+        accessibilityLabel = "Select For You source",
+        iconTestTag = "For You source icon",
+        enabled = enabled,
+        expanded = expanded,
+        onExpandedChange = onExpandedChange,
+        onSourceSelected = onSourceSelected,
+    )
 }
 
 

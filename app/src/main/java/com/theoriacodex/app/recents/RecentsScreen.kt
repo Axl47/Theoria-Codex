@@ -44,6 +44,7 @@ import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.SourceLogo
 import com.theoriacodex.app.tags.PostTagActionSection
+import com.theoriacodex.app.ui.components.SourceSelector
 import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
@@ -92,8 +93,8 @@ fun RecentsScreen(
     onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
     onGoToSearch: () -> Unit,
-    onOpenWatchedPost: (Int) -> Unit,
-    onOpenCodexPost: (Int) -> Unit,
+    onOpenWatchedPost: (List<RecentPostEntry>, Int) -> Unit,
+    onOpenCodexPost: (List<RecentPostEntry>, Int) -> Unit,
     onOpenSearch: (RecentSearchEntry) -> Unit,
     onOpenFypSearch: (RecentSearchEntry) -> Unit,
     onClear: (RecentsClearTarget) -> Unit,
@@ -104,6 +105,20 @@ fun RecentsScreen(
     onStartOver: (Post, RecentPostSection) -> Unit = { _, _ -> },
 ) {
     var filter by rememberSaveable { mutableStateOf(RecentsFilter.WATCHED) }
+    var selectedSource by rememberSaveable { mutableStateOf<SourceKey?>(null) }
+    var sourceMenuExpanded by remember { mutableStateOf(false) }
+    val visibleWatchedPosts = remember(watchedPosts, selectedSource) {
+        watchedPosts.filter { selectedSource == null || it.post.id.source == selectedSource }
+    }
+    val visibleCodexPosts = remember(codexPosts, selectedSource) {
+        codexPosts.filter { selectedSource == null || it.post.id.source == selectedSource }
+    }
+    val visibleSearches = remember(searches, selectedSource) { searches.filter { it.matchesSource(selectedSource) } }
+    val visibleFypSearches = remember(fypSearches, selectedSource) { fypSearches.filter { it.matchesSource(selectedSource) } }
+    val visibleActivity = remember(activity, selectedSource) { activity.filter { it.matchesSource(selectedSource) } }
+    val sourceEmptyMessage = selectedSource?.let { "No recent activity from ${it.displayName()}." }
+    val openWatchedPost: (Int) -> Unit = { onOpenWatchedPost(visibleWatchedPosts, it) }
+    val openCodexPost: (Int) -> Unit = { onOpenCodexPost(visibleCodexPosts, it) }
     val now = remember(watchedPosts, codexPosts, searches, fypSearches, activity) { System.currentTimeMillis() }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var selectedActionSection by remember { mutableStateOf(RecentPostSection.WATCHED) }
@@ -142,9 +157,24 @@ fun RecentsScreen(
                     onClear(filter.clearTarget)
                 },
             ) {
-                Text("Clear")
+                Text(if (selectedSource == null) "Clear" else "Clear section")
             }
         }
+
+        SourceSelector(
+            selectedSource = selectedSource,
+            availableSources = SourceKey.entries,
+            allSourcesLabel = "All sources",
+            accessibilityLabel = "Filter Recents by source",
+            iconTestTag = "Recents source icon",
+            enabled = true,
+            expanded = sourceMenuExpanded,
+            onExpandedChange = { sourceMenuExpanded = it },
+            onSourceSelected = {
+                selectedSource = it
+                sourceMenuExpanded = false
+            },
+        )
 
         Row(
             modifier = Modifier
@@ -164,7 +194,7 @@ fun RecentsScreen(
 
         when (filter) {
             RecentsFilter.WATCHED -> WatchedGrid(
-                watchedPosts = watchedPosts,
+                watchedPosts = visibleWatchedPosts,
                 now = now,
                 pixivUgoiraClient = pixivUgoiraClient,
                 likedPostIds = likedPostIds,
@@ -173,16 +203,17 @@ fun RecentsScreen(
                 onDurationEnvironmentChanged = onDurationEnvironmentChanged,
                 onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
                 onToggleLike = onToggleLike,
-                onOpenWatchedPost = onOpenWatchedPost,
+                onOpenWatchedPost = openWatchedPost,
                 onLongPress = {
                     selectedActionPost = it
                     selectedActionSection = RecentPostSection.WATCHED
                 },
                 showMediaProgress = true,
+                emptyMessage = sourceEmptyMessage ?: "Posts appear here after you open them in Viewer.",
             )
 
             RecentsFilter.CODEX -> WatchedGrid(
-                watchedPosts = codexPosts,
+                watchedPosts = visibleCodexPosts,
                 now = now,
                 pixivUgoiraClient = pixivUgoiraClient,
                 likedPostIds = likedPostIds,
@@ -191,36 +222,38 @@ fun RecentsScreen(
                 onDurationEnvironmentChanged = onDurationEnvironmentChanged,
                 onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
                 onToggleLike = onToggleLike,
-                onOpenWatchedPost = onOpenCodexPost,
+                onOpenWatchedPost = openCodexPost,
                 onLongPress = {
                     selectedActionPost = it
                     selectedActionSection = RecentPostSection.CODEX
                 },
-                emptyMessage = "Posts appear here after you open them from Codex.",
+                emptyMessage = sourceEmptyMessage ?: "Posts appear here after you open them from Codex.",
             )
 
             RecentsFilter.FYP -> SearchHistoryList(
-                searches = fypSearches,
+                searches = visibleFypSearches,
                 now = now,
                 onOpenSearch = onOpenFypSearch,
                 onPinSearch = onPinSearch,
-                emptyMessage = "Recommendation searches appear here after For You generates them.",
+                emptyMessage = sourceEmptyMessage ?: "Recommendation searches appear here after For You generates them.",
             )
 
             RecentsFilter.SEARCHES -> SearchHistoryList(
-                searches = searches,
+                searches = visibleSearches,
+                emptyMessage = sourceEmptyMessage ?: "Searches appear here after you press Apply in Search.",
                 now = now,
                 onOpenSearch = onOpenSearch,
                 onPinSearch = onPinSearch,
             )
 
             RecentsFilter.ALL -> ActivityList(
-                activity = activity,
-                watchedPosts = watchedPosts,
-                codexPosts = codexPosts,
+                activity = visibleActivity,
+                emptyMessage = sourceEmptyMessage ?: "Recent posts and applied searches appear here.",
+                watchedPosts = visibleWatchedPosts,
+                codexPosts = visibleCodexPosts,
                 now = now,
-                onOpenWatchedPost = onOpenWatchedPost,
-                onOpenCodexPost = onOpenCodexPost,
+                onOpenWatchedPost = openWatchedPost,
+                onOpenCodexPost = openCodexPost,
                 onOpenSearch = onOpenSearch,
                 onOpenFypSearch = onOpenFypSearch,
                 onPinSearch = onPinSearch,
@@ -388,9 +421,10 @@ private fun ActivityList(
     onOpenSearch: (RecentSearchEntry) -> Unit,
     onOpenFypSearch: (RecentSearchEntry) -> Unit,
     onPinSearch: ((RecentSearchEntry) -> Unit)?,
+    emptyMessage: String,
 ) {
     if (activity.isEmpty()) {
-        EmptyRecentState("Recent posts and applied searches appear here.")
+        EmptyRecentState(emptyMessage)
         return
     }
 
