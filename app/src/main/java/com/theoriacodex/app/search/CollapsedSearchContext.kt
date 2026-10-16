@@ -18,9 +18,9 @@ internal fun collapsedSearchContextSummary(
             "$first +${appliedSourceScope.sources.size - 1}"
         }
     }
-    val query = appliedQuery.effectiveIncludeTermGroups.takeIf(List<*>::isNotEmpty)?.joinToString(" AND ") { group ->
+    val query = appliedQuery.effectiveIncludeTermGroups.takeIf(List<*>::isNotEmpty)?.joinToString(" & ") { group ->
         if (group.terms.size == 1) group.terms.single().value
-        else group.terms.joinToString(prefix = "(", postfix = ")", separator = " OR ") { it.value }
+        else group.terms.joinToString(prefix = "(", postfix = ")", separator = " || ") { it.value }
     }
         ?: appliedQuery.excludeTerms.firstOrNull()?.value?.let { value -> "-$value" }
     return buildList {

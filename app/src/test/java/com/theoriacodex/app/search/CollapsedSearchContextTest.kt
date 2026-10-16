@@ -16,7 +16,7 @@ class CollapsedSearchContextTest {
         val query = emptySearchQuery(QueryMode.Source(SourceKey.PIXIV)).withIncludeTermsAsRequired(listOf(SearchTerm("klee"), SearchTerm("landscape")))
 
         assertEquals(
-            "Pixiv · klee AND landscape · 2 filters",
+            "Pixiv · klee & landscape · 2 filters",
             collapsedSearchContextSummary(
                 appliedSourceScope = SearchSourceScope.Single(SourceKey.PIXIV),
                 appliedQuery = query,
@@ -33,7 +33,7 @@ class CollapsedSearchContextTest {
             ))
 
         assertEquals(
-            "Unified · tag1 AND (tag2 OR tag3)",
+            "Unified · tag1 & (tag2 || tag3)",
             collapsedSearchContextSummary(SearchSourceScope.GlobalUnified, query, 0),
         )
     }
