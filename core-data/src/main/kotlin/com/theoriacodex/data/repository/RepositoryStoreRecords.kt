@@ -19,6 +19,8 @@ internal data class LegacySettingsStoreRecord(
     val enabledSources: List<String> = SourceKey.entries.map { it.name },
     @field:SerializedName("sourceWeights")
     val sourceWeights: Map<String, Double> = SourceRuntimeSettings().sourceWeights.mapKeys { it.key.name },
+    @field:SerializedName("sourceWeightsByConfiguration")
+    val sourceWeightsByConfiguration: Map<String, Map<String, Double>>? = null,
     @field:SerializedName("videoQuality") val videoQuality: String? = null,
     @field:SerializedName("downloadQuality") val downloadQuality: String? = null,
     @field:SerializedName("downloadsOverMetered") val downloadsOverMetered: Boolean? = null,
@@ -64,6 +66,7 @@ internal data class LegacySettingsStoreRecord(
             sourceWeights = sourceWeights.mapNotNull { (key, value) ->
                 runCatching { SourceKey.valueOf(key) }.getOrNull()?.let { source -> source to value }
             }.toMap(),
+            sourceWeightsByConfiguration = decodeWeightConfigurations(),
         )
         val profiles = recommendationProfiles
             ?.mapNotNull { it.toDomainOrNull() }
@@ -107,6 +110,13 @@ internal data class LegacySettingsStoreRecord(
         )
     }
 
+    private fun decodeWeightConfigurations(): Map<String, Map<SourceKey, Double>> =
+        sourceWeightsByConfiguration.orEmpty().mapValues { (_, weights) ->
+            weights.mapNotNull { (name, weight) ->
+                runCatching { SourceKey.valueOf(name) }.getOrNull()?.let { it to weight }
+            }.toMap()
+        }
+
     fun requiresSourceCatalogMigration(): Boolean {
         return sourceSchemaVersion() < SHARED_SOURCE_CATALOG_VERSION
     }
@@ -148,6 +158,9 @@ internal data class LegacySettingsStoreRecord(
                 sourceCatalogVersion = SHARED_SOURCE_CATALOG_VERSION,
                 enabledSources = settings.runtime.enabledSources.map { it.name },
                 sourceWeights = settings.runtime.sourceWeights.mapKeys { it.key.name },
+                sourceWeightsByConfiguration = settings.runtime.sourceWeightsByConfiguration.mapValues { (_, weights) ->
+                    weights.mapKeys { it.key.name }
+                },
                 cacheFullImageOnSave = settings.cache.cacheFullImageOnSave,
                 videoQuality = settings.viewer.videoQuality.name,
                 downloadQuality = settings.cache.downloadQuality.name,

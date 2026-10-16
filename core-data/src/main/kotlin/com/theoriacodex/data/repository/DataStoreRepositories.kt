@@ -116,7 +116,7 @@ class DataStoreSettingsRepository(
 
     override suspend fun setEnabledSources(enabledSources: Set<SourceKey>) {
         updateSettings { current ->
-            current.copy(runtime = current.runtime.copy(enabledSources = enabledSources))
+            current.copy(runtime = SourceWeightSettings.selectSources(current.runtime, enabledSources))
         }
     }
 

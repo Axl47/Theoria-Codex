@@ -73,12 +73,7 @@ internal object RepositoryPolicies {
             .filterValues { snapshot -> snapshot.checkedAtEpochMs >= 0L }
 
         return settings.copy(
-            runtime = settings.runtime.copy(
-                sourceWeights = normalizeSourceWeights(
-                    enabledSources = settings.runtime.enabledSources,
-                    rawWeights = settings.runtime.sourceWeights,
-                ),
-            ),
+            runtime = SourceWeightSettings.normalize(settings.runtime),
             recommendationProfiles = normalizedProfiles,
             activeProfileId = activeProfileId,
             forYouBlacklistByProfile = normalizedBlacklist,

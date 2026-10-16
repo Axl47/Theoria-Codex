@@ -19,7 +19,7 @@ class ReadOnlyProfileBackupFilesTest {
         file.writeBytes(original)
         val snapshot = ReadOnlyProfileBackupFiles.capture(directory)
         snapshot.requireUnchanged()
-        assertEquals(AppSettings(), snapshot.settings)
+        assertEquals(RepositoryPolicies.normalizeSettings(AppSettings()), snapshot.settings)
         assertTrue(original.contentEquals(file.readBytes()))
         assertEquals(listOf(DATASTORE_SETTINGS_FILE_NAME), directory.listFiles()!!.map { it.name })
         file.writeText(Gson().toJson(SettingsDataStoreFile.fromDomain(AppSettings().copy(cache = CacheSettings(cacheFullImageOnSave = true)))))

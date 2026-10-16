@@ -42,6 +42,29 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
+    fun `source weight memory survives repository reconstruction`() = runTest {
+        val directory = tempFolder.newFolder("weight-memory")
+        val firstScope = newScope()
+        val first = DataStoreSettingsRepository(directory, firstScope)
+        val pair = setOf(SourceKey.PIXIV, SourceKey.GELBOORU)
+        first.setEnabledSources(pair)
+        first.setSourceWeights(mapOf(SourceKey.PIXIV to 4.0, SourceKey.GELBOORU to 1.0))
+        first.setEnabledSources(setOf(SourceKey.HITOMI))
+        closeScope(firstScope)
+
+        val secondScope = newScope()
+        try {
+            val second = DataStoreSettingsRepository(directory, secondScope)
+            second.setEnabledSources(pair)
+            val weights = second.observeSettings().first().runtime.sourceWeights
+            assertEquals(0.8, weights.getValue(SourceKey.PIXIV), 0.0000001)
+            assertEquals(0.2, weights.getValue(SourceKey.GELBOORU), 0.0000001)
+        } finally {
+            closeScope(secondScope)
+        }
+    }
+
+    @Test
     fun `settings imports legacy JSON once archives it and records a verifiable proof`() = runTest {
         val directory = tempFolder.newFolder("settings-import")
         val legacy = directory.resolve("settings_store.json")

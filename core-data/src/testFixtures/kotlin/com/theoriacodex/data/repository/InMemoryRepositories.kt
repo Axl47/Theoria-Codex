@@ -449,7 +449,7 @@ class InMemorySettingsRepository : SettingsRepository {
     override suspend fun setEnabledSources(enabledSources: Set<SourceKey>) {
         updateSettings { current ->
             current.copy(
-                runtime = current.runtime.copy(enabledSources = enabledSources),
+                runtime = SourceWeightSettings.selectSources(current.runtime, enabledSources),
             )
         }
     }

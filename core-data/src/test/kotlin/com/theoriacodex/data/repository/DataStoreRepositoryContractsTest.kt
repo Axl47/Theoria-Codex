@@ -69,6 +69,27 @@ class DataStoreRepositoryContractsTest(
     }
 
     @Test
+    fun `source combinations remember independent weights regardless of source order`() = runTest {
+        val repository = createSettingsRepository()
+        val pair = linkedSetOf(SourceKey.PIXIV, SourceKey.GELBOORU)
+        repository.setEnabledSources(pair)
+        repository.setSourceWeights(mapOf(SourceKey.PIXIV to 3.0, SourceKey.GELBOORU to 1.0))
+        val pairWeights = repository.observeSettings().first().runtime.sourceWeights
+        assertEquals(0.75, pairWeights.getValue(SourceKey.PIXIV), 0.0000001)
+
+        val triple = pair + SourceKey.HITOMI
+        repository.setEnabledSources(triple)
+        repository.setSourceWeights(mapOf(SourceKey.PIXIV to 1.0, SourceKey.GELBOORU to 2.0, SourceKey.HITOMI to 7.0))
+        val tripleWeights = repository.observeSettings().first().runtime.sourceWeights
+        repository.setEnabledSources(emptySet())
+        repository.setEnabledSources(linkedSetOf(SourceKey.GELBOORU, SourceKey.PIXIV))
+        assertEquals(pairWeights, repository.observeSettings().first().runtime.sourceWeights)
+        repository.setCacheFullImageOnSave(true)
+        repository.setEnabledSources(triple)
+        assertEquals(tripleWeights, repository.observeSettings().first().runtime.sourceWeights)
+    }
+
+    @Test
     fun `ui restore preserves one-time tab scroll and launch context semantics`() = runTest {
         val repository = createUiRestoreRepository()
         val launch = ViewerLaunchContext(
