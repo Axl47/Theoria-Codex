@@ -153,14 +153,6 @@ private fun SaveToCodexSheetContent(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             SaveToCodexHeader(title, onDismiss)
-            selectedProfile?.let { profile ->
-                Text(
-                    text = "Profile: ${profile.name}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 8.dp),
-                )
-            }
             OutlinedTextField(
                 value = searchText,
                 onValueChange = { searchText = it },
