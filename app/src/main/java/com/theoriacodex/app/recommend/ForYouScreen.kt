@@ -207,20 +207,7 @@ fun ForYouScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("For You", style = MaterialTheme.typography.titleLarge)
-                ForYouSourceSelector(
-                    selectedSource = state.selectedSource,
-                    availableSources = state.availableSources,
-                    enabled = !state.isRefreshing && !state.isPaging,
-                    expanded = showSourceMenu,
-                    onExpandedChange = { showSourceMenu = it },
-                    onSourceSelected = { source ->
-                        showSourceMenu = false
-                        onAction(ForYouAction.SelectSource(source))
-                    },
-                )
-            }
+            Text("For You", style = MaterialTheme.typography.titleLarge)
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 IconButton(
                     enabled = state.canBlacklistCurrentSeed,
@@ -242,6 +229,18 @@ fun ForYouScreen(
                 }
             }
         }
+
+        ForYouSourceSelector(
+            selectedSource = state.selectedSource,
+            availableSources = state.availableSources,
+            enabled = !state.isRefreshing && !state.isPaging,
+            expanded = showSourceMenu,
+            onExpandedChange = { showSourceMenu = it },
+            onSourceSelected = { source ->
+                showSourceMenu = false
+                onAction(ForYouAction.SelectSource(source))
+            },
+        )
 
         if (state.seedSummaryBySource.isNotEmpty()) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
