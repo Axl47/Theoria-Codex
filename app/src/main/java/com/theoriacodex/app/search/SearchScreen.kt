@@ -1760,28 +1760,7 @@ internal fun SearchSourcePicker(
             },
         ) {
             Box(Modifier.clearAndSetSemantics {}) {
-                when (draftSourceScope) {
-                    is SearchSourceScope.Single -> {
-                        val source = draftSourceScope.source
-                        if (source == SourceKey.IWARA) Text("I") else SourceLogo(source, size = 18.dp)
-                    }
-                    SearchSourceScope.GlobalUnified, is SearchSourceScope.Temporary -> {
-                        val count = when (draftSourceScope) {
-                            is SearchSourceScope.Temporary -> draftSourceScope.sources.size
-                            else -> unifiedSourceCount
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("U")
-                            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary) {
-                                Text(
-                                    text = count.toString(),
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    style = MaterialTheme.typography.labelSmall,
-                                )
-                            }
-                        }
-                    }
-                }
+                SearchSourceIndicator(draftSourceScope, unifiedSourceCount)
             }
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -1796,6 +1775,33 @@ internal fun SearchSourcePicker(
                     },
                     onTemporarySourceToggled = onTemporarySourceToggled,
                 )
+            }
+        }
+    }
+}
+
+/** Compact visual counterpart to the picker button's accessible scope label. */
+@Composable
+private fun SearchSourceIndicator(draftSourceScope: SearchSourceScope, unifiedSourceCount: Int) {
+    when (draftSourceScope) {
+        is SearchSourceScope.Single -> {
+            val source = draftSourceScope.source
+            if (source == SourceKey.IWARA) Text("I") else SourceLogo(source, size = 18.dp)
+        }
+        SearchSourceScope.GlobalUnified, is SearchSourceScope.Temporary -> {
+            val count = when (draftSourceScope) {
+                is SearchSourceScope.Temporary -> draftSourceScope.sources.size
+                else -> unifiedSourceCount
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("U")
+                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary) {
+                    Text(
+                        text = count.toString(),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
             }
         }
     }
