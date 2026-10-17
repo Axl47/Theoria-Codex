@@ -7,6 +7,31 @@ import org.junit.Test
 
 class FeedPageDemandTest {
     @Test
+    fun `restoration loads absent anchor through the same bounded budget and continue`() {
+        val demand = FeedPageDemand()
+        val restoring = hiddenPage.copy(hasLocalFilters = false, visibleCount = 20,
+            canonicalCount = 20, requiredCanonicalIndex = 90)
+        for (generation in 1L..3L) {
+            assertTrue(demand.update(restoring.copy(completedGeneration = generation)).loadNextPage)
+        }
+        assertTrue(demand.update(restoring.copy(completedGeneration = 4L)).showContinue)
+        demand.continueLoading()
+        assertTrue(demand.update(restoring.copy(completedGeneration = 4L)).loadNextPage)
+        assertFalse(demand.update(restoring.copy(completedGeneration = 5L, canonicalCount = 100)).loadNextPage)
+    }
+
+    @Test
+    fun `restoration page failure pauses demand and exhaustion stops it`() {
+        val restoring = hiddenPage.copy(hasLocalFilters = false, visibleCount = 20,
+            canonicalCount = 20, requiredCanonicalIndex = 22)
+        val demand = FeedPageDemand()
+        assertTrue(demand.update(restoring).loadNextPage)
+        assertFalse(demand.update(restoring.copy(completedGeneration = 2L, failed = true)).loadNextPage)
+        assertFalse(demand.update(restoring.copy(completedGeneration = 3L)).loadNextPage)
+        assertFalse(FeedPageDemand().update(restoring.copy(canLoadMore = false)).loadNextPage)
+    }
+
+    @Test
     fun `hidden first pages drain only three pages before an explicit continue`() {
         val demand = FeedPageDemand()
         for (generation in 1L..3L) {

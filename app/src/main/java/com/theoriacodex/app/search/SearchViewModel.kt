@@ -17,6 +17,7 @@ import com.theoriacodex.app.search.state.SearchRestorationUiState
 import com.theoriacodex.app.search.state.SearchStateChange
 import com.theoriacodex.app.search.state.SearchStateReducer
 import com.theoriacodex.app.search.state.SearchUiState
+import com.theoriacodex.app.search.state.allowsScrollPersistence
 import com.theoriacodex.app.search.state.withAutocompleteResult
 import com.theoriacodex.app.search.state.withResolvedPosts
 import com.theoriacodex.app.search.state.withSuggestionInput
@@ -989,6 +990,7 @@ internal class SearchViewModel(
     }
 
     private fun persistScroll(action: SearchAction.ScrollChanged) {
+        if (!mutableState.value.restoration.allowsScrollPersistence) return
         val index = action.firstVisibleItemIndex.coerceAtLeast(0)
         val offset = action.firstVisibleItemOffsetPx.coerceAtLeast(0)
         savedStateHandle[SearchSavedStateKeys.SCROLL_INDEX] = index

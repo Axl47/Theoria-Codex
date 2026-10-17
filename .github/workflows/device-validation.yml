@@ -110,6 +110,7 @@ jobs:
           path: |
             build/reports/device-preflight/
             app/build/outputs/androidTest-results/connected/
+            app/build/outputs/connected_android_test_additional_output/
             app/build/reports/androidTests/connected/
             core-data-android/build/outputs/androidTest-results/connected/
             core-data-android/build/reports/androidTests/connected/

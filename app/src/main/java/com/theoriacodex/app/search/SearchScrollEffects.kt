@@ -1,6 +1,7 @@
 package com.theoriacodex.app.search
 
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -9,49 +10,64 @@ import androidx.compose.runtime.snapshotFlow
 import com.theoriacodex.app.related.RelatedFeedProjection
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchRestorationUiState
+import com.theoriacodex.app.search.state.SearchUiState
+import com.theoriacodex.app.search.state.allowsScrollPersistence
+import com.theoriacodex.app.search.state.canApplyScrollRestoration
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterIsInstance
 
 @Composable
 internal fun SearchScrollRestorationEffect(
-    restoration: SearchRestorationUiState.Restored?,
-    hasVisibleResults: Boolean,
-    animatedFilterActive: Boolean,
+    state: SearchUiState,
     projection: RelatedFeedProjection,
     gridState: LazyStaggeredGridState,
     onAction: (SearchAction) -> Unit,
 ) {
     val currentProjection by rememberUpdatedState(projection)
-    LaunchedEffect(restoration?.scrollRequestId, hasVisibleResults, animatedFilterActive) {
+    val restoration = state.restoration as? SearchRestorationUiState.Restored
+    val currentRestoration by rememberUpdatedState(restoration)
+    val dispatch by rememberUpdatedState(onAction)
+    // A deliberate drag supersedes restoration; scrollToItem emits no DragInteraction.
+    LaunchedEffect(gridState) {
+        gridState.interactionSource.interactions.filterIsInstance<DragInteraction.Start>().collect {
+            currentRestoration?.takeIf { it.scrollState != null }?.let {
+                dispatch(SearchAction.ScrollRestorationApplied(it.scrollRequestId))
+            }
+        }
+    }
+    LaunchedEffect(restoration?.scrollRequestId, state.canApplyScrollRestoration) {
         val request = restoration ?: return@LaunchedEffect
         val restored = request.scrollState ?: return@LaunchedEffect
-        if (!hasVisibleResults || (animatedFilterActive && !request.resetToTop)) return@LaunchedEffect
+        if (!state.canApplyScrollRestoration) return@LaunchedEffect
         val activeProjection = currentProjection
-        val lastIndex = activeProjection.entries.lastIndex.coerceAtLeast(0)
-        gridState.scrollToItem(
-            index = activeProjection.gridIndexForCanonicalIndex(restored.firstVisibleItemIndex)
-                .coerceIn(0, lastIndex),
-            scrollOffset = restored.firstVisibleItemOffsetPx.coerceAtLeast(0),
-        )
-        onAction(SearchAction.ScrollRestorationApplied(request.scrollRequestId))
+        if (activeProjection.entries.isNotEmpty()) {
+            gridState.scrollToItem(
+                index = activeProjection.gridIndexForCanonicalIndex(restored.firstVisibleItemIndex),
+                scrollOffset = restored.firstVisibleItemOffsetPx.coerceAtLeast(0),
+            )
+        }
+        dispatch(SearchAction.ScrollRestorationApplied(request.scrollRequestId))
     }
 }
 
 @Composable
 internal fun SearchScrollPersistenceEffect(
     queryHash: String,
+    restoration: SearchRestorationUiState,
     animatedFilterActive: Boolean,
     projection: RelatedFeedProjection,
     gridState: LazyStaggeredGridState,
     onAction: (SearchAction) -> Unit,
 ) {
     val currentProjection by rememberUpdatedState(projection)
-    LaunchedEffect(queryHash, animatedFilterActive) {
-        if (animatedFilterActive) return@LaunchedEffect
+    val dispatch by rememberUpdatedState(onAction)
+    LaunchedEffect(queryHash, animatedFilterActive, restoration.allowsScrollPersistence) {
+        if (animatedFilterActive || !restoration.allowsScrollPersistence) return@LaunchedEffect
         snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
             .distinctUntilChanged()
             .collect { (index, offset) ->
                 currentProjection.canonicalPositionForGridIndex(index, offset)?.let { position ->
-                    onAction(SearchAction.ScrollChanged(position.index, position.offsetPx))
+                    dispatch(SearchAction.ScrollChanged(position.index, position.offsetPx))
                 }
             }
     }

@@ -15,6 +15,7 @@ data class FeedPageDemandInput(
     val lastVisibleCanonicalIndex: Int? = null,
     val atVisibleEnd: Boolean = false,
     val scrolling: Boolean = false,
+    val requiredCanonicalIndex: Int? = null,
 )
 
 data class FeedPageDemandResult(
@@ -62,7 +63,8 @@ class FeedPageDemand(
         } == true
         val needsVisiblePosts = input.canonicalCount == 0 ||
             (input.hasLocalFilters && (input.visibleCount < minimumVisiblePosts || input.atVisibleEnd))
-        if (!nearCanonicalEnd && !needsVisiblePosts) return FeedPageDemandResult()
+        val needsRestorationTarget = input.requiredCanonicalIndex?.let { it >= input.canonicalCount } == true
+        if (!nearCanonicalEnd && !needsVisiblePosts && !needsRestorationTarget) return FeedPageDemandResult()
         if (automaticPages >= automaticPageLimit) return FeedPageDemandResult(showContinue = true)
 
         automaticPages += 1

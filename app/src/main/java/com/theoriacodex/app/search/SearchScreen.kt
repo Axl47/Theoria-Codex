@@ -336,11 +336,10 @@ fun SearchScreen(
     val scrollRestoration = (state.restoration as? SearchRestorationUiState.Restored)
         ?.takeIf { restored -> restored.scrollState != null }
     SearchScrollRestorationEffect(
-        scrollRestoration, visibleResults.isNotEmpty(), animatedFilterActive,
-        feedProjection, gridState, onAction,
+        state, feedProjection, gridState, onAction,
     )
     SearchScrollPersistenceEffect(
-        queryHash, animatedFilterActive, feedProjection, gridState, onAction,
+        queryHash, state.restoration, animatedFilterActive, feedProjection, gridState, onAction,
     )
 
     val pageDemand = rememberFeedPageDemand(
@@ -355,6 +354,7 @@ fun SearchScreen(
             paging = state.loadingMore,
             failed = state.content.error != null,
             resolvingDurations = durationReadiness.isResolving,
+            requiredCanonicalIndex = scrollRestoration?.scrollState?.firstVisibleItemIndex,
         ),
         filters = visibilityFilters,
         gridState = gridState,

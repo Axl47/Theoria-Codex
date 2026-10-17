@@ -1,6 +1,9 @@
 package com.theoriacodex.app.journeys
 
 import android.graphics.Color
+import android.graphics.BitmapFactory
+import android.view.View
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.isDisplayed
@@ -23,10 +26,16 @@ import kotlinx.coroutines.flow.first
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.After
 
 class OfflineCollectionJourneyTest : AppJourneyFixture() {
+    private var diagnostics: OfflineImageDiagnostics? = null
+
+    @After fun restoreImageLoader() { diagnostics?.close() }
+
     @Test
     fun collectionDownloadSurvivesDisposableClearAndColdGraphThenViewerSwipesWithoutProviderResolution() {
+        diagnostics = OfflineImageDiagnostics()
         val sourcePosts = posts.getValue(SourceKey.PIXIV).take(2)
         val snapshots = sourcePosts.map { post ->
             val remote = ImageRef("https://unavailable.invalid/${post.id.sourcePostId}.png", null, "image/png")
@@ -45,6 +54,14 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
         compose.onNodeWithText("2 posts available offline").assertIsDisplayed()
         val localPaths = io { sourcePosts.map { requireNotNull(offline.find(it.id)?.full?.localPath) } }
         assertTrue(localPaths.all { File(it).isFile })
+        localPaths.forEach { path ->
+            val decoded = requireNotNull(BitmapFactory.decodeFile(path)) { OfflineImageDiagnostics.decodeSummary(path) }
+            try {
+                assertEquals("Retained PNG decodes as cyan", Color.CYAN, decoded.getPixel(decoded.width / 2, decoded.height / 2))
+            } finally {
+                decoded.recycle()
+            }
+        }
         // Remove the per-test originals before clearing caches so only retained offline bytes can render.
         io {
             sourcePosts.mapNotNull { it.full?.localPath }.distinct().forEach { path ->
@@ -72,9 +89,7 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
         compose.waitUntil(conditionDescription = "Viewer displays the first active media surface", timeoutMillis = 10_000) {
             activeMedia.isDisplayed()
         }
-        compose.waitUntil(conditionDescription = "First offline post renders the retained cyan PNG", timeoutMillis = 10_000) {
-            activeMediaShowsFixturePixels()
-        }
+        awaitFixturePixels("first-offline-post", localPaths)
         compose.onNodeWithContentDescription(requireNotNull(ordered.first().title)).assertIsDisplayed()
         // The active overlay owns the swipe detector; image semantics can exist during route entry.
         // Stay away from system back-gesture edges while crossing well beyond the 12% paging threshold.
@@ -88,9 +103,7 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
         compose.waitUntil(conditionDescription = "Viewer swipe records the second offline post", timeoutMillis = 10_000) {
             io { container.data.recentsRepository.observeWatchedPosts().first().any { it.post.id == ordered.last().id } }
         }
-        compose.waitUntil(conditionDescription = "Second offline post renders the retained cyan PNG", timeoutMillis = 10_000) {
-            activeMediaShowsFixturePixels()
-        }
+        awaitFixturePixels("second-offline-post", localPaths)
         compose.onNodeWithContentDescription(requireNotNull(ordered.last().title)).assertIsDisplayed()
         val viewed = io { container.data.recentsRepository.observeWatchedPosts().first() }
         assertEquals(ordered.map { it.id }.toSet(), viewed.map { it.post.id }.toSet())
@@ -106,6 +119,28 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
         })
         assertTrue(localPaths.all { File(it).isFile })
         assertTrue(container.registry.resolveRequests.isEmpty())
+        captureDiagnostics("completed", localPaths)
+    }
+
+    private fun awaitFixturePixels(label: String, retainedPaths: List<String>) {
+        try {
+            compose.waitUntil(conditionDescription = "$label renders the retained cyan PNG", timeoutMillis = 10_000) {
+                activeMediaShowsFixturePixels()
+            }
+        } catch (timeout: ComposeTimeoutException) {
+            try {
+                captureDiagnostics(label, retainedPaths)
+            } catch (captureFailure: Exception) {
+                timeout.addSuppressed(captureFailure)
+            }
+            throw timeout
+        }
+    }
+
+    private fun captureDiagnostics(label: String, retainedPaths: List<String>) {
+        lateinit var decor: View
+        scenario.onActivity { decor = it.window.decorView }
+        requireNotNull(diagnostics).capture(label, compose, decor, retainedPaths)
     }
 
     private fun activeMediaShowsFixturePixels(): Boolean {

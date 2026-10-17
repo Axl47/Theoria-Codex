@@ -112,6 +112,7 @@ internal class ScrollPersistenceSearchViewModelTest : SearchViewModelTestFixture
                 scrollPersistenceDispatcher = mainDispatcherRule.dispatcher,
             )
 
+            restore(viewModel)
             viewModel.onAction(SearchAction.ScrollChanged(1, 10))
             advanceTimeBy(40L)
             viewModel.onAction(SearchAction.ScrollChanged(2, 20))
@@ -141,6 +142,7 @@ internal class ScrollPersistenceSearchViewModelTest : SearchViewModelTestFixture
             owner.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
             owner.onAction(SearchAction.ApplyDraft)
             runCurrent()
+            owner.acknowledgeScroll()
             uiRestore.clearWrites()
             val durableQueryHash = owner.state.value.query.appliedQueryHash
             val store = ViewModelStore()
@@ -157,6 +159,7 @@ internal class ScrollPersistenceSearchViewModelTest : SearchViewModelTestFixture
             owner.onAction(SearchAction.ToggleTemporarySource(SourceKey.GELBOORU))
             owner.onAction(SearchAction.ApplyDraft)
             runCurrent()
+            owner.acknowledgeScroll()
             owner.onAction(SearchAction.ScrollChanged(5, 50))
             runCurrent()
             store.clear()
@@ -186,6 +189,7 @@ internal class ScrollPersistenceSearchViewModelTest : SearchViewModelTestFixture
                 },
             )
             provider[SearchViewModel::class.java]
+            restore(owner)
             owner.onAction(SearchAction.ScrollChanged(8, 80))
             runCurrent()
 
@@ -217,6 +221,7 @@ internal class ScrollPersistenceSearchViewModelTest : SearchViewModelTestFixture
             )
             provider[SearchViewModel::class.java]
 
+            restore(owner)
             owner.onAction(SearchAction.ScrollChanged(1, 10))
             uiRestore.firstWriteStarted.await()
             val executor = Executors.newSingleThreadExecutor()
@@ -310,4 +315,32 @@ internal class ScrollPersistenceSearchViewModelTest : SearchViewModelTestFixture
             )
         }
 
+    @Test
+    fun `pending restoration rejects initial layout writes until acknowledged`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val saved = SavedStateHandle(mapOf(
+                SearchSavedStateKeys.SCROLL_INDEX to 22,
+                SearchSavedStateKeys.SCROLL_OFFSET to 17,
+            ))
+            val uiRestore = RecordingUiRestoreRepository()
+            val owner = viewModel(ViewModelSearchAdapter(), savedState = saved, uiRestoreRepository = uiRestore)
+            owner.onAction(SearchAction.ScrollChanged(0, 0))
+            restore(owner)
+            owner.onAction(SearchAction.ScrollChanged(0, 0))
+            advanceUntilIdle()
+            assertEquals(22, saved.get<Int>(SearchSavedStateKeys.SCROLL_INDEX))
+            assertTrue(uiRestore.writeSnapshot().isEmpty())
+            owner.onAction(SearchAction.Resume)
+            assertEquals(SearchScrollState(22, 17),
+                (owner.state.value.restoration as SearchRestorationUiState.Restored).scrollState)
+            owner.acknowledgeScroll()
+            owner.onAction(SearchAction.ScrollChanged(22, 17))
+            advanceUntilIdle()
+            assertEquals(listOf(SearchScrollState(22, 17)), uiRestore.writeSnapshot().map { it.second })
+        }
+
+    private fun SearchViewModel.acknowledgeScroll() {
+        val request = state.value.restoration as SearchRestorationUiState.Restored
+        onAction(SearchAction.ScrollRestorationApplied(request.scrollRequestId))
+    }
 }

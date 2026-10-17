@@ -43,4 +43,11 @@ if [[ "$owner" == data || "$owner" == all ]]; then
 fi
 current_device="$(selected_device)"
 [[ "$current_device" == "$serial" ]]
-./gradlew "${connected[@]}" "${test_options[@]}" --continue --no-parallel --console=plain
+test_status=0
+./gradlew "${connected[@]}" "${test_options[@]}" --continue --no-parallel --console=plain || test_status=$?
+if [[ "$owner" == app || "$owner" == all ]]; then
+  # Read-only collection also runs after test failures; never hide the instrumentation exit status.
+  "${ADB:-adb}" -s "$serial" pull /sdcard/Android/data/com.theoriacodex.debug/files/journey-diagnostics \
+    "$evidence/" > "$evidence/journey-diagnostics-pull.log" 2>&1 || true
+fi
+exit "$test_status"
