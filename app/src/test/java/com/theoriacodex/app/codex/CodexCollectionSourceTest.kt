@@ -23,6 +23,19 @@ import org.junit.rules.TemporaryFolder
 class CodexCollectionSourceTest {
     @get:Rule val folder = TemporaryFolder()
 
+    @Test fun `save relevance reads all collection members rather than bounded covers`() = runTest {
+        val repository = InMemoryCodexRepository()
+        repository.ensureCodex("target", "Target")
+        val posts = (1..12).map { testPost(sourcePostId = "$it").copy(canonicalTags = listOf("cat")) }
+        repository.addItems("target", posts)
+        val source = CodexCollectionSource(repository, folder.root, InMemoryCacheRepository())
+        assertEquals(mapOf("target" to 12L), source.observeSaveRelevance(setOf("target"), listOf(posts.first())).first())
+        repository.removeItem("target", posts.first().id.source, posts.first().id.sourcePostId)
+        assertEquals(mapOf("target" to 11L), source.observeSaveRelevance(setOf("target"), listOf(posts.first())).first())
+        assertEquals(emptyMap<String, Long>(), source.observeSaveRelevance(emptySet(), posts).first())
+        assertEquals(emptyMap<String, Long>(), source.observeSaveRelevance(setOf("target"), emptyList()).first())
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun `Library observes named cover refreshes without a collection or cache-size change`() = runTest {

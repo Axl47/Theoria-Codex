@@ -105,6 +105,7 @@ internal data class SaveToCodexDestinationState(
     val codicesByProfile: Map<String, List<Codex>>,
     val itemCounts: Map<String, Int>,
     val coverCandidates: Map<String, List<CodexCoverCandidate>>,
+    val relevanceScores: Map<String, Long>,
 )
 
 internal data class ViewerDestinationState(
@@ -262,6 +263,7 @@ internal fun CodexDetailDestinationStateBoundary(
 @Composable
 internal fun SaveToCodexDestinationStateBoundary(
     data: DataDependencies,
+    posts: List<Post>,
     content: @Composable (SaveToCodexDestinationState) -> Unit,
 ) {
     val settingsState = remember(data.settingsRepository) { data.settingsRepository.observeSettings() }
@@ -270,6 +272,10 @@ internal fun SaveToCodexDestinationStateBoundary(
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val codices = codicesState.value
     val collection = rememberCodexCollectionState(data = data, codices = codices)
+    val relevance = remember(data.codexRepository, codices, posts) {
+        CodexCollectionSource(data.codexRepository, data.storageDirectory, data.cacheRepository)
+            .observeSaveRelevance(codices.mapTo(linkedSetOf(), Codex::codexId), posts)
+    }.collectAsStateWithLifecycle(initialValue = emptyMap())
     DestinationStateBoundary(settingsState) { settings ->
         val activeProfile = settings.activeRecommendationProfile()
         content(
@@ -285,6 +291,7 @@ internal fun SaveToCodexDestinationStateBoundary(
                 },
                 itemCounts = collection.itemCounts,
                 coverCandidates = collection.coverCandidates,
+                relevanceScores = relevance.value,
             ),
         )
     }

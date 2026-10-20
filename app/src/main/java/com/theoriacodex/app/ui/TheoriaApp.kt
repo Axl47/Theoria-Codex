@@ -1818,13 +1818,14 @@ internal fun TheoriaAppContent(
 
             if (showSaveSheet && pendingSavePosts.isNotEmpty()) {
                 val posts = pendingSavePosts
-                SaveToCodexDestinationStateBoundary(dataDependencies) { state ->
+                SaveToCodexDestinationStateBoundary(dataDependencies, posts) { state ->
                     SaveToCodexSheet(
                     profiles = state.settings.recommendationProfiles,
                     initialProfileId = state.activeProfile.profileId,
                     codicesByProfile = state.codicesByProfile,
                     codexItemCounts = state.itemCounts,
                     codexCoverCandidates = state.coverCandidates,
+                    relevanceScores = state.relevanceScores,
                     excludedCodexIds = excludedCodexIdsForSave,
                     onCreateCodex = { profileId, name ->
                         codexSaveOwner.save(

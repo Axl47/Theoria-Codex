@@ -17,13 +17,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
-/** Balanced sheet title with a close action and equal space on the opposite side. */
+/** Balanced sheet title with a close action and an optional trailing action. */
 @Composable
-internal fun SheetHeader(title: String, closeDescription: String, onDismiss: () -> Unit) {
+internal fun SheetHeader(
+    title: String,
+    closeDescription: String,
+    onDismiss: () -> Unit,
+    trailingAction: (@Composable () -> Unit)? = null,
+) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = closeDescription) }
         Text(title, modifier = Modifier.weight(1f), textAlign = TextAlign.Center,
             style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.size(48.dp))
+        if (trailingAction != null) trailingAction() else Spacer(Modifier.size(48.dp))
     }
 }

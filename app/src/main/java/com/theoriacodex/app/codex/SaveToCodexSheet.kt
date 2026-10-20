@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -23,10 +24,13 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -61,6 +65,7 @@ internal fun SaveToCodexSheet(
     codicesByProfile: Map<String, List<Codex>>,
     codexItemCounts: Map<String, Int>,
     codexCoverCandidates: Map<String, List<CodexCoverCandidate>>,
+    relevanceScores: Map<String, Long> = emptyMap(),
     excludedCodexIds: Set<String> = emptySet(),
     onCreateCodex: (String, String) -> Unit,
     onSelectCodex: (String) -> Unit,
@@ -100,6 +105,7 @@ internal fun SaveToCodexSheet(
         hasExcludedCodices = profileCodices.size != selectedCodices.size,
         codexItemCounts = codexItemCounts,
         codexCoverCandidates = codexCoverCandidates,
+        relevanceScores = relevanceScores,
         onSelectCodex = onSelectCodex,
         onCycleProfile = {
             selectedProfileId = nextProfileId(profiles, selectedProfileId)
@@ -132,6 +138,7 @@ private fun SaveToCodexSheetContent(
     hasExcludedCodices: Boolean,
     codexItemCounts: Map<String, Int>,
     codexCoverCandidates: Map<String, List<CodexCoverCandidate>>,
+    relevanceScores: Map<String, Long>,
     onSelectCodex: (String) -> Unit,
     onCycleProfile: () -> Unit,
     onCreateCodex: () -> Unit,
@@ -139,17 +146,14 @@ private fun SaveToCodexSheetContent(
 ) {
     var searchText by rememberSaveable { mutableStateOf("") }
     var insideSaved by rememberSaveable(selectedProfile?.profileId) { mutableStateOf(false) }
+    var sortByRelevance by rememberSaveable { mutableStateOf(true) }
     val likesId = selectedProfile?.profileId?.let(::likesCodexIdForProfile)
     val rootCodices = remember(selectedCodices, likesId, insideSaved) {
         savePickerCodices(selectedCodices, likesId, insideSaved)
     }
     BackHandler(enabled = insideSaved) { insideSaved = false; searchText = "" }
-    val matchingCodices = remember(rootCodices, searchText) {
-        val query = searchText.trim()
-        rootCodices.filter { codex ->
-            codex.name.contains(query, ignoreCase = true) ||
-                (codex.codexId == SAVED_CODEX_ID && "Likes".contains(query, ignoreCase = true))
-        }
+    val matchingCodices = remember(rootCodices, searchText, sortByRelevance, relevanceScores, likesId) {
+        matchingSaveCodices(rootCodices, searchText, sortByRelevance, relevanceScores, likesId)
     }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -162,7 +166,9 @@ private fun SaveToCodexSheetContent(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            SheetHeader(if (insideSaved) "Saved" else title, "Close save menu", onDismiss)
+            SheetHeader(if (insideSaved) "Saved" else title, "Close save menu", onDismiss) {
+                SaveCodexSortToggle(sortByRelevance) { sortByRelevance = it }
+            }
             if (insideSaved) {
                 SheetActionRow(Icons.AutoMirrored.Filled.ArrowBack, "All Codices") {
                     insideSaved = false
@@ -184,6 +190,34 @@ private fun SaveToCodexSheetContent(
             SheetActionRow(Icons.Default.Person, selectedProfile?.name ?: "Profile", onCycleProfile)
             SheetActionRow(Icons.Default.Add, "Create Codex", onCreateCodex)
         }
+    }
+}
+
+private fun matchingSaveCodices(
+    codices: List<Codex>,
+    searchText: String,
+    sortByRelevance: Boolean,
+    relevanceScores: Map<String, Long>,
+    likesId: String?,
+): List<Codex> {
+    val query = searchText.trim()
+    val matches = codices.filter { codex ->
+        codex.name.contains(query, ignoreCase = true) ||
+            (codex.codexId == SAVED_CODEX_ID && "Likes".contains(query, ignoreCase = true))
+    }
+    return if (sortByRelevance) matches.sortedByDescending { codex ->
+        relevanceScores[if (codex.codexId == SAVED_CODEX_ID) likesId else codex.codexId] ?: 0L
+    } else matches
+}
+
+@Composable
+private fun SaveCodexSortToggle(sortByRelevance: Boolean, onChange: (Boolean) -> Unit) {
+    IconToggleButton(checked = sortByRelevance, onCheckedChange = onChange) {
+        Icon(
+            if (sortByRelevance) Icons.Default.AutoAwesome else Icons.AutoMirrored.Filled.Sort,
+            contentDescription = if (sortByRelevance) "Sort: tag relevance. Switch to normal order"
+                else "Sort: normal order. Switch to tag relevance",
+        )
     }
 }
 
@@ -229,6 +263,8 @@ private fun CodexPickerList(
     onSelectCodex: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val listState = rememberLazyListState()
+    LaunchedEffect(codices) { listState.scrollToItem(0) }
     if (codices.isEmpty()) {
         Surface(
             shape = RoundedCornerShape(20.dp),
@@ -244,6 +280,7 @@ private fun CodexPickerList(
         return
     }
     LazyColumn(
+        state = listState,
         modifier = modifier.heightIn(max = 420.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {

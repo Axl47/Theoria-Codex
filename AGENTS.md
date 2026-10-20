@@ -116,6 +116,8 @@ Viewer OCR and translation have been removed from Settings and Viewer, including
 
 ## Codex Library Scroll
 
+Save-to-Codex defaults to tag relevance: sum the saved-post counts for each distinct incoming normalized tag across providers, preserving library order for ties. Ranking uses all local collection members, not bounded cover summaries, and runs off Main only while the save sheet is open. Saved's score comes from the selected profile's Likes; toggling normal order must preserve the library's stored order without rewriting it.
+
 Wait for the first authoritative Codex collection list and Saved Searches list before composing the Library grid. An initial empty placeholder still renders the synthetic Followed tile; measuring that grid can clamp a restored scroll index or make the Followed key become the anchor when collections arrive. Retain the grid's existing saveable state and distinguish loading from an authoritative empty library. `CodexLibraryScrollReturnTest` covers repeated detail return and saved-instance restoration with delayed repository emission.
 
 Virtual Codex covers publish as soon as the first root post is admitted, using the feed's selected sort order; paging must not replace that entry cover. Named-thumbnail writes and clears emit a process-only cache revision even when image counts/bytes do not change. Library observes that revision independently of membership summaries, and local cover requests include it in their image-cache identity. A named cover may switch posts, so it replaces old bytes with the new post's pointer; ordinary sparse post-cache saves still retain downloaded bytes.

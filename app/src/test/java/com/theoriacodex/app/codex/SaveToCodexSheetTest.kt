@@ -23,6 +23,35 @@ import org.robolectric.annotation.Config
 class SaveToCodexSheetTest {
     @get:Rule val compose = createComposeRule()
 
+    @Config(qualifiers = "w411dp-h1000dp")
+    @Test fun `tag relevance is default and toggle restores normal order while search stays active`() {
+        compose.setContent {
+            MaterialTheme {
+                SaveToCodexSheet(
+                    profiles = listOf(RecommendationProfile("main", "Main")), initialProfileId = "main",
+                    codicesByProfile = mapOf("main" to listOf(
+                        Codex("a", "Art first", 0), Codex("b", "Art relevant", 0), Codex("c", "Art tied", 0),
+                    )),
+                    codexItemCounts = emptyMap(), codexCoverCandidates = emptyMap(),
+                    relevanceScores = mapOf("b" to 5L, "c" to 5L),
+                    onCreateCodex = { _, _ -> }, onSelectCodex = {}, onDismiss = {},
+                )
+            }
+        }
+        fun assertBefore(first: String, second: String) {
+            val firstY = compose.onNodeWithText(first).fetchSemanticsNode().boundsInRoot.top
+            val secondY = compose.onNodeWithText(second).fetchSemanticsNode().boundsInRoot.top
+            org.junit.Assert.assertTrue("$first should precede $second", firstY < secondY)
+        }
+        assertBefore("Art relevant", "Art tied")
+        assertBefore("Art tied", "Art first")
+        compose.onNodeWithText("Search Codices").performTextReplacement("Art")
+        compose.onNodeWithContentDescription("Sort: tag relevance. Switch to normal order").performClick()
+        assertBefore("Art first", "Art relevant")
+        compose.onNodeWithContentDescription("Sort: normal order. Switch to tag relevance").performClick()
+        assertBefore("Art relevant", "Art first")
+    }
+
     @Test fun `Saved drills down to Likes and preserves excluded targets across profiles`() {
         val main = "profile-main"
         val other = "alt"

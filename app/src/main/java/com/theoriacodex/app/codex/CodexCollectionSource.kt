@@ -4,6 +4,7 @@ import com.theoriacodex.data.repository.CacheRepository
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.Post
 import java.io.File
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -11,6 +12,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.catch
 
 internal data class CodexCollectionPresentation(
     val itemCounts: Map<String, Int> = emptyMap(),
@@ -29,6 +32,18 @@ internal class CodexCollectionSource(
     private val cacheRepository: CacheRepository,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
+    /** Only the open save sheet observes full membership tags; scoring stays off Main. */
+    fun observeSaveRelevance(codexIds: Set<String>, posts: List<Post>): Flow<Map<String, Long>> {
+        if (codexIds.isEmpty()) return flowOf(emptyMap())
+        val relevance = CodexSaveRelevance(posts)
+        if (!relevance.hasTags) return flowOf(emptyMap())
+        return combine(codexIds.sorted().map { id ->
+            repository.observeCodexPosts(id, CodexSortMode.NEWEST_SAVED)
+                .map { saved -> id to relevance.score(saved) }
+                .catch { emit(id to 0L) }
+        }) { scores -> scores.toMap() }.flowOn(Dispatchers.Default)
+    }
+
     fun observe(codexIds: Set<String>): Flow<CodexCollectionPresentation> =
         combine(repository.observeCodexSummaries(codexIds), cacheRepository.observeNamedThumbnailRevisions()) { summaries, revision ->
             val thumbnails = storageDirectory.resolve("cache/thumbnails").listFiles().orEmpty().toList()
