@@ -65,7 +65,7 @@ internal fun SaveToCodexSheet(
     codicesByProfile: Map<String, List<Codex>>,
     codexItemCounts: Map<String, Int>,
     codexCoverCandidates: Map<String, List<CodexCoverCandidate>>,
-    relevanceScores: Map<String, Long> = emptyMap(),
+    relevanceScores: Map<String, Double> = emptyMap(),
     excludedCodexIds: Set<String> = emptySet(),
     onCreateCodex: (String, String) -> Unit,
     onSelectCodex: (String) -> Unit,
@@ -138,7 +138,7 @@ private fun SaveToCodexSheetContent(
     hasExcludedCodices: Boolean,
     codexItemCounts: Map<String, Int>,
     codexCoverCandidates: Map<String, List<CodexCoverCandidate>>,
-    relevanceScores: Map<String, Long>,
+    relevanceScores: Map<String, Double>,
     onSelectCodex: (String) -> Unit,
     onCycleProfile: () -> Unit,
     onCreateCodex: () -> Unit,
@@ -197,7 +197,7 @@ private fun matchingSaveCodices(
     codices: List<Codex>,
     searchText: String,
     sortByRelevance: Boolean,
-    relevanceScores: Map<String, Long>,
+    relevanceScores: Map<String, Double>,
     likesId: String?,
 ): List<Codex> {
     val query = searchText.trim()
@@ -206,7 +206,7 @@ private fun matchingSaveCodices(
             (codex.codexId == SAVED_CODEX_ID && "Likes".contains(query, ignoreCase = true))
     }
     return if (sortByRelevance) matches.sortedByDescending { codex ->
-        relevanceScores[if (codex.codexId == SAVED_CODEX_ID) likesId else codex.codexId] ?: 0L
+        relevanceScores[if (codex.codexId == SAVED_CODEX_ID) likesId else codex.codexId] ?: 0.0
     } else matches
 }
 

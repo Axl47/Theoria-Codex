@@ -7,6 +7,7 @@ import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.InMemoryCodexRepository
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.app.search.state.emptySearchQuery
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
@@ -29,11 +30,13 @@ class CodexCollectionSourceTest {
         val posts = (1..12).map { testPost(sourcePostId = "$it").copy(canonicalTags = listOf("cat")) }
         repository.addItems("target", posts)
         val source = CodexCollectionSource(repository, folder.root, InMemoryCacheRepository())
-        assertEquals(mapOf("target" to 12L), source.observeSaveRelevance(setOf("target"), listOf(posts.first())).first())
-        repository.removeItem("target", posts.first().id.source, posts.first().id.sourcePostId)
-        assertEquals(mapOf("target" to 11L), source.observeSaveRelevance(setOf("target"), listOf(posts.first())).first())
-        assertEquals(emptyMap<String, Long>(), source.observeSaveRelevance(emptySet(), posts).first())
-        assertEquals(emptyMap<String, Long>(), source.observeSaveRelevance(setOf("target"), emptyList()).first())
+        assertEquals(mapOf("target" to 1.0), source.observeSaveRelevance(setOf("target"), listOf(posts.first())).first())
+        repository.addItems("target", listOf(testPost(sourcePostId = "unmatched").copy(canonicalTags = listOf("dog"))))
+        val query = emptySearchQuery().withIncludeTermsAsRequired(listOf(com.theoriacodex.domain.model.SearchTerm("cat")))
+        val score = source.observeSaveRelevance(setOf("target"), listOf(posts.first()), query).first().getValue("target")
+        assertEquals(0.95 * 12 / 13, score, 0.000001)
+        assertEquals(emptyMap<String, Double>(), source.observeSaveRelevance(emptySet(), posts).first())
+        assertEquals(emptyMap<String, Double>(), source.observeSaveRelevance(setOf("target"), emptyList()).first())
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

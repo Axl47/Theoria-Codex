@@ -105,7 +105,7 @@ internal data class SaveToCodexDestinationState(
     val codicesByProfile: Map<String, List<Codex>>,
     val itemCounts: Map<String, Int>,
     val coverCandidates: Map<String, List<CodexCoverCandidate>>,
-    val relevanceScores: Map<String, Long>,
+    val relevanceScores: Map<String, Double>,
 )
 
 internal data class ViewerDestinationState(
@@ -264,6 +264,7 @@ internal fun CodexDetailDestinationStateBoundary(
 internal fun SaveToCodexDestinationStateBoundary(
     data: DataDependencies,
     posts: List<Post>,
+    searchQuery: com.theoriacodex.domain.model.Query? = null,
     content: @Composable (SaveToCodexDestinationState) -> Unit,
 ) {
     val settingsState = remember(data.settingsRepository) { data.settingsRepository.observeSettings() }
@@ -272,9 +273,9 @@ internal fun SaveToCodexDestinationStateBoundary(
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val codices = codicesState.value
     val collection = rememberCodexCollectionState(data = data, codices = codices)
-    val relevance = remember(data.codexRepository, codices, posts) {
+    val relevance = remember(data.codexRepository, codices, posts, searchQuery) {
         CodexCollectionSource(data.codexRepository, data.storageDirectory, data.cacheRepository)
-            .observeSaveRelevance(codices.mapTo(linkedSetOf(), Codex::codexId), posts)
+            .observeSaveRelevance(codices.mapTo(linkedSetOf(), Codex::codexId), posts, searchQuery)
     }.collectAsStateWithLifecycle(initialValue = emptyMap())
     DestinationStateBoundary(settingsState) { settings ->
         val activeProfile = settings.activeRecommendationProfile()

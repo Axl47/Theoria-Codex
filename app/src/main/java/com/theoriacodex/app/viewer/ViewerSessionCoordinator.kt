@@ -17,6 +17,8 @@ internal data class ViewerSession(
     val initialMediaIndex: Int = 0,
     // Transient launch-owner action; cold restoration never invents a related-shelf owner.
     val onToggleLike: ((Post) -> Unit)? = null,
+    // Captured applied query for contextual save ranking; never inferred from another live route.
+    val saveQuery: com.theoriacodex.domain.model.Query? = null,
 )
 
 private val LAZY_MEDIA_RESOLUTION_SOURCES = setOf(

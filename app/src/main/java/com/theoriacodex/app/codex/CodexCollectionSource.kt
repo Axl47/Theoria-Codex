@@ -5,6 +5,7 @@ import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.Query
 import java.io.File
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -33,14 +34,16 @@ internal class CodexCollectionSource(
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     /** Only the open save sheet observes full membership tags; scoring stays off Main. */
-    fun observeSaveRelevance(codexIds: Set<String>, posts: List<Post>): Flow<Map<String, Long>> {
+    fun observeSaveRelevance(
+        codexIds: Set<String>, posts: List<Post>, searchQuery: Query? = null,
+    ): Flow<Map<String, Double>> {
         if (codexIds.isEmpty()) return flowOf(emptyMap())
-        val relevance = CodexSaveRelevance(posts)
-        if (!relevance.hasTags) return flowOf(emptyMap())
+        val relevance = CodexSaveRelevance(posts, searchQuery)
+        if (!relevance.hasSignals) return flowOf(emptyMap())
         return combine(codexIds.sorted().map { id ->
             repository.observeCodexPosts(id, CodexSortMode.NEWEST_SAVED)
                 .map { saved -> id to relevance.score(saved) }
-                .catch { emit(id to 0L) }
+                .catch { emit(id to 0.0) }
         }) { scores -> scores.toMap() }.flowOn(Dispatchers.Default)
     }
 

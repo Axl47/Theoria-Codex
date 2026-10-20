@@ -165,6 +165,7 @@ import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
@@ -377,26 +378,30 @@ internal fun TheoriaAppContent(
     }
     var showSaveSheet by remember { mutableStateOf(false) }
     var pendingSavePosts by remember { mutableStateOf<List<Post>>(emptyList()) }
+    var pendingSaveQuery by remember { mutableStateOf<Query?>(null) }
     var pendingSaveFromForYou by remember { mutableStateOf(false) }
     var excludedCodexIdsForSave by remember { mutableStateOf<Set<String>>(emptySet()) }
     fun requestSaveToCodex(
         posts: List<Post>,
         fromForYou: Boolean = false,
         excludedCodexId: String? = null,
+        searchQuery: Query? = null,
     ) {
         val uniquePosts = posts.distinctBy(Post::id)
         if (uniquePosts.isEmpty()) return
         pendingSavePosts = uniquePosts
+        pendingSaveQuery = searchQuery
         pendingSaveFromForYou = fromForYou
         excludedCodexIdsForSave = setOfNotNull(excludedCodexId)
         showSaveSheet = true
     }
-    fun requestSaveToCodex(post: Post, fromForYou: Boolean = false) {
-        requestSaveToCodex(listOf(post), fromForYou)
+    fun requestSaveToCodex(post: Post, fromForYou: Boolean = false, searchQuery: Query? = null) {
+        requestSaveToCodex(listOf(post), fromForYou, searchQuery = searchQuery)
     }
     fun clearPendingCodexSave() {
         showSaveSheet = false
         pendingSavePosts = emptyList()
+        pendingSaveQuery = null
         pendingSaveFromForYou = false
         excludedCodexIdsForSave = emptySet()
     }
@@ -1045,6 +1050,7 @@ internal fun TheoriaAppContent(
                                                 onOpenSourceAccounts = { settingsOwner.onAction(SettingsAction.OpenSourceAccounts) },
                                                 onOpenViewer = { effect ->
                                                     val likeAction = searchLikeAction()
+                                                    val saveQuery = searchRouteOwner?.currentState()?.query?.applied
                                                     val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
                                                         effect.posts,
                                                         effect.context,
@@ -1056,6 +1062,7 @@ internal fun TheoriaAppContent(
                                                             liveSearchBinding = effect.liveSearchBinding,
                                                             searchVisibilityFilters = effect.visibilityFilters,
                                                             onToggleLike = likeAction,
+                                                            saveQuery = saveQuery,
                                                         ),
                                                     )
                                                     navController.navigate(AppRoute.Viewer) {
@@ -1075,7 +1082,7 @@ internal fun TheoriaAppContent(
                                                     scope.launch { openCreatorProfile(post) }
                                                 },
                                                 onRequestSaveToCodex = { post ->
-                                                    requestSaveToCodex(post)
+                                                    requestSaveToCodex(post, searchQuery = searchRouteOwner?.currentState()?.query?.applied)
                                                 },
                                                 onSaveToDevice = ::requestSaveToDevice,
                                                 onPostUrlCopied = { recordPostUrlCopy() },
@@ -1700,6 +1707,8 @@ internal fun TheoriaAppContent(
                                         requestSaveToCodex(
                                             post = post,
                                             fromForYou = context.streamSource == ViewerStreamSource.FOR_YOU,
+                                            searchQuery = activeViewerOwner?.session?.value
+                                                ?.takeIf { it.context.queryHash == context.queryHash }?.saveQuery,
                                         )
                                     },
                                     onSharePost = { post ->
@@ -1818,7 +1827,7 @@ internal fun TheoriaAppContent(
 
             if (showSaveSheet && pendingSavePosts.isNotEmpty()) {
                 val posts = pendingSavePosts
-                SaveToCodexDestinationStateBoundary(dataDependencies, posts) { state ->
+                SaveToCodexDestinationStateBoundary(dataDependencies, posts, pendingSaveQuery) { state ->
                     SaveToCodexSheet(
                     profiles = state.settings.recommendationProfiles,
                     initialProfileId = state.activeProfile.profileId,

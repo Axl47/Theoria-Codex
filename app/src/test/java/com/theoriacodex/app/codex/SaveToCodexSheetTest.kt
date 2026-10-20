@@ -33,7 +33,7 @@ class SaveToCodexSheetTest {
                         Codex("a", "Art first", 0), Codex("b", "Art relevant", 0), Codex("c", "Art tied", 0),
                     )),
                     codexItemCounts = emptyMap(), codexCoverCandidates = emptyMap(),
-                    relevanceScores = mapOf("b" to 5L, "c" to 5L),
+                    relevanceScores = mapOf("b" to 0.5, "c" to 0.5),
                     onCreateCodex = { _, _ -> }, onSelectCodex = {}, onDismiss = {},
                 )
             }
