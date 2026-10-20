@@ -224,8 +224,8 @@ private fun ViewerVideoCommands(state: ViewerVideoState, controls: ViewerRendere
         }
     }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    LaunchedEffect(state.player, controls.isActive, controls.isPlaying, state.failed, state.scrubbing) {
-        state.setPlaying(controls.isActive && controls.isPlaying && !state.failed && !state.scrubbing &&
+    LaunchedEffect(state.player, controls.isActive, controls.isPlaying, state.failed) {
+        state.setPlaying(controls.isActive && controls.isPlaying && !state.failed &&
             lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
     }
     LaunchedEffect(state.player, controls.seekJumpSerial, controls.seekJumpDeltaMs, controls.isActive, state.failed, state.duration) {
@@ -242,7 +242,7 @@ private fun ViewerVideoLifecycle(state: ViewerVideoState, controls: ViewerRender
     DisposableEffect(owner, state.player, controls.isActive, controls.isPlaying, state.failed) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_START, Lifecycle.Event.ON_RESUME -> state.setPlaying(controls.isActive && controls.isPlaying && !state.failed && !state.scrubbing)
+                Lifecycle.Event.ON_START, Lifecycle.Event.ON_RESUME -> state.setPlaying(controls.isActive && controls.isPlaying && !state.failed)
                 Lifecycle.Event.ON_PAUSE -> if (context.viewerActivity()?.keepViewerPlayingOnPause != true) state.setPlaying(false)
                 Lifecycle.Event.ON_STOP -> state.setPlaying(false)
                 else -> Unit
@@ -325,7 +325,7 @@ private fun ViewerVideoTimeline(
             })
             MediaTimelineBar(
                 positionMs = state.position, durationMs = state.duration,
-                onSeekStarted = { state.scrubbing = true; state.setPlaying(false) },
+                onSeekStarted = { state.scrubbing = true },
                 onSeekFinished = state::seek,
                 onSeekCancelled = { state.scrubbing = false },
                 preview = { target ->
