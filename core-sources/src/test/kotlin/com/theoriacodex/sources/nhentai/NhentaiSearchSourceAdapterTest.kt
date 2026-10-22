@@ -140,7 +140,7 @@ internal class NhentaiSearchSourceAdapterTest : NhentaiSourceAdapterTestFixture(
                           "title": {
                             "english": "",
                             "japanese": "",
-                            "pretty": "Test Gallery"
+                            "pretty": "[Artist] Test Gallery (English)"
                           },
                           "images": {
                             "thumbnail": {"t": "w", "w": 350, "h": 500},
@@ -173,6 +173,7 @@ internal class NhentaiSearchSourceAdapterTest : NhentaiSourceAdapterTestFixture(
         val post = page.items.firstOrNull()
         assertNotNull(post)
         assertEquals(SourceKey.NHENTAI, post?.id?.source)
+        assertEquals("Test Gallery", post?.title)
         assertEquals("https://t.nhentai.net/galleries/9876/thumb.webp", post?.preview?.url)
         assertEquals(2, post?.media?.size)
         assertEquals("https://i.nhentai.net/galleries/9876/1.webp", post?.media?.get(0)?.url)
@@ -222,7 +223,7 @@ internal class NhentaiSearchSourceAdapterTest : NhentaiSourceAdapterTestFixture(
         assertEquals("2", page.nextPageToken)
         val post = page.items.single()
         assertEquals("659203", post.id.sourcePostId)
-        assertEquals("[Osuwaani] Commission", post.title)
+        assertEquals("Commission", post.title)
         assertEquals("https://t.nhentai.net/galleries/4009462/thumb.webp", post.preview.url)
         assertEquals("image/webp", post.preview.mime)
         assertNull(post.full)

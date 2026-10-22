@@ -32,7 +32,7 @@ internal class NhentaiResolutionSourceAdapterTest : NhentaiSourceAdapterTestFixt
                       "id": 634609,
                       "media_id": "3821534",
                       "title": {
-                        "english": "English Detail",
+                        "english": "[Artist] English Detail (English)",
                         "japanese": null,
                         "pretty": "Pretty Detail"
                       },
@@ -119,7 +119,7 @@ internal class NhentaiResolutionSourceAdapterTest : NhentaiSourceAdapterTestFixt
             SourceHttpResponse(
                 statusCode = 200,
                 body = """
-                    Title: Mirrored Gallery - Page 1
+                    Title: [Artist] Mirrored Gallery (English) - Page 1
 
                     Markdown Content:
                     [](http://nhentai.net/g/634609/)

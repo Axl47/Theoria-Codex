@@ -478,7 +478,7 @@ class NhentaiSourceAdapter(
             rawTags = emptyList(),
             authorName = null,
             createdAtEpochMs = null,
-            title = title,
+            title = cleanNhentaiTitle(title),
             mediaCount = pageCount,
         )
         val metadata = fetchMirrorGalleryMetadata(galleryId)
@@ -681,7 +681,7 @@ class NhentaiSourceAdapter(
             rawTags = rawTags,
             authorName = authorName,
             createdAtEpochMs = createdAtEpochMs,
-            title = title?.trim()?.takeIf { it.isNotBlank() },
+            title = cleanNhentaiTitle(title),
             mediaCount = mediaCount,
             taxonomy = tags.map(ParsedNhentaiTag::toPostTaxonomyTerm),
         )
