@@ -65,3 +65,7 @@ Keep `AGENTS.md` limited to durable product intent, safety boundaries, and accep
 
 - Builds, mocks, and host tests do not establish live provider authentication, hardware playback, PiP, or TalkBack behavior. Performance acceptance requires physical-device measurements, simultaneous-autoplay coverage, and retained complete iteration evidence. Calibration requires three complete runs of the same APK under matching conditions.
 - Use `.codex/skills/theoria-release/SKILL.md` for release preparation and publishing. Preparing a release does not authorize creating or pushing its tag; publishing requires a separate explicit instruction.
+
+## Next Changelog
+
+After completing a change, add or refine a concise bullet in root `NEXT_CHANGELOG.md` only if app users would notice its effect. Describe the benefit or corrected behavior, following `release-notes/` wording and grouping under `New`, `Improvements`, or `Fixes` as relevant; omit internal refactors, tests, and documentation-only work. Consolidate related entries. The release skill curates these notes and clears published content only after successful publication.

@@ -23,7 +23,7 @@ Never use a low sequential Android code. Existing releases and the updater compa
 Start without changing files or Git state.
 
 1. Confirm the checkout is clean and based on `main`. Fetch tags.
-2. Identify the most recent `vX.Y.Z` release tag and review user-visible changes since it.
+2. Identify the most recent `vX.Y.Z` release tag, read root `NEXT_CHANGELOG.md`, and review user-visible changes since the tag. Treat pending notes as drafting input, not a substitute for reviewing the changes.
 3. Read relevant feature behavior, not only Conventional Commit subjects. Exclude internal refactors, test-only work, and implementation detail unless users notice its effect.
 4. Propose the next version, calculate its Android code, and write concise notes grouped under `Highlights`, `New`, `Improvements`, `Fixes`, and, when relevant, `Known Issues`.
 5. Present the proposal in the response and ask for approval.
@@ -91,5 +91,6 @@ Publish only when the user explicitly asks to publish the named version.
 5. Push only that exact tag; `main` must already be synchronized from the preparation phase.
 6. Monitor the tag-triggered `Main Prerelease` workflow to completion. If it fails, report the immutable release failure and prepare a newer patch version for any repair; never move or recreate the tag.
 7. Confirm the GitHub prerelease exists, is not a draft, uses the expected tag and notes, and contains the uploaded `theoria-codex-main.apk` asset before reporting publication complete.
+8. Only after publication is confirmed, empty root `NEXT_CHANGELOG.md` and commit the reset as `docs(changelog): reset after vX.Y.Z`. Preserve any entries for changes outside the published release. Do not clear notes during preparation or after failed publication, alter the release tag, or push the cleanup commit without authorization.
 
 If any check fails, stop before tagging. Fix the release commit and prepare a newer version rather than altering a published tag.
