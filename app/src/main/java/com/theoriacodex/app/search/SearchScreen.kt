@@ -1,5 +1,8 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.viewer.LocalViewerReturnTransition
+import com.theoriacodex.app.viewer.LocalViewerReturnGrid
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -949,6 +952,8 @@ fun SearchResultCard(
     onViewportChanged: (Boolean) -> Unit = {},
     onAuthoritativeDurationKnown: (Long) -> Unit = {},
 ) {
+    val viewerReturn = LocalViewerReturnTransition.current
+    val viewerReturnGrid = LocalViewerReturnGrid.current
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
@@ -1004,7 +1009,10 @@ fun SearchResultCard(
             .fillMaxWidth()
             .testTag(searchCardTestTag(post.id))
             .combinedClickable(
-                onClick = onClick,
+                onClick = {
+                    viewerReturn?.openedFrom(viewerReturnGrid)
+                    onClick()
+                },
                 onLongClick = onLongPress,
             ),
     ) {
@@ -1121,6 +1129,7 @@ fun SearchResultCard(
                 .fillMaxWidth()
                 .aspectRatio(ratio)
                 .onGloballyPositioned { coordinates ->
+                    viewerReturn?.recordBounds(viewerReturnGrid, post.id, coordinates.boundsInWindow(clipBounds = false))
                     val visible = coordinates.isAttached &&
                         isVisibleFeedBounds(coordinates.boundsInWindow(clipBounds = true))
                     if (isInViewport != visible) {

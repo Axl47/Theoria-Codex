@@ -71,6 +71,7 @@ internal fun ViewerMediaPage(
     onNavigate: (ViewerHorizontalSwipeDirection) -> Unit,
     onRequestMediaRecovery: ((Post, ImageRef) -> Unit)?,
     levelControls: ViewerLevelControls? = null,
+    returnProgress: Float = 0f,
 ) {
     val key = ViewerMediaKey(post.id, mediaIndex)
     val isVideo = isVideoMediaRef(media)
@@ -86,7 +87,11 @@ internal fun ViewerMediaPage(
         translationY = transform.panY
     }
     Box(Modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxSize().padding(if (layout.landscape || animated) 0.dp else 16.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.fillMaxSize().padding(if (layout.landscape || animated) 0.dp else 16.dp)
+                .viewerReturnMedia(returnProgress, viewerAspectRatio(post)),
+            contentAlignment = Alignment.Center,
+        ) {
             ViewerMediaContent(
                 post, media, key, controls.copy(seekJumpSerial = interactions.seekSerial, seekJumpDeltaMs = interactions.seekDelta),
                 events, videoOptions, videoPositions, imageSession, pixivUgoiraClient, transformModifier, onRequestMediaRecovery,

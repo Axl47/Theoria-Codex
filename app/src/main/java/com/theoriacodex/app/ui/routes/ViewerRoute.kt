@@ -1,5 +1,7 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.app.viewer.LocalViewerReturnTransition
+
 import com.theoriacodex.data.repository.CodexUsageTarget
 import com.theoriacodex.app.statistics.statisticsCodexId
 import com.theoriacodex.app.statistics.statisticsPostKey
@@ -205,6 +207,10 @@ internal fun ViewerRoute(
     effectCallbacks: ViewerRouteEffectCallbacks,
     screenCallbacks: ViewerRouteScreenCallbacks,
 ) {
+    val viewerReturn = LocalViewerReturnTransition.current
+    DisposableEffect(viewerReturn) {
+        onDispose { viewerReturn?.clear() }
+    }
     val latestDependencies = rememberUpdatedState(dependencies)
     val latestRenderConfig = rememberUpdatedState(renderConfig)
     val latestEffectCallbacks = rememberUpdatedState(effectCallbacks)
@@ -375,6 +381,7 @@ internal fun ViewerRoute(
                 viewerOwner.clearSession(retainPresentation = true)
                 latestDependencies.value.sessionRetentionOwner.clear()
                 callbacks.onDismiss()
+                currentState.currentPage?.post?.id?.let { viewerReturn?.begin(it) }
             }
 
             is ViewerEffect.ResolvePost,

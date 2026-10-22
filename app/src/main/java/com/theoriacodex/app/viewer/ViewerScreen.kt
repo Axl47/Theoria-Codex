@@ -1,6 +1,7 @@
 package com.theoriacodex.app.viewer
 
 import android.content.res.Configuration
+import androidx.compose.animation.core.tween
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -97,6 +98,8 @@ internal fun ViewerScreen(
     onOpenCreatorFallback: ((Post) -> Unit)? = null,
     playbackDiagnosticsEnabled: Boolean = com.theoriacodex.app.BuildConfig.BENCHMARK_FIXTURES_ENABLED,
 ) {
+    val returnProgress = rememberViewerReturnProgress()
+    val returning = LocalViewerReturnTransition.current?.request != null
     val activity = LocalContext.current.viewerActivity()
     val inPictureInPicture = activity?.viewerPictureInPictureActive == true
     var quality by remember(videoQuality) { mutableStateOf(videoQuality) }
@@ -131,6 +134,7 @@ internal fun ViewerScreen(
     var timelineInteractionActive by remember { mutableStateOf(false) }
     var lastViewerPaginationRequestSize by remember(posts.size) { mutableIntStateOf(-1) }
     var pendingDismiss by remember { mutableStateOf(false) }
+    var swipeInProgress by remember { mutableStateOf(false) }
     val pendingMediaJumpByPost = remember { mutableStateMapOf<Int, Int>() }
     val currentPostIndex = uiState.currentPageIndex.coerceIn(0, posts.lastIndex)
     SideEffect { videoPositions.retainAround(posts.map { it.id }, currentPostIndex) }
@@ -157,7 +161,7 @@ internal fun ViewerScreen(
     val selectedMediaOverviewItems = remember(selectedPost) { viewerMediaOverviewItems(selectedPost) }
     val mediaOverviewAvailable = viewerMediaOverviewAvailable(selectedMediaOverviewItems)
     val touchExplorationEnabled = rememberViewerTouchExploration()
-    val chromeVisible = (uiState.controls.chromeVisible || touchExplorationEnabled) && !inPictureInPicture
+    val chromeVisible = (uiState.controls.chromeVisible || touchExplorationEnabled) && !inPictureInPicture && !returning
     val showInfoSheet = uiState.controls.metadataVisible && !inPictureInPicture
     val mediaPlaybackEnabled = uiState.controls.playback.playing
     val playbackRestartRequest = uiState.controls.playback.restartRequest
@@ -225,8 +229,8 @@ internal fun ViewerScreen(
         }
     }
 
-    LaunchedEffect(pendingDismiss) {
-        if (!pendingDismiss) return@LaunchedEffect
+    LaunchedEffect(pendingDismiss, swipeInProgress) {
+        if (!pendingDismiss || swipeInProgress) return@LaunchedEffect
         withFrameNanos { }
         onAction(ViewerAction.Dismiss)
     }
@@ -248,7 +252,8 @@ internal fun ViewerScreen(
         }
     }
 
-    BackHandler(enabled = !pendingDismiss) {
+    BackHandler {
+        if (pendingDismiss || returning) return@BackHandler
         if (mediaOverviewVisible) {
             setOverviewVisible(false)
             markInteraction()
@@ -314,7 +319,7 @@ internal fun ViewerScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(Color.Black.copy(alpha = 1f - returnProgress))
     ) {
         if (mediaOverviewVisible && mediaOverviewAvailable) {
             ViewerMediaOverviewGrid(
@@ -333,6 +338,9 @@ internal fun ViewerScreen(
             HorizontalPager(
                 state = postPagerState,
                 userScrollEnabled = false,
+                reverseLayout = viewerMediaPagerReverseLayout(
+                    uiState.currentPage?.swipeMediaCount() ?: 1, invertMultiImageScrollDirection,
+                ),
                 modifier = Modifier.fillMaxSize(),
             ) { postPage ->
             val post = posts[postPage]
@@ -377,12 +385,12 @@ internal fun ViewerScreen(
                 pendingMediaJumpByPost.remove(postPage)
             }
 
-            LaunchedEffect(mediaPagerState.currentPage) {
-                if (postPage == currentPostIndex && mediaPagerState.currentPage != selectedMediaIndex) {
-                    onAction(ViewerAction.SelectMedia(mediaPagerState.currentPage))
+            LaunchedEffect(mediaPagerState.settledPage, currentPostIndex) {
+                if (postPage == currentPostIndex && mediaPagerState.settledPage != selectedMediaIndex) {
+                    onAction(ViewerAction.SelectMedia(mediaPagerState.settledPage))
                 }
                 if (postPage == currentPostIndex) {
-                    onVisibleMediaChanged?.invoke(post, mediaPagerState.currentPage + 1)
+                    onVisibleMediaChanged?.invoke(post, mediaPagerState.settledPage + 1)
                 }
                 if (postPage == postPagerState.currentPage) {
                     markInteraction()
@@ -390,7 +398,7 @@ internal fun ViewerScreen(
             }
 
             val navigateFromHorizontalSwipe: (ViewerHorizontalSwipeDirection) -> Unit = navigate@{ direction ->
-                if (viewerTransform.isZoomed) return@navigate
+                if (viewerTransform.isZoomed || swipeInProgress || pendingDismiss || returning) return@navigate
                 if (postPage != postPagerState.currentPage) return@navigate
                 val targetPostIndex = when (direction) {
                     ViewerHorizontalSwipeDirection.Previous -> postPage - 1
@@ -410,16 +418,20 @@ internal fun ViewerScreen(
                 ) ?: return@navigate
 
                 markInteraction()
-                if (target.postIndex == postPage) {
-                    scope.launch {
-                        mediaPagerState.animateScrollToPage(target.mediaIndex)
-                    }
-                } else {
-                    onAction(ViewerAction.SelectPage(target.postIndex))
-                    onAction(ViewerAction.SelectMedia(target.mediaIndex))
-                    pendingMediaJumpByPost[target.postIndex] = target.mediaIndex
-                    scope.launch {
-                        postPagerState.animateScrollToPage(target.postIndex)
+                swipeInProgress = true
+                scope.launch {
+                    try {
+                        if (target.postIndex == postPage) {
+                            mediaPagerState.animateScrollToPage(target.mediaIndex, animationSpec = tween(300))
+                        } else {
+                            pendingMediaJumpByPost[target.postIndex] = target.mediaIndex
+                            postPagerState.animateScrollToPage(target.postIndex, animationSpec = tween(300))
+                            // Commit after motion so state synchronization cannot snap the pager mid-swipe.
+                            onAction(ViewerAction.SelectPage(target.postIndex))
+                            onAction(ViewerAction.SelectMedia(target.mediaIndex))
+                        }
+                    } finally {
+                        swipeInProgress = false
                     }
                 }
             }
@@ -448,6 +460,7 @@ internal fun ViewerScreen(
                 ViewerMediaPage(
                     post = post,
                     media = media,
+                    returnProgress = if (active) returnProgress else 0f,
                     mediaIndex = mediaPage,
                     mediaCount = pageState.swipeMediaCount(),
                     controls = ViewerRendererControls(

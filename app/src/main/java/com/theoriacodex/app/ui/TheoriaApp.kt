@@ -1,5 +1,13 @@
 package com.theoriacodex.app.ui
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import com.theoriacodex.app.viewer.LocalViewerReturnTransition
+import com.theoriacodex.app.viewer.ViewerReturnTransition
+import com.theoriacodex.app.viewer.ViewerReturnLifetime
+
 import com.theoriacodex.app.update.ReleaseChangelogEntry
 import com.theoriacodex.app.update.mergeReleaseHistory
 import com.theoriacodex.app.update.toReleaseHistoryEntry
@@ -973,7 +981,11 @@ internal fun TheoriaAppContent(
             dataDependencies.storageDirectory, dataDependencies.cacheRepository)
         CodexSaveRelevanceLoader(dataDependencies.codexRepository, scope, source::observeSaveRelevance)
     }
-    CompositionLocalProvider(LocalCodexSaveRelevanceLoader provides saveRelevanceLoader) {
+    val viewerReturnTransition = remember { ViewerReturnTransition() }
+    CompositionLocalProvider(
+        LocalCodexSaveRelevanceLoader provides saveRelevanceLoader,
+        LocalViewerReturnTransition provides viewerReturnTransition,
+    ) {
     com.theoriacodex.app.codex.SavedCodexSession {
     PostTagContextProvider(searchRouteOwner?.state, featureDependencies.search::fetchSearchTermCounts) {
         TheoriaNightTheme {
@@ -1039,6 +1051,10 @@ internal fun TheoriaAppContent(
                     NavHost(
                         navController = navController,
                         startDestination = AppRoute.Home,
+                        popEnterTransition = {
+                            if (initialState.destination.route == AppRoute.Viewer) EnterTransition.None
+                            else fadeIn(tween(700))
+                        },
                         modifier = contentModifier,
                     ) {
                         composable(AppRoute.Home) {
@@ -1667,7 +1683,12 @@ internal fun TheoriaAppContent(
                             )
                             }
                         }
-                        composable(AppRoute.Viewer) {
+                        composable(
+                            AppRoute.Viewer,
+                            // Keep the live outgoing renderer until its card-return animation finishes.
+                            popExitTransition = { ExitTransition.None },
+                        ) {
+                            ViewerReturnLifetime(this)
                             ViewerDestinationStateBoundary(
                                 data = dataDependencies,
                                 sources = sourceDependencies,
