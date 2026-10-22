@@ -61,7 +61,10 @@ fun TwoColumnProjectedPostStaggeredGrid(
     shelfContent: @Composable LazyStaggeredGridItemScope.(RelatedFeedEntry.ShelfEntry) -> Unit,
 ) {
     val postIds = remember(projection) { projection.entries.map { (it as? RelatedFeedEntry.PostEntry)?.post?.id } }
-    AdaptivePostGrid(postIds = postIds, state = state, modifier = modifier) {
+    val shelfIds = remember(projection) {
+        projection.entries.map { (it as? RelatedFeedEntry.ShelfEntry)?.state?.requestOrNull?.seed?.id }
+    }
+    AdaptivePostGrid(postIds = postIds, state = state, modifier = modifier, shelfIds = shelfIds) {
         itemsIndexed(
             items = projection.entries,
             key = { _, entry ->
@@ -97,10 +100,11 @@ private fun AdaptivePostGrid(
     postIds: List<PostId?>,
     state: LazyStaggeredGridState,
     modifier: Modifier,
+    shelfIds: List<PostId?> = emptyList(),
     content: LazyStaggeredGridScope.() -> Unit,
 ) {
     val gridId = rememberSaveable { UUID.randomUUID().toString() }
-    ViewerReturnGridEffect(gridId, postIds, state)
+    ViewerReturnGridEffect(gridId, postIds, state, shelfIds)
     CompositionLocalProvider(LocalViewerReturnGrid provides gridId) {
         BoxWithConstraints(modifier = modifier) {
             LazyVerticalStaggeredGrid(

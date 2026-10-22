@@ -23,6 +23,12 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
+import com.theoriacodex.app.ui.components.TwoColumnProjectedPostStaggeredGrid
+import com.theoriacodex.app.ui.components.RelatedPostsShelf
+import com.theoriacodex.app.related.RelatedFeedEntry
+import com.theoriacodex.app.related.RelatedFeedProjection
+import com.theoriacodex.app.related.RelatedPostsRequest
+import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -161,6 +167,69 @@ class ViewerReturnTransitionTest {
         compose.runOnIdle { assertEquals(1f, progress, 0.001f) }
         compose.mainClock.advanceTimeBy(400)
         compose.onNodeWithTag("returning media").assertDoesNotExist()
+    }
+
+    @Test fun `related return positions both the offscreen shelf and its offscreen card`() {
+        val transition = ViewerReturnTransition()
+        val related = (0..20).map { post("related-$it") }
+        val target = related[15]
+        val seed = post("seed")
+        val loaded = RelatedPostsUiState.Loaded(RelatedPostsRequest(seed, 29, 1), related)
+        val regular = listOf(target) + (1..60).map { post("regular-$it") }
+        val entries = regular.mapIndexed { index, post -> RelatedFeedEntry.PostEntry(post, index) }.toMutableList<RelatedFeedEntry>()
+        entries.add(30, RelatedFeedEntry.ShelfEntry(loaded, 29))
+        val projection = RelatedFeedProjection(entries)
+        var origin: String? = null
+        var viewport = Rect.Zero
+        compose.setContent {
+            CompositionLocalProvider(LocalViewerReturnTransition provides transition) {
+                TwoColumnProjectedPostStaggeredGrid(
+                    projection, rememberLazyStaggeredGridState(),
+                    Modifier.height(600.dp).onGloballyPositioned { viewport = it.boundsInWindow() },
+                    postContent = { _, post ->
+                        val gridId = LocalViewerReturnGrid.current
+                        origin = gridId
+                        Box(Modifier.fillMaxWidth().height(140.dp).onGloballyPositioned {
+                            transition.recordBounds(gridId, post.id, it.boundsInWindow(clipBounds = false))
+                        })
+                    },
+                    shelfContent = {
+                        RelatedPostsShelf(
+                            state = loaded, posts = related, likedPostIds = emptySet(), pixivUgoiraClient = null,
+                            onToggleLike = {}, onOpenPost = { _, _ -> }, onLongPress = {}, onDismiss = {},
+                            onRetry = {}, onPreviousPage = {}, onNextPage = {}, onViewportChanged = { _, _ -> },
+                            onAuthoritativeDurationKnown = { _, _ -> },
+                        )
+                    },
+                )
+            }
+        }
+        compose.runOnIdle {
+            transition.openedFrom(origin, shelfId = seed.id)
+            transition.begin(target.id)
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            val bounds = requireNotNull(transition.targetBounds) { "The related card must replace the centered fallback" }
+            assertEquals(viewport.center.x, bounds.center.x, 2f)
+            assertTrue("Shelf media should be fully visible: $bounds in $viewport",
+                bounds.top >= viewport.top && bounds.bottom <= viewport.bottom)
+        }
+    }
+
+    @Test fun `shelf target waits for both axes and ignores a duplicate regular card`() {
+        val transition = ViewerReturnTransition()
+        val shelf = post("seed").id
+        val bounds = Rect(20f, 100f, 220f, 400f)
+        transition.openedFrom("feed", shelfId = shelf)
+        transition.begin(postId)
+        transition.recordBounds("feed", postId, bounds)
+        transition.centered("feed", postId)
+        assertNull(transition.targetBounds)
+        transition.recordBounds("feed", postId, bounds, shelf)
+        assertNull(transition.targetBounds)
+        transition.shelfCentered("feed", postId, shelf)
+        assertEquals(bounds, transition.targetBounds)
     }
 
     private fun post(id: String) = Post(

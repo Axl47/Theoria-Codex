@@ -2,6 +2,7 @@ package com.theoriacodex.app.search
 
 import com.theoriacodex.app.viewer.LocalViewerReturnTransition
 import com.theoriacodex.app.viewer.LocalViewerReturnGrid
+import com.theoriacodex.app.viewer.LocalViewerReturnShelf
 import androidx.compose.ui.layout.LayoutCoordinates
 
 import androidx.compose.animation.AnimatedVisibility
@@ -963,6 +964,7 @@ fun SearchResultCard(
 ) {
     val viewerReturn = LocalViewerReturnTransition.current
     val viewerReturnGrid = LocalViewerReturnGrid.current
+    val viewerReturnShelf = LocalViewerReturnShelf.current
     var viewerMediaCoordinates by remember(post.id) { mutableStateOf<LayoutCoordinates?>(null) }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -1023,6 +1025,7 @@ fun SearchResultCard(
                     viewerReturn?.openedFrom(
                         viewerReturnGrid,
                         viewerMediaCoordinates?.takeIf { it.isAttached }?.boundsInWindow(clipBounds = false),
+                        shelfId = viewerReturnShelf,
                     )
                     onClick()
                 },
@@ -1143,7 +1146,7 @@ fun SearchResultCard(
                 .aspectRatio(ratio)
                 .onGloballyPositioned { coordinates ->
                     viewerMediaCoordinates = coordinates
-                    viewerReturn?.recordBounds(viewerReturnGrid, post.id, coordinates.boundsInWindow(clipBounds = false))
+                    viewerReturn?.recordBounds(viewerReturnGrid, post.id, coordinates.boundsInWindow(clipBounds = false), viewerReturnShelf)
                     val visible = coordinates.isAttached &&
                         isVisibleFeedBounds(coordinates.boundsInWindow(clipBounds = true))
                     if (isInViewport != visible) {

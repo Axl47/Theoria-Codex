@@ -64,6 +64,7 @@
 - Remove repeated type labels from tag names in the post hold menu.
 
 ## Fixes
+- Return fullscreen “More like this” posts to their shelf cards, including after swiping to an offscreen related post.
 
 - Keep liked posts visible with Hide Liked until their “More like this” recommendations are dismissed.
 - Resume autoplaying feed videos at the position where you left fullscreen playback.

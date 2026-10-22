@@ -7,6 +7,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,7 +39,9 @@ private const val VIEWER_RETURN_TARGET_WAIT_MS = 300L
 internal val LocalViewerReturnTransition = staticCompositionLocalOf<ViewerReturnTransition?> { null }
 internal val LocalViewerReturnGrid = staticCompositionLocalOf<String?> { null }
 
-internal data class ViewerReturnRequest(val gridId: String?, val postId: PostId)
+internal val LocalViewerReturnShelf = staticCompositionLocalOf<PostId?> { null }
+
+internal data class ViewerReturnRequest(val gridId: String?, val postId: PostId, val shelfId: PostId? = null)
 
 /** Keep both destinations alive while the media moves between its card and fullscreen bounds. */
 @Composable
@@ -53,6 +56,7 @@ internal fun ViewerReturnLifetime(scope: AnimatedVisibilityScope) {
 /** Transient geometry shared by the viewer and its originating feed. */
 internal class ViewerReturnTransition {
     private var originGridId: String? = null
+    private var originShelfId: PostId? = null
     var openingBounds by mutableStateOf<Rect?>(null)
         private set
     var request by mutableStateOf<ViewerReturnRequest?>(null)
@@ -60,11 +64,13 @@ internal class ViewerReturnTransition {
     var targetBounds by mutableStateOf<Rect?>(null)
         private set
     private var centered = false
+    private var rowCentered = false
     private val mediaBounds = mutableMapOf<PostId, Rect>()
 
-    fun openedFrom(gridId: String?, bounds: Rect? = null) {
+    fun openedFrom(gridId: String?, bounds: Rect? = null, shelfId: PostId? = null) {
         clear()
         originGridId = gridId
+        originShelfId = shelfId
         openingBounds = bounds?.takeUnless { it.isEmpty }
     }
 
@@ -74,29 +80,38 @@ internal class ViewerReturnTransition {
 
     fun begin(postId: PostId) {
         openingBounds = null
-        request = ViewerReturnRequest(originGridId, postId)
+        request = ViewerReturnRequest(originGridId, postId, originShelfId)
         targetBounds = null
         centered = false
+        rowCentered = originShelfId == null
         mediaBounds.clear()
     }
 
-    fun recordBounds(gridId: String?, postId: PostId, bounds: Rect) {
+    fun recordBounds(gridId: String?, postId: PostId, bounds: Rect, shelfId: PostId? = null) {
         val pending = request ?: return
-        if (gridId == null || gridId != pending.gridId || postId != pending.postId || bounds.isEmpty) return
+        if (gridId == null || gridId != pending.gridId || postId != pending.postId || shelfId != pending.shelfId || bounds.isEmpty) return
         mediaBounds[postId] = bounds
-        if (centered) targetBounds = bounds
+        if (centered && rowCentered) targetBounds = bounds
     }
 
     fun centered(gridId: String, postId: PostId) {
-        if (request != ViewerReturnRequest(gridId, postId)) return
+        if (request?.gridId != gridId || request?.postId != postId) return
         centered = true
-        targetBounds = mediaBounds[postId]
+        if (rowCentered) targetBounds = mediaBounds[postId]
+    }
+
+    fun shelfCentered(gridId: String, postId: PostId, shelfId: PostId) {
+        if (request != ViewerReturnRequest(gridId, postId, shelfId)) return
+        rowCentered = true
+        if (centered) targetBounds = mediaBounds[postId]
     }
 
     fun clear() {
         request = null
         targetBounds = null
         originGridId = null
+        originShelfId = null
+        rowCentered = false
         openingBounds = null
         centered = false
         mediaBounds.clear()
@@ -105,12 +120,14 @@ internal class ViewerReturnTransition {
 
 /** Runs after the underlying destination returns to composition, including offscreen posts. */
 @Composable
-internal fun ViewerReturnGridEffect(gridId: String, postIds: List<PostId?>, state: LazyStaggeredGridState) {
+internal fun ViewerReturnGridEffect(
+    gridId: String, postIds: List<PostId?>, state: LazyStaggeredGridState, shelfIds: List<PostId?> = emptyList(),
+) {
     val transition = LocalViewerReturnTransition.current ?: return
     val request = transition.request
-    LaunchedEffect(request, gridId, postIds) {
+    LaunchedEffect(request, gridId, postIds, shelfIds) {
         if (request?.gridId != gridId) return@LaunchedEffect
-        val index = postIds.indexOf(request.postId)
+        val index = request.shelfId?.let(shelfIds::indexOf) ?: postIds.indexOf(request.postId)
         if (index < 0) return@LaunchedEffect
         state.scrollToItem(index)
         val item = snapshotFlow { state.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } }
@@ -120,6 +137,27 @@ internal fun ViewerReturnGridEffect(gridId: String, postIds: List<PostId?>, stat
             layout.viewportStartOffset, layout.viewportEndOffset))
         withFrameNanos { }
         transition.centered(gridId, request.postId)
+    }
+}
+
+/** Related media needs both its vertical shelf and horizontal card positioned before landing. */
+@Composable
+internal fun ViewerReturnShelfEffect(shelfId: PostId, postIds: List<PostId>, state: LazyListState) {
+    val transition = LocalViewerReturnTransition.current ?: return
+    val gridId = LocalViewerReturnGrid.current ?: return
+    val request = transition.request
+    LaunchedEffect(request, gridId, shelfId, postIds) {
+        if (request?.gridId != gridId || request.shelfId != shelfId) return@LaunchedEffect
+        val index = postIds.indexOf(request.postId)
+        if (index < 0) return@LaunchedEffect
+        state.scrollToItem(index)
+        val item = snapshotFlow { state.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } }
+            .filterNotNull().first()
+        val layout = state.layoutInfo
+        state.scrollBy(viewerReturnCenterScroll(item.offset, item.size,
+            layout.viewportStartOffset, layout.viewportEndOffset))
+        withFrameNanos { }
+        transition.shelfCentered(gridId, request.postId, shelfId)
     }
 }
 

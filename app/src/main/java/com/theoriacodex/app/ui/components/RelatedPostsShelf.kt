@@ -20,6 +20,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.theoriacodex.app.viewer.LocalViewerReturnShelf
+import com.theoriacodex.app.viewer.ViewerReturnShelfEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -28,6 +32,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.noMediaDurationStateForPost
 import com.theoriacodex.app.media.observedMediaDurationMs
@@ -178,6 +183,7 @@ private fun RelatedShelfBody(
         is RelatedPostsUiState.Empty -> ShelfMessage("No new related posts")
         is RelatedPostsUiState.Failed -> ShelfMessage(state.message)
         is RelatedPostsUiState.Loaded -> RelatedPostsRow(
+            shelfId = state.request.seed.id,
             posts = posts,
             sizingPosts = (state.pages.flatMap { page -> page.posts } + posts).distinctBy(Post::id),
             likedPostIds = likedPostIds,
@@ -196,6 +202,7 @@ private fun RelatedShelfBody(
 
 @Composable
 private fun RelatedPostsRow(
+    shelfId: PostId,
     posts: List<Post>,
     sizingPosts: List<Post>,
     likedPostIds: Set<PostId>,
@@ -214,12 +221,52 @@ private fun RelatedPostsRow(
         return
     }
     val cardWidth = 180.dp
+    val rowHeight = rememberRelatedRowHeight(sizingPosts, cardWidth)
+    val rowState = rememberLazyListState()
+    val postIds = remember(posts) { posts.map { it.id } }
+    ViewerReturnShelfEffect(shelfId, postIds, rowState)
+    CompositionLocalProvider(LocalViewerReturnShelf provides shelfId) {
+        LazyRow(
+            state = rowState,
+            modifier = Modifier.height(rowHeight),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            itemsIndexed(
+                items = posts,
+                key = { _, post -> "related-card:${post.id.source.name}:${post.id.sourcePostId}" },
+            ) { index, post ->
+                Box(modifier = Modifier.width(cardWidth)) {
+                    val observedDuration = observedMediaDurationMs(post, durationStateForPost)
+                    SearchResultCard(
+                        post = post,
+                        pixivUgoiraClient = pixivUgoiraClient,
+                        acquiredDurationMs = observedDuration ?: acquiredDurations[post.id],
+                        showSourceBadge = true,
+                        liked = post.id in likedPostIds,
+                        onToggleLike = { onToggleLike(post) },
+                        recoverPostMedia = recoverPostMedia,
+                        onClick = { onOpenPost(posts, index) },
+                        onLongPress = { onLongPress(post) },
+                        onViewportChanged = { visible -> onViewportChanged(post, visible) },
+                        onAuthoritativeDurationKnown = { durationMs ->
+                            onAuthoritativeDurationKnown(post, durationMs)
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun rememberRelatedRowHeight(sizingPosts: List<Post>, cardWidth: Dp): Dp {
     val titleHorizontalPadding = 20.dp
     val titleVerticalPadding = 16.dp
     val titleStyle = MaterialTheme.typography.bodyMedium
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
-    val rowHeight = remember(sizingPosts, titleStyle, density, textMeasurer) {
+    return remember(sizingPosts, cardWidth, titleStyle, density, textMeasurer) {
         val titleWidthPx = with(density) { (cardWidth - titleHorizontalPadding).roundToPx() }
         sizingPosts.maxOf { post ->
             val mediaHeight = cardWidth / previewAspectRatio(post)
@@ -233,35 +280,6 @@ private fun RelatedPostsRow(
                 with(density) { measuredHeightPx.toDp() } + titleVerticalPadding
             } ?: 0.dp
             mediaHeight + titleHeight
-        }
-    }
-    LazyRow(
-        modifier = Modifier.height(rowHeight),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        itemsIndexed(
-            items = posts,
-            key = { _, post -> "related-card:${post.id.source.name}:${post.id.sourcePostId}" },
-        ) { index, post ->
-            Box(modifier = Modifier.width(cardWidth)) {
-                val observedDuration = observedMediaDurationMs(post, durationStateForPost)
-                SearchResultCard(
-                    post = post,
-                    pixivUgoiraClient = pixivUgoiraClient,
-                    acquiredDurationMs = observedDuration ?: acquiredDurations[post.id],
-                    showSourceBadge = true,
-                    liked = post.id in likedPostIds,
-                    onToggleLike = { onToggleLike(post) },
-                    recoverPostMedia = recoverPostMedia,
-                    onClick = { onOpenPost(posts, index) },
-                    onLongPress = { onLongPress(post) },
-                    onViewportChanged = { visible -> onViewportChanged(post, visible) },
-                    onAuthoritativeDurationKnown = { durationMs ->
-                        onAuthoritativeDurationKnown(post, durationMs)
-                    },
-                )
-            }
         }
     }
 }
