@@ -112,7 +112,7 @@ class HideLikedRelatedPostsJourneyTest {
                 compose.onNode(verticalGrid).performScrollToNode(hasTestTag(tag))
                 if (fullscreen) {
                     compose.onNodeWithTag(tag).performClick()
-                    compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("Back").fetchSemanticsNodes().isNotEmpty() }
+                    compose.waitUntil(10_000) { compose.onNodeWithContentDescription("More actions").isDisplayed() }
                     compose.onNodeWithContentDescription("Like post").performClick()
                 } else {
                     compose.onNode(hasContentDescription("Like post") and hasAnyAncestor(hasTestTag(tag)), useUnmergedTree = true)
@@ -126,8 +126,11 @@ class HideLikedRelatedPostsJourneyTest {
                     }
                 }
                 if (fullscreen) {
+                    // Room persistence can complete before the separate liked-post flow reaches Viewer.
+                    compose.waitUntil(10_000) { compose.onNodeWithContentDescription("Unlike post").isDisplayed() }
                     compose.onNodeWithContentDescription("Unlike post").assertIsDisplayed()
                     compose.onNodeWithContentDescription("Back").performClick()
+                    compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("More actions").fetchSemanticsNodes().isEmpty() }
                 }
                 compose.waitUntil(10_000) { compose.onAllNodesWithText("More like this").fetchSemanticsNodes().isNotEmpty() }
                 compose.onNode(verticalGrid).performScrollToIndex(0)
