@@ -19,6 +19,7 @@
 
 ## Improvements
 
+- Use a monochrome launcher icon for non-production builds so they are easier to distinguish from the production app.
 - Animate swipes between fullscreen posts and gallery media.
 - Expand tapped post media from its feed card into fullscreen.
 - Shrink fullscreen media back into its feed card on close, bringing the current post near the center first.

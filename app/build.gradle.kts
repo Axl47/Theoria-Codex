@@ -1,15 +1,49 @@
 import com.android.build.api.artifact.SingleArtifact
 import org.gradle.api.DefaultTask
+import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFile
+import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
 import org.gradle.api.tasks.testing.Test
 import org.gradle.process.ExecOperations
 import javax.inject.Inject
+import java.awt.image.BufferedImage
+import javax.imageio.ImageIO
+
+abstract class GenerateMonochromeLauncherIconTask : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val sourceIcon: RegularFileProperty
+
+    @get:OutputDirectory
+    abstract val outputDirectory: DirectoryProperty
+
+    @TaskAction
+    fun generate() {
+        val source = checkNotNull(ImageIO.read(sourceIcon.get().asFile)) {
+            "Cannot read launcher icon: ${sourceIcon.get().asFile}"
+        }
+        val monochrome = BufferedImage(source.width, source.height, BufferedImage.TYPE_INT_ARGB)
+        for (y in 0 until source.height) {
+            for (x in 0 until source.width) {
+                val pixel = source.getRGB(x, y)
+                val red = (pixel ushr 16) and 0xff
+                val green = (pixel ushr 8) and 0xff
+                val blue = pixel and 0xff
+                val gray = (299 * red + 587 * green + 114 * blue + 500) / 1000
+                monochrome.setRGB(x, y, (pixel and -0x1000000) or (gray shl 16) or (gray shl 8) or gray)
+            }
+        }
+        val output = outputDirectory.file("drawable-nodpi/theoria_app_icon.png").get().asFile
+        output.parentFile.mkdirs()
+        check(ImageIO.write(monochrome, "png", output)) { "Cannot write launcher icon: $output" }
+    }
+}
 
 abstract class VerifyR8JsonContractsTask @Inject constructor(
     private val execOperations: ExecOperations,
@@ -226,6 +260,12 @@ android {
 }
 
 val rejectPersonalReleaseInstall = tasks.register<RejectPersonalReleaseInstallTask>("rejectPersonalReleaseInstall")
+val generateMonochromeLauncherIcon = tasks.register<GenerateMonochromeLauncherIconTask>(
+    "generateMonochromeLauncherIcon",
+) {
+    sourceIcon.set(layout.projectDirectory.file("src/main/res/drawable-nodpi/theoria_app_icon.png"))
+    outputDirectory.set(layout.buildDirectory.dir("generated/res/monochromeLauncherIcon"))
+}
 tasks.matching {
     it.name.contains("PersonalRelease") &&
         (it.name.startsWith("install") || it.name.startsWith("uninstall") || it.name.startsWith("connected"))
@@ -234,6 +274,15 @@ tasks.matching {
 }
 
 androidComponents {
+    onVariants(selector().all()) { variant ->
+        // Production-ID APKs include the signed personal update lane.
+        if (variant.applicationId.get() != android.defaultConfig.applicationId) {
+            variant.sources.res?.addGeneratedSourceDirectory(
+                generateMonochromeLauncherIcon,
+                GenerateMonochromeLauncherIconTask::outputDirectory,
+            )
+        }
+    }
     // Baseline Profile otherwise synthesizes debug-signed production-ID derivatives of this
     // personal build. It is an export source only, never a measurement or connected-test lane.
     beforeVariants(selector().all()) { variant ->
