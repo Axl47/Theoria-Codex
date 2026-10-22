@@ -17,6 +17,7 @@
 
 ## Improvements
 
+- Label the Codex tab header “Library”.
 - Reduce vertical spacing around the For You source dropdown.
 - Reduce vertical spacing around the Search toolbar.
 - Search collections in Save to Codex.
