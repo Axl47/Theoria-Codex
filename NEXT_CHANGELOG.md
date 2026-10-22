@@ -40,7 +40,9 @@
 - Remove repeated type labels from tag names in the post hold menu.
 
 ## Fixes
+- Dismiss the keyboard when swiping between tabs or leaving Search input.
 
+- Collapse expanded Search controls when scrolling results, while preserving pending edits.
 - Restore saved Search positions through loading and pagination.
 - Reset Search to the top after Apply.
 - Preserve Library scroll when returning from a collection.

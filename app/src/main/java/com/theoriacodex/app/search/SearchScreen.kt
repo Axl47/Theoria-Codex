@@ -187,6 +187,7 @@ fun SearchScreen(
     val durationMinBucket = animationRestoreState.durationMinBucket
     val durationMaxBucket = animationRestoreState.durationMaxBucket
     var searchFieldFocused by remember { mutableStateOf(false) }
+    var searchControlsDismissedByScroll by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
     var showFavoriteTagSheet by remember { mutableStateOf(false) }
     var editingIncludeGroupIndex by remember { mutableStateOf<Int?>(null) }
@@ -363,11 +364,11 @@ fun SearchScreen(
         onLoadNextPage = { onAction(SearchAction.LoadNextPage) },
     )
 
-    LaunchedEffect(searchFieldFocused) {
-        if (!searchFieldFocused) return@LaunchedEffect
+    LaunchedEffect(gridState) {
         snapshotFlow { gridState.isScrollInProgress }
             .collectLatest { scrolling ->
                 if (scrolling) {
+                    searchControlsDismissedByScroll = true
                     inputFocus.clear()
                 }
             }
@@ -386,11 +387,11 @@ fun SearchScreen(
         visibleSourceStatusChipStatuses(state.content.statuses)
     }
     val clearFocusInteraction = remember { MutableInteractionSource() }
-    val showSearchControls = searchFieldFocused ||
+    val showSearchControls = !searchControlsDismissedByScroll && (searchFieldFocused ||
         input.isNotBlank() ||
         autocompleteSuggestions.isNotEmpty() ||
         facetedAutocompleteSuggestions.isNotEmpty() ||
-        state.hasPendingChanges
+        state.hasPendingChanges)
     val showAddInputAction = searchFieldFocused && input.isNotBlank()
 
     fun commitTagInput() {
@@ -438,6 +439,7 @@ fun SearchScreen(
                     .onFocusChanged { state ->
                         searchFieldFocused = state.isFocused
                         if (state.isFocused) {
+                            searchControlsDismissedByScroll = false
                             // Focus can return before the cleared input has recomposed after submission.
                             onAction(SearchAction.RefreshAutocomplete)
                         } else {

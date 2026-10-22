@@ -12,6 +12,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchContentUiState
 import com.theoriacodex.app.search.state.SearchQueryUiState
@@ -23,6 +25,7 @@ import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.SortMode
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -90,6 +93,17 @@ class SearchApplyScrollTest {
             useUnmergedTree = true,
         )
         val replacements = posts.reversed()
+        compose.runOnIdle {
+            state.value = state.value.copy(query = state.value.query.copy(
+                draft = state.value.query.draft.copy(sort = SortMode.POPULAR),
+            ))
+        }
+        compose.onNodeWithText("Apply").assertIsDisplayed()
+        grid.performTouchInput { swipeUp() }
+        compose.onNodeWithText("Apply").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(SortMode.POPULAR, state.value.query.draft.sort) }
+        compose.onNodeWithTag("Search query input").performClick()
+        compose.onNodeWithText("Apply").assertIsDisplayed()
         repeat(2) {
             grid.performScrollToIndex(20)
             compose.onNodeWithTag("Search query input").performClick()
