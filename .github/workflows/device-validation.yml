@@ -26,6 +26,8 @@ on:
       - 'scripts/verify_device_apk.py'
       - 'scripts/verify_debug_device.sh'
       - 'scripts/device_validation_common.sh'
+      - 'scripts/prepare_ci_android_sdk.sh'
+      - 'scripts/verify_ci_emulator.sh'
       - '.github/workflows/device-validation.yml'
   push:
     branches:
@@ -44,6 +46,8 @@ on:
       - 'scripts/verify_device_apk.py'
       - 'scripts/verify_debug_device.sh'
       - 'scripts/device_validation_common.sh'
+      - 'scripts/prepare_ci_android_sdk.sh'
+      - 'scripts/verify_ci_emulator.sh'
       - '.github/workflows/device-validation.yml'
   schedule:
     - cron: '23 07 * * 6'
@@ -93,6 +97,12 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      - name: Update Android command-line tools for minor API versions
+        run: bash scripts/prepare_ci_android_sdk.sh
+
+      - name: Build isolated test APKs before starting the emulator
+        run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest :core-data-android:assembleDebugAndroidTest --console=plain
+
       - name: Run connected device tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -102,6 +112,7 @@ jobs:
           profile: pixel_6
           # Android 17's default data partition leaves too little room for the app/test APKs.
           disk-size: 6G
+          ram-size: 4096M
           disable-animations: true
           emulator-options: >-
             -no-snapshot
@@ -109,7 +120,7 @@ jobs:
             -gpu swiftshader_indirect
             -noaudio
             -no-boot-anim
-          script: scripts/verify_debug_device.sh all
+          script: bash scripts/verify_ci_emulator.sh debug
 
       - name: Upload connected-test reports
         if: always()
@@ -117,6 +128,7 @@ jobs:
         with:
           name: connected-tests-api-${{ matrix.api-level }}
           path: |
+            build/reports/ci-emulator/
             build/reports/device-preflight/
             app/build/outputs/androidTest-results/connected/
             app/build/outputs/connected_android_test_additional_output/
@@ -165,6 +177,9 @@ jobs:
       - name: Build minified release acceptance
         run: ./gradlew :app:assembleReleaseAcceptance --stacktrace
 
+      - name: Update Android command-line tools for minor API versions
+        run: bash scripts/prepare_ci_android_sdk.sh
+
       - name: Run minified release acceptance
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -173,6 +188,7 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disk-size: 6G
+          ram-size: 4096M
           disable-animations: true
           emulator-options: >-
             -no-snapshot
@@ -180,7 +196,7 @@ jobs:
             -gpu swiftshader_indirect
             -noaudio
             -no-boot-anim
-          script: scripts/verify_release_acceptance_device.sh
+          script: bash scripts/verify_ci_emulator.sh acceptance
 
       - name: Upload release-acceptance reports
         if: always()
@@ -188,6 +204,7 @@ jobs:
         with:
           name: release-acceptance-api-${{ matrix.api-level }}
           path: |
+            build/reports/ci-emulator/
             app/build/outputs/apk/releaseAcceptance/
             app/build/outputs/mapping/releaseAcceptance/
           if-no-files-found: warn

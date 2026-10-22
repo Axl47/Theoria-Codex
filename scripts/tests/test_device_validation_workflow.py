@@ -12,7 +12,9 @@ class DeviceValidationWorkflowTest(unittest.TestCase):
         cls.workflow = WORKFLOW.read_text(encoding="utf-8")
 
     def test_connected_lane_executes_and_retains_both_instrumentation_owners(self) -> None:
-        self.assertIn("script: scripts/verify_debug_device.sh all", self.workflow)
+        self.assertIn("script: bash scripts/verify_ci_emulator.sh debug", self.workflow)
+        wrapper = (REPOSITORY_ROOT / "scripts/verify_ci_emulator.sh").read_text(encoding="utf-8")
+        self.assertIn("scripts/verify_debug_device.sh all", wrapper)
         lane = (REPOSITORY_ROOT / "scripts/verify_debug_device.sh").read_text(encoding="utf-8")
         self.assertIn(":app:connectedDebugAndroidTest", lane)
         self.assertIn(":core-data-android:connectedDebugAndroidTest", lane)
@@ -31,6 +33,8 @@ class DeviceValidationWorkflowTest(unittest.TestCase):
         self.assertEqual(2, self.workflow.count('api-level: ["36", "37.0"]'))
         self.assertEqual(2, self.workflow.count("api-level: ${{ matrix.api-level }}"))
         self.assertEqual(2, self.workflow.count("disk-size: 6G"))
+        self.assertEqual(2, self.workflow.count("ram-size: 4096M"))
+        self.assertEqual(2, self.workflow.count("run: bash scripts/prepare_ci_android_sdk.sh"))
 
 
 if __name__ == "__main__":
