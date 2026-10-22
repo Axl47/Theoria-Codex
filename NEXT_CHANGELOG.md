@@ -19,6 +19,8 @@
 
 ## Improvements
 
+- Simplify Search source selection with icons, an R34 submenu, and highlights for sources included in Unified.
+
 - Show the destination Codex’s name in post save confirmations.
 
 - Keep Saved sub-Codex feeds loaded for the session when reopening them.
@@ -44,7 +46,7 @@
 - Show the first Pixiv Ugoira frame sooner.
 - Reduce lag when opening or switching animated posts.
 - See storage usage in a chart with a category breakdown.
-- Use more compact collection actions.
+- Use more compact collection actions, with matching toolbar icons for Clean Codex and Make available offline.
 - Use more compact filter controls.
 - Use more compact applied-search summaries.
 - Improve accessibility labels for tag actions.

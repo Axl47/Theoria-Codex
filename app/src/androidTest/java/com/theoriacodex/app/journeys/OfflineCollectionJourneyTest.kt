@@ -48,7 +48,7 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
         launch()
         tab("Codex")
         activate(compose.onNodeWithContentDescription("Actions for Offline collection"))
-        activate(compose.onNodeWithText("Make available offline"))
+        activate(compose.onNodeWithContentDescription("Make available offline"))
         val offline = requireNotNull(container.features.offlineMedia)
         compose.waitUntil(10_000) { offline.store.snapshot.value.postCount == 2 }
         compose.onNodeWithText("2 posts available offline").assertIsDisplayed()

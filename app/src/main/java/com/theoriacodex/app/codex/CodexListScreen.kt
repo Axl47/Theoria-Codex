@@ -7,6 +7,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,6 +20,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CleaningServices
+import androidx.compose.material.icons.filled.OfflinePin
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Reorder
 import androidx.compose.material.icons.filled.Delete
@@ -372,14 +375,6 @@ private fun CodexActionSheet(
                 overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
-            TextButton(onClick = { state.actionTarget = null; state.cleaningTargetId = codex.codexId }) {
-                Text("Clean Codex")
-            }
-            actions.makeAvailableOffline?.let { makeOffline ->
-                TextButton(onClick = { state.actionTarget = null; makeOffline(codex.codexId) }) {
-                    Text("Make available offline")
-                }
-            }
             if (presentation.actionLoading) {
                 Text("Loading collection tags…")
             } else if (presentation.actionFailed) {
@@ -405,7 +400,7 @@ private fun CodexActionButtons(
     state: CodexListUiState,
     actions: CodexListActions,
 ) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+    FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         CodexActionIcon(Icons.Default.Download, "Download codex") {
             state.actionTarget = null; actions.downloadCodex(codex.codexId)
         }
@@ -417,6 +412,14 @@ private fun CodexActionButtons(
         }
         CodexActionIcon(Icons.Default.Edit, "Rename codex") {
             state.renameTarget = codex; state.actionTarget = null
+        }
+        CodexActionIcon(Icons.Default.CleaningServices, "Clean Codex") {
+            state.actionTarget = null; state.cleaningTargetId = codex.codexId
+        }
+        actions.makeAvailableOffline?.let { makeOffline ->
+            CodexActionIcon(Icons.Default.OfflinePin, "Make available offline") {
+                state.actionTarget = null; makeOffline(codex.codexId)
+            }
         }
         val deleteLabel = if (isLikesCodex) "Clear likes" else "Delete codex"
         CodexActionIcon(Icons.Default.Delete, deleteLabel) {
