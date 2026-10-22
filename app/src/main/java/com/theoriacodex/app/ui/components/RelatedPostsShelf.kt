@@ -28,21 +28,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.Dp
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.noMediaDurationStateForPost
 import com.theoriacodex.app.media.observedMediaDurationMs
-import com.theoriacodex.app.post.displayTitleOrNull
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.related.availablePages
 import com.theoriacodex.app.related.currentPageIndex
 import com.theoriacodex.app.related.requestOrNull
 import com.theoriacodex.app.search.SearchResultCard
-import com.theoriacodex.app.search.previewAspectRatio
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.domain.model.ImageRef
@@ -221,7 +215,7 @@ private fun RelatedPostsRow(
         return
     }
     val cardWidth = 180.dp
-    val rowHeight = rememberRelatedRowHeight(sizingPosts, cardWidth)
+    val rowHeight = rememberPostShelfHeight(sizingPosts, cardWidth)
     val rowState = rememberLazyListState()
     val postIds = remember(posts) { posts.map { it.id } }
     ViewerReturnShelfEffect(shelfId, postIds, rowState)
@@ -240,6 +234,7 @@ private fun RelatedPostsRow(
                     val observedDuration = observedMediaDurationMs(post, durationStateForPost)
                     SearchResultCard(
                         post = post,
+                        mediaAspectRatio = POST_SHELF_MEDIA_ASPECT_RATIO,
                         pixivUgoiraClient = pixivUgoiraClient,
                         acquiredDurationMs = observedDuration ?: acquiredDurations[post.id],
                         showSourceBadge = true,
@@ -255,31 +250,6 @@ private fun RelatedPostsRow(
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun rememberRelatedRowHeight(sizingPosts: List<Post>, cardWidth: Dp): Dp {
-    val titleHorizontalPadding = 20.dp
-    val titleVerticalPadding = 16.dp
-    val titleStyle = MaterialTheme.typography.bodyMedium
-    val density = LocalDensity.current
-    val textMeasurer = rememberTextMeasurer()
-    return remember(sizingPosts, cardWidth, titleStyle, density, textMeasurer) {
-        val titleWidthPx = with(density) { (cardWidth - titleHorizontalPadding).roundToPx() }
-        sizingPosts.maxOf { post ->
-            val mediaHeight = cardWidth / previewAspectRatio(post)
-            val titleHeight = post.displayTitleOrNull()?.let { title ->
-                val measuredHeightPx = textMeasurer.measure(
-                    text = title,
-                    style = titleStyle,
-                    maxLines = 2,
-                    constraints = Constraints(maxWidth = titleWidthPx),
-                ).size.height
-                with(density) { measuredHeightPx.toDp() } + titleVerticalPadding
-            } ?: 0.dp
-            mediaHeight + titleHeight
         }
     }
 }

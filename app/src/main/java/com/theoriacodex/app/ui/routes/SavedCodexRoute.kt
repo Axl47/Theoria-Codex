@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -47,6 +48,8 @@ import com.theoriacodex.app.media.rememberDurationFilterMetadata
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
+import com.theoriacodex.app.ui.components.POST_SHELF_MEDIA_ASPECT_RATIO
+import com.theoriacodex.app.ui.components.rememberPostShelfHeight
 import com.theoriacodex.app.ui.components.FeedFabRestoreRegistry
 import com.theoriacodex.app.ui.components.codexFeedFabContext
 import com.theoriacodex.data.repository.CodexSortMode
@@ -147,17 +150,20 @@ private fun SavedCodexSection(
             metadata.knownDurationMsByPostId)
     }
     SideEffect { owner.onFilterChanged(!filters.animatedDurationRange.isFullRange) }
+    val cardWidth = 164.dp
+    val rowHeight = rememberPostShelfHeight(posts, cardWidth)
     val row = rememberLazyListState()
     DurationRouteEnvironmentEffect({ parentScrolling() || row.isScrollInProgress }, owner::onEnvironmentChanged)
     val liveOwner = state.followedOwner ?: state.savedSearchOwner
     val feed = liveOwner?.state?.collectAsStateWithLifecycle()?.value
     SavedCodexCarousel(title, count, posts, state.loading, feed?.errors?.isNotEmpty() == true,
         onOpen, { liveOwner?.retry() }, onLongPress) {
-        LazyRow(state = row, contentPadding = PaddingValues(horizontal = 16.dp),
+        LazyRow(state = row, modifier = Modifier.height(rowHeight), contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             itemsIndexed(posts, key = { _, post -> "${post.id.source.name}:${post.id.sourcePostId}" }) { index, post ->
-                Box(Modifier.width(164.dp).heightIn(max = 280.dp)) {
+                Box(Modifier.width(cardWidth)) {
                     SearchResultCard(post = post, pixivUgoiraClient = sources.pixivUgoiraClient,
+                        mediaAspectRatio = POST_SHELF_MEDIA_ASPECT_RATIO,
                         acquiredDurationMs = observedMediaDurationMs(post, owner::observeState),
                         showSourceBadge = true, resolvePostById = resolvePost,
                         onClick = { onOpenViewer(posts, index) },
