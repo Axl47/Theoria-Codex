@@ -17,6 +17,10 @@
 
 ## Improvements
 
+- Keep Saved sub-Codex feeds loaded for the session when reopening them.
+- Shorten the Saved Searches title to “Searches”.
+- Show a right arrow beside each Saved sub-Codex title to make opening it clearer.
+
 - Resume videos where you left them when revisiting up to five nearby Viewer posts in either direction, until you exit Viewer.
 - Keep the last seek thumbnail visible beneath the spinner while the next frame loads.
 - Label the Codex tab header “Library”.

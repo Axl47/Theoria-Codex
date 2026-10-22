@@ -33,7 +33,11 @@ internal fun SavedSearchesCodexBoundary(
         SearchCoordinator(sources.registry, data.queryRepository, data.settingsRepository, data.uiRestoreRepository,
             data.recentsRepository, data.statisticsRepository)
     }
-    val owner = viewModel<SavedSearchesCodexViewModel>(factory = SavedSearchesCodexViewModel.factory(execution, data.cacheRepository))
+    val owner = viewModel<SavedSearchesCodexViewModel>(
+        viewModelStoreOwner = com.theoriacodex.app.codex.LocalSavedCodexSessionOwner.current
+            ?: checkNotNull(androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner.current),
+        factory = SavedSearchesCodexViewModel.factory(execution, data.cacheRepository),
+    )
     val selected = remember(entries, filters.excludedSavedSearches) {
         val excluded = filters.excludedSavedSearches.toSet()
         entries.filterNot { it.id in excluded }
@@ -42,7 +46,7 @@ internal fun SavedSearchesCodexBoundary(
     val feed = owner.state.collectAsStateWithLifecycle().value
     val posts = remember(feed.posts, sort) { sortLiveCodexPosts(feed.posts, sort) }
     content(CodexDetailDestinationState(
-        codex = Codex(SAVED_SEARCHES_CODEX_ID, "Saved Searches", 0), items = emptyList(), posts = posts,
+        codex = Codex(SAVED_SEARCHES_CODEX_ID, "Searches", 0), items = emptyList(), posts = posts,
         activeProfile = settings.activeRecommendationProfile(), availableSources = available,
         creatorBrowsingSources = remember(sources.registry, available) { sources.registry.creatorBrowsingSources().intersect(available) },
         resolveUnknownAnimatedDurations = settings.contentFilters.resolveUnknownAnimatedDurations,

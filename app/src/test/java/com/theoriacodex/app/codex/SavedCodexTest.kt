@@ -34,7 +34,7 @@ class SavedCodexTest {
         }
         compose.onNodeWithText("Likes").assertDoesNotExist()
         compose.onNodeWithText("Followed").assertDoesNotExist()
-        compose.onNodeWithText("Saved Searches").assertDoesNotExist()
+        compose.onNodeWithText("Searches").assertDoesNotExist()
         compose.onNodeWithText("Likes: 4, Followed: 2, Search: 3").assertIsDisplayed()
         compose.onNodeWithText("Saved").performClick()
         compose.runOnIdle { assertEquals(SAVED_CODEX_ID, opened) }

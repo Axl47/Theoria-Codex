@@ -973,6 +973,7 @@ internal fun TheoriaAppContent(
         CodexSaveRelevanceLoader(dataDependencies.codexRepository, scope, source::observeSaveRelevance)
     }
     CompositionLocalProvider(LocalCodexSaveRelevanceLoader provides saveRelevanceLoader) {
+    com.theoriacodex.app.codex.SavedCodexSession {
     PostTagContextProvider(searchRouteOwner?.state, featureDependencies.search::fetchSearchTermCounts) {
         TheoriaNightTheme {
             if (!navReady) {
@@ -1943,6 +1944,7 @@ internal fun TheoriaAppContent(
                 )
             }
         }
+    }
     }
     }
 }

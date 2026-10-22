@@ -11,7 +11,7 @@ internal const val SAVED_CODEX_ID = "system:saved"
 internal fun savedCodexChildren(likesCodexId: String) = listOf(
     Codex(likesCodexId, "Likes", 0),
     Codex(FOLLOWED_CODEX_ID, "Followed", 0),
-    Codex(SAVED_SEARCHES_CODEX_ID, "Saved Searches", 0),
+    Codex(SAVED_SEARCHES_CODEX_ID, "Searches", 0),
 )
 
 internal fun savedCodexSummary(likesCodexId: String, counts: Map<String, Int>): String =

@@ -39,7 +39,7 @@ internal fun SavedSearchesCodexHeader(
     onRemove: (String) -> Unit,
 ) {
     var showSearches by remember { mutableStateOf(false) }
-    LiveCodexHeader("Saved Searches", SAVED_SEARCHES_CODEX_ID, owner,
+    LiveCodexHeader("Searches", SAVED_SEARCHES_CODEX_ID, owner,
         entries.associate { it.id to it.name }, visiblePosts, posts, filters, resolvingDurations, gridState,
         onBack, "Searches", onManage = { showSearches = true })
     if (showSearches) ModalBottomSheet(onDismissRequest = { showSearches = false }, dragHandle = null) {

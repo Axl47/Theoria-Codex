@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -77,18 +79,18 @@ class SavedSearchesCodexJourneyTest {
             }
             compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Codex").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithContentDescription("Codex").performClick()
-            compose.onNodeWithText("Saved Searches").assertDoesNotExist()
+            compose.onNodeWithText("Searches").assertDoesNotExist()
             compose.onNodeWithText("Likes: 0, Followed: 0, Search: 2").assertIsDisplayed()
             compose.onNodeWithText("Saved").performClick()
             compose.onNodeWithText("Likes").assertIsDisplayed()
             compose.onNodeWithText("Followed").assertIsDisplayed()
-            compose.onNodeWithText("Saved Searches").performScrollTo().performClick()
+            compose.onNodeWithText("Searches").performScrollTo().performClick()
             val first = searchCardTestTag(posts[0].id)
             val second = searchCardTestTag(posts[1].id)
             compose.waitUntil(10_000) { compose.onAllNodesWithTag(first).fetchSemanticsNodes().isNotEmpty() &&
                 compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
             assertEquals(1, compose.onAllNodesWithTag(searchCardTestTag(posts[2].id)).fetchSemanticsNodes().size)
-            compose.onNodeWithText("Searches").performClick()
+            compose.onNode(hasText("Searches") and hasClickAction()).performClick()
             compose.onNodeWithContentDescription("Include First search").performClick()
             compose.onNodeWithText("Done").performClick()
             compose.waitUntil(10_000) { compose.onAllNodesWithTag(first).fetchSemanticsNodes().isEmpty() }
@@ -99,15 +101,22 @@ class SavedSearchesCodexJourneyTest {
             compose.onNodeWithTag(second).assertIsDisplayed()
             assertEquals(roots, graph.registry.requests.count { it.pageToken == null })
             compose.onNodeWithContentDescription("Back").performClick()
-            compose.onNodeWithText("Saved Searches").performScrollTo()
+            compose.onNodeWithText("Searches").performScrollTo()
             compose.waitUntil(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag(first).assertDoesNotExist()
+            assertEquals(roots, graph.registry.requests.count { it.pageToken == null })
+            // Leaving Saved entirely must retain the same feed, too.
+            compose.onNodeWithContentDescription("Back").performClick()
+            compose.onNodeWithText("Saved").performClick()
+            compose.onNodeWithText("Searches").performScrollTo()
+            compose.waitUntil(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
+            assertEquals(roots, graph.registry.requests.count { it.pageToken == null })
             compose.onNodeWithTag(second).performClick()
             compose.waitUntil(10_000) { compose.onNodeWithContentDescription("Back").isDisplayed() }
             compose.onNodeWithContentDescription("Back").performClick()
-            compose.onNodeWithText("Saved Searches").performScrollTo().performClick()
+            compose.onNodeWithText("Searches").performScrollTo().performClick()
             compose.waitUntil(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithText("Searches").performClick()
+            compose.onNode(hasText("Searches") and hasClickAction()).performClick()
             compose.onNodeWithContentDescription("Include First search").assertIsOff()
             compose.onNodeWithText("Exclude all").performClick()
             compose.onNodeWithText("Done").performClick()
