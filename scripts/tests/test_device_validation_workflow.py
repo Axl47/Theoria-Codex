@@ -30,6 +30,7 @@ class DeviceValidationWorkflowTest(unittest.TestCase):
         self.assertIn("name: release-acceptance-api-${{ matrix.api-level }}", self.workflow)
         self.assertEqual(2, self.workflow.count('api-level: ["36", "37.0"]'))
         self.assertEqual(2, self.workflow.count("api-level: ${{ matrix.api-level }}"))
+        self.assertEqual(2, self.workflow.count("disk-size: 6G"))
 
 
 if __name__ == "__main__":

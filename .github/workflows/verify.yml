@@ -98,6 +98,21 @@ jobs:
       - name: Lint generated Android sources
         run: ./gradlew :app:lint :core-data-android:lintDebug --offline --no-daemon --warning-mode=all
 
+      - name: Upload Android test and lint reports
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: android-test-and-lint-reports
+          path: |
+            app/build/test-results/
+            app/build/reports/tests/
+            app/build/reports/lint-results-*
+            core-data-android/build/test-results/
+            core-data-android/build/reports/tests/
+            core-data-android/build/reports/lint-results-*
+          if-no-files-found: warn
+          retention-days: 14
+
   maintainability:
     name: Maintainability
     runs-on: ubuntu-latest

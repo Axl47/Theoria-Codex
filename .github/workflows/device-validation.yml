@@ -100,6 +100,8 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_6
+          # Android 17's default data partition leaves too little room for the app/test APKs.
+          disk-size: 6G
           disable-animations: true
           emulator-options: >-
             -no-snapshot
@@ -170,6 +172,7 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_6
+          disk-size: 6G
           disable-animations: true
           emulator-options: >-
             -no-snapshot
