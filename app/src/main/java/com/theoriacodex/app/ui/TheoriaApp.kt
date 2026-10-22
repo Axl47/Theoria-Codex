@@ -420,6 +420,18 @@ internal fun TheoriaAppContent(
         }
     }
     var pendingTopLevelRoute by remember { mutableStateOf<String?>(null) }
+    fun goToSearch() {
+        homeTabRoute = TopLevelDestination.Search.route
+        pendingTopLevelRoute = TopLevelDestination.Search.route
+        if (navController.currentDestination?.route != AppRoute.Home &&
+            !navController.popBackStack(AppRoute.Home, inclusive = false)
+        ) {
+            navController.navigate(AppRoute.Home) {
+                popUpTo(navController.graph.findStartDestination().id)
+                launchSingleTop = true
+            }
+        }
+    }
     var homeTabRestoreComplete by remember { mutableStateOf(false) }
     var navReady by remember(appContainer) { mutableStateOf(appShellState.appReady) }
     val startupWorkflowState = appShellState.startup
@@ -557,15 +569,7 @@ internal fun TheoriaAppContent(
                 mode = QueryMode.Source(source),
             ),
         )
-        homeTabRoute = TopLevelDestination.Search.route
-        pendingTopLevelRoute = TopLevelDestination.Search.route
-        navController.navigate(AppRoute.Home) {
-            popUpTo(navController.graph.findStartDestination().id) {
-                saveState = true
-            }
-            launchSingleTop = true
-            restoreState = true
-        }
+        goToSearch()
         Toast.makeText(
             appContext,
             "Searching ${source.displayName()} codex tags: ${normalizedIncludeTags.joinToString(separator = ", ")}",
@@ -1569,8 +1573,7 @@ internal fun TheoriaAppContent(
                                 },
                                 onFavoriteTagLongPress = addFavoriteTag,
                                 onGoToSearch = {
-                                    homeTabRoute = TopLevelDestination.Search.route
-                                    navController.popBackStack(AppRoute.Home, inclusive = false)
+                                    goToSearch()
                                 },
                                 onBack = {
                                     navController.popBackStack()
@@ -1809,20 +1812,8 @@ internal fun TheoriaAppContent(
                                     },
                                     onFavoriteTagLongPress = addFavoriteTag,
                                     onGoToSearch = {
-                                        homeTabRoute = TopLevelDestination.Search.route
                                         scope.launch { featureDependencies.search.setViewerLaunchContext(null) }
-                                        navController.popBackStack(AppRoute.Viewer, inclusive = true)
-                                        navController.navigate(AppRoute.Home) {
-                                            popUpTo(navController.graph.findStartDestination().id) {
-                                                saveState = true
-                                            }
-                                            launchSingleTop = true
-                                            restoreState = true
-                                        }
-                                        scope.launch {
-                                            val searchIndex = TopLevelDestination.entries.indexOf(TopLevelDestination.Search)
-                                            topLevelPagerState.scrollToPage(searchIndex)
-                                        }
+                                        goToSearch()
                                     },
                                     onOpenCreatorFallback = { post ->
                                         scope.launch { openCreatorProfile(post) }
