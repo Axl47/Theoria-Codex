@@ -1,0 +1,82 @@
+[
+  {
+    "reader": "luna-01",
+    "evaluation": "Accept displayed startup readiness. Defer app-shell polling and production export-intent wiring because #27 owns that runtime boundary. Retain all platform/parser/package tests."
+  },
+  {
+    "reader": "luna-02",
+    "evaluation": "Keep device accessibility and installed JSON/credential contracts. Move in-memory PKCE orchestration and component policy to host with all assertions retained. Defer screenshot coordinate investigation and process-recovery cleanup until coordinated platform evidence. Extra creator-request recording is outside this bounded patch."
+  },
+  {
+    "reader": "luna-03",
+    "evaluation": "Keep geometry/order assertions: they prove layout and sorting behavior. Bounded Compose waits are not themselves evidence of flakiness; do not replace asynchronous UI observations with assertions against another flow. No change needed to SDK-annotation-only cases."
+  },
+  {
+    "reader": "luna-04",
+    "evaluation": "Defer WebP files changed by #27. Keep real interruption testing and virtual duration cases. Filesystem busy-yield cleanup is a potential later maintenance task; no reproduced failure, and runTest already supplies a global bound. Locale advice is conditional on parallel JVM execution."
+  },
+  {
+    "reader": "luna-05",
+    "evaluation": "Keep persistence/queue/owner contracts and package gates. Real dispatcher checks intentionally protect execution ownership. Broad selector and checkpoint-loop observations do not justify adding new abstractions throughout this focused patch."
+  },
+  {
+    "reader": "luna-06",
+    "evaluation": "Keep opt-in live checks separate and unchanged. Preserve actual UI-thread shutdown/cancellation proof and meaningful geometry. SearchInputSubmission changed semantically in #27 and remains deferred; generic extra idle calls are not a demonstrated remedy."
+  },
+  {
+    "reader": "luna-07",
+    "evaluation": "Compose assertions synchronize, so reject speculative waitForIdle insertion. Retain credential migration and source-specific parser tests. Temporary-directory hygiene is useful but not necessary for this bounded change."
+  },
+  {
+    "reader": "luna-08",
+    "evaluation": "Accept replacing CodexLibraryScrollReturnTest fixed 300 ms delay with controlled repository emission and an explicit no-placeholder-grid assertion. Defer all three upstream journey synchronization files. Keep state/lifecycle/update signing contracts."
+  },
+  {
+    "reader": "luna-09",
+    "evaluation": "Keep architecture entry-point guard: explicitly protects a single immutable route state API. Preserve deadline/cancellation completion checks; no slower or weaker timeout assertion substitution. Transport gate refinements require evidence beyond a timeout existing."
+  },
+  {
+    "reader": "luna-10",
+    "evaluation": "Keep Room EXPLAIN index-use and later-write assertions; schema existence alone would weaken the intended query guarantee. Keep prefetch architecture/cache-sharing guards and ordered prefetch behavior absent a proven defect. String equality observation is optional maintenance outside current scope."
+  },
+  {
+    "reader": "luna-11",
+    "evaluation": "Keep all real Room/DataStore/file-backed behavior, upgrades and rollback tests. The shared host/device migration scenario is intentional coverage of different SQLite runtimes. Large scaling cases protect bounded work and must not be reduced just for cost."
+  },
+  {
+    "reader": "luna-12",
+    "evaluation": "Do not infer missing real-backend coverage from the in-memory suite alone: luna10/11 cover Room transactions, migrations, later writes, DataStore parity and rollback. Preserve fixture contracts without creating another test framework. runTest/deferred gates need no blanket timeout additions."
+  },
+  {
+    "reader": "luna-13",
+    "evaluation": "Keep deterministic seeded vectors as replay behavior, provider-specific contracts, cache limits and cancellation. Dated captured protocol resources are intentional frozen fixtures, not a reason to refresh live data."
+  },
+  {
+    "reader": "luna-14",
+    "evaluation": "Preserve prompt real-network cancellation bounds. Replacing elapsed-time assertions with only exception type would permit delayed cancellation and weaken coverage. Revisit with a deterministic equivalent only on a concrete failure."
+  },
+  {
+    "reader": "luna-15",
+    "evaluation": "Keep provider-specific request/projection cases and fixed fixtures. Optional transcript exhaustion tightening is outside this bounded patch; stub runtime delays are not changed."
+  },
+  {
+    "reader": "luna-16",
+    "evaluation": "Keep stub all-source contracts and distinct fixture-family cases. All physical benchmarks, simultaneous playback probes, safety wrappers, signing and quality gates remain unchanged."
+  },
+  {
+    "reader": "luna-17",
+    "evaluation": "Defer safety-wrapper/benchmark/CI edits to coordinator. Structural APK manifest parsing and bounded transport are review suggestions, not authorization to change device lanes. No new unrelated tag-store suite in this patch."
+  },
+  {
+    "reader": "luna-18",
+    "evaluation": "Keep release/Debug harness configuration and schema v1-v5 byte-for-byte. The acceptance Activity tests minified persisted data across real process restart, unlike host serializers; exported schema repetition is required migration input."
+  },
+  {
+    "reader": "luna-19",
+    "evaluation": "Keep schema v6-v9 byte-for-byte, including retired translation compatibility table and reverse-membership index. Complete historical snapshots are not redundant test executions."
+  },
+  {
+    "reader": "luna-patch",
+    "evaluation": "All five current changed/new files fully read; no static findings. All ten moved test names remain, with two additional gated auth cases. Compilation/execution remains unverified during coordinator capture hold."
+  }
+]

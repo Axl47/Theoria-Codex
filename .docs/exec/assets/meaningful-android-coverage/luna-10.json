@@ -1,0 +1,284 @@
+{
+  "reader": "luna-10",
+  "assigned_count": 27,
+  "completed_count": 27,
+  "integrity": "All 26 manifest files matched declared byte counts, line counts, and SHA256 hashes. Supplemental /tmp report was also read fully.",
+  "files": [
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerSwipeAnimationTest.kt",
+      "lines": 81,
+      "read_complete": true,
+      "keep": "Preserves visible-slide timing, gallery media selection, opening controls, and swipe animation.",
+      "redundancy": "none observed",
+      "flakiness": "none observed; virtual Compose clock is controlled.",
+      "proposal": "keep/no change",
+      "disposition": "keep; PR change is SDK-annotation-only"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerTransformStateTest.kt",
+      "lines": 84,
+      "read_complete": true,
+      "keep": "Covers double-tap zoom, pan gating, scale clamping, pan reset, and multi-image direction inversion.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerVideoPlayerPoolTest.kt",
+      "lines": 90,
+      "read_complete": true,
+      "keep": "Covers player reuse, independent overlapping bindings, idle release, and feed/viewer retention coordination.",
+      "redundancy": "none observed",
+      "flakiness": "none observed; main-looper time is virtualized.",
+      "proposal": "keep/no change",
+      "disposition": "keep; PR change is SDK-annotation-only"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerVideoPositionsTest.kt",
+      "lines": 69,
+      "read_complete": true,
+      "keep": "Protects per-media position retention, bounded eviction, late-release behavior, gallery isolation, and session isolation.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerVideoPrefetchTest.kt",
+      "lines": 57,
+      "read_complete": true,
+      "keep": "Protects truthful prefetch outcomes, 24 MiB target, shared CacheWriter identity, and removal of the legacy cache owner.",
+      "redundancy": "Lines 35-48 inspect production source strings, directly mirroring implementation.",
+      "flakiness": "Source-string assertions can fail on harmless refactors without behavioral regression.",
+      "proposal": "Replace lines 35-48 with a behavioral cache-sharing test using an injectable/temp cache, or explicitly retain this as an architecture contract.",
+      "disposition": "independent recommendation"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerVideoRecoveryTest.kt",
+      "lines": 53,
+      "read_complete": true,
+      "keep": "Protects one retry for decoder/frame failures, no retry for unsupported/source errors, and per-media retry budgets.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerViewModelTest.kt",
+      "lines": 596,
+      "read_complete": true,
+      "keep": "Broadly protects session replacement, cancellation, restoration, sparse resolution, stale-event rejection, effects, deletion/provider errors, and prefetch concurrency.",
+      "redundancy": "none proven",
+      "flakiness": "Lines 529-539 assume the first two queued keys start; scheduler ordering is not clearly contractual. Lines 143-144 use String reference identity rather than value equality.",
+      "proposal": "Use assertEquals for saved-state values at lines 143-144; at lines 529-539 assert max concurrency and started-key membership unless queue order is an explicit contract.",
+      "disposition": "independent recommendation"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerVisibilityRecordingTest.kt",
+      "lines": 89,
+      "read_complete": true,
+      "keep": "Protects reattachment deduplication, stale/foreign event rejection, repeat visits, and partial persistence recovery.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/state/ViewerStateReducerTest.kt",
+      "lines": 457,
+      "read_complete": true,
+      "keep": "Protects session reset, media-kind mapping, playback modes, gallery selection, recovery, stale events, resolution failures, prefetch truthfulness, and typed effects.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/resources/r8-json-contracts.txt",
+      "lines": 55,
+      "read_complete": true,
+      "keep": "Durable R8 JSON field contract, including taxonomy count and migration/storage fields.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/resources/robolectric.properties",
+      "lines": 2,
+      "read_complete": true,
+      "keep": "Pins host tests to API 36 while API 37 remains covered by emulator CI.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/testDebug/java/com/theoriacodex/app/developercopy/DeveloperCopyProtocolTest.kt",
+      "lines": 51,
+      "read_complete": true,
+      "keep": "Protects bounded wire parsing, truncation/oversize/version/trailing rejection, secret redaction, and exact debug caller/certificate authorization.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/testDebug/java/com/theoriacodex/app/developercopy/ReadOnlyCredentialReadTest.kt",
+      "lines": 72,
+      "read_complete": true,
+      "keep": "Protects read-only handling of interrupted atomic artifacts, missing credentials, malformed committed data, and backup recovery.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep; PR change is SDK-annotation-only"
+    },
+    {
+      "path": "app/src/testDebug/java/com/theoriacodex/app/developercopy/ReadOnlyLibrarySnapshotTest.kt",
+      "lines": 110,
+      "read_complete": true,
+      "keep": "Protects staged Room snapshots, production-byte/WAL immutability, read-only connections, external-commit invalidation, and committed WAL rows.",
+      "redundancy": "none observed",
+      "flakiness": "none observed in the controlled native SQLite setup",
+      "proposal": "keep/no change",
+      "disposition": "keep; PR change is SDK-annotation-only"
+    },
+    {
+      "path": "baseline-profile/src/main/AndroidManifest.xml",
+      "lines": 2,
+      "read_complete": true,
+      "keep": "Empty manifest is appropriate for the baseline-profile test module.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep; coordinator-owned benchmark/profile lane"
+    },
+    {
+      "path": "baseline-profile/src/main/java/com/theoriacodex/baselineprofile/BaselineProfileGenerator.kt",
+      "lines": 45,
+      "read_complete": true,
+      "keep": "Protects startup and top-level navigation profile collection with bounded destination readiness.",
+      "redundancy": "none observed",
+      "flakiness": "No concrete issue; fixed English content descriptions and 15-second bounded waits are intentional profile inputs.",
+      "proposal": "keep/no change",
+      "disposition": "keep; coordinator-owned benchmark/profile lane"
+    },
+    {
+      "path": "core-data-android/src/androidTest/kotlin/com/theoriacodex/data/android/room/RoomUpgradeJourneyDeviceTest.kt",
+      "lines": 21,
+      "read_complete": true,
+      "keep": "Runs persisted upgrades from versions 1, 2, and 6 and verifies later writes.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep; device evidence remains coordinator-owned"
+    },
+    {
+      "path": "core-data-android/src/androidTest/kotlin/com/theoriacodex/data/android/room/TheoriaRoomSchemaTest.kt",
+      "lines": 235,
+      "read_complete": true,
+      "keep": "Protects migration metadata, content preservation, recents ownership, automatic tags, duration schema, progress defaults, grouping, and translation-cache compatibility.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-data-android/src/sharedTest/kotlin/com/theoriacodex/data/android/room/RoomUpgradeScenario.kt",
+      "lines": 202,
+      "read_complete": true,
+      "keep": "Protects full registered upgrade paths, reopen persistence, membership isolation, recents, later writes, duration/translation compatibility, foreign-key checks, and cascades.",
+      "redundancy": "none observed",
+      "flakiness": "none observed; Dispatchers.IO is deliberate for production-style database access.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RetainedPostPayloadsTest.kt",
+      "lines": 46,
+      "read_complete": true,
+      "keep": "Protects payload identity retention, changed-row-only decoding across 1k/10k/50k rows, and hash-collision safety.",
+      "redundancy": "none observed",
+      "flakiness": "none observed; 50k-row case is the main bounded cost.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomCodexCleaningTest.kt",
+      "lines": 151,
+      "read_complete": true,
+      "keep": "Protects canonical union cleaning, undo timestamp preservation, likes/profile isolation, invalid requests, deleted targets, and transactional rollback.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep; PR change is SDK-annotation-only"
+    },
+    {
+      "path": "core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomCodexLikesRepositoryTest.kt",
+      "lines": 508,
+      "read_complete": true,
+      "keep": "Protects codex ordering/membership, bulk operations, likes synchronization, automatic tags/groups, payload round trips, malformed payload failures, and atomic rollback.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; each test uses an isolated in-memory database.",
+      "proposal": "keep/no change",
+      "disposition": "keep; PR change is SDK-annotation-only"
+    },
+    {
+      "path": "core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomCollectionStorageTest.kt",
+      "lines": 171,
+      "read_complete": true,
+      "keep": "Protects sparse-write preservation, bulk rollback, summary decoding limits, watched eviction, orphan retention, and migration index creation.",
+      "redundancy": "none observed",
+      "flakiness": "Lines 154-156 assert EXPLAIN QUERY PLAN chooses a named index. SQLite planner choice and wording can vary across API 36/37 and tiny datasets.",
+      "proposal": "Replace planner-choice assertion with deterministic index/schema validation, or use INDEXED BY in a narrowly scoped query if planner use must be tested.",
+      "disposition": "independent recommendation"
+    },
+    {
+      "path": "core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomLegacyJsonImporterTest.kt",
+      "lines": 442,
+      "read_complete": true,
+      "keep": "Protects atomic legacy import, checksum/count proof, split-brain detection, fail-closed validation, source preservation, destination drift, partial archive retry, and recovery.",
+      "redundancy": "none observed",
+      "flakiness": "none observed; TemporaryFolder and isolated in-memory DB provide deterministic state.",
+      "proposal": "keep/no change",
+      "disposition": "keep; PR change is SDK-annotation-only"
+    },
+    {
+      "path": "core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomMediaDurationRepositoryTest.kt",
+      "lines": 146,
+      "read_complete": true,
+      "keep": "Protects typed state round trips, expiry deletion, deterministic pruning/upsert behavior, and migration schema.",
+      "redundancy": "none observed",
+      "flakiness": "none observed; production ordering is explicitly deterministic.",
+      "proposal": "keep/no change",
+      "disposition": "keep; PR change is SDK-annotation-only"
+    },
+    {
+      "path": "core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomProfileBackupStoreTest.kt",
+      "lines": 124,
+      "read_complete": true,
+      "keep": "Protects logical snapshot ordering, likes timestamps, independent recents, idempotent merge, rollback, and legacy likes/member preservation.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep; PR change is SDK-annotation-only"
+    },
+    {
+      "path": "/tmp/theoria-test-audit-luna-10.json",
+      "lines": 235,
+      "read_complete": true,
+      "keep": "Assignment manifest lists the same 26 luna-10 files with matching metadata and pending status.",
+      "redundancy": "Metadata duplicate of the repository manifest by design.",
+      "flakiness": "none observed",
+      "proposal": "keep/no change; do not edit report/assignment metadata",
+      "disposition": "read-only supplemental assignment file"
+    }
+  ],
+  "top_findings": [
+    "RoomCollectionStorageTest.kt:154-156 has planner-dependent EXPLAIN QUERY PLAN assertions; this is the clearest cross-API flakiness risk.",
+    "ViewerVideoPrefetchTest.kt:35-48 verifies runtime behavior by searching source text; replace with behavioral coverage or explicitly document the architecture contract.",
+    "ViewerViewModelTest.kt:143-144 tests String reference identity, and lines 529-539 assume queue start order; both should be decoupled from incidental implementation details.",
+    "No assigned binary fixtures were present. No migration, credential, navigation/restoration, membership/filter, cancellation/recovery, simultaneous-autoplay, or signing-isolation coverage should be removed."
+  ]
+}

@@ -1,0 +1,124 @@
+{
+  "reader": "luna-18",
+  "assigned_count": 10,
+  "completed_count": 10,
+  "files": [
+    {
+      "path": "app/src/debug/AndroidManifest.xml",
+      "lines": 9,
+      "bytes": 637,
+      "read_complete": true,
+      "keep": "Debug-only production-package query (line 2), isolated developer-copy process (lines 4-6), and non-exported journey fixture (line 7).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep unchanged; device/debug harness configuration is explicitly deferred.",
+      "disposition": "Keep; no change."
+    },
+    {
+      "path": "app/src/debug/res/values/strings.xml",
+      "lines": 3,
+      "bytes": 76,
+      "read_complete": true,
+      "keep": "Debug-specific app label at line 2.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep unchanged.",
+      "disposition": "Keep; no change."
+    },
+    {
+      "path": "app/src/debug/res/xml/debug_network_security_config.xml",
+      "lines": 8,
+      "bytes": 361,
+      "read_complete": true,
+      "keep": "Cleartext denied globally and permitted only for 127.0.0.1 (lines 3-7), matching deterministic loopback transport tests.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep unchanged; do not broaden cleartext scope.",
+      "disposition": "Keep; safety-sensitive configuration deferred."
+    },
+    {
+      "path": "app/src/releaseAcceptance/AndroidManifest.xml",
+      "lines": 8,
+      "bytes": 304,
+      "read_complete": true,
+      "keep": "Release acceptance activity entrypoint (lines 4-6).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep unchanged; application-id/signing isolation is configured outside this manifest and must remain intact.",
+      "disposition": "Keep; no change."
+    },
+    {
+      "path": "app/src/releaseAcceptance/java/com/theoriacodex/app/acceptance/ReleaseDataAcceptanceActivity.kt",
+      "lines": 148,
+      "bytes": 7468,
+      "read_complete": true,
+      "keep": "Validates token/phase input and cancellation (lines 28-47); writes then reads persisted updater, share, post, legacy-post, and tag data across process restart (lines 52-103); checks exact JSON wire keys and video variants (lines 106-118); preserves legacy video decoding (lines 139-144).",
+      "redundancy": "None proven; the fixture covers distinct minified persistence contracts.",
+      "flakiness": "None observed under the caller contract. Line 60 requires a fresh token directory; the acceptance script generates a random 12-byte token, so reuse is not expected.",
+      "proposal": "Keep unchanged. Any runtime/harness synchronization change is deferred under PR #27.",
+      "disposition": "Keep; deferred from modification."
+    },
+    {
+      "path": "core-data-android/schemas/com.theoriacodex.data.android.room.TheoriaRoomDatabase/1.json",
+      "lines": 323,
+      "bytes": 10476,
+      "read_complete": true,
+      "keep": "Room version 1 identity (lines 2-5), codex/posts/items/likes entities, and complete migration proof metadata (lines 8-316).",
+      "redundancy": "Repeated entity definitions are required in historical Room snapshots; no removable redundancy proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep byte-for-byte; do not hand-edit or discard historical schema input.",
+      "disposition": "Keep; migration fixture deferred."
+    },
+    {
+      "path": "core-data-android/schemas/com.theoriacodex.data.android.room.TheoriaRoomDatabase/2.json",
+      "lines": 527,
+      "bytes": 17399,
+      "read_complete": true,
+      "keep": "Room version 2 identity (lines 2-5), prior entities, plus recent_watched, recent_searches, and recents_migration_metadata (lines 318-520).",
+      "redundancy": "Repeated unchanged tables are intentional complete snapshots; none removable.",
+      "flakiness": "None observed.",
+      "proposal": "Keep byte-for-byte; preserve versioned migration input.",
+      "disposition": "Keep; migration fixture deferred."
+    },
+    {
+      "path": "core-data-android/schemas/com.theoriacodex.data.android.room.TheoriaRoomDatabase/3.json",
+      "lines": 535,
+      "bytes": 17668,
+      "read_complete": true,
+      "keep": "Room version 3 identity (lines 2-5); recent_watched gains section in schema, composite key, and index (lines 318-400), preserving independent WATCHED/CODEX ownership.",
+      "redundancy": "Repeated unchanged tables are intentional complete snapshots; none removable.",
+      "flakiness": "None observed.",
+      "proposal": "Keep byte-for-byte; this snapshot is required for 2→3 migration validation.",
+      "disposition": "Keep; migration fixture deferred."
+    },
+    {
+      "path": "core-data-android/schemas/com.theoriacodex.data.android.room.TheoriaRoomDatabase/4.json",
+      "lines": 597,
+      "bytes": 19552,
+      "read_complete": true,
+      "keep": "Room version 4 identity (lines 2-5) and codex_automatic_tags table, index, and codex cascade foreign key (lines 44-103).",
+      "redundancy": "Repeated unchanged tables are intentional complete snapshots; none removable.",
+      "flakiness": "None observed.",
+      "proposal": "Keep byte-for-byte; preserve automatic-tag migration identity and foreign-key contract.",
+      "disposition": "Keep; migration fixture deferred."
+    },
+    {
+      "path": "core-data-android/schemas/com.theoriacodex.data.android.room.TheoriaRoomDatabase/5.json",
+      "lines": 675,
+      "bytes": 22214,
+      "read_complete": true,
+      "keep": "Room version 5 identity (lines 2-5) and media_durations table, nullable decision metadata, primary key, and updated-at index (lines 592-667).",
+      "redundancy": "Repeated unchanged tables are intentional complete snapshots; none removable.",
+      "flakiness": "None observed.",
+      "proposal": "Keep byte-for-byte; preserve duration persistence and 4→5 migration input.",
+      "disposition": "Keep; migration fixture deferred."
+    }
+  ],
+  "top_findings": [
+    "All 10 assigned files were read completely; every manifest SHA-256 and byte count matches the working-tree file.",
+    "Schema snapshots v1-v5 preserve distinct Room identity hashes and migration boundaries; generated repetition is required historical state, not actionable redundancy.",
+    "ReleaseDataAcceptanceActivity provides meaningful cross-process minified persistence coverage for updater, share, current/legacy post encoding, and tag-store contracts; no concrete flakiness was observed.",
+    "Manifest schema line counts are logical line counts; schema files lack a final LF, so wc -l is one lower while bytes and hashes match exactly.",
+    "No independent change is recommended. Runtime, release/debug harness, safety, and migration-fixture changes remain deferred per PR #27 and the assigned read-only scope."
+  ]
+}

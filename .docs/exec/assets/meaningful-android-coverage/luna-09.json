@@ -1,0 +1,317 @@
+{
+  "reader": "luna-09",
+  "assigned_count": 30,
+  "completed_count": 30,
+  "files": [
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/update/UpdateTransportTest.kt",
+      "lines": 135,
+      "read_complete": true,
+      "keep": "Atomic bounded downloads, timeout cleanup, cancellation races, and shared release caching.",
+      "redundancy": "none observed",
+      "flakiness": "Potential suite cost at line 48 (5-second blocking read) and line 91 (10ms polling); no demonstrated flake.",
+      "proposal": "Independent: replace the blocking sleep/poll loop with controllable completion gates while preserving timeout and late-read coverage.",
+      "disposition": "independent suggestion"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/AnimationPlaybackTest.kt",
+      "lines": 148,
+      "read_complete": true,
+      "keep": "Buffering, seek, loop, fractional rates, lifecycle pause/resume, and frame selection.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/FeedVideoPositionHandoffTest.kt",
+      "lines": 48,
+      "read_complete": true,
+      "keep": "Zero-position handoff, active binding delivery, recycled-player protection, and key isolation.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/MediaPlaybackSemanticsTest.kt",
+      "lines": 84,
+      "read_complete": true,
+      "keep": "Single first-frame traces, benchmark-only semantics, stable resource-safe tags, and trace names.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/MediaTimelineBarTest.kt",
+      "lines": 107,
+      "read_complete": true,
+      "keep": "Preview-only drag updates, commit-on-release, cancellation, and removal cancellation.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/PixivUgoiraArchiveTest.kt",
+      "lines": 125,
+      "read_complete": true,
+      "keep": "Archive path safety, metadata/frame matching, duplicate rejection, compressed/expanded/frame-count limits, and structural cache guards.",
+      "redundancy": "none proven",
+      "flakiness": "Line 68 may be expensive when constructing the expansion-limit fixture; no flake observed.",
+      "proposal": "keep/no change; retain boundary coverage.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/PixivUgoiraClientTest.kt",
+      "lines": 314,
+      "read_complete": true,
+      "keep": "Credential cancellation, metadata/archive single-flight, partial consumers, cancellation/retry, disk reuse, deadline cleanup, retry limit, and offline archive behavior.",
+      "redundancy": "none observed",
+      "flakiness": "Lines 158 and 170 use blocking/interruption gates without local timeouts; a regression could wait for the runTest global timeout.",
+      "proposal": "Independent: wrap gate waits at lines 158-170 in explicit bounded withTimeout checks without retries or weakened assertions.",
+      "disposition": "independent suggestion"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/PixivUgoiraFramesTest.kt",
+      "lines": 74,
+      "read_complete": true,
+      "keep": "Progressive first-frame publication, bitmap reuse, decode budgets, and paired archive metadata integrity.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/SeekJumpFeedbackTest.kt",
+      "lines": 93,
+      "read_complete": true,
+      "keep": "Formatting, same-direction accumulation, opposite-direction reset, expiry, and zero-delta behavior.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/VideoCacheContentionTest.kt",
+      "lines": 54,
+      "read_complete": true,
+      "keep": "Playback bypasses a prefetch-held cache range and still reads the complete payload.",
+      "redundancy": "none observed",
+      "flakiness": "Line 46 has a fixed 2-second wall-clock wait, potentially load-sensitive; no demonstrated flake.",
+      "proposal": "Independent: use a test-controlled read-completion signal with a safety timeout instead of relying solely on the 2-second future wait.",
+      "disposition": "independent suggestion"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/VideoPlaybackInfrastructureTest.kt",
+      "lines": 202,
+      "read_complete": true,
+      "keep": "Shared resource identity, credential-safe deterministic cache keys, fresh load controls, slot reuse, stale-return protection, concurrent visible resources, and idle cleanup.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerAccessibilityTest.kt",
+      "lines": 127,
+      "read_complete": true,
+      "keep": "Touch-exploration chrome persistence and recommended accessibility timeout/reset behavior.",
+      "redundancy": "none observed",
+      "flakiness": "none observed; fake main-clock advancement is deterministic.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerAutoPictureInPictureTest.kt",
+      "lines": 109,
+      "read_complete": true,
+      "keep": "PiP arming for ready/buffering playback, disarming for paused/ended/error states, binding ownership, unsupported devices, and aspect ratio.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerGalleryLoadingSwipeTest.kt",
+      "lines": 158,
+      "read_complete": true,
+      "keep": "Watched/sparse gallery restoration, pending resolution, cover non-recording, media-before-post navigation, and known-count failure handling.",
+      "redundancy": "none observed",
+      "flakiness": "Compose swipe interaction at lines 146-148 is gesture/layout dependent; no demonstrated flake.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerGifByteStoreTest.kt",
+      "lines": 76,
+      "read_complete": true,
+      "keep": "Single acquisition, reconstruction reuse, cancellation recovery, source isolation, expiry refresh, and disk-budget eviction.",
+      "redundancy": "none observed",
+      "flakiness": "none observed; TemporaryFolder isolates files.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerGifTransportTest.kt",
+      "lines": 73,
+      "read_complete": true,
+      "keep": "Source header propagation, one-fetch cache reuse, persisted bytes, and prompt stalled-request cancellation.",
+      "redundancy": "none observed",
+      "flakiness": "Loopback server lifecycle and bounded 2-second cancellation wait at lines 52-71; no demonstrated flake.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerLevelControlsTest.kt",
+      "lines": 118,
+      "read_complete": true,
+      "keep": "Brightness/volume system integration, clamping, restoration, mute, external volume changes, unavailable display, and gesture write protection.",
+      "redundancy": "none observed",
+      "flakiness": "Shared Robolectric AudioManager/Settings state is touched, but each relevant test establishes its own values.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerLevelGesturesTest.kt",
+      "lines": 178,
+      "read_complete": true,
+      "keep": "Vertical brightness/volume classification, horizontal navigation separation, pinch/touch-exploration/PiP blocking, still-image behavior, and feedback expiry.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerLinkedPageTest.kt",
+      "lines": 57,
+      "read_complete": true,
+      "keep": "Selected gallery media index survives post resolution in a linked viewer launch.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerMediaErrorInteractionTest.kt",
+      "lines": 65,
+      "read_complete": true,
+      "keep": "Retry remains touchable above video gesture layers for all recoverable error messages.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerMediaGesturesTest.kt",
+      "lines": 83,
+      "read_complete": true,
+      "keep": "Assistive seek/zoom/chrome/info actions, double-tap seek, dynamic semantics, and inactive-node removal.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerPlatformPlaybackTest.kt",
+      "lines": 84,
+      "read_complete": true,
+      "keep": "Independent media sessions, external play/pause intent propagation, lifecycle session retention, and PiP ratio clamping.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerPlaybackSettingsTest.kt",
+      "lines": 53,
+      "read_complete": true,
+      "keep": "All playback modes and five accessible speed stops.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerPrefetchPlannerTest.kt",
+      "lines": 92,
+      "read_complete": true,
+      "keep": "Adjacent prefetch ordering, bounded edge windows, unknown-current no-op, and duplicate canonical-key elimination.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerRendererContractTest.kt",
+      "lines": 90,
+      "read_complete": true,
+      "keep": "Ready-media preservation across recoverable resolution errors, fatal error pause, retry generation isolation, and stale session events.",
+      "redundancy": "none observed",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerReturnTransitionTest.kt",
+      "lines": 259,
+      "read_complete": true,
+      "keep": "Origin/current-post ownership, window-coordinate geometry, offscreen grid/shelf centering, navigation lifetime, and media retention through return.",
+      "redundancy": "none proven",
+      "flakiness": "Compose lazy-grid geometry and 2px assertions at lines 121-131 and 231-236 are layout-sensitive; no demonstrated flake.",
+      "proposal": "keep/no change; geometry coverage is meaningful for restoration/navigation.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerSavedReturnTest.kt",
+      "lines": 98,
+      "read_complete": true,
+      "keep": "Visible and offscreen Saved carousel return bounds, vertical/horizontal scrolling, and isolation of unrelated rows.",
+      "redundancy": "none observed",
+      "flakiness": "Compose lazy-list settling and coordinate assertions at lines 81-89 are layout-sensitive; no demonstrated flake.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerScreenImagePipelineTest.kt",
+      "lines": 519,
+      "read_complete": true,
+      "keep": "Provider-specific delivery fallback order, GIF/animated/ugoira/video overview kinds, poster selection, prefetch locations, availability, and swipe boundaries.",
+      "redundancy": "none proven; provider matrix intentionally exercises distinct fallback policy.",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerScreenOwnershipTest.kt",
+      "lines": 21,
+      "read_complete": true,
+      "keep": "Single immutable ViewerScreen route-state entry point.",
+      "redundancy": "Implementation-mirroring is proven: lines 12-19 inspect JVM method names/count/signature rather than runtime behavior.",
+      "flakiness": "Brittle under harmless Kotlin compiler/generated-overload changes; no runtime flake.",
+      "proposal": "Independent: replace reflection-count enforcement with a typed public API/call-site contract or document this as an intentional architecture guard.",
+      "disposition": "independent suggestion; do not remove without agreement"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerSessionCoordinatorTest.kt",
+      "lines": 308,
+      "read_complete": true,
+      "keep": "Lazy-resolution policy, route-specific provider behavior, cached/local media handling, merge identity preservation, prelaunch blocking, and usable-media detection.",
+      "redundancy": "none observed",
+      "flakiness": "none observed; deferred provider is explicitly completed under runTest.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    }
+  ],
+  "top_findings": [
+    "All 30 assigned text files were read completely; manifest byte counts, line counts, and SHA-256 hashes matched.",
+    "No assigned binary fixtures were present.",
+    "Most tests provide focused behavioral coverage with no proven redundancy or flakiness.",
+    "Independent test-only concern: UpdateTransportTest lines 48 and 91 use real blocking/polling timing.",
+    "Independent test-only concern: PixivUgoiraClientTest lines 158-170 rely on blocking gates without local bounded waits.",
+    "Independent architecture-test concern: ViewerScreenOwnershipTest lines 12-19 mirrors generated implementation details via reflection.",
+    "No runtime, dependency, SDK, workflow, safety, CI-wrapper, benchmark, or device suggestions were made; PR/runtime changes remain deferred.",
+    "Explicit SavedSearchesCodexJourneyTest, HideLikedRelatedPostsJourneyTest, and RelatedViewerReturnTest synchronization deferrals are acknowledged and not assigned to this reader."
+  ]
+}

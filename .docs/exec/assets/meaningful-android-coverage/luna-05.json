@@ -1,0 +1,254 @@
+{
+  "reader": "luna-05",
+  "assigned_count": 24,
+  "completed_count": 24,
+  "files": [
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/OfflineStorageViewModelTest.kt",
+      "lines": 162,
+      "read_complete": true,
+      "keep": "Confirmation, ownership retention, disposable-cache reporting, dismissal-surviving preparation, and cancellation before clear (35-145).",
+      "redundancy": "none proven",
+      "flakiness": "Potential wall-clock sensitivity from four 10s timeouts over Dispatchers.Default and file I/O (30,36,68,91,119); no observed failure.",
+      "proposal": "Keep; if CI timeout evidence appears, use an injected test scope/dispatcher rather than real-time waiting.",
+      "disposition": "KEEP; evidence-gated independent improvement"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/PostDownloadQueueTest.kt",
+      "lines": 354,
+      "read_complete": true,
+      "keep": "Worker bounds, cancellation, retry identity, preparation failures, gallery expansion, progress, deletion, and durable history behavior (23-319).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; runTest and virtual time are deterministic. Literal 1s polling assumptions occur at 34,152,208.",
+      "proposal": "Keep; optionally derive advance intervals from the configured poll interval.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/PostDownloadRecoveryTest.kt",
+      "lines": 331,
+      "read_complete": true,
+      "keep": "Atomic removal recovery, enqueue-gap reconciliation, origin migration, export identity, legacy ambiguity, restart reconciliation, cancellation, admission failure, and retry recovery (24-328).",
+      "redundancy": "none proven; restart/gap coverage is distinct from queue-state coverage",
+      "flakiness": "Potential unbounded busy-yield waits if persistence never reaches the checkpoint (122,180); this is a hang risk, not random timing.",
+      "proposal": "Add bounded checkpoint waiting or an explicit persisted-state await around loops at 122 and 180; do not add retries/sleeps.",
+      "disposition": "INDEPENDENT test-hardening recommendation"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/PostDownloadServiceTest.kt",
+      "lines": 145,
+      "read_complete": true,
+      "keep": "Filename sanitization, page suffixes, MIME fallback, headers, Unicode/collision handling, length limits, and gallery validation (12-127).",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "No change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/PostMediaTest.kt",
+      "lines": 166,
+      "read_complete": true,
+      "keep": "Animated/video candidate selection, provider normalization, Pixiv/NHentai/Gelbooru delivery plans, gallery-page correctness, and tag formatting (12-143).",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "No change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/RemoteMediaRecoveryTest.kt",
+      "lines": 160,
+      "read_complete": true,
+      "keep": "Exact 404 recognition, capability dispatch, ordinary resolution fallback, and cancellation propagation (31-69).",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "No change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/post/PostMutationViewModelTest.kt",
+      "lines": 66,
+      "read_complete": true,
+      "keep": "Captured profile identity, commit-ordered callbacks, pending state, and durable failure feedback acknowledgment (21-64).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; deterministic test dispatcher and deferred gate.",
+      "proposal": "No change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/quality/ArchitectureBoundarySourceTest.kt",
+      "lines": 106,
+      "read_complete": true,
+      "keep": "Lifecycle-aware collection, Compose-state isolation, and application-container ownership of durable repositories (18-65).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; source scan is deterministic.",
+      "proposal": "No change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/quality/PerformanceBenchmarkArchitectureTest.kt",
+      "lines": 101,
+      "read_complete": true,
+      "keep": "Non-production package isolation, packaged-ID verification, baseline/macrobenchmark sandboxing, manifest restrictions, and listener safety (16-98).",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "No change; safety assertions must remain strict.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/recents/RecentSearchPresentationTest.kt",
+      "lines": 96,
+      "read_complete": true,
+      "keep": "Source/unified/multi/FYP subtitles, grouped AND/OR formatting, and legacy/current FYP seed replay (18-79).",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "No change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/recents/RecentsClearWorkflowTest.kt",
+      "lines": 187,
+      "read_complete": true,
+      "keep": "Contextual clear feedback, exact undo snapshots, FYP/manual separation, failed clear/undo recovery, and stale UI snapshot handling (23-175).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; deterministic in-memory clock and repository.",
+      "proposal": "No change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/recents/SavedSearchControlsTest.kt",
+      "lines": 186,
+      "read_complete": true,
+      "keep": "Pin/rename/replay/remove workflow, dedicated FYP and multi-search routes, source filtering, and filtered activity navigation (41-145).",
+      "redundancy": "none proven",
+      "flakiness": "Potential selector ambiguity from broad hasSetTextAction() lookups (58,64) if dialogs gain multiple editable nodes; none observed.",
+      "proposal": "Scope text-field selectors to the active dialog/test tag if additional fields are introduced.",
+      "disposition": "INDEPENDENT low-priority UI-test hardening"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/recents/SavedSearchViewModelTest.kt",
+      "lines": 134,
+      "read_complete": true,
+      "keep": "Accepted pin survives picker dismissal, stable rename/remove identity, failure feedback, history pruning, and clear-history independence (46-115).",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "No change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/recommend/ForYouCoordinatorFixtures.kt",
+      "lines": 35,
+      "read_complete": true,
+      "keep": "Shared coordinator fixture injects repositories, seed source, tag store, and computation dispatcher (16-34).",
+      "redundancy": "shared helper; no duplication concern",
+      "flakiness": "none observed; tests needing randomness inject seedSource.",
+      "proposal": "No change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/recommend/ForYouCoordinatorTest.kt",
+      "lines": 378,
+      "read_complete": true,
+      "keep": "Fallback overlap/order, blacklist retraining, likes/fallback avoidance, accepted-history policy, replay fidelity, source-specific continuation, failed-page retry, cancellation, and capability removal (52-250).",
+      "redundancy": "none proven; coordinator and ViewModel tests cover different layers",
+      "flakiness": "none observed; virtual delays and deferred gates are deterministic.",
+      "proposal": "No change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/recommend/ForYouViewModelTest.kt",
+      "lines": 335,
+      "read_complete": true,
+      "keep": "Saved-state controls, startup ordering, zero-like updates, stale root rejection, paging retry, related promotion, blacklist feedback/undo, and empty-seed behavior (42-265).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; runTest, deferred gates, and explicit scheduler advancement are used.",
+      "proposal": "No change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/recommend/state/ForYouStateContractTest.kt",
+      "lines": 161,
+      "read_complete": true,
+      "keep": "Reducer request identity, replay, empty-state distinctions, failed-token paging, generation rejection, blacklist undo, and viewer ordering/filter propagation (26-145).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; pure reducer assertions.",
+      "proposal": "No change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/related/RelatedPostsLoaderTest.kt",
+      "lines": 106,
+      "read_complete": true,
+      "keep": "Off-route provider execution, parent cancellation, adapter capability support, same-source filtering, deduplication, and bounded results (31-68).",
+      "redundancy": "none proven",
+      "flakiness": "Exact Dispatchers.Default identity is implementation-coupled (43); no observed flake.",
+      "proposal": "If dispatcher implementation changes, assert off-caller execution via injection rather than requiring exactly Default.",
+      "disposition": "DEFERRED if runtime dispatcher contract changes; otherwise KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/related/RelatedPostsRouteControllerTest.kt",
+      "lines": 170,
+      "read_complete": true,
+      "keep": "Deadline failure, owner cancellation, promotion, retained-page navigation, fullscreen-like advancement, retry, and cleanup (19-137).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; timeout uses virtual time.",
+      "proposal": "No change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/related/RelatedPostsShelfTest.kt",
+      "lines": 73,
+      "read_complete": true,
+      "keep": "Previous-page reachability across empty, loading, and failed next pages (28-70).",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "No change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/AdmissionFailureSearchViewModelTest.kt",
+      "lines": 155,
+      "read_complete": true,
+      "keep": "Admission-key mismatch rejection, noncancellable stale-success suppression, failed-query persistence, disabled paging, and targeted retry (68-152).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; deterministic dispatcher/deferred coordination.",
+      "proposal": "No change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/CollapsedSearchContextTest.kt",
+      "lines": 71,
+      "read_complete": true,
+      "keep": "Applied query summaries, grouped terms, exclusion-only summaries, and combined filter counts (14-69).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; pure functions.",
+      "proposal": "No change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/EffectsRestorationSearchViewModelTest.kt",
+      "lines": 166,
+      "read_complete": true,
+      "keep": "Autocomplete focus/commit ownership, viewer effects, direct Nhentai navigation, saved draft restoration, date/score filters, and scroll reconstruction (68-163).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; explicit scheduler control and buffered effect collection.",
+      "proposal": "No change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/FeedMediaVisibilityTest.kt",
+      "lines": 70,
+      "read_complete": true,
+      "keep": "Media demand follows viewport visibility even when caption remains visible (34-68), protecting autoplay/resource behavior.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; bounded Compose scroll sequence. runBlocking inside runOnIdle is synchronous at 61 and 66.",
+      "proposal": "No change unless UI-thread blocking is demonstrated in CI.",
+      "disposition": "KEEP"
+    }
+  ],
+  "top_findings": [
+    "All 24 assigned files are text; manifest byte counts, line counts, and SHA-256 hashes matched exactly. Every file was read completely.",
+    "Coverage is meaningful and protects cancellation/error recovery, persistence/migration, navigation/restoration, filtering/membership policy, simultaneous media visibility, and package/signing isolation.",
+    "Independent hardening candidates are the unbounded persistence checkpoint loops at PostDownloadRecoveryTest.kt:122 and :180, plus broad Compose text-field selectors at SavedSearchControlsTest.kt:58 and :64.",
+    "OfflineStorageViewModelTest.kt has a potential wall-clock/Dispatchers.Default sensitivity at lines 30,36,68,91,119; no failure evidence was available, so this is evidence-gated.",
+    "No assigned file differs from the stated baseline. No tests should be removed for redundancy; no runtime/dependency/SDK/workflow/safety/CI-wrapper change is recommended here. Saved-search journey synchronization and related-viewer readiness remain explicitly deferred."
+  ]
+}

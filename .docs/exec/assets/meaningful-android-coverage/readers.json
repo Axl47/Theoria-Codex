@@ -1,0 +1,362 @@
+[
+  {
+    "reader": "luna-01",
+    "taskId": "node:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-01-r1",
+    "threadId": "thread:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-01-r1",
+    "provider": "codex",
+    "model": "gpt-5.6-luna",
+    "options": [
+      {
+        "id": "reasoningEffort",
+        "value": "high"
+      },
+      {
+        "id": "serviceTier",
+        "value": "default"
+      }
+    ],
+    "status": "completed"
+  },
+  {
+    "reader": "luna-02",
+    "taskId": "node:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-02-r1",
+    "threadId": "thread:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-02-r1",
+    "provider": "codex",
+    "model": "gpt-5.6-luna",
+    "options": [
+      {
+        "id": "reasoningEffort",
+        "value": "high"
+      },
+      {
+        "id": "serviceTier",
+        "value": "default"
+      }
+    ],
+    "status": "completed"
+  },
+  {
+    "reader": "luna-03",
+    "taskId": "node:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-03-r1",
+    "threadId": "thread:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-03-r1",
+    "provider": "codex",
+    "model": "gpt-5.6-luna",
+    "options": [
+      {
+        "id": "reasoningEffort",
+        "value": "high"
+      },
+      {
+        "id": "serviceTier",
+        "value": "default"
+      }
+    ],
+    "status": "completed"
+  },
+  {
+    "reader": "luna-04",
+    "taskId": "node:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-04-r1",
+    "threadId": "thread:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-04-r1",
+    "provider": "codex",
+    "model": "gpt-5.6-luna",
+    "options": [
+      {
+        "id": "reasoningEffort",
+        "value": "high"
+      },
+      {
+        "id": "serviceTier",
+        "value": "default"
+      }
+    ],
+    "status": "completed"
+  },
+  {
+    "reader": "luna-05",
+    "taskId": "node:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-05-r1",
+    "threadId": "thread:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-05-r1",
+    "provider": "codex",
+    "model": "gpt-5.6-luna",
+    "options": [
+      {
+        "id": "reasoningEffort",
+        "value": "high"
+      },
+      {
+        "id": "serviceTier",
+        "value": "default"
+      }
+    ],
+    "status": "completed"
+  },
+  {
+    "reader": "luna-06",
+    "taskId": "node:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-06-r1",
+    "threadId": "thread:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-06-r1",
+    "provider": "codex",
+    "model": "gpt-5.6-luna",
+    "options": [
+      {
+        "id": "reasoningEffort",
+        "value": "high"
+      },
+      {
+        "id": "serviceTier",
+        "value": "default"
+      }
+    ],
+    "status": "completed"
+  },
+  {
+    "reader": "luna-07",
+    "taskId": "node:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-07-r1",
+    "threadId": "thread:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-07-r1",
+    "provider": "codex",
+    "model": "gpt-5.6-luna",
+    "options": [
+      {
+        "id": "reasoningEffort",
+        "value": "high"
+      },
+      {
+        "id": "serviceTier",
+        "value": "default"
+      }
+    ],
+    "status": "completed"
+  },
+  {
+    "reader": "luna-08",
+    "taskId": "node:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-08-r1",
+    "threadId": "thread:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-08-r1",
+    "provider": "codex",
+    "model": "gpt-5.6-luna",
+    "options": [
+      {
+        "id": "reasoningEffort",
+        "value": "high"
+      },
+      {
+        "id": "serviceTier",
+        "value": "default"
+      }
+    ],
+    "status": "completed"
+  },
+  {
+    "reader": "luna-09",
+    "taskId": "node:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-09-r1",
+    "threadId": "thread:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-09-r1",
+    "provider": "codex",
+    "model": "gpt-5.6-luna",
+    "options": [
+      {
+        "id": "reasoningEffort",
+        "value": "high"
+      },
+      {
+        "id": "serviceTier",
+        "value": "default"
+      }
+    ],
+    "status": "completed"
+  },
+  {
+    "reader": "luna-10",
+    "taskId": "node:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-10-r1",
+    "threadId": "thread:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-10-r1",
+    "provider": "codex",
+    "model": "gpt-5.6-luna",
+    "options": [
+      {
+        "id": "reasoningEffort",
+        "value": "high"
+      },
+      {
+        "id": "serviceTier",
+        "value": "default"
+      }
+    ],
+    "status": "completed"
+  },
+  {
+    "reader": "luna-11",
+    "taskId": "node:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-11-r1",
+    "threadId": "thread:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-11-r1",
+    "provider": "codex",
+    "model": "gpt-5.6-luna",
+    "options": [
+      {
+        "id": "reasoningEffort",
+        "value": "high"
+      },
+      {
+        "id": "serviceTier",
+        "value": "default"
+      }
+    ],
+    "status": "completed"
+  },
+  {
+    "reader": "luna-12",
+    "taskId": "node:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-12-r1",
+    "threadId": "thread:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-12-r1",
+    "provider": "codex",
+    "model": "gpt-5.6-luna",
+    "options": [
+      {
+        "id": "reasoningEffort",
+        "value": "high"
+      },
+      {
+        "id": "serviceTier",
+        "value": "default"
+      }
+    ],
+    "status": "completed"
+  },
+  {
+    "reader": "luna-13",
+    "taskId": "node:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-13-r1",
+    "threadId": "thread:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-13-r1",
+    "provider": "codex",
+    "model": "gpt-5.6-luna",
+    "options": [
+      {
+        "id": "reasoningEffort",
+        "value": "high"
+      },
+      {
+        "id": "serviceTier",
+        "value": "default"
+      }
+    ],
+    "status": "completed"
+  },
+  {
+    "reader": "luna-14",
+    "taskId": "node:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-14-r1",
+    "threadId": "thread:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-14-r1",
+    "provider": "codex",
+    "model": "gpt-5.6-luna",
+    "options": [
+      {
+        "id": "reasoningEffort",
+        "value": "high"
+      },
+      {
+        "id": "serviceTier",
+        "value": "default"
+      }
+    ],
+    "status": "completed"
+  },
+  {
+    "reader": "luna-15",
+    "taskId": "node:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-15-r1",
+    "threadId": "thread:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-15-r1",
+    "provider": "codex",
+    "model": "gpt-5.6-luna",
+    "options": [
+      {
+        "id": "reasoningEffort",
+        "value": "high"
+      },
+      {
+        "id": "serviceTier",
+        "value": "default"
+      }
+    ],
+    "status": "completed"
+  },
+  {
+    "reader": "luna-16",
+    "taskId": "node:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-16-r1",
+    "threadId": "thread:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-16-r1",
+    "provider": "codex",
+    "model": "gpt-5.6-luna",
+    "options": [
+      {
+        "id": "reasoningEffort",
+        "value": "high"
+      },
+      {
+        "id": "serviceTier",
+        "value": "default"
+      }
+    ],
+    "status": "completed"
+  },
+  {
+    "reader": "luna-17",
+    "taskId": "node:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-17-r1",
+    "threadId": "thread:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-17-r1",
+    "provider": "codex",
+    "model": "gpt-5.6-luna",
+    "options": [
+      {
+        "id": "reasoningEffort",
+        "value": "high"
+      },
+      {
+        "id": "serviceTier",
+        "value": "default"
+      }
+    ],
+    "status": "completed"
+  },
+  {
+    "reader": "luna-18",
+    "taskId": "node:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-18-r1",
+    "threadId": "thread:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-18-r1",
+    "provider": "codex",
+    "model": "gpt-5.6-luna",
+    "options": [
+      {
+        "id": "reasoningEffort",
+        "value": "high"
+      },
+      {
+        "id": "serviceTier",
+        "value": "default"
+      }
+    ],
+    "status": "completed"
+  },
+  {
+    "reader": "luna-19",
+    "taskId": "node:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-19-r1",
+    "threadId": "thread:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-19-r1",
+    "provider": "codex",
+    "model": "gpt-5.6-luna",
+    "options": [
+      {
+        "id": "reasoningEffort",
+        "value": "high"
+      },
+      {
+        "id": "serviceTier",
+        "value": "default"
+      }
+    ],
+    "status": "completed"
+  },
+  {
+    "reader": "luna-patch",
+    "taskId": "node:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-patch-r1",
+    "threadId": "thread:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-patch-r1",
+    "provider": "codex",
+    "model": "gpt-5.6-luna",
+    "options": [
+      {
+        "id": "reasoningEffort",
+        "value": "high"
+      },
+      {
+        "id": "serviceTier",
+        "value": "default"
+      }
+    ],
+    "status": "completed"
+  }
+]

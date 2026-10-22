@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui
 
+import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,8 +24,13 @@ import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
-class NavigationChromeDeviceTest {
+@RunWith(RobolectricTestRunner::class)
+@Config(application = Application::class)
+class NavigationChromeTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
@@ -45,7 +51,8 @@ class NavigationChromeDeviceTest {
     @Test
     fun filteredCodexCardLaunchesOnlyVisiblePostsInRepositoryOrder() {
         val first = post(SourceKey.PIXIV, "first")
-        val hidden = post(SourceKey.GELBOORU, "hidden")
+        // A provider-local ID collision must not leak a filtered post into the Viewer launch.
+        val hidden = post(SourceKey.GELBOORU, "second")
         val second = post(SourceKey.PIXIV, "second")
         var launch: Pair<List<Post>, Int>? = null
         compose.setContent {

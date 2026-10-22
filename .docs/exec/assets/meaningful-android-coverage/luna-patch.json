@@ -1,0 +1,46 @@
+{
+  "reader": "luna-patch",
+  "files": [
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/sourceauth/PixivPkceControllerTest.kt",
+      "lines": 358,
+      "read_complete": true,
+      "keep": "Keep. Host migration is appropriate for URI/controller orchestration. All eight baseline cases remain, with meaningful competing-controller and cancellation-during-exchange coverage added. Android Keystore/session-store coverage remains in androidTest.",
+      "flakiness": "No deadlock or redundant coverage found statically. runTest plus explicit exchange gates, cancelAndJoin, and mutex assertions provide deterministic sequencing.",
+      "proposal": "None. Static review only; compilation/execution was not performed."
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/NavigationChromeTest.kt",
+      "lines": 83,
+      "read_complete": true,
+      "keep": "Keep. Robolectric host migration matches local Compose-test conventions and retains both baseline behaviors. The provider-local ID collision assertion strengthens source identity safety; device accessibility journeys remain Android.",
+      "flakiness": "No issue found statically. Compose state updates use runOnIdle and the test has no timing sleeps.",
+      "proposal": "None. Static review only; compilation/execution was not performed."
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/CodexLibraryScrollReturnTest.kt",
+      "lines": 152,
+      "read_complete": true,
+      "keep": "Keep. The 300 ms delay is replaced by explicit subscription/data-arrival gates, with an assertion that no loading grid exists before data. Scroll position is checked across two returns, including saved-instance restoration.",
+      "flakiness": "No active-path deadlock found statically: each subscription publishes a deferred, release waits for it, and completion occurs on Compose idle with bounded waits.",
+      "proposal": "None. Static review only; compilation/execution was not performed."
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/TheoriaAppSmokeTest.kt",
+      "lines": 37,
+      "read_complete": true,
+      "keep": "Keep in androidTest. RESUMED-state safety and all five top-level navigation assertions remain; the startup gate now requires visible Search rather than mere node existence.",
+      "flakiness": "No issue found statically. isDisplayed() is consistent with local Android Compose journey usage.",
+      "proposal": "None. Static review only; compilation/execution was not performed."
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/journeys/AppJourneyFixture.kt",
+      "lines": 112,
+      "read_complete": true,
+      "keep": "Keep in androidTest. Fixture lifecycle, cold relaunch, deterministic image/data setup, debug package guard, and enabled-control activation are retained. Search readiness now requires display.",
+      "flakiness": "No issue found statically. Readiness and interaction waits are bounded and use displayed/enabled semantics; teardown remains explicit.",
+      "proposal": "None. Static review only; compilation/execution was not performed."
+    }
+  ],
+  "findings": []
+}

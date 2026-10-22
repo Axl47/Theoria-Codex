@@ -1,0 +1,408 @@
+{
+  "reader": "luna-02",
+  "assigned_count": 39,
+  "completed_count": 39,
+  "text_lines_read": 3902,
+  "binary_bytes_verified": 235712,
+  "files": [
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/journeys/CodexCollectionJourneyTest.kt",
+      "lines": 58,
+      "read_complete": true,
+      "keep": "Covers durable Codex creation, rename, bulk removal, undo, and delete cancellation.",
+      "redundancy": "none",
+      "flakiness": "none observed; state-backed waits at lines 33, 38, 44, 46, and 48.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/journeys/ForYouPostActionsJourneyTest.kt",
+      "lines": 73,
+      "read_complete": true,
+      "keep": "Protects local like/Codex ownership, FYP save statistics, related shelf presentation, creator navigation, and back restoration.",
+      "redundancy": "none",
+      "flakiness": "Real long-clicks at lines 58 and 65 and immediate postBack assertion at lines 69-70 are device-geometry/timing sensitive; no failure evidence observed.",
+      "proposal": "If failures are reproduced, wait for the card after pressBack before asserting; preserve real long-click coverage.",
+      "disposition": "recommendation"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/journeys/OfflineCollectionJourneyTest.kt",
+      "lines": 159,
+      "read_complete": true,
+      "keep": "Protects offline download persistence, disposable-cache clearing, cold graph recreation, viewer paging, watched-post records, MIME preservation, and zero provider resolution.",
+      "redundancy": "none",
+      "flakiness": "Likely coordinate bug at lines 146-155: boundsInWindow are sampled directly against a screen screenshot, while diagnostics at lines 97-103 explicitly applies the window offset.",
+      "proposal": "Reuse the decor screen/window offset when sampling screenshot pixels, or pass calibrated display coordinates into activeMediaShowsFixturePixels.",
+      "disposition": "recommendation"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/journeys/OfflineImageDiagnostics.kt",
+      "lines": 131,
+      "read_complete": true,
+      "keep": "Bounded Coil request logging, screenshot capture, window geometry, retained-file decode summaries, and semantics dumps make offline-render failures diagnosable.",
+      "redundancy": "none",
+      "flakiness": "none observed; event history is intentionally bounded to 64 entries at lines 50-52.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/journeys/PinnedSearchJourneyTest.kt",
+      "lines": 63,
+      "read_complete": true,
+      "keep": "Protects grouped multi-source saved-search persistence across history clearing and cold relaunch, including exact terms, exclusions, sort, and source replay.",
+      "redundancy": "none",
+      "flakiness": "none observed; persistence and request waits are explicit.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/journeys/SearchNavigationJourneyTest.kt",
+      "lines": 263,
+      "read_complete": true,
+      "keep": "Protects grouped search semantics, paging, viewer return, Activity recreation, applied-query restoration, canonical scroll offsets, recents, FYP replay, and local likes isolation.",
+      "redundancy": "none",
+      "flakiness": "The real swipe loop at lines 217-238 uses density/layout-sensitive velocity and only waitForIdle after each gesture; target visibility can vary across devices.",
+      "proposal": "Retain real drag coverage, but wait conditionally after each swipe for target/preceding bounds or settled scroll state rather than relying only on waitForIdle.",
+      "disposition": "recommendation"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/json/InstalledJsonCompatibilityDeviceTest.kt",
+      "lines": 207,
+      "read_complete": true,
+      "keep": "Protects installed-target JSON key stability, video variant round trips, legacy decoding, and tag-cache migration/rewrite.",
+      "redundancy": "none",
+      "flakiness": "none observed; tag-store writes use persistenceDebounceMs=0 and explicit flush.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/media/AnimatedWebPDecoderDeviceTest.kt",
+      "lines": 78,
+      "read_complete": true,
+      "keep": "Verifies API-window animated, static, and controllable WebP decoder contracts and cache-key separation.",
+      "redundancy": "none",
+      "flakiness": "none observed for supported Android 16/17; the PR's SDK-branch removal is appropriate for the supported window.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/media/PostDownloadDestinationDeviceTest.kt",
+      "lines": 130,
+      "read_complete": true,
+      "keep": "Protects Unicode destination names, distinct gallery files, repeat-download preservation, and DownloadManager collision behavior in an isolated directory.",
+      "redundancy": "none",
+      "flakiness": "Native DownloadManager and 20-second polling at lines 85-98 depend on device service health; no test-local retry/sleep defect observed.",
+      "proposal": "keep/no change; infrastructure failures should remain infrastructure evidence.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/media/PostDownloadProcessRecoveryDeviceTest.kt",
+      "lines": 144,
+      "read_complete": true,
+      "keep": "Protects the native enqueue/checkpoint gap across force-stop, durable queue restoration, ID deduplication, file contents, and isolated cleanup.",
+      "redundancy": "none",
+      "flakiness": "Read-phase rows/files are cleaned only after all assertions at lines 94-98; timeout/assertion failure can leave DownloadManager rows and token directories for later runs.",
+      "proposal": "Have the host orchestration perform token-scoped cleanup in a failure path; do not weaken the intentional process-kill barrier at lines 61-65.",
+      "disposition": "recommendation"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/source/HitomiLiveTransportDeviceTest.kt",
+      "lines": 97,
+      "read_complete": true,
+      "keep": "Explicitly opt-in live Hitomi typed, multi-tag, and byte-range transport coverage.",
+      "redundancy": "none",
+      "flakiness": "External provider/network variability is inherent to lines 24-39 and the 60-second timeout; default lane is protected by assumeTrue.",
+      "proposal": "keep explicit opt-in; defer any live-network stabilization or retry design.",
+      "disposition": "deferred"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/source/HitomiProtocolDeviceTest.kt",
+      "lines": 25,
+      "read_complete": true,
+      "keep": "Protects Android-runtime parsing of Hitomi gallery assignment JavaScript.",
+      "redundancy": "none",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/sourceauth/AndroidCredentialEnvelopeStoreDeviceTest.kt",
+      "lines": 138,
+      "read_complete": true,
+      "keep": "Protects lazy material creation, Android Keystore encryption, plaintext exclusion, tamper/missing-key reconnect behavior, backup recovery, and reset.",
+      "redundancy": "none; separate credential envelope contract from PKCE session contract.",
+      "flakiness": "none observed; tests reset the shared alias/path in setup and teardown.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/sourceauth/AndroidPixivPkceSessionStoreDeviceTest.kt",
+      "lines": 111,
+      "read_complete": true,
+      "keep": "Protects encrypted no-backup PKCE persistence, exact one-shot consume, artifact removal, and fail-closed tamper handling.",
+      "redundancy": "none",
+      "flakiness": "none observed; shared test alias/path are reset around each test.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/sourceauth/PixivPkceControllerDeviceTest.kt",
+      "lines": 284,
+      "read_complete": true,
+      "keep": "Protects state validation, recreation, replay rejection, native callbacks, transient exchange/save retries, cancellation before save, and terminal cancellation after save.",
+      "redundancy": "none",
+      "flakiness": "none observed; coroutine cancellation cases are deterministic and use in-memory collaborators.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/ui/CompactControlAccessibilityDeviceTest.kt",
+      "lines": 239,
+      "read_complete": true,
+      "keep": "Protects Android Compose roles, state descriptions, target geometry, expansion actions, owner dispatch, and sanitized recovery messaging.",
+      "redundancy": "none",
+      "flakiness": "none observed; minimum-size assertions intentionally accommodate text scaling.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/ui/NavigationChromeDeviceTest.kt",
+      "lines": 76,
+      "read_complete": true,
+      "keep": "Protects filter FAB state semantics and filtered Codex viewer ordering/index mapping.",
+      "redundancy": "none",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/ui/TagActionAccessibilityDeviceTest.kt",
+      "lines": 70,
+      "read_complete": true,
+      "keep": "Protects selected-tag accessibility semantics, canonical draft removal, favorite removal labels, and minimum targets.",
+      "redundancy": "none; Android semantics coverage is distinct from host UI tests.",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/benchmarkRelease/AndroidManifest.xml",
+      "lines": 59,
+      "read_complete": true,
+      "keep": "Isolates benchmark profileable/fixture components, removes network/install/FileProvider and Bluetooth validation components, and exposes only benchmark entry points.",
+      "redundancy": "none",
+      "flakiness": "benchmark-only manifest behavior; not meaningful default app coverage.",
+      "proposal": "No change in this audit; benchmark manifest review is deferred.",
+      "disposition": "deferred"
+    },
+    {
+      "path": "app/src/benchmarkRelease/java/com/theoriacodex/app/benchmark/BenchmarkAppJourney.kt",
+      "lines": 227,
+      "read_complete": true,
+      "keep": "Benchmark-only production graph with fixture-owned providers/media/storage, simultaneous playback observation, duration tracing, and bounded byte-range transport.",
+      "redundancy": "intentional benchmark harness mirroring production navigation",
+      "flakiness": "The 200 ms status loop and 250 ms transport delay are benchmark workload design, not test assertions.",
+      "proposal": "No change; benchmark source is explicitly deferred.",
+      "disposition": "deferred"
+    },
+    {
+      "path": "app/src/benchmarkRelease/java/com/theoriacodex/app/benchmark/BenchmarkDurationWorkload.kt",
+      "lines": 178,
+      "read_complete": true,
+      "keep": "Drives the production duration coordinator against bundled MP4 data with trace markers and explicit receiver signals.",
+      "redundancy": "none",
+      "flakiness": "The settled wait at lines 109-110 accepts only Known states; unsupported-container behavior would wait for harness timeout, though the bundled MP4 is valid.",
+      "proposal": "Defer any benchmark timeout/unsupported-state policy change to benchmark owners.",
+      "disposition": "deferred"
+    },
+    {
+      "path": "app/src/benchmarkRelease/java/com/theoriacodex/app/benchmark/BenchmarkFixtureActivity.kt",
+      "lines": 280,
+      "read_complete": true,
+      "keep": "Provides isolated search, duration, viewer, and mixed-journey benchmark fixtures while avoiding production repositories/providers.",
+      "redundancy": "intentional fixture activity",
+      "flakiness": "none observed in source; lifecycle/session handling is benchmark-specific.",
+      "proposal": "No change; benchmark activity review is deferred.",
+      "disposition": "deferred"
+    },
+    {
+      "path": "app/src/benchmarkRelease/java/com/theoriacodex/app/benchmark/BenchmarkViewerObservation.kt",
+      "lines": 45,
+      "read_complete": true,
+      "keep": "Reports the single visible native PlayerView surface and global bounds for benchmark playback observation.",
+      "redundancy": "none",
+      "flakiness": "singleOrNull at line 43 intentionally reports no observation when multiple surfaces are visible; benchmark policy review is deferred.",
+      "proposal": "No change in this audit.",
+      "disposition": "deferred"
+    },
+    {
+      "path": "app/src/benchmarkRelease/res/raw/benchmark_loop.mp4",
+      "lines": "binary: 32502 bytes; sha256 ac3213320cd1c8acbf081cb13ce652c8706dcda37e3a18bc1af31e23a5335403",
+      "read_complete": true,
+      "keep": "ISO MP4 fixture consumed by BenchmarkDurationWorkload MediaMetadataRetriever probing.",
+      "redundancy": "none",
+      "flakiness": "none observed",
+      "proposal": "keep; benchmark resource review deferred",
+      "disposition": "deferred"
+    },
+    {
+      "path": "app/src/benchmarkRelease/res/raw/benchmark_motion.mp4",
+      "lines": "binary: 202173 bytes; sha256 c12b1375d4a6d46da310ea2b2c982eff74fe4fb0cb6e59110fbf7eb6998160df",
+      "read_complete": true,
+      "keep": "ISO MP4 motion fixture consumed by BenchmarkAppJourney video posts and byte-range transport.",
+      "redundancy": "none",
+      "flakiness": "none observed",
+      "proposal": "keep; benchmark resource review deferred",
+      "disposition": "deferred"
+    },
+    {
+      "path": "app/src/benchmarkRelease/res/raw/benchmark_two_frame_gif.gif",
+      "lines": "binary: 89 bytes; sha256 d01296ebd98845e6637e7982f7d37d76a1e457d83edf14e165eb3f67b55d4c46",
+      "read_complete": true,
+      "keep": "2x2 GIF fixture consumed by benchmark mixed-media post generation.",
+      "redundancy": "none",
+      "flakiness": "none observed",
+      "proposal": "keep; benchmark resource review deferred",
+      "disposition": "deferred"
+    },
+    {
+      "path": "app/src/benchmarkRelease/res/raw/benchmark_two_frame_webp.webp",
+      "lines": "binary: 140 bytes; sha256 252a1234a210189c3a4150d8b16ff688f86e264c546d6fffd1d9a730819a9cec",
+      "read_complete": true,
+      "keep": "RIFF/WebP two-frame fixture consumed by benchmark mixed-media post generation.",
+      "redundancy": "none",
+      "flakiness": "none observed",
+      "proposal": "keep; benchmark resource review deferred",
+      "disposition": "deferred"
+    },
+    {
+      "path": "app/src/benchmarkRelease/res/raw/benchmark_ugoira.zip",
+      "lines": "binary: 808 bytes; sha256 90ff2393b1a7faadafaa0430789c444e165808a2b?; archive contains 0.png and 1.png",
+      "read_complete": true,
+      "keep": "Stored ZIP fixture containing two PNG frames, consumed by the benchmark PixivUgoiraClient fixture.",
+      "redundancy": "none",
+      "flakiness": "none observed",
+      "proposal": "keep; benchmark resource review deferred",
+      "disposition": "deferred"
+    },
+    {
+      "path": "app/src/debug/java/com/theoriacodex/app/fixtures/JourneyTestActivity.kt",
+      "lines": 39,
+      "read_complete": true,
+      "keep": "Test-only host renders the real app graph and Android-owned ViewModel navigation state.",
+      "redundancy": "none",
+      "flakiness": "none observed; fixture installation is explicitly checked at line 24.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/fixtures/java/com/theoriacodex/app/fixtures/JourneyAppContainer.kt",
+      "lines": 170,
+      "read_complete": true,
+      "keep": "Builds a real app dependency graph with isolated Room/DataStore/file storage, offline media, auth, updates, profiles, and deterministic fixture providers.",
+      "redundancy": "none",
+      "flakiness": "none observed; shutdown closes coordinators, owner jobs, and Room in order at lines 159-165.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/fixtures/java/com/theoriacodex/app/fixtures/JourneyExternalServices.kt",
+      "lines": 26,
+      "read_complete": true,
+      "keep": "Ensures unconfigured external requests fail before opening sockets and provides deterministic in-memory account state.",
+      "redundancy": "none",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/fixtures/java/com/theoriacodex/app/fixtures/JourneySourceRegistry.kt",
+      "lines": 63,
+      "read_complete": true,
+      "keep": "Provides deterministic paging, filtering, source capabilities, resolution, related posts, creator posts, and tag suggestions.",
+      "redundancy": "none",
+      "flakiness": "none observed",
+      "proposal": "Coverage gap: searchCreatorPosts at line 43 and relatedPosts at line 44 do not record requests, so journeys cannot assert creator/related source ownership. Record those calls with source/creator/seed metadata and assert them where relevant.",
+      "disposition": "recommendation"
+    },
+    {
+      "path": "app/src/main/java/com/theoriacodex/app/search/FeedMediaTestTags.kt",
+      "lines": 11,
+      "read_complete": true,
+      "keep": "Defines stable card/media/video semantic identities shared by journeys and benchmarks.",
+      "redundancy": "none",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/TheoriaApplicationProcessPolicyTest.kt",
+      "lines": 66,
+      "read_complete": true,
+      "keep": "Protects production, developer-copy, benchmark-fixture, and unknown-process initialization policy.",
+      "redundancy": "none",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/appshell/AppShellCreationTest.kt",
+      "lines": 37,
+      "read_complete": true,
+      "keep": "Protects Android saved-state ViewModel factory creation and restoration of pending incoming URI state.",
+      "redundancy": "none",
+      "flakiness": "none observed; the PR change is SDK-annotation-only.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/appshell/AppShellViewModelTest.kt",
+      "lines": 55,
+      "read_complete": true,
+      "keep": "Protects current-value-only incoming URI consumption, startup readiness sequencing, and reconstruction persistence.",
+      "redundancy": "none; state-owner coverage complements IncomingUriWorkflowTest.",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/appshell/IncomingUriWorkflowTest.kt",
+      "lines": 50,
+      "read_complete": true,
+      "keep": "Protects Pixiv callback precedence, Codex/external classification, saved handoff restoration, and stale-consume rejection.",
+      "redundancy": "none; workflow-level behavior is distinct from ViewModel integration.",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/appshell/StartupUpdateOwnershipTest.kt",
+      "lines": 107,
+      "read_complete": true,
+      "keep": "Protects single-owner update checks/installs, retained installer-return state, skip/remind decisions, and visible failure recovery.",
+      "redundancy": "none",
+      "flakiness": "none observed; runTest and deferred gates make the concurrency deterministic.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/appshell/ViewerSessionRetentionViewModelTest.kt",
+      "lines": 143,
+      "read_complete": true,
+      "keep": "Protects session retention, replacement, clear/no-op behavior, one-shot handoff, and rapid-reentry claim isolation.",
+      "redundancy": "none",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    }
+  ],
+  "top_findings": [
+    "Most assigned files are meaningful and deterministic; no broad assertion weakening, retries, sleeps, budget reductions, or migration regressions were found.",
+    "OfflineCollectionJourneyTest likely samples screenshot coordinates incorrectly: lines 146-155 omit the window-to-screen offset that OfflineImageDiagnostics computes at lines 97-103.",
+    "JourneySourceRegistry hides creator and related request ownership at lines 43-44, weakening the ability of navigation journeys to prove source/membership policy.",
+    "SearchNavigationJourneyTest's real swipe loop at lines 217-238 is the main device-layout-sensitive interaction; retain the gesture but add condition-based settling.",
+    "PostDownloadProcessRecoveryDeviceTest can leak token-scoped native rows/files if the read phase fails before lines 94-98; host-level failure cleanup is preferable.",
+    "Hitomi live transport and benchmark resources/source are intentionally deferred. Explicitly opt-in live coverage should remain outside the default connected-device lane.",
+    "The benchmark_ugoira.zip SHA256 is 90ff2393b1a7faadafaa0430789c444e165808a9c9029798998dd716d071b19c."
+  ]
+}

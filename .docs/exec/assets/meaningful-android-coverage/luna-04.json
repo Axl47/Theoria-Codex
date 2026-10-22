@@ -1,0 +1,274 @@
+{
+  "reader": "luna-04",
+  "assigned_count": 26,
+  "completed_count": 26,
+  "files": [
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/creator/CreatorProfileCoordinatorTest.kt",
+      "lines": 355,
+      "read_complete": true,
+      "keep": "Covers paging, refresh, unsupported sources, external visibility filtering, Iwara routing, capability removal, and stale-result rejection.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; deferred gates are deterministic.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/creator/CreatorProfileViewModelTest.kt",
+      "lines": 355,
+      "read_complete": true,
+      "keep": "Protects saved-state reconstruction, replacement cancellation, stale completion rejection, paging retry, viewer/back effects, related-post lifecycle, and capability loss.",
+      "redundancy": "None proven; coordinator and ViewModel coverage exercise different contracts.",
+      "flakiness": "None observed; NonCancellable deferred gates intentionally model late completion.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/creator/CreatorRelatedPostsScreenTest.kt",
+      "lines": 84,
+      "read_complete": true,
+      "keep": "Protects hide-liked behavior, seed retention while related shelf is visible, explicit dismissal, and pending-like UI state.",
+      "redundancy": "None proven.",
+      "flakiness": "No observed flake; line 69 documents a real Room-membership ordering race and the test synchronizes state explicitly.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/creator/state/CreatorStateContractTest.kt",
+      "lines": 117,
+      "read_complete": true,
+      "keep": "Pure reducer coverage for open/refresh, failure reasons, stale generations, cancellation, empty-versus-failed states, and viewer identity/filter propagation.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/di/AvailabilityAwareSourceAdapterRegistryTest.kt",
+      "lines": 172,
+      "read_complete": true,
+      "keep": "Protects registry/orchestrator identity, delegate intersection, idempotent search initialization, and normalization after capability removal.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; state changes and assertions are synchronous or use virtual scheduling.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/json/GsonWireContractTest.kt",
+      "lines": 182,
+      "read_complete": true,
+      "keep": "Protects explicit Gson names, no-arg reflection construction, exact durable key sets, and representative legacy decoding including credential and token records.",
+      "redundancy": "None proven; declared-field checks are intentional wire-contract enforcement.",
+      "flakiness": "None observed.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/AnimatedWebPDecodeIntegrationTest.kt",
+      "lines": 85,
+      "read_complete": true,
+      "keep": "Protects sampled static decoding, controllable two-frame decoding, ordinary-animation delegation, and pre-allocation dimension rejection.",
+      "redundancy": "None proven; complements header/parser unit tests.",
+      "flakiness": "Line 34 depends on the process working directory; alternate runners may not resolve src/androidTest/assets. Native graphics and real Coil loader also increase cost.",
+      "proposal": "Independent test-only hardening: resolve the fixture from a repository-root walk or dedicated test resource, and retain explicit loader/drawable cleanup.",
+      "disposition": "KEEP; independent recommendation"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/AnimatedWebPDecoderTest.kt",
+      "lines": 147,
+      "read_complete": true,
+      "keep": "Protects VP8X parsing, malformed/truncated rejection, canvas bounds, byte limits, cancellation interruption, and independent read-only buffers.",
+      "redundancy": "None proven.",
+      "flakiness": "Lines 75-103 use a real 2-second latch wait, Thread.sleep(Long.MAX_VALUE), and a 5-second test timeout; loaded CI can produce timing failures.",
+      "proposal": "Independent test-only recommendation: use an interruptible blocking primitive with a bounded await and diagnostic timeout rather than relying on long Thread.sleep scheduling.",
+      "disposition": "KEEP; independent recommendation"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/AnimationExportDestinationTest.kt",
+      "lines": 214,
+      "read_complete": true,
+      "keep": "Protects public URI tracking, missing-file fallback, cancellation propagation, deletion isolation, publication acknowledgement loss, interrupted publication recovery, private fallback, reconciliation, and legacy ambiguity refusal.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; provider and TemporaryFolder are recreated per test.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/BoundedMediaDurationProbeTest.kt",
+      "lines": 253,
+      "read_complete": true,
+      "keep": "Protects bounded range requests, source headers, tail metadata, missing Content-Range retryability, oversized-body rejection, unsupported-container settlement, timeout cancellation, and retry timing.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; clock and fake transport are deterministic.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/DownloadJobsSheetTest.kt",
+      "lines": 72,
+      "read_complete": true,
+      "keep": "Protects two-column layout, origin labels, count semantics, tap-open behavior, individual removal/deletion, and bulk actions.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; Compose semantics and bounds assertions are stable.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/DurationBacklogIntegrationTest.kt",
+      "lines": 74,
+      "read_complete": true,
+      "keep": "Protects backlog settlement beyond queue capacity, priority eviction/release behavior, and retention of settled filter decisions after cache eviction.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; 513-item case is intentional bounded stress coverage.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/DurationFilterProjectionTest.kt",
+      "lines": 29,
+      "read_complete": true,
+      "keep": "Protects prepared-key reuse and invalidation when authoritative media is replaced.",
+      "redundancy": "None proven; narrower than route metadata tests.",
+      "flakiness": "None observed.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/DurationRouteAcquisitionTest.kt",
+      "lines": 113,
+      "read_complete": true,
+      "keep": "Protects the real route-to-coordinator-to-engine-to-range-parser pipeline, cancellation during scrolling, idle resumption, bounded requests, and non-mutation of feed posts.",
+      "redundancy": "None proven.",
+      "flakiness": "No observed flake; exact virtual-time call counts are implementation-sensitive but intentionally verify cancellation/resumption.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/MediaDurationAcquisitionEngineTest.kt",
+      "lines": 146,
+      "read_complete": true,
+      "keep": "Protects provider/probe precedence, provenance, unsupported versus retryable outcomes, and timeout cancellation.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/MediaDurationCoordinatorTest.kt",
+      "lines": 455,
+      "read_complete": true,
+      "keep": "Protects environment gating, scroll cancellation/requeue, shared consumers, release semantics, priority preemption, terminal publication, provenance, serial execution, durable reuse, and relaunch persistence.",
+      "redundancy": "None proven; broad but distinct coordinator state-machine coverage.",
+      "flakiness": "None observed; virtual scheduler and deferred gates are deterministic.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/MediaDurationPersistenceTest.kt",
+      "lines": 35,
+      "read_complete": true,
+      "keep": "Protects typed durable round trips, non-durable Pending state, and fail-closed handling of unknown enum values.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/MediaDurationPostMetadataTest.kt",
+      "lines": 131,
+      "read_complete": true,
+      "keep": "Protects static exclusion, single key computation, append prefix validation, signed URL rotation, authoritative media replacement, player publication authority, no post mutation, and fingerprint isolation.",
+      "redundancy": "None proven; adjacent projection tests cover separate layers.",
+      "flakiness": "None observed.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/MediaDurationProbeTest.kt",
+      "lines": 50,
+      "read_complete": true,
+      "keep": "Protects authoritative full-media selection, preview-only rejection, and extension-based video recognition without MIME.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/MediaDurationRouteViewModelTest.kt",
+      "lines": 345,
+      "read_complete": true,
+      "keep": "Protects background-resolution policy, player publication separation, active filters, pre-sync visibility, snapshot caching, append behavior, supersession, per-route state, removal, filter release, and identity replacement.",
+      "redundancy": "None proven; route lifecycle coverage is distinct from coordinator internals.",
+      "flakiness": "None observed; virtual scheduling and deferred cancellation gates are deterministic.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/MediaRequestFactoryTest.kt",
+      "lines": 43,
+      "read_complete": true,
+      "keep": "Protects source-specific headers, hardware policy, and distinct static/controllable animated-WebP cache parameters.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/MediaStorageChartTest.kt",
+      "lines": 48,
+      "read_complete": true,
+      "keep": "Protects exact category labels, byte counts, percentages, zero-state messaging, and reactive update behavior.",
+      "redundancy": "None proven.",
+      "flakiness": "Lines 26-45 mutate global Locale.default; concurrent JVM tests could observe US locale unexpectedly.",
+      "proposal": "Independent test-only recommendation: avoid global locale mutation if formatter injection is available, otherwise serialize this test/resource-lock the locale-sensitive section.",
+      "disposition": "KEEP; independent recommendation"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/OfflineMediaAcquisitionTest.kt",
+      "lines": 65,
+      "read_complete": true,
+      "keep": "Protects request headers, complete-byte verification, disconnect cleanup, and rejection of partial, error, wrong-type, HTML, oversized, and empty responses.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; fake connections are deterministic.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/OfflineMediaCoordinatorTest.kt",
+      "lines": 176,
+      "read_complete": true,
+      "keep": "Protects retry skipping completed posts, shared owners, deadline versus explicit cancellation, real-byte caching, automatic-save accumulation/deduplication, clear/remove cancellation, and data-saver media identity.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; flow waits are driven by the test scheduler.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/OfflineQueueRecoveryTest.kt",
+      "lines": 118,
+      "read_complete": true,
+      "keep": "Protects persisted recovery, verified-completion reuse, unfinished acquisition resumption, signed-token redaction, missing-owner skipping, multi-owner registration, and preservation of completed copies after checkpoint failure.",
+      "redundancy": "None proven.",
+      "flakiness": "Lines 43 and 85 use unbounded while/yield polling on filesystem checkpoints; a persistence failure can hang the test indefinitely.",
+      "proposal": "Independent test-only recommendation: wrap checkpoint polling in a bounded timeout with diagnostic failure text; do not add retries or sleeps.",
+      "disposition": "KEEP; independent recommendation"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/OfflineStorageControlsTest.kt",
+      "lines": 69,
+      "read_complete": true,
+      "keep": "Protects separation of disposable-cache clearing from offline removal and requires explicit confirmation for owner/all removal.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; semantics-based scrolling and clicks are deterministic.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    }
+  ],
+  "top_findings": [
+    "All 26 assigned text files were read in full; manifest byte counts, line counts, and SHA-256 values matched.",
+    "No assigned test should be removed for redundancy; layered creator, duration, animation, and offline-storage coverage protects distinct contracts.",
+    "Three independent test-only hardening recommendations: avoid cwd-dependent asset lookup at AnimatedWebPDecodeIntegrationTest.kt:34, reduce real-time interruption sensitivity at AnimatedWebPDecoderTest.kt:75-103, and bound filesystem polling at OfflineQueueRecoveryTest.kt:43,85.",
+    "MediaStorageChartTest.kt:26-45 mutates global Locale.default; consider isolation if the JVM test lane ever enables parallel execution.",
+    "No builds, tests, emulator/device access, installations, or production changes were performed."
+  ]
+}

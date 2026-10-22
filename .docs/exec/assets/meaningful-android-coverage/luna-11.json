@@ -1,0 +1,254 @@
+{
+  "reader": "luna-11",
+  "assigned_count": 24,
+  "completed_count": 24,
+  "files": [
+    {
+      "path": "core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomProfileDeletionTest.kt",
+      "lines": 78,
+      "read_complete": true,
+      "keep": "Room canonical-post deduplication and transactional profile deletion preserve shared posts, rollback, orphan cleanup, and retired-profile write guards (24-71).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; in-memory Room, deterministic IDs, and injected trigger failure are controlled (25-72).",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomRecentsLegacyImporterTest.kt",
+      "lines": 352,
+      "read_complete": true,
+      "keep": "Migration normalization, dedupe, rich-payload merge, crash-resume proofs, source/destination drift, archive failures, transaction rollback, corruption quarantine, and conflict handling (56-322).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; temp directories and deterministic clocks control filesystem cases (42-54, 71, 179, 246).",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomRecentsRepositoryTest.kt",
+      "lines": 380,
+      "read_complete": true,
+      "keep": "Room-backed recents section isolation, FYP/multi-search metadata, deterministic caps, membership preservation, progress monotonicity, restore semantics, sparse payload enrichment, rollback, and versioned query persistence (44-355).",
+      "redundancy": "Similar behaviors exist in in-memory tests, but this verifies Room persistence/transactions; not redundant.",
+      "flakiness": "none observed; fixed clock and in-memory database (33-42, 114, 229).",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomUpgradeJourneyTest.kt",
+      "lines": 27,
+      "read_complete": true,
+      "keep": "Runs registered Room upgrade paths from versions 1, 2, and 6 and verifies later writes/reopens through shared scenario (18-25).",
+      "redundancy": "Intentional parity with the Android device journey using the same shared scenario.",
+      "flakiness": "none observed in the test itself; scenario deletes/recreates named databases (18-25).",
+      "proposal": "keep/no change; any additional platform validation is deferred to device coverage",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomViewerTranslationCacheRepositoryTest.kt",
+      "lines": 122,
+      "read_complete": true,
+      "keep": "Legacy cache privacy, TTL expiry, LRU trimming, migration 7→8 schema creation, and content preservation (43-110).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; injected clock makes TTL/LRU deterministic (30, 45-85).",
+      "proposal": "keep as compatibility coverage; OCR/translation feature work is not implied",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-data-android/src/test/resources/robolectric.properties",
+      "lines": 2,
+      "read_complete": true,
+      "keep": "Pins host Room tests to API 36 while API 37 is covered by emulator/device lanes (1-2).",
+      "redundancy": "none",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/CodexLikesPolicyTest.kt",
+      "lines": 184,
+      "read_complete": true,
+      "keep": "Codex naming, profile/tag normalization, exact reorder validation, source-aware automatic tags, group compaction, and matching semantics (16-178).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; pure policy tests",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/CreatorFollowsRepositoryTest.kt",
+      "lines": 54,
+      "read_complete": true,
+      "keep": "Source-scoped identity, duplicate follow handling, new-post detection/visit clearing, unfollow isolation, and legacy decode defaults (16-52).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; in-memory repository and fixed timestamps",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/DataStoreDispatchTest.kt",
+      "lines": 62,
+      "read_complete": true,
+      "keep": "Proves storage transform and shutdown continue after caller dispatcher/UI freeze (24-50).",
+      "redundancy": "none proven",
+      "flakiness": "5-second real-time timeouts and a live executor can be sensitive to severe CI starvation (39, 49-50, 56). No failure evidence here.",
+      "proposal": "keep; only revisit timeout mechanics if reproducible CI timeouts occur",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/DataStoreRepositoriesTest.kt",
+      "lines": 600,
+      "read_complete": true,
+      "keep": "Settings/UI persistence, legacy import proofs, reconstruction, unknown enum handling, stale-source precedence, corruption/future-schema fail-closed behavior, concurrent mutations, bounds, scroll/FAB restoration, and migration ordering (31-565).",
+      "redundancy": "Overlaps contract tests by design; this file covers DataStore durability and migration-specific behavior.",
+      "flakiness": "none observed; concurrent sections assert sets/independent keys, and scopes are explicitly closed (274-291, 496-516).",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/DataStoreRepositoryContractsTest.kt",
+      "lines": 149,
+      "read_complete": true,
+      "keep": "Parameterized in-memory/DataStore contract for normalization, profile-owned mutations, source-weight memory, and UI restoration (23-114).",
+      "redundancy": "Intentional backend parity; no proven redundancy.",
+      "flakiness": "none observed; parameterized deterministic assertions and explicit DataStore scope cleanup (33-39, 130-137).",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/FileBackedCacheRepositoryTest.kt",
+      "lines": 120,
+      "read_complete": true,
+      "keep": "Named/pointer cache replacement, byte accounting, restart behavior, stale/empty sparse replacement rules, and preservation until usable media arrives (9-118).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; temporary files and deterministic content",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/FileBackedQueryRepositoryTest.kt",
+      "lines": 211,
+      "read_complete": true,
+      "keep": "Typed query persistence, recovery registry/quarantine replay, injected IO lane, concurrent writes, unknown enum fallback, and typed-empty versus absent terms (35-209).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; concurrent test keys are independent and IO thread names are explicitly injected (112-124, 127-146).",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/FileBackedRepositoryTestFixture.kt",
+      "lines": 57,
+      "read_complete": true,
+      "keep": "Shared deterministic query/post fixtures and TemporaryFolder setup used by file-backed repository tests (35-57).",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/FileBackedSavedSearchRepositoryTest.kt",
+      "lines": 144,
+      "read_complete": true,
+      "keep": "Pinned search identity/name updates, grouped query/FYP replay, bounds, atomic writes, corruption quarantine, idempotent merge, and concurrent save/remove serialization (19-135).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; repository mutex serializes Default-dispatcher callers and restart checks persisted order (121-135).",
+      "proposal": "keep; synchronization changes are explicitly deferred per task instructions",
+      "disposition": "keep/deferred"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/InMemoryRepositoriesTest.kt",
+      "lines": 469,
+      "read_complete": true,
+      "keep": "In-memory Codex, recents, cache, settings/profile, likes, and UI restore behavior including normalization, limits, memberships, progress, and isolation (20-452).",
+      "redundancy": "Some overlap with DataStore/Room tests is intentional fixture/backend contract coverage.",
+      "flakiness": "none observed; pure in-memory state and fixed clocks",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/MediaDurationRepositoryTest.kt",
+      "lines": 66,
+      "read_complete": true,
+      "keep": "Known/unsupported/retryable state round trips, expiry, bounded retention, and same-key replacement (11-58).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; injected clock",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/MediaPreferencesStorageTest.kt",
+      "lines": 44,
+      "read_complete": true,
+      "keep": "Legacy settings defaults and video rendition codec/sparse merge preservation (14-42).",
+      "redundancy": "Sparse media merge is also exercised through repository integrations, but this directly protects codec round-trip.",
+      "flakiness": "none observed; pure serialization",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/OfflineMediaStoreTest.kt",
+      "lines": 265,
+      "read_complete": true,
+      "keep": "Scaling scan/decode behavior, gallery ownership, failed/cancelled writes, invalidation, integrity checks, replacement generations, path stripping, selected video renditions, cleanup, and legacy manifest rejection (20-258).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; 1,000-item loop is costly but specifically protects scan/decode scaling (22-60).",
+      "proposal": "keep the 1,000-item case; do not reduce without measured suite-cost evidence",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/ProfileBackupServiceTest.kt",
+      "lines": 241,
+      "read_complete": true,
+      "keep": "Portable backup round-trip, path/credential stripping, profile/library/search/position restore, idempotent journal recovery, invalid/capacity preflight, malformed/deep input rejection, and history exclusion (31-181).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; fake stores and fixed clock/operation ID control state (183-190).",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/ProfileCapacityTest.kt",
+      "lines": 90,
+      "read_complete": true,
+      "keep": "Durable profile/tag/blacklist overflow preservation and restore capacity preflight with reopen validation (22-77).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; explicit scope cancellation/join",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/ProfileDeletionServiceTest.kt",
+      "lines": 86,
+      "read_complete": true,
+      "keep": "Retired-profile write guards, durable deletion intent recovery, post-library-commit failure handling, capacity preflight, and invalid-intent protection (15-84).",
+      "redundancy": "Room deletion test covers a separate backend transaction path; no redundancy proven.",
+      "flakiness": "none observed; temporary journals and controlled dispatcher/failure injection",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/ReadOnlyProfileBackupFilesTest.kt",
+      "lines": 43,
+      "read_complete": true,
+      "keep": "Read-only snapshot integrity, atomic replacement detection, and no-write failure behavior for missing/corrupt/future/pending stores (15-41).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; temporary files and byte comparisons",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/ReadingPositionRepositoryTest.kt",
+      "lines": 84,
+      "read_complete": true,
+      "keep": "Backwards visible progress, section isolation, restart persistence, bounded merge, rollback, obsolete FYP filtering, and malformed-entry tolerance (17-78).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; deterministic timestamps and TemporaryFolder",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    }
+  ],
+  "top_findings": [
+    "All 24 assigned text files were read completely; manifest line counts, byte counts, and SHA-256 values match.",
+    "No concrete flakiness defect or unjustified test redundancy was proven. Backend-parallel tests are intentional coverage of Room, DataStore, in-memory, and file-backed implementations.",
+    "The only plausible risk is environmental timeout sensitivity in DataStoreDispatchTest (5-second real-time waits at lines 39, 49-50, 56); retain unless CI demonstrates reproducible starvation.",
+    "OfflineMediaStoreTest's 1,000-item case is relatively costly but directly protects scan/decode complexity; do not weaken without measured evidence.",
+    "PR #27's assigned Room files only change Robolectric SDK configuration; no runtime/dependency/SDK/workflow safety change is recommended from these files."
+  ]
+}

@@ -1,0 +1,194 @@
+{
+  "reader": "luna-14",
+  "assigned_count": 18,
+  "completed_count": 18,
+  "files": [
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiGlobalIndexSourceAdapterTest.kt",
+      "lines": 263,
+      "read_complete": true,
+      "keep": true,
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep global-index routing, deduplication, cache rotation, budget, and token fail-closed coverage (48-260).",
+      "disposition": "Keep; independent."
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiMediaUrlResolverTest.kt",
+      "lines": 319,
+      "read_complete": true,
+      "keep": true,
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep configuration parsing, shard ordering, refresh/cancellation, cache-budget, validation, and error-header assertions (14-265).",
+      "disposition": "Keep; independent."
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiNozomiTest.kt",
+      "lines": 129,
+      "read_complete": true,
+      "keep": true,
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep URL, range, primitive decode/dedupe, allocation-contract, and malformed-input coverage (10-116).",
+      "disposition": "Keep; independent."
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiPaginationSourceAdapterTest.kt",
+      "lines": 368,
+      "read_complete": true,
+      "keep": true,
+      "redundancy": "None proven; random/cache cases cover distinct continuation contracts.",
+      "flakiness": "None observed; deferred scheduling is deterministic under runTest.",
+      "proposal": "Keep pagination offsets, token compatibility, random snapshots, filtering, cache misses, and changed-snapshot failures (48-365).",
+      "disposition": "Keep; independent."
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiProtocolTest.kt",
+      "lines": 123,
+      "read_complete": true,
+      "keep": true,
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep URL encoding, autocomplete/gallery parsing, declaration variants, size limits, malformed scripts, and fixture-shape checks (9-113).",
+      "disposition": "Keep; independent."
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiRandomSnapshotCacheTest.kt",
+      "lines": 116,
+      "read_complete": true,
+      "keep": true,
+      "redundancy": "None proven.",
+      "flakiness": "None observed; deferred/cancellation coordination is deterministic.",
+      "proposal": "Keep TTL, fingerprint mismatch, single-flight cancellation, LRU eviction, and oversize-entry coverage (21-110).",
+      "disposition": "Keep; independent."
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiSourceAdapterTestFixture.kt",
+      "lines": 307,
+      "read_complete": true,
+      "keep": true,
+      "redundancy": "Shared fixture abstraction is appropriate; no harmful duplication proven.",
+      "flakiness": "None observed; synchronized request recording and deterministic routing support concurrent tests.",
+      "proposal": "Keep adapter factory, query/token helpers, binary-range routing, gallery generation, and concurrency probes (47-305).",
+      "disposition": "Keep; independent."
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/http/DefaultSourceHttpClientTest.kt",
+      "lines": 394,
+      "read_complete": true,
+      "keep": true,
+      "redundancy": "None proven.",
+      "flakiness": "Real HttpServer cancellation tests use 100 ms timeout plus wall-clock <1000 ms assertions at 116-152 and 279-310; host load can fail a correct implementation.",
+      "proposal": "Keep cancellation behavior assertions, but replace elapsed-time gates with deterministic cleanup/signaling or assert only timeout propagation (151-152, 309-310).",
+      "disposition": "Independent test-hardening recommendation; no runtime change."
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/iwara/IwaraSourceAdapterTest.kt",
+      "lines": 555,
+      "read_complete": true,
+      "keep": true,
+      "redundancy": "Search and resolve embed-only tests cover separate entry points; no redundancy proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep endpoint/query mapping, media/card projection, filtering, creator/autocomplete/trending, typed failures, and Jina fallback coverage (21-543).",
+      "disposition": "Keep; independent."
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/media/MediaMimeTest.kt",
+      "lines": 22,
+      "read_complete": true,
+      "keep": true,
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep extension, case, query/fragment, and unknown-MIME assertions (9-20).",
+      "disposition": "Keep; independent."
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/nhentai/NhentaiCreatorSourceAdapterTest.kt",
+      "lines": 91,
+      "read_complete": true,
+      "keep": true,
+      "redundancy": "None proven.",
+      "flakiness": "None observed; timeout uses runTest virtual time.",
+      "proposal": "Keep incremental count publication, artist-profile normalization, creator pagination, and invalid-identity no-request coverage (19-90).",
+      "disposition": "Keep; independent."
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/nhentai/NhentaiRelatedPostsSourceAdapterTest.kt",
+      "lines": 122,
+      "read_complete": true,
+      "keep": true,
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep order, seed/invalid dedupe, six-item bound, empty/invalid inputs, and typed provider-failure coverage (16-108).",
+      "disposition": "Keep; independent."
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/nhentai/NhentaiResolutionSourceAdapterTest.kt",
+      "lines": 220,
+      "read_complete": true,
+      "keep": true,
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep API projection, Cloudflare mirror fallbacks, progressive media URLs, taxonomy, and cancellation stop conditions (26-218).",
+      "disposition": "Keep; independent."
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/nhentai/NhentaiSearchSourceAdapterTest.kt",
+      "lines": 399,
+      "read_complete": true,
+      "keep": true,
+      "redundancy": "Direct-ID tests overlap intentionally but one specifically protects ignoring filter tags (277-357).",
+      "flakiness": "None observed.",
+      "proposal": "Keep query/facet compilation, wildcard search, card/lazy mapping, errors, direct IDs, and tag-ID lookup coverage (26-397).",
+      "disposition": "Keep; independent."
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/nhentai/NhentaiSourceAdapterTestFixture.kt",
+      "lines": 155,
+      "read_complete": true,
+      "keep": true,
+      "redundancy": "Shared queue/cancellation clients are appropriate support code.",
+      "flakiness": "None observed; tests use sequential deterministic queues.",
+      "proposal": "Keep common queries, request recording, and cancellation-specific fake clients (25-154).",
+      "disposition": "Keep; independent."
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/nhentai/NhentaiSuggestionSourceAdapterTest.kt",
+      "lines": 238,
+      "read_complete": true,
+      "keep": true,
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep autocomplete, faceted taxonomy/scopes, filtering, portable tag-ID cache, and trending sampling coverage (26-236).",
+      "disposition": "Keep; independent."
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/nhentai/NhentaiTitleTest.kt",
+      "lines": 37,
+      "read_complete": true,
+      "keep": true,
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep nested annotation, malformed bracket, empty-title, and ordinary-title cases (9-36).",
+      "disposition": "Keep; independent."
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/pixiv/PixivAccountDecisionTest.kt",
+      "lines": 58,
+      "read_complete": true,
+      "keep": true,
+      "redundancy": "None proven.",
+      "flakiness": "None observed; deferred refreshes use explicit CompletableDeferred coordination.",
+      "proposal": "Keep stale refresh rejection after disconnect/relogin and protection of newer credentials from expired responses (17-56).",
+      "disposition": "Keep; independent."
+    }
+  ],
+  "top_findings": [
+    "All 18 assigned text files were read completely; manifest line/byte counts and SHA-256 hashes matched.",
+    "Coverage is meaningful across provider routing/parsing, pagination/restoration tokens, cache bounds, cancellation/error recovery, membership/filter behavior, and credential race handling.",
+    "No proven redundant or implementation-mirroring tests were found.",
+    "Only concrete flakiness risk is the wall-clock cancellation gating in DefaultSourceHttpClientTest.kt lines 151-152 and 309-310.",
+    "No assigned file requires deferred runtime, dependency, SDK, workflow, safety, benchmark, or device changes."
+  ]
+}

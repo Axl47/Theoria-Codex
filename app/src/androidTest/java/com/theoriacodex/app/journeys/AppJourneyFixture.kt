@@ -8,7 +8,6 @@ import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
@@ -85,7 +84,7 @@ abstract class AppJourneyFixture {
         JourneyTestActivity.fixtureContainer = container
         scenario = ActivityScenario.launch(JourneyTestActivity::class.java)
         compose.waitUntil(15_000) {
-            compose.onAllNodesWithContentDescription("Search").fetchSemanticsNodes().isNotEmpty()
+            compose.onNodeWithContentDescription("Search").isDisplayed()
         }
     }
 

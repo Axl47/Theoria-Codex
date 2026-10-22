@@ -1,0 +1,222 @@
+{
+  "reader": "luna-17",
+  "assigned_count": 21,
+  "completed_count": 21,
+  "files": [
+    {
+      "path": "scripts/tests/test_check_changed_coverage.py",
+      "lines": 362,
+      "read_complete": true,
+      "keep": "Covers diff parsing, source filtering, XML mapping, fail-closed behavior, thresholds, and comment-only changes.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "scripts/tests/test_check_hotspots.py",
+      "lines": 220,
+      "read_complete": true,
+      "keep": "Meaningfully covers hotspot budgets, stale/moved exceptions, Detekt owner canonicalization, configuration errors, and workflow ownership.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; intentionally depends on host git and repository files.",
+      "proposal": "keep/no change",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "scripts/tests/test_ci_emulator_environment.py",
+      "lines": 149,
+      "read_complete": true,
+      "keep": "Protects emulator-only access, API/memory validation, bounded probes, readiness, cleanup diagnostics, delegate exit status, and pinned SDK tools.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; timeout shortening at lines 23-25 is formatting-coupled to the wrapper.",
+      "proposal": "Consider injectable timeout configuration for the fixture instead of textual replacement; CI-wrapper change is deferred.",
+      "disposition": "DEFERRED"
+    },
+    {
+      "path": "scripts/tests/test_configuration_cache_contract.py",
+      "lines": 101,
+      "read_complete": true,
+      "keep": "Checks strict Gradle configuration-cache settings, reuse evidence, custom task ownership, and credential exclusion.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; workflow substring/count assertions are intentionally strict.",
+      "proposal": "keep/no change",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "scripts/tests/test_copy_production_to_debug.py",
+      "lines": 151,
+      "read_complete": true,
+      "keep": "Protects manifest isolation, certificate pinning, dry-run behavior, no production mutations, cleanup, and byte-exact installed APK verification.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "scripts/tests/test_debug_journey_diagnostics.py",
+      "lines": 51,
+      "read_complete": true,
+      "keep": "Ensures diagnostics collection occurs after both successful and failed runs without replacing the instrumentation status.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "scripts/tests/test_debug_keystore_location.py",
+      "lines": 93,
+      "read_complete": true,
+      "keep": "Covers AGP/XDG/Android preference paths, explicit override precedence, alias conflicts, and no unsafe fallback.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "scripts/tests/test_device_validation_workflow.py",
+      "lines": 41,
+      "read_complete": true,
+      "keep": "Checks both instrumentation owners, retained reports, API 36/37 matrices, disk/RAM provisioning, and SDK preparation.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; repository-text contract is intentionally exact.",
+      "proposal": "keep/no change",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "scripts/tests/test_r8_json_contract_build.py",
+      "lines": 58,
+      "read_complete": true,
+      "keep": "Protects public AGP mapping/seeds artifacts, variant-owned verification, assembly finalization, and CI/release task ownership.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "scripts/tests/test_release_acceptance_preflight.py",
+      "lines": 116,
+      "read_complete": true,
+      "keep": "Covers package/version/debuggability/signature lane checks, forbidden listener/production targets, missing APKs, and the exact ADB boundary.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "scripts/tests/test_sign_release_apk.py",
+      "lines": 80,
+      "read_complete": true,
+      "keep": "Protects secret non-leakage, temporary key permissions/removal, verification-before-publish, source preservation, and no overwrite.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "scripts/update_tag_store.py",
+      "lines": 181,
+      "read_complete": true,
+      "keep": "Provides deterministic case-insensitive deduplication/sorting, source validation, Pixiv HTML extraction, Cloudflare challenge handling, and bounded URL timeout.",
+      "redundancy": "none proven",
+      "flakiness": "URL mode necessarily depends on external Pixiv availability.",
+      "proposal": "Independent recommendation: add host-only tests for malformed top-level stores and injected URL responses; no production change required.",
+      "disposition": "INDEPENDENT RECOMMENDATION"
+    },
+    {
+      "path": "scripts/verify_benchmark_fixture_apk.py",
+      "lines": 116,
+      "read_complete": true,
+      "keep": "Verifies isolated package, activity/receiver/process/action contracts, forbidden surfaces, DEX presence, and byte-identical fixture packaging.",
+      "redundancy": "none proven",
+      "flakiness": "Manifest checks use fixed 800/600-character windows at lines 77-83, making them sensitive to manifest formatting/attribute growth.",
+      "proposal": "Parse the manifest structurally and inspect the matched activity/receiver nodes; verifier/safety change is deferred.",
+      "disposition": "DEFERRED"
+    },
+    {
+      "path": "scripts/verify_ci_emulator.sh",
+      "lines": 102,
+      "read_complete": true,
+      "keep": "Protects CI-only emulator access, bounded device probes, package/user/storage readiness, API matching, memory floor, diagnostics, and owner dispatch.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; streaming logcat is explicitly killed in EXIT cleanup.",
+      "proposal": "keep/no change",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "scripts/verify_debug_device.sh",
+      "lines": 53,
+      "read_complete": true,
+      "keep": "Protects owner selection, task-graph preflight, APK package checks, isolated instrumentation owners, device identity recheck, and retained diagnostics after failures.",
+      "redundancy": "none proven",
+      "flakiness": "Gradle/ADB operations at lines 35-51 have no command timeout, so a wedged device/tool can hang the lane.",
+      "proposal": "Add bounded command execution only with coordinator approval; device/CI wrapper change is deferred.",
+      "disposition": "DEFERRED"
+    },
+    {
+      "path": "scripts/verify_device_apk.py",
+      "lines": 174,
+      "read_complete": true,
+      "keep": "Critical package isolation, debuggability, instrumentation target, listener prohibition, signing certificate, and keystore-lane checks.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change; retain as the mandatory pre-ADB gate.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "scripts/verify_macrobenchmark_runner_apk.py",
+      "lines": 53,
+      "read_complete": true,
+      "keep": "Checks instrumentation presence, expected runner, and forbidden listener configuration.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; package/signature checks are delegated to verify_device_apk.",
+      "proposal": "keep/no change",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "scripts/verify_performance_device.sh",
+      "lines": 131,
+      "read_complete": true,
+      "keep": "Preserves physical-device selection, APK preflight, scenario contracts, complete captures, transfer ordering, fingerprints, calibration, and comparison evidence.",
+      "redundancy": "none proven",
+      "flakiness": "Install/instrument/pull commands at lines 79-101 are unbounded; physical-device transport loss can hang or leave partial evidence.",
+      "proposal": "Investigate bounded transport handling while preserving complete-run semantics; benchmark/device work is explicitly deferred.",
+      "disposition": "DEFERRED"
+    },
+    {
+      "path": "scripts/verify_r8_json_contract.py",
+      "lines": 138,
+      "read_complete": true,
+      "keep": "Fail-closed contract parsing, mapping/seeds inspection, constructor retention, field rename detection, and safe unreachable-class handling.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "scripts/verify_release_acceptance_device.sh",
+      "lines": 118,
+      "read_complete": true,
+      "keep": "Protects acceptance APK lane, package/version/debuggability, cold/callback launches, process liveness, crash checks, and persisted write/read phases.",
+      "redundancy": "none proven",
+      "flakiness": "ADB calls can block beyond the bounded 15-iteration polling loops at lines 21-32 and 54-73.",
+      "proposal": "Consider bounded ADB calls and timestamp-scoped crash evidence; release/device behavior is deferred.",
+      "disposition": "DEFERRED"
+    },
+    {
+      "path": "scripts/verify_transfer_recovery_device.py",
+      "lines": 110,
+      "read_complete": true,
+      "keep": "Covers authorized single-device selection, isolated APK preflight, local fixture serving, process-stop recovery, write/read phases, and retained evidence.",
+      "redundancy": "none proven",
+      "flakiness": "Fixture page 1 waits up to 180 seconds at lines 33-35 and subprocess calls at lines 74-105 have no timeout; transport failure can stall the lane.",
+      "proposal": "Add an explicit outer timeout and bounded fixture wait while preserving the process-gap scenario; device/recovery work is deferred.",
+      "disposition": "DEFERRED"
+    }
+  ],
+  "top_findings": [
+    "All 21 assigned text files were read completely; manifest byte counts, line counts, and SHA-256 values matched.",
+    "The strongest concrete flakiness/cost risks are unbounded ADB/Gradle subprocesses in verify_debug_device.sh, verify_performance_device.sh, verify_release_acceptance_device.sh, and verify_transfer_recovery_device.py; all are deferred per coordinator ownership of device/benchmark work.",
+    "verify_benchmark_fixture_apk.py uses fixed manifest substring windows (lines 77-83); structural XML inspection would be more robust, but this verifier/safety change is deferred."
+  ]
+}

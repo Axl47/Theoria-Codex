@@ -1,0 +1,265 @@
+{
+  "reader": "luna-13",
+  "assigned_count": 25,
+  "completed_count": 25,
+  "files": [
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/orchestration/UnifiedSearchOrchestratorTest.kt",
+      "lines": 518,
+      "read_complete": true,
+      "keep": "Protects continuation exclusions, timeout cancellation, bounded OR concurrency, capability gating, weighted merge, overrides, filtering, typed failures, and cancellation.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; runTest virtual time controls delays at lines 45-60, 63-76, and 79-95.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/query/CanonicalQueryGroupsTest.kt",
+      "lines": 40,
+      "read_complete": true,
+      "keep": "Protects canonical group-to-flat projections, divergent-construction rejection, portable-group preservation, and source-owned-term removal.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/query/QueryHashTest.kt",
+      "lines": 117,
+      "read_complete": true,
+      "keep": "Protects order-independent hashing, sort sensitivity, facet/namespace/polarity identity, OR-group boundaries, and normalization.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change; v3 assertion at lines 70-73 is an intentional hash-format contract.",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/query/QueryStateMachineTest.kt",
+      "lines": 59,
+      "read_complete": true,
+      "keep": "Protects applied/draft initialization, dirty state, apply, and reset transitions.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/query/SourceCapabilityGateTest.kt",
+      "lines": 61,
+      "read_complete": true,
+      "keep": "Protects aggregation of all relevant source exclusion reasons and supported-source retention.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/recommendation/ForYouTagSetGeneratorTest.kt",
+      "lines": 144,
+      "read_complete": true,
+      "keep": "Protects seeded sampling, canonicalization, fallback behavior, sparse history, co-occurrence pairing, Pixiv marker filtering, and random-state preservation.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "Independent recommendation: exact 16-sample vector at lines 20-28 is implementation-brittle; replace with invariants only if the seeded sequence is not a public compatibility contract.",
+      "disposition": "independent/deferred"
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/recommendation/RecommendationTagNormalizationTest.kt",
+      "lines": 57,
+      "read_complete": true,
+      "keep": "Protects booru/native-space normalization, Pixiv popularity-marker removal, stable distinct ordering, and limits.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/tags/SourceTagNormalizationTest.kt",
+      "lines": 14,
+      "read_complete": true,
+      "keep": "Protects Hitomi underscore/display-space equivalence.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/RealAdapterRegistryTest.kt",
+      "lines": 56,
+      "read_complete": true,
+      "keep": "Protects safe default Pixiv exposure and explicit later-phase source exposure.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change; source exposure is a deliberate safety/configuration contract.",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/RealProviderPageContractTest.kt",
+      "lines": 83,
+      "read_complete": true,
+      "keep": "Protects cross-provider canonical deduplication, order, continuation tokens, and creator-page behavior using synthetic protocol fixtures.",
+      "redundancy": "none proven; this is the cross-provider contract while adapter tests cover provider-specific parsing.",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/aibooru/AibooruProviderJourneyTest.kt",
+      "lines": 99,
+      "read_complete": true,
+      "keep": "Protects duplicate paging, detail retry, trending/autocomplete request distinction, typed parse/network/rate-limit failures, and cancellation.",
+      "redundancy": "none proven; journey-level retry/error coverage complements adapter parsing tests.",
+      "flakiness": "none observed; ScriptedHttpClient is deterministic and runTest controls coroutine execution.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/aibooru/AibooruSourceAdapterTest.kt",
+      "lines": 119,
+      "read_complete": true,
+      "keep": "Protects exact request compilation, full-page pagination with malformed records, safe optional-field parsing, and authoritative tag counts.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/common/AutocompleteTagCountsTest.kt",
+      "lines": 52,
+      "read_complete": true,
+      "keep": "Protects exact-count selection, normalization/deduplication/bounds, maximum concurrency of two, absent counts, and cancellation propagation.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; delay(10) at line 36 runs under virtual time.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/common/SourceAdapterCommonTest.kt",
+      "lines": 171,
+      "read_complete": true,
+      "keep": "Protects quick-query windows, duration parsing/overflow rejection, typed JSON failures, MIME/HTTP classification, safe JSON accessors, object envelopes, and challenge detection.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/gelbooru/GelbooruRelatedPostsParserTest.kt",
+      "lines": 41,
+      "read_complete": true,
+      "keep": "Protects scoped ordered unique related links and distinction between absent and empty related blocks.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/gelbooru/GelbooruSourceAdapterTest.kt",
+      "lines": 493,
+      "read_complete": true,
+      "keep": "Protects bounded related hydration, OR query syntax, credentials/auth failures, pagination, malformed records, creator metadata, media URLs/MIME/durations, CDN canonicalization, and tag counts.",
+      "redundancy": "none proven; related parser and adapter tests cover separate parsing and hydration layers.",
+      "flakiness": "none observed; hydration delay(1) at line 478 is virtual under runTest.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/health/HitomiProviderHealthProbeTest.kt",
+      "lines": 279,
+      "read_complete": true,
+      "keep": "Protects exact Hitomi configuration/gallery/media probes, byte ranges and bounds, headers, signature drift diagnostics, and cancellation.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; fixture resource path at lines 151-153 is a maintenance dependency, not runtime flakiness.",
+      "proposal": "Independent maintenance note: preserve or explicitly version the dated fixture resource; do not weaken probe assertions.",
+      "disposition": "independent/deferred"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/health/ProviderHealthCheckCliTest.kt",
+      "lines": 91,
+      "read_complete": true,
+      "keep": "Protects provider selection validation and strict targeted versus untargeted status gates.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/health/ProviderHealthCheckerTest.kt",
+      "lines": 369,
+      "read_complete": true,
+      "keep": "Protects health status mapping, probe JSON parsing, seeded search/autocomplete/trending/resolve/media/related checks, OR-group diagnostics, credential skips, typed scopes, and cancellation.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; all coroutine paths use runTest and fake adapters.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiByteBudgetCacheTest.kt",
+      "lines": 37,
+      "read_complete": true,
+      "keep": "Protects exact byte weighting, LRU eviction, cached-byte accounting, and oversize non-retention.",
+      "redundancy": "none proven; distinct cache implementation from HitomiGlobalIndexCache.",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiCreatorFailureSourceAdapterTest.kt",
+      "lines": 293,
+      "read_complete": true,
+      "keep": "Protects creator identity/URL encoding, Unicode validation, typed artist pagination, invalid-token fail-closed behavior, cancellation, parse failures, media recovery isolation, oversized/truncated ranges, and retryability.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; the 100 ms timeout and 60 s delay at lines 171-179 are virtual under runTest.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiDeterministicPermutationTest.kt",
+      "lines": 66,
+      "read_complete": true,
+      "keep": "Protects deterministic bijection across awkward sizes, repeatability, seed diversity, traversal strides, and prefix coverage.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; fixed seeds and bounded in-memory loops.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiFacetHydrationSourceAdapterTest.kt",
+      "lines": 326,
+      "read_complete": true,
+      "keep": "Protects facet taxonomy/autocomplete, authoritative counts, media-config recovery, typed include/exclude intersections, bounded ordered hydration, sparse cards, complete resolve behavior, and simultaneous media URL contracts.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; galleryDelayMs=50 at lines 252-258 is virtual under runTest.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiGalleryManifestStoreTest.kt",
+      "lines": 161,
+      "read_complete": true,
+      "keep": "Protects shared-loader ownership cancellation, deadlines, single-flight loading, TTL replacement, failed/missing retryability, and byte-budget rejection.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; runCurrent/runTest control cancellation and timeout scheduling.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiGlobalIndexCacheTest.kt",
+      "lines": 156,
+      "read_complete": true,
+      "keep": "Protects byte-weighted LRU behavior, oversize handling, provider-version invalidation, single-flight sharing, cancellation propagation/retry, and version isolation.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; CompletableDeferred and runCurrent make concurrency deterministic.",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    }
+  ],
+  "top_findings": [
+    "All 25 assigned text files were read completely in bounded line-numbered chunks.",
+    "Every manifest byte count, line count, and SHA-256 matched the worktree; no assigned binary fixtures were present.",
+    "No reproducible wall-clock, network, emulator, device, or external-I/O flakiness was observed.",
+    "No test removal is justified by proven redundancy; cross-layer and cross-provider overlaps protect distinct contracts.",
+    "The only independent maintainability recommendation is to reconsider the exact seeded sample vector in ForYouTagSetGeneratorTest.kt lines 20-28 if that sequence is not an intentional compatibility contract.",
+    "No assigned file changes the PR runtime/dependencies/SDK/workflows/safety/CI wrappers; no PR-runtime deferral is required for this audit."
+  ]
+}

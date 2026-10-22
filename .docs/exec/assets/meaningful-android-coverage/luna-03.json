@@ -1,0 +1,324 @@
+{
+  "reader": "luna-03",
+  "assigned_count": 31,
+  "completed_count": 31,
+  "files": [
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/backup/BackupViewModelTest.kt",
+      "lines": 240,
+      "read_complete": true,
+      "keep": "Protects preview confirmation, recreation, invalid input, busy guards, export cleanup, restore retry, and bounded reads (47-184).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; StandardTestDispatcher and virtual advancement are deterministic.",
+      "proposal": "Keep unchanged.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/AvailableSaveTargetCodicesTest.kt",
+      "lines": 27,
+      "read_complete": true,
+      "keep": "Protects source exclusion and remaining order (9-19).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep unchanged.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexAutomaticTagsTest.kt",
+      "lines": 76,
+      "read_complete": true,
+      "keep": "Protects normalized filtering, source ordering, empty-source omission, selected-tag presentation, and counts (10-74).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep unchanged.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexCleaningUiTest.kt",
+      "lines": 85,
+      "read_complete": true,
+      "keep": "Protects target exclusion, multi-selection, dynamic removal, cancellation, and Likes warning semantics (31-83).",
+      "redundancy": "None proven; UI policy is distinct from workflow transaction tests.",
+      "flakiness": "No concrete flake observed; Compose assertions use stable content descriptions/text.",
+      "proposal": "Keep; SDK-annotation-only PR adjustment is not an independent blocker (DEFERRED).",
+      "disposition": "keep; SDK-only change deferred"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexCleaningWorkflowTest.kt",
+      "lines": 78,
+      "read_complete": true,
+      "keep": "Protects captured selections across retry, exact Undo restoration, failure recovery, and no-match behavior (20-76).",
+      "redundancy": "None proven; cleaning differs from ordinary removal.",
+      "flakiness": "None observed; virtual coroutine scheduling.",
+      "proposal": "Keep unchanged.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexCollectionSourceTest.kt",
+      "lines": 108,
+      "read_complete": true,
+      "keep": "Protects full identity membership, all-member relevance, named-cover refresh, and lazy post hydration (27-107).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; Channel collection and injected StandardTestDispatcher are deterministic.",
+      "proposal": "Keep explicit test dispatcher; any production constructor implications are DEFERRED.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexCommandHostTest.kt",
+      "lines": 60,
+      "read_complete": true,
+      "keep": "Protects snackbar preemption, Undo restoration, deletion navigation, and coalesced feedback (26-55).",
+      "redundancy": "None proven.",
+      "flakiness": "Concrete risk: five real-time 5-second polling waits at 41, 43, 46, 53-54 can time out under host load.",
+      "proposal": "Replace polling waits with a test-owned deterministic snackbar/effect signal or awaitable state; preserve all assertions.",
+      "disposition": "recommend independent flakiness cleanup; SDK-only PR change deferred"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexCoverImageRequestTest.kt",
+      "lines": 30,
+      "read_complete": true,
+      "keep": "Protects cache-key revision when file path and mtime are unchanged (19-29).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; TemporaryFolder controls the file.",
+      "proposal": "Keep; SDK-only PR change deferred.",
+      "disposition": "keep; SDK-only change deferred"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexCoverTest.kt",
+      "lines": 92,
+      "read_complete": true,
+      "keep": "Protects fallback cover ordering, page-one-only media fallback, and downloaded-thumbnail precedence (17-66).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; assertions encode intentional display ordering.",
+      "proposal": "Keep unchanged.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexDetailPresentationTest.kt",
+      "lines": 31,
+      "read_complete": true,
+      "keep": "Protects filtered/unfiltered counts, bulk-selection counts, and singular/plural action text (8-29).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep unchanged.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexEditSelectionTest.kt",
+      "lines": 51,
+      "read_complete": true,
+      "keep": "Protects edit-mode gating, toggling, reconciliation, exit clearing, and clean restart (12-48).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep unchanged.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexRemovalWorkflowTest.kt",
+      "lines": 136,
+      "read_complete": true,
+      "keep": "Protects one-shot reorder, removal retry/Undo, detached collector completion, and original profile identity retention (24-134).",
+      "redundancy": "None proven; selected removal and cleaning have separate transaction contracts.",
+      "flakiness": "None observed; virtual scheduling and explicit deferred gates.",
+      "proposal": "Keep unchanged.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexReorderControlsTest.kt",
+      "lines": 56,
+      "read_complete": true,
+      "keep": "Protects identity-based move controls, positions, bounds checks, and committed draft order (27-50).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; semantics actions are preferable to coordinates.",
+      "proposal": "Keep; SDK-only PR change deferred.",
+      "disposition": "keep; SDK-only change deferred"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexSaveRelevanceLoaderTest.kt",
+      "lines": 82,
+      "read_complete": true,
+      "keep": "Protects shared lookup reuse, transition continuity, invalidation, cancellation, and stop timeout (19-80).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; 250 ms/5,001 ms advances are virtual and document lifecycle timing.",
+      "proposal": "Keep unchanged.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexSaveViewModelTest.kt",
+      "lines": 193,
+      "read_complete": true,
+      "keep": "Protects durable-before-statistics ordering, save failure, cache failure, collector cancellation, route-specific metrics, statistics failure, and destination naming (51-165).",
+      "redundancy": "None proven; complements service-level save tests.",
+      "flakiness": "None observed; deferred commit and StandardTestDispatcher are deterministic.",
+      "proposal": "Keep unchanged.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexSearchSourceOptionsTest.kt",
+      "lines": 187,
+      "read_complete": true,
+      "keep": "Protects source availability, source filtering, per-post tag deduplication, invalid-tag removal, and stable sorting (12-165).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep unchanged.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexShareModelsTest.kt",
+      "lines": 456,
+      "read_complete": true,
+      "keep": "Protects size budgets, credential/path stripping, v1 compatibility, v2 snapshots, malformed optional data, taxonomy semantics, duplicate upgrade, provider fallback, ID parsing, and filename sanitization (20-359).",
+      "redundancy": "None proven; broad cases exercise one serialization/import boundary.",
+      "flakiness": "None observed; pure model/parser assertions.",
+      "proposal": "Keep unchanged.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/FollowedCodexFiltersTest.kt",
+      "lines": 108,
+      "read_complete": true,
+      "keep": "Protects one vertical scroller, two-column author layout, settled swipe state, multi-source identity selection, search, and reset (39-106).",
+      "redundancy": "None proven.",
+      "flakiness": "Concrete fragility: pixel bounds and 2,000 ms clock settlement at 58-74 depend on Compose layout/animation timing.",
+      "proposal": "Prefer semantic grid/settled-state assertions over exact top/left geometry and elapsed animation time; preserve layout intent.",
+      "disposition": "recommend independent UI-flakiness cleanup; SDK-only PR change deferred"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/FollowedCodexViewModelTest.kt",
+      "lines": 209,
+      "read_complete": true,
+      "keep": "Protects cover selection, paging, duplicate pages, retry isolation, late-result rejection, metadata non-reload, and two-request concurrency cap (37-181).",
+      "redundancy": "Similar shape to saved-search tests, but separate state machine and provider contract; no removal justified.",
+      "flakiness": "None observed; delays are virtual and bounded by test scheduler.",
+      "proposal": "Keep unchanged.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/LikesCodexSyncServiceTest.kt",
+      "lines": 115,
+      "read_complete": true,
+      "keep": "Protects like/unlike membership, profile cleanup idempotency, independent manual Likes entries, and profile-scoped automatic Codices (19-113).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep unchanged.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/PostActionSheetPreloadTest.kt",
+      "lines": 63,
+      "read_complete": true,
+      "keep": "Protects eager relevance lookup before save selection and one-shot save callback (28-61).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; waitForIdle plus flowOf are deterministic.",
+      "proposal": "Keep; SDK-only PR change deferred.",
+      "disposition": "keep; SDK-only change deferred"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/SaveToCodexSheetTest.kt",
+      "lines": 159,
+      "read_complete": true,
+      "keep": "Protects profile/Likes navigation, membership indicators, relevance sorting, search, exclusions, and selection callbacks (29-157).",
+      "redundancy": "None proven.",
+      "flakiness": "Concrete fragility: ordering is inferred from boundsInRoot coordinates at 76-87.",
+      "proposal": "Use semantic item order or stable test tags/list state instead of Y-coordinate comparisons; preserve ordering assertions.",
+      "disposition": "recommend independent UI-flakiness cleanup; SDK-only PR change deferred"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/SavedCodexTest.kt",
+      "lines": 42,
+      "read_complete": true,
+      "keep": "Protects Likes replacement with Saved, ordered position, hidden system entries, count summary, and navigation (22-40).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; SDK-only PR change deferred.",
+      "disposition": "keep; SDK-only change deferred"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/SavedSearchesCodexFiltersTest.kt",
+      "lines": 61,
+      "read_complete": true,
+      "keep": "Protects include/exclude-all, stable IDs, search, rename, and remove controls (32-55).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; explicitly defer synchronization changes requested by coordinator.",
+      "disposition": "keep; synchronization explicitly deferred"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/SavedSearchesCodexViewModelTest.kt",
+      "lines": 222,
+      "read_complete": true,
+      "keep": "Protects native per-source tags, paging continuation, partial-provider retry, late-result rejection, no-op rename/empty selection, and concurrency deadlines (45-190).",
+      "redundancy": "Analogous to FollowedCodexViewModelTest but covers a distinct saved-search loader.",
+      "flakiness": "None observed; delays and deadlines are virtual.",
+      "proposal": "Keep unchanged; explicit synchronization changes are deferred.",
+      "disposition": "keep; synchronization explicitly deferred"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/transfer/CodexDocumentIoTest.kt",
+      "lines": 33,
+      "read_complete": true,
+      "keep": "Protects bounded excess-byte consumption, malformed UTF-8 rejection, off-caller document reads, round-trip text, and null provider handling (14-31).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; thread assertion is an explicit provider contract.",
+      "proposal": "Keep unchanged.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/transfer/CodexImportWorkflowTest.kt",
+      "lines": 138,
+      "read_complete": true,
+      "keep": "Protects snapshot-first import, invalid-document atomicity, bounded concurrency, ordered progress, cancellation, retry target retention, overall timeout, and no partial collection (36-118).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; exact 5,000/120,000 ms values are virtual scheduler time.",
+      "proposal": "Keep unchanged.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/transfer/CodexTransferServiceTest.kt",
+      "lines": 198,
+      "read_complete": true,
+      "keep": "Protects reorder preservation, typed storage failures, durable-before-cache saves, snapshot round trip, invalid/missing outcomes, and post-commit cache failure handling (26-179).",
+      "redundancy": "None proven; VM tests cover user-facing orchestration while this covers service boundaries.",
+      "flakiness": "None observed.",
+      "proposal": "Keep unchanged.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/creator/CreatorFollowsViewModelTest.kt",
+      "lines": 91,
+      "read_complete": true,
+      "keep": "Protects refresh isolation, latest-post recording, unfollow/toggle persistence, cancellation, and preservation of durable results (32-88).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; virtual delays and explicit cleanup.",
+      "proposal": "Keep unchanged.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/creator/CreatorOpeningWorkflowTest.kt",
+      "lines": 93,
+      "read_complete": true,
+      "keep": "Protects authoritative creator order, legacy hydration, provider failure/timeout, cancellation propagation, unavailable providers, and source-specific deep-link queries (26-67).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; fake HTTP/provider contracts are deterministic.",
+      "proposal": "Keep unchanged.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/creator/CreatorProfileActionPresentationTest.kt",
+      "lines": 243,
+      "read_complete": true,
+      "keep": "Protects capability-gated labels, upload-query requirements, exact Hitomi identity validation, legacy fallback, deduplication, and dead-action suppression (22-219).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; pure presentation/model assertions.",
+      "proposal": "Keep unchanged.",
+      "disposition": "keep"
+    }
+  ],
+  "top_findings": [
+    "All 31 assigned files were read completely; manifest byte counts, line counts, and SHA-256 values matched exactly.",
+    "Most coverage is focused and meaningful; no test should be removed for redundancy.",
+    "Primary concrete flakiness risk is real-time snackbar polling in CodexCommandHostTest.kt:41,43,46,53-54.",
+    "Secondary UI fragility is coordinate/timing-based ordering and scrolling in FollowedCodexFiltersTest.kt:58-74 and SaveToCodexSheetTest.kt:76-87.",
+    "Robolectric SDK-annotation-only changes are non-blocking and deferred; SavedSearches synchronization changes remain explicitly deferred."
+  ]
+}

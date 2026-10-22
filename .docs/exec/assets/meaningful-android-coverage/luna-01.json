@@ -1,0 +1,363 @@
+{
+  "reader": "luna-01",
+  "assigned_count": 35,
+  "completed_count": 35,
+  "files": [
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/codex/CodexCollectionFiltersTest.kt",
+      "lines": 113,
+      "read_complete": true,
+      "keep": "Protects composed source, animated, duration, language, full-color, ordering, and capability filters.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/codex/CodexSaveRelevanceTest.kt",
+      "lines": 85,
+      "read_complete": true,
+      "keep": "Protects relevance normalization, required/OR groups, deduplication, typed identity, exclusions, and raw-tag fallback.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/codex/FollowedCodexTest.kt",
+      "lines": 35,
+      "read_complete": true,
+      "keep": "Protects source identity, author alternatives, source intersection, and empty-selection semantics.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/feed/FeedPageDemandTest.kt",
+      "lines": 150,
+      "read_complete": true,
+      "keep": "Protects bounded restoration paging, continuation, failure pause, exhaustion, duplicate suppression, pending resolution, query/refresh/scroll resets, and filtered tails.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/logic/AppLogicArchitectureTest.kt",
+      "lines": 135,
+      "read_complete": true,
+      "keep": "Protects platform-free module boundaries, provider independence, moved owners, quality-gate wiring, and shared media policy.",
+      "redundancy": "Intentional source-text architecture guard; it mirrors declarations by design (12-50, 54-95).",
+      "flakiness": "Root discovery depends on an ancestor containing settings.gradle.kts (9-10); none observed in Gradle execution.",
+      "proposal": "Keep; only revisit if IDE/non-Gradle invocation is required.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/media/DurationDecisionProjectionTest.kt",
+      "lines": 26,
+      "read_complete": true,
+      "keep": "Protects bounded incoming-key reconciliation and rejects whole-feed iteration.",
+      "redundancy": "None proven.",
+      "flakiness": "None; intentional 1k/10k/50k allocation cost.",
+      "proposal": "Keep; do not weaken the boundedness guard.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/media/DurationDemandSchedulerTest.kt",
+      "lines": 142,
+      "read_complete": true,
+      "keep": "Protects deterministic priority/FIFO behavior, deduplication, promotion, consumer release, bounded eviction, and lifecycle/scroll gates.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/media/DurationFilterReadinessTest.kt",
+      "lines": 66,
+      "read_complete": true,
+      "keep": "Protects candidate/pending accounting and ensures inactive filters do not block paging.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/media/MediaDurationStateTest.kt",
+      "lines": 120,
+      "read_complete": true,
+      "keep": "Protects acquisition precedence, pending recovery, unsupported settlement, stable opaque fingerprints, and identity invalidation.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/media/MediaStorageBreakdownTest.kt",
+      "lines": 35,
+      "read_complete": true,
+      "keep": "Protects exact byte totals, zero-safe percentages, category legends, and long-size arithmetic.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/media/Mp4DurationParserTest.kt",
+      "lines": 110,
+      "read_complete": true,
+      "keep": "Protects head/tail windows, truncation, missing metadata, malformed timescale, and version-one overflow handling.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/media/PostMediaPolicyTest.kt",
+      "lines": 125,
+      "read_complete": true,
+      "keep": "Protects media-kind detection, animated/ugoira policy, duration bucket boundaries, labels, and post-resolution duration preservation.",
+      "redundancy": "Some intentional overlap with SearchVisibilityFiltersTest duration cases, but unit versus integration coverage is distinct.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/media/VideoQualityPolicyTest.kt",
+      "lines": 41,
+      "read_complete": true,
+      "keep": "Protects network/default quality selection, MIME propagation, export blocking, offline media, and unavailable resolutions.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/media/WebmDurationParserTest.kt",
+      "lines": 108,
+      "read_complete": true,
+      "keep": "Protects timestamp scaling, element ordering, truncation, missing info, NaN, and overflow handling.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/post/PostPresentationTest.kt",
+      "lines": 41,
+      "read_complete": true,
+      "keep": "Protects absent/blank/id-like title suppression and meaningful trimming.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/post/PostTagSelectionTest.kt",
+      "lines": 28,
+      "read_complete": true,
+      "keep": "Protects provider-equivalent canonical matching and facet/namespace selection identity.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/recommend/TrainingTagsTest.kt",
+      "lines": 98,
+      "read_complete": true,
+      "keep": "Protects tag-facet filtering, native Pixiv raw tags, query affinity, and typed suggestion filtering.",
+      "redundancy": "Recommendation and training assertions intentionally cover both public projections.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/related/RelatedFeedProjectionTest.kt",
+      "lines": 71,
+      "read_complete": true,
+      "keep": "Protects shelf placement after visible seeds, hidden-seed anchoring, canonical/grid mapping, and visibility advancement.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/related/RelatedPostsStateTest.kt",
+      "lines": 156,
+      "read_complete": true,
+      "keep": "Protects retained liked seeds across loading/empty/failure, stale request rejection, page selection, promotion, duplicate filtering, and retained-page cleanup.",
+      "redundancy": "Intentional integration with SearchVisibilityFilters; not redundant with its standalone filter tests.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/search/FeedMediaLifecycleTest.kt",
+      "lines": 75,
+      "read_complete": true,
+      "keep": "Protects stable visibility leasing, simultaneous sibling playback, lifecycle stop, clipping, and bounded decode sizing.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; preserve simultaneous-autoplay assertions.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/search/SearchScopedInputPolicyTest.kt",
+      "lines": 120,
+      "read_complete": true,
+      "keep": "Protects all scope aliases, polarity, exact namespace resolution, unified blocking, unsupported-scope messaging, and source-term removal.",
+      "redundancy": "Distinct parser/policy coverage from SearchDraftReducer integration cases.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/search/SearchVisibilityFiltersTest.kt",
+      "lines": 320,
+      "read_complete": true,
+      "keep": "Protects like/save/watch filters, retained liked posts, animated/duration policies, external duration metadata, full-range behavior, and favorite grouping.",
+      "redundancy": "Some intentional overlap with related-state retention tests; behavior paths differ.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/search/TagSuggestionRankingTest.kt",
+      "lines": 115,
+      "read_complete": true,
+      "keep": "Protects exact/prefix/alternate ranking, stable provider order, unified/trending interleaving, null counts, ties, and limits.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/search/state/SearchDraftReducerTest.kt",
+      "lines": 365,
+      "read_complete": true,
+      "keep": "Protects draft reset/clear, mode history, temporary sources, tag preparation, OR groups, provider validation, filters, scoped terms, restoration, taxonomy changes, and rejection atomicity.",
+      "redundancy": "Broad reducer contract coverage; no removable duplication proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/search/state/SearchHistoryTest.kt",
+      "lines": 51,
+      "read_complete": true,
+      "keep": "Protects scroll anchors, bounded history, identical-query suppression, undo consumption, and execution gating.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/search/state/SearchScrollRestorationTest.kt",
+      "lines": 36,
+      "read_complete": true,
+      "keep": "Protects exhaustion gating, loading/failure exclusion, and one-shot persistence acknowledgment.",
+      "redundancy": "Distinct pure-state contract from SearchStateContract restoration transitions.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/search/state/SearchStateContractTest.kt",
+      "lines": 458,
+      "read_complete": true,
+      "keep": "Protects immutable result resolution, loading/retry/paging, provider status merging, stale cancellation, viewer navigation context, restoration, and stale scroll acknowledgments.",
+      "redundancy": "Large but coherent reducer contract; no specific redundant case proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; preserve cancellation and restoration cases.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/statistics/StatisticsProjectionTest.kt",
+      "lines": 150,
+      "read_complete": true,
+      "keep": "Protects codex ranking, denominator semantics, deduplication, source/tag percentages, deterministic limits, null rankings, and duration formatting.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/ui/AdaptiveLayoutPolicyTest.kt",
+      "lines": 20,
+      "read_complete": true,
+      "keep": "Protects exact navigation-rail, column, and viewer-panel breakpoints plus upper bounds.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/androidTest/assets/animated/two-frame.webp.b64",
+      "lines": "1 line; 189 bytes base64; sha256 e03aea10652a69737ff20ddd3688bf1dfe04a7bd17fc5bd60755ed2f3210387b",
+      "read_complete": true,
+      "keep": "Decoded successfully to a 140-byte RIFF/WebP VP8X animated fixture with ANIM metadata and two frames; preserves the animated decoder consumer contract.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; retain manifest hash and decoded-byte contract.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/FileProviderBoundaryDeviceTest.kt",
+      "lines": 157,
+      "read_complete": true,
+      "keep": "Protects FileProvider authority/roots, installer grants, exact resolver bytes, import/export URI carriers, and rejection outside declared roots.",
+      "redundancy": "Lines 70-96 manually rebuild the same export Intent shape as production TheoriaApp export code, so that case can pass if production wiring regresses.",
+      "flakiness": "None observed; UUID fixtures isolate files.",
+      "proposal": "Exercise the production export-intent path or extract a shared builder; this touches runtime code and is deferred for PR #27.",
+      "disposition": "DEFERRED"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/MainActivityIntentFilterDeviceTest.kt",
+      "lines": 91,
+      "read_complete": true,
+      "keep": "Protects every supported external host/scheme combination and JSON import MIME/scheme combination, plus negative matches.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; package-scoped resolver lookup is deterministic.",
+      "proposal": "Keep; no change.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/TheoriaAppContainerDeviceTest.kt",
+      "lines": 171,
+      "read_complete": true,
+      "keep": "Protects stable application container identity, configuration retention, activity recreation payload retention, payload precedence/clearing, and single-task retirement.",
+      "redundancy": "None proven.",
+      "flakiness": "Manual polling with Thread.sleep(25ms) and a 20s deadline (155-168) can race asynchronous AppShell clearing and adds long failure latency.",
+      "proposal": "Replace the bespoke sleep loop with an idling/resource-backed condition or a bounded framework wait while retaining the exact clearing assertions.",
+      "disposition": "INDEPENDENT"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/TheoriaAppSmokeTest.kt",
+      "lines": 40,
+      "read_complete": true,
+      "keep": "Protects resumed activity and rendering of all top-level navigation semantics.",
+      "redundancy": "None proven.",
+      "flakiness": "Readiness waits only for a semantics node to exist (28-33), then immediately asserts display; a node can exist before placement.",
+      "proposal": "Wait for the Search node to be displayed/placed, not merely present, before asserting the five destinations.",
+      "disposition": "INDEPENDENT"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/journeys/AppJourneyFixture.kt",
+      "lines": 113,
+      "read_complete": true,
+      "keep": "Protects isolated debug package identity, real screen/container wiring, deterministic provider fixtures, cold graph recreation, lifecycle cleanup, and local fixture storage.",
+      "redundancy": "Shared fixture setup is intentional infrastructure for journey tests.",
+      "flakiness": "Initial launch readiness waits only for a Search semantics node to exist (87-90); the fixed 15s bound can race placement/startup.",
+      "proposal": "Use displayed/placed Search readiness in launch while retaining the explicit debug package isolation check at line 45.",
+      "disposition": "INDEPENDENT"
+    }
+  ],
+  "top_findings": [
+    "All 35 assigned files were read completely; manifest bytes, line counts, and SHA-256 values matched.",
+    "FileProviderBoundaryDeviceTest.kt lines 70-96 manually mirrors production export Intent construction; this is a meaningful coverage gap and should be deferred because fixing it may touch runtime code.",
+    "TheoriaAppContainerDeviceTest.kt lines 155-168 uses bespoke sleep polling; TheoriaAppSmokeTest.kt lines 28-34 and AppJourneyFixture.kt lines 87-90 wait for node presence rather than displayed placement.",
+    "No assigned test weakens migration, restoration, cancellation, filtering, simultaneous autoplay, package isolation, or Android 16/17 safeguards."
+  ]
+}

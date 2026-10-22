@@ -1,8 +1,8 @@
 package com.theoriacodex.app
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.lifecycle.Lifecycle
 import org.junit.Assert.assertEquals
@@ -23,13 +23,10 @@ class TheoriaAppSmokeTest {
         )
 
         // The app container and startup workflow are initialized asynchronously after the
-        // Activity reaches RESUMED. Wait for the shell semantics tree instead of racing the
+        // Activity reaches RESUMED. Wait for visible shell navigation instead of racing the
         // startup surface on a cold CI emulator.
         composeRule.waitUntil(timeoutMillis = 30_000) {
-            composeRule
-                .onAllNodesWithContentDescription("Search")
-                .fetchSemanticsNodes()
-                .isNotEmpty()
+            composeRule.onNodeWithContentDescription("Search").isDisplayed()
         }
         composeRule.onNodeWithContentDescription("Search").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Recents").assertIsDisplayed()

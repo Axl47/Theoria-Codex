@@ -1,0 +1,264 @@
+{
+  "reader": "luna-06",
+  "assigned_count": 25,
+  "completed_count": 25,
+  "files": [
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/LiveSearchCoordinatorRouteTest.kt",
+      "lines": 159,
+      "read_complete": true,
+      "keep": "Cancellation propagation, strict source filtering, and opt-in seeded live route checks (48-156).",
+      "redundancy": "None proven.",
+      "flakiness": "Conditional external-provider flakiness: opt-in network calls, mutable results, and empty-result assertions (88-156).",
+      "proposal": "Keep; retain outside deterministic host gates as an opt-in live-provider lane.",
+      "disposition": "keep/live-lane"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/LiveSearchCoordinatorRouteTestFixture.kt",
+      "lines": 375,
+      "read_complete": true,
+      "keep": "Shared coordinator construction, credential filtering, cancellation probe, URL sanitization, and source-case selection (50-273).",
+      "redundancy": "None proven; shared fixture reduces duplication among live tests.",
+      "flakiness": "Live helper uses real HTTP with fixed 8s/12s timeouts and zero retries (122-127); provider configuration/data can vary.",
+      "proposal": "Keep; document/use only in explicitly opt-in live validation.",
+      "disposition": "keep/live-lane"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/LiveSearchCoordinatorRouteTestHitomiTest.kt",
+      "lines": 255,
+      "read_complete": true,
+      "keep": "Hitomi typed/global search, taxonomy, autocomplete, creator routing, animated WebP, and MP4 contracts (48-252).",
+      "redundancy": "None proven.",
+      "flakiness": "High conditional provider flakiness: exact gallery IDs, 44-item expectation, taxonomy, media URLs, and live Range probes (169-252).",
+      "proposal": "Keep as opt-in live coverage; do not require it in host-only CI.",
+      "disposition": "keep/live-lane"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/LiveSearchCoordinatorRouteTestMediaTest.kt",
+      "lines": 96,
+      "read_complete": true,
+      "keep": "Real-source downloadable-media policy and HTTP status/header probe (48-93).",
+      "redundancy": "None proven.",
+      "flakiness": "External network/provider availability and mutable media URLs (48-93).",
+      "proposal": "Keep as opt-in live media coverage; no host-gate change.",
+      "disposition": "keep/live-lane"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/RelatedPostsSearchViewModelTest.kt",
+      "lines": 69,
+      "read_complete": true,
+      "keep": "Like/unlike related shelf lifecycle, canonical-result preservation, loader request identity, and viewer context (25-57).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; runTest and deterministic fake loader.",
+      "proposal": "Keep; no change.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/RequestOwnershipSearchViewModelTest.kt",
+      "lines": 421,
+      "read_complete": true,
+      "keep": "Restoration gating, timeout recovery, stale-request rejection, autocomplete generations, cancellation, temporary scopes, paging ownership, retries, and environment reconciliation (68-419).",
+      "redundancy": "None proven; cases cover distinct request-owner transitions.",
+      "flakiness": "None observed; virtual dispatcher/time and deferred gates are deterministic.",
+      "proposal": "Keep; no change.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/ScrollPersistenceSearchViewModelTest.kt",
+      "lines": 346,
+      "read_complete": true,
+      "keep": "Scroll reset/acknowledgement, debounce coalescing, durable-vs-temporary keys, clear flushing, recreation, reentry, and pending-restoration protection (68-340).",
+      "redundancy": "None proven.",
+      "flakiness": "Potential host scheduling sensitivity in cross-thread clear assertion using 100ms/5s wall-clock waits (231-245).",
+      "proposal": "Independent test-only follow-up: replace the 100ms blocking assertion with deterministic admission/latch signaling while retaining a bounded safety guard.",
+      "disposition": "keep; independent/deferred"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchAnimationFilterRestoreTest.kt",
+      "lines": 38,
+      "read_complete": true,
+      "keep": "Per-source animation filter isolation and unified-mode non-inheritance (13-37).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchApplyScrollTest.kt",
+      "lines": 137,
+      "read_complete": true,
+      "keep": "Apply visibility, result replacement reset, repeated same-query reset, animated-only reset, and page append anchor preservation (41-135).",
+      "redundancy": "The two parameterized-style tests intentionally cover ordinary and animated filters; no redundancy proven.",
+      "flakiness": "Compose gesture/semantics and scroll geometry are UI-sensitive (91-135), but assertions use a 1px tolerance.",
+      "proposal": "Keep; no change absent reproducible failures.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchCardMediaCountTest.kt",
+      "lines": 18,
+      "read_complete": true,
+      "keep": "Watched-position badge, null progress, and clamping behavior (8-16).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchCoordinatorFixtures.kt",
+      "lines": 37,
+      "read_complete": true,
+      "keep": "Centralized deterministic SearchCoordinator construction with injectable repositories, clock, store, and dispatcher (15-36).",
+      "redundancy": "None proven; this is shared setup.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchCoordinatorTest.kt",
+      "lines": 685,
+      "read_complete": true,
+      "keep": "Coordinator execution, partial failures, continuation tokens, source scopes, persistence, autocomplete, faceted suggestions, caching, cancellation, tag counts, trending, and adapter contracts (49-486, 513-685).",
+      "redundancy": "No proven duplicate behavior; TestAdapter/FacetedAdapter provide controlled provider contracts rather than mirroring coordinator internals.",
+      "flakiness": "None observed; coroutine tests use runTest and injected clock.",
+      "proposal": "Keep; no change.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchExecutionBookkeepingTest.kt",
+      "lines": 72,
+      "read_complete": true,
+      "keep": "Failed-page token retention/retry and history/statistics accounting for failed, partial, and empty executions (19-70).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; deterministic adapters and in-memory repositories.",
+      "proposal": "Keep; no change.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchFacetUiTest.kt",
+      "lines": 79,
+      "read_complete": true,
+      "keep": "User-facing facet labels, chip polarity/namespace, typed suggestion metadata, translation display, and cache-provenance hiding (13-77).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; pure formatting contracts.",
+      "proposal": "Keep; no change.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchInputSubmissionTest.kt",
+      "lines": 146,
+      "read_complete": true,
+      "keep": "Undo enablement/order, idle gating, IME eligibility, blocked/empty input rejection, commit clearing, and focus-refresh ownership (39-144).",
+      "redundancy": "None proven.",
+      "flakiness": "Rendered-text verification relies on a 2s wall-clock Compose wait (130-139), sensitive to heavily loaded hosts.",
+      "proposal": "Independent test-only follow-up: prefer Compose idling/state-driven synchronization after IME commit, retaining a bounded failure diagnostic.",
+      "disposition": "keep; independent/deferred"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchLoadingResponsivenessTest.kt",
+      "lines": 74,
+      "read_complete": true,
+      "keep": "Results become visible before slow history bookkeeping; same-query refresh retains content while changed query clears retention (22-72).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; deferred work is controlled by CompletableDeferred and test scheduler.",
+      "proposal": "Keep; no change.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchPageRecoveryTest.kt",
+      "lines": 48,
+      "read_complete": true,
+      "keep": "Retry resumes failed page with preserved healthy results and avoids restarting root search (17-46).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; deterministic token and root-call counters.",
+      "proposal": "Keep; no change.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchRefreshPresentationTest.kt",
+      "lines": 89,
+      "read_complete": true,
+      "keep": "Page error preserves card node and exposes Retry; refresh preserves node identity until replacement (37-87).",
+      "redundancy": "None proven.",
+      "flakiness": "Compose node-identity assertions are UI-sensitive (51-59, 78-87), but behavior is intentional and deterministic under the rule.",
+      "proposal": "Keep; no change absent reproducible failures.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchSavedQueryCodecTest.kt",
+      "lines": 30,
+      "read_complete": true,
+      "keep": "Saved-query round trip preserves grouped positive terms, exclusions, and query settings (13-28).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchScreenMediaBehaviorTest.kt",
+      "lines": 152,
+      "read_complete": true,
+      "keep": "Page-specific preview selection, source autoplay policy, declared media count, aspect fallback, progressive fallback order, stable resource-safe tags, and card supporting-content rules (16-133).",
+      "redundancy": "None proven; each source/media policy assertion is distinct.",
+      "flakiness": "None observed; pure policy/projection tests.",
+      "proposal": "Keep; preserve source-specific poster-only and simultaneous-autoplay contracts.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchScrollResetTest.kt",
+      "lines": 89,
+      "read_complete": true,
+      "keep": "UI-thread close draining an admitted reset and same-position re-admission after reset (29-87).",
+      "redundancy": "None proven; this covers controller-level concurrency distinct from ViewModel persistence tests.",
+      "flakiness": "Cross-thread executor plus 5s timeouts and a 100ms blocked-close assertion depend on host scheduling (29-66).",
+      "proposal": "Independent test-only follow-up: use explicit latches/admission state for the ordering proof, with one bounded guard rather than timing-based blocking detection.",
+      "disposition": "keep; independent/deferred"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchScrollRestorationTest.kt",
+      "lines": 144,
+      "read_complete": true,
+      "keep": "Delayed-page anchor restoration, failed-page fallback, hidden-anchor predecessor, deliberate-drag supersession, and no replay after append (53-116).",
+      "redundancy": "None proven.",
+      "flakiness": "Compose gesture/layout assertions are UI-sensitive (53-116), but no explicit sleeps or wall-clock waits are used.",
+      "proposal": "Keep; no change absent reproducible failures.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchSourcePickerTest.kt",
+      "lines": 141,
+      "read_complete": true,
+      "keep": "Source selection, long-press temporary Multi-Search, selection semantics, vertical layout, unified source highlighting, R34 submenu navigation, and back navigation (38-128).",
+      "redundancy": "None proven.",
+      "flakiness": "Pointer event-time thresholds (77-88) and exact content descriptions/layout bounds (64-96) are UI-sensitive, but event timing is deterministic.",
+      "proposal": "Keep; no change absent reproducible failures.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchSuggestionCoordinatorTest.kt",
+      "lines": 172,
+      "read_complete": true,
+      "keep": "Fresh/cached trending order, fast-provider incremental update, cache hit, duplicate-prefix suppression, parallel slowest-provider timing, and timeout fallback (15-170).",
+      "redundancy": "None proven; cache, incremental, parallel, and timeout behaviors are separate.",
+      "flakiness": "None observed; delays run on virtual test time.",
+      "proposal": "Keep; no change.",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchTermCountCoordinatorTest.kt",
+      "lines": 96,
+      "read_complete": true,
+      "keep": "Facet/namespace-preserving counts, fresh-cache expiry, bounded concurrency, deadline behavior, and cancellation propagation (25-85).",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; 20s delays and 4s deadline are virtual StandardTestDispatcher time.",
+      "proposal": "Keep; no change.",
+      "disposition": "keep"
+    }
+  ],
+  "top_findings": [
+    "All 25 assigned files were read completely; manifest byte counts, line counts, and SHA-256 values matched.",
+    "The four LiveSearchCoordinator live tests intentionally depend on external providers and mutable media/search data (LiveSearchCoordinatorRouteTest.kt:88-156; LiveSearchCoordinatorRouteTestHitomiTest.kt:48-252; LiveSearchCoordinatorRouteTestMediaTest.kt:48-93). Keep them opt-in and out of deterministic host gates.",
+    "The clearest independent flakiness risk is wall-clock/cross-thread synchronization in ScrollPersistenceSearchViewModelTest.kt:231-245, SearchScrollResetTest.kt:29-66, and SearchInputSubmissionTest.kt:130-139. Prefer deterministic latches or Compose idling over timing-based ordering checks.",
+    "No test redundancy or implementation-mirroring was proven across the assigned files; shared fixtures and adapters are purposeful seams.",
+    "No assigned file requires a runtime, dependency, SDK, workflow, safety, CI-wrapper, or production change."
+  ]
+}

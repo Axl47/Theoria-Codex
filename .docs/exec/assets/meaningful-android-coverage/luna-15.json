@@ -1,0 +1,416 @@
+{
+  "reader": "luna-15",
+  "assigned_count": 40,
+  "completed_count": 40,
+  "sha256_verified": "All 40 manifest hashes matched; all assigned files are text (no binary fixtures).",
+  "files": [
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/pixiv/PixivAuthApiTest.kt",
+      "lines": 99,
+      "read_complete": true,
+      "keep": "PKCE authorization defaults, token parsing/expiry, redirect URI, 401 auth-expired mapping, and transport-to-network mapping (18-97).",
+      "redundancy": "None observed.",
+      "flakiness": "None observed; deterministic fake HTTP and fixed clock.",
+      "proposal": "Keep; optional independent test for malformed token payload or non-401 HTTP mapping.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/pixiv/PixivSourceAdapterTest.kt",
+      "lines": 639,
+      "read_complete": true,
+      "keep": "Covers translated tags, bounded/deduplicated related posts, credential requirement, one-time refresh retry, pagination, null tolerance, creator metadata, ugoira duration, creator pagination, tag normalization, and single-/multi-page progressive media (23-550).",
+      "redundancy": "No material redundancy; related tests protect separate adapter contracts.",
+      "flakiness": "None observed; fixed responses, zero request interval, and deterministic queues.",
+      "proposal": "Independent test hardening: assert the complete ugoira request sequence/count in QueueHttpClient (320-364), not only the last URL.",
+      "disposition": "KEEP; TEST-HARDENING OPTIONAL"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/pixiv/PixivTokenCoordinatorTest.kt",
+      "lines": 99,
+      "read_complete": true,
+      "keep": "Concurrent expired-token callers share one refresh and persisted winner; auth-failure callers reuse a concurrent winner (18-60).",
+      "redundancy": "None; two scenarios cover distinct coordinator paths.",
+      "flakiness": "None observed; runTest and coordinator serialization make ordering-independent assertions.",
+      "proposal": "Keep; preserve concurrency coverage.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/rule34/Rule34GenProviderJourneyTest.kt",
+      "lines": 64,
+      "read_complete": true,
+      "keep": "Provider continuation, card deduplication, retry after 503, detail parsing, missing-post handling, duration/tags, and exact transcript exhaustion (18-53).",
+      "redundancy": "None observed.",
+      "flakiness": "None; ScriptedHttpClient enforces deterministic order, headers, and exhaustion.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/rule34/Rule34GenSourceAdapterTest.kt",
+      "lines": 99,
+      "read_complete": true,
+      "keep": "Search card parsing/continuation and direct MP4, preview, duration, and canonical-tag extraction (17-46).",
+      "redundancy": "None material; fixture HTML is the adapter contract.",
+      "flakiness": "None; static HTML and fake client.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/rule34/Rule34GroupedSearchMetadataTest.kt",
+      "lines": 148,
+      "read_complete": true,
+      "keep": "Grouped-query hydration, real detail metadata, continuation, local exclusion filtering, sparse-card hydration, and ordinary-search non-hydration (19-85).",
+      "redundancy": "The false/true Gen/Video matrix repeats assertions deliberately to verify the shared contract across two providers; not implementation mirroring.",
+      "flakiness": "None; deterministic in-memory HTTP transcript.",
+      "proposal": "Keep; do not collapse the provider matrix.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/rule34/Rule34PahealSourceAdapterTest.kt",
+      "lines": 141,
+      "read_complete": true,
+      "keep": "RSS search/next link, autocomplete JSON, post metadata/tag/dimensions, and cancellation propagation (20-94).",
+      "redundancy": "None material.",
+      "flakiness": "None; fixed XML/HTML and identity-checked CancellationException.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/rule34/Rule34VideoSourceAdapterTest.kt",
+      "lines": 248,
+      "read_complete": true,
+      "keep": "Search pagination, best-resolution MP4 selection, preview/tags/duration, trending fallback, and cancellation for default/fallback/autocomplete paths (19-127).",
+      "redundancy": "Cancellation tests share a helper pattern but cover distinct APIs and fallback paths; no removal recommended.",
+      "flakiness": "None; queue and cancellation clients are deterministic.",
+      "proposal": "Optional independent assertion of queue exhaustion/request count in QueueHttpClient (140-162).",
+      "disposition": "KEEP; TEST-HARDENING OPTIONAL"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/rule34/Rule34XxxSourceAdapterTest.kt",
+      "lines": 165,
+      "read_complete": true,
+      "keep": "Credential query attachment, canonical URL, autocomplete counts, full-page pagination despite malformed record, malformed optional values, and auth-required failure (21-152).",
+      "redundancy": "None material.",
+      "flakiness": "None; static JSON and fake credentials/client.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/testing/FakeInfrastructure.kt",
+      "lines": 96,
+      "read_complete": true,
+      "keep": "Reusable deterministic HTTP/credential doubles, recorded requests, and compare-and-commit Pixiv refresh semantics (11-95).",
+      "redundancy": "Shared support code; no duplicate implementation found.",
+      "flakiness": "None in intended single-test-thread use.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/testing/ScriptedHttpClient.kt",
+      "lines": 44,
+      "read_complete": true,
+      "keep": "Strict offline GET transcript with endpoint/query/header checks, injected failures, and exhaustion assertion (8-35).",
+      "redundancy": "None; complements permissive FakeHttpClient.",
+      "flakiness": "None; deterministic FIFO protocol.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-sources/src/test/resources/hitomi/2026-07-10/README.md",
+      "lines": 12,
+      "read_complete": true,
+      "keep": "Documents capture date, endpoint-to-fixture mapping, sanitized protocol scope, and network-independent refresh policy (1-12).",
+      "redundancy": "None.",
+      "flakiness": "None; documentation only.",
+      "proposal": "Keep; refresh only for deliberate protocol investigation.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-sources/src/test/resources/hitomi/2026-07-10/artist-kio.json",
+      "lines": 1,
+      "read_complete": true,
+      "keep": "Artist tag-index autocomplete fixture with counts and artist type (1).",
+      "redundancy": "None.",
+      "flakiness": "None; static fixture.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-sources/src/test/resources/hitomi/2026-07-10/artist-najar.nozomi.hex",
+      "lines": 1,
+      "read_complete": true,
+      "keep": "Full 116-byte hexadecimal Nozomi artist list payload (1; 233 text bytes).",
+      "redundancy": "None.",
+      "flakiness": "None; static encoded fixture.",
+      "proposal": "Keep unchanged; preserve exact bytes/hash.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-sources/src/test/resources/hitomi/2026-07-10/gallery-4042375.js",
+      "lines": 1,
+      "read_complete": true,
+      "keep": "Full animated artist-cg gallery metadata, 44 WebP files, hashes, dimensions, tags, artist, and dates (1).",
+      "redundancy": "None; provider protocol fixture.",
+      "flakiness": "None; static captured payload.",
+      "proposal": "Keep unchanged; do not refresh absent a protocol investigation.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-sources/src/test/resources/hitomi/2026-07-10/gallery-7231.js",
+      "lines": 1,
+      "read_complete": true,
+      "keep": "Full two-file anime/video gallery metadata including videofilename, dimensions, tags, and dates (1).",
+      "redundancy": "None.",
+      "flakiness": "None; static captured payload.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-sources/src/test/resources/hitomi/2026-07-10/gg-current-inverted-shape.js",
+      "lines": 14,
+      "read_complete": true,
+      "keep": "Current shard selector cases, hash-to-path function, and captured base path variant (1-14).",
+      "redundancy": "Paired structural variant with gg-shape.js; both are needed protocol cases.",
+      "flakiness": "None; static JavaScript fixture.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-sources/src/test/resources/hitomi/2026-07-10/gg-shape.js",
+      "lines": 14,
+      "read_complete": true,
+      "keep": "Alternate shard selector cases, hash-to-path function, and captured base path (1-14).",
+      "redundancy": "Paired structural variant with gg-current-inverted-shape.js; deliberate coverage.",
+      "flakiness": "None; static JavaScript fixture.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-sources/src/test/resources/hitomi/2026-07-10/global-tags.json",
+      "lines": 1,
+      "read_complete": true,
+      "keep": "Global tag index fixture covering duplicate tag names with different categories/counts and character/artist/series types (1).",
+      "redundancy": "None.",
+      "flakiness": "None; static fixture.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-stubs/src/main/kotlin/com/theoriacodex/stubs/JsonStubSourceAdapter.kt",
+      "lines": 137,
+      "read_complete": true,
+      "keep": "Stub search/trending/autocomplete, blank-prefix handling, quick-query sort mapping, source validation, two-page resolution, scenario delay/failure behavior, and default capabilities (18-135).",
+      "redundancy": "None material; adapter is the shared stub contract.",
+      "flakiness": "The intentional SLOW_NETWORK preset uses a 900 ms delay (96-98); this is deterministic but can add wall-clock cost outside virtual-time tests.",
+      "proposal": "DEFERRED: any delay-injection/runtime change touches PR-27 runtime behavior. Preserve cancellation and failure semantics.",
+      "disposition": "KEEP; DEFER COST CHANGE"
+    },
+    {
+      "path": "core-stubs/src/main/kotlin/com/theoriacodex/stubs/StubAdapterRegistry.kt",
+      "lines": 35,
+      "read_complete": true,
+      "keep": "Eager adapter construction for every SourceKey, lookup, enumeration, and unified orchestrator wiring (8-33).",
+      "redundancy": "None.",
+      "flakiness": "None; deterministic SourceKey.entries mapping.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-stubs/src/main/kotlin/com/theoriacodex/stubs/StubFixtureLoader.kt",
+      "lines": 119,
+      "read_complete": true,
+      "keep": "Page-token routing, source-folder mapping, resource loading, Gson conversion, domain mapping, trending conversion, and failure/empty scenario DTOs (15-119).",
+      "redundancy": "Schema DTOs intentionally mirror fixture JSON; no avoidable duplication proven.",
+      "flakiness": "None observed; deterministic classpath resources.",
+      "proposal": "Keep unchanged; preserve all source-folder mappings and fixture contracts.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-stubs/src/main/kotlin/com/theoriacodex/stubs/StubRuntime.kt",
+      "lines": 8,
+      "read_complete": true,
+      "keep": "Volatile scenario preset enables safe runtime scenario switching (3-7).",
+      "redundancy": "None.",
+      "flakiness": "None observed.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-stubs/src/main/kotlin/com/theoriacodex/stubs/StubScenario.kt",
+      "lines": 20,
+      "read_complete": true,
+      "keep": "Failure configuration schema and complete NORMAL/PARTIAL_FAILURE/EMPTY_RESULTS/SLOW_NETWORK preset set (5-20).",
+      "redundancy": "None.",
+      "flakiness": "None; enum/data classes only.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/aibooru/search_page_1.json",
+      "lines": 17,
+      "read_complete": true,
+      "keep": "Aibooru first-page pagination and complete post metadata/domain fields (1-17).",
+      "redundancy": "Paired page fixture is required for continuation coverage.",
+      "flakiness": "None; static JSON.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/aibooru/search_page_2.json",
+      "lines": 17,
+      "read_complete": true,
+      "keep": "Aibooru terminal page with distinct dimensions/tags/author/timestamp (1-17).",
+      "redundancy": "None beyond intentional page pair.",
+      "flakiness": "None.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/aibooru/trending_tags.json",
+      "lines": 6,
+      "read_complete": true,
+      "keep": "Aibooru trending tag/type/count fixture (1-6).",
+      "redundancy": "None.",
+      "flakiness": "None.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/gelbooru/search_page_1.json",
+      "lines": 17,
+      "read_complete": true,
+      "keep": "Gelbooru first-page post and continuation token with dimensions, tags, author, timestamp (1-17).",
+      "redundancy": "Intentional page pair.",
+      "flakiness": "None.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/gelbooru/search_page_2.json",
+      "lines": 17,
+      "read_complete": true,
+      "keep": "Gelbooru terminal page with distinct post metadata (1-17).",
+      "redundancy": "None beyond page-pair contract.",
+      "flakiness": "None.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/gelbooru/trending_tags.json",
+      "lines": 6,
+      "read_complete": true,
+      "keep": "Gelbooru trending tag/type/count fixture (1-6).",
+      "redundancy": "None.",
+      "flakiness": "None.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/hitomi/search_page_1.json",
+      "lines": 18,
+      "read_complete": true,
+      "keep": "Hitomi animated gallery fixture with title, dimensions, tags, artist, and continuation (1-18).",
+      "redundancy": "Intentional page pair and complementary gallery fixture.",
+      "flakiness": "None.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/hitomi/search_page_2.json",
+      "lines": 19,
+      "read_complete": true,
+      "keep": "Hitomi anime/video fixture with duration, null author, terminal pagination, and media metadata (1-19).",
+      "redundancy": "None beyond intentional page pair.",
+      "flakiness": "None.",
+      "proposal": "Keep unchanged; preserve duration and null-author edge cases.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/hitomi/trending_tags.json",
+      "lines": 7,
+      "read_complete": true,
+      "keep": "Hitomi tag/female/artist suggestion types and counts (1-7).",
+      "redundancy": "None.",
+      "flakiness": "None.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/iwara/search_page_1.json",
+      "lines": 19,
+      "read_complete": true,
+      "keep": "Iwara video first page with duration, dimensions, media URLs, tags, creator, and continuation (1-19).",
+      "redundancy": "Intentional page pair.",
+      "flakiness": "None.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/iwara/search_page_2.json",
+      "lines": 18,
+      "read_complete": true,
+      "keep": "Iwara terminal video page with distinct dimensions/tags/creator/timestamp (1-18).",
+      "redundancy": "None beyond page-pair contract.",
+      "flakiness": "None.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/iwara/trending_tags.json",
+      "lines": 6,
+      "read_complete": true,
+      "keep": "Iwara trending tag/count fixture (1-6).",
+      "redundancy": "None.",
+      "flakiness": "None.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/nhentai/search_page_1.json",
+      "lines": 17,
+      "read_complete": true,
+      "keep": "nhentai first-page pagination and gallery metadata including dimensions/tags/author (1-17).",
+      "redundancy": "Intentional page pair.",
+      "flakiness": "None.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/nhentai/search_page_2.json",
+      "lines": 17,
+      "read_complete": true,
+      "keep": "nhentai terminal page with distinct gallery metadata (1-17).",
+      "redundancy": "None beyond page-pair contract.",
+      "flakiness": "None.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/nhentai/trending_tags.json",
+      "lines": 6,
+      "read_complete": true,
+      "keep": "nhentai trending tags/counts fixture (1-6).",
+      "redundancy": "None.",
+      "flakiness": "None.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/pixiv/search_page_1.json",
+      "lines": 29,
+      "read_complete": true,
+      "keep": "Pixiv first-page fixture with two posts, continuation, dimensions, tags, authors, URLs, and timestamps (1-29).",
+      "redundancy": "Intentional page-pair fixture; no avoidable duplication.",
+      "flakiness": "None; static JSON.",
+      "proposal": "Keep unchanged.",
+      "disposition": "KEEP"
+    }
+  ],
+  "top_findings": [
+    "All 40 assigned files were read completely in bounded line-numbered chunks; every manifest SHA256 matched.",
+    "Coverage is meaningful and focused around authentication, refresh coordination, pagination, deduplication, metadata hydration, cancellation/error recovery, media selection, and provider protocol parsing.",
+    "No reproducible flakiness was observed. Do not add retries, sleeps, weakened assertions, or lower gates.",
+    "Optional independent test hardening: assert complete request sequences/counts in the Pixiv ugoira queue (PixivSourceAdapterTest.kt:320-364) and Rule34Video queue helper (Rule34VideoSourceAdapterTest.kt:140-162).",
+    "The only cost concern is the intentional 900 ms SLOW_NETWORK delay in JsonStubSourceAdapter.kt:96-98; any runtime/injection change is DEFERRED under PR #27.",
+    "No recommendations touch migrations, Room upgrades, navigation/restoration, membership/filter policy, simultaneous autoplay, package/signing isolation, Android 16/17 behavior, or device infrastructure."
+  ]
+}
