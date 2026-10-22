@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.domain.model.SourceKey
@@ -37,12 +38,14 @@ internal fun SourceSelector(
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     onSourceSelected: (SourceKey?) -> Unit,
+    minimumHeight: Dp = 48.dp,
+    verticalPadding: Dp = 2.dp,
 ) {
     val selectedLabel = selectedSource?.displayName() ?: allSourcesLabel
     Box {
         Row(
             modifier = Modifier
-                .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                .sizeIn(minWidth = 48.dp, minHeight = minimumHeight)
                 .semantics {
                     contentDescription = accessibilityLabel
                 }
@@ -57,7 +60,7 @@ internal fun SourceSelector(
                     role = Role.DropdownList,
                     onClick = { onExpandedChange(true) },
                 )
-                .padding(vertical = 2.dp),
+                .padding(vertical = verticalPadding),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

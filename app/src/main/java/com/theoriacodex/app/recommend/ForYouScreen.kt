@@ -448,6 +448,8 @@ internal fun ForYouSourceSelector(
         expanded = expanded,
         onExpandedChange = onExpandedChange,
         onSourceSelected = onSourceSelected,
+        minimumHeight = 33.dp,
+        verticalPadding = 1.dp,
     )
 }
 

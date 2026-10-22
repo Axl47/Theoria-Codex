@@ -17,6 +17,7 @@
 
 ## Improvements
 
+- Reduce vertical spacing around the For You source dropdown.
 - Reduce vertical spacing around the Search toolbar.
 - Search collections in Save to Codex.
 - Prioritize Save to Codex destinations relevant to the applied search and incoming post tags, with an option to return to library order.
