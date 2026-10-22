@@ -33,7 +33,8 @@
 
 - Resume videos where you left them when revisiting up to five nearby Viewer posts in either direction, until you exit Viewer.
 - Keep the last seek thumbnail visible beneath the spinner while the next frame loads.
-- Label the Codex tab header “Library”.
+- Label the Codex tab header “Codex Library”.
+- Hold a Codex title or Saved section name to open its actions or management sheet.
 - Reduce vertical spacing around the For You source dropdown.
 - Reduce vertical spacing around the Search toolbar.
 - Search collections in Save to Codex.

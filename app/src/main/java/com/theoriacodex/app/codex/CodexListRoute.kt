@@ -34,8 +34,14 @@ internal fun CodexListScreen(
     likesCodexId: String,
     onCleanCodex: (String, Set<String>) -> Unit,
     onMakeAvailableOffline: ((String) -> Unit)? = null,
+    initialActionCodexId: String? = null,
+    onActionsDismissed: () -> Unit = {},
 ) {
-    val state = remember { CodexListUiState(codices) }
+    val state = remember {
+        CodexListUiState(codices).apply {
+            actionTarget = codices.firstOrNull { it.codexId == initialActionCodexId }
+        }
+    }
     val targetId = state.actionTarget?.codexId ?: state.searchSourceTarget?.codexId
         ?: state.tagSelectionTarget?.codex?.codexId
     var retry by remember(targetId) { mutableIntStateOf(0) }
@@ -54,7 +60,13 @@ internal fun CodexListScreen(
         onCleanCodex, onMakeAvailableOffline,
     )
     LaunchedEffect(codices, state.reorderMode) { state.synchronizeCodices(codices) }
-    CodexListContent(presentation, state, actions)
+    if (initialActionCodexId == null) CodexListContent(presentation, state, actions)
+    val hasOverlay = state.actionTarget != null || state.searchSourceTarget != null ||
+        state.tagSelectionTarget != null || state.renameTarget != null ||
+        state.deleteTarget != null || state.cleaningTargetId != null
+    LaunchedEffect(hasOverlay) {
+        if (initialActionCodexId != null && !hasOverlay) onActionsDismissed()
+    }
     CodexListOverlays(presentation, state, actions)
 }
 

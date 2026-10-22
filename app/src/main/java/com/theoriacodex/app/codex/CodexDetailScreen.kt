@@ -106,6 +106,7 @@ fun CodexDetailScreen(
     onBack: () -> Unit,
     onDeleteCodex: () -> Unit,
     isLikesCodex: Boolean,
+    onTitleLongPress: (() -> Unit)? = null,
     customHeader: (@Composable (List<Post>, CodexCollectionFilters, Boolean,
         androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState) -> Unit)? = null,
     customFilters: (@Composable (() -> Unit) -> Unit)? = null,
@@ -216,6 +217,7 @@ fun CodexDetailScreen(
                 customHeader(visiblePosts, filters, durationReadiness.isResolving, gridState)
             } else CodexDetailHeader(
                 codexName = codexName,
+                onTitleLongPress = onTitleLongPress,
                 itemSummary = codexItemSummary(
                     visibleCount = visiblePosts.size,
                     totalCount = posts.size,
@@ -376,6 +378,7 @@ private fun CodexDeleteConfirmationDialog(
 @Composable
 private fun CodexDetailHeader(
     codexName: String,
+    onTitleLongPress: (() -> Unit)?,
     itemSummary: String,
     itemCount: Int,
     editSelection: CodexEditSelection,
@@ -389,6 +392,7 @@ private fun CodexDetailHeader(
 ) {
     SecondaryScreenAppBar(
         title = codexName,
+        onTitleLongPress = onTitleLongPress,
         subtitle = itemSummary,
         onBack = onBack,
     ) {

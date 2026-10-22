@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.components
 
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -37,6 +38,7 @@ fun SecondaryScreenAppBar(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     containerColor: Color = Color.Transparent,
+    onTitleLongPress: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     Surface(
@@ -54,7 +56,12 @@ fun SecondaryScreenAppBar(
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
             }
             Column(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).then(
+                    if (onTitleLongPress != null) Modifier.combinedClickable(
+                        onClick = {}, onLongClick = onTitleLongPress,
+                        onLongClickLabel = "Actions for $title",
+                    ) else Modifier,
+                ),
                 verticalArrangement = Arrangement.spacedBy(1.dp),
             ) {
                 Text(

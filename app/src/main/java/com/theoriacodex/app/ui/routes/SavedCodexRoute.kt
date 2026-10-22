@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.routes
 
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,9 +25,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -59,6 +63,10 @@ internal fun SavedCodexRoute(
     onBack: () -> Unit,
     onOpenCodex: (String) -> Unit,
     onOpenViewer: (String, List<Post>, Int) -> Unit,
+    onOpenCodexActions: (String) -> Unit,
+    onManageFollowed: () -> Unit,
+    onRenameSearch: (String, String) -> Unit,
+    onRemoveSearch: (String) -> Unit,
     resolvePost: suspend (PostId) -> Post?,
 ) {
     val settings = remember(data.settingsRepository) { data.settingsRepository.observeSettings() }
@@ -70,6 +78,17 @@ internal fun SavedCodexRoute(
         data.likesRepository.observeLikes(settings.activeRecommendationProfile().profileId)
     }.collectAsStateWithLifecycle(initialValue = null).value?.size ?: return
     val counts = listOf(likesCount, settings.followedCreators.size, searches.size)
+    var showSearches by remember { mutableStateOf(false) }
+    if (showSearches) {
+        val id = com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID
+        val context = codexFeedFabContext(id)
+        restoreRegistry.state(context)?.let { restore ->
+            com.theoriacodex.app.codex.SavedSearchesManagementSheet(
+                searches, restore, { restoreRegistry.update(context, it) }, onRenameSearch, onRemoveSearch,
+                onDismiss = { showSearches = false },
+            )
+        }
+    }
     val scroll = rememberLazyListState()
     LazyColumn(state = scroll, contentPadding = PaddingValues(vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -88,6 +107,13 @@ internal fun SavedCodexRoute(
                     SavedCodexSection(state, child.codexId, child.name, counts[index], restore,
                         durations, sources, { scroll.isScrollInProgress },
                         { onOpenCodex(child.codexId) },
+                        {
+                            when (child.codexId) {
+                                com.theoriacodex.app.codex.FOLLOWED_CODEX_ID -> onManageFollowed()
+                                com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID -> showSearches = true
+                                else -> onOpenCodexActions(child.codexId)
+                            }
+                        },
                         { posts, position -> onOpenViewer(child.codexId, posts, position) }, resolvePost)
                 }
             }
@@ -106,6 +132,7 @@ private fun SavedCodexSection(
     sources: SourceDependencies,
     parentScrolling: () -> Boolean,
     onOpen: () -> Unit,
+    onLongPress: () -> Unit,
     onOpenViewer: (List<Post>, Int) -> Unit,
     resolvePost: suspend (PostId) -> Post?,
 ) {
@@ -125,7 +152,7 @@ private fun SavedCodexSection(
     val liveOwner = state.followedOwner ?: state.savedSearchOwner
     val feed = liveOwner?.state?.collectAsStateWithLifecycle()?.value
     SavedCodexCarousel(title, count, posts, state.loading, feed?.errors?.isNotEmpty() == true,
-        onOpen, { liveOwner?.retry() }) {
+        onOpen, { liveOwner?.retry() }, onLongPress) {
         LazyRow(state = row, contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             itemsIndexed(posts, key = { _, post -> "${post.id.source.name}:${post.id.sourcePostId}" }) { index, post ->
@@ -152,17 +179,23 @@ internal fun SavedCodexCarousel(
     failed: Boolean,
     onOpen: () -> Unit,
     onRetry: () -> Unit,
+    onLongPress: () -> Unit,
     content: @Composable () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        TextButton(onClick = onOpen, modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(count.toString(), style = MaterialTheme.typography.titleMedium)
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
-                }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
+                .combinedClickable(onClick = onOpen, onLongClick = onLongPress,
+                    role = Role.Button, onLongClickLabel = "Actions for $title")
+                .heightIn(min = 48.dp)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(count.toString(), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             }
         }
         when {

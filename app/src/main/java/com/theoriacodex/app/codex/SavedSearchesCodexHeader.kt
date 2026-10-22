@@ -42,11 +42,26 @@ internal fun SavedSearchesCodexHeader(
     LiveCodexHeader("Searches", SAVED_SEARCHES_CODEX_ID, owner,
         entries.associate { it.id to it.name }, visiblePosts, posts, filters, resolvingDurations, gridState,
         onBack, "Searches", onManage = { showSearches = true })
-    if (showSearches) ModalBottomSheet(onDismissRequest = { showSearches = false }, dragHandle = null) {
+    if (showSearches) SavedSearchesManagementSheet(entries, restoreState, onChange, onRename, onRemove) {
+        showSearches = false
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun SavedSearchesManagementSheet(
+    entries: List<SavedSearchEntry>,
+    restoreState: FeedFabRestoreState,
+    onChange: (FeedFabRestoreState) -> Unit,
+    onRename: (String, String) -> Unit,
+    onRemove: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss, dragHandle = null) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SavedSearchesCodexFilters(entries, restoreState, onChange, onRename, onRemove)
-            TextButton(onClick = { showSearches = false }) { Text("Done") }
+            TextButton(onClick = onDismiss) { Text("Done") }
         }
     }
 }

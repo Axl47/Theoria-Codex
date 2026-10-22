@@ -92,7 +92,7 @@ private fun CodexListHeader(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("Library", style = MaterialTheme.typography.titleLarge)
+        Text("Codex Library", style = MaterialTheme.typography.titleLarge)
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             CodexActionIcon(Icons.Default.FileOpen, "Import Codex", onClick = actions.importCodex)
             CodexActionIcon(

@@ -4,7 +4,10 @@ import android.app.Application
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.isDisplayed
@@ -79,18 +82,25 @@ class SavedSearchesCodexJourneyTest {
             }
             compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Codex").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithContentDescription("Codex").performClick()
+            compose.onNodeWithText("Codex Library").assertIsDisplayed()
             compose.onNodeWithText("Searches").assertDoesNotExist()
             compose.onNodeWithText("Likes: 0, Followed: 0, Search: 2").assertIsDisplayed()
             compose.onNodeWithText("Saved").performClick()
-            compose.onNodeWithText("Likes").assertIsDisplayed()
+            compose.onNodeWithText("Likes").performTouchInput { longClick() }
+            compose.onNodeWithContentDescription("Clear likes").assertExists()
+            compose.onNodeWithText("Cancel").performClick()
             compose.onNodeWithText("Followed").assertIsDisplayed()
-            compose.onNodeWithText("Searches").performScrollTo().performClick()
+            compose.onNodeWithText("Searches").performScrollTo().performTouchInput { longClick() }
+            compose.onNodeWithContentDescription("Include First search").assertExists()
+            compose.onNodeWithText("Done").performClick()
+            compose.onNodeWithText("Searches").performClick()
             val first = searchCardTestTag(posts[0].id)
             val second = searchCardTestTag(posts[1].id)
             compose.waitUntil(10_000) { compose.onAllNodesWithTag(first).fetchSemanticsNodes().isNotEmpty() &&
                 compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
             assertEquals(1, compose.onAllNodesWithTag(searchCardTestTag(posts[2].id)).fetchSemanticsNodes().size)
-            compose.onNode(hasText("Searches") and hasClickAction()).performClick()
+            compose.onNode(hasText("Searches") and SemanticsMatcher.keyIsDefined(SemanticsActions.OnLongClick))
+                .performTouchInput { longClick() }
             compose.onNodeWithContentDescription("Include First search").performClick()
             compose.onNodeWithText("Done").performClick()
             compose.waitUntil(10_000) { compose.onAllNodesWithTag(first).fetchSemanticsNodes().isEmpty() }
@@ -116,7 +126,8 @@ class SavedSearchesCodexJourneyTest {
             compose.onNodeWithContentDescription("Back").performClick()
             compose.onNodeWithText("Searches").performScrollTo().performClick()
             compose.waitUntil(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
-            compose.onNode(hasText("Searches") and hasClickAction()).performClick()
+            compose.onNode(hasText("Searches") and SemanticsMatcher.keyIsDefined(SemanticsActions.OnLongClick))
+                .performTouchInput { longClick() }
             compose.onNodeWithContentDescription("Include First search").assertIsOff()
             compose.onNodeWithText("Exclude all").performClick()
             compose.onNodeWithText("Done").performClick()

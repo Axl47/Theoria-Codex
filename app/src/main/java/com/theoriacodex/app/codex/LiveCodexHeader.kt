@@ -33,7 +33,8 @@ internal fun LiveCodexHeader(
     onManage: () -> Unit,
 ) {
     val state = owner.state.collectAsStateWithLifecycle().value
-    SecondaryScreenAppBar(title = title, subtitle = "${visiblePosts.size} posts", onBack = onBack) {
+    SecondaryScreenAppBar(title = title, subtitle = "${visiblePosts.size} posts", onBack = onBack,
+        onTitleLongPress = onManage) {
         TextButton(onClick = onManage) { Text(manageLabel) }
         IconButton(enabled = !state.loading, onClick = owner::refresh) {
             Icon(Icons.Default.Refresh, contentDescription = "Refresh $title")

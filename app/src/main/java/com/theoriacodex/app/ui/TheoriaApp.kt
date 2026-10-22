@@ -659,6 +659,58 @@ internal fun TheoriaAppContent(
         },
     )
 
+    var codexActionTargetId by remember { mutableStateOf<String?>(null) }
+    val codexLibrary: @Composable (String?) -> Unit = { actionId ->
+        CodexDestinationStateBoundary(
+            data = dataDependencies,
+            sources = sourceDependencies,
+            thumbnailCacheGeneration = thumbnailCacheGeneration,
+        ) { state ->
+            CodexListScreen(
+                codices = state.visibleCodices,
+                itemCounts = state.itemCounts,
+                codexCoverCandidates = state.coverCandidates,
+                observeActionOptions = state.observeActionOptions,
+                onOpenCodex = { codexId ->
+                    navController.navigate(AppRoute.codexDetail(codexId))
+                },
+                onImportCodex = {
+                    importCodexLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
+                },
+                onDownloadCodex = { codexId ->
+                    scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                        downloadCodex(codexId)
+                    }
+                },
+                onMakeAvailableOffline = libraryTransfers.offline?.let { it::makeAvailableOffline },
+                onShareCodex = { codexId ->
+                    scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                        shareCodex(codexId)
+                    }
+                },
+                onSearchFromCodex = { _, source, includeTags ->
+                    scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                        searchFromCodex(source, includeTags)
+                    }
+                },
+                onCleanCodex = { targetId, comparisonIds ->
+                    codexCommandOwner.clean(state.activeProfile.profileId, targetId, comparisonIds)
+                },
+                onCommitReorder = codexCommandOwner::reorder,
+                onCreateCodex = { name -> codexCommandOwner.create(state.activeProfile.profileId, name) },
+                onRenameCodex = codexCommandOwner::rename,
+                onSetAutomaticTag = codexCommandOwner::automaticTag,
+                onDeleteCodex = { id -> codexCommandOwner.delete(id, state.activeProfile.profileId) },
+                initialActionCodexId = actionId,
+                onActionsDismissed = { codexActionTargetId = null },
+                likesCodexId = likesCodexIdForProfile(state.activeProfile.profileId),
+            )
+        }
+    }
+    codexActionTargetId?.let { id ->
+        androidx.compose.runtime.key(id) { codexLibrary(id) }
+    }
+
     suspend fun completeAppStartup() {
         if (navReady) return
         sourceDependencies.accounts.refreshAvailability()
@@ -1416,49 +1468,7 @@ internal fun TheoriaAppContent(
                                     }
 
                                     TopLevelDestination.Codex -> {
-                                        CodexDestinationStateBoundary(
-                                            data = dataDependencies,
-                                            sources = sourceDependencies,
-                                            thumbnailCacheGeneration = thumbnailCacheGeneration,
-                                        ) { state ->
-                                            CodexListScreen(
-                                            codices = state.visibleCodices,
-                                            itemCounts = state.itemCounts,
-                                            codexCoverCandidates = state.coverCandidates,
-                                            observeActionOptions = state.observeActionOptions,
-                                            onOpenCodex = { codexId ->
-                                                navController.navigate(AppRoute.codexDetail(codexId))
-                                            },
-                                            onImportCodex = {
-                                                importCodexLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
-                                            },
-                                            onDownloadCodex = { codexId ->
-                                                scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                                    downloadCodex(codexId)
-                                                }
-                                            },
-                                            onMakeAvailableOffline = libraryTransfers.offline?.let { it::makeAvailableOffline },
-                                            onShareCodex = { codexId ->
-                                                scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                                    shareCodex(codexId)
-                                                }
-                                            },
-                                            onSearchFromCodex = { _, source, includeTags ->
-                                                scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                                    searchFromCodex(source, includeTags)
-                                                }
-                                            },
-                                            onCleanCodex = { targetId, comparisonIds ->
-                                                codexCommandOwner.clean(state.activeProfile.profileId, targetId, comparisonIds)
-                                            },
-                                            onCommitReorder = codexCommandOwner::reorder,
-                                            onCreateCodex = { name -> codexCommandOwner.create(state.activeProfile.profileId, name) },
-                                            onRenameCodex = codexCommandOwner::rename,
-                                            onSetAutomaticTag = codexCommandOwner::automaticTag,
-                                            onDeleteCodex = { id -> codexCommandOwner.delete(id, state.activeProfile.profileId) },
-                                            likesCodexId = likesCodexIdForProfile(state.activeProfile.profileId),
-                                        )
-                                        }
+                                        codexLibrary(null)
                                     }
 
                                     TopLevelDestination.Settings -> {
@@ -1511,6 +1521,10 @@ internal fun TheoriaAppContent(
                                     onBack = { navController.popBackStack() },
                                     onOpenCodex = { navController.navigate(AppRoute.codexDetail(it)) },
                                     onOpenViewer = openCodexViewer,
+                                    onOpenCodexActions = { codexActionTargetId = it },
+                                    onManageFollowed = { showFollowedCreators = true },
+                                    onRenameSearch = savedSearchOwner::rename,
+                                    onRemoveSearch = savedSearchOwner::remove,
                                     resolvePost = { viewerRouteWorkflow.resolvePost(it, ViewerStreamSource.CODEX) },
                                 )
                                 return@composable
@@ -1550,6 +1564,7 @@ internal fun TheoriaAppContent(
                                 )
                                 CodexDetailScreen(
                                 codexName = state.codex?.name,
+                                onTitleLongPress = { codexActionTargetId = codexId },
                                 customHeader = virtualUi?.header,
                                 customFilters = virtualUi?.filters,
                                 customFiltersActive = virtualUi?.filtersActive == true,
