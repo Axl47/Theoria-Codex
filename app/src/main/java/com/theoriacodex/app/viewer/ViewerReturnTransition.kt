@@ -8,6 +8,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.saveable.rememberSaveable
+import java.util.UUID
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -39,9 +42,14 @@ private const val VIEWER_RETURN_TARGET_WAIT_MS = 300L
 internal val LocalViewerReturnTransition = staticCompositionLocalOf<ViewerReturnTransition?> { null }
 internal val LocalViewerReturnGrid = staticCompositionLocalOf<String?> { null }
 
-internal val LocalViewerReturnShelf = staticCompositionLocalOf<PostId?> { null }
+internal sealed interface ViewerReturnShelfId {
+    data class Related(val seedId: PostId) : ViewerReturnShelfId
+    data class Saved(val codexId: String) : ViewerReturnShelfId
+}
 
-internal data class ViewerReturnRequest(val gridId: String?, val postId: PostId, val shelfId: PostId? = null)
+internal val LocalViewerReturnShelf = staticCompositionLocalOf<ViewerReturnShelfId?> { null }
+
+internal data class ViewerReturnRequest(val gridId: String?, val postId: PostId, val shelfId: ViewerReturnShelfId? = null)
 
 /** Keep both destinations alive while the media moves between its card and fullscreen bounds. */
 @Composable
@@ -56,7 +64,7 @@ internal fun ViewerReturnLifetime(scope: AnimatedVisibilityScope) {
 /** Transient geometry shared by the viewer and its originating feed. */
 internal class ViewerReturnTransition {
     private var originGridId: String? = null
-    private var originShelfId: PostId? = null
+    private var originShelfId: ViewerReturnShelfId? = null
     var openingBounds by mutableStateOf<Rect?>(null)
         private set
     var request by mutableStateOf<ViewerReturnRequest?>(null)
@@ -67,7 +75,7 @@ internal class ViewerReturnTransition {
     private var rowCentered = false
     private val mediaBounds = mutableMapOf<PostId, Rect>()
 
-    fun openedFrom(gridId: String?, bounds: Rect? = null, shelfId: PostId? = null) {
+    fun openedFrom(gridId: String?, bounds: Rect? = null, shelfId: ViewerReturnShelfId? = null) {
         clear()
         originGridId = gridId
         originShelfId = shelfId
@@ -87,7 +95,7 @@ internal class ViewerReturnTransition {
         mediaBounds.clear()
     }
 
-    fun recordBounds(gridId: String?, postId: PostId, bounds: Rect, shelfId: PostId? = null) {
+    fun recordBounds(gridId: String?, postId: PostId, bounds: Rect, shelfId: ViewerReturnShelfId? = null) {
         val pending = request ?: return
         if (gridId == null || gridId != pending.gridId || postId != pending.postId || shelfId != pending.shelfId || bounds.isEmpty) return
         mediaBounds[postId] = bounds
@@ -100,7 +108,7 @@ internal class ViewerReturnTransition {
         if (rowCentered) targetBounds = mediaBounds[postId]
     }
 
-    fun shelfCentered(gridId: String, postId: PostId, shelfId: PostId) {
+    fun shelfCentered(gridId: String, postId: PostId, shelfId: ViewerReturnShelfId) {
         if (request != ViewerReturnRequest(gridId, postId, shelfId)) return
         rowCentered = true
         if (centered) targetBounds = mediaBounds[postId]
@@ -121,7 +129,7 @@ internal class ViewerReturnTransition {
 /** Runs after the underlying destination returns to composition, including offscreen posts. */
 @Composable
 internal fun ViewerReturnGridEffect(
-    gridId: String, postIds: List<PostId?>, state: LazyStaggeredGridState, shelfIds: List<PostId?> = emptyList(),
+    gridId: String, postIds: List<PostId?>, state: LazyStaggeredGridState, shelfIds: List<ViewerReturnShelfId?> = emptyList(),
 ) {
     val transition = LocalViewerReturnTransition.current ?: return
     val request = transition.request
@@ -140,9 +148,9 @@ internal fun ViewerReturnGridEffect(
     }
 }
 
-/** Related media needs both its vertical shelf and horizontal card positioned before landing. */
+/** Carousel media needs both its vertical shelf and horizontal card positioned before landing. */
 @Composable
-internal fun ViewerReturnShelfEffect(shelfId: PostId, postIds: List<PostId>, state: LazyListState) {
+internal fun ViewerReturnShelfEffect(shelfId: ViewerReturnShelfId, postIds: List<PostId>, state: LazyListState) {
     val transition = LocalViewerReturnTransition.current ?: return
     val gridId = LocalViewerReturnGrid.current ?: return
     val request = transition.request
@@ -150,15 +158,50 @@ internal fun ViewerReturnShelfEffect(shelfId: PostId, postIds: List<PostId>, sta
         if (request?.gridId != gridId || request.shelfId != shelfId) return@LaunchedEffect
         val index = postIds.indexOf(request.postId)
         if (index < 0) return@LaunchedEffect
-        state.scrollToItem(index)
-        val item = snapshotFlow { state.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } }
-            .filterNotNull().first()
-        val layout = state.layoutInfo
-        state.scrollBy(viewerReturnCenterScroll(item.offset, item.size,
-            layout.viewportStartOffset, layout.viewportEndOffset))
-        withFrameNanos { }
+        state.centerViewerReturnItem(index)
         transition.shelfCentered(gridId, request.postId, shelfId)
     }
+}
+
+/** Saved's vertical overview participates in the same two-axis return as a related shelf. */
+@Composable
+internal fun ViewerReturnColumn(
+    shelfIds: List<ViewerReturnShelfId?>,
+    state: LazyListState,
+    content: @Composable () -> Unit,
+) {
+    val gridId = rememberSaveable { UUID.randomUUID().toString() }
+    val transition = LocalViewerReturnTransition.current
+    val request = transition?.request
+    LaunchedEffect(request, gridId, shelfIds) {
+        if (request?.gridId != gridId || request.shelfId == null) return@LaunchedEffect
+        val index = shelfIds.indexOf(request.shelfId)
+        if (index < 0) return@LaunchedEffect
+        state.centerViewerReturnItem(index)
+        transition.centered(gridId, request.postId)
+    }
+    CompositionLocalProvider(LocalViewerReturnGrid provides gridId, content = content)
+}
+
+@Composable
+internal fun ViewerReturnShelf(
+    shelfId: ViewerReturnShelfId,
+    postIds: List<PostId>,
+    state: LazyListState,
+    content: @Composable () -> Unit,
+) {
+    ViewerReturnShelfEffect(shelfId, postIds, state)
+    CompositionLocalProvider(LocalViewerReturnShelf provides shelfId, content = content)
+}
+
+/** LazyRow and LazyColumn expose offsets along their own scroll axis. */
+private suspend fun LazyListState.centerViewerReturnItem(index: Int) {
+    scrollToItem(index)
+    val item = snapshotFlow { layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } }
+        .filterNotNull().first()
+    val layout = layoutInfo
+    scrollBy(viewerReturnCenterScroll(item.offset, item.size, layout.viewportStartOffset, layout.viewportEndOffset))
+    withFrameNanos { }
 }
 
 internal fun viewerReturnCenterScroll(itemTop: Int, itemHeight: Int, viewportStart: Int, viewportEnd: Int): Float =

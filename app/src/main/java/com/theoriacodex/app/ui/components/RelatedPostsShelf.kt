@@ -20,10 +20,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.foundation.lazy.rememberLazyListState
-import com.theoriacodex.app.viewer.LocalViewerReturnShelf
-import com.theoriacodex.app.viewer.ViewerReturnShelfEffect
+import com.theoriacodex.app.viewer.ViewerReturnShelfId
+import com.theoriacodex.app.viewer.ViewerReturnShelf
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -218,8 +217,7 @@ private fun RelatedPostsRow(
     val rowHeight = rememberPostShelfHeight(sizingPosts, cardWidth)
     val rowState = rememberLazyListState()
     val postIds = remember(posts) { posts.map { it.id } }
-    ViewerReturnShelfEffect(shelfId, postIds, rowState)
-    CompositionLocalProvider(LocalViewerReturnShelf provides shelfId) {
+    ViewerReturnShelf(ViewerReturnShelfId.Related(shelfId), postIds, rowState) {
         LazyRow(
             state = rowState,
             modifier = Modifier.height(rowHeight),

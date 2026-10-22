@@ -5,6 +5,7 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.navigation.NavHostController
@@ -80,22 +81,40 @@ class ViewerReturnTransitionTest {
         assertTrue(viewerReturnGeometry(source, null, null, 1f).scale.isFinite())
     }
 
-    @Test fun `return reveals an offscreen post and centers it before publishing its bounds`() {
+    @Test fun `Recents and Codex grid centers the exited offscreen post`() = checkGridReturn(projected = false)
+
+    @Test fun `FYP projected grid centers the exited post past inserted shelves`() = checkGridReturn(projected = true)
+
+    private fun checkGridReturn(projected: Boolean) {
         val transition = ViewerReturnTransition()
         val posts = (0..60).map { index -> post(index.toString()) }
         var origin: String? = null
         var viewport = Rect.Zero
         compose.setContent {
             CompositionLocalProvider(LocalViewerReturnTransition provides transition) {
-                TwoColumnPostStaggeredGrid(
-                    posts, rememberLazyStaggeredGridState(),
-                    Modifier.height(600.dp).onGloballyPositioned { viewport = it.boundsInWindow() },
-                ) { _, post ->
+                val card: @Composable (Int, Post) -> Unit = { _, post ->
                     val gridId = LocalViewerReturnGrid.current
                     origin = gridId
                     Box(Modifier.fillMaxWidth().height(140.dp).onGloballyPositioned {
                         transition.recordBounds(gridId, post.id, it.boundsInWindow(clipBounds = false))
                     })
+                }
+                val modifier = Modifier.height(600.dp).onGloballyPositioned { viewport = it.boundsInWindow() }
+                if (projected) {
+                    val entries = posts.mapIndexed { index, post -> RelatedFeedEntry.PostEntry(post, index) }
+                        .toMutableList<RelatedFeedEntry>()
+                    entries.add(5, RelatedFeedEntry.ShelfEntry(
+                        RelatedPostsUiState.Loading(RelatedPostsRequest(posts[4], 4, 1)), 4,
+                    ))
+                    TwoColumnProjectedPostStaggeredGrid(
+                        RelatedFeedProjection(entries), rememberLazyStaggeredGridState(), modifier,
+                        postContent = { index, post -> card(index, post) },
+                        shelfContent = { Box(Modifier.fillMaxWidth().height(180.dp)) },
+                    )
+                } else {
+                    TwoColumnPostStaggeredGrid(posts, rememberLazyStaggeredGridState(), modifier) { index, post ->
+                        card(index, post)
+                    }
                 }
             }
         }
@@ -205,7 +224,7 @@ class ViewerReturnTransitionTest {
             }
         }
         compose.runOnIdle {
-            transition.openedFrom(origin, shelfId = seed.id)
+            transition.openedFrom(origin, shelfId = ViewerReturnShelfId.Related(seed.id))
             transition.begin(target.id)
         }
         compose.waitForIdle()
@@ -219,7 +238,7 @@ class ViewerReturnTransitionTest {
 
     @Test fun `shelf target waits for both axes and ignores a duplicate regular card`() {
         val transition = ViewerReturnTransition()
-        val shelf = post("seed").id
+        val shelf = ViewerReturnShelfId.Related(post("seed").id)
         val bounds = Rect(20f, 100f, 220f, 400f)
         transition.openedFrom("feed", shelfId = shelf)
         transition.begin(postId)

@@ -45,6 +45,9 @@ import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.media.rememberDurationFilterMetadata
+import com.theoriacodex.app.viewer.ViewerReturnColumn
+import com.theoriacodex.app.viewer.ViewerReturnShelf
+import com.theoriacodex.app.viewer.ViewerReturnShelfId
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
@@ -92,31 +95,35 @@ internal fun SavedCodexRoute(
         }
     }
     val scroll = rememberLazyListState()
-    LazyColumn(state = scroll, contentPadding = PaddingValues(vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        item(key = "header") {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-                Text("Saved", style = MaterialTheme.typography.titleLarge)
+    val children = remember(likesId) { savedCodexChildren(likesId) }
+    val shelfIds = remember(children) { listOf(null) + children.map { ViewerReturnShelfId.Saved(it.codexId) } }
+    ViewerReturnColumn(shelfIds, scroll) {
+        LazyColumn(state = scroll, contentPadding = PaddingValues(vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)) {
+            item(key = "header") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
+                    Text("Saved", style = MaterialTheme.typography.titleLarge)
+                }
             }
-        }
-        savedCodexChildren(likesId).forEachIndexed { index, child ->
-            item(key = child.codexId) {
-                val restore = restoreRegistry.state(codexFeedFabContext(child.codexId)) ?: return@item
-                val sort = CodexSortMode.entries.firstOrNull { it.name == restore.sortMode }
-                    ?: CodexSortMode.NEWEST_SAVED
-                CodexDetailDestinationStateBoundary(child.codexId, sort, data, sources, restore) { state ->
-                    SavedCodexSection(state, child.codexId, child.name, counts[index], restore,
-                        durations, sources, { scroll.isScrollInProgress },
-                        { onOpenCodex(child.codexId) },
-                        {
-                            when (child.codexId) {
-                                com.theoriacodex.app.codex.FOLLOWED_CODEX_ID -> onManageFollowed()
-                                com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID -> showSearches = true
-                                else -> onOpenCodexActions(child.codexId)
-                            }
-                        },
-                        { posts, position -> onOpenViewer(child.codexId, posts, position) }, resolvePost)
+            children.forEachIndexed { index, child ->
+                item(key = child.codexId) {
+                    val restore = restoreRegistry.state(codexFeedFabContext(child.codexId)) ?: return@item
+                    val sort = CodexSortMode.entries.firstOrNull { it.name == restore.sortMode }
+                        ?: CodexSortMode.NEWEST_SAVED
+                    CodexDetailDestinationStateBoundary(child.codexId, sort, data, sources, restore) { state ->
+                        SavedCodexSection(state, child.codexId, child.name, counts[index], restore,
+                            durations, sources, { scroll.isScrollInProgress },
+                            { onOpenCodex(child.codexId) },
+                            {
+                                when (child.codexId) {
+                                    com.theoriacodex.app.codex.FOLLOWED_CODEX_ID -> onManageFollowed()
+                                    com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID -> showSearches = true
+                                    else -> onOpenCodexActions(child.codexId)
+                                }
+                            },
+                            { posts, position -> onOpenViewer(child.codexId, posts, position) }, resolvePost)
+                    }
                 }
             }
         }
@@ -155,23 +162,26 @@ private fun SavedCodexSection(
     DurationRouteEnvironmentEffect({ parentScrolling() || row.isScrollInProgress }, owner::onEnvironmentChanged)
     val liveOwner = state.followedOwner ?: state.savedSearchOwner
     val feed = liveOwner?.state?.collectAsStateWithLifecycle()?.value
-    SavedCodexCarousel(title, count, posts, state.loading, feed?.errors?.isNotEmpty() == true,
-        onOpen, { liveOwner?.retry() }, onLongPress) {
-        LazyRow(state = row, modifier = Modifier.height(rowHeight), contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            itemsIndexed(posts, key = { _, post -> "${post.id.source.name}:${post.id.sourcePostId}" }) { index, post ->
-                Box(Modifier.width(cardWidth)) {
-                    SearchResultCard(post = post, pixivUgoiraClient = sources.pixivUgoiraClient,
-                        mediaAspectRatio = POST_SHELF_MEDIA_ASPECT_RATIO,
-                        showTitle = false,
-                        acquiredDurationMs = observedMediaDurationMs(post, owner::observeState),
-                        showSourceBadge = true, resolvePostById = resolvePost,
-                        onClick = { onOpenViewer(posts, index) },
-                        onViewportChanged = { owner.onPostVisibilityChanged(post, it) },
-                        onAuthoritativeDurationKnown = { owner.publishPlayerDuration(post, it) })
+    val postIds = remember(posts) { posts.map { it.id } }
+    ViewerReturnShelf(ViewerReturnShelfId.Saved(id), postIds, row) {
+        SavedCodexCarousel(title, count, posts, state.loading, feed?.errors?.isNotEmpty() == true,
+            onOpen, { liveOwner?.retry() }, onLongPress) {
+            LazyRow(state = row, modifier = Modifier.height(rowHeight), contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                itemsIndexed(posts, key = { _, post -> "${post.id.source.name}:${post.id.sourcePostId}" }) { index, post ->
+                    Box(Modifier.width(cardWidth)) {
+                        SearchResultCard(post = post, pixivUgoiraClient = sources.pixivUgoiraClient,
+                            mediaAspectRatio = POST_SHELF_MEDIA_ASPECT_RATIO,
+                            showTitle = false,
+                            acquiredDurationMs = observedMediaDurationMs(post, owner::observeState),
+                            showSourceBadge = true, resolvePostById = resolvePost,
+                            onClick = { onOpenViewer(posts, index) },
+                            onViewportChanged = { owner.onPostVisibilityChanged(post, it) },
+                            onAuthoritativeDurationKnown = { owner.publishPlayerDuration(post, it) })
+                    }
                 }
+                if (feed?.canLoadMore == true) item(key = "more") { TextButton(onClick = onOpen) { Text("View all") } }
             }
-            if (feed?.canLoadMore == true) item(key = "more") { TextButton(onClick = onOpen) { Text("View all") } }
         }
     }
 }

@@ -76,6 +76,7 @@
 - Remove repeated type labels from tag names in the post hold menu.
 
 ## Fixes
+- Return fullscreen Saved previews to their sub-Codex cards, scrolling the carousel to the exited post.
 
 - Show tag post counts supplied by nhentai and retain completed counts when further lookups time out.
 - Return fullscreen “More like this” posts to their shelf cards, including after swiping to an offscreen related post.
