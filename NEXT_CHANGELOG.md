@@ -43,6 +43,7 @@
 - Remove repeated type labels from tag names in the post hold menu.
 
 ## Fixes
+- Extend the landscape navigation sidebar background to the bottom of the screen.
 - Automatically retry a video once after a decoder or rendering failure, keeping your playback position.
 - Restore the previous search’s scroll position when using Search Undo.
 - Keep the background around the notification bar black in landscape.
@@ -52,7 +53,7 @@
 - Restore saved Search positions through loading and pagination.
 - Reset Search to the top after Apply.
 - Preserve Library scroll when returning from a collection.
-- Keep videos playing while dragging the seek bar without resuming paused playback.
+- Keep videos, GIFs, and Pixiv animations playing while dragging the seek bar without resuming paused playback.
 - Prevent forward swipes from skipping unresolved galleries.
 - Show restoration progress only during actual session recovery.
 - Preserve related-post shelf navigation after liking from fullscreen.

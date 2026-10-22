@@ -55,6 +55,9 @@ class AdaptiveNavigationTest {
         compose.onNodeWithTag("content").performScrollToIndex(20)
         compose.runOnIdle { width.value = 1000f }
         compose.onNodeWithTag("navigation-rail").assertIsDisplayed()
+        val railBounds = compose.onNodeWithTag("navigation-rail").fetchSemanticsNode().boundsInRoot
+        val contentBounds = compose.onNodeWithTag("content").fetchSemanticsNode().boundsInRoot
+        assertEquals(contentBounds.bottom, railBounds.bottom, 1f)
         compose.onNodeWithText("Settings").performClick()
         compose.runOnIdle {
             assertEquals(20, firstVisible)

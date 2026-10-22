@@ -1,6 +1,7 @@
 package com.theoriacodex.app.ui
 
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -48,15 +49,17 @@ internal fun TheoriaAdaptiveScaffold(
     ) { padding ->
         Row(modifier = Modifier.fillMaxSize()) {
             if (navigationVisible && rail) NavigationRail(
-                modifier = Modifier.testTag("navigation-rail").verticalScroll(rememberScrollState()),
+                modifier = Modifier.testTag("navigation-rail"),
             ) {
-                TopLevelDestination.entries.forEachIndexed { index, destination ->
-                    NavigationRailItem(
-                        selected = selectedIndex == index,
-                        onClick = { onDestinationSelected(destination) },
-                        icon = { Icon(destination.icon(), destination.label, Modifier.size(24.dp)) },
-                        label = { Text(destination.label) },
-                    )
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                    TopLevelDestination.entries.forEachIndexed { index, destination ->
+                        NavigationRailItem(
+                            selected = selectedIndex == index,
+                            onClick = { onDestinationSelected(destination) },
+                            icon = { Icon(destination.icon(), destination.label, Modifier.size(24.dp)) },
+                            label = { Text(destination.label) },
+                        )
+                    }
                 }
             }
             Box(modifier = Modifier.weight(1f).fillMaxSize()) {
