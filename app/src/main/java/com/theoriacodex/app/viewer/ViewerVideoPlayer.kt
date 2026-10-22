@@ -40,6 +40,7 @@ import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import kotlinx.coroutines.delay
 import com.theoriacodex.app.media.isMediaNetworkMetered
 import com.theoriacodex.app.media.withVideoQuality
@@ -58,6 +59,8 @@ internal fun ViewerVideoPlayer(
     mediaModifier: Modifier = Modifier,
     controls: ViewerRendererControls,
     events: ViewerRendererEvents,
+    mediaKey: ViewerMediaKey,
+    positions: ViewerVideoPositions,
     loadingPreview: (@Composable () -> Unit)? = null,
 ) {
     val context = LocalContext.current
@@ -65,7 +68,6 @@ internal fun ViewerVideoPlayer(
     val location = remember(media, quality, qualityHeight, metered) {
         resolveViewerVideoPlaybackLocation(media.withVideoQuality(quality, metered, qualityHeight))
     }
-    var resumePosition by remember(postId, media.url) { mutableLongStateOf(0L) }
     if (!terminalMessage.isNullOrBlank()) {
         ViewerVideoMessage(terminalMessage, modifier)
         return
@@ -80,7 +82,9 @@ internal fun ViewerVideoPlayer(
         return
     }
     val state = remember(location, sourceKey, controls.loadGeneration) { ViewerVideoState() }
-    ViewerVideoBinding(state, location, sourceKey, controls, events, resumePosition) { resumePosition = it }
+    ViewerVideoBinding(state, location, sourceKey, controls, events, positions.position(mediaKey)) {
+        positions.save(mediaKey, it)
+    }
     ViewerVideoCommands(state, controls)
     ViewerVideoLifecycle(state, controls)
     ViewerVideoProgress(state, events)
@@ -211,6 +215,7 @@ private fun viewerVideoListener(
 
 @Composable
 private fun ViewerVideoCommands(state: ViewerVideoState, controls: ViewerRendererControls) {
+    var handledRestart by remember(state) { mutableLongStateOf(controls.restartRequest) }
     LaunchedEffect(state.player, controls.loopPlayback) {
         state.player?.repeatMode = if (controls.loopPlayback) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
     }
@@ -218,7 +223,8 @@ private fun ViewerVideoCommands(state: ViewerVideoState, controls: ViewerRendere
         runCatching { state.player?.playbackParameters = PlaybackParameters(controls.playbackRate.coerceAtLeast(MIN_VIEWER_PLAYBACK_RATE)) }
     }
     LaunchedEffect(state.player, controls.restartRequest) {
-        if (controls.restartRequest > 0L) {
+        if (controls.restartRequest != handledRestart) {
+            handledRestart = controls.restartRequest
             state.seek(0L)
             state.setPlaying(controls.isActive && controls.isPlaying)
         }

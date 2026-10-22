@@ -17,6 +17,7 @@
 
 ## Improvements
 
+- Resume videos where you left them when revisiting up to five nearby Viewer posts in either direction, until you exit Viewer.
 - Keep the last seek thumbnail visible beneath the spinner while the next frame loads.
 - Label the Codex tab header “Library”.
 - Reduce vertical spacing around the For You source dropdown.

@@ -68,6 +68,7 @@ internal fun ViewerMediaPage(
     onTransformChanged: (ViewerTransformState) -> Unit,
     layout: ViewerMediaLayout,
     videoOptions: ViewerVideoOptions,
+    videoPositions: ViewerVideoPositions,
     mediaError: ViewerMediaError?,
     imageSession: ViewerImageSession,
     pixivUgoiraClient: PixivUgoiraClient?,
@@ -94,7 +95,7 @@ internal fun ViewerMediaPage(
         Box(Modifier.fillMaxSize().padding(if (layout.landscape || animated) 0.dp else 16.dp), contentAlignment = Alignment.Center) {
             ViewerMediaContent(
                 post, media, key, controls.copy(seekJumpSerial = interactions.seekSerial, seekJumpDeltaMs = interactions.seekDelta),
-                events, videoOptions, imageSession, pixivUgoiraClient, transformModifier, onRequestMediaRecovery,
+                events, videoOptions, videoPositions, imageSession, pixivUgoiraClient, transformModifier, onRequestMediaRecovery,
             )
             FittedSeekJumpFeedbackOverlay(interactions.feedback, viewerAspectRatio(post), interactions::clearFeedback, Modifier.matchParentSize())
             mediaError?.let { ViewerMediaErrorOverlay(it) { onAction(ViewerAction.RetryMedia) } }

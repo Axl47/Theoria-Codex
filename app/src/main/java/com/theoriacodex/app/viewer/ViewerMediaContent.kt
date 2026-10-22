@@ -26,6 +26,7 @@ internal fun ViewerMediaContent(
     controls: ViewerRendererControls,
     events: ViewerRendererEvents,
     videoOptions: ViewerVideoOptions,
+    videoPositions: ViewerVideoPositions,
     imageSession: ViewerImageSession,
     pixivUgoiraClient: PixivUgoiraClient?,
     transformModifier: Modifier,
@@ -66,6 +67,7 @@ internal fun ViewerMediaContent(
             terminalMessage = videoOptions.terminalMessage,
             modifier = Modifier.fillMaxSize(), mediaModifier = transformModifier,
             controls = controls, events = events,
+            mediaKey = key, positions = videoPositions,
             loadingPreview = { ViewerLoadingPreview(post, media, transformModifier) },
         )
         isGifMediaRef(media) -> {

@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -98,6 +99,7 @@ internal fun ViewerScreen(
     var quality by remember(videoQuality) { mutableStateOf(videoQuality) }
     var qualityHeight by remember(uiState.currentMedia?.key) { mutableStateOf<Int?>(null) }
     val posts = remember(uiState.pages) { uiState.pages.map { page -> page.post } }
+    val videoPositions = remember(uiState.session) { ViewerVideoPositions() }
     if (posts.isEmpty()) {
         Box(
             modifier = Modifier
@@ -128,6 +130,7 @@ internal fun ViewerScreen(
     var pendingDismiss by remember { mutableStateOf(false) }
     val pendingMediaJumpByPost = remember { mutableStateMapOf<Int, Int>() }
     val currentPostIndex = uiState.currentPageIndex.coerceIn(0, posts.lastIndex)
+    SideEffect { videoPositions.retainAround(posts.map { it.id }, currentPostIndex) }
     val selectedPost = posts[currentPostIndex]
     val selectedPostLiked = selectedPost.id in likedPostIds
     val selectedPostMedia = remember(selectedPost) { postMediaItems(selectedPost) }
@@ -463,6 +466,7 @@ internal fun ViewerScreen(
                     onTransformChanged = { viewerTransform = it },
                     layout = ViewerMediaLayout(isLandscape, inPictureInPicture, touchExplorationEnabled, invertMultiImageScrollDirection),
                     videoOptions = ViewerVideoOptions(quality, qualityHeight, terminalResolutionMessage, playbackDiagnosticsEnabled),
+                    videoPositions = videoPositions,
                     mediaError = uiState.mediaError?.takeIf { active && it.mediaKey == key },
                     pixivUgoiraClient = pixivUgoiraClient,
                     onAction = onAction,
