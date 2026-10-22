@@ -17,6 +17,8 @@
 
 ## Improvements
 
+- Show the destination Codex’s name in post save confirmations.
+
 - Keep Saved sub-Codex feeds loaded for the session when reopening them.
 - Shorten the Saved Searches title to “Searches”.
 - Show a right arrow beside each Saved sub-Codex title to make opening it clearer.

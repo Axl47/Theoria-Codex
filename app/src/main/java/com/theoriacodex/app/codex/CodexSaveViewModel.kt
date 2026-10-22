@@ -9,6 +9,7 @@ import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 
@@ -36,14 +37,18 @@ internal class CodexSaveViewModel(
             if (result is CodexSaveResult.Success && fromForYou) {
                 runCatchingPreservingCancellation { statistics.recordForYouSave() }
             }
+            val codexName = if (result is CodexSaveResult.Success) {
+                runCatchingPreservingCancellation { codices.observeCodex(codexId).first()?.name }
+                    .getOrNull() ?: newCollectionName ?: "Codex"
+            } else "Codex"
             messages.send(
                 when (result) {
                     is CodexSaveResult.Failure -> result.message
                     is CodexSaveResult.Success -> when {
                         result.cacheFailures > 0 -> "Posts saved. Some offline copies could not be cached."
                         result.inserted == 0 -> "Posts are already in this Codex."
-                        result.inserted == 1 -> "Post saved to Codex."
-                        else -> "${result.inserted} posts saved to Codex."
+                        result.inserted == 1 -> "Post saved to $codexName."
+                        else -> "${result.inserted} posts saved to $codexName."
                     }
                 },
             )

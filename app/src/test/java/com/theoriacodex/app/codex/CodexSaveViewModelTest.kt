@@ -64,7 +64,7 @@ class CodexSaveViewModelTest {
 
         assertEquals(posts.map(Post::id).toSet(), savedIds())
         assertEquals(1L, statistics.observeStatistics().first().forYouSaveCount)
-        assertEquals("2 posts saved to Codex.", owner.effects.first())
+        assertEquals("2 posts saved to Saved.", owner.effects.first())
     }
 
     @Test
@@ -127,7 +127,7 @@ class CodexSaveViewModelTest {
 
         assertEquals(posts.map(Post::id).toSet(), savedIds())
         assertEquals(1L, statistics.observeStatistics().first().forYouSaveCount)
-        assertEquals("2 posts saved to Codex.", owner.effects.first())
+        assertEquals("2 posts saved to Saved.", owner.effects.first())
     }
 
     @Test
@@ -137,7 +137,7 @@ class CodexSaveViewModelTest {
         advanceUntilIdle()
 
         assertEquals(0L, statistics.observeStatistics().first().forYouSaveCount)
-        assertEquals("Post saved to Codex.", owner.effects.first())
+        assertEquals("Post saved to Saved.", owner.effects.first())
     }
 
     @Test
@@ -150,7 +150,18 @@ class CodexSaveViewModelTest {
         advanceUntilIdle()
 
         assertEquals(posts.map(Post::id).toSet(), savedIds())
-        assertEquals("2 posts saved to Codex.", owner.effects.first())
+        assertEquals("2 posts saved to Saved.", owner.effects.first())
+    }
+
+    @Test
+    fun `existing collection save names the destination`() = runTest {
+        codices.ensureCodex("target", "Landscapes")
+        val owner = owner()
+
+        owner.save("target", posts.take(1), cacheFullImage = false, fromForYou = false)
+        advanceUntilIdle()
+
+        assertEquals("Post saved to Landscapes.", owner.effects.first())
     }
 
     private fun gatedRepository(commit: CompletableDeferred<Unit>): CodexRepository =
