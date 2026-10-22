@@ -2,6 +2,9 @@ package com.theoriacodex.app.search
 
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchSourceScope
+import com.theoriacodex.app.search.state.SearchRestorationUiState
+import com.theoriacodex.app.search.state.canApplyScrollRestoration
+import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
@@ -18,6 +21,35 @@ import org.junit.Test
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 internal class SearchUndoViewModelTest : SearchViewModelTestFixture() {
+    @Test fun `Undo restores a paginated search anchor after its results load`() = runTest(mainDispatcherRule.dispatcher) {
+        val owner = viewModel(ViewModelSearchAdapter())
+        restore(owner)
+        owner.onAction(SearchAction.ApplyTagSearch(listOf("paged"), QueryMode.Source(SourceKey.PIXIV)))
+        advanceUntilIdle()
+        owner.onAction(SearchAction.LoadNextPage)
+        advanceUntilIdle()
+        val reset = owner.state.value.restoration as SearchRestorationUiState.Restored
+        owner.onAction(SearchAction.ScrollRestorationApplied(reset.scrollRequestId))
+        owner.onAction(SearchAction.ScrollChanged(1, 37))
+        owner.onAction(SearchAction.ApplyTagSearch(listOf("second"), QueryMode.Source(SourceKey.PIXIV)))
+        advanceUntilIdle()
+        assertEquals(SearchScrollState(1, 37), owner.state.value.searchHistory.single().scrollState)
+
+        owner.onAction(SearchAction.UndoSearch)
+        advanceUntilIdle()
+        val restored = owner.state.value.restoration as SearchRestorationUiState.Restored
+        assertEquals(SearchScrollState(1, 37), restored.scrollState)
+        assertFalse(restored.resetToTop)
+        assertFalse(owner.state.value.canApplyScrollRestoration)
+        owner.onAction(SearchAction.LoadNextPage)
+        advanceUntilIdle()
+        assertTrue(owner.state.value.canApplyScrollRestoration)
+        assertEquals(SearchScrollState(1, 37), (owner.state.value.restoration as SearchRestorationUiState.Restored).scrollState)
+        owner.onAction(SearchAction.ScrollRestorationApplied(restored.scrollRequestId))
+        owner.onAction(SearchAction.Resume)
+        assertEquals(SearchScrollState(1, 37), (owner.state.value.restoration as SearchRestorationUiState.Restored).scrollState)
+    }
+
     @Test fun `Undo replays grouped Multi-Search source selection and consumes history`() = runTest(mainDispatcherRule.dispatcher) {
         val adapter = ViewModelSearchAdapter()
         val owner = viewModel(adapter, additionalAdapters = listOf(ViewModelSearchAdapter(SourceKey.AIBOORU)))
@@ -31,6 +63,9 @@ internal class SearchUndoViewModelTest : SearchViewModelTestFixture() {
         )
         owner.onAction(SearchAction.ApplyHistoricalQuery(query, scope))
         advanceUntilIdle()
+        val reset = owner.state.value.restoration as SearchRestorationUiState.Restored
+        owner.onAction(SearchAction.ScrollRestorationApplied(reset.scrollRequestId))
+        owner.onAction(SearchAction.ScrollChanged(0, 55))
         owner.onAction(SearchAction.ApplyTagSearch(listOf("second"), QueryMode.Source(SourceKey.PIXIV)))
         advanceUntilIdle()
         assertTrue(owner.state.value.canUndoSearch)
@@ -40,6 +75,7 @@ internal class SearchUndoViewModelTest : SearchViewModelTestFixture() {
         assertEquals(query, owner.state.value.query.applied)
         assertEquals(query, owner.state.value.query.draft)
         assertEquals(scope, owner.state.value.query.appliedSourceScope)
+        assertEquals(SearchScrollState(0, 55), (owner.state.value.restoration as SearchRestorationUiState.Restored).scrollState)
         assertEquals("", owner.state.value.suggestions.input)
         assertFalse(owner.state.value.canUndoSearch)
         assertTrue(owner.state.value.restoration is com.theoriacodex.app.search.state.SearchRestorationUiState.Restored)

@@ -457,6 +457,7 @@ internal class SearchViewModel(
             sourceScope = current.query.draftSourceScope,
             persistAcceptedResult = true,
             undo = undo,
+            undoScrollState = if (undo) current.searchHistory.lastOrNull()?.scrollState else null,
         )
     }
 
@@ -634,6 +635,7 @@ internal class SearchViewModel(
         sourceScope: com.theoriacodex.app.search.state.SearchSourceScope,
         persistAcceptedResult: Boolean,
         undo: Boolean = false,
+        undoScrollState: SearchScrollState? = null,
         onSuccess: suspend () -> Unit = {},
         relatedResetReason: String = "root search ($kind)",
     ) {
@@ -647,7 +649,7 @@ internal class SearchViewModel(
         val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
             try {
                 executeRootRequest(
-                    requestId, query, sourceScope, expectedExecutionKey, persistAcceptedResult, undo, onSuccess,
+                    requestId, query, sourceScope, expectedExecutionKey, persistAcceptedResult, undo, undoScrollState, onSuccess,
                 )
             } catch (_: TimeoutCancellationException) {
                 failRequestIfCurrent(requestId, ROOT_REQUEST_TIMEOUT_MESSAGE)
@@ -671,7 +673,8 @@ internal class SearchViewModel(
 
     private suspend fun executeRootRequest(
         requestId: Long, query: Query, sourceScope: SearchSourceScope,
-        expectedExecutionKey: String, persistAcceptedResult: Boolean, undo: Boolean, onSuccess: suspend () -> Unit,
+        expectedExecutionKey: String, persistAcceptedResult: Boolean, undo: Boolean,
+        undoScrollState: SearchScrollState?, onSuccess: suspend () -> Unit,
     ) = withTimeout(rootRequestTimeoutMs) {
         val result = executionService.executeInitial(query, sourceScope)
         coroutineContext.ensureActive()
@@ -687,10 +690,16 @@ internal class SearchViewModel(
         val previous = mutableState.value
         val succeeded = completeRequest(requestId, result, expectedExecutionKey)
         if (persistAcceptedResult) {
-            mutableState.value = mutableState.value.withAcceptedSearchHistory(previous, undo)
-            savedStateHandle[SearchSavedStateKeys.SCROLL_INDEX] = 0
-            savedStateHandle[SearchSavedStateKeys.SCROLL_OFFSET] = 0
-            reduce(SearchStateChange.ScrollResetRequested)
+            mutableState.value = mutableState.value.withAcceptedSearchHistory(
+                previous, undo, savedStateHandle.savedSearchScrollState() ?: SearchScrollState(0, 0),
+            )
+            val scrollState = undoScrollState ?: SearchScrollState(0, 0)
+            savedStateHandle[SearchSavedStateKeys.SCROLL_INDEX] = scrollState.firstVisibleItemIndex
+            savedStateHandle[SearchSavedStateKeys.SCROLL_OFFSET] = scrollState.firstVisibleItemOffsetPx
+            reduce(
+                if (undoScrollState != null) SearchStateChange.RouteEntryScrollRestorationRequested(scrollState)
+                else SearchStateChange.ScrollResetRequested,
+            )
         }
         persistDraftQuery()
         if (persistAcceptedResult) withContext(NonCancellable) {

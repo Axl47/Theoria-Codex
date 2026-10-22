@@ -1,12 +1,23 @@
 package com.theoriacodex.app.search.state
 
 import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.data.repository.SearchScrollState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SearchHistoryTest {
+    @Test fun `scroll anchors belong to each step without making identical queries new steps`() {
+        val first = accepted(SearchUiState(), "first")
+        val second = accepted(first, "second", scrollState = SearchScrollState(12, 34))
+        val third = accepted(second, "third", scrollState = SearchScrollState(56, 78))
+        assertEquals(listOf(SearchScrollState(12, 34), SearchScrollState(56, 78)), third.searchHistory.map { it.scrollState })
+        assertEquals(third.searchHistory, accepted(third, "third", scrollState = SearchScrollState(9, 10)).searchHistory)
+        val undone = accepted(third, "second", undo = true)
+        assertEquals(SearchScrollState(12, 34), undone.searchHistory.single().scrollState)
+    }
+
     @Test fun `only changed accepted searches add a bounded backward step`() {
         var state = SearchUiState()
         state = accepted(state, "first")
@@ -30,8 +41,11 @@ class SearchHistoryTest {
         assertEquals(listOf("a"), state.searchHistory.map { it.query.includeTags.single() })
     }
 
-    private fun accepted(previous: SearchUiState, tag: String, undo: Boolean = false): SearchUiState = previous.copy(
+    private fun accepted(
+        previous: SearchUiState, tag: String, undo: Boolean = false,
+        scrollState: SearchScrollState = SearchScrollState(0, 0),
+    ): SearchUiState = previous.copy(
         query = previous.query.copy(applied = emptySearchQuery().withIncludeTermsAsRequired(listOf(SearchTerm(tag)))),
         content = previous.content.copy(hasExecutedSearch = true),
-    ).withAcceptedSearchHistory(previous, undo)
+    ).withAcceptedSearchHistory(previous, undo, scrollState)
 }
