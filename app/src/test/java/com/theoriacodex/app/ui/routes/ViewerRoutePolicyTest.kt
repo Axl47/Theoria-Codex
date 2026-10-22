@@ -26,6 +26,29 @@ import org.junit.Test
 
 class ViewerRoutePolicyTest {
     @Test
+    fun `search and creator viewer retain liked seeds until related shelf dismissal`() {
+        val liked = post("liked")
+        val snapshot = ViewerRouteLiveSourceSnapshot(
+            queryHash = "active",
+            results = listOf(liked),
+            retainedLikedPostIds = setOf(liked.id),
+        )
+        val state = ViewerRouteLiveSourceState(
+            search = snapshot,
+            creatorProfile = snapshot,
+            likedPostIds = setOf(liked.id),
+        )
+        listOf(ViewerStreamSource.SEARCH, ViewerStreamSource.CREATOR_PROFILE).forEach { source ->
+            val session = session("active", source, SearchVisibilityFilters(hideLiked = true))
+            assertEquals(listOf(liked), state.visiblePostsFor(session))
+            assertEquals(emptyList<Post>(), state.copy(
+                search = snapshot.copy(retainedLikedPostIds = emptySet()),
+                creatorProfile = snapshot.copy(retainedLikedPostIds = emptySet()),
+            ).visiblePostsFor(session))
+        }
+    }
+
+    @Test
     fun `related viewer has no live source and records ordinary watched membership`() {
         val state = ViewerRouteLiveSourceState()
         val context = ViewerLaunchContext(

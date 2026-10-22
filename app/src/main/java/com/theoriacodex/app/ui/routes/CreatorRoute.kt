@@ -33,6 +33,7 @@ internal data class CreatorRouteConfig(
     val followed: Boolean = false,
     val availableSources: Set<SourceKey>,
     val likedPostIds: Set<PostId>,
+    val pendingLikePostIds: Set<PostId> = emptySet(),
     val savedPostIds: Set<PostId>,
     val resolveUnknownAnimatedDurations: Boolean,
 )
@@ -156,6 +157,7 @@ private fun CreatorRouteContent(
         onToggleFollow = { state.creator?.let { callbacks.onToggleFollow(it, state.results) } },
         state = state,
         likedPostIds = config.likedPostIds,
+        pendingLikePostIds = config.pendingLikePostIds,
         savedPostIds = config.savedPostIds,
         pixivUgoiraClient = pixivUgoiraClient,
         resolveUnknownAnimatedDurations = config.resolveUnknownAnimatedDurations,

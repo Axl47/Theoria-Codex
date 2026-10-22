@@ -9,6 +9,7 @@ import com.theoriacodex.app.related.RelatedFeedProjection
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.related.buildRelatedFeedProjection
 import com.theoriacodex.app.related.loadedPosts
+import com.theoriacodex.app.related.retainedLikedPostIds
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.search.filterSearchResults
@@ -33,13 +34,18 @@ fun rememberRelatedFeedPresentation(
     unknownAnimatedDurationPolicy: UnknownAnimatedDurationPolicy,
     durationStates: Map<MediaDurationKey, MediaDurationState>,
     durationFilterActive: Boolean,
+    pendingLikePostIds: Set<PostId> = emptySet(),
 ): RelatedFeedPresentation {
+    val retainedLikedPostIds = remember(relatedState, pendingLikePostIds) {
+        relatedState.retainedLikedPostIds + pendingLikePostIds
+    }
     val relatedPosts = relatedState.loadedPosts
     val durationMetadata = rememberDurationFilterMetadata(relatedPosts, durationStates, durationFilterActive)
     val visiblePosts = remember(
         relatedPosts,
         visibilityFilters,
         likedPostIds,
+        retainedLikedPostIds,
         savedPostIds,
         watchedPostIds,
         unknownAnimatedDurationPolicy,
@@ -49,6 +55,7 @@ fun rememberRelatedFeedPresentation(
             results = relatedPosts,
             filters = visibilityFilters,
             likedPostIds = likedPostIds,
+            retainedLikedPostIds = retainedLikedPostIds,
             savedPostIds = savedPostIds,
             watchedPostIds = watchedPostIds,
             unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,

@@ -167,6 +167,7 @@ fun SearchScreen(
     fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     likedPostIds: Set<PostId> = emptySet(),
+    pendingLikePostIds: Set<PostId> = emptySet(),
     savedPostIds: Set<PostId> = emptySet(),
     watchedPostIds: Set<PostId> = emptySet(),
     favoriteTags: Map<SourceKey, List<String>> = emptyMap(),
@@ -270,7 +271,9 @@ fun SearchScreen(
     val durationMetadata = rememberDurationFilterMetadata(displayResults, durationStates, animatedDurationFilterActive)
     val acquiredDurations = durationMetadata.knownDurationMsByPostId
     val durationReadiness = durationMetadata.readiness
-    val retainedLikedPostIds = remember(state.relatedPosts) { state.relatedPosts.retainedLikedPostIds }
+    val retainedLikedPostIds = remember(state.relatedPosts, pendingLikePostIds) {
+        state.relatedPosts.retainedLikedPostIds + pendingLikePostIds
+    }
     val visibleResults = remember(
         displayResults,
         visibilityFilters,
@@ -293,6 +296,7 @@ fun SearchScreen(
         )
     }
     val relatedPresentation = rememberRelatedFeedPresentation(
+        pendingLikePostIds = pendingLikePostIds,
         canonicalPosts = displayResults, visibleCanonicalPosts = visibleResults,
         relatedState = state.relatedPosts, visibilityFilters = visibilityFilters,
         likedPostIds = likedPostIds, savedPostIds = savedPostIds, watchedPostIds = watchedPostIds,

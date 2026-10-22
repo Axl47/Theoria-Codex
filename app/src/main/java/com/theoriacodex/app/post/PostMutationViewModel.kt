@@ -9,11 +9,14 @@ import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -28,17 +31,25 @@ internal class PostMutationViewModel(
     private val scope = scopeOverride ?: viewModelScope
     private val commands = Mutex()
     val feedback = MutationFeedback()
+    private val mutablePendingLikePostIds = MutableStateFlow<Map<String, Set<PostId>>>(emptyMap())
+    val pendingLikePostIds = mutablePendingLikePostIds.asStateFlow()
 
     fun like(profile: RecommendationProfile, post: Post, onCommitted: (LikeToggleOutcome) -> Unit = {}) {
         scope.launch {
             commands.withLock {
-                val result = runCatchingPreservingCancellation {
-                    val tags = withContext(computationDispatcher) { trainingTagsFor(post) }
-                    toggle(profile, post, tags)
+                // Membership can emit before toggle returns. Retain the post through shelf setup.
+                mutablePendingLikePostIds.value = mapOf(profile.profileId to setOf(post.id))
+                try {
+                    val result = runCatchingPreservingCancellation {
+                        val tags = withContext(computationDispatcher) { trainingTagsFor(post) }
+                        toggle(profile, post, tags)
+                    }
+                    result.fold(onSuccess = onCommitted, onFailure = {
+                        feedback.add("Could not update Likes. Please try again.")
+                    })
+                } finally {
+                    mutablePendingLikePostIds.value = emptyMap()
                 }
-                result.fold(onSuccess = onCommitted, onFailure = {
-                    feedback.add("Could not update Likes. Please try again.")
-                })
             }
         }
     }

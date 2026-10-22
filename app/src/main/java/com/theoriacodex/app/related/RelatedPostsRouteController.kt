@@ -1,6 +1,7 @@
 package com.theoriacodex.app.related
 
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -49,12 +50,12 @@ internal class RelatedPostsRouteController(
         val insertionIndex = (current.requestOrNull?.anchorCanonicalIndex ?: return) + 1
         val retainedPages = current.withoutPost(post.id).availablePages
         promotePost(post, insertionIndex)
-        launch(post, insertionIndex, retainedPages)
+        launch(post, insertionIndex, retainedPages, current.retainedLikedPostIds)
     }
 
     fun retry() {
         val request = currentState().requestOrNull ?: return
-        launch(request.seed, request.anchorCanonicalIndex, currentState().availablePages)
+        launch(request.seed, request.anchorCanonicalIndex, currentState().availablePages, request.ancestorSeedPostIds)
     }
 
     fun showPreviousPage() {
@@ -79,6 +80,7 @@ internal class RelatedPostsRouteController(
         seed: Post,
         anchorCanonicalIndex: Int,
         retainedPages: List<RelatedPostsPage> = emptyList(),
+        ancestorSeedPostIds: Set<PostId> = emptySet(),
     ) {
         cancelJob("Related-post request replaced")
         val loading = currentState().begin(
@@ -86,6 +88,7 @@ internal class RelatedPostsRouteController(
             anchorCanonicalIndex = anchorCanonicalIndex,
             generation = ++nextGeneration,
             retainedPages = retainedPages,
+            ancestorSeedPostIds = ancestorSeedPostIds,
         )
         updateState(loading)
         job = scope.launch {

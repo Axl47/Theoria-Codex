@@ -12,6 +12,7 @@ data class RelatedPostsRequest(
     val seed: Post,
     val anchorCanonicalIndex: Int,
     val generation: Long,
+    val ancestorSeedPostIds: Set<PostId> = emptySet(),
 ) {
     init {
         require(anchorCanonicalIndex >= 0) { "Related-post anchor must be non-negative" }
@@ -83,7 +84,10 @@ val RelatedPostsUiState.availablePages: List<RelatedPostsPage>
 /** Keep the current shelf's seeds visible until its recommendation chain is dismissed. */
 val RelatedPostsUiState.retainedLikedPostIds: Set<PostId>
     get() = buildSet {
-        requestOrNull?.let { add(it.seed.id) }
+        requestOrNull?.let { request ->
+            addAll(request.ancestorSeedPostIds)
+            add(request.seed.id)
+        }
         availablePages.forEach { page -> add(page.request.seed.id) }
     }
 
@@ -99,11 +103,13 @@ fun RelatedPostsUiState.begin(
     anchorCanonicalIndex: Int,
     generation: Long,
     retainedPages: List<RelatedPostsPage> = emptyList(),
+    ancestorSeedPostIds: Set<PostId> = emptySet(),
 ): RelatedPostsUiState.Loading = RelatedPostsUiState.Loading(
     request = RelatedPostsRequest(
         seed = seed,
         anchorCanonicalIndex = anchorCanonicalIndex,
         generation = generation,
+        ancestorSeedPostIds = ancestorSeedPostIds,
     ),
     retainedPages = retainedPages,
 )

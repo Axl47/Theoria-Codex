@@ -82,6 +82,7 @@ fun CreatorProfileScreen(
     followed: Boolean = false,
     onToggleFollow: () -> Unit = {},
     likedPostIds: Set<PostId>,
+    pendingLikePostIds: Set<PostId> = emptySet(),
     savedPostIds: Set<PostId>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     resolveUnknownAnimatedDurations: Boolean = false,
@@ -136,7 +137,9 @@ fun CreatorProfileScreen(
     val unknownAnimatedDurationPolicy = durationFilter.unknownPolicy
     val acquiredDurations = durationFilter.knownDurationMsByPostId
     val durationReadiness = durationFilter.readiness
-    val retainedLikedPostIds = remember(state.relatedPosts) { state.relatedPosts.retainedLikedPostIds }
+    val retainedLikedPostIds = remember(state.relatedPosts, pendingLikePostIds) {
+        state.relatedPosts.retainedLikedPostIds + pendingLikePostIds
+    }
     val visibleResults = remember(
         state.results,
         visibilityFilters,
@@ -162,6 +165,7 @@ fun CreatorProfileScreen(
     DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
 
     val relatedPresentation = rememberRelatedFeedPresentation(
+        pendingLikePostIds = pendingLikePostIds,
         canonicalPosts = state.results,
         visibleCanonicalPosts = visibleResults,
         relatedState = state.relatedPosts,

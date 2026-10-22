@@ -104,6 +104,7 @@ import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.app.creator.CreatorOpeningWorkflow
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.creator.state.CreatorAction
+import com.theoriacodex.app.related.retainedLikedPostIds
 import com.theoriacodex.app.related.LikeToggleOutcome
 import com.theoriacodex.app.recents.RecentsScreen
 import com.theoriacodex.app.recents.fypSeedBySource
@@ -285,6 +286,7 @@ internal fun TheoriaAppContent(
             PostMutationViewModel(dataDependencies.settingsRepository, workflowDependencies.likesCodexSync::toggle)
         } },
     )
+    val pendingLikePostIds by postMutationOwner.pendingLikePostIds.collectAsStateWithLifecycle()
     MutationFeedbackHost(postMutationOwner.feedback, snackbarHostState)
     MutationFeedbackHost(feedFabRestoreRegistry.feedback, snackbarHostState)
     val codexSaveOwner = viewModel<CodexSaveViewModel>(
@@ -1141,6 +1143,7 @@ internal fun TheoriaAppContent(
                                             mediaDurationCoordinator = featureDependencies.mediaDurationCoordinator,
                                             pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                                             config = SearchRouteConfig(
+                                                pendingLikePostIds = pendingLikePostIds[state.activeProfile.profileId].orEmpty(),
                                                 settings = state.settings,
                                                 availableSources = state.availableSources,
                                                 creatorBrowsingSources = state.creatorBrowsingSources,
@@ -1652,6 +1655,7 @@ internal fun TheoriaAppContent(
                                 mediaDurationCoordinator = featureDependencies.mediaDurationCoordinator,
                                 pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                                 config = CreatorRouteConfig(
+                                    pendingLikePostIds = pendingLikePostIds[state.activeProfile.profileId].orEmpty(),
                                     followed = state.settings.followedCreators.any { it.creator.followKey() == creator.followKey() },
                                     activeCreator = creator,
                                     availableSources = state.availableSources,
@@ -1750,6 +1754,8 @@ internal fun TheoriaAppContent(
                                         queryHash = state.search.query.appliedQueryHash
                                             .takeIf(String::isNotBlank),
                                         results = state.search.content.results,
+                                        retainedLikedPostIds = state.search.relatedPosts.retainedLikedPostIds +
+                                            pendingLikePostIds[state.browsing.activeProfile.profileId].orEmpty(),
                                         canLoadMore = state.search.content.canLoadMore,
                                         loadingMore = state.search.loadingMore,
                                     ),
@@ -1762,6 +1768,8 @@ internal fun TheoriaAppContent(
                                     creatorProfile = ViewerRouteLiveSourceSnapshot(
                                         queryHash = state.creator.queryHash,
                                         results = state.creator.results,
+                                        retainedLikedPostIds = state.creator.relatedPosts.retainedLikedPostIds +
+                                            pendingLikePostIds[state.browsing.activeProfile.profileId].orEmpty(),
                                         canLoadMore = state.creator.canLoadMore,
                                         loadingMore = state.creator.isPaging,
                                     ),

@@ -127,6 +127,12 @@ class RelatedPostsRouteControllerTest {
             assertEquals(listOf(seed.id, promoted.id, sibling.id), loader.requests)
             assertEquals(listOf(seed, promoted, sibling), canonicalPosts)
             assertEquals(listOf(last), state.loadedPosts)
+            assertEquals(setOf(seed.id, promoted.id, sibling.id), state.retainedLikedPostIds)
+            controller.retry()
+            runCurrent()
+            assertEquals(setOf(seed.id, promoted.id, sibling.id), state.retainedLikedPostIds)
+            controller.clear()
+            assertTrue(state.retainedLikedPostIds.isEmpty())
             assertTrue(state.availablePages.flatMap { it.posts }.none { it.id == sibling.id || it.id == promoted.id })
         }
     }

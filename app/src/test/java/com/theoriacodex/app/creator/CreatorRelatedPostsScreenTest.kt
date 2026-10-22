@@ -38,6 +38,7 @@ class CreatorRelatedPostsScreenTest {
             results = listOf(seed),
         ))
         val liked = mutableStateOf(false)
+        val pending = mutableStateOf(false)
         val actions = mutableListOf<CreatorAction>()
         compose.setContent {
             MaterialTheme {
@@ -45,14 +46,12 @@ class CreatorRelatedPostsScreenTest {
                     state = state.value,
                     likedPostIds = if (liked.value) setOf(seed.id) else emptySet(),
                     savedPostIds = emptySet(),
+                    pendingLikePostIds = if (pending.value) setOf(seed.id) else emptySet(),
                     fabRestoreState = FeedFabRestoreState(hideLiked = true),
                     onToggleLike = { post ->
                         assertEquals(seed.id, post.id)
+                        pending.value = true
                         liked.value = true
-                        val loading = RelatedPostsUiState.Idle.begin(seed, 0, 1)
-                        state.value = state.value.copy(
-                            relatedPosts = loading.complete(loading.request, emptyList(), setOf(seed.id)),
-                        )
                     },
                     onAction = { action ->
                         actions += action
@@ -67,6 +66,15 @@ class CreatorRelatedPostsScreenTest {
             }
         }
         compose.onNodeWithContentDescription("Like post").performClick()
+        // Room membership may reach the grid before the commit callback starts the shelf.
+        compose.onNodeWithContentDescription("Unlike post").assertIsDisplayed()
+        compose.runOnIdle {
+            val loading = RelatedPostsUiState.Idle.begin(seed, 0, 1)
+            state.value = state.value.copy(
+                relatedPosts = loading.complete(loading.request, emptyList(), setOf(seed.id)),
+            )
+            pending.value = false
+        }
         compose.onNodeWithText("No new related posts").assertIsDisplayed()
         compose.onNodeWithContentDescription("Unlike post").assertIsDisplayed()
         compose.onNodeWithText("Dismiss").performClick()

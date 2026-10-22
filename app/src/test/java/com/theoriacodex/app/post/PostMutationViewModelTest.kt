@@ -30,14 +30,19 @@ class PostMutationViewModelTest {
             LikeToggleOutcome.LIKED
         }, this, StandardTestDispatcher(testScheduler))
         val outcomes = mutableListOf<LikeToggleOutcome>()
-        owner.like(first, testPost(), outcomes::add)
+        owner.like(first, testPost()) { outcome ->
+            assertEquals(setOf(testPost().id), owner.pendingLikePostIds.value[first.profileId])
+            outcomes += outcome
+        }
         runCurrent()
         assertTrue(outcomes.isEmpty())
+        assertEquals(mapOf(first.profileId to setOf(testPost().id)), owner.pendingLikePostIds.value)
         settings.setActiveProfile(second.profileId)
         release.complete(Unit)
         advanceUntilIdle()
         assertEquals(listOf(first.profileId), committed)
         assertEquals(listOf(LikeToggleOutcome.LIKED), outcomes)
+        assertTrue(owner.pendingLikePostIds.value.isEmpty())
         assertTrue(owner.feedback.notices.value.isEmpty())
     }
 
@@ -52,6 +57,7 @@ class PostMutationViewModelTest {
         owner.like(stored.observeSettings().first().recommendationProfiles.first(), testPost()) { error("No commit occurred") }
         owner.favorite("profile-main", SourceKey.PIXIV, "tag", true)
         advanceUntilIdle()
+        assertTrue(owner.pendingLikePostIds.value.isEmpty())
         val notices = owner.feedback.notices.value
         assertEquals(2, notices.size)
         notices.forEach { owner.feedback.acknowledge(it.id) }

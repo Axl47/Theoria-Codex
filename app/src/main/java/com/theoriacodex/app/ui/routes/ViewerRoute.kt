@@ -87,6 +87,7 @@ internal data class ViewerRouteLiveSourceSnapshot(
     val results: List<Post> = emptyList(),
     val canLoadMore: Boolean = false,
     val loadingMore: Boolean = false,
+    val retainedLikedPostIds: Set<PostId> = emptySet(),
 )
 
 /**
@@ -126,6 +127,7 @@ internal data class ViewerRouteLiveSourceState(
             results = snapshot.results,
             filters = session.searchVisibilityFilters,
             likedPostIds = if (appliesSavedAndLikedPolicy) likedPostIds else emptySet(),
+            retainedLikedPostIds = snapshot.retainedLikedPostIds,
             savedPostIds = if (appliesSavedAndLikedPolicy) savedPostIds else emptySet(),
             watchedPostIds = if (appliesSavedAndLikedPolicy) watchedPostIds else emptySet(),
             unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
