@@ -16,7 +16,7 @@ import org.robolectric.annotation.Config
 import java.util.Locale
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [35], qualifiers = "en-rUS")
+@Config(application = Application::class, qualifiers = "en-rUS")
 class MediaStorageChartTest {
     @get:Rule val compose = createComposeRule()
 

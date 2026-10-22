@@ -1,6 +1,5 @@
 package com.theoriacodex.app.media
 
-import android.os.Build
 import android.os.Trace
 import com.theoriacodex.data.repository.MediaDurationRepository
 import com.theoriacodex.domain.model.Post
@@ -48,15 +47,11 @@ object AndroidMediaDurationTraceRecorder : MediaDurationTraceRecorder {
     override fun probe() = recordEvent(TRACE_DURATION_PROBE)
 
     override fun workloadStarted(cookie: Int) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            Trace.beginAsyncSection(TRACE_DURATION_WORKLOAD, cookie)
-        }
+        Trace.beginAsyncSection(TRACE_DURATION_WORKLOAD, cookie)
     }
 
     override fun workloadFinished(cookie: Int) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            Trace.endAsyncSection(TRACE_DURATION_WORKLOAD, cookie)
-        }
+        Trace.endAsyncSection(TRACE_DURATION_WORKLOAD, cookie)
     }
 
     override fun publication() = recordEvent(TRACE_DURATION_PUBLISH)

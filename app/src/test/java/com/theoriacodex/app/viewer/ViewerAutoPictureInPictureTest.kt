@@ -23,7 +23,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [35])
+@Config(application = Application::class)
 class ViewerAutoPictureInPictureTest {
     @Test
     fun `native auto entry follows playback and keeps buffering video armed`() {
@@ -37,9 +37,6 @@ class ViewerAutoPictureInPictureTest {
             assertEquals(9.0 / 16, activity.params!!.aspectRatio!!.toDouble(), 0.001)
             player.update(playing = true, playbackState = Player.STATE_BUFFERING)
             assertTrue(activity.params!!.isAutoEnterEnabled)
-            var explicitEntries = 0
-            controller.onUserLeaveHint { explicitEntries++; true }
-            assertEquals(0, explicitEntries)
             player.update(playing = false, playbackState = Player.STATE_READY)
             assertFalse(activity.params!!.isAutoEnterEnabled)
             assertFalse(controller.keepPlayingOnPause)
@@ -66,30 +63,6 @@ class ViewerAutoPictureInPictureTest {
             assertFalse(controller.keepPlayingOnPause)
             secondPlayer.update(true, Player.STATE_READY)
             assertFalse(activity.params!!.isAutoEnterEnabled)
-        }
-    }
-
-    @Test
-    @Config(sdk = [28])
-    fun `older Android enters only when leaving with an active video`() {
-        withController { _, controller ->
-            var entries = 0
-            val enter: (PictureInPictureParams) -> Boolean = { entries++; true }
-            controller.onUserLeaveHint(enter)
-            val player = TestVideoPlayer()
-            val binding = controller.bind(player)
-            controller.onUserLeaveHint(enter)
-            assertEquals(0, entries)
-            player.update(true, Player.STATE_READY)
-            controller.onUserLeaveHint(enter)
-            assertEquals(1, entries)
-            assertFalse(controller.keepPlayingOnPause)
-            player.update(false, Player.STATE_READY)
-            controller.onUserLeaveHint(enter)
-            assertEquals(1, entries)
-            binding.close()
-            controller.onUserLeaveHint(enter)
-            assertEquals(1, entries)
         }
     }
 

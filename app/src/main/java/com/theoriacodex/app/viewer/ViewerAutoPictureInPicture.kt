@@ -1,8 +1,6 @@
 package com.theoriacodex.app.viewer
 
 import android.app.Activity
-import android.app.PictureInPictureParams
-import android.os.Build
 import androidx.media3.common.Player
 import java.io.Closeable
 
@@ -11,9 +9,9 @@ internal class ViewerAutoPictureInPicture(private val activity: Activity) {
     private var currentPlayer: Player? = null
     private var currentBinding: Any? = null
 
-    // Android 12 can pause the Activity before reporting its automatic PiP transition.
+    // The Activity can pause before Android reports its automatic PiP transition.
     val keepPlayingOnPause: Boolean
-        get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && eligiblePlayer() != null
+        get() = eligiblePlayer() != null
 
     fun bind(player: Player): Closeable {
         val binding = Any()
@@ -36,12 +34,6 @@ internal class ViewerAutoPictureInPicture(private val activity: Activity) {
         }
     }
 
-    fun onUserLeaveHint(enter: (PictureInPictureParams) -> Boolean) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) return
-        val player = eligiblePlayer() ?: return
-        enter(activity.viewerPictureInPictureParams(player.videoSize.width, player.videoSize.height))
-    }
-
     private fun eligiblePlayer(): Player? {
         if (!activity.supportsViewerPictureInPicture()) return null
         return currentPlayer?.takeIf { player ->
@@ -52,7 +44,7 @@ internal class ViewerAutoPictureInPicture(private val activity: Activity) {
     }
 
     private fun updateParams() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || !activity.supportsViewerPictureInPicture()) return
+        if (!activity.supportsViewerPictureInPicture()) return
         val player = eligiblePlayer()
         runCatching {
             activity.setPictureInPictureParams(activity.viewerPictureInPictureParams(

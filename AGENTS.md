@@ -35,6 +35,11 @@ Explain plans, questions, and completed work in plain system-level language. The
 
 Keep `AGENTS.md` limited to durable product intent, safety boundaries, and acceptance or release requirements that cannot be inferred from the codebase. Add findings only when they meet that bar; leave implementation details, app flows, and resolved bug histories in code, tests, or focused documentation.
 
+## Android Support
+
+- Support only the latest stable Android major release and its immediate predecessor; previews do not move the support window. Currently: Android 17 (API 37) and Android 16 (API 36). Keep the minimum SDK, documentation, and test matrix aligned as this window advances.
+- Prefer platform APIs available throughout that window and remove obsolete OS compatibility branches when touched. Preserve saved-data and credential migrations for existing users.
+
 ## Non-obvious Constraints
 
 - Likes and creator follows are local actions. Do not add remote bookmarks, favorites, follows, or notification subscriptions.

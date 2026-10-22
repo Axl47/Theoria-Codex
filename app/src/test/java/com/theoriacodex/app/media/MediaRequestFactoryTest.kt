@@ -13,7 +13,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [35])
+@Config(application = Application::class)
 class MediaRequestFactoryTest {
     @Test
     fun `building another provider request cannot replace protected source headers`() {

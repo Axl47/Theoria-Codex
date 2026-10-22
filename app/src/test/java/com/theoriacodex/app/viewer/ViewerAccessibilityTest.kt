@@ -33,7 +33,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [35])
+@Config(application = Application::class)
 class ViewerAccessibilityTest {
     @get:Rule val compose = createComposeRule()
 

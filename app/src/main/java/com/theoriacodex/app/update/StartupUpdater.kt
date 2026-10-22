@@ -2,8 +2,6 @@ package com.theoriacodex.app.update
 
 import android.content.Context
 import android.content.pm.PackageManager
-import android.os.Build
-import androidx.core.content.pm.PackageInfoCompat
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.withTimeoutOrNull
@@ -281,15 +279,10 @@ class StartupUpdater(
     }
 
     private fun readInstalledVersionCode(context: Context): Int {
-        val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.packageManager.getPackageInfo(
-                context.packageName,
-                PackageManager.PackageInfoFlags.of(0),
-            )
-        } else {
-            @Suppress("DEPRECATION")
-            context.packageManager.getPackageInfo(context.packageName, 0)
-        }
-        return PackageInfoCompat.getLongVersionCode(packageInfo).toInt()
+        val packageInfo = context.packageManager.getPackageInfo(
+            context.packageName,
+            PackageManager.PackageInfoFlags.of(0),
+        )
+        return packageInfo.longVersionCode.toInt()
     }
 }

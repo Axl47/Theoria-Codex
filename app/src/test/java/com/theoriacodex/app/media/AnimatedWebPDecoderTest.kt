@@ -20,7 +20,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class LegacyAnimatedWebPDecoderTest {
+class AnimatedWebPDecoderTest {
     @Test
     fun `animated webp header reads the VP8X feature byte`() {
         val animated = extendedWebPHeader(featureFlags = 0x02, width = 1080, height = 1920)

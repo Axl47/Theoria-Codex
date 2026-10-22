@@ -15,14 +15,18 @@ jobs:
   personal-apk:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6.1.0
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: |
+            17
+            21
 
-      - uses: gradle/actions/setup-gradle@v3
+      - uses: gradle/actions/setup-gradle@v6.4.0
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
       - name: Assemble certificate-pinned personal APK
         env:
@@ -37,17 +41,18 @@ jobs:
       - name: Sign personal APK with the existing production key
         id: sign_personal
         env:
-          BUILD_TOOLS_VERSION: '35.0.0'
-        uses: r0adkll/sign-android-release@v1
-        with:
-          releaseDirectory: app/build/outputs/apk/personalRelease
-          signingKeyBase64: ${{ secrets.THEORIA_UPLOAD_KEYSTORE_BASE64 }}
-          alias: ${{ secrets.THEORIA_UPLOAD_KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.THEORIA_UPLOAD_STORE_PASSWORD }}
-          keyPassword: ${{ secrets.THEORIA_UPLOAD_KEY_PASSWORD }}
+          BUILD_TOOLS_VERSION: '36.0.0'
+          THEORIA_UPLOAD_KEYSTORE_BASE64: ${{ secrets.THEORIA_UPLOAD_KEYSTORE_BASE64 }}
+          THEORIA_UPLOAD_KEY_ALIAS: ${{ secrets.THEORIA_UPLOAD_KEY_ALIAS }}
+          THEORIA_UPLOAD_STORE_PASSWORD: ${{ secrets.THEORIA_UPLOAD_STORE_PASSWORD }}
+          THEORIA_UPLOAD_KEY_PASSWORD: ${{ secrets.THEORIA_UPLOAD_KEY_PASSWORD }}
+        run: >-
+          python3 scripts/sign_release_apk.py
+          app/build/outputs/apk/personalRelease/app-personalRelease-unsigned.apk
+          app/build/outputs/apk/personalRelease/app-personalRelease-signed.apk
 
       - name: Save personal APK as a short-lived developer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: theoria-personal-debug-copy
           path: ${{ steps.sign_personal.outputs.signedReleaseFile }}

@@ -19,6 +19,9 @@
 
 ## Improvements
 
+- Focus support on Android 16 and Android 17; new builds require Android 16 or newer.
+- Use Android’s configured interaction sounds for Compose controls.
+
 - Hide post titles in Saved sub-Codex rows for compact, evenly sized previews.
 
 - Open artist profiles from nhentai posts to browse their galleries.
@@ -76,6 +79,8 @@
 - Remove repeated type labels from tag names in the post hold menu.
 
 ## Fixes
+- Reduce timing-related video playback failures.
+- Include navigation fixes for predictive-back races and transition clipping.
 - Return fullscreen Saved previews to their sub-Codex cards, scrolling the carousel to the exited post.
 
 - Show tag post counts supplied by nhentai and retain completed counts when further lookups time out.

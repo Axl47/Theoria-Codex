@@ -36,7 +36,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [35])
+@Config(application = Application::class)
 class ViewerLevelGesturesTest {
     @get:Rule val compose = createComposeRule()
     private val activityController = Robolectric.buildActivity(Activity::class.java)

@@ -5,7 +5,6 @@ import com.theoriacodex.app.statistics.statisticsPostKey
 import android.content.Context
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.di.SourceDependencies
-import com.theoriacodex.app.media.appClipboardConfirmationMessage
 import com.theoriacodex.app.media.copyPostUrlToClipboard
 import com.theoriacodex.app.media.recoverRemoteMedia
 import com.theoriacodex.app.recommend.state.ForYouAction
@@ -305,5 +304,5 @@ internal fun shareViewerPostMessage(
 ): String? {
     val copied = post?.let { copyPostUrlToClipboard(context, it) } == true
     if (copied) onPostUrlCopied()
-    return if (copied) appClipboardConfirmationMessage("Post URL copied") else "No post URL available"
+    return if (copied) null else "No post URL available"
 }

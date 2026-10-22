@@ -1,3 +1,5 @@
+import com.android.build.api.dsl.LibraryExtension
+
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.androidx.room)
@@ -5,12 +7,12 @@ plugins {
     alias(libs.plugins.detekt)
 }
 
-android {
+extensions.configure<LibraryExtension> {
     namespace = "com.theoriacodex.data.android"
-    compileSdk = 37
+    compileSdk = libs.versions.androidCompileSdk.get().toInt()
 
     defaultConfig {
-        minSdk = 26
+        minSdk = libs.versions.androidMinSdk.get().toInt()
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
     }
@@ -30,10 +32,10 @@ android {
     }
 
     sourceSets.named("androidTest") {
-        assets.srcDir("$projectDir/schemas")
+        assets.directories.add("$projectDir/schemas")
     }
     sourceSets.named("test") {
-        assets.srcDir("$projectDir/schemas")
+        assets.directories.add("$projectDir/schemas")
     }
 }
 

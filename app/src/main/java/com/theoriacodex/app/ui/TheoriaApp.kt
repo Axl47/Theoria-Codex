@@ -15,7 +15,6 @@ import com.theoriacodex.app.update.toReleaseHistoryEntry
 
 import com.theoriacodex.data.repository.followKey
 import android.content.ClipData
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -176,7 +175,6 @@ import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
-import com.theoriacodex.data.storage.ApplicationDataState
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
@@ -190,40 +188,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
-
-@Composable
-fun TheoriaApp(
-    incomingUri: Uri? = null,
-    onIncomingUriConsumed: () -> Unit = {},
-) {
-    val appContext = LocalContext.current.applicationContext
-    val viewerSessionOwner = viewModel<ViewerSessionRetentionViewModel>()
-    val appShellOwner = viewModel<AppShellViewModel>()
-    val containerOwner = rememberTheoriaAppContainerOwner(appContext)
-    val containerState by containerOwner.appContainerState.collectAsStateWithLifecycle()
-    val scope = rememberCoroutineScope()
-    LaunchedEffect(containerOwner) { containerOwner.startAppContainer() }
-    when (val current = containerState) {
-        is ApplicationDataState.Ready -> TheoriaAppContent(
-            appContainer = current.value,
-            viewerSessionOwner = viewerSessionOwner,
-            appShellOwner = appShellOwner,
-            incomingUri = incomingUri,
-            onIncomingUriConsumed = onIncomingUriConsumed,
-        )
-        is ApplicationDataState.Failed -> AppContainerStartupSurface(
-            failed = true,
-            onRetry = {
-                scope.launch {
-                    runCatchingPreservingCancellation { containerOwner.retryAppContainer() }
-                }
-            },
-        )
-        ApplicationDataState.Loading,
-        ApplicationDataState.NotStarted,
-        -> AppContainerStartupSurface(failed = false, onRetry = {})
-    }
-}
 
 /** Renderable app-shell boundary with dependencies supplied by the application owner. */
 @Composable
@@ -1991,14 +1955,5 @@ internal fun TheoriaAppContent(
         }
     }
     }
-    }
-}
-
-private fun openInBrowser(context: Context, url: String) {
-    runCatching {
-        val intent = Intent(Intent.ACTION_VIEW, url.toUri()).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        context.startActivity(intent)
     }
 }

@@ -1,12 +1,8 @@
 package com.theoriacodex.app.search
 
-import android.os.Build
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 
@@ -19,24 +15,15 @@ internal class SearchInputFocus(
     }
 }
 
-/** Old Android immediately refocuses the first editor when its native Compose owner loses focus. */
+/** Clear the Compose focus and keyboard together when leaving or submitting Search. */
 @Composable
 internal fun rememberSearchInputFocus(): SearchInputFocus {
     val manager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
-    val page = remember { FocusRequester() }
-    return remember(manager, keyboard, page) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
-            // Keep native focus on the page without creating an accessibility control or fake button.
-            SearchInputFocus(Modifier.focusRequester(page).focusTarget()) {
-                page.requestFocus()
-                keyboard?.hide()
-            }
-        } else {
-            SearchInputFocus(Modifier) { force ->
-                manager.clearFocus(force)
-                keyboard?.hide()
-            }
+    return remember(manager, keyboard) {
+        SearchInputFocus(Modifier) { force ->
+            manager.clearFocus(force)
+            keyboard?.hide()
         }
     }
 }

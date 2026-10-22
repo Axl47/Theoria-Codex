@@ -21,6 +21,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.lifecycle.ViewModelStoreOwner
@@ -57,7 +58,7 @@ import org.robolectric.annotation.Config
 
 /** Exercise actual Room Likes/Codex writes and route callbacks with both membership filters enabled. */
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [35])
+@Config(application = Application::class)
 class HideLikedRelatedPostsJourneyTest {
     @get:Rule val compose = createComposeRule()
     @get:Rule val temporary = TemporaryFolder()
@@ -97,6 +98,7 @@ class HideLikedRelatedPostsJourneyTest {
             }
             compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Recents").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithContentDescription("Recents").performClick()
+            compose.waitUntil(10_000) { compose.onNodeWithText("Searches").isDisplayed() }
             compose.onNodeWithText("Searches").performClick()
             compose.waitUntil(10_000) { compose.onAllNodesWithTag("Recent search:likes-query").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("Recent search:likes-query").performClick()

@@ -1,5 +1,10 @@
 # Theoria Codex
 
+Supports only the latest stable Android major release and its immediate predecessor: currently **Android 17 and Android 16** (minimum API 36; compile/target API 37). Preview releases do not advance this window. Older Android versions cannot install new builds.
+
+For local builds, run Gradle with **JDK 21**; Android 16/17 Robolectric tests require it. Keep **JDK 17** available for the JVM modules’ existing compilation toolchains. CI installs both and runs Gradle on JDK 21.
+
+
 Theoria Codex is an Android-first, local-first, tag-driven media browser and collection app. It is built around a small loop: search real sources, open posts in an immersive viewer, save or like what matters, revisit activity through Recents, and use liked/tag history to drive recommendations.
 
 ## Current App Shape
@@ -14,7 +19,7 @@ The app has five top-level tabs, in bottom-navigation and pager order:
 
 ## Viewer And Media
 
-Viewer handles still images, videos, GIF-like animated media, animated WebP, Pixiv ugoira, and multi-page posts. Multi-page and mixed-media posts support full-view paging, a two-column Media Overview that preserves the exact media order, type badges without grid autoplay, and a persisted scroll-direction toggle. Animated media supports playback-rate controls, scrub/seek affordances, and repeated double-tap seek feedback. Animated WebP uses Android's native decoder on API 28 and newer plus a bounded API 26/27 fallback; Media Overview requests a separate static first frame.
+Viewer handles still images, videos, GIF-like animated media, animated WebP, Pixiv ugoira, and multi-page posts. Multi-page and mixed-media posts support full-view paging, a two-column Media Overview that preserves the exact media order, type badges without grid autoplay, and a persisted scroll-direction toggle. Animated media supports playback-rate controls, scrub/seek affordances, and repeated double-tap seek feedback. Animated WebP uses Android’s native decoder for ordinary playback and a bounded controllable decoder for scrubbing; Media Overview requests a separate static first frame.
 
 Saving a post or collection to the device downloads every gallery page, with per-page progress and failed-page retry. Viewer download saves only the selected page. Filenames retain a bounded Unicode title plus source, canonical post ID, and gallery page. Repeated downloads preserve existing files: Android may save a numbered copy; an existing-file refusal is reported without offering a futile Retry. A Hitomi anime record with a playable video exposes exactly one MP4 item—the poster remains preview metadata rather than becoming a second page—and downloading it creates one `.mp4` request with the source headers.
 
@@ -213,7 +218,7 @@ python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 ./gradlew :koverXmlReport :koverVerify
 ```
 
-Gradle configuration cache is enabled repository-wide in strict fail mode. CI creates an isolated
+Gradle configuration cache is enabled repository-wide in strict fail mode. Gradle Actions 6.4.0 uses its enhanced cache provider for downloaded dependencies and build state; this does not disable local configuration-cache reuse. Trusted CI runs also save and restore encrypted configuration-cache entries using the repository’s `GRADLE_ENCRYPTION_KEY` secret. Fork and Dependabot PRs without that secret still run every check and use local configuration-cache reuse; they skip encrypted transfer. CI creates an isolated
 cache entry and immediately reuses it; when diagnosing build logic, keep
 `--configuration-cache-problems=fail` enabled rather than allowing incompatible tasks to fall back
 silently. Use `--no-configuration-cache` only for an intentional comparison or diagnosis.
@@ -270,7 +275,7 @@ Raw evidence must remain available through comparison; deleting it afterwards pr
 comparison reports but prevents later trace inspection or independent revalidation of those runs.
 
 Android-related pull requests and main pushes, including `app-logic` changes, run device tests on
-API 35 while the app compiles and targets SDK 37. Scheduled/manual runs also cover API 27. Tagged
+Android 16 and 17 (API 36 and 37), including scheduled/manual runs. Tagged
 releases require both Verify and Device Validation, including isolated minified acceptance. That
 lane verifies package ID, debuggability and the actual debug signing certificate before install,
 then checks startup/callback and persisted JSON data across two separate process launches.

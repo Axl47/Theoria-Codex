@@ -1,7 +1,6 @@
 package com.theoriacodex.app.media
 
 import android.graphics.Bitmap
-import android.os.Build
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.graphics.scale
 import coil.ImageLoader
@@ -23,9 +22,9 @@ import okio.BufferedSource
 import kotlin.math.roundToInt
 
 /**
- * Animated WebP fallback for Android 8.x and static first-frame decoder for Media Overview tiles.
+ * Bounded controllable WebP decoding for Viewer scrubbing and static Media Overview frames.
  */
-internal class LegacyAnimatedWebPDecoder(
+internal class AnimatedWebPDecoder(
     private val source: ImageSource,
     private val options: Options,
     private val mode: AnimatedWebPDecodeMode,
@@ -51,35 +50,30 @@ internal class LegacyAnimatedWebPDecoder(
             )
         }
 
-        var isSampled = false
-        val drawable = when (mode) {
+        when (mode) {
             AnimatedWebPDecodeMode.ANIMATED,
             AnimatedWebPDecodeMode.CONTROLLABLE,
-            -> webPDrawable
-            AnimatedWebPDecodeMode.STATIC_FIRST_FRAME -> {
-                val frame = try {
-                    webPDrawable.frameSeqDecoder.getFrameBitmap(0)
-                        ?: throw IOException("Animated WebP did not decode a first frame")
-                } finally {
-                    webPDrawable.stop()
-                }
-                try {
-                    val scaledFrame = frame.scaledToward(options)
-                    if (scaledFrame !== frame) {
-                        frame.recycle()
-                        isSampled = true
-                    }
-                    scaledFrame.toDrawable(options.context.resources)
-                } catch (error: Throwable) {
-                    if (!frame.isRecycled) frame.recycle()
-                    throw error
-                }
-            }
+            -> DecodeResult(drawable = webPDrawable, isSampled = false)
+            AnimatedWebPDecodeMode.STATIC_FIRST_FRAME -> decodeFirstFrame(webPDrawable)
         }
-        DecodeResult(
-            drawable = drawable,
-            isSampled = isSampled,
-        )
+    }
+
+    private fun decodeFirstFrame(drawable: WebPDrawable): DecodeResult {
+        val frame = try {
+            drawable.frameSeqDecoder.getFrameBitmap(0)
+                ?: throw IOException("Animated WebP did not decode a first frame")
+        } finally {
+            drawable.stop()
+        }
+        try {
+            val scaledFrame = frame.scaledToward(options)
+            val isSampled = scaledFrame !== frame
+            if (isSampled) frame.recycle()
+            return DecodeResult(scaledFrame.toDrawable(options.context.resources), isSampled)
+        } catch (error: Throwable) {
+            if (!frame.isRecycled) frame.recycle()
+            throw error
+        }
     }
 
     class Factory : Decoder.Factory {
@@ -92,14 +86,11 @@ internal class LegacyAnimatedWebPDecoder(
                 ANIMATED_WEBP_DECODE_MODE_PARAMETER,
             )
             val mode = requestedMode ?: AnimatedWebPDecodeMode.ANIMATED
-            if (
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
-                mode == AnimatedWebPDecodeMode.ANIMATED
-            ) {
+            if (mode == AnimatedWebPDecodeMode.ANIMATED) {
                 return null
             }
             val header = result.source.source().animatedWebPHeaderOrNull() ?: return null
-            return LegacyAnimatedWebPDecoder(
+            return AnimatedWebPDecoder(
                 source = result.source,
                 options = options,
                 mode = mode,

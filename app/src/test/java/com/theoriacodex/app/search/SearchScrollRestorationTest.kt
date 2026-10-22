@@ -37,7 +37,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [35])
+@Config(application = Application::class)
 class SearchScrollRestorationTest {
     @get:Rule val compose = createComposeRule()
     private val posts = (0..59).map { testPost(sourcePostId = "restore-$it") }

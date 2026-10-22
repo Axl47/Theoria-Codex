@@ -29,7 +29,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [35])
+@Config(application = Application::class)
 class SearchSourcePickerTest {
     @get:Rule
     val composeRule = createComposeRule()

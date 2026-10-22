@@ -17,6 +17,11 @@
             android:name="androidx.core.content.FileProvider"
             tools:node="remove" />
 
+        <!-- The offline benchmark fixture must not handle external media discovery intents. -->
+        <activity
+            android:name="androidx.media3.session.BluetoothValidationActivity"
+            tools:node="remove" />
+
         <activity
             android:name=".MainActivity"
             android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize"

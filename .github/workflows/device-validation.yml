@@ -6,6 +6,9 @@ on:
       release-acceptance:
         type: boolean
         default: false
+    secrets:
+      GRADLE_ENCRYPTION_KEY:
+        required: false
   pull_request:
     branches:
       - main
@@ -62,21 +65,26 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Hosted runners expose the stable API 35 platform package; the app still compiles and targets SDK 37.
-        api-level: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '[27,35]' || '[35]') }}
+        # Latest and previous stable Android releases; keep aligned with androidMinSdk.
+        # Android 17 packages use the literal 37.0 coordinate in the SDK catalog.
+        api-level: ["36", "37.0"]
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6.1.0
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: |
+            17
+            21
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6.4.0
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
       - name: Enable KVM
         run: |
@@ -90,8 +98,7 @@ jobs:
         with:
           api-level: ${{ matrix.api-level }}
           target: google_apis
-          # Google's API 27 catalog provides x86, while API 35 uses x86_64.
-          arch: ${{ matrix.api-level == 27 && 'x86' || 'x86_64' }}
+          arch: x86_64
           profile: pixel_6
           disable-animations: true
           emulator-options: >-
@@ -104,7 +111,7 @@ jobs:
 
       - name: Upload connected-test reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: connected-tests-api-${{ matrix.api-level }}
           path: |
@@ -118,23 +125,33 @@ jobs:
           retention-days: 14
 
   release-acceptance:
-    name: R8 release acceptance (API 35)
+    name: R8 release acceptance (API ${{ matrix.api-level }})
     if: inputs.release-acceptance || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 75
 
+    strategy:
+      fail-fast: false
+      matrix:
+        # Android 17 packages use the literal 37.0 coordinate in the SDK catalog.
+        api-level: ["36", "37.0"]
+
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6.1.0
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: |
+            17
+            21
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6.4.0
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
       - name: Enable KVM
         run: |
@@ -149,7 +166,7 @@ jobs:
       - name: Run minified release acceptance
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: ${{ matrix.api-level }}
           target: google_apis
           arch: x86_64
           profile: pixel_6
@@ -164,9 +181,9 @@ jobs:
 
       - name: Upload release-acceptance reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
-          name: release-acceptance-api-35
+          name: release-acceptance-api-${{ matrix.api-level }}
           path: |
             app/build/outputs/apk/releaseAcceptance/
             app/build/outputs/mapping/releaseAcceptance/

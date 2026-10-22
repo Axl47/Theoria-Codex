@@ -2,7 +2,6 @@ package com.theoriacodex.app
 
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -19,11 +18,6 @@ class MainActivity : ComponentActivity() {
     internal val viewerAutoPictureInPicture = ViewerAutoPictureInPicture(this)
     val keepViewerPlayingOnPause: Boolean
         get() = enteringViewerPictureInPicture || isInPictureInPictureMode || viewerAutoPictureInPicture.keepPlayingOnPause
-
-    override fun onUserLeaveHint() {
-        super.onUserLeaveHint()
-        viewerAutoPictureInPicture.onUserLeaveHint(::requestViewerPictureInPicture)
-    }
 
     fun requestViewerPictureInPicture(params: android.app.PictureInPictureParams): Boolean {
         enteringViewerPictureInPicture = true
@@ -63,12 +57,7 @@ class MainActivity : ComponentActivity() {
 
 internal fun Intent.incomingPayloadUri(): Uri? {
     data?.let { return it }
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)?.let { return it }
-    } else {
-        @Suppress("DEPRECATION")
-        getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.let { return it }
-    }
+    getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)?.let { return it }
     clipData?.let { clip ->
         for (index in 0 until clip.itemCount) {
             clip.getItemAt(index).uri?.let { return it }

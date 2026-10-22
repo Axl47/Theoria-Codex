@@ -19,7 +19,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [28])
+@Config(application = Application::class)
 class ReadOnlyCredentialReadTest {
     @get:Rule val temporary = TemporaryFolder()
 

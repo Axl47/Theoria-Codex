@@ -26,9 +26,10 @@ class DeviceValidationWorkflowTest(unittest.TestCase):
         )
 
     def test_release_acceptance_artifact_matches_emulator_api(self) -> None:
-        self.assertIn("name: R8 release acceptance (API 35)", self.workflow)
-        self.assertIn("name: release-acceptance-api-35", self.workflow)
-        self.assertNotIn("name: release-acceptance-api-37", self.workflow)
+        self.assertIn("name: R8 release acceptance (API ${{ matrix.api-level }})", self.workflow)
+        self.assertIn("name: release-acceptance-api-${{ matrix.api-level }}", self.workflow)
+        self.assertEqual(2, self.workflow.count('api-level: ["36", "37.0"]'))
+        self.assertEqual(2, self.workflow.count("api-level: ${{ matrix.api-level }}"))
 
 
 if __name__ == "__main__":
