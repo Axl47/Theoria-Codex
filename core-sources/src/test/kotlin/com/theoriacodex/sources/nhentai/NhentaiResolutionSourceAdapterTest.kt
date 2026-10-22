@@ -66,6 +66,7 @@ internal class NhentaiResolutionSourceAdapterTest : NhentaiSourceAdapterTestFixt
         assertEquals(2, post?.mediaCount)
         assertEquals(listOf("english", "kyaradain"), post?.canonicalTags)
         assertEquals("kyaradain", post?.authorName)
+        assertEquals(listOf(141113, 106), post?.taxonomy?.map { it.count })
     }
 
     @Test

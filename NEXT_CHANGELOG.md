@@ -73,6 +73,8 @@
 - Remove repeated type labels from tag names in the post hold menu.
 
 ## Fixes
+
+- Show tag post counts supplied by nhentai and retain completed counts when further lookups time out.
 - Return fullscreen “More like this” posts to their shelf cards, including after swiping to an offscreen related post.
 
 - Keep liked posts visible with Hide Liked until their “More like this” recommendations are dismissed.

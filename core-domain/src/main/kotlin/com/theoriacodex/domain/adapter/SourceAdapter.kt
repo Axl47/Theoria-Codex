@@ -124,6 +124,11 @@ interface FacetedSearchSourceAdapter {
 
 interface TagCountLookupSourceAdapter {
     suspend fun fetchTagCounts(tags: List<String>): Map<String, Int>
+
+    /** Publish completed batches before returning so callers retain them if later work times out. */
+    suspend fun fetchTagCountsIncrementally(tags: List<String>, onCounts: (Map<String, Int>) -> Unit) {
+        onCounts(fetchTagCounts(tags))
+    }
 }
 
 data class Page<T>(

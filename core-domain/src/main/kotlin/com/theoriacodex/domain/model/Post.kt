@@ -47,6 +47,7 @@ data class PostTaxonomyTerm(
     val value: String,
     val facet: SearchFacet = SearchFacet.TAG,
     val sourceNamespace: String? = null,
+    val count: Int? = null,
 ) {
     fun toSearchTerm(): SearchTerm {
         return SearchTerm(

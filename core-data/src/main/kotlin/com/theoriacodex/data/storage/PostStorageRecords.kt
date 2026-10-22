@@ -87,6 +87,8 @@ data class PostTaxonomyTermStorageRecord(
     val facet: String? = null,
     @field:SerializedName("sourceNamespace")
     val sourceNamespace: String? = null,
+    @field:SerializedName("count")
+    val count: Int? = null,
 )
 
 data class CreatorProfileStorageRecord(
@@ -249,6 +251,7 @@ object PostStorageCodec {
             value = term.value,
             facet = term.facet.name,
             sourceNamespace = term.sourceNamespace,
+            count = term.count,
         )
     }
 }
@@ -282,6 +285,7 @@ private fun PostTaxonomyTermStorageRecord.toDomainOrNull(): PostTaxonomyTerm? {
         value = resolvedValue,
         facet = resolvedFacet,
         sourceNamespace = sourceNamespace?.trim()?.takeIf(String::isNotBlank),
+        count = count?.takeIf { it >= 0 },
     )
 }
 

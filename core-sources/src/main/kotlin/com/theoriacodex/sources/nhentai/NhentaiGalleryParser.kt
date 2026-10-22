@@ -167,6 +167,7 @@ private fun parseNhentaiTags(raw: JsonObject): List<ParsedNhentaiTag> {
         ParsedNhentaiTag(
             name = name,
             type = tag.get("type").asStringOrNull()?.trim(),
+            count = tag.get("count").asIntOrNull()?.takeIf { it >= 0 },
         )
     }
 }
@@ -174,6 +175,7 @@ private fun parseNhentaiTags(raw: JsonObject): List<ParsedNhentaiTag> {
 private data class ParsedNhentaiTag(
     val name: String,
     val type: String?,
+    val count: Int?,
 )
 
 private fun ParsedNhentaiTag.toPostTaxonomyTerm(): PostTaxonomyTerm {
@@ -182,6 +184,7 @@ private fun ParsedNhentaiTag.toPostTaxonomyTerm(): PostTaxonomyTerm {
         value = name,
         facet = taxonomy.first,
         sourceNamespace = taxonomy.second,
+        count = count,
     )
 }
 

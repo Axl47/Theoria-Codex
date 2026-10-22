@@ -3,8 +3,11 @@ package com.theoriacodex.sources.nhentai
 import com.google.gson.JsonParser
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.testing.FakeHttpClient
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -12,6 +15,29 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NhentaiCreatorSourceAdapterTest {
+    @Test
+    fun `tag count lookup publishes completed counts before a later request times out`() = runTest {
+        var requests = 0
+        val http = object : SourceHttpClient by FakeHttpClient() {
+            override suspend fun postJson(url: String, body: String, headers: Map<String, String>): SourceHttpResponse {
+                requests++
+                if (requests > 1) delay(10_000)
+                return SourceHttpResponse(200, """[{"id":1,"type":"tag","name":"first","count":42}]""")
+            }
+        }
+        val adapter = NhentaiSourceAdapter(http, minRequestIntervalMs = 0)
+        val counts = mutableMapOf<String, Int>()
+
+        val completed = withTimeoutOrNull(4_000) {
+            adapter.fetchTagCountsIncrementally(listOf("first", "second")) { counts.putAll(it) }
+            true
+        }
+
+        assertNull(completed)
+        assertEquals(mapOf("first" to 42), counts)
+        assertEquals(2, requests)
+    }
+
     @Test
     fun `artist tags become distinct profiles without treating other tags as creators`() {
         val post = requireNotNull(parseNhentaiGallery(JsonParser.parseString("""

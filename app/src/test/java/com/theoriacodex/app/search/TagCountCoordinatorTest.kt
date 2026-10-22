@@ -14,6 +14,31 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class TagCountCoordinatorTest {
+    @Test fun `completed incremental counts survive timeout and remain cached`() = runTest {
+        val delegate = TestAdapter(SourceKey.NHENTAI)
+        var lookups = 0
+        val adapter = object : SourceAdapter by delegate, TagCountLookupSourceAdapter {
+            override suspend fun fetchTagCounts(tags: List<String>): Map<String, Int> = error("Use incremental lookup")
+            override suspend fun fetchTagCountsIncrementally(tags: List<String>, onCounts: (Map<String, Int>) -> Unit) {
+                lookups++
+                delay(1_000)
+                onCounts(mapOf("known" to 7))
+                delay(10_000)
+                onCounts(mapOf("slow" to 9))
+            }
+        }
+        val store = RecordingTagStore()
+        val owner = TagCountCoordinator(TestRegistry(listOf(adapter)), store, { _, tag -> tag },
+            dispatcher = StandardTestDispatcher(testScheduler))
+        val result = owner.fetch(SourceKey.NHENTAI, listOf("known", "slow"), emptyMap())
+
+        assertEquals(4_000L, testScheduler.currentTime)
+        assertEquals(mapOf("known" to 7, "slow" to null), result)
+        assertEquals(7, store.getCount(SourceKey.NHENTAI, "known"))
+        assertEquals(result, owner.fetch(SourceKey.NHENTAI, listOf("known", "slow"), emptyMap()))
+        assertEquals(1, lookups)
+    }
+
     @Test fun `unsupported count providers issue no autocomplete requests`() = runTest {
         for (source in listOf(SourceKey.PIXIV, SourceKey.IWARA)) {
             val adapter = TestAdapter(source)

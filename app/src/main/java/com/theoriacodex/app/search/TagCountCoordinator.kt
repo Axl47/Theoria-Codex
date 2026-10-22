@@ -52,16 +52,17 @@ internal class TagCountCoordinator(
             }
         }
         if (missing.isEmpty()) return
-        val counts = runCatchingPreservingCancellation {
-            adapter.fetchTagCounts(missing.map { prepareTag(source, it) })
-        }.getOrDefault(emptyMap())
-        val indexed = counts.mapKeys { sourceTagKey(source, it.key) }
-        if (counts.isNotEmpty()) store.put(source,
-            counts.map { TagSuggestion(it.key, "tag_count_lookup", it.value) }, TagSuggestionOrigin.COUNT_LOOKUP)
-        missing.forEach { tag ->
-            resolved[tag] = indexed[sourceTagKey(source, tag)]
-            if (resolved[tag] == null) markMissing(source, listOf(tag))
+        runCatchingPreservingCancellation {
+            adapter.fetchTagCountsIncrementally(missing.map { prepareTag(source, it) }) { counts ->
+                val indexed = counts.mapKeys { sourceTagKey(source, it.key) }
+                if (counts.isNotEmpty()) store.put(source,
+                    counts.map { TagSuggestion(it.key, "tag_count_lookup", it.value) }, TagSuggestionOrigin.COUNT_LOOKUP)
+                missing.forEach { tag ->
+                    indexed[sourceTagKey(source, tag)]?.let { resolved[tag] = it }
+                }
+            }
         }
+        markMissing(source, missing.filter { resolved[it] == null })
     }
 
     private fun markMissing(source: SourceKey, tags: List<String>) = synchronized(missingUntil) {

@@ -25,6 +25,40 @@ import org.robolectric.annotation.Config
 class PostTagActionTypedCountsTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun `supplied counts display immediately by type and only missing terms are fetched`() {
+        val artist = SearchTerm("shared", SearchFacet.ARTIST, "artist")
+        val character = SearchTerm("shared", SearchFacet.CHARACTER, "character")
+        val post = testPost().copy(taxonomy = listOf(
+            PostTaxonomyTerm("shared", sourceNamespace = "tag", count = 0),
+            PostTaxonomyTerm("shared", SearchFacet.ARTIST, "artist", count = 12),
+            PostTaxonomyTerm("shared", SearchFacet.CHARACTER, "character"),
+        ))
+        compose.setContent {
+            MaterialTheme {
+                PostTagContextProvider(null, fetchSearchTermCounts = { _, requested ->
+                    assertEquals(listOf(character), requested)
+                    mapOf(character to 34)
+                }) {
+                    PostTagActionSection(
+                        post = post,
+                        draftQuery = emptySearchQuery(),
+                        tagVideoCountProvider = { _, _ -> 999 },
+                        fetchTagVideoCounts = { _, _ -> error("Supplied general count must avoid lookup") },
+                        onAddIncludeTerm = { true },
+                        onAddExcludeTerm = { true },
+                        onRemoveIncludeTerm = {},
+                        onRemoveExcludeTerm = {},
+                    )
+                }
+            }
+        }
+        listOf("0", "12", "34").forEach { count ->
+            compose.onNode(hasScrollAction()).performScrollToNode(hasText(count))
+            compose.onNodeWithText(count).assertIsDisplayed()
+        }
+        assertEquals(mapOf(SearchTerm("shared", sourceNamespace = "tag") to 0, artist to 12), postActionSuppliedCounts(post))
+    }
+
     @Test fun `hold menu displays distinct general artist and character counts for the same name`() {
         val artist = SearchTerm("shared", SearchFacet.ARTIST, "artist")
         val character = SearchTerm("shared", SearchFacet.CHARACTER, "character")

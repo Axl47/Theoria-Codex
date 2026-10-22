@@ -247,22 +247,19 @@ class NhentaiSourceAdapter(
     }
 
     override suspend fun fetchTagCounts(tags: List<String>): Map<String, Int> {
-        val requested = tags
-            .asSequence()
+        val counts = linkedMapOf<String, Int>()
+        fetchTagCountsIncrementally(tags) { counts.putAll(it) }
+        return counts
+    }
+
+    override suspend fun fetchTagCountsIncrementally(tags: List<String>, onCounts: (Map<String, Int>) -> Unit) {
+        tags.asSequence()
             .map(::normalizeNhentaiTag)
             .filter(String::isNotBlank)
             .distinct()
-            .toList()
-        if (requested.isEmpty()) return emptyMap()
-
-        val counts = linkedMapOf<String, Int>()
-        requested.forEach { tag ->
-            val info = resolveNhentaiTag(tag)
-            if (info != null) {
-                counts[info.name] = info.count
+            .forEach { tag ->
+                resolveNhentaiTag(tag)?.let { info -> onCounts(mapOf(info.name to info.count)) }
             }
-        }
-        return counts
     }
 
     override suspend fun quickQuery(kind: QuickQueryKind): Query {

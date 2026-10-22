@@ -78,8 +78,12 @@ fun PostTagActionSection(
     val selection = remember(post.id.source, draft) {
         PostTagSelection(post.id.source, draft?.includeTerms.orEmpty(), draft?.excludeTerms.orEmpty())
     }
-    val tagVideoCounts = rememberTagCounts(post.id.source, generalTags, tagVideoCountProvider, fetchTagVideoCounts)
-    val typedCounts = rememberSearchTermCounts(post.id.source, terms)
+    val suppliedCounts = remember(post.taxonomy) { postActionSuppliedCounts(post) }
+    val generalCounts = remember(suppliedCounts) {
+        suppliedCounts.filterKeys(SearchTerm::isGeneralPostTag).mapKeys { it.key.value }
+    }
+    val tagVideoCounts = rememberTagCounts(post.id.source, generalTags, tagVideoCountProvider, fetchTagVideoCounts, generalCounts)
+    val typedCounts = rememberSearchTermCounts(post.id.source, terms, suppliedCounts)
 
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val columns = if (maxWidth.value >= 354f) 3 else 2
@@ -172,12 +176,13 @@ fun FavoriteTagActionGrid(
 /** Both tag surfaces publish local counts first and keep all enrichment off the UI dispatcher. */
 @Composable
 private fun rememberTagCounts(source: SourceKey, tags: List<String>,
-    cached: (SourceKey, String) -> Int?, fetch: suspend (SourceKey, List<String>) -> Map<String, Int?>): Map<String, Int?> {
-    var counts by remember(source, tags) { mutableStateOf<Map<String, Int?>>(emptyMap()) }
+    cached: (SourceKey, String) -> Int?, fetch: suspend (SourceKey, List<String>) -> Map<String, Int?>,
+    supplied: Map<String, Int> = emptyMap()): Map<String, Int?> {
+    var counts by remember(source, tags, supplied) { mutableStateOf<Map<String, Int?>>(supplied) }
     val currentCached by rememberUpdatedState(cached)
     val currentFetch by rememberUpdatedState(fetch)
-    LaunchedEffect(source, tags) {
-        counts = withContext(Dispatchers.Default) { tags.associateWith { currentCached(source, it) } }
+    LaunchedEffect(source, tags, supplied) {
+        counts = withContext(Dispatchers.Default) { tags.associateWith { supplied[it] ?: currentCached(source, it) } }
         val missing = tags.filter { counts[it] == null }
         if (missing.isNotEmpty()) counts = counts + withContext(Dispatchers.IO) { currentFetch(source, missing) }
     }
@@ -445,6 +450,15 @@ internal data class PostActionTermGroup(
     val label: String,
     val terms: List<SearchTerm>,
 )
+
+/** Keep supplied counts keyed by the same typed identity used by the action grid. */
+internal fun postActionSuppliedCounts(post: Post): Map<SearchTerm, Int> = buildMap {
+    post.taxonomy.forEach { taxonomy ->
+        val term = taxonomy.toSearchTerm().normalizedPostActionTermOrNull()
+        val count = taxonomy.count?.takeIf { it >= 0 }
+        if (term != null && count != null) put(term, count)
+    }
+}
 
 internal fun postActionTerms(post: Post): List<SearchTerm> {
     val typedTerms = post.taxonomy

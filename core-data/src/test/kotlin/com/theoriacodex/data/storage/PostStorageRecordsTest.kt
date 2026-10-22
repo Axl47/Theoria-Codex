@@ -113,6 +113,7 @@ class PostStorageRecordsTest {
             taxonomy = listOf(
                 PostTaxonomyTerm(
                     value = "artist",
+                    count = 42,
                     facet = SearchFacet.ARTIST,
                     sourceNamespace = "user",
                 )
