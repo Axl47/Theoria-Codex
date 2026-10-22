@@ -13,6 +13,19 @@ import org.junit.Test
 
 class SearchScreenMediaBehaviorTest {
     @Test
+    fun `card preview follows last page and never falls back to another page`() {
+        val pages = (1..3).map { ImageRef("https://example.com/$it.jpg", null, "image/jpeg") }
+        val post = samplePost(SourceKey.PIXIV).copy(media = pages, full = pages.first())
+        val selected = postForCardPreview(post, 2)
+        assertEquals(pages[1], selected.full)
+        assertEquals(listOf(pages[1]), selected.media)
+        assertEquals(listOf("https://example.com/2.jpg"), previewMediaDeliveryPlan(selected).candidates.map { it.location })
+        assertEquals(pages.first(), postForCardPreview(post, 1).full)
+        assertEquals(pages.last(), postForCardPreview(post, 20).full)
+        assertEquals(post, postForCardPreview(post, null))
+    }
+
+    @Test
     fun `iwara and hitomi cards remain poster only in search`() {
         assertFalse(allowsInlineAutoplayInSearch(samplePost(SourceKey.IWARA)))
         assertFalse(allowsInlineAutoplayInSearch(samplePost(SourceKey.HITOMI)))

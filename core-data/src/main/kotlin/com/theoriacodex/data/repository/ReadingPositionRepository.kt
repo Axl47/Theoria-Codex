@@ -6,6 +6,10 @@ import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -23,6 +27,7 @@ data class ReadingPosition(
 }
 
 interface ReadingPositionRepository {
+    fun observe(): Flow<List<ReadingPosition>>
     suspend fun get(postId: PostId, section: RecentPostSection): ReadingPosition?
     suspend fun record(position: ReadingPosition)
     suspend fun snapshot(): List<ReadingPosition>
@@ -42,6 +47,12 @@ class FileBackedReadingPositionRepository(
     private val file = baseDirectory.resolve(READING_POSITIONS_FILE_NAME)
     private val mutex = Mutex()
     private var positions: List<ReadingPosition>? = null
+    private val updates = MutableStateFlow<List<ReadingPosition>>(emptyList())
+
+    override fun observe(): Flow<List<ReadingPosition>> = flow {
+        mutex.withLock { load() }
+        emitAll(updates)
+    }
 
     init {
         require(entryLimit > 0)
@@ -71,12 +82,16 @@ class FileBackedReadingPositionRepository(
     private suspend fun load(): List<ReadingPosition> {
         positions?.let { return it }
         val document = store.read(file, JsonObject())
-        return decodeReadingPositions(document, entryLimit).also { positions = it }
+        return decodeReadingPositions(document, entryLimit).also {
+            positions = it
+            updates.value = it
+        }
     }
 
     private suspend fun persist(updated: List<ReadingPosition>) {
         store.write(file, encodeReadingPositions(updated))
         positions = updated
+        updates.value = updated
     }
 }
 
@@ -115,7 +130,12 @@ private fun encodeReadingPositions(updated: List<ReadingPosition>): JsonObject =
 /** Fixture/default owner; production supplies the file-backed repository. */
 class InMemoryReadingPositionRepository : ReadingPositionRepository {
     private val mutex = Mutex()
-    private var positions = emptyList<ReadingPosition>()
+    private val updates = MutableStateFlow<List<ReadingPosition>>(emptyList())
+    private var positions: List<ReadingPosition>
+        get() = updates.value
+        set(value) { updates.value = value }
+
+    override fun observe(): Flow<List<ReadingPosition>> = updates
 
     override suspend fun get(postId: PostId, section: RecentPostSection): ReadingPosition? = mutex.withLock {
         positions.firstOrNull { it.postId == postId && it.section == section }

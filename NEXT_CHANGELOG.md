@@ -19,6 +19,12 @@
 
 ## Improvements
 
+- Keep “More like this” previews consistently sized so tall posts do not dominate the row.
+- Use consistently sized previews in Saved sub-Codex rows.
+
+- Show watched progress and the last watched time on Search results, matching Recents.
+- Keep post previews on the last media viewed when returning from fullscreen, including in Recents.
+
 - Use a monochrome launcher icon for non-production builds so they are easier to distinguish from the production app.
 - Animate swipes between fullscreen posts and gallery media.
 - Expand tapped post media from its feed card into fullscreen.

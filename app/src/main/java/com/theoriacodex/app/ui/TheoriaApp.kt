@@ -1034,8 +1034,18 @@ internal fun TheoriaAppContent(
             dataDependencies.storageDirectory, dataDependencies.cacheRepository)
         CodexSaveRelevanceLoader(dataDependencies.codexRepository, scope, source::observeSaveRelevance)
     }
+    val readingPositions by remember(dataDependencies.readingPositions) {
+        dataDependencies.readingPositions.observe()
+    }.collectAsStateWithLifecycle(initialValue = emptyList())
+    val watchedEntries by remember(dataDependencies.recentsRepository) {
+        dataDependencies.recentsRepository.observeWatchedPosts()
+    }.collectAsStateWithLifecycle(initialValue = emptyList())
+    val watchPresentation = remember(readingPositions, watchedEntries) {
+        com.theoriacodex.app.search.postWatchPresentation(readingPositions, watchedEntries)
+    }
     val viewerReturnTransition = remember { ViewerReturnTransition() }
     CompositionLocalProvider(
+        com.theoriacodex.app.search.LocalPostWatchPresentation provides watchPresentation,
         LocalCodexSaveRelevanceLoader provides saveRelevanceLoader,
         LocalViewerReturnTransition provides viewerReturnTransition,
     ) {

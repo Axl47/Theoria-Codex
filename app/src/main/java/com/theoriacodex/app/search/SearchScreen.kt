@@ -718,8 +718,14 @@ fun SearchScreen(
                             },
                             postContent = { _, post ->
                                 val observedDurationMs = observedMediaDurationMs(post, durationStateForPost)
+                                val watchedEntry = LocalPostWatchPresentation.current.watched[post.id]
+                                val lastViewedAt = LocalPostWatchPresentation.current.positions[post.id]?.lastViewedAt
                                 SearchResultCard(
                                     post = post,
+                                    viewedMediaNumber = watchedEntry?.maxViewedMediaNumber,
+                                    metadataLabel = watchedEntry?.let {
+                                        relativeTimeLabel(System.currentTimeMillis(), lastViewedAt ?: it.viewedAtEpochMs)
+                                    },
                                     pixivUgoiraClient = pixivUgoiraClient,
                                     acquiredDurationMs = observedDurationMs ?: acquiredDurations[post.id],
                                     showSourceBadge = state.query.appliedSourceScope !is SearchSourceScope.Single,
@@ -951,6 +957,7 @@ fun SearchResultCard(
     showSourceBadge: Boolean = false,
     metadataLabel: String? = null,
     viewedMediaNumber: Int? = null,
+    mediaAspectRatio: Float? = null,
     liked: Boolean = false,
     onToggleLike: (() -> Unit)? = null,
     resolvePostById: (suspend (PostId) -> Post?)? = null,
@@ -980,9 +987,21 @@ fun SearchResultCard(
     var resolvedPostOverride by remember(post.id) { mutableStateOf<Post?>(null) }
     var resolutionAttempted by remember(post.id) { mutableStateOf(false) }
     val mediaRecoveryAttemptedUrls = remember(post.id) { mutableSetOf<String>() }
+    val watchPresentation = LocalPostWatchPresentation.current
+    val lastMediaNumber = watchPresentation.positions[post.id]?.mediaNumber
     val effectivePost = resolvedPostOverride?.let { resolved ->
         mergeResolvedPostForPresentation(original = post, resolved = resolved)
     } ?: post
+
+    val watchedPost = watchPresentation.watched[post.id]?.post
+    val previewPost = remember(effectivePost, watchedPost, lastMediaNumber) {
+        val previewSource = if (lastMediaNumber != null && lastMediaNumber > postMediaItems(effectivePost).size && watchedPost != null) {
+            mergeResolvedPostForPresentation(original = effectivePost, resolved = watchedPost)
+        } else {
+            effectivePost
+        }
+        postForCardPreview(previewSource, lastMediaNumber)
+    }
 
     DisposableEffect(post.id) {
         onDispose {
@@ -1043,12 +1062,12 @@ fun SearchResultCard(
         val videoRef = remember(
             effectivePost.id.source,
             effectivePost.id.sourcePostId,
-            effectivePost.media,
-            effectivePost.full,
-            effectivePost.preview,
+            previewPost.media,
+            previewPost.full,
+            previewPost.preview,
         ) {
-            if (allowsInlineAutoplayInSearch(effectivePost)) {
-                resolveCardVideoRef(effectivePost)
+            if (allowsInlineAutoplayInSearch(previewPost)) {
+                resolveCardVideoRef(previewPost)
             } else {
                 null
             }
@@ -1061,7 +1080,7 @@ fun SearchResultCard(
         ) {
             mutableStateOf(false)
         }
-        val imageDeliveryPlan = remember(effectivePost) { previewMediaDeliveryPlan(effectivePost) }
+        val imageDeliveryPlan = remember(previewPost) { previewMediaDeliveryPlan(previewPost) }
         val imageCandidates = imageDeliveryPlan.candidates
         var displayedImageCandidateIndex by remember(
             effectivePost.id,
@@ -1075,8 +1094,8 @@ fun SearchResultCard(
         var hasVisibleImage by remember(effectivePost.id, imageDeliveryPlan) { mutableStateOf(false) }
         val previewCandidate = imageCandidates.getOrNull(displayedImageCandidateIndex)
         val previewUrl = previewCandidate?.location
-        val ratio = remember(post.id) {
-            previewAspectRatio(post)
+        val ratio = remember(post.id, mediaAspectRatio) {
+            mediaAspectRatio ?: previewAspectRatio(post)
         }
         val windowSize = LocalWindowInfo.current.containerSize
         val decodeSize = remember(windowSize.width, ratio) {
@@ -1184,7 +1203,9 @@ fun SearchResultCard(
             } else if (videoRef != null && !videoPlaybackFailed) {
                 SearchVideoPreview(
                     media = videoRef,
-                    mediaIndex = postMediaItems(effectivePost).indexOf(videoRef).coerceAtLeast(0),
+                    mediaIndex = postMediaItems(effectivePost).indexOf(videoRef).takeIf { it >= 0 }
+                        ?: watchedPost?.let { postMediaItems(it).indexOf(videoRef).takeIf { index -> index >= 0 } }
+                        ?: 0,
                     postId = effectivePost.id,
                     sourceKey = effectivePost.id.source,
                     playbackDiagnosticsEnabled = playbackDiagnosticsEnabled,

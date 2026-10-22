@@ -62,7 +62,7 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
-import java.util.Locale
+import com.theoriacodex.app.search.relativeTimeLabel
 import kotlinx.coroutines.flow.Flow
 
 @Composable
@@ -404,7 +404,11 @@ private fun WatchedGrid(
             pixivUgoiraClient = pixivUgoiraClient,
             acquiredDurationMs = observedDurationMs,
             showSourceBadge = true,
-            metadataLabel = relativeTimeLabel(now, entry.viewedAtEpochMs),
+            metadataLabel = relativeTimeLabel(
+                now,
+                com.theoriacodex.app.search.LocalPostWatchPresentation.current.positions[post.id]?.lastViewedAt
+                    ?: entry.viewedAtEpochMs,
+            ),
             viewedMediaNumber = entry.maxViewedMediaNumber.takeIf { showMediaProgress },
             liked = post.id in likedPostIds,
             onToggleLike = onToggleLike?.let { toggle -> { toggle(post) } },
@@ -739,19 +743,5 @@ internal fun recentSearchPresentation(entry: RecentSearchEntry): RecentSearchPre
 internal fun RecentSearchEntry.fypSeedBySource(): Map<SourceKey, List<String>> {
     return sourceTags.ifEmpty {
         sources.associateWith { query.includeTags }
-    }
-}
-
-private fun relativeTimeLabel(now: Long, eventAt: Long): String {
-    val elapsedMs = (now - eventAt).coerceAtLeast(0L)
-    val minuteMs = 60_000L
-    val hourMs = 60L * minuteMs
-    val dayMs = 24L * hourMs
-    return when {
-        elapsedMs < minuteMs -> "Just now"
-        elapsedMs < hourMs -> "${elapsedMs / minuteMs}m ago"
-        elapsedMs < dayMs -> "${elapsedMs / hourMs}h ago"
-        elapsedMs < 7L * dayMs -> "${elapsedMs / dayMs}d ago"
-        else -> String.format(Locale.US, "%.0fw ago", elapsedMs.toDouble() / (7L * dayMs).toDouble())
     }
 }

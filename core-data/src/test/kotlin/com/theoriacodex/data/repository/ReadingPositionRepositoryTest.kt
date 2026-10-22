@@ -2,6 +2,7 @@ package com.theoriacodex.data.repository
 
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -12,6 +13,17 @@ import org.junit.rules.TemporaryFolder
 
 class ReadingPositionRepositoryTest {
     @get:Rule val temporary = TemporaryFolder()
+
+    @Test
+    fun `observers receive backwards progress and profile replacement`() = runTest {
+        val repository = FileBackedReadingPositionRepository(temporary.newFolder())
+        assertEquals(emptyList<ReadingPosition>(), repository.observe().first())
+        repository.record(position("book", 9, 100))
+        repository.record(position("book", 3, 200))
+        assertEquals(3, repository.observe().first().single().mediaNumber)
+        repository.replace(emptyList())
+        assertTrue(repository.observe().first().isEmpty())
+    }
 
     @Test
     fun `last page can move backwards and survives reopening independently per section`() = runTest {
