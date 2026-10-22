@@ -50,6 +50,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -828,6 +830,14 @@ internal fun TheoriaAppContent(
     )
     val selectedTopLevelIndex = topLevelPagerState.currentPage
         .coerceIn(0, TopLevelDestination.entries.lastIndex)
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(topLevelPagerState.isScrollInProgress) {
+        if (topLevelPagerState.isScrollInProgress) {
+            focusManager.clearFocus(force = true)
+            keyboard?.hide()
+        }
+    }
     var persistedHomeTabRoute by rememberSaveable { mutableStateOf<String?>(null) }
     val bottomNavigationSizing = remember(windowHeightDp, bottomSystemInsetDp) {
         calculateBottomNavigationSizing(
