@@ -19,6 +19,8 @@
 
 ## Improvements
 
+- Hide post titles in Saved sub-Codex rows for compact, evenly sized previews.
+
 - Open artist profiles from nhentai posts to browse their galleries.
 
 - Match post source badges to the height of the last watched timestamp.

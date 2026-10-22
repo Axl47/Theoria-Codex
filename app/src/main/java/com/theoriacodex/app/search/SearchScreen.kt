@@ -955,6 +955,7 @@ fun SearchResultCard(
     viewedMediaNumber: Int? = null,
     showWatchHistory: Boolean = false,
     mediaAspectRatio: Float? = null,
+    showTitle: Boolean = true,
     liked: Boolean = false,
     onToggleLike: (() -> Unit)? = null,
     resolvePostById: (suspend (PostId) -> Post?)? = null,
@@ -1359,7 +1360,7 @@ fun SearchResultCard(
             }
         }
 
-        if (supportingContent.showTitleFooter) {
+        if (showTitle && supportingContent.showTitleFooter) {
             Column(
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),

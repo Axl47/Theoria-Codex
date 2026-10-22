@@ -49,7 +49,6 @@ import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.POST_SHELF_MEDIA_ASPECT_RATIO
-import com.theoriacodex.app.ui.components.rememberPostShelfHeight
 import com.theoriacodex.app.ui.components.FeedFabRestoreRegistry
 import com.theoriacodex.app.ui.components.codexFeedFabContext
 import com.theoriacodex.data.repository.CodexSortMode
@@ -151,7 +150,7 @@ private fun SavedCodexSection(
     }
     SideEffect { owner.onFilterChanged(!filters.animatedDurationRange.isFullRange) }
     val cardWidth = 164.dp
-    val rowHeight = rememberPostShelfHeight(posts, cardWidth)
+    val rowHeight = cardWidth / POST_SHELF_MEDIA_ASPECT_RATIO
     val row = rememberLazyListState()
     DurationRouteEnvironmentEffect({ parentScrolling() || row.isScrollInProgress }, owner::onEnvironmentChanged)
     val liveOwner = state.followedOwner ?: state.savedSearchOwner
@@ -164,6 +163,7 @@ private fun SavedCodexSection(
                 Box(Modifier.width(cardWidth)) {
                     SearchResultCard(post = post, pixivUgoiraClient = sources.pixivUgoiraClient,
                         mediaAspectRatio = POST_SHELF_MEDIA_ASPECT_RATIO,
+                        showTitle = false,
                         acquiredDurationMs = observedMediaDurationMs(post, owner::observeState),
                         showSourceBadge = true, resolvePostById = resolvePost,
                         onClick = { onOpenViewer(posts, index) },
