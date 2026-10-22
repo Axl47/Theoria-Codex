@@ -326,6 +326,7 @@ fun ForYouScreen(
                         val observedDurationMs = observedMediaDurationMs(post, durationStateForPost)
                         SearchResultCard(
                             post = post,
+                            showWatchHistory = true,
                             pixivUgoiraClient = pixivUgoiraClient,
                             acquiredDurationMs = observedDurationMs ?: acquiredDurations[post.id],
                             showSourceBadge = true,

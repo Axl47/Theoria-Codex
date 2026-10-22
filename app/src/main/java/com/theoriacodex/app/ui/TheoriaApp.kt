@@ -1160,19 +1160,15 @@ internal fun TheoriaAppContent(
                                                 onOpenViewer = { effect ->
                                                     val likeAction = searchLikeAction()
                                                     val saveQuery = searchRouteOwner?.currentState()?.query?.applied
-                                                    val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
-                                                        effect.posts,
-                                                        effect.context,
-                                                    )
                                                     viewerSessionOwner.retain(
-                                                        ViewerSession(
-                                                            posts = preparedPosts,
+                                                        viewerRouteWorkflow.prepareResumableSession(ViewerSession(
+                                                            posts = effect.posts,
                                                             context = effect.context,
                                                             liveSearchBinding = effect.liveSearchBinding,
                                                             searchVisibilityFilters = effect.visibilityFilters,
                                                             onToggleLike = likeAction,
                                                             saveQuery = saveQuery,
-                                                        ),
+                                                        )),
                                                     )
                                                     navController.navigate(AppRoute.Viewer) {
                                                         launchSingleTop = !effect.liveSearchBinding
@@ -1232,18 +1228,14 @@ internal fun TheoriaAppContent(
                                             callbacks = ForYouRouteCallbacks(
                                                 onOpenViewer = { effect ->
                                                     val likeAction = forYouLikeAction()
-                                                    val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
-                                                        effect.posts,
-                                                        effect.context,
-                                                    )
                                                     viewerSessionOwner.retain(
-                                                        ViewerSession(
-                                                            posts = preparedPosts,
+                                                        viewerRouteWorkflow.prepareResumableSession(ViewerSession(
+                                                            posts = effect.posts,
                                                             context = effect.context,
                                                             liveSearchBinding = effect.liveSearchBinding,
                                                             searchVisibilityFilters = effect.visibilityFilters,
                                                             onToggleLike = likeAction,
-                                                        ),
+                                                        )),
                                                     )
                                                     if (effect.liveSearchBinding) {
                                                         featureDependencies.search.setViewerLaunchContext(effect.context)
@@ -1320,9 +1312,8 @@ internal fun TheoriaAppContent(
                                                         recentsSection = section,
                                                     )
                                                     scope.launch {
-                                                        val session = viewerRouteWorkflow.prepareRecentSession(
-                                                            posts,
-                                                            context,
+                                                        val session = viewerRouteWorkflow.prepareResumableSession(
+                                                            ViewerSession(posts = posts, context = context),
                                                             startOver = startOver,
                                                         )
                                                         viewerSessionOwner.retain(session)

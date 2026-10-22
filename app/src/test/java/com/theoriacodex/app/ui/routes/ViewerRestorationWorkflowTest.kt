@@ -93,15 +93,40 @@ class ViewerRestorationWorkflowTest {
             val launch = ViewerSession(listOf(gallery), context(ViewerStreamSource.RECENTS, "recents:watched"))
             workflow.recordVisiblePost(gallery, 5, launch)
             workflow.recordVisibleMediaProgress(gallery, 2, launch)
-            val resumed = workflow.prepareRecentSession(listOf(gallery), launch.context)
+            val resumed = workflow.prepareResumableSession(launch)
             assertEquals(1, resumed.initialMediaIndex)
             assertEquals(5, graph.data.recentsRepository.observeWatchedPosts().first().single().maxViewedMediaNumber)
             val fromDisk = FileBackedReadingPositionRepository(graph.data.storageDirectory)
             assertEquals(2, fromDisk.get(gallery.id, RecentPostSection.WATCHED)?.mediaNumber)
 
-            val restarted = workflow.prepareRecentSession(listOf(gallery), launch.context, startOver = true)
+            val restarted = workflow.prepareResumableSession(launch, startOver = true)
             assertEquals(0, restarted.initialMediaIndex)
             assertEquals(5, graph.data.recentsRepository.observeWatchedPosts().first().single().maxViewedMediaNumber)
+        }
+    }
+
+    @Test
+    fun `Search FYP and Recents share last viewed media across entry points`() = runTest {
+        val gallery = testPost(SourceKey.PIXIV, "shared-gallery").copy(
+            media = (1..5).map { ImageRef("https://fixture.invalid/$it.jpg", null, "image/jpeg") },
+            mediaCount = 5,
+        )
+        withGraph(listOf(gallery)) { graph, workflow ->
+            val origins = listOf(ViewerStreamSource.SEARCH, ViewerStreamSource.FOR_YOU, ViewerStreamSource.RECENTS)
+            for (origin in origins) {
+                val launch = ViewerSession(listOf(gallery), context(origin, "shared"), liveSearchBinding = origin != ViewerStreamSource.RECENTS)
+                workflow.recordVisiblePost(gallery, 5, launch)
+                workflow.recordVisibleMediaProgress(gallery, 2, launch)
+                for (destination in origins) {
+                    val target = launch.copy(context = context(destination, "target"))
+                    val resumed = workflow.prepareResumableSession(target)
+                    assertEquals(1, resumed.initialMediaIndex)
+                    assertEquals(target.copy(posts = resumed.posts, initialMediaIndex = 1), resumed)
+                }
+                val recent = graph.data.recentsRepository.observeWatchedPosts().first().single()
+                assertEquals(RecentPostSection.WATCHED, recent.section)
+                assertEquals(5, recent.maxViewedMediaNumber)
+            }
         }
     }
 

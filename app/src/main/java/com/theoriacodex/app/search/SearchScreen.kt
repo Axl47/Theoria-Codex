@@ -719,14 +719,9 @@ fun SearchScreen(
                             },
                             postContent = { _, post ->
                                 val observedDurationMs = observedMediaDurationMs(post, durationStateForPost)
-                                val watchedEntry = LocalPostWatchPresentation.current.watched[post.id]
-                                val lastViewedAt = LocalPostWatchPresentation.current.positions[post.id]?.lastViewedAt
                                 SearchResultCard(
                                     post = post,
-                                    viewedMediaNumber = watchedEntry?.maxViewedMediaNumber,
-                                    metadataLabel = watchedEntry?.let {
-                                        relativeTimeLabel(System.currentTimeMillis(), lastViewedAt ?: it.viewedAtEpochMs)
-                                    },
+                                    showWatchHistory = true,
                                     pixivUgoiraClient = pixivUgoiraClient,
                                     acquiredDurationMs = observedDurationMs ?: acquiredDurations[post.id],
                                     showSourceBadge = state.query.appliedSourceScope !is SearchSourceScope.Single,
@@ -958,6 +953,7 @@ fun SearchResultCard(
     showSourceBadge: Boolean = false,
     metadataLabel: String? = null,
     viewedMediaNumber: Int? = null,
+    showWatchHistory: Boolean = false,
     mediaAspectRatio: Float? = null,
     liked: Boolean = false,
     onToggleLike: (() -> Unit)? = null,
@@ -989,7 +985,13 @@ fun SearchResultCard(
     var resolutionAttempted by remember(post.id) { mutableStateOf(false) }
     val mediaRecoveryAttemptedUrls = remember(post.id) { mutableSetOf<String>() }
     val watchPresentation = LocalPostWatchPresentation.current
-    val lastMediaNumber = watchPresentation.positions[post.id]?.mediaNumber
+    val lastPosition = watchPresentation.positions[post.id]
+    val lastMediaNumber = lastPosition?.mediaNumber
+    val watchedEntry = watchPresentation.watched[post.id].takeIf { showWatchHistory }
+    val cardViewedMediaNumber = viewedMediaNumber ?: watchedEntry?.maxViewedMediaNumber
+    val cardMetadataLabel = metadataLabel ?: watchedEntry?.let {
+        relativeTimeLabel(System.currentTimeMillis(), lastPosition?.lastViewedAt ?: it.viewedAtEpochMs)
+    }
     val effectivePost = resolvedPostOverride?.let { resolved ->
         mergeResolvedPostForPresentation(original = post, resolved = resolved)
     } ?: post
@@ -1056,7 +1058,7 @@ fun SearchResultCard(
         val durationLabel = animatedDurationLabel(effectivePost, acquiredDurationMs)
         val supportingContent = searchCardSupportingContent(
             title = title,
-            metadataLabel = metadataLabel,
+            metadataLabel = cardMetadataLabel,
             showSourceBadge = showSourceBadge,
         )
         val mediaContentDescription = title ?: effectivePost.id.sourcePostId
@@ -1281,7 +1283,7 @@ fun SearchResultCard(
             if (mediaCount > 1) {
                 ImageCountBadge(
                     count = mediaCount,
-                    viewedMediaNumber = viewedMediaNumber,
+                    viewedMediaNumber = cardViewedMediaNumber,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(8.dp),
@@ -1338,8 +1340,8 @@ fun SearchResultCard(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (metadataLabel != null) {
-                        PreviewMetadataLabel(metadataLabel)
+                    if (cardMetadataLabel != null) {
+                        PreviewMetadataLabel(cardMetadataLabel)
                     }
                     if (showSourceBadge) {
                         SourceBadge(source = effectivePost.id.source)

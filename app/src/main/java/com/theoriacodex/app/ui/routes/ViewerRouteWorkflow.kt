@@ -192,11 +192,13 @@ internal class ViewerRouteWorkflow(
         )
     }
 
-    suspend fun prepareRecentSession(
-        posts: List<Post>,
-        context: ViewerLaunchContext,
+    /** Resume feed and Recents launches through the same saved-position policy. */
+    suspend fun prepareResumableSession(
+        session: ViewerSession,
         startOver: Boolean = false,
     ): ViewerSession {
+        val posts = session.posts
+        val context = session.context
         val index = context.startIndex.coerceIn(0, posts.lastIndex)
         val selected = posts[index]
         val section = recentPostSectionForViewer(context)
@@ -212,7 +214,7 @@ internal class ViewerRouteWorkflow(
                 data.readingPositions.record(ReadingPosition(selected.id, section, 1, System.currentTimeMillis()))
             }
         }
-        return ViewerSession(posts = prepared, context = context, initialMediaIndex = mediaNumber - 1)
+        return session.copy(posts = prepared, initialMediaIndex = mediaNumber - 1)
     }
 
     private suspend fun resolveRestoredPost(postId: PostId): Post? = withTimeoutOrNull(15_000L) {
