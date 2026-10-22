@@ -11,7 +11,9 @@ import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.pixiv.PixivAuthApi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CopyableThrowable
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
@@ -148,7 +150,7 @@ class PixivPkceControllerTest {
 
     @Test
     fun callbackPropagatesCredentialPersistenceCancellationUnchanged() = runTest {
-        val expected = CancellationException("activity left during callback")
+        val expected = CallbackCancellation("activity left during callback")
         val store = InMemoryPixivPkceSessionStore()
         val controller = controller(
             store = store,
@@ -336,6 +338,13 @@ class PixivPkceControllerTest {
         override suspend fun getRule34XxxCredentials(): Rule34XxxCredentials? = null
         override suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials) = Unit
         override suspend fun clearRule34XxxCredentials() = Unit
+    }
+
+    // Host debug stack recovery may clone ordinary exceptions; this sentinel tests exact propagation.
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private class CallbackCancellation(message: String) :
+        CancellationException(message), CopyableThrowable<CallbackCancellation> {
+        override fun createCopy(): CallbackCancellation? = null
     }
 
     private class CancellingCredentialsProvider(

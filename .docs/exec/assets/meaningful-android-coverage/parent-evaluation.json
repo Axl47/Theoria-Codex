@@ -78,5 +78,9 @@
   {
     "reader": "luna-patch",
     "evaluation": "All five current changed/new files fully read; no static findings. All ten moved test names remain, with two additional gated auth cases. Compilation/execution remains unverified during coordinator capture hold."
+  },
+  {
+    "reader": "luna-cancellation",
+    "evaluation": "Final 367-line PKCE file fully read after host validation exposed debug copying of ordinary CancellationException. Exact identity and session assertions remain. Non-copying sentinel verified against local coroutines 1.11 bytecode and official API; affected ten-case rerun passes. No remaining static finding."
   }
 ]

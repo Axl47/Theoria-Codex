@@ -12,9 +12,9 @@
   "files": [
     {
       "path": "app/src/test/java/com/theoriacodex/app/sourceauth/PixivPkceControllerTest.kt",
-      "lines": 358,
-      "sha256": "0a2883713e8897f7a0fe75d361b7ae68d31d276de635675e1fa0987095f90f4c",
-      "reader": "luna-patch",
+      "lines": 367,
+      "sha256": "20d27a8b0ceed2a1a8296e8734ac1a9e02a35b2c285f1d01a023408cc12dbe29",
+      "reader": "luna-cancellation",
       "read_status": "complete"
     },
     {
