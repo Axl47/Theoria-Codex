@@ -1,8 +1,6 @@
 package com.theoriacodex.app.viewer
 
 import android.os.SystemClock
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Box
@@ -19,15 +17,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.isAnimatedImageMediaRef
 import com.theoriacodex.app.media.isGifMediaRef
@@ -39,7 +33,6 @@ import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
-import kotlin.math.abs
 
 internal data class ViewerMediaLayout(
     val landscape: Boolean,
@@ -77,6 +70,7 @@ internal fun ViewerMediaPage(
     onToggleChrome: () -> Unit,
     onNavigate: (ViewerHorizontalSwipeDirection) -> Unit,
     onRequestMediaRecovery: ((Post, ImageRef) -> Unit)?,
+    levelControls: ViewerLevelControls? = null,
 ) {
     val key = ViewerMediaKey(post.id, mediaIndex)
     val isVideo = isVideoMediaRef(media)
@@ -100,7 +94,8 @@ internal fun ViewerMediaPage(
             FittedSeekJumpFeedbackOverlay(interactions.feedback, viewerAspectRatio(post), interactions::clearFeedback, Modifier.matchParentSize())
         }
         ViewerMediaGestureLayer(key, mediaCount, isVideo || isGif || isUgoira, animated, interactions, controls,
-            transform, onTransformChanged, layout, onAction, onInteraction, onToggleChrome, onNavigate)
+            transform, onTransformChanged, layout, onAction, onInteraction, onToggleChrome, onNavigate,
+            levelControls.takeIf { isVideo })
         mediaError?.let { error ->
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 ViewerMediaErrorOverlay(error) { onAction(ViewerAction.RetryMedia) }
@@ -136,6 +131,7 @@ private fun ViewerMediaGestureLayer(
     transform: ViewerTransformState, onTransformChanged: (ViewerTransformState) -> Unit,
     layout: ViewerMediaLayout, onAction: (ViewerAction) -> Unit, onInteraction: () -> Unit,
     onToggleChrome: () -> Unit, onNavigate: (ViewerHorizontalSwipeDirection) -> Unit,
+    levelControls: ViewerLevelControls?,
 ) {
     val transformState = rememberTransformableState { _, zoom, pan, _ ->
         onTransformChanged(transform.transform(zoom, pan.x, pan.y))
@@ -153,68 +149,12 @@ private fun ViewerMediaGestureLayer(
     )
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxWidth()
-            .then(viewerHorizontalSwipeModifier(key, transform.isZoomed, mediaCount, layout.invertGalleryDirection, onNavigate))
+            .viewerMediaSwipe(
+                key, transform.isZoomed, mediaCount, layout.invertGalleryDirection, onNavigate,
+                enabled = controls.isActive && !layout.pictureInPicture && !layout.touchExploration,
+                levelControls = levelControls,
+            )
             .transformable(transformState, canPan = { transform.isZoomed }).then(gestures))
         if (controls.showControls && animated) Spacer(Modifier.fillMaxWidth().height(96.dp))
     }
 }
-
-@Composable
-private fun viewerHorizontalSwipeModifier(
-    key: ViewerMediaKey,
-    zoomed: Boolean,
-    mediaCount: Int,
-    invertMultiImageScrollDirection: Boolean,
-    onNavigate: (ViewerHorizontalSwipeDirection) -> Unit,
-): Modifier {
-    val currentOnNavigate by rememberUpdatedState(onNavigate)
-    return Modifier.pointerInput(key, zoomed, mediaCount, invertMultiImageScrollDirection) {
-        if (zoomed) return@pointerInput
-        awaitEachGesture {
-            val down = awaitFirstDown(requireUnconsumed = false)
-            val threshold = maxOf(VIEWER_HORIZONTAL_SWIPE_MIN_DISTANCE_PX, size.width * VIEWER_HORIZONTAL_SWIPE_WIDTH_RATIO)
-            val swipe = readViewerSwipe(down.id, threshold)
-            if (swipe.completed(threshold)) {
-                val direction = if (swipe.x < 0f) ViewerHorizontalSwipeDirection.Next else ViewerHorizontalSwipeDirection.Previous
-                currentOnNavigate(viewerSwipeDirectionForSetting(direction, mediaCount, invertMultiImageScrollDirection))
-            }
-        }
-    }
-}
-
-private class ViewerSwipeMotion {
-    var x = 0f
-    var y = 0f
-    var consuming = false
-
-    fun add(delta: Offset, threshold: Float) {
-        x += delta.x
-        y += delta.y
-        if (abs(x) > threshold * VIEWER_HORIZONTAL_SWIPE_SLOP_FRACTION && abs(x) > abs(y) * VIEWER_HORIZONTAL_SWIPE_AXIS_RATIO) {
-            consuming = true
-        }
-    }
-
-    fun completed(threshold: Float): Boolean = consuming && abs(x) >= threshold && abs(x) > abs(y) * VIEWER_HORIZONTAL_SWIPE_AXIS_RATIO
-}
-
-private suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.readViewerSwipe(
-    id: androidx.compose.ui.input.pointer.PointerId,
-    threshold: Float,
-): ViewerSwipeMotion {
-    val swipe = ViewerSwipeMotion()
-    while (true) {
-        val event = awaitPointerEvent(pass = PointerEventPass.Initial)
-        if (event.changes.size > 1) break
-        val change = event.changes.firstOrNull { it.id == id } ?: break
-        swipe.add(change.position - change.previousPosition, threshold)
-        if (swipe.consuming) change.consume()
-        if (!change.pressed) break
-    }
-    return swipe
-}
-
-private const val VIEWER_HORIZONTAL_SWIPE_MIN_DISTANCE_PX = 48f
-private const val VIEWER_HORIZONTAL_SWIPE_WIDTH_RATIO = 0.12f
-private const val VIEWER_HORIZONTAL_SWIPE_SLOP_FRACTION = 0.35f
-private const val VIEWER_HORIZONTAL_SWIPE_AXIS_RATIO = 1.25f

@@ -1,10 +1,16 @@
 package com.theoriacodex.app.viewer
 
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
@@ -12,6 +18,7 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
+import kotlin.math.abs
 
 internal data class ViewerMediaGestureActions(
     val seek: (Long) -> Unit,
@@ -73,4 +80,89 @@ private fun mediaAccessibilityActions(
             actions.toggleControls(); true
         })
     }
+}
+
+/** One direction lock keeps level adjustments, page navigation, taps, and pinch gestures separate. */
+@Composable
+internal fun Modifier.viewerMediaSwipe(
+    key: ViewerMediaKey,
+    zoomed: Boolean,
+    mediaCount: Int,
+    invertMultiImageScrollDirection: Boolean,
+    onNavigate: (ViewerHorizontalSwipeDirection) -> Unit,
+    enabled: Boolean = true,
+    levelControls: ViewerLevelControls? = null,
+): Modifier {
+    val currentOnNavigate by rememberUpdatedState(onNavigate)
+    return pointerInput(key, enabled, zoomed, mediaCount, invertMultiImageScrollDirection, levelControls) {
+        if (!enabled || zoomed) return@pointerInput
+        try {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                val threshold = maxOf(48f, size.width * 0.12f)
+                val control = if (down.position.x < size.width / 2f) ViewerLevelControl.Brightness else ViewerLevelControl.Volume
+                val swipe = readViewerSwipe(down.id, threshold, levelControls, control)
+                levelControls?.end()
+                swipe.direction(threshold)?.let { direction ->
+                    currentOnNavigate(viewerSwipeDirectionForSetting(direction, mediaCount, invertMultiImageScrollDirection))
+                }
+            }
+        } finally {
+            levelControls?.end()
+        }
+    }
+}
+
+private enum class ViewerSwipeAxis { Pending, Horizontal, Vertical }
+
+private class ViewerSwipeMotion {
+    var x = 0f
+    var y = 0f
+    var axis = ViewerSwipeAxis.Pending
+    var released = false
+
+    fun add(delta: Offset, threshold: Float, touchSlop: Float) {
+        x += delta.x
+        y += delta.y
+        if (axis != ViewerSwipeAxis.Pending) return
+        axis = when {
+            abs(x) > threshold * 0.35f && abs(x) > abs(y) * 1.25f -> ViewerSwipeAxis.Horizontal
+            abs(y) > touchSlop && abs(y) > abs(x) * 1.25f -> ViewerSwipeAxis.Vertical
+            else -> ViewerSwipeAxis.Pending
+        }
+    }
+
+    fun direction(threshold: Float): ViewerHorizontalSwipeDirection? {
+        if (!released || axis != ViewerSwipeAxis.Horizontal || abs(x) < threshold) return null
+        return if (x < 0f) ViewerHorizontalSwipeDirection.Next else ViewerHorizontalSwipeDirection.Previous
+    }
+}
+
+private suspend fun AwaitPointerEventScope.readViewerSwipe(
+    id: PointerId,
+    threshold: Float,
+    levels: ViewerLevelControls?,
+    control: ViewerLevelControl,
+): ViewerSwipeMotion {
+    val swipe = ViewerSwipeMotion()
+    var adjusting = false
+    while (true) {
+        val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+        val change = event.changes.singleOrNull()?.takeIf { it.id == id } ?: break
+        val delta = change.position - change.previousPosition
+        swipe.add(delta, threshold, viewConfiguration.touchSlop)
+        if (swipe.axis == ViewerSwipeAxis.Vertical && levels != null) {
+            if (!adjusting) levels.begin(control)
+            levels.drag(-(if (adjusting) delta.y else swipe.y) / (size.height * 0.6f).coerceAtLeast(1f))
+            adjusting = true
+            change.consume()
+        } else if (swipe.axis == ViewerSwipeAxis.Horizontal) {
+            change.consume()
+        }
+        if (!change.pressed) {
+            swipe.released = true
+            break
+        }
+    }
+    return swipe
 }

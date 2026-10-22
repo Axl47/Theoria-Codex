@@ -143,6 +143,9 @@ internal fun ViewerScreen(
         ?.coerceIn(0, selectedPostMedia.lastIndex)
         ?: 0
     val selectedCurrentMedia = selectedPostMedia.getOrNull(selectedMediaIndex)
+    val levelControls = rememberViewerLevelControls(
+        enabled = !inPictureInPicture && selectedCurrentMedia?.let(::isVideoMediaRef) == true && !uiState.overview.visible,
+    )
     val currentIsSeekableMedia = selectedCurrentMedia?.let { media ->
         isVideoMediaRef(media) ||
             isGifMediaRef(media) ||
@@ -470,6 +473,7 @@ internal fun ViewerScreen(
                     layout = ViewerMediaLayout(isLandscape, inPictureInPicture, touchExplorationEnabled, invertMultiImageScrollDirection),
                     videoOptions = ViewerVideoOptions(quality, qualityHeight, terminalResolutionMessage, playbackDiagnosticsEnabled),
                     videoPositions = videoPositions,
+                    levelControls = levelControls,
                     mediaError = uiState.mediaError?.takeIf { active && it.mediaKey == key },
                     pixivUgoiraClient = pixivUgoiraClient,
                     onAction = onAction,
@@ -548,6 +552,9 @@ internal fun ViewerScreen(
                     markInteraction()
                 },
             )
+        }
+        if (!inPictureInPicture && !mediaOverviewVisible) {
+            ViewerLevelFeedbackOverlay(levelControls, Modifier.align(Alignment.Center))
         }
     }
 
