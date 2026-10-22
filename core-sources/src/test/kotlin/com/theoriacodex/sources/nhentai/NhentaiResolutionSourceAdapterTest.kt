@@ -38,7 +38,7 @@ internal class NhentaiResolutionSourceAdapterTest : NhentaiSourceAdapterTestFixt
                       },
                       "cover": {"path": "galleries/3821534/cover.webp.webp", "width": 350, "height": 494},
                       "thumbnail": {"path": "galleries/3821534/thumb.webp", "width": 250, "height": 353},
-                      "scanlator": "",
+                      "scanlator": "Translation Group",
                       "upload_date": 1772669054,
                       "tags": [
                         {"id": 12227, "type": "language", "name": "english", "slug": "english", "url": "/language/english/", "count": 141113},

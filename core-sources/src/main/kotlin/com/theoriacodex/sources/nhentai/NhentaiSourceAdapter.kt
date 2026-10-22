@@ -655,9 +655,7 @@ class NhentaiSourceAdapter(
             raw.get("japanese_title").asStringOrNull(),
         ).firstOrNull { !it.isNullOrBlank() }
 
-        val scanlator = raw.get("scanlator").asStringOrNull()?.trim().orEmpty()
-        val artist = tags.firstOrNull { it.type.equals("artist", ignoreCase = true) }?.name
-        val authorName = scanlator.ifBlank { artist }
+        val authorName = tags.firstOrNull { it.type.equals("artist", ignoreCase = true) }?.name
         val createdAtEpochMs = raw.get("upload_date").asLongOrNull()?.times(1000L)
         val declaredMediaCount = raw.get("num_pages").asIntOrNull()?.takeIf { it > 0 }
         val mediaCount = when {

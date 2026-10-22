@@ -150,7 +150,7 @@ internal class NhentaiSearchSourceAdapterTest : NhentaiSourceAdapterTestFixture(
                               {"t": "g", "w": 1200, "h": 1800}
                             ]
                           },
-                          "scanlator": null,
+                          "scanlator": "Translation Group",
                           "upload_date": 1710000000,
                           "tags": [
                             {"id": 1, "type": "tag", "name": "big breasts", "count": 5000}
@@ -179,6 +179,7 @@ internal class NhentaiSearchSourceAdapterTest : NhentaiSourceAdapterTestFixture(
         assertEquals("https://i.nhentai.net/galleries/9876/2.gif", post?.media?.get(1)?.url)
         assertEquals("https://nhentai.net/g/123/", post?.pageUrl)
         assertEquals(listOf("big breasts"), post?.canonicalTags)
+        assertNull(post?.authorName)
         assertEquals(
             listOf(Triple(SearchFacet.TAG, "tag", "big breasts")),
             post?.taxonomy?.map { term -> Triple(term.facet, term.sourceNamespace, term.value) },
