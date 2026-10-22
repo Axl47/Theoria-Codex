@@ -30,7 +30,7 @@ class CodexCleaningUiTest {
 
     @Test fun `collection action selects multiple comparisons while excluding target and removed choices`() {
         val likesId = ProfileLibraryIds.likes("profile-main")
-        val codices = mutableStateOf(listOf(Codex(likesId, "Likes", 1), Codex("a", "Source A", 2), Codex("b", "Source B", 3)))
+        val codices = mutableStateOf(listOf(Codex("target", "Collection", 1), Codex("a", "Source A", 2), Codex("b", "Source B", 3)))
         var submitted: Pair<String, Set<String>>? = null
         compose.setContent { MaterialTheme {
             CodexListScreen(
@@ -41,18 +41,18 @@ class CodexCleaningUiTest {
                 likesCodexId = likesId, onCleanCodex = { id, sources -> submitted = id to sources },
             )
         } }
-        compose.onNodeWithContentDescription("Actions for Likes").performClick()
+        compose.onNodeWithContentDescription("Actions for Collection").performClick()
         compose.onNodeWithContentDescription("Clean Codex").performClick()
-        compose.onNodeWithText("Clean Likes").assertIsDisplayed()
-        compose.onNode(hasText("Likes") and isToggleable()).assertDoesNotExist()
-        compose.onNodeWithText("Matching posts will also be unliked.").assertIsDisplayed()
+        compose.onNodeWithText("Clean Collection").assertIsDisplayed()
+        compose.onNode(hasText("Collection") and isToggleable()).assertDoesNotExist()
+        compose.onNodeWithText("Matching posts will also be unliked.").assertDoesNotExist()
         compose.onNodeWithText("Clean Codex").assertIsNotEnabled()
         compose.onNode(hasText("Source A") and isToggleable()).performClick()
         compose.onNode(hasText("Source B") and isToggleable()).performClick()
         compose.onNodeWithText("Clean Codex").assertIsEnabled().performClick()
-        compose.runOnIdle { assertEquals(likesId to setOf("a", "b"), submitted) }
+        compose.runOnIdle { assertEquals("target" to setOf("a", "b"), submitted) }
 
-        compose.onNodeWithContentDescription("Actions for Likes").performClick()
+        compose.onNodeWithContentDescription("Actions for Collection").performClick()
         compose.onNodeWithContentDescription("Clean Codex").performClick()
         compose.onNodeWithText("Clean Codex").assertIsNotEnabled()
         compose.onNode(hasText("Source A") and isToggleable()).performClick()
@@ -60,5 +60,26 @@ class CodexCleaningUiTest {
         compose.onNodeWithText("Clean Codex").assertIsNotEnabled()
         compose.onNodeWithText("Cancel").performClick()
         compose.runOnIdle { assertNull(submitted) }
+    }
+
+    @Test fun `cleaning Likes warns about unliking and excludes itself from comparisons`() {
+        val likes = Codex(ProfileLibraryIds.likes("profile-main"), "Likes", 1)
+        var submitted: Set<String>? = null
+        compose.setContent { MaterialTheme {
+            CodexCleaningSheet(
+                target = likes,
+                codices = listOf(likes, Codex("a", "Source A", 2)),
+                isLikesCodex = true,
+                onDismiss = {},
+                onClean = { submitted = it },
+            )
+        } }
+        compose.onNodeWithText("Clean Likes").assertIsDisplayed()
+        compose.onNodeWithText("Matching posts will also be unliked.").assertIsDisplayed()
+        compose.onNode(hasText("Likes") and isToggleable()).assertDoesNotExist()
+        compose.onNodeWithText("Clean Codex").assertIsNotEnabled()
+        compose.onNode(hasText("Source A") and isToggleable()).performClick()
+        compose.onNodeWithText("Clean Codex").assertIsEnabled().performClick()
+        compose.runOnIdle { assertEquals(setOf("a"), submitted) }
     }
 }
