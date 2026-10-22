@@ -1,3 +1,5 @@
+@file:androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+
 package com.theoriacodex.app.viewer
 
 import androidx.media3.common.PlaybackException

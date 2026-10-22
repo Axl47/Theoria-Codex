@@ -411,21 +411,32 @@ private fun TagActionPill(
             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
         },
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = if (compact) 2.dp else 4.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (icon != null) {
-                icon()
-            } else if (label != null) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+        TagActionPillContent(selected, label, icon, compact)
+    }
+}
+
+@Composable
+private fun TagActionPillContent(
+    selected: Boolean,
+    label: String?,
+    icon: (@Composable () -> Unit)?,
+    compact: Boolean,
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = if (compact) 2.dp else 4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (icon != null) {
+            icon()
+        } else if (label != null) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                color = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

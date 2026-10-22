@@ -1776,38 +1776,53 @@ internal fun SearchSourcePicker(
             }
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            val r34Options = options.filter { (it as? QueryMode.Source)?.source?.isRule34Family() == true }
-            if (r34Expanded) {
-                DropdownMenuItem(text = { Text("← Back") }, onClick = { r34Expanded = false })
-            }
-            val visibleOptions = if (r34Expanded) r34Options else options - r34Options.toSet()
-            visibleOptions.forEach { option ->
-                SourceMenuOption(
-                    option = option,
-                    draftSourceScope = draftSourceScope,
-                    highlightedSources = highlightedSources,
-                    showTitle = r34Expanded,
-                    onModeSelected = {
-                        expanded = false
-                        onModeSelected(it)
-                    },
-                    onTemporarySourceToggled = onTemporarySourceToggled,
-                )
-            }
-            if (!r34Expanded && r34Options.isNotEmpty()) {
-                val selected = highlightedSources.any { it.isRule34Family() }
-                DropdownMenuItem(
-                    modifier = Modifier
-                        .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
-                        .semantics {
-                            contentDescription = "R34"
-                            this.selected = selected
-                        },
-                    text = { SearchLetterIcon("R34") },
-                    onClick = { r34Expanded = true },
-                )
-            }
+            SearchSourceMenuItems(
+                options, draftSourceScope, highlightedSources, r34Expanded,
+                onR34ExpandedChange = { r34Expanded = it },
+                onModeSelected = { expanded = false; onModeSelected(it) },
+                onTemporarySourceToggled = onTemporarySourceToggled,
+            )
         }
+    }
+}
+
+@Composable
+private fun SearchSourceMenuItems(
+    options: List<QueryMode>,
+    draftSourceScope: SearchSourceScope,
+    highlightedSources: Collection<SourceKey>,
+    r34Expanded: Boolean,
+    onR34ExpandedChange: (Boolean) -> Unit,
+    onModeSelected: (QueryMode) -> Unit,
+    onTemporarySourceToggled: (SourceKey) -> Unit,
+) {
+    val r34Options = options.filter { (it as? QueryMode.Source)?.source?.isRule34Family() == true }
+    if (r34Expanded) {
+        DropdownMenuItem(text = { Text("← Back") }, onClick = { onR34ExpandedChange(false) })
+    }
+    val visibleOptions = if (r34Expanded) r34Options else options - r34Options.toSet()
+    visibleOptions.forEach { option ->
+        SourceMenuOption(
+            option = option,
+            draftSourceScope = draftSourceScope,
+            highlightedSources = highlightedSources,
+            showTitle = r34Expanded,
+            onModeSelected = onModeSelected,
+            onTemporarySourceToggled = onTemporarySourceToggled,
+        )
+    }
+    if (!r34Expanded && r34Options.isNotEmpty()) {
+        val selected = highlightedSources.any { it.isRule34Family() }
+        DropdownMenuItem(
+            modifier = Modifier
+                .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+                .semantics {
+                    contentDescription = "R34"
+                    this.selected = selected
+                },
+            text = { SearchLetterIcon("R34") },
+            onClick = { onR34ExpandedChange(true) },
+        )
     }
 }
 

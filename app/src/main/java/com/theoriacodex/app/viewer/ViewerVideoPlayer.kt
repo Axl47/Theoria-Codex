@@ -208,15 +208,7 @@ private fun viewerVideoListener(
         }
         override fun onPlayerError(error: PlaybackException) {
             if (state.player !== player) return
-            if (state.retryPending || state.failed) return
-            if (recovery.requestRetry(error.errorCode)) {
-                state.loading = true
-                state.retryPending = true
-                return
-            }
-            state.loading = false
-            state.failed = true
-            events().onError(error.message ?: "Could not play video")
+            state.handleError(error, recovery, events)
         }
         override fun onRenderedFirstFrame() {
             if (state.player !== player) return
@@ -232,14 +224,35 @@ private fun viewerVideoListener(
         }
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             if (state.player !== player) return
-            state.actuallyPlaying = isPlaying
-            if (isPlaying) {
-                state.failed = false
-                state.loading = false
-                events().onReady()
-            }
+            state.handlePlayingChanged(isPlaying, events)
         }
     }
+}
+
+private fun ViewerVideoState.handlePlayingChanged(isPlaying: Boolean, events: () -> ViewerRendererEvents) {
+    actuallyPlaying = isPlaying
+    if (isPlaying) {
+        failed = false
+        loading = false
+        events().onReady()
+    }
+}
+
+/** Retain the one-retry budget and terminal error state across listener callbacks. */
+private fun ViewerVideoState.handleError(
+    error: PlaybackException,
+    recovery: ViewerVideoRecovery,
+    events: () -> ViewerRendererEvents,
+) {
+    if (retryPending || failed) return
+    if (recovery.requestRetry(error.errorCode)) {
+        loading = true
+        retryPending = true
+        return
+    }
+    loading = false
+    failed = true
+    events().onError(error.message ?: "Could not play video")
 }
 
 @Composable

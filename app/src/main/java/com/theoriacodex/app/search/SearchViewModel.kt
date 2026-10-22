@@ -691,22 +691,27 @@ internal class SearchViewModel(
         val previous = mutableState.value
         val succeeded = completeRequest(requestId, result, expectedExecutionKey)
         if (persistAcceptedResult) {
-            mutableState.value = mutableState.value.withAcceptedSearchHistory(
-                previous, undo, savedStateHandle.savedSearchScrollState() ?: SearchScrollState(0, 0),
-            )
-            val scrollState = undoScrollState ?: SearchScrollState(0, 0)
-            savedStateHandle[SearchSavedStateKeys.SCROLL_INDEX] = scrollState.firstVisibleItemIndex
-            savedStateHandle[SearchSavedStateKeys.SCROLL_OFFSET] = scrollState.firstVisibleItemOffsetPx
-            reduce(
-                if (undoScrollState != null) SearchStateChange.RouteEntryScrollRestorationRequested(scrollState)
-                else SearchStateChange.ScrollResetRequested,
-            )
+            rememberAcceptedSearchNavigation(previous, undo, undoScrollState)
         }
         persistDraftQuery()
         if (persistAcceptedResult) withContext(NonCancellable) {
             executionService.recordAcceptedSearch(result)
         }
         if (succeeded) onSuccess()
+    }
+
+    /** Preserve Undo history and the accepted search's route scroll request together. */
+    private fun rememberAcceptedSearchNavigation(previous: SearchUiState, undo: Boolean, undoScrollState: SearchScrollState?) {
+        mutableState.value = mutableState.value.withAcceptedSearchHistory(
+            previous, undo, savedStateHandle.savedSearchScrollState() ?: SearchScrollState(0, 0),
+        )
+        val scrollState = undoScrollState ?: SearchScrollState(0, 0)
+        savedStateHandle[SearchSavedStateKeys.SCROLL_INDEX] = scrollState.firstVisibleItemIndex
+        savedStateHandle[SearchSavedStateKeys.SCROLL_OFFSET] = scrollState.firstVisibleItemOffsetPx
+        reduce(
+            if (undoScrollState != null) SearchStateChange.RouteEntryScrollRestorationRequested(scrollState)
+            else SearchStateChange.ScrollResetRequested,
+        )
     }
 
     private fun completeRequest(

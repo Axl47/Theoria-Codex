@@ -162,6 +162,8 @@ private fun SaveToCodexSheetContent(
     val matchingCodices = remember(rootCodices, searchText, sortByRelevance, relevanceScores, likesId) {
         matchingSaveCodices(rootCodices, searchText, sortByRelevance, relevanceScores, likesId)
     }
+    val displayedContainingCodexIds = if (likesId in containingCodexIds) containingCodexIds + SAVED_CODEX_ID
+        else containingCodexIds
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -188,8 +190,7 @@ private fun SaveToCodexSheetContent(
                 modifier = Modifier.weight(1f, fill = false),
                 emptyMessage = savePickerEmptyMessage(selectedCodices, hasExcludedCodices),
                 itemCounts = codexItemCounts + (SAVED_CODEX_ID to (codexItemCounts[likesId] ?: 0)),
-                containingCodexIds = if (likesId in containingCodexIds) containingCodexIds + SAVED_CODEX_ID
-                    else containingCodexIds,
+                containingCodexIds = displayedContainingCodexIds,
                 coverCandidates = codexCoverCandidates + (SAVED_CODEX_ID to codexCoverCandidates[likesId].orEmpty()),
                 onSelectCodex = { id ->
                     if (id == SAVED_CODEX_ID) { insideSaved = true; searchText = "" }
@@ -342,26 +343,7 @@ private fun CodexPickerRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Box(
-                modifier = Modifier
-                    .size(58.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center,
-            ) {
-                CodexCoverImage(
-                    candidates = coverCandidates,
-                    contentDescription = codex.name,
-                    modifier = Modifier.fillMaxWidth(),
-                    fallback = {
-                        Icon(
-                            imageVector = Icons.Default.Collections,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                )
-            }
+            CodexPickerCover(codex.name, coverCandidates)
 
             Column(
                 modifier = Modifier.weight(1f),
@@ -387,6 +369,30 @@ private fun CodexPickerRow(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun CodexPickerCover(name: String, candidates: List<CodexCoverCandidate>) {
+    Box(
+        modifier = Modifier
+            .size(58.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center,
+    ) {
+        CodexCoverImage(
+            candidates = candidates,
+            contentDescription = name,
+            modifier = Modifier.fillMaxWidth(),
+            fallback = {
+                Icon(
+                    imageVector = Icons.Default.Collections,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+        )
     }
 }
 
