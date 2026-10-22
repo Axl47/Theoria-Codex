@@ -9,6 +9,7 @@ import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
+import com.theoriacodex.domain.adapter.RelatedPostsSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
@@ -49,7 +50,7 @@ class NhentaiSourceAdapter(
     private val httpClient: SourceHttpClient,
     private val gson: Gson = Gson(),
     private val minRequestIntervalMs: Long = 350L,
-) : SourceAdapter, TagCountLookupSourceAdapter, FacetedSearchSourceAdapter {
+) : SourceAdapter, TagCountLookupSourceAdapter, FacetedSearchSourceAdapter, RelatedPostsSourceAdapter {
     override val sourceKey: SourceKey = SourceKey.NHENTAI
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
@@ -284,6 +285,25 @@ class NhentaiSourceAdapter(
 
         val root = parseJsonObject(response.body)
         return parseNhentaiGallery(root)
+    }
+
+    /** Uses the site's More like this recommendations without substituting a tag search. */
+    override suspend fun relatedPosts(seed: PostId, limit: Int): List<Post> {
+        if (seed.source != SourceKey.NHENTAI || limit <= 0) return emptyList()
+        val galleryId = seed.sourcePostId.trim().takeIf(String::isDigitsOnly) ?: return emptyList()
+        val root = requireNotNull(requestJsonObject(url = "$NHENTAI_GALLERY_URL_PREFIX/$galleryId/related"))
+        val galleries = root.optionalJsonArray("result") ?: throw SourceAdapterException(
+            reason = SourceFailureReason.PARSE,
+            message = "NHentai related galleries were not found in the response",
+        )
+        return galleries.asSequence()
+            .mapNotNull { element ->
+                element.takeIf(JsonElement::isJsonObject)?.asJsonObject?.let(::parseNhentaiGallery)
+            }
+            .filterNot { post -> post.id.sourcePostId == galleryId }
+            .distinctBy(Post::id)
+            .take(limit.coerceAtMost(NHENTAI_MAX_RELATED_POSTS))
+            .toList()
     }
 
     private suspend fun requestJsonObjectOrMirrorSearch(
@@ -725,6 +745,7 @@ private const val NHENTAI_TAGS_SEARCH_URL = "https://nhentai.net/api/v2/tags/sea
 internal const val NHENTAI_IMAGES_BASE = "https://i.nhentai.net"
 internal const val NHENTAI_THUMBS_BASE = "https://t.nhentai.net"
 private const val NHENTAI_TRENDING_GALLERY_SAMPLE_SIZE = 6
+private const val NHENTAI_MAX_RELATED_POSTS = 6
 private const val JINA_MIRROR_BASE = "https://r.jina.ai/http://"
 private val NHENTAI_METADATA_MIRROR_BASES = listOf(
     "https://nhentai.to",

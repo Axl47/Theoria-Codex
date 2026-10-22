@@ -67,6 +67,7 @@
 - Preserve related-post shelf navigation after liking from fullscreen.
 - Keep previous pages reachable after empty results.
 - Show related posts after liking creator uploads.
+- Show nhentai’s “More like this” recommendations after liking a post.
 - Refresh Followed covers from the first available post in the selected feed order.
 - Preserve provider tag counts.
 - Show counts for typed terms in the tag hold menu.
