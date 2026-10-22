@@ -43,7 +43,8 @@
 - Preload Save to Codex tag matching when opening a post’s hold menu to reduce waiting in the save picker.
 - Prioritize Save to Codex destinations relevant to the applied search and incoming post tags, with an option to return to library order.
 - Activate Unified Search by holding sources, with the current single source hidden from the picker.
-- Adjust only the selected Unified sources’ weights in Settings using stepped sliders.
+- Adjust selected Unified sources’ weights in 5% steps, with other weights updating immediately while the chosen weight stays fixed.
+- Collapse Unified Mode settings when browsing a single source.
 - Automatically reapply Search when returning after changing its Unified weights.
 - Remember Viewer play mode.
 - Adjust playback speed with a slider.

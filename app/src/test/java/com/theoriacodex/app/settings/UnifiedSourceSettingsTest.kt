@@ -1,6 +1,10 @@
 package com.theoriacodex.app.settings
 
 import android.app.Application
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.performClick
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -25,15 +29,24 @@ class UnifiedSourceSettingsTest {
 
     @Test
     fun singleSourceShowsActivationHelpWithoutWeightControls() {
+        var expanded by mutableStateOf(true)
         composeRule.setContent {
             MaterialTheme {
-                UnifiedSourceSettings(setOf(SourceKey.PIXIV), SourceRuntimeSettings()) {
+                UnifiedSourceSettings(
+                    setOf(SourceKey.PIXIV), SourceRuntimeSettings(),
+                    expanded = expanded, onToggle = { expanded = !expanded },
+                ) {
                     error("Single-source settings must not write weights")
                 }
             }
         }
         composeRule.onNodeWithText("Activate Unified by holding down sources in Search.").assertExists()
         composeRule.onNodeWithContentDescription("Pixiv weight").assertDoesNotExist()
+        composeRule.onNodeWithText("Select multiple sources to adjust their weights.").assertDoesNotExist()
+        composeRule.onNodeWithText("Unified Mode").performClick()
+        composeRule.onNodeWithText("Activate Unified by holding down sources in Search.").assertDoesNotExist()
+        composeRule.onNodeWithText("Unified Mode").performClick()
+        composeRule.onNodeWithText("Activate Unified by holding down sources in Search.").assertExists()
     }
 
     @Test
@@ -42,7 +55,7 @@ class UnifiedSourceSettingsTest {
         val sources = setOf(SourceKey.PIXIV, SourceKey.GELBOORU)
         composeRule.setContent {
             MaterialTheme {
-                UnifiedSourceSettings(sources, SourceRuntimeSettings(), updates::add)
+                UnifiedSourceSettings(sources, SourceRuntimeSettings(), onWeightsChanged = updates::add)
             }
         }
         val slider = composeRule.onNodeWithContentDescription("Pixiv weight")
@@ -50,6 +63,9 @@ class UnifiedSourceSettingsTest {
         composeRule.onNodeWithContentDescription("Gelbooru weight").assertExists()
         composeRule.onNodeWithContentDescription("Iwara weight").assertDoesNotExist()
         slider.performSemanticsAction(SemanticsActions.SetProgress) { it(0.75f) }
+        assertEquals(0.25f, composeRule.onNodeWithContentDescription("Gelbooru weight")
+            .fetchSemanticsNode().config[SemanticsProperties.ProgressBarRangeInfo].current)
+        assertEquals(0.75f, slider.fetchSemanticsNode().config[SemanticsProperties.ProgressBarRangeInfo].current)
         composeRule.runOnIdle {
             assertTrue(updates.isNotEmpty())
             assertEquals(sources, updates.last().keys)

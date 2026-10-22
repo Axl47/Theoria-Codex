@@ -139,6 +139,13 @@ fun SettingsScreen(
         UnifiedSourceSettings(
             sources = searchSources,
             runtime = state.settings.runtime,
+            expanded = state.sectionExpansion[SettingsSectionKey.UNIFIED_MODE],
+            onToggle = {
+                onAction(SettingsAction.SetSectionExpanded(
+                    SettingsSectionKey.UNIFIED_MODE,
+                    !state.sectionExpansion[SettingsSectionKey.UNIFIED_MODE],
+                ))
+            },
             onWeightsChanged = { onAction(SettingsAction.SetSourceWeights(searchSources, it)) },
         )
 

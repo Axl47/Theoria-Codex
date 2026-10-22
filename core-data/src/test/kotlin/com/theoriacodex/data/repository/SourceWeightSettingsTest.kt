@@ -6,6 +6,30 @@ import org.junit.Test
 
 class SourceWeightSettingsTest {
     @Test
+    fun `every slider step preserves edited weight and distributes whole steps totaling one`() {
+        for (count in 2..SourceKey.entries.size) {
+            val sources = SourceKey.entries.take(count).toSet()
+            val original = SourceWeightSettings.weightsFor(SourceRuntimeSettings(), sources)
+            val source = sources.first()
+            for (step in 0..20) {
+                val updated = SourceWeightSettings.redistribute(original, source, step / 20.0)
+                assertEquals(step / 20.0, updated.getValue(source), 0.000001)
+                assertEquals(1.0, updated.values.sum(), 0.000001)
+                updated.values.forEach { assertEquals(kotlin.math.round(it * 20), it * 20, 0.000001) }
+                val saved = SourceWeightSettings.updateWeights(SourceRuntimeSettings(), sources, updated)
+                assertEquals(step / 20.0, SourceWeightSettings.weightsFor(saved, sources).getValue(source), 0.000001)
+            }
+        }
+    }
+
+    @Test
+    fun `moving away from full weight redistributes across zero weight peers`() {
+        val initial = mapOf(SourceKey.PIXIV to 1.0, SourceKey.GELBOORU to 0.0, SourceKey.IWARA to 0.0)
+        val updated = SourceWeightSettings.redistribute(initial, SourceKey.PIXIV, 0.5)
+        assertEquals(mapOf(SourceKey.PIXIV to 0.5, SourceKey.GELBOORU to 0.25, SourceKey.IWARA to 0.25), updated)
+    }
+
+    @Test
     fun `group weights survive normalization without changing other source configurations`() {
         val group = setOf(SourceKey.PIXIV, SourceKey.GELBOORU)
         val original = SourceWeightSettings.normalize(SourceRuntimeSettings())
