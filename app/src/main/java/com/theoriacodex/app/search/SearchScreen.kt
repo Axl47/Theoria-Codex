@@ -72,6 +72,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -2006,8 +2007,11 @@ private fun SourceBadge(
     source: SourceKey,
     modifier: Modifier = Modifier,
 ) {
+    val labelHeight = with(LocalDensity.current) {
+        MaterialTheme.typography.labelSmall.lineHeight.toDp()
+    }
     Surface(
-        modifier = modifier,
+        modifier = modifier.height(labelHeight + 8.dp),
         color = if (source.isRule34Family()) {
             Color.Transparent
         } else {
