@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Simplify provider responsibilities</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font: 16px/1.5 system-ui, sans-serif; max-width: 1100px; margin: auto; padding: 24px; }
+    nav { position: sticky; top: 0; background: Canvas; padding: 12px 0; border-block: 1px solid #888; }
+    section { padding-block: 16px; border-bottom: 1px solid #888; }
+    table { width: 100%; border-collapse: collapse; }
+    td, th { padding: 8px; border: 1px solid #888; text-align: left; vertical-align: top; }
+    code { font-size: 0.9em; overflow-wrap: anywhere; }
+    pre { overflow-x: auto; }
+    .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+    .card { border: 1px solid #888; padding: 12px; }
+    @media print { nav { position: static; } section { break-inside: avoid; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ExecPlan: Simplify provider responsibilities</h1>
+    <p>Reduce 15 complexity and size findings while preserving provider search, pagination, media mapping,
+      recovery, and diagnostic results. Runtime UI behavior is unchanged.</p>
+    <p>Owner: Codex · Created and updated: 2026-10-22 · Status: complete</p>
+    <div class="dashboard">
+      <div class="card"><strong>Outcome</strong><br>All 15 original findings resolved.</div>
+      <div class="card"><strong>Validation</strong><br>241 tests passed; Detekt reports zero findings.</div>
+      <div class="card"><strong>Main risk</strong><br>Changing request order, continuation authority, or sparse-media behavior during extraction.</div>
+      <div class="card"><strong>Next action</strong><br>No further implementation work.</div>
+    </div>
+  </header>
+  <nav aria-label="Plan sections">
+    <a href="#purpose">Purpose</a> · <a href="#context">Context</a> · <a href="#phases">Phases</a> ·
+    <a href="#work">Work plan</a> · <a href="#validation">Validation</a> ·
+    <a href="#log">Living log</a> · <a href="#recovery">Recovery</a>
+  </nav>
+  <main>
+    <section id="purpose">
+      <h2>Purpose / Big picture</h2>
+      <p>Provider adapters translate remote responses into canonical posts, the shared identities and media
+        used by Search and Viewer. Smaller responsibility boundaries make search continuation and media
+        behavior easier to maintain. Existing fixture tests must keep producing the same posts, requests,
+        continuation tokens, diagnostic statuses, and typed failures.</p>
+    </section>
+    <section id="context">
+      <h2>Context and orientation</h2>
+      <p>The Kotlin/JVM module <code>core-sources</code> owns provider adapters. Detekt is its static code
+        analysis tool. Keep Detekt's own parallel setting disabled and leave its rules and baseline unchanged.
+        No production, live-provider, build-channel, or UI changes are required.</p>
+      <p>Paths in this table are relative to
+        <code>core-sources/src/main/kotlin/com/theoriacodex/sources/</code>.</p>
+      <table>
+        <thead><tr><th>Path</th><th>Responsibility after refactor</th></tr></thead>
+        <tbody>
+          <tr><td><code>health/ProviderHealth.kt</code></td><td>Sequential diagnostic orchestration with individual newest, seeded, trending, resolve, and media checks.</td></tr>
+          <tr><td><code>hitomi/HitomiSourceAdapter.kt</code></td><td>Provider entry points, continuation validation, random snapshots, bounded hydration, and autocomplete.</td></tr>
+          <tr><td><code>hitomi/HitomiQueryCompiler.kt</code></td><td>Typed terms to provider indexes, with version-bound global-index cache reuse.</td></tr>
+          <tr><td><code>hitomi/HitomiNozomiReader.kt</code></td><td>Nozomi (binary gallery-ID index) transport, byte ranges, membership caches, and bounded ordered scans.</td></tr>
+          <tr><td><code>hitomi/HitomiPostMapper.kt</code></td><td>Parsed metadata to sparse/resolved posts and provider media-URL recovery.</td></tr>
+          <tr><td><code>hitomi/HitomiGalleryMetadata.kt</code></td><td>Existing pure metadata parser; update its ownership comment.</td></tr>
+          <tr><td><code>nhentai/NhentaiSourceAdapter.kt</code></td><td>Search request choice, transport, mirror fallbacks, tag lookup/cache, and resolution.</td></tr>
+          <tr><td><code>nhentai/NhentaiGalleryParser.kt</code></td><td>Pure gallery, image, title, author, and taxonomy mapping.</td></tr>
+          <tr><td><code>nhentai/NhentaiTagSuggestions.kt</code></td><td>Pure suggestion extraction, matching, strongest-count deduplication, and ordering.</td></tr>
+          <tr><td><code>pixiv/PixivSourceAdapter.kt</code></td><td>Separate illustration media/page/tag mapping from post construction.</td></tr>
+        </tbody>
+      </table>
+      <p>The originating chat owned nhentai edits until its explicit handoff after
+        <code>da2744ae</code> (<code>fix(nhentai): strip bracketed annotations from titles</code>).
+        Reread those files after handoff. Preserve <code>cleanNhentaiTitle</code> and artist attribution
+        from <code>88a2fd13</code>. Other chats may modify this shared checkout; stage explicit owned paths only.</p>
+    </section>
+    <section id="phases">
+      <h2>Phases</h2>
+      <table>
+        <thead><tr><th>Phase</th><th>Goal and edits</th><th>Observable acceptance</th></tr></thead>
+        <tbody>
+          <tr><td>1 — complete</td><td>Inspect the 15 reported findings and existing tests; identify preserved data flow and error paths.</td><td>Scope covers only health, Hitomi, Pixiv, nhentai and their two long test fixtures.</td></tr>
+          <tr><td>2 — complete</td><td>Extract health steps, Hitomi compiler/reader/mapper and Pixiv media/tag parsing.</td><td>Request order, cache sharing, limits, cancellation, post IDs and media ordering remain unchanged.</td></tr>
+          <tr><td>3 — complete</td><td>After handoff, extract nhentai gallery mapping and suggestions; shorten request orchestration and fixture setup.</td><td>API/mirror title cleanup and artist attribution remain covered by existing tests.</td></tr>
+          <tr><td>4 — complete</td><td>Run the module test suite and Detekt, review the diff, and commit explicit owned files.</td><td>241 passing tests, zero Detekt findings, clean whitespace check and an isolated Conventional Commit.</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section id="work">
+      <h2>Work plan</h2>
+      <ol>
+        <li>Split <code>ProviderProbeRunner.runCase</code> into its existing diagnostic steps and pure seeded-post predicates.
+          Preserve sample capture before result evaluation and preserve step ordering and failure isolation.</li>
+        <li>Move Hitomi query compilation, version binding and compiled-index models into <code>HitomiQueryCompiler</code>.
+          Share the existing global-index cache with <code>HitomiNozomiReader</code>.</li>
+        <li>Move binary-index transport and membership/size caches into <code>HitomiNozomiReader</code>.
+          Preserve scan budgets, consumed raw IDs, request bounds and range validation before hydrating posts.</li>
+        <li>Move Hitomi post mapping and media recovery together into <code>HitomiPostMapper</code>.
+          Reuse <code>ParsedHitomiGallery.hasPlayableVideo</code> for sparse video and poster decisions.</li>
+        <li>Separate Pixiv media, page and tag parsing; preserve canonical media preference, progressive URLs and native/translated tag order.</li>
+        <li>Move nhentai pure gallery mapping and suggestions out of the adapter, retaining legacy/new image formats,
+          sparse mirror behavior, page ordering, declared counts, cleaned title selection and artist authorship.</li>
+        <li>In <code>core-sources/src/test/kotlin/com/theoriacodex/sources/nhentai/NhentaiResolutionSourceAdapterTest.kt</code>
+          and <code>core-sources/src/test/kotlin/com/theoriacodex/sources/pixiv/PixivSourceAdapterTest.kt</code>,
+          move long response setup into named fixtures. Retain every behavioral assertion.</li>
+      </ol>
+      <p>No new runtime feature, UI state, rule suppression, dependency or baseline change is part of this work.</p>
+    </section>
+    <section id="validation">
+      <h2>Validation and acceptance</h2>
+      <p>Run from the repository root:
+        <code>/Users/axel/Desktop/Code_Projects/Personal/Apps/Theoria Codex</code>.</p>
+      <table>
+        <thead><tr><th>Check</th><th>Command</th><th>Evidence</th></tr></thead>
+        <tbody>
+          <tr><td>Module behavior and analysis</td><td><code>./gradlew :core-sources:test :core-sources:detekt --offline</code></td><td>BUILD SUCCESSFUL in 8s; 241 tests, zero failures/errors/skips. Detekt SARIF contains zero results.</td></tr>
+          <tr><td>Final physical-line budgets</td><td><code>./gradlew :core-sources:detekt --offline</code></td><td>BUILD SUCCESSFUL in 1s after final formatting; zero findings.</td></tr>
+          <tr><td>Whitespace</td><td><code>git diff --check</code></td><td>Passes without output.</td></tr>
+          <tr><td>Commit isolation</td><td><code>git diff --cached --stat</code> and <code>git diff --cached --check</code></td><td>Only the plan and owned core-sources refactor files are staged.</td></tr>
+        </tbody>
+      </table>
+      <p>The existing suite covers health outcomes and provider search, continuation, parsing, sparse media,
+        recovery and cancellation fixtures. No device or live-provider check is needed for these behavior-preserving extractions.</p>
+    </section>
+    <section id="log">
+      <h2>Living log</h2>
+      <h3>Progress</h3>
+      <ul>
+        <li>2026-10-22 — inspected all 15 reported findings and build configuration.</li>
+        <li>2026-10-22 — extracted ProviderHealth, Hitomi and Pixiv responsibilities.</li>
+        <li>2026-10-22 — received explicit nhentai handoff after <code>da2744ae</code>; reread and preserved title/author behavior.</li>
+        <li>2026-10-22 — completed nhentai extraction and both fixture cleanups.</li>
+        <li>2026-10-22 — module behavior tests and Detekt pass; reviewed final diff and explicit staging list.</li>
+      </ul>
+      <h3>Surprises and discoveries</h3>
+      <p>Hitomi already has a pure gallery metadata parser and bounded cache helpers; reusing them avoids
+        duplicating media identity or cache policy. The first sandboxed Gradle invocation could not open
+        the wrapper lock outside the workspace; the authorized invocation with Gradle-cache access passed.</p>
+      <h3>Decision log</h3>
+      <p>2026-10-22 / Codex: extract cohesive provider responsibilities and keep existing behavioral tests.
+        Preserve the shared cache instances and exact request/error paths. No rule or baseline changes.</p>
+      <h3>Outcomes and retrospective</h3>
+      <p>All 15 original findings are resolved with smaller methods and provider-specific responsibility
+        boundaries. Existing tests pass, including the handed-off nhentai title and author expectations.
+        No new developer constraint was discovered that requires an AGENTS.md change.</p>
+    </section>
+    <section id="recovery">
+      <h2>Idempotence and recovery</h2>
+      <p>Gradle checks and diff review are safe to rerun. No destructive operation is required. Resume by
+        reviewing this plan and the current diff; preserve concurrent work. If a check fails, repair its
+        common cause and rerun only affected validation. For a post-commit reversal, inspect the commit
+        and revert it in coordination with the shared checkout owner; never reset the checkout.</p>
+    </section>
+  </main>
+</body>
+</html>

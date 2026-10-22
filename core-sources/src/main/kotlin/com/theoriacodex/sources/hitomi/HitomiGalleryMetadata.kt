@@ -32,7 +32,7 @@ internal data class ParsedHitomiGallery(
     val animated: Boolean get() = taxonomy.any { it.facet == SearchFacet.TAG && it.value.equals("animated", true) }
 }
 
-/** Pure metadata boundary. Transport, URL acquisition and sparse media publication stay in the adapter. */
+/** Pure metadata boundary. Transport stays in the adapter; URL acquisition and sparse publication belong to HitomiPostMapper. */
 internal fun parseHitomiGallery(json: JsonObject, fallbackGalleryId: Int): ParsedHitomiGallery = with(json) {
     val galleryId = stringValue("id")?.toIntOrNull() ?: fallbackGalleryId
     val files = arrayValue("files")?.mapIndexed { index, element ->

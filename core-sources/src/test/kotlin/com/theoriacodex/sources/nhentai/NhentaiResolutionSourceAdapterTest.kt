@@ -110,40 +110,7 @@ internal class NhentaiResolutionSourceAdapterTest : NhentaiSourceAdapterTestFixt
 
     @Test
     fun `resolve post falls back to mirrored reader page when api is cloudflare blocked`() = runTest {
-        val httpClient = QueueHttpClient(
-            SourceHttpResponse(
-                statusCode = 403,
-                body = "<html>Attention Required! Cloudflare</html>",
-                headers = mapOf("cf-mitigated" to listOf("challenge")),
-            ),
-            SourceHttpResponse(
-                statusCode = 200,
-                body = """
-                    Title: [Artist] Mirrored Gallery (English) - Page 1
-
-                    Markdown Content:
-                    [](http://nhentai.net/g/634609/)
-
-                    1 of 3[](http://nhentai.net/g/634609/2/)[](http://nhentai.net/g/634609/3/)
-
-                    [![Image 2: Page 1](https://i2.nhentai.net/galleries/3821534/1.webp)](http://nhentai.net/g/634609/2/)
-                """.trimIndent(),
-            ),
-            SourceHttpResponse(
-                statusCode = 200,
-                body = """
-                    <html>
-                      <body>
-                        <section id="tags">
-                          <a href="/tag/big-breasts/" class="tag"><span class="name">big breasts</span></a>
-                          <a href="/artist/yomoda-yomo/" class="tag"><span class="name">yomoda yomo</span></a>
-                          <a href="/language/english/" class="tag"><span class="name">english</span></a>
-                        </section>
-                      </body>
-                    </html>
-                """.trimIndent(),
-            ),
-        )
+        val httpClient = blockedApiWithMirroredReader()
         val adapter = NhentaiSourceAdapter(httpClient = httpClient)
 
         val post = adapter.resolvePost(PostId(source = SourceKey.NHENTAI, sourcePostId = "634609"))
@@ -177,6 +144,41 @@ internal class NhentaiResolutionSourceAdapterTest : NhentaiSourceAdapterTestFixt
         )
         assertEquals("yomoda yomo", post?.authorName)
     }
+
+    private fun blockedApiWithMirroredReader() = QueueHttpClient(
+        SourceHttpResponse(
+            statusCode = 403,
+            body = "<html>Attention Required! Cloudflare</html>",
+            headers = mapOf("cf-mitigated" to listOf("challenge")),
+        ),
+        SourceHttpResponse(
+            statusCode = 200,
+            body = """
+                Title: [Artist] Mirrored Gallery (English) - Page 1
+
+                Markdown Content:
+                [](http://nhentai.net/g/634609/)
+
+                1 of 3[](http://nhentai.net/g/634609/2/)[](http://nhentai.net/g/634609/3/)
+
+                [![Image 2: Page 1](https://i2.nhentai.net/galleries/3821534/1.webp)](http://nhentai.net/g/634609/2/)
+            """.trimIndent(),
+        ),
+        SourceHttpResponse(
+            statusCode = 200,
+            body = """
+                <html>
+                  <body>
+                    <section id="tags">
+                      <a href="/tag/big-breasts/" class="tag"><span class="name">big breasts</span></a>
+                      <a href="/artist/yomoda-yomo/" class="tag"><span class="name">yomoda yomo</span></a>
+                      <a href="/language/english/" class="tag"><span class="name">english</span></a>
+                    </section>
+                  </body>
+                </html>
+            """.trimIndent(),
+        ),
+    )
 
     @Test
     fun `exact tag lookup cancellation stops search instead of falling through`() = runTest {

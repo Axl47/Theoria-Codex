@@ -520,38 +520,7 @@ class PixivSourceAdapterTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(
                 statusCode = 200,
-                body = """
-                    {
-                      "illusts": [
-                        {
-                          "id": 67890,
-                          "image_urls": {
-                            "square_medium": "https://i.pximg.net/cover_square.jpg",
-                            "medium": "https://i.pximg.net/cover_medium.jpg",
-                            "large": "https://i.pximg.net/cover_large.jpg"
-                          },
-                          "meta_pages": [
-                            {
-                              "image_urls": {
-                                "medium": "https://i.pximg.net/page1_medium.jpg",
-                                "large": "https://i.pximg.net/page1_large.jpg",
-                                "original": "https://i.pximg.net/page1_original.jpg"
-                              }
-                            },
-                            {
-                              "image_urls": {
-                                "medium": "https://i.pximg.net/page2_medium.jpg",
-                                "large": "https://i.pximg.net/page2_large.jpg",
-                                "original": "https://i.pximg.net/page2_original.jpg"
-                              }
-                            }
-                          ],
-                          "tags": [{"name": "landscape"}],
-                          "user": {"id": 77, "name": "artist"}
-                        }
-                      ]
-                    }
-                """.trimIndent(),
+                body = multipageIllustResponse(),
             )
         }
         val adapter = PixivSourceAdapter(
@@ -579,6 +548,39 @@ class PixivSourceAdapterTest {
             post.media[1].progressiveUrls,
         )
     }
+
+    private fun multipageIllustResponse(): String = """
+        {
+          "illusts": [
+            {
+              "id": 67890,
+              "image_urls": {
+                "square_medium": "https://i.pximg.net/cover_square.jpg",
+                "medium": "https://i.pximg.net/cover_medium.jpg",
+                "large": "https://i.pximg.net/cover_large.jpg"
+              },
+              "meta_pages": [
+                {
+                  "image_urls": {
+                    "medium": "https://i.pximg.net/page1_medium.jpg",
+                    "large": "https://i.pximg.net/page1_large.jpg",
+                    "original": "https://i.pximg.net/page1_original.jpg"
+                  }
+                },
+                {
+                  "image_urls": {
+                    "medium": "https://i.pximg.net/page2_medium.jpg",
+                    "large": "https://i.pximg.net/page2_large.jpg",
+                    "original": "https://i.pximg.net/page2_original.jpg"
+                  }
+                }
+              ],
+              "tags": [{"name": "landscape"}],
+              "user": {"id": 77, "name": "artist"}
+            }
+          ]
+        }
+    """.trimIndent()
 
     private fun sampleQuery(): Query {
         return Query(

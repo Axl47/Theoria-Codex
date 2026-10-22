@@ -346,8 +346,34 @@ class ProviderProbeRunner(
         }
 
         val results = mutableListOf<ProviderProbeStepResult>()
-        val includeTerms = probeCase.configuredIncludeTerms()
-        results += runStep(probeCase = probeCase, checkName = "newest-search") {
+        results += runNewestSearch(probeCase, adapter)
+        var seededSample: Post? = null
+        results += runStep(probeCase = probeCase, checkName = "seeded-search") {
+            val query = Query(
+                mode = QueryMode.Source(probeCase.source),
+                includeTerms = probeCase.configuredIncludeTerms(),
+                excludeTerms = emptyList(),
+                sort = probeCase.sort,
+                dateRange = null,
+                minScore = null,
+            )
+            val page = adapter.search(query, pageToken = null)
+            seededSample = page.items.firstOrNull()
+            seededSearchResult(probeCase, page.items)
+        }
+        results += runAutocomplete(probeCase, adapter)
+        if (probeCase.trendingProbe) results += runTrending(probeCase, adapter)
+        results += runResolve(probeCase, adapter, seededSample)
+        if (probeCase.mediaProbe) results += mediaMetadataResult(probeCase, seededSample)
+        runRelatedPosts(probeCase, adapter)?.let(results::add)
+        return results
+    }
+
+    private suspend fun runNewestSearch(
+        probeCase: ProviderProbeCase,
+        adapter: SourceAdapter,
+    ): ProviderProbeStepResult {
+        return runStep(probeCase = probeCase, checkName = "newest-search") {
             val query = adapter.quickQuery(QuickQueryKind.NEWEST)
             val page = adapter.search(query, pageToken = null)
             val sample = page.items.firstOrNull()
@@ -360,88 +386,75 @@ class ProviderProbeRunner(
                 emptyMessage = "Reachable but returned no newest posts",
             )
         }
+    }
 
-        var seededSample: Post? = null
-        results += runStep(probeCase = probeCase, checkName = "seeded-search") {
-            val query = Query(
-                mode = QueryMode.Source(probeCase.source),
-                includeTerms = includeTerms,
-                excludeTerms = emptyList(),
-                sort = probeCase.sort,
-                dateRange = null,
-                minScore = null,
+    private fun seededSearchResult(probeCase: ProviderProbeCase, posts: List<Post>): ProviderProbeStepResult {
+        val includeTerms = probeCase.configuredIncludeTerms()
+        val tagEchoMatches = !probeCase.strictTagEcho || posts.any { post ->
+            post.echoesTerms(includeTerms)
+        }
+        val groupedEchoMatchCount = posts.count { post -> post.echoesGroups(probeCase.requiredAnyTagGroups) }
+        val groupedEchoMatches = probeCase.requiredAnyTagGroups.isEmpty() || groupedEchoMatchCount == posts.size
+        val termsLabel = includeTerms.joinToString { term ->
+            "${term.sourceNamespace?.let { "$it:" }.orEmpty()}${term.value}"
+        }
+        return when {
+            posts.isEmpty() -> degraded(
+                probeCase = probeCase,
+                checkName = "seeded-search",
+                itemCount = 0,
+                message = "Reachable but returned no posts for $termsLabel",
             )
-            val page = adapter.search(query, pageToken = null)
-            seededSample = page.items.firstOrNull()
-            val tagEchoMatches = !probeCase.strictTagEcho || page.items.any { post ->
-                val tags = post.canonicalTags + post.rawTags
-                includeTerms.all { term ->
-                    val expected = term.value
-                    tags.any { tag -> tagsMatch(tag, expected) }
-                }
-            }
-            val groupedEchoMatchCount = page.items.count { post ->
-                val tags = post.canonicalTags + post.rawTags
-                probeCase.requiredAnyTagGroups.all { group ->
-                    group.any { expected -> tags.any { actual -> tagsMatch(actual, expected) } }
-                }
-            }
-            val groupedEchoMatches = probeCase.requiredAnyTagGroups.isEmpty() ||
-                groupedEchoMatchCount == page.items.size
-            val termsLabel = includeTerms.joinToString { term ->
-                "${term.sourceNamespace?.let { "$it:" }.orEmpty()}${term.value}"
-            }
-            when {
-                page.items.isEmpty() -> degraded(
-                    probeCase = probeCase,
-                    checkName = "seeded-search",
-                    itemCount = 0,
-                    message = "Reachable but returned no posts for $termsLabel",
-                )
-                !tagEchoMatches -> degraded(
-                    probeCase = probeCase,
-                    checkName = "seeded-search",
-                    itemCount = page.items.size,
-                    samplePost = seededSample,
-                    message = "Returned posts, but none echoed required terms $termsLabel",
-                )
-                !groupedEchoMatches -> degraded(
-                    probeCase = probeCase,
-                    checkName = "seeded-search",
-                    itemCount = page.items.size,
-                    samplePost = seededSample,
-                    message = "$groupedEchoMatchCount/${page.items.size} posts satisfied required OR groups",
-                )
-                else -> ok(
-                    probeCase = probeCase,
-                    checkName = "seeded-search",
-                    itemCount = page.items.size,
-                    samplePost = seededSample,
-                    message = if (probeCase.requiredAnyTagGroups.isEmpty()) {
-                        "Returned ${page.items.size} seeded posts"
-                    } else {
-                        "Returned ${page.items.size} seeded posts; all satisfied required OR groups"
-                    },
-                )
-            }
+            !tagEchoMatches -> degraded(
+                probeCase = probeCase,
+                checkName = "seeded-search",
+                itemCount = posts.size,
+                samplePost = posts.firstOrNull(),
+                message = "Returned posts, but none echoed required terms $termsLabel",
+            )
+            !groupedEchoMatches -> degraded(
+                probeCase = probeCase,
+                checkName = "seeded-search",
+                itemCount = posts.size,
+                samplePost = posts.firstOrNull(),
+                message = "$groupedEchoMatchCount/${posts.size} posts satisfied required OR groups",
+            )
+            else -> ok(
+                probeCase = probeCase,
+                checkName = "seeded-search",
+                itemCount = posts.size,
+                samplePost = posts.firstOrNull(),
+                message = if (probeCase.requiredAnyTagGroups.isEmpty()) {
+                    "Returned ${posts.size} seeded posts"
+                } else {
+                    "Returned ${posts.size} seeded posts; all satisfied required OR groups"
+                },
+            )
         }
+    }
 
-        results += runAutocomplete(probeCase, adapter)
-        if (probeCase.trendingProbe) {
-            results += runStep(probeCase = probeCase, checkName = "trending-tags") {
-                val tags = adapter.trendingTags(limit = 5)
-                okOrDegraded(
-                    probeCase = probeCase,
-                    checkName = "trending-tags",
-                    itemCount = tags.size,
-                    okMessage = "Returned ${tags.size} trending tags",
-                    emptyMessage = "Reachable but returned no trending tags",
-                )
-            }
+    private suspend fun runTrending(
+        probeCase: ProviderProbeCase,
+        adapter: SourceAdapter,
+    ): ProviderProbeStepResult {
+        return runStep(probeCase = probeCase, checkName = "trending-tags") {
+            val tags = adapter.trendingTags(limit = 5)
+            okOrDegraded(
+                probeCase = probeCase,
+                checkName = "trending-tags",
+                itemCount = tags.size,
+                okMessage = "Returned ${tags.size} trending tags",
+                emptyMessage = "Reachable but returned no trending tags",
+            )
         }
+    }
 
-        val sample = seededSample
-        results += if (sample == null) {
+    private suspend fun runResolve(
+        probeCase: ProviderProbeCase,
+        adapter: SourceAdapter,
+        sample: Post?,
+    ): ProviderProbeStepResult {
+        return if (sample == null) {
             skipped(
                 probeCase = probeCase,
                 checkName = "resolve-post",
@@ -473,40 +486,46 @@ class ProviderProbeRunner(
                 }
             }
         }
+    }
 
-        if (probeCase.mediaProbe) {
-            results += if (sample == null) {
-                skipped(
+    private fun mediaMetadataResult(probeCase: ProviderProbeCase, sample: Post?): ProviderProbeStepResult {
+        return if (sample == null) {
+            skipped(
+                probeCase = probeCase,
+                checkName = "media-metadata",
+                message = "No seeded search sample post for media metadata check",
+            )
+        } else {
+            val mediaUrls = mediaUrls(sample)
+            if (mediaUrls.isEmpty()) {
+                degraded(
                     probeCase = probeCase,
                     checkName = "media-metadata",
-                    message = "No seeded search sample post for media metadata check",
+                    samplePost = sample,
+                    requestUrl = resolveRequestUrl(sample),
+                    message = "Sample post has no media URLs",
                 )
             } else {
-                val mediaUrls = mediaUrls(sample)
-                if (mediaUrls.isEmpty()) {
-                    degraded(
-                        probeCase = probeCase,
-                        checkName = "media-metadata",
-                        samplePost = sample,
-                        requestUrl = resolveRequestUrl(sample),
-                        message = "Sample post has no media URLs",
-                    )
-                } else {
-                    ok(
-                        probeCase = probeCase,
-                        checkName = "media-metadata",
-                        itemCount = mediaUrls.size,
-                        samplePost = sample,
-                        requestUrl = mediaUrls.first(),
-                        message = "Sample post exposes ${mediaUrls.size} media URLs",
-                    )
-                }
+                ok(
+                    probeCase = probeCase,
+                    checkName = "media-metadata",
+                    itemCount = mediaUrls.size,
+                    samplePost = sample,
+                    requestUrl = mediaUrls.first(),
+                    message = "Sample post exposes ${mediaUrls.size} media URLs",
+                )
             }
         }
+    }
 
-        runRelatedPosts(probeCase, adapter)?.let(results::add)
+    private fun Post.echoesTerms(terms: List<SearchTerm>): Boolean {
+        val tags = canonicalTags + rawTags
+        return terms.all { term -> tags.any { tag -> tagsMatch(tag, term.value) } }
+    }
 
-        return results
+    private fun Post.echoesGroups(groups: List<List<String>>): Boolean {
+        val tags = canonicalTags + rawTags
+        return groups.all { group -> group.any { expected -> tags.any { actual -> tagsMatch(actual, expected) } } }
     }
 
     private suspend fun runRelatedPosts(

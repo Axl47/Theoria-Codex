@@ -294,79 +294,8 @@ class PixivSourceAdapter(
 
     private fun parseIllust(raw: JsonObject): Post? {
         val id = raw.longValue("id")?.toString() ?: return null
-        val isUgoira = raw.stringValue("type") == "ugoira"
-        val imageUrls = raw.optionalJsonObject("image_urls")
-        val previewUrl = normalizedUrl(
-            imageUrls?.stringValue("medium") ?: imageUrls?.stringValue("square_medium"),
-        )
-        val singlePageMediumUrl = normalizedUrl(imageUrls?.stringValue("medium"))
-        val singlePageLargeUrl = normalizedUrl(imageUrls?.stringValue("large"))
-        val singlePageOriginalUrl = normalizedUrl(
-            raw.optionalJsonObject("meta_single_page")
-                ?.stringValue("original_image_url"),
-        )
-        val fullUrl = singlePageOriginalUrl ?: singlePageLargeUrl ?: singlePageMediumUrl
-        val fullMime = if (isUgoira) PIXIV_UGOIRA_MIME else inferMimeFromUrl(fullUrl)
-        val previewMime = inferMimeFromUrl(previewUrl) ?: fullMime
-        val previewRef = ImageRef(url = previewUrl, localPath = null, mime = previewMime)
-        val singlePageRef = fullUrl?.let { canonicalUrl ->
-            ImageRef(
-                url = canonicalUrl,
-                localPath = null,
-                mime = fullMime,
-                progressiveUrls = if (isUgoira) {
-                    emptyList()
-                } else {
-                    buildPixivProgressiveUrls(
-                        singlePageMediumUrl,
-                        singlePageLargeUrl,
-                        canonicalUrl = canonicalUrl,
-                    )
-                },
-            )
-        }
-        val multiPageRefs = raw.optionalJsonArray("meta_pages").elementsOrEmpty().mapNotNull { page ->
-            val pageObject = page.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
-            val pageUrls = pageObject.optionalJsonObject("image_urls") ?: return@mapNotNull null
-            val mediumUrl = normalizedUrl(pageUrls.stringValue("medium"))
-            val largeUrl = normalizedUrl(pageUrls.stringValue("large"))
-            val originalUrl = normalizedUrl(pageUrls.stringValue("original"))
-            val pageUrl = originalUrl ?: largeUrl ?: mediumUrl ?: return@mapNotNull null
-            ImageRef(
-                url = pageUrl,
-                localPath = null,
-                mime = inferMimeFromUrl(pageUrl),
-                progressiveUrls = buildPixivProgressiveUrls(
-                    mediumUrl,
-                    largeUrl,
-                    canonicalUrl = pageUrl,
-                ),
-            )
-        }
-        val fallbackFullRef = singlePageRef
-        val mediaRefs = when {
-            multiPageRefs.isNotEmpty() -> multiPageRefs
-            fallbackFullRef != null -> listOf(fallbackFullRef)
-            !previewUrl.isNullOrBlank() -> listOf(previewRef)
-            else -> emptyList()
-        }
-
-        val rawTags = mutableListOf<String>()
-        val canonicalTags = linkedSetOf<String>()
-        raw.optionalJsonArray("tags").elementsOrEmpty().forEach { tagElement ->
-            val tagObject = tagElement.takeIf { it.isJsonObject }?.asJsonObject ?: return@forEach
-            val name = tagObject.stringValue("name")?.trim().orEmpty()
-            if (name.isNotBlank()) {
-                rawTags += name
-                canonicalTags += name
-            }
-            val translatedName = tagObject.get("translated_name").asStringOrNull()
-                ?.trim()
-                .orEmpty()
-            if (translatedName.isNotBlank()) {
-                canonicalTags += translatedName
-            }
-        }
+        val media = parsePixivMedia(raw)
+        val tags = parsePixivTags(raw)
         val createdAt = parseIsoInstant(raw.stringValue("create_date"))
         val user = raw.optionalJsonObject("user")
         val userName = user?.stringValue("name")?.trim().orEmpty().ifBlank { null }
@@ -375,14 +304,14 @@ class PixivSourceAdapter(
 
         return Post(
             id = PostId(SourceKey.PIXIV, id),
-            preview = previewRef,
-            full = fallbackFullRef ?: mediaRefs.firstOrNull(),
-            media = mediaRefs,
+            preview = media.preview,
+            full = media.full,
+            media = media.pages,
             pageUrl = "https://www.pixiv.net/en/artworks/$id",
             width = raw.intValue("width"),
             height = raw.intValue("height"),
-            canonicalTags = canonicalTags.toList(),
-            rawTags = rawTags.distinct(),
+            canonicalTags = tags.canonical,
+            rawTags = tags.raw,
             authorName = userName,
             createdAtEpochMs = createdAt,
             title = title,
@@ -495,3 +424,91 @@ private const val MAX_RELATED_POSTS: Int = 6
 const val PIXIV_UGOIRA_MIME: String = com.theoriacodex.domain.model.PIXIV_UGOIRA_MIME
 private val PIXIV_TRAILING_PARENTHESIS_REGEX = Regex("\\s*\\([^)]*\\)\\s*$")
 private val PIXIV_TAG_WHITESPACE_REGEX = Regex("\\s+")
+
+private data class ParsedPixivMedia(val preview: ImageRef, val full: ImageRef?, val pages: List<ImageRef>)
+private data class ParsedPixivTags(val raw: List<String>, val canonical: List<String>)
+
+private fun parsePixivMedia(raw: JsonObject): ParsedPixivMedia {
+    val isUgoira = raw.stringValue("type") == "ugoira"
+    val imageUrls = raw.optionalJsonObject("image_urls")
+    val previewUrl = normalizedUrl(
+        imageUrls?.stringValue("medium") ?: imageUrls?.stringValue("square_medium"),
+    )
+    val singlePageMediumUrl = normalizedUrl(imageUrls?.stringValue("medium"))
+    val singlePageLargeUrl = normalizedUrl(imageUrls?.stringValue("large"))
+    val singlePageOriginalUrl = normalizedUrl(
+        raw.optionalJsonObject("meta_single_page")
+            ?.stringValue("original_image_url"),
+    )
+    val fullUrl = singlePageOriginalUrl ?: singlePageLargeUrl ?: singlePageMediumUrl
+    val fullMime = if (isUgoira) PIXIV_UGOIRA_MIME else inferMimeFromUrl(fullUrl)
+    val previewMime = inferMimeFromUrl(previewUrl) ?: fullMime
+    val previewRef = ImageRef(url = previewUrl, localPath = null, mime = previewMime)
+    val singlePageRef = fullUrl?.let { canonicalUrl ->
+        ImageRef(
+            url = canonicalUrl,
+            localPath = null,
+            mime = fullMime,
+            progressiveUrls = if (isUgoira) {
+                emptyList()
+            } else {
+                buildPixivProgressiveUrls(
+                    singlePageMediumUrl,
+                    singlePageLargeUrl,
+                    canonicalUrl = canonicalUrl,
+                )
+            },
+        )
+    }
+    val multiPageRefs = parsePixivPages(raw)
+    val fallbackFullRef = singlePageRef
+    val mediaRefs = when {
+        multiPageRefs.isNotEmpty() -> multiPageRefs
+        fallbackFullRef != null -> listOf(fallbackFullRef)
+        !previewUrl.isNullOrBlank() -> listOf(previewRef)
+        else -> emptyList()
+    }
+
+    return ParsedPixivMedia(previewRef, fallbackFullRef ?: mediaRefs.firstOrNull(), mediaRefs)
+}
+
+private fun parsePixivPages(raw: JsonObject): List<ImageRef> {
+    return raw.optionalJsonArray("meta_pages").elementsOrEmpty().mapNotNull { page ->
+        val pageObject = page.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
+        val pageUrls = pageObject.optionalJsonObject("image_urls") ?: return@mapNotNull null
+        val mediumUrl = normalizedUrl(pageUrls.stringValue("medium"))
+        val largeUrl = normalizedUrl(pageUrls.stringValue("large"))
+        val originalUrl = normalizedUrl(pageUrls.stringValue("original"))
+        val pageUrl = originalUrl ?: largeUrl ?: mediumUrl ?: return@mapNotNull null
+        ImageRef(
+            url = pageUrl,
+            localPath = null,
+            mime = inferMimeFromUrl(pageUrl),
+            progressiveUrls = buildPixivProgressiveUrls(
+                mediumUrl,
+                largeUrl,
+                canonicalUrl = pageUrl,
+            ),
+        )
+    }
+}
+
+private fun parsePixivTags(raw: JsonObject): ParsedPixivTags {
+    val rawTags = mutableListOf<String>()
+    val canonicalTags = linkedSetOf<String>()
+    raw.optionalJsonArray("tags").elementsOrEmpty().forEach { tagElement ->
+        val tagObject = tagElement.takeIf { it.isJsonObject }?.asJsonObject ?: return@forEach
+        val name = tagObject.stringValue("name")?.trim().orEmpty()
+        if (name.isNotBlank()) {
+            rawTags += name
+            canonicalTags += name
+        }
+        val translatedName = tagObject.get("translated_name").asStringOrNull()
+            ?.trim()
+            .orEmpty()
+        if (translatedName.isNotBlank()) {
+            canonicalTags += translatedName
+        }
+    }
+    return ParsedPixivTags(raw = rawTags.distinct(), canonical = canonicalTags.toList())
+}

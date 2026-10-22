@@ -20,16 +20,12 @@ import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
-import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.sources.common.asBooleanOrNull
 import com.theoriacodex.sources.common.asIntOrNull
-import com.theoriacodex.sources.common.asLongOrNull
 import com.theoriacodex.sources.common.asStringOrNull
 import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.classifyHttpFailure
@@ -37,7 +33,6 @@ import com.theoriacodex.sources.common.elementsOrEmpty
 import com.theoriacodex.sources.common.isSuccessful
 import com.theoriacodex.sources.common.matchesChallenge
 import com.theoriacodex.sources.common.optionalJsonArray
-import com.theoriacodex.sources.common.optionalJsonObject
 import com.theoriacodex.sources.common.parseJsonArray as parseSourceJsonArray
 import com.theoriacodex.sources.common.parseJsonObject as parseSourceJsonObject
 import com.theoriacodex.sources.common.sourceNetworkFailure
@@ -111,21 +106,7 @@ class NhentaiSourceAdapter(
         val useAllEndpoint = compiledQuery.isBlank() &&
             (query.sort == SortMode.NEWEST || query.sort == SortMode.RANDOM)
 
-        val url = if (exactTag != null) {
-            params["tag_id"] = exactTag.id.toString()
-            mapTaggedSortParam(query.sort)?.let { sort ->
-                params["sort"] = sort
-            }
-            NHENTAI_GALLERIES_TAGGED_URL
-        } else if (useAllEndpoint) {
-            NHENTAI_GALLERIES_ALL_URL
-        } else {
-            params["query"] = compiledQuery.ifBlank { NHENTAI_V2_SEARCH_ALL_QUERY }
-            mapSortParam(query.sort)?.let { sort ->
-                params["sort"] = sort
-            }
-            NHENTAI_GALLERIES_SEARCH_URL
-        }
+        val url = searchUrl(query.sort, exactTag, useAllEndpoint, compiledQuery, params)
 
         val root = requestJsonObjectOrMirrorSearch(
             url = url,
@@ -139,7 +120,7 @@ class NhentaiSourceAdapter(
         val posts = galleries.mapNotNull { element ->
             element.takeIf(JsonElement::isJsonObject)
                 ?.asJsonObject
-                ?.let(::parseGallery)
+                ?.let(::parseNhentaiGallery)
         }
         val normalizedPosts = if (query.sort == SortMode.RANDOM) posts.shuffled() else posts
 
@@ -154,6 +135,30 @@ class NhentaiSourceAdapter(
             items = normalizedPosts,
             nextPageToken = nextPageToken,
         )
+    }
+
+    private fun searchUrl(
+        sort: SortMode,
+        exactTag: NhentaiTagInfo?,
+        useAllEndpoint: Boolean,
+        compiledQuery: String,
+        params: MutableMap<String, String>,
+    ): String {
+        return if (exactTag != null) {
+            params["tag_id"] = exactTag.id.toString()
+            mapTaggedSortParam(sort)?.let { sort ->
+                params["sort"] = sort
+            }
+            NHENTAI_GALLERIES_TAGGED_URL
+        } else if (useAllEndpoint) {
+            NHENTAI_GALLERIES_ALL_URL
+        } else {
+            params["query"] = compiledQuery.ifBlank { NHENTAI_V2_SEARCH_ALL_QUERY }
+            mapSortParam(sort)?.let { sort ->
+                params["sort"] = sort
+            }
+            NHENTAI_GALLERIES_SEARCH_URL
+        }
     }
 
     override suspend fun trendingTags(limit: Int): List<TagSuggestion> {
@@ -182,7 +187,7 @@ class NhentaiSourceAdapter(
                 allowNotFound = true,
             )
         }
-        return collectTagSuggestions(
+        return collectNhentaiTagSuggestions(
             galleries = detailedGalleries.filterNotNull(),
             prefix = null,
             limit = limit,
@@ -278,7 +283,7 @@ class NhentaiSourceAdapter(
         }
 
         val root = parseJsonObject(response.body)
-        return parseGallery(root)
+        return parseNhentaiGallery(root)
     }
 
     private suspend fun requestJsonObjectOrMirrorSearch(
@@ -572,166 +577,6 @@ class NhentaiSourceAdapter(
         return parseSourceJsonArray(trimmed, gson, "NHentai")
     }
 
-    private fun parseGallery(raw: JsonObject): Post? {
-        val galleryId = raw.get("id").asLongOrNull()?.toString()
-            ?: raw.get("id").asStringOrNull()?.trim()?.takeIf { it.isNotBlank() }
-            ?: return null
-        val mediaId = raw.get("media_id").asLongOrNull()?.toString()
-            ?: raw.get("media_id").asStringOrNull()?.trim()?.takeIf { it.isNotBlank() }
-            ?: return null
-        val oldImages = raw.optionalJsonObject("images")
-        val oldThumbnail = oldImages?.optionalJsonObject("thumbnail")
-        val oldCover = oldImages?.optionalJsonObject("cover")
-        val oldPages = oldImages?.optionalJsonArray("pages").elementsOrEmpty()
-        val newPages = raw.optionalJsonArray("pages").elementsOrEmpty()
-        val pages = if (newPages.isNotEmpty()) newPages else oldPages
-
-        val oldThumbExt = imageExtension(oldThumbnail?.get("t").asStringOrNull())
-        val oldCoverExt = imageExtension(oldCover?.get("t").asStringOrNull())
-        val newThumbnailPath = raw.get("thumbnail").asStringOrNull()
-            ?: raw.optionalJsonObject("thumbnail")?.get("path").asStringOrNull()
-        val newCoverPath = raw.get("cover").asStringOrNull()
-            ?: raw.optionalJsonObject("cover")?.get("path").asStringOrNull()
-        val previewUrl = sourceImageUrl(NHENTAI_THUMBS_BASE, newThumbnailPath)
-            ?: "$NHENTAI_THUMBS_BASE/galleries/$mediaId/thumb.$oldThumbExt"
-        val coverUrl = sourceImageUrl(NHENTAI_THUMBS_BASE, newCoverPath)
-            ?: "$NHENTAI_THUMBS_BASE/galleries/$mediaId/cover.$oldCoverExt"
-
-        val pageRefs = pages.sortedWithPageNumber().mapIndexedNotNull { index, pageElement ->
-            val page = pageElement.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@mapIndexedNotNull null
-            val path = page.get("path").asStringOrNull()
-            val ext = imageExtension(path?.substringAfterLast('.') ?: page.get("t").asStringOrNull())
-            val url = sourceImageUrl(NHENTAI_IMAGES_BASE, path)
-                ?: "$NHENTAI_IMAGES_BASE/galleries/$mediaId/${index + 1}.$ext"
-            ImageRef(
-                url = url,
-                localPath = null,
-                mime = mimeFromFileExt(ext),
-            )
-        }
-
-        val fallbackCoverRef = ImageRef(
-            url = coverUrl,
-            localPath = null,
-            mime = mimeFromFileExt(newCoverPath?.substringAfterLast('.') ?: oldCoverExt),
-        )
-
-        val mirrorSparse = raw.get("mirror_sparse").asBooleanOrNull() ?: false
-        val mediaRefs = if (mirrorSparse) {
-            emptyList()
-        } else if (pageRefs.isNotEmpty()) {
-            pageRefs
-        } else if (raw.has("cover") || oldCover != null) {
-            listOf(fallbackCoverRef)
-        } else {
-            emptyList()
-        }
-
-        val fullRef = mediaRefs.firstOrNull()
-        val previewRef = ImageRef(
-            url = previewUrl,
-            localPath = null,
-            mime = mimeFromFileExt(newThumbnailPath?.substringAfterLast('.') ?: oldThumbExt) ?: fullRef?.mime,
-        )
-
-        val tags = raw.optionalJsonArray("tags").elementsOrEmpty().mapNotNull { tagElement ->
-            val tag = tagElement.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@mapNotNull null
-            val name = tag.get("name").asStringOrNull()?.trim().orEmpty()
-            if (name.isBlank()) return@mapNotNull null
-            ParsedNhentaiTag(
-                name = name,
-                type = tag.get("type").asStringOrNull()?.trim(),
-            )
-        }
-
-        val canonicalTags = tags.map { it.name }.distinctBy { it.lowercase() }
-        val rawTags = canonicalTags
-        val titleObject = raw.optionalJsonObject("title")
-        val title = listOf(
-            raw.get("english_title").asStringOrNull(),
-            titleObject?.get("english").asStringOrNull(),
-            titleObject?.get("pretty").asStringOrNull(),
-            titleObject?.get("japanese").asStringOrNull(),
-            raw.get("japanese_title").asStringOrNull(),
-        ).firstOrNull { !it.isNullOrBlank() }
-
-        val authorName = tags.firstOrNull { it.type.equals("artist", ignoreCase = true) }?.name
-        val createdAtEpochMs = raw.get("upload_date").asLongOrNull()?.times(1000L)
-        val declaredMediaCount = raw.get("num_pages").asIntOrNull()?.takeIf { it > 0 }
-        val mediaCount = when {
-            pageRefs.isNotEmpty() -> pageRefs.size
-            declaredMediaCount != null -> declaredMediaCount
-            mediaRefs.isNotEmpty() -> mediaRefs.size
-            else -> null
-        }
-
-        return Post(
-            id = PostId(SourceKey.NHENTAI, galleryId),
-            preview = previewRef,
-            full = fullRef,
-            media = mediaRefs,
-            pageUrl = "https://nhentai.net/g/$galleryId/",
-            width = raw.get("thumbnail_width").asIntOrNull()
-                ?: oldThumbnail?.get("w").asIntOrNull()
-                ?: oldCover?.get("w").asIntOrNull(),
-            height = raw.get("thumbnail_height").asIntOrNull()
-                ?: oldThumbnail?.get("h").asIntOrNull()
-                ?: oldCover?.get("h").asIntOrNull(),
-            canonicalTags = canonicalTags,
-            rawTags = rawTags,
-            authorName = authorName,
-            createdAtEpochMs = createdAtEpochMs,
-            title = cleanNhentaiTitle(title),
-            mediaCount = mediaCount,
-            taxonomy = tags.map(ParsedNhentaiTag::toPostTaxonomyTerm),
-        )
-    }
-
-    private fun collectTagSuggestions(
-        galleries: List<JsonElement>,
-        prefix: String?,
-        limit: Int,
-    ): List<TagSuggestion> {
-        if (limit <= 0) return emptyList()
-        val normalizedPrefix = prefix?.trim()?.lowercase().orEmpty()
-        val byName = linkedMapOf<String, TagSuggestion>()
-
-        galleries.forEach galleriesLoop@{ galleryElement ->
-            val gallery = galleryElement.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@galleriesLoop
-            val tags = gallery.optionalJsonArray("tags").elementsOrEmpty()
-            tags.forEach tagLoop@{ tagElement ->
-                val tag = tagElement.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@tagLoop
-                val name = tag.get("name").asStringOrNull()?.trim().orEmpty()
-                if (name.isBlank()) return@tagLoop
-                if (normalizedPrefix.isNotBlank() && !name.lowercase().contains(normalizedPrefix)) {
-                    return@tagLoop
-                }
-
-                val key = name.lowercase()
-                val count = tag.get("count").asIntOrNull()
-                val type = tag.get("type").asStringOrNull()?.trim()?.takeIf { it.isNotBlank() }
-                val existing = byName[key]
-                val existingCount = existing?.count ?: Int.MIN_VALUE
-                val candidateCount = count ?: Int.MIN_VALUE
-
-                if (existing == null || candidateCount > existingCount) {
-                    byName[key] = TagSuggestion(
-                        text = name,
-                        type = type,
-                        count = count,
-                    )
-                }
-            }
-        }
-
-        return byName.values
-            .sortedWith(
-                compareByDescending<TagSuggestion> { suggestion -> suggestion.count ?: Int.MIN_VALUE }
-                    .thenBy { suggestion -> suggestion.text.lowercase() }
-            )
-            .take(limit)
-    }
-
     private fun parseTagInfo(raw: JsonObject): NhentaiTagInfo? {
         val id = raw.get("id").asIntOrNull() ?: return null
         val name = raw.get("name").asStringOrNull()?.trim()?.takeIf(String::isNotBlank) ?: return null
@@ -778,11 +623,6 @@ class NhentaiSourceAdapter(
     }
 }
 
-private data class ParsedNhentaiTag(
-    val name: String,
-    val type: String?,
-)
-
 private data class NhentaiTagInfo(
     val id: Int,
     val name: String,
@@ -802,15 +642,6 @@ private fun NhentaiTagInfo.toFacetedSuggestion(): FacetedTagSuggestion {
         facet = taxonomy.first,
         sourceNamespace = taxonomy.second,
         count = count,
-    )
-}
-
-private fun ParsedNhentaiTag.toPostTaxonomyTerm(): PostTaxonomyTerm {
-    val taxonomy = nhentaiTaxonomy(type)
-    return PostTaxonomyTerm(
-        value = name,
-        facet = taxonomy.first,
-        sourceNamespace = taxonomy.second,
     )
 }
 
@@ -867,28 +698,6 @@ private fun imageUrlCandidates(baseUrl: String, page: Int, primaryExt: String): 
         .map { ext -> "$baseUrl/$page.$ext" }
 }
 
-private fun List<JsonElement>.sortedWithPageNumber(): List<JsonElement> {
-    return sortedWith(compareBy { element ->
-        element.takeIf(JsonElement::isJsonObject)
-            ?.asJsonObject
-            ?.get("number")
-            .asIntOrNull()
-            ?: Int.MAX_VALUE
-    })
-}
-
-private fun sourceImageUrl(baseUrl: String, path: String?): String? {
-    val normalizedPath = path
-        ?.trim()
-        ?.trimStart('/')
-        ?.takeIf(String::isNotBlank)
-        ?: return null
-    if (normalizedPath.startsWith("http://") || normalizedPath.startsWith("https://")) {
-        return normalizedPath
-    }
-    return "${baseUrl.trimEnd('/')}/$normalizedPath"
-}
-
 private fun String.isDigitsOnly(): Boolean {
     return isNotBlank() && all { ch -> ch.isDigit() }
 }
@@ -913,8 +722,8 @@ private const val NHENTAI_GALLERIES_TAGGED_URL = "https://nhentai.net/api/v2/gal
 private const val NHENTAI_GALLERIES_SEARCH_URL = "https://nhentai.net/api/v2/search"
 private const val NHENTAI_GALLERY_URL_PREFIX = "https://nhentai.net/api/v2/galleries"
 private const val NHENTAI_TAGS_SEARCH_URL = "https://nhentai.net/api/v2/tags/search"
-private const val NHENTAI_IMAGES_BASE = "https://i.nhentai.net"
-private const val NHENTAI_THUMBS_BASE = "https://t.nhentai.net"
+internal const val NHENTAI_IMAGES_BASE = "https://i.nhentai.net"
+internal const val NHENTAI_THUMBS_BASE = "https://t.nhentai.net"
 private const val NHENTAI_TRENDING_GALLERY_SAMPLE_SIZE = 6
 private const val JINA_MIRROR_BASE = "https://r.jina.ai/http://"
 private val NHENTAI_METADATA_MIRROR_BASES = listOf(
