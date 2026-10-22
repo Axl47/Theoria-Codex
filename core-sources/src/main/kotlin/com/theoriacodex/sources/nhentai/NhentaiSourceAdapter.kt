@@ -4,6 +4,7 @@ import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
@@ -18,11 +19,13 @@ import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.coroutines.mapConcurrent
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
@@ -50,7 +53,7 @@ class NhentaiSourceAdapter(
     private val httpClient: SourceHttpClient,
     private val gson: Gson = Gson(),
     private val minRequestIntervalMs: Long = 350L,
-) : SourceAdapter, TagCountLookupSourceAdapter, FacetedSearchSourceAdapter, RelatedPostsSourceAdapter {
+) : SourceAdapter, TagCountLookupSourceAdapter, FacetedSearchSourceAdapter, RelatedPostsSourceAdapter, CreatorPostsSourceAdapter {
     override val sourceKey: SourceKey = SourceKey.NHENTAI
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
@@ -135,6 +138,22 @@ class NhentaiSourceAdapter(
         return canonicalPostPage(
             items = normalizedPosts,
             nextPageToken = nextPageToken,
+        )
+    }
+
+    override suspend fun searchCreatorPosts(creator: CreatorProfile, pageToken: String?): Page<Post> {
+        if (creator.source != sourceKey) return Page(emptyList(), null)
+        val artist = creator.profileId?.takeIf(String::isNotBlank) ?: return Page(emptyList(), null)
+        return search(
+            query = Query(
+                mode = QueryMode.Source(sourceKey),
+                includeTerms = listOf(SearchTerm(artist, SearchFacet.ARTIST, NHENTAI_ARTIST_NAMESPACE)),
+                excludeTerms = emptyList(),
+                sort = SortMode.NEWEST,
+                dateRange = null,
+                minScore = null,
+            ),
+            pageToken = pageToken,
         )
     }
 
@@ -506,17 +525,16 @@ class NhentaiSourceAdapter(
             title = cleanNhentaiTitle(title),
             mediaCount = pageCount,
         )
-        val metadata = fetchMirrorGalleryMetadata(galleryId)
-        return if (metadata != null && metadata.taxonomy.isNotEmpty()) {
-            post.copy(
-                canonicalTags = metadata.canonicalTags,
-                rawTags = metadata.canonicalTags,
-                authorName = metadata.authorName,
-                taxonomy = metadata.taxonomy,
-            )
-        } else {
-            post
-        }
+        val metadata = fetchMirrorGalleryMetadata(galleryId) ?: return post
+        val creators = metadata.taxonomy.nhentaiCreatorProfiles()
+        return post.copy(
+            creatorProfile = creators.firstOrNull(),
+            creatorProfiles = creators,
+            canonicalTags = metadata.canonicalTags,
+            rawTags = metadata.canonicalTags,
+            authorName = metadata.authorName,
+            taxonomy = metadata.taxonomy,
+        )
     }
 
     private suspend fun fetchMirrorGalleryMetadata(galleryId: String): NhentaiMirrorMetadata? {

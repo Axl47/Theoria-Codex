@@ -20,6 +20,23 @@ class CreatorProfileActionPresentationTest {
     )
 
     @Test
+    fun `nhentai artist exposes profile action when adapter supports creator browsing`() {
+        val profile = CreatorProfile(
+            source = SourceKey.NHENTAI,
+            displayName = "darkmaya",
+            profileId = "darkmaya",
+            uploadsQuery = "artist:darkmaya",
+        )
+        val post = samplePost(SourceKey.NHENTAI, "darkmaya", profile)
+
+        val actions = creatorProfileActions(post, creatorBrowsingSources + SourceKey.NHENTAI)
+
+        assertEquals(listOf("darkmaya"), actions.map { it.label })
+        assertEquals(profile, actions.single().profile)
+        assertFalse(actions.single().requiresLegacyResolution)
+    }
+
+    @Test
     fun `creatorButtonLabel uses browseable creator profile name when present`() {
         val post = samplePost(
             source = SourceKey.PIXIV,

@@ -143,6 +143,8 @@ internal class NhentaiResolutionSourceAdapterTest : NhentaiSourceAdapterTestFixt
             post?.taxonomy?.map { term -> Triple(term.facet, term.sourceNamespace, term.value) },
         )
         assertEquals("yomoda yomo", post?.authorName)
+        assertEquals("artist:\"yomoda yomo\"", post?.creatorProfile?.uploadsQuery)
+        assertEquals(listOf("yomoda yomo"), post?.creatorProfiles?.map { it.profileId })
     }
 
     private fun blockedApiWithMirroredReader() = QueueHttpClient(

@@ -13,7 +13,7 @@ internal fun compileNhentaiQuery(query: Query): String {
     return (include + exclude).take(MAX_NHENTAI_QUERY_TERMS).joinToString(" ")
 }
 
-private fun SearchTerm.compileNhentaiTerm(): String? {
+internal fun SearchTerm.compileNhentaiTerm(): String? {
     val normalizedValue = normalizeNhentaiTag(value).takeIf(String::isNotBlank) ?: return null
     val namespace = resolvedNhentaiNamespace() ?: return normalizedValue.takeIf {
         facet == SearchFacet.TAG && sourceNamespace == null

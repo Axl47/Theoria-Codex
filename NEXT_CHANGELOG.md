@@ -19,6 +19,8 @@
 
 ## Improvements
 
+- Open artist profiles from nhentai posts to browse their galleries.
+
 - Match post source badges to the height of the last watched timestamp.
 - Keep “More like this” previews consistently sized so tall posts do not dominate the row.
 - Use consistently sized previews in Saved sub-Codex rows.

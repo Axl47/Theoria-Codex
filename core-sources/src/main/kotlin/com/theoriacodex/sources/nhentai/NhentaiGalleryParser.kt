@@ -37,7 +37,9 @@ internal fun parseNhentaiGallery(raw: JsonObject): Post? {
         raw.get("japanese_title").asStringOrNull(),
     ).firstOrNull { !it.isNullOrBlank() }
 
-    val authorName = tags.firstOrNull { it.type.equals("artist", ignoreCase = true) }?.name
+    val taxonomy = tags.map(ParsedNhentaiTag::toPostTaxonomyTerm)
+    val creators = taxonomy.nhentaiCreatorProfiles()
+    val authorName = creators.firstOrNull()?.displayName
     val createdAtEpochMs = raw.get("upload_date").asLongOrNull()?.times(1000L)
     return Post(
         id = PostId(SourceKey.NHENTAI, galleryId),
@@ -53,7 +55,9 @@ internal fun parseNhentaiGallery(raw: JsonObject): Post? {
         createdAtEpochMs = createdAtEpochMs,
         title = cleanNhentaiTitle(title),
         mediaCount = images.count,
-        taxonomy = tags.map(ParsedNhentaiTag::toPostTaxonomyTerm),
+        taxonomy = taxonomy,
+        creatorProfile = creators.firstOrNull(),
+        creatorProfiles = creators,
     )
 }
 
