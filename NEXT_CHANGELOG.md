@@ -103,7 +103,7 @@
 - Keep tag-sheet selections consistent with the Search draft when switching between included and excluded terms.
 - Remember Unified source weights for each enabled-source combination.
 - Use the artist as the nhentai author.
-- Remove bracketed annotations from nhentai titles.
+- Remove annotations in parentheses, square brackets, and curly braces from nhentai titles.
 - Preserve For You history when clearing ordinary searches.
 - Count only successful searches in lifetime statistics.
 - Keep successful provider results visible when another source fails during pagination.

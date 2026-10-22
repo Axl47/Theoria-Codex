@@ -1,6 +1,6 @@
 package com.theoriacodex.sources.nhentai
 
-private val titleAnnotations = Regex("\\([^()]*\\)|\\[[^\\[\\]]*\\]")
+private val titleAnnotations = Regex("\\([^()]*\\)|\\[[^\\[\\]]*\\]|\\{[^{}]*\\}")
 private val titleWhitespace = Regex("\\s+")
 
 internal fun cleanNhentaiTitle(title: String?): String? {

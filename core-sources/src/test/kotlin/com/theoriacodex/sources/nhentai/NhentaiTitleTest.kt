@@ -15,6 +15,14 @@ internal class NhentaiTitleTest {
     }
 
     @Test
+    fun `removes curly brace annotations including nested annotations`() {
+        assertEquals("A Gallery Title", cleanNhentaiTitle("{Group} A {extra} Gallery Title {English}"))
+        assertEquals("Gallery", cleanNhentaiTitle("{Group {Artist}} Gallery {part (extra)}"))
+        assertNull(cleanNhentaiTitle("{English}"))
+        assertEquals("Gallery {unfinished", cleanNhentaiTitle("Gallery {unfinished"))
+    }
+
+    @Test
     fun `empty titles and titles consisting only of annotations have no title`() {
         assertNull(cleanNhentaiTitle(null))
         assertNull(cleanNhentaiTitle("   "))
