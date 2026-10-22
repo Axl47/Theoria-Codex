@@ -1,6 +1,8 @@
 package com.theoriacodex.app.search
 
 import android.app.Application
+import androidx.compose.ui.test.onNodeWithText
+import com.theoriacodex.app.source.displayName
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -94,6 +96,38 @@ class SearchSourcePickerTest {
         gelbooru.assertIsNotSelected()
         unified.assertIsNotSelected()
         composeRule.onNodeWithContentDescription("Search source: Pixiv").assertExists()
+    }
+
+    @Test
+    fun unifiedHighlightsIncludedSourcesAndR34SubmenuReturnsToRoot() {
+        val clicked = mutableListOf<QueryMode>()
+        composeRule.setContent {
+            MaterialTheme {
+                SearchSourcePicker(
+                    draftSourceScope = SearchSourceScope.GlobalUnified,
+                    options = listOf(QueryMode.Unified) + listOf(
+                        SourceKey.PIXIV, SourceKey.IWARA, SourceKey.RULE34XXX,
+                        SourceKey.RULE34PAHEAL, SourceKey.RULE34VIDEO,
+                    ).map(QueryMode::Source),
+                    unifiedSourceCount = 2,
+                    unifiedSources = setOf(SourceKey.PIXIV, SourceKey.RULE34XXX),
+                    onModeSelected = { clicked += it },
+                    onTemporarySourceToggled = {},
+                )
+            }
+        }
+        composeRule.onNodeWithContentDescription("Search source: Unified, 2 sources").performClick()
+        composeRule.onNodeWithContentDescription("Unified").assertIsSelected()
+        composeRule.onNodeWithContentDescription("Pixiv").assertIsSelected()
+        composeRule.onNodeWithContentDescription("Iwara").assertIsNotSelected()
+        composeRule.onNodeWithContentDescription("R34").assertIsSelected().performClick()
+        composeRule.onNodeWithContentDescription("Pixiv").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription(SourceKey.RULE34XXX.displayName()).assertIsSelected()
+        composeRule.onNodeWithContentDescription(SourceKey.RULE34PAHEAL.displayName()).assertIsNotSelected()
+        composeRule.onNodeWithText("← Back").performClick()
+        composeRule.onNodeWithContentDescription("R34").performClick()
+        composeRule.onNodeWithContentDescription(SourceKey.RULE34VIDEO.displayName()).performClick()
+        composeRule.runOnIdle { assertEquals(listOf(QueryMode.Source(SourceKey.RULE34VIDEO)), clicked) }
     }
 
     private fun assertCombinedOwner(node: SemanticsNodeInteraction, hasLongClick: Boolean) {

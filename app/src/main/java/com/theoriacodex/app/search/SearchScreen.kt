@@ -488,7 +488,8 @@ fun SearchScreen(
                         SearchSourcePicker(
                             draftSourceScope = state.query.draftSourceScope,
                             options = state.query.modeOptions,
-                            unifiedSourceCount = state.query.enabledSourceCount,
+                            unifiedSourceCount = state.query.unifiedSources.size,
+                            unifiedSources = state.query.unifiedSources,
                             onOpen = { inputFocus.clear() },
                             onModeSelected = { mode -> onAction(SearchAction.SelectMode(mode)) },
                             onTemporarySourceToggled = { source ->
@@ -1744,11 +1745,18 @@ internal fun SearchSourcePicker(
     draftSourceScope: SearchSourceScope,
     options: List<QueryMode>,
     unifiedSourceCount: Int,
+    unifiedSources: Set<SourceKey> = emptySet(),
     onOpen: () -> Unit = {},
     onModeSelected: (QueryMode) -> Unit,
     onTemporarySourceToggled: (SourceKey) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var r34Expanded by remember { mutableStateOf(false) }
+    val highlightedSources = if (draftSourceScope == SearchSourceScope.GlobalUnified) {
+        unifiedSources
+    } else {
+        draftSourceScope.explicitSources
+    }
     val scopeLabel = when (draftSourceScope) {
         SearchSourceScope.GlobalUnified -> "Unified, $unifiedSourceCount sources"
         is SearchSourceScope.Single -> draftSourceScope.source.displayName()
@@ -1759,6 +1767,7 @@ internal fun SearchSourcePicker(
             modifier = Modifier.semantics { contentDescription = "Search source: $scopeLabel" },
             onClick = {
                 onOpen()
+                r34Expanded = false
                 expanded = true
             },
         ) {
@@ -1767,16 +1776,35 @@ internal fun SearchSourcePicker(
             }
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { option ->
+            val r34Options = options.filter { (it as? QueryMode.Source)?.source?.isRule34Family() == true }
+            if (r34Expanded) {
+                DropdownMenuItem(text = { Text("← Back") }, onClick = { r34Expanded = false })
+            }
+            val visibleOptions = if (r34Expanded) r34Options else options - r34Options.toSet()
+            visibleOptions.forEach { option ->
                 SourceMenuOption(
                     option = option,
                     draftSourceScope = draftSourceScope,
-                    unifiedSourceCount = unifiedSourceCount,
+                    highlightedSources = highlightedSources,
+                    showTitle = r34Expanded,
                     onModeSelected = {
                         expanded = false
                         onModeSelected(it)
                     },
                     onTemporarySourceToggled = onTemporarySourceToggled,
+                )
+            }
+            if (!r34Expanded && r34Options.isNotEmpty()) {
+                val selected = highlightedSources.any { it.isRule34Family() }
+                DropdownMenuItem(
+                    modifier = Modifier
+                        .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+                        .semantics {
+                            contentDescription = "R34"
+                            this.selected = selected
+                        },
+                    text = { SearchLetterIcon("R34") },
+                    onClick = { r34Expanded = true },
                 )
             }
         }
@@ -1789,7 +1817,7 @@ private fun SearchSourceIndicator(draftSourceScope: SearchSourceScope, unifiedSo
     when (draftSourceScope) {
         is SearchSourceScope.Single -> {
             val source = draftSourceScope.source
-            if (source == SourceKey.IWARA) Text("I") else SourceLogo(source, size = 18.dp)
+            SearchSourceIcon(source)
         }
         SearchSourceScope.GlobalUnified, is SearchSourceScope.Temporary -> {
             val count = when (draftSourceScope) {
@@ -1797,7 +1825,7 @@ private fun SearchSourceIndicator(draftSourceScope: SearchSourceScope, unifiedSo
                 else -> unifiedSourceCount
             }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("U")
+                SearchLetterIcon("U")
                 Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary) {
                     Text(
                         text = count.toString(),
@@ -1815,14 +1843,15 @@ private fun SearchSourceIndicator(draftSourceScope: SearchSourceScope, unifiedSo
 private fun SourceMenuOption(
     option: QueryMode,
     draftSourceScope: SearchSourceScope,
-    unifiedSourceCount: Int,
+    highlightedSources: Collection<SourceKey>,
+    showTitle: Boolean,
     onModeSelected: (QueryMode) -> Unit,
     onTemporarySourceToggled: (SourceKey) -> Unit,
 ) {
     val source = (option as? QueryMode.Source)?.source
     val selected = when {
         option == QueryMode.Unified -> draftSourceScope is SearchSourceScope.GlobalUnified
-        source != null -> source in draftSourceScope.explicitSources
+        source != null -> source in highlightedSources
         else -> false
     }
     val label = option.sourceChipLabel()
@@ -1846,10 +1875,30 @@ private fun SourceMenuOption(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (source != null && source != SourceKey.IWARA && !source.isRule34Family()) {
-            Box(Modifier.clearAndSetSemantics {}) { SourceLogo(source, size = 18.dp) }
+        Box(Modifier.clearAndSetSemantics {}) {
+            if (source == null) SearchLetterIcon("U") else SearchSourceIcon(source)
         }
-        Text(if (option == QueryMode.Unified) "Unified ($unifiedSourceCount)" else label)
+        if (showTitle) Text(label)
+    }
+}
+
+/** Letter marks share the white, bold treatment of Hitomi's icon. */
+@Composable
+private fun SearchLetterIcon(label: String) {
+    Text(
+        text = label,
+        color = Color.White,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+    )
+}
+
+@Composable
+private fun SearchSourceIcon(source: SourceKey) {
+    when {
+        source == SourceKey.IWARA -> SearchLetterIcon("I")
+        source.isRule34Family() -> SearchLetterIcon("R34")
+        else -> SourceLogo(source, size = 18.dp)
     }
 }
 

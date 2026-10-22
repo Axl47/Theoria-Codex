@@ -103,6 +103,7 @@ data class SearchQueryUiState(
     val availableSources: List<SourceKey> = emptyList(),
     val modeOptions: List<QueryMode> = listOf(QueryMode.Unified),
     val enabledSourceCount: Int = 0,
+    val unifiedSources: Set<SourceKey> = emptySet(),
     val supportedScopes: List<FacetedSearchScope> = emptyList(),
     val selectedScope: FacetedSearchScope = FacetedSearchScope.All,
     val validationMessage: String? = null,

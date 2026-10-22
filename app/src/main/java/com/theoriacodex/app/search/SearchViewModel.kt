@@ -514,6 +514,7 @@ internal class SearchViewModel(
                 availableSources = change.availableSources,
                 modeOptions = listOf(QueryMode.Unified) + change.availableSources.map(QueryMode::Source),
                 enabledSourceCount = enabledCount,
+                unifiedSources = settings.runtime.enabledSources.intersect(available),
                 supportedScopes = scopes,
                 selectedScope = current.query.selectedScope.takeIf { it in scopes }
                     ?: com.theoriacodex.domain.adapter.FacetedSearchScope.All,
