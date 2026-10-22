@@ -37,9 +37,10 @@ class ViewerRoutePolicyTest {
             search = snapshot,
             creatorProfile = snapshot,
             likedPostIds = setOf(liked.id),
+            savedPostIds = setOf(liked.id),
         )
         listOf(ViewerStreamSource.SEARCH, ViewerStreamSource.CREATOR_PROFILE).forEach { source ->
-            val session = session("active", source, SearchVisibilityFilters(hideLiked = true))
+            val session = session("active", source, SearchVisibilityFilters(hideLiked = true, hideSaved = true))
             assertEquals(listOf(liked), state.visiblePostsFor(session))
             assertEquals(emptyList<Post>(), state.copy(
                 search = snapshot.copy(retainedLikedPostIds = emptySet()),

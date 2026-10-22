@@ -45,9 +45,9 @@ class CreatorRelatedPostsScreenTest {
                 CreatorProfileScreen(
                     state = state.value,
                     likedPostIds = if (liked.value) setOf(seed.id) else emptySet(),
-                    savedPostIds = emptySet(),
+                    savedPostIds = if (liked.value) setOf(seed.id) else emptySet(),
                     pendingLikePostIds = if (pending.value) setOf(seed.id) else emptySet(),
-                    fabRestoreState = FeedFabRestoreState(hideLiked = true),
+                    fabRestoreState = FeedFabRestoreState(hideLiked = true, hideSaved = true),
                     onToggleLike = { post ->
                         assertEquals(seed.id, post.id)
                         pending.value = true

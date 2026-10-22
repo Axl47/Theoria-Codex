@@ -44,7 +44,8 @@ class RelatedPostsStateTest {
             assertEquals(seeds, visible(state))
             // Idle also covers likes where recommendations were unsupported or never opened.
             assertEquals(emptyList<Post>(), visible(RelatedPostsUiState.Idle))
-            assertEquals(emptyList<Post>(), visible(state, seeds.mapTo(mutableSetOf(), Post::id)))
+            assertEquals(seeds, visible(state, likedIds))
+            assertEquals(emptyList<Post>(), visible(RelatedPostsUiState.Idle, likedIds))
         }
     }
 

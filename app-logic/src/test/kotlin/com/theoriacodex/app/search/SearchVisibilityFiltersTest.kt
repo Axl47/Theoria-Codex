@@ -11,6 +11,25 @@ import org.junit.Test
 
 class SearchVisibilityFiltersTest {
     @Test
+    fun `pending like retains its automatic save without retaining unrelated saved posts`() {
+        val pending = samplePost(id = "pending", source = SourceKey.PIXIV)
+        val saved = samplePost(id = "saved", source = SourceKey.PIXIV)
+        val filters = SearchVisibilityFilters(hideLiked = true, hideSaved = true)
+
+        fun visible(retainedIds: Set<PostId>) = filterSearchResults(
+            results = listOf(pending, saved),
+            filters = filters,
+            // The saved-membership observer can emit before the likes observer.
+            likedPostIds = emptySet(),
+            savedPostIds = setOf(pending.id, saved.id),
+            retainedLikedPostIds = retainedIds,
+        )
+
+        assertEquals(listOf(pending), visible(setOf(pending.id)))
+        assertEquals(emptyList<Post>(), visible(emptySet()))
+    }
+
+    @Test
     fun `filterSearchResults keeps all results when filters are disabled`() {
         val animated = samplePost(id = "animated", source = SourceKey.PIXIV, fullMime = "video/mp4", fullUrl = "https://cdn.test/animated.mp4")
         val liked = samplePost(id = "liked", source = SourceKey.GELBOORU)

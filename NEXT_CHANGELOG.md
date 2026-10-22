@@ -80,7 +80,7 @@
 - Show tag post counts supplied by nhentai and retain completed counts when further lookups time out.
 - Return fullscreen “More like this” posts to their shelf cards, including after swiping to an offscreen related post.
 
-- Keep liked posts visible with Hide Liked while likes save and until their “More like this” recommendation chain is dismissed, including likes made in fullscreen.
+- Keep liked posts visible until their “More like this” recommendations are dismissed, even with both Hide liked and Hide saved enabled and when liking from fullscreen.
 - Resume autoplaying feed videos at the position where you left fullscreen playback.
 - Open nhentai page links at the linked gallery page, including when pages load after the cover.
 - Close Codex when using Go to Search, including from its Viewer.
