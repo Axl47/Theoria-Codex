@@ -802,6 +802,7 @@ internal fun TheoriaAppContent(
                 posts = listOf(resolved),
                 context = context,
                 liveSearchBinding = false,
+                initialMediaIndex = requiredDeepLink.initialMediaIndex,
             ),
         )
         dataDependencies.uiRestoreRepository.setViewerLaunchContext(context)

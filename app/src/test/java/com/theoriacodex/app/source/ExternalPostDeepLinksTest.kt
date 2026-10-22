@@ -96,6 +96,26 @@ class ExternalPostDeepLinksTest {
             source = SourceKey.NHENTAI,
             postId = "527662",
         )
+        listOf(
+            "https://nhentai.net/g/552559/3/",
+            "http://www.nhentai.net/g/552559/3?ignored=true#page",
+        ).forEach { url ->
+            assertDeepLink(url, SourceKey.NHENTAI, "552559", initialMediaIndex = 2)
+        }
+    }
+
+    @Test
+    fun `rejects invalid nhentai page links`() {
+        listOf(
+            "https://nhentai.net/g/552559/0/",
+            "https://nhentai.net/g/552559/-3/",
+            "https://nhentai.net/g/552559/2147483648/",
+            "https://nhentai.net/g/552559/three/",
+            "https://nhentai.net/g/552559/3/extra/",
+            "https://nhentai.net.example.com/g/552559/3/",
+        ).forEach { url ->
+            assertNull(url, parseExternalPostDeepLink(url))
+        }
     }
 
     @Test
@@ -252,12 +272,13 @@ class ExternalPostDeepLinksTest {
         assertNull(parseExternalCreatorDeepLink("https://example.com/users/201823"))
     }
 
-    private fun assertDeepLink(url: String, source: SourceKey, postId: String) {
+    private fun assertDeepLink(url: String, source: SourceKey, postId: String, initialMediaIndex: Int = 0) {
         val parsed = parseExternalPostDeepLink(url)
 
         requireNotNull(parsed)
         assertEquals(source, parsed.source)
         assertEquals(postId, parsed.postId)
+        assertEquals(initialMediaIndex, parsed.initialMediaIndex)
         assertEquals(source.displayName(), parsed.sourceLabel)
     }
 

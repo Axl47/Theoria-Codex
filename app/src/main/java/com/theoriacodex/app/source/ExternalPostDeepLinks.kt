@@ -13,6 +13,7 @@ data class ExternalPostDeepLink(
     val source: SourceKey,
     val sourceLabel: String,
     val postId: String,
+    val initialMediaIndex: Int = 0,
 )
 
 data class ExternalCreatorDeepLink(
@@ -35,13 +36,7 @@ fun parseExternalPostDeepLink(rawUrl: String): ExternalPostDeepLink? {
             postId = postId,
         )
     }
-    parseNhentaiGalleryIdFromUri(uri)?.let { postId ->
-        return ExternalPostDeepLink(
-            source = SourceKey.NHENTAI,
-            sourceLabel = SourceKey.NHENTAI.displayName(),
-            postId = postId,
-        )
-    }
+    parseNhentaiPostDeepLink(uri)?.let { return it }
     parseHitomiGalleryIdFromUri(uri)?.let { postId ->
         return ExternalPostDeepLink(
             source = SourceKey.HITOMI,
@@ -232,15 +227,23 @@ private fun parseRule34GenPostIdFromUri(uri: ParsedExternalUri): String? {
     return match.groupValues.getOrNull(1)?.takeIf(String::isDigitsOnly)
 }
 
-private fun parseNhentaiGalleryIdFromUri(uri: ParsedExternalUri): String? {
+private fun parseNhentaiPostDeepLink(uri: ParsedExternalUri): ExternalPostDeepLink? {
     val scheme = uri.scheme
     val host = uri.host
     if (scheme != "https" && scheme != "http") return null
     if (host != "nhentai.net" && host != "www.nhentai.net") return null
 
     val path = uri.encodedPath
-    val match = Regex("^/g/(\\d+)(?:/\\d+)?/?$").matchEntire(path) ?: return null
-    return match.groupValues.getOrNull(1)?.takeIf(String::isDigitsOnly)
+    val match = Regex("^/g/(\\d+)(?:/(\\d+))?/?$").matchEntire(path) ?: return null
+    val pageNumber = match.groups[2]?.value?.let { page ->
+        page.toIntOrNull()?.takeIf { it > 0 } ?: return null
+    } ?: 1
+    return ExternalPostDeepLink(
+        source = SourceKey.NHENTAI,
+        sourceLabel = SourceKey.NHENTAI.displayName(),
+        postId = match.groupValues[1],
+        initialMediaIndex = pageNumber - 1,
+    )
 }
 
 private fun parseHitomiGalleryIdFromUri(uri: ParsedExternalUri): String? {

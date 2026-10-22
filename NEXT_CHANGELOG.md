@@ -48,6 +48,7 @@
 - Remove repeated type labels from tag names in the post hold menu.
 
 ## Fixes
+- Open nhentai page links at the linked gallery page.
 - Close Codex when using Go to Search, including from its Viewer.
 - Make Viewer error Retry buttons respond to taps.
 - Clear stale Viewer errors when video playback succeeds, and keep post-resolution timeouts from interrupting loaded media.
