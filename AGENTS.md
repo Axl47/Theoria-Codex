@@ -55,4 +55,4 @@ Keep `AGENTS.md` limited to durable product intent, safety boundaries, and accep
 
 ## Next Changelog
 
-After completing a change, add or refine a concise bullet in root `NEXT_CHANGELOG.md` only if app users would notice its effect. Describe the benefit or corrected behavior, following `release-notes/` wording and grouping under `New`, `Improvements`, or `Fixes` as relevant; omit internal refactors, tests, and documentation-only work. Consolidate related entries. The release skill curates these notes and clears published content only after successful publication.
+After completing a change, add or refine a concise bullet in root `NEXT_CHANGELOG.md` only if app users would notice its effect. Describe the benefit or corrected behavior, following `release-notes/` wording and grouping under `New`, `Improvements`, or `Fixes` as relevant; omit internal refactors, tests, and documentation-only work. Give each distinct user-visible change its own bullet on a separate line, even when one task includes multiple changes. Consolidate only entries describing the same change. The release skill curates these notes and clears published content only after successful publication.
