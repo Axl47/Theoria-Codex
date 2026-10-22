@@ -278,7 +278,13 @@ private fun ViewerUiState.selectPage(pageIndex: Int): ViewerReduction {
 private fun ViewerUiState.selectMedia(mediaIndex: Int): ViewerReduction {
     val page = currentPage ?: return ViewerReduction(this)
     val selected = mediaIndex.coerceInMedia(page.media)
-    val updatedPage = page.copy(selectedMediaIndex = selected)
+    val updatedPage = page.copy(
+        selectedMediaIndex = selected,
+        pendingMediaIndex = mediaIndex.takeIf {
+            it > page.media.lastIndex && page.resolution.status != ViewerResolutionStatus.NOT_REQUIRED &&
+                page.resolution.status != ViewerResolutionStatus.RESOLVED
+        },
+    )
     val updatedPages = pages.toMutableList().also { values -> values[currentPageIndex] = updatedPage }
     return ViewerReduction(
         copy(
@@ -376,7 +382,7 @@ private fun ViewerUiState.replaceResolvedPost(post: Post): ViewerUiState {
     if (pageIndex < 0) return this
     val previous = pages[pageIndex]
     val replacement = post.toViewerPageState(
-        selectedMediaIndex = previous.selectedMediaIndex,
+        selectedMediaIndex = previous.pendingMediaIndex ?: previous.selectedMediaIndex,
         resolution = previous.resolution.copy(
             status = ViewerResolutionStatus.RESOLVED,
             message = null,

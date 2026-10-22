@@ -63,7 +63,7 @@
 
 ## Fixes
 - Resume autoplaying feed videos at the position where you left fullscreen playback.
-- Open nhentai page links at the linked gallery page.
+- Open nhentai page links at the linked gallery page, including when pages load after the cover.
 - Close Codex when using Go to Search, including from its Viewer.
 - Make Viewer error Retry buttons respond to taps.
 - Clear stale Viewer errors when video playback succeeds, and keep post-resolution timeouts from interrupting loaded media.

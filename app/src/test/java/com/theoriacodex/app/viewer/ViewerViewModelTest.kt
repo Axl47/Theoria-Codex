@@ -226,6 +226,32 @@ class ViewerViewModelTest {
     }
 
     @Test
+    fun `linked gallery page survives loading from a cover-only post`() = runTest {
+        val resolved = CompletableDeferred<Post?>()
+        val cover = post("552559", SourceKey.NHENTAI, listOf(image("cover.jpg"))).copy(mediaCount = 3)
+        val gallery = cover.copy(media = listOf(image("1.jpg"), image("2.jpg"), image("3.jpg")))
+        val handle = SavedStateHandle()
+        val owner = ViewerViewModel(
+            handle,
+            postResolver = ViewerPostResolver { _, _ -> resolved.await() },
+            scopeOverride = this,
+        )
+        owner.replaceSession(session("deeplink", listOf(cover)).copy(initialMediaIndex = 2))
+        owner.onAction(ViewerAction.RequestCurrentPageResolution)
+        runCurrent()
+        assertEquals(0, owner.state.value.currentPage?.selectedMediaIndex)
+        assertEquals(2, handle.get<Int>(ViewerSavedStateKeys.MEDIA_INDEX))
+        owner.updateSession { it }
+        resolved.complete(gallery)
+        owner.onAction(ViewerAction.RequestCurrentPageResolution)
+        advanceUntilIdle()
+        assertEquals(2, owner.state.value.currentPage?.selectedMediaIndex)
+        owner.onAction(ViewerAction.SelectMedia(1))
+        owner.applyResolvedPost(gallery)
+        assertEquals(1, owner.state.value.currentPage?.selectedMediaIndex)
+    }
+
+    @Test
     fun `new recent session opens the last media without changing another session selection`() = runTest {
         val owner = ViewerViewModel(SavedStateHandle(), scopeOverride = this)
         val gallery = post("gallery", media = listOf(image("1.jpg"), image("2.jpg"), image("3.jpg")))

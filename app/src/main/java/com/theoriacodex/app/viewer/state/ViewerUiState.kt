@@ -72,6 +72,8 @@ internal data class ViewerPageState(
     val media: List<ViewerMediaState>,
     val selectedMediaIndex: Int = 0,
     val resolution: ViewerResolutionState = ViewerResolutionState(),
+    // Keep a launch/restore target while only a cover or partial gallery is available.
+    val pendingMediaIndex: Int? = null,
 ) {
     val selectedMedia: ViewerMediaState?
         get() = media.getOrNull(selectedMediaIndex)

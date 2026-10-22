@@ -142,7 +142,7 @@ internal class ViewerViewModel(
         val current = mutableSession.value ?: return
         val updated = transform(current)
         val currentIndex = state.value.currentPageIndex
-        val currentMediaIndex = state.value.currentPage?.selectedMediaIndex ?: 0
+        val currentMediaIndex = state.value.currentPage?.let { it.pendingMediaIndex ?: it.selectedMediaIndex } ?: 0
         val replacement = updated.copy(
             context = updated.context.copy(startIndex = currentIndex),
         )
@@ -380,7 +380,8 @@ internal class ViewerViewModel(
         saveIfChanged(ViewerSavedStateKeys.QUERY_HASH, session.queryHash)
         saveIfChanged(ViewerSavedStateKeys.STREAM_KEY, session.streamKey)
         saveIfChanged(ViewerSavedStateKeys.PAGE_INDEX, current.currentPageIndex)
-        saveIfChanged(ViewerSavedStateKeys.MEDIA_INDEX, current.currentPage?.selectedMediaIndex ?: 0)
+        val mediaIndex = current.currentPage?.let { it.pendingMediaIndex ?: it.selectedMediaIndex } ?: 0
+        saveIfChanged(ViewerSavedStateKeys.MEDIA_INDEX, mediaIndex)
         saveIfChanged(ViewerSavedStateKeys.PLAYBACK_MODE, current.controls.playbackMode.name)
         current.currentPage?.let { page ->
             saveIfChanged(ViewerSavedStateKeys.SELECTED_POST, encodeViewerPostId(page.post.id))
@@ -392,7 +393,7 @@ internal class ViewerViewModel(
             saveIfChanged(ViewerSavedStateKeys.RECENTS_SECTION, mutableSession.value?.context?.recentsSection?.name)
         }
         restoredPageIndex = current.currentPageIndex
-        restoredMediaIndex = current.currentPage?.selectedMediaIndex ?: 0
+        restoredMediaIndex = mediaIndex
     }
 
     private fun <T> saveIfChanged(key: String, value: T) {
