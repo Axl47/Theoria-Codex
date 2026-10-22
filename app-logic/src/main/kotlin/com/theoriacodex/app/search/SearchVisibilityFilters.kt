@@ -35,6 +35,7 @@ fun filterSearchResults(
     watchedPostIds: Set<PostId> = emptySet(),
     unknownAnimatedDurationPolicy: UnknownAnimatedDurationPolicy = UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS,
     knownDurationMsByPostId: Map<PostId, Long> = emptyMap(),
+    retainedLikedPostIds: Set<PostId> = emptySet(),
 ): List<Post> {
     return results.filter { post ->
         (!filters.animatedOnly || isAnimatedPost(post)) &&
@@ -44,7 +45,7 @@ fun filterSearchResults(
                 unknownAnimatedDurationPolicy,
                 knownDurationMsByPostId[post.id],
             ) &&
-            (!filters.hideLiked || post.id !in likedPostIds) &&
+            (!filters.hideLiked || post.id !in likedPostIds || post.id in retainedLikedPostIds) &&
             (!filters.hideSaved || post.id !in savedPostIds) &&
             (!filters.hideWatched || post.id !in watchedPostIds)
     }

@@ -121,6 +121,7 @@ import com.theoriacodex.app.ui.components.FeedLoadingState
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.ui.components.TwoColumnProjectedPostStaggeredGrid
+import com.theoriacodex.app.related.retainedLikedPostIds
 import com.theoriacodex.app.ui.components.rememberRelatedFeedPresentation
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchRestorationUiState
@@ -267,10 +268,12 @@ fun SearchScreen(
     val durationMetadata = rememberDurationFilterMetadata(displayResults, durationStates, animatedDurationFilterActive)
     val acquiredDurations = durationMetadata.knownDurationMsByPostId
     val durationReadiness = durationMetadata.readiness
+    val retainedLikedPostIds = remember(state.relatedPosts) { state.relatedPosts.retainedLikedPostIds }
     val visibleResults = remember(
         displayResults,
         visibilityFilters,
         likedPostIds,
+        retainedLikedPostIds,
         savedPostIds,
         watchedPostIds,
         unknownAnimatedDurationPolicy,
@@ -280,6 +283,7 @@ fun SearchScreen(
             results = displayResults,
             filters = visibilityFilters,
             likedPostIds = likedPostIds,
+            retainedLikedPostIds = retainedLikedPostIds,
             savedPostIds = savedPostIds,
             watchedPostIds = watchedPostIds,
             unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,

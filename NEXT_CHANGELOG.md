@@ -64,6 +64,8 @@
 - Remove repeated type labels from tag names in the post hold menu.
 
 ## Fixes
+
+- Keep liked posts visible with Hide Liked until their “More like this” recommendations are dismissed.
 - Resume autoplaying feed videos at the position where you left fullscreen playback.
 - Open nhentai page links at the linked gallery page, including when pages load after the cover.
 - Close Codex when using Go to Search, including from its Viewer.

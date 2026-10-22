@@ -80,6 +80,13 @@ val RelatedPostsUiState.availablePages: List<RelatedPostsPage>
         is RelatedPostsUiState.Failed -> retainedPages
     }
 
+/** Keep the current shelf's seeds visible until its recommendation chain is dismissed. */
+val RelatedPostsUiState.retainedLikedPostIds: Set<PostId>
+    get() = buildSet {
+        requestOrNull?.let { add(it.seed.id) }
+        availablePages.forEach { page -> add(page.request.seed.id) }
+    }
+
 val RelatedPostsUiState.currentPageIndex: Int
     get() = when (this) {
         RelatedPostsUiState.Idle -> -1

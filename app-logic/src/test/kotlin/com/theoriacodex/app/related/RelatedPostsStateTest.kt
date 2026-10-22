@@ -1,5 +1,7 @@
 package com.theoriacodex.app.related
 
+import com.theoriacodex.app.search.SearchVisibilityFilters
+import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -9,6 +11,43 @@ import org.junit.Assert.assertSame
 import org.junit.Test
 
 class RelatedPostsStateTest {
+    @Test
+    fun `hide liked retains shelf seeds through loading results empty and failure until dismissal`() {
+        val seed = post("seed")
+        val nextSeed = post("next")
+        val otherLiked = post("other")
+        val loading = RelatedPostsUiState.Idle.begin(seed, 0, 1)
+        val loaded = loading.complete(loading.request, listOf(nextSeed), setOf(seed.id))
+        val nextLoading = loaded.begin(nextSeed, 1, 2, loaded.availablePages)
+        val states = listOf(
+            loading,
+            loaded,
+            loading.complete(loading.request, emptyList(), emptySet()),
+            loading.fail(loading.request, "offline"),
+            nextLoading,
+            nextLoading.complete(nextLoading.request, listOf(post("result")), emptySet()),
+            nextLoading.complete(nextLoading.request, emptyList(), emptySet()),
+            nextLoading.fail(nextLoading.request, "offline"),
+        )
+        states.forEach { state ->
+            val seeds = if (state.requestOrNull?.seed == nextSeed) listOf(seed, nextSeed) else listOf(seed)
+            val results = seeds + otherLiked
+            val likedIds = results.mapTo(mutableSetOf(), Post::id)
+            fun visible(shelf: RelatedPostsUiState, savedIds: Set<PostId> = emptySet()) = filterSearchResults(
+                results = results,
+                filters = SearchVisibilityFilters(hideLiked = true, hideSaved = true),
+                likedPostIds = likedIds,
+                savedPostIds = savedIds,
+                retainedLikedPostIds = shelf.retainedLikedPostIds,
+            )
+
+            assertEquals(seeds, visible(state))
+            // Idle also covers likes where recommendations were unsupported or never opened.
+            assertEquals(emptyList<Post>(), visible(RelatedPostsUiState.Idle))
+            assertEquals(emptyList<Post>(), visible(state, seeds.mapTo(mutableSetOf(), Post::id)))
+        }
+    }
+
     @Test
     fun `latest request rejects stale completion and filters canonical duplicates`() {
         val seedA = post("a")

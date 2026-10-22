@@ -65,6 +65,7 @@ import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.app.ui.components.TwoColumnProjectedPostStaggeredGrid
 import com.theoriacodex.app.ui.components.RelatedPostsShelf
+import com.theoriacodex.app.related.retainedLikedPostIds
 import com.theoriacodex.app.ui.components.rememberRelatedFeedPresentation
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.viewer.PixivUgoiraClient
@@ -135,10 +136,12 @@ fun CreatorProfileScreen(
     val unknownAnimatedDurationPolicy = durationFilter.unknownPolicy
     val acquiredDurations = durationFilter.knownDurationMsByPostId
     val durationReadiness = durationFilter.readiness
+    val retainedLikedPostIds = remember(state.relatedPosts) { state.relatedPosts.retainedLikedPostIds }
     val visibleResults = remember(
         state.results,
         visibilityFilters,
         likedPostIds,
+        retainedLikedPostIds,
         savedPostIds,
         unknownAnimatedDurationPolicy,
         acquiredDurations,
@@ -147,6 +150,7 @@ fun CreatorProfileScreen(
             results = state.results,
             filters = visibilityFilters,
             likedPostIds = likedPostIds,
+            retainedLikedPostIds = retainedLikedPostIds,
             savedPostIds = savedPostIds,
             unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
             knownDurationMsByPostId = acquiredDurations,

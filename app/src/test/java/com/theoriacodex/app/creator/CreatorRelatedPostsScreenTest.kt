@@ -30,7 +30,7 @@ class CreatorRelatedPostsScreenTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
-    fun `liking a creator upload presents related shelf even when hide liked removes every upload`() {
+    fun `hide liked retains the seed until the related shelf is dismissed`() {
         val seed = testPost(sourcePostId = "seed")
         val state = mutableStateOf(CreatorUiState(
             creator = CreatorProfile(SourceKey.PIXIV, "Artist", profileId = "artist"),
@@ -68,6 +68,7 @@ class CreatorRelatedPostsScreenTest {
         }
         compose.onNodeWithContentDescription("Like post").performClick()
         compose.onNodeWithText("No new related posts").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Unlike post").assertIsDisplayed()
         compose.onNodeWithText("Dismiss").performClick()
         compose.onNodeWithText("No uploads match the current filters.").assertIsDisplayed()
         compose.runOnIdle { assertEquals(listOf(CreatorAction.DismissRelatedPosts), actions) }
