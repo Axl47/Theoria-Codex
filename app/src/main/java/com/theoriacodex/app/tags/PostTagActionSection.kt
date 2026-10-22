@@ -78,6 +78,7 @@ fun PostTagActionSection(
         PostTagSelection(post.id.source, draft?.includeTerms.orEmpty(), draft?.excludeTerms.orEmpty())
     }
     val tagVideoCounts = rememberTagCounts(post.id.source, generalTags, tagVideoCountProvider, fetchTagVideoCounts)
+    val typedCounts = rememberSearchTermCounts(post.id.source, terms)
 
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val columns = if (maxWidth.value >= 354f) 3 else 2
@@ -95,6 +96,7 @@ fun PostTagActionSection(
                 groups = termGroups,
                 columns = columns,
                 videoCounts = tagVideoCounts,
+                typedCounts = typedCounts,
                 selection = selection,
                 onFavoriteTagLongPress = if (onFavoriteTagLongPress != null) {
                     { tag -> onFavoriteTagLongPress(post.id.source, tag) }
@@ -185,6 +187,7 @@ private fun LazyListScope.tagActionGrid(
     groups: List<PostActionTermGroup>,
     columns: Int,
     videoCounts: Map<String, Int?>,
+    typedCounts: Map<SearchTerm, Int?>,
     selection: PostTagSelection,
     onFavoriteTagLongPress: ((String) -> Unit)?,
     onIncludeTerm: (SearchTerm) -> Unit,
@@ -221,7 +224,7 @@ private fun LazyListScope.tagActionGrid(
                     val generalTag = term.takeIf(SearchTerm::isGeneralPostTag)?.value
                     TagActionCell(
                         label = postActionTermLabel(term),
-                        videoCount = generalTag?.let(videoCounts::get),
+                        videoCount = if (generalTag != null) videoCounts[generalTag] else typedCounts[term],
                         includeSelected = selection.included(term) != null,
                         excludeSelected = selection.excluded(term) != null,
                         onTagLongPress = if (generalTag != null && onFavoriteTagLongPress != null) {

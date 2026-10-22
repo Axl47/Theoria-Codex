@@ -85,6 +85,7 @@ class SearchCoordinator(
     )
     private val tagCounts = TagCountCoordinator(registry, tagSuggestionStore, ::autocompletePrefixForSource,
         clock = clock, dispatcher = computationDispatcher)
+    private val searchTermCounts = SearchTermCountCoordinator(registry, clock, computationDispatcher)
     private val resolvedPostsByExecution = linkedMapOf<String, LinkedHashMap<PostId, Post>>()
     private val resolveFailuresByExecution = mutableMapOf<String, MutableMap<PostId, ResolveFailureRecord>>()
     private val queryPreparation = UnifiedQueryPreparation(clock)
@@ -552,6 +553,9 @@ class SearchCoordinator(
     suspend fun fetchTagVideoCounts(source: SourceKey, tags: List<String>): Map<String, Int?> {
         return fetchTagVideoCounts(source, tags, emptyList(), emptyList())
     }
+
+    suspend fun fetchSearchTermCounts(source: SourceKey, terms: List<SearchTerm>): Map<SearchTerm, Int?> =
+        searchTermCounts.fetch(source, terms)
 
     suspend fun resolveNhentaiGalleryById(galleryId: String): Post? {
         val id = galleryId.trim().takeIf { it.isNotBlank() && it.all(Char::isDigit) } ?: return null

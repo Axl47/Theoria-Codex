@@ -80,7 +80,7 @@ class PostTagDraftBindingTest {
         var added = 0
         val post = testPost().copy(canonicalTags = listOf("cat"), taxonomy = emptyList())
         compose.setContent {
-            MaterialTheme { SearchDraftSelectionProvider(owner) {
+            MaterialTheme { PostTagContextProvider(owner) {
                 if (visible.value) PostTagActionSection(post,
                     onAddIncludeTerm = { added++; true }, onAddExcludeTerm = { true },
                     onRemoveIncludeTerm = { removed += it }, onRemoveExcludeTerm = {})

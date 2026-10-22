@@ -100,7 +100,7 @@ import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsEffect
 import com.theoriacodex.app.settings.SettingsViewModel
 import com.theoriacodex.app.post.PostMutationViewModel
-import com.theoriacodex.app.tags.SearchDraftSelectionProvider
+import com.theoriacodex.app.tags.PostTagContextProvider
 import com.theoriacodex.app.ui.components.MutationFeedbackHost
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.creatorBrowsingSources
@@ -949,7 +949,7 @@ internal fun TheoriaAppContent(
         onProfileChanged = { profile -> ensureLikesCodexId(profile) },
     )
 
-    SearchDraftSelectionProvider(searchRouteOwner?.state) {
+    PostTagContextProvider(searchRouteOwner?.state, featureDependencies.search::fetchSearchTermCounts) {
         TheoriaNightTheme {
             if (!navReady) {
                 val promptRemote = updateChoiceRemote

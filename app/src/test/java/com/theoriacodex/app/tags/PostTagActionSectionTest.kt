@@ -39,7 +39,7 @@ class PostTagActionSectionTest {
     }
 
     @Test
-    fun `favorites and counts are limited to general tag terms`() {
+    fun `favorites are limited to general tag terms`() {
         val portableTag = SearchTerm("portable")
         val sourceTag = SearchTerm("source tag", SearchFacet.TAG, "tag")
         val female = SearchTerm("female tag", SearchFacet.TAG, "female")
