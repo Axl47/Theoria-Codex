@@ -19,6 +19,10 @@ class CiEmulatorEnvironmentTest(unittest.TestCase):
         scripts.mkdir()
         for name in ("verify_ci_emulator.sh", "device_validation_common.sh", "prepare_ci_android_sdk.sh"):
             shutil.copyfile(REPO / "scripts" / name, scripts / name)
+        # Exercise real process deadlines with shorter budgets; keep the timeout implementation intact.
+        wrapper = scripts / "verify_ci_emulator.sh"
+        wrapper.write_text(wrapper.read_text().replace("readonly probe_timeout=10", "readonly probe_timeout=1")
+                           .replace("readonly readiness_timeout=60", "readonly readiness_timeout=2"))
         self.executable(scripts / "verify_debug_device.sh", "#!/bin/sh\nprintf '%s' \"$*\" > delegated\nexit \"${FAKE_TEST_EXIT:-0}\"\n")
         self.executable(scripts / "verify_release_acceptance_device.sh", "#!/bin/sh\necho acceptance > delegated\n")
         self.avd = self.root / "avd"
@@ -27,14 +31,21 @@ class CiEmulatorEnvironmentTest(unittest.TestCase):
         (self.avd / "test.avd/config.ini").write_text("hw.ramSize=4096M\ndisk.dataPartition.size=6G\n")
         self.executable(self.root / "fake-adb", textwrap.dedent('''\
             #!/usr/bin/env python3
-            import os,sys,time
+            import os,pathlib,signal,sys,time
             args=sys.argv[1:]
             serial=os.environ.get('FAKE_SERIAL','emulator-5554')
+            stall=os.environ.get('FAKE_STALL')
+            signal.signal(signal.SIGTERM,signal.SIG_IGN)
             if args==['devices']:
+                if stall=='devices':time.sleep(60)
                 print('List of devices attached\\n'+serial+'\\tdevice')
                 sys.exit(0)
             assert args[:2]==['-s',serial],args
             args=args[2:]
+            if stall=='readiness' and args==['shell','am','get-current-user']:time.sleep(60)
+            if stall=='cleanup' and pathlib.Path('delegated').exists() and args[1:2] in [['dumpsys'],['df'],['cat']]:
+                print('stalled diagnostic',flush=True)
+                time.sleep(60)
             if args[:1]==['logcat']:
                 print('system log fixture',flush=True)
                 time.sleep(60)
@@ -74,6 +85,28 @@ class CiEmulatorEnvironmentTest(unittest.TestCase):
         self.assertEqual(2, result.returncode, result.stderr)
         self.assertIn("AVD target does not match", result.stderr)
         self.assertFalse((self.root / "delegated").exists())
+
+    def test_stalled_device_inventory_is_bounded_before_any_device_access(self):
+        result = self.run_wrapper(FAKE_STALL="devices")
+        self.assertEqual(124, result.returncode, result.stderr)
+        self.assertIn("timed out", result.stderr)
+        self.assertFalse((self.root / "build").exists())
+
+    def test_stalled_readiness_obeys_overall_deadline_without_installing(self):
+        result = self.run_wrapper(FAKE_STALL="readiness")
+        self.assertEqual(2, result.returncode, result.stderr)
+        self.assertIn("services are not ready", result.stderr)
+        self.assertFalse((self.root / "delegated").exists())
+        self.assertTrue((self.root / "build/reports/ci-emulator/debug/logcat.txt").is_file())
+
+    def test_stalled_cleanup_retains_delegate_failure_and_partial_diagnostics(self):
+        result = self.run_wrapper(FAKE_STALL="cleanup", FAKE_TEST_EXIT="23")
+        self.assertEqual(23, result.returncode, result.stderr)
+        evidence = self.root / "build/reports/ci-emulator/debug"
+        for name in ("system-server-crash.txt", "storage-after.txt", "memory-after.txt"):
+            output = (evidence / name).read_text()
+            self.assertIn("stalled diagnostic", output)
+            self.assertIn("timed out", output)
 
     def test_api_37_rejects_underprovisioned_memory_before_installation(self):
         result = self.run_wrapper(FAKE_MEMORY="1495952")
