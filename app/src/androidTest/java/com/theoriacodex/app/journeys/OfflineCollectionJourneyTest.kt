@@ -7,21 +7,18 @@ import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.isDisplayed
-import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
-import androidx.test.platform.app.InstrumentationRegistry
 import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
-import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.first
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -123,9 +120,11 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
     }
 
     private fun awaitFixturePixels(label: String, retainedPaths: List<String>) {
+        lateinit var decor: View
+        scenario.onActivity { decor = it.window.decorView }
         try {
             compose.waitUntil(conditionDescription = "$label renders the retained cyan PNG", timeoutMillis = 10_000) {
-                activeMediaShowsFixturePixels()
+                requireNotNull(diagnostics).activeMediaShowsFixturePixels(compose, decor)
             }
         } catch (timeout: ComposeTimeoutException) {
             try {
@@ -143,17 +142,4 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
         requireNotNull(diagnostics).capture(label, compose, decor, retainedPaths)
     }
 
-    private fun activeMediaShowsFixturePixels(): Boolean {
-        val surface = compose.onAllNodesWithContentDescription("Media actions", useUnmergedTree = true)
-            .fetchSemanticsNodes().singleOrNull() ?: return false
-        val center = surface.boundsInWindow.center
-        val screenshot = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot() ?: return false
-        return try {
-            val x = center.x.roundToInt()
-            val y = center.y.roundToInt()
-            x in 0 until screenshot.width && y in 0 until screenshot.height && screenshot.getPixel(x, y) == Color.CYAN
-        } finally {
-            screenshot.recycle()
-        }
-    }
 }

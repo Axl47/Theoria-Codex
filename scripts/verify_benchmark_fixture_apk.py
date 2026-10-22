@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 
@@ -17,6 +18,7 @@ EXPECTED_DURATION_RECEIVER = "com.theoriacodex.app.benchmark.BenchmarkDurationSt
 EXPECTED_DURATION_ACTION = "com.theoriacodex.action.BENCHMARK_DURATION_START"
 EXPECTED_PROCESS = ":benchmarkFixture"
 EXPECTED_LAUNCHER = "com.theoriacodex.app.MainActivity"
+ANDROID = "{http://schemas.android.com/apk/res/android}"
 FORBIDDEN_MANIFEST_SURFACES = (
     "android.permission.INTERNET",
     "android.permission.REQUEST_INSTALL_PACKAGES",
@@ -45,6 +47,41 @@ def sha256(contents: bytes) -> str:
     return hashlib.sha256(contents).hexdigest()
 
 
+def verify_manifest(manifest: str) -> None:
+    for forbidden in FORBIDDEN_MANIFEST_SURFACES:
+        require(forbidden not in manifest, f"benchmark manifest retains forbidden surface {forbidden}")
+    try:
+        root = ET.fromstring(manifest)
+    except ET.ParseError as error:
+        raise SystemExit(f"Malformed benchmark manifest: {error}") from error
+    require(root.tag == "manifest", "benchmark manifest has an unexpected root")
+    applications = root.findall("application")
+    require(len(applications) == 1, "benchmark manifest must contain exactly one application")
+
+    def component(kind: str, name: str) -> ET.Element:
+        matches = [node for node in applications[0].findall(kind) if node.get(ANDROID + "name") == name]
+        require(len(matches) == 1, f"benchmark manifest must contain exactly one {kind} {name}")
+        return matches[0]
+
+    # Check attributes and actions on their owner, never on an adjacent manifest component.
+    for kind, name, action in (
+        ("activity", EXPECTED_ACTIVITY, EXPECTED_ACTION),
+        ("receiver", EXPECTED_DURATION_RECEIVER, EXPECTED_DURATION_ACTION),
+    ):
+        node = component(kind, name)
+        require(node.get(ANDROID + "exported") == "true", f"{name} is not exported")
+        require(node.get(ANDROID + "process") == EXPECTED_PROCESS, f"{name} is outside fixture process")
+        require(any(item.get(ANDROID + "name") == action for item in node.findall("intent-filter/action")),
+                f"{name} is missing action {action}")
+
+    launcher = component("activity", EXPECTED_LAUNCHER)
+    require(any(
+        any(item.get(ANDROID + "name") == "android.intent.action.MAIN" for item in intent_filter.findall("action"))
+        and any(item.get(ANDROID + "name") == "android.intent.category.LAUNCHER" for item in intent_filter.findall("category"))
+        for intent_filter in launcher.findall("intent-filter")
+    ), "benchmark MainActivity is missing its launcher filter")
+
+
 def main() -> None:
     require(len(sys.argv) == 4, "usage: verify_benchmark_fixture_apk.py APK VIDEO APKANALYZER")
     apk = Path(sys.argv[1])
@@ -58,29 +95,7 @@ def main() -> None:
     require(application_id == EXPECTED_APPLICATION_ID, f"unexpected application ID: {application_id}")
 
     manifest = run(analyzer, "manifest", "print", str(apk))
-    for expected in (
-        EXPECTED_ACTIVITY,
-        EXPECTED_ACTION,
-        EXPECTED_DURATION_RECEIVER,
-        EXPECTED_DURATION_ACTION,
-        EXPECTED_PROCESS,
-    ):
-        require(expected in manifest, f"benchmark manifest is missing {expected}")
-    for forbidden in FORBIDDEN_MANIFEST_SURFACES:
-        require(forbidden not in manifest, f"benchmark manifest retains forbidden surface {forbidden}")
-    for launcher_contract in (
-        EXPECTED_LAUNCHER,
-        "android.intent.action.MAIN",
-        "android.intent.category.LAUNCHER",
-    ):
-        require(launcher_contract in manifest, f"benchmark manifest is missing {launcher_contract}")
-    activity_offset = manifest.index(EXPECTED_ACTIVITY)
-    activity_block = manifest[activity_offset : activity_offset + 800]
-    require('android:exported="true"' in activity_block, "benchmark fixture is not exported")
-    receiver_offset = manifest.index(EXPECTED_DURATION_RECEIVER)
-    receiver_block = manifest[receiver_offset : receiver_offset + 600]
-    require('android:exported="true"' in receiver_block, "duration signal receiver is not exported")
-    require(EXPECTED_PROCESS in receiver_block, "duration signal receiver is outside fixture process")
+    verify_manifest(manifest)
 
     dex_packages = run(analyzer, "dex", "packages", str(apk))
     require(EXPECTED_ACTIVITY in dex_packages, "benchmark fixture activity was removed from dex")

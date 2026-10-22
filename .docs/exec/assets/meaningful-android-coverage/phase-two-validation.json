@@ -1,0 +1,36 @@
+{
+  "date": "2026-10-22",
+  "upstream": "b921a664302fb26d507283e9304b8f4fdd6cfffe",
+  "main_merge_commit": "1e12025e",
+  "before_manifest_gate": {
+    "log": "/tmp/theoria-pr28-manifest-before.log",
+    "test_methods": 9,
+    "subtest_failures": 10,
+    "errors": 1,
+    "meaning": "Old string windows accepted invalid component ownership/export/process and rejected valid long attributes."
+  },
+  "after_python": {
+    "command": "python3 -m unittest discover -s scripts/tests -p 'test_*.py'",
+    "passed": 105,
+    "failures": 0,
+    "errors": 0,
+    "log": "/tmp/theoria-pr28-phase2-python.log"
+  },
+  "android_host": {
+    "command": "JAVA_HOME=/tmp/theoria-jdk21/jdk-21.0.13+9/Contents/Home ANDROID_HOME=/Users/axel/Library/Android/sdk ./gradlew :app:compileDebugAndroidTestKotlin :app:verifyBenchmarkFixtureArtifact --offline --console=plain",
+    "result": "BUILD SUCCESSFUL",
+    "log": "/tmp/theoria-pr28-phase2-host.log",
+    "artifact_contract": "com.theoriacodex.benchmark; :benchmarkFixture; res/os.mp4; 32502 bytes; video sha256 ac3213320cd1c8acbf081cb13ce652c8706dcda37e3a18bc1af31e23a5335403",
+    "device_access": false,
+    "benchmark_execution": false
+  },
+  "luna_reviews": {
+    "files": 4,
+    "readers": [
+      "luna-phase2-render",
+      "luna-phase2-manifest"
+    ],
+    "findings": []
+  },
+  "ci": "Pending final-head API 36/37 connected and host/quality checks via existing PR workflows; no local emulator/device/phone access."
+}

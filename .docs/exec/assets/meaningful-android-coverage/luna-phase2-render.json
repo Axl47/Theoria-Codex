@@ -1,0 +1,24 @@
+{
+  "reader": "gpt-5.6-luna",
+  "files": [
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/journeys/OfflineCollectionJourneyTest.kt",
+      "lines": 145,
+      "sha256": "60734e09bd659f827d883dcfacb8127a862e1cf014d04117ceef2473c055b5e7",
+      "read_complete": true,
+      "keep": "Retains cyan decode, disposable-original deletion, offline persistence, cold-graph relaunch, MIME, watched-membership, retained-path, and zero-provider-resolution assertions. Pixel polling now uses the diagnostics helper with decor offset.",
+      "flakiness": "No new lifecycle or cleanup issue identified; decor is obtained through scenario.onActivity and the bounded wait remains intact.",
+      "proposal": "No findings; no change proposed."
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/journeys/OfflineImageDiagnostics.kt",
+      "lines": 149,
+      "sha256": "9c4ebcc1dbc42f605cd24f135e20097ee3695c707114e593b37799fa47a8c798",
+      "read_complete": true,
+      "keep": "Shared decor screen/window translation is applied to the assertion and diagnostics. pixelAt preserves bounds checking and exact Color.CYAN matching. Screenshots are recycled on every path; event access remains synchronized; Coil restoration is unchanged.",
+      "flakiness": "No new lifecycle or thread-safety defect identified. Geometry location reads are main-thread marshaled, and transient frame changes are retried by the caller's waitUntil.",
+      "proposal": "No findings; no change proposed."
+    }
+  ],
+  "findings": []
+}

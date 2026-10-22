@@ -376,5 +376,41 @@
       }
     ],
     "status": "completed"
+  },
+  {
+    "reader": "luna-phase2-render",
+    "taskId": "node:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-phase2-render-r1",
+    "threadId": "thread:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-phase2-render-r1",
+    "provider": "codex",
+    "model": "gpt-5.6-luna",
+    "options": [
+      {
+        "id": "reasoningEffort",
+        "value": "high"
+      },
+      {
+        "id": "serviceTier",
+        "value": "default"
+      }
+    ],
+    "status": "completed"
+  },
+  {
+    "reader": "luna-phase2-manifest",
+    "taskId": "node:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-phase2-manifest-r1",
+    "threadId": "thread:delegated-task:command%3Amcp%3A96af0ade-525b-4752-b3ae-9b7b8c144c87%3Adelegate-task%3Ameaningful-audit-luna-phase2-manifest-r1",
+    "provider": "codex",
+    "model": "gpt-5.6-luna",
+    "options": [
+      {
+        "id": "reasoningEffort",
+        "value": "high"
+      },
+      {
+        "id": "serviceTier",
+        "value": "default"
+      }
+    ],
+    "status": "completed"
   }
 ]

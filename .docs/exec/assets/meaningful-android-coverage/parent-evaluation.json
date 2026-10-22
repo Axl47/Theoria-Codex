@@ -82,5 +82,13 @@
   {
     "reader": "luna-cancellation",
     "evaluation": "Final 367-line PKCE file fully read after host validation exposed debug copying of ordinary CancellationException. Exact identity and session assertions remain. Non-copying sentinel verified against local coroutines 1.11 bytecode and official API; affected ten-case rerun passes. No remaining static finding."
+  },
+  {
+    "reader": "luna-phase2-render",
+    "evaluation": "Accept: both complete final files preserve all offline assertions and recycle screenshots. Correct real screen/window offset mismatch using shared diagnostic geometry; no new retry/sleep or runtime code."
+  },
+  {
+    "reader": "luna-phase2-manifest",
+    "evaluation": "Accept: exact XML ownership closes reproduced false admissions and formatting rejection while retaining package/forbidden-surface/DEX/byte gates. Nine focused cases and 105 helper tests pass. Optional additional equivalent XML cases are not required; the parent also validates a real freshly packaged APK instead of extending the synthetic fixture matrix."
   }
 ]

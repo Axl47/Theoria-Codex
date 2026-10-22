@@ -1,0 +1,24 @@
+{
+  "reader": "gpt-5.6-luna",
+  "files": [
+    {
+      "path": "scripts/verify_benchmark_fixture_apk.py",
+      "lines": 131,
+      "sha256": "2a1c04823dadc72cd7d37b6d95a7f23d5e04826889189f7a361ddc9f9ec03fea",
+      "read_complete": true,
+      "keep": "Keep. XML parsing correctly binds component attributes/actions, rejects malformed/missing/duplicate structures, and preserves package, forbidden-surface, DEX, and byte-exact media gates. Standard apkanalyzer XML with a prefixed Android namespace is compatible.",
+      "flakiness": "None observed; deterministic host-only logic.",
+      "proposal": "No blocking fix. Optionally add compatibility fixtures containing an XML declaration, tools namespace, and representative generated attributes. The raw forbidden-surface scan is intentionally fail-closed, though it may reject matching text in comments or unrelated labels."
+    },
+    {
+      "path": "scripts/tests/test_benchmark_fixture_manifest.py",
+      "lines": 162,
+      "sha256": "fbe3d6aedafba133874f5504ef0d05c7c52c21972fc1d3b99054e1e3cc3fab8f",
+      "read_complete": true,
+      "keep": "Keep. Tests invoke the real CLI main through a fake analyzer boundary, use real temporary ZIP/video bytes, and meaningfully cover long/reordered attributes, neighboring-component borrowing, action ownership, process isolation, launcher-filter pairing, duplicates, malformed/missing application, forbidden surfaces, package/DEX/media gates.",
+      "flakiness": "None observed; no device, network, timing, or nondeterministic dependencies.",
+      "proposal": "No blocking fix. Optional additional coverage: duplicate application/receiver cases, missing expected component, and a representative apkanalyzer-generated manifest with XML/tools namespaces."
+    }
+  ],
+  "findings": []
+}
