@@ -21,6 +21,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.lifecycle.ViewModelStoreOwner
@@ -57,7 +58,7 @@ import org.robolectric.annotation.Config
 
 /** Exercise actual Room Likes/Codex writes and route callbacks with both membership filters enabled. */
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [35])
+@Config(application = Application::class)
 class HideLikedRelatedPostsJourneyTest {
     @get:Rule val compose = createComposeRule()
     @get:Rule val temporary = TemporaryFolder()
@@ -97,6 +98,7 @@ class HideLikedRelatedPostsJourneyTest {
             }
             compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Recents").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithContentDescription("Recents").performClick()
+            compose.waitUntil(10_000) { compose.onNodeWithText("Searches").isDisplayed() }
             compose.onNodeWithText("Searches").performClick()
             compose.waitUntil(10_000) { compose.onAllNodesWithTag("Recent search:likes-query").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("Recent search:likes-query").performClick()
@@ -110,7 +112,7 @@ class HideLikedRelatedPostsJourneyTest {
                 compose.onNode(verticalGrid).performScrollToNode(hasTestTag(tag))
                 if (fullscreen) {
                     compose.onNodeWithTag(tag).performClick()
-                    compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("Back").fetchSemanticsNodes().isNotEmpty() }
+                    compose.waitUntil(10_000) { compose.onNodeWithContentDescription("More actions").isDisplayed() }
                     compose.onNodeWithContentDescription("Like post").performClick()
                 } else {
                     compose.onNode(hasContentDescription("Like post") and hasAnyAncestor(hasTestTag(tag)), useUnmergedTree = true)
@@ -124,8 +126,11 @@ class HideLikedRelatedPostsJourneyTest {
                     }
                 }
                 if (fullscreen) {
+                    // Room persistence can complete before the separate liked-post flow reaches Viewer.
+                    compose.waitUntil(10_000) { compose.onNodeWithContentDescription("Unlike post").isDisplayed() }
                     compose.onNodeWithContentDescription("Unlike post").assertIsDisplayed()
                     compose.onNodeWithContentDescription("Back").performClick()
+                    compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("More actions").fetchSemanticsNodes().isEmpty() }
                 }
                 compose.waitUntil(10_000) { compose.onAllNodesWithText("More like this").fetchSemanticsNodes().isNotEmpty() }
                 compose.onNode(verticalGrid).performScrollToIndex(0)

@@ -21,7 +21,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [35])
+@Config(application = Application::class)
 class ViewerGifTransportTest {
     @Test
     fun `remote bytes are fetched once with source headers and reused by fallback`() = runBlocking {

@@ -8,15 +8,22 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.hasScrollToIndexAction
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performClick
 import androidx.lifecycle.ViewModelStoreOwner
@@ -49,7 +56,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [35])
+@Config(application = Application::class)
 class SavedSearchesCodexJourneyTest {
     @get:Rule val compose = createComposeRule()
     @get:Rule val temporary = TemporaryFolder()
@@ -82,14 +89,18 @@ class SavedSearchesCodexJourneyTest {
             }
             compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Codex").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithContentDescription("Codex").performClick()
+            compose.waitUntil(10_000) { compose.onNodeWithText("Likes: 0, Followed: 0, Search: 2").isDisplayed() }
             compose.onNodeWithText("Codex Library").assertIsDisplayed()
             compose.onNodeWithText("Searches").assertDoesNotExist()
             compose.onNodeWithText("Likes: 0, Followed: 0, Search: 2").assertIsDisplayed()
             compose.onNodeWithText("Saved").performClick()
+            compose.waitUntil(10_000) { compose.onNodeWithText("Likes").isDisplayed() }
             compose.onNodeWithText("Likes").performTouchInput { longClick() }
+            compose.waitUntil(10_000) { compose.onNodeWithContentDescription("Clear likes").isDisplayed() }
             compose.onNodeWithContentDescription("Clear likes").assertExists()
             compose.onNodeWithText("Cancel").performClick()
             compose.onNodeWithText("Followed").assertIsDisplayed()
+            compose.waitUntil(10_000) { compose.onAllNodesWithText("Searches").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("Searches").performScrollTo().performTouchInput { longClick() }
             compose.onNodeWithContentDescription("Include First search").assertExists()
             compose.onNodeWithText("Done").performClick()
@@ -103,14 +114,21 @@ class SavedSearchesCodexJourneyTest {
                 .performTouchInput { longClick() }
             compose.onNodeWithContentDescription("Include First search").performClick()
             compose.onNodeWithText("Done").performClick()
-            compose.waitUntil(10_000) { compose.onAllNodesWithTag(first).fetchSemanticsNodes().isEmpty() }
+            compose.waitUntil(10_000) { compose.onAllNodesWithTag(first).fetchSemanticsNodes().isEmpty() &&
+                compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
+            val verticalGrid = hasScrollToIndexAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange)
+            compose.onNode(verticalGrid, useUnmergedTree = true).performScrollToNode(hasTestTag(second))
             compose.onNodeWithTag(second).assertIsDisplayed().performClick()
-            compose.waitUntil(10_000) { compose.onNodeWithContentDescription("Back").isDisplayed() }
+            // Saved also has a Back button; only Viewer's action menu proves navigation completed.
+            compose.waitUntil(10_000) { compose.onNodeWithContentDescription("More actions").isDisplayed() }
             val roots = graph.registry.requests.count { it.pageToken == null }
             compose.onNodeWithContentDescription("Back").performClick()
+            compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("More actions").fetchSemanticsNodes().isEmpty() }
+            compose.waitUntil(10_000) { compose.onNodeWithTag(second).isDisplayed() }
             compose.onNodeWithTag(second).assertIsDisplayed()
             assertEquals(roots, graph.registry.requests.count { it.pageToken == null })
             compose.onNodeWithContentDescription("Back").performClick()
+            compose.waitUntil(10_000) { compose.onAllNodesWithText("Searches").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("Searches").performScrollTo()
             compose.waitUntil(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag(first).assertDoesNotExist()
@@ -118,12 +136,15 @@ class SavedSearchesCodexJourneyTest {
             // Leaving Saved entirely must retain the same feed, too.
             compose.onNodeWithContentDescription("Back").performClick()
             compose.onNodeWithText("Saved").performClick()
+            compose.waitUntil(10_000) { compose.onAllNodesWithText("Searches").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("Searches").performScrollTo()
             compose.waitUntil(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
             assertEquals(roots, graph.registry.requests.count { it.pageToken == null })
             compose.onNodeWithTag(second).performClick()
-            compose.waitUntil(10_000) { compose.onNodeWithContentDescription("Back").isDisplayed() }
+            compose.waitUntil(10_000) { compose.onNodeWithContentDescription("More actions").isDisplayed() }
             compose.onNodeWithContentDescription("Back").performClick()
+            compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("More actions").fetchSemanticsNodes().isEmpty() }
+            compose.waitUntil(10_000) { compose.onAllNodesWithText("Searches").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("Searches").performScrollTo().performClick()
             compose.waitUntil(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
             compose.onNode(hasText("Searches") and SemanticsMatcher.keyIsDefined(SemanticsActions.OnLongClick))
@@ -133,6 +154,9 @@ class SavedSearchesCodexJourneyTest {
             compose.onNodeWithText("Done").performClick()
             compose.waitUntil(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isEmpty() }
             compose.onNodeWithText("Save a search from Recents or include a search in this feed").assertIsDisplayed()
+        } catch (failure: Throwable) {
+            println(compose.onRoot().printToString())
+            throw failure
         } finally {
             compose.runOnIdle { show.value = false; owners?.viewModelStore?.clear() }
             runBlocking(Dispatchers.IO) { graph.shutdown() }

@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.Resources
 import android.media.MediaMetadataRetriever
-import android.os.Build
 import android.os.Trace
 import com.theoriacodex.app.R
 import com.theoriacodex.app.viewer.videoPlaybackInfrastructure
@@ -153,15 +152,11 @@ private fun recordDurationTraceEvent(name: String) {
 }
 
 private fun beginDurationBatchTrace() {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        Trace.beginAsyncSection(TRACE_DURATION_BATCH, DURATION_BATCH_TRACE_COOKIE)
-    }
+    Trace.beginAsyncSection(TRACE_DURATION_BATCH, DURATION_BATCH_TRACE_COOKIE)
 }
 
 private fun endDurationBatchTrace() {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        Trace.endAsyncSection(TRACE_DURATION_BATCH, DURATION_BATCH_TRACE_COOKIE)
-    }
+    Trace.endAsyncSection(TRACE_DURATION_BATCH, DURATION_BATCH_TRACE_COOKIE)
 }
 
 internal const val ACTION_BENCHMARK_DURATION_START =

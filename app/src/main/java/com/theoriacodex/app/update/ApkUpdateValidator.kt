@@ -3,8 +3,6 @@ package com.theoriacodex.app.update
 import android.content.Context
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
-import android.os.Build
-import androidx.core.content.pm.PackageInfoCompat
 import java.io.File
 import java.security.MessageDigest
 
@@ -16,11 +14,11 @@ class ApkUpdateValidator(
         expectedVersionCode: Int,
     ): Result<Unit> = runCatching {
         val packageManager = context.packageManager
-        val archiveInfo = packageManager.getArchivePackageInfoCompat(apkFile)
+        val archiveInfo = packageManager.readArchivePackageInfo(apkFile)
             ?: error("Downloaded update APK is unreadable")
-        val archiveVersion = PackageInfoCompat.getLongVersionCode(archiveInfo)
-        val installedInfo = packageManager.getInstalledPackageInfoCompat(context.packageName)
-        val installedVersion = PackageInfoCompat.getLongVersionCode(installedInfo)
+        val archiveVersion = archiveInfo.longVersionCode
+        val installedInfo = packageManager.readInstalledPackageInfo(context.packageName)
+        val installedVersion = installedInfo.longVersionCode
         val archiveSignatures = archiveInfo.signatureDigests()
         val installedSignatures = installedInfo.signatureDigests()
         validateApkIdentityPolicy(
@@ -38,52 +36,32 @@ class ApkUpdateValidator(
         ).getOrThrow()
     }
 
-    private fun PackageManager.getArchivePackageInfoCompat(apkFile: File): PackageInfo? {
-        val legacyFlags = legacySignatureFlags()
-        val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            getPackageArchiveInfo(apkFile.absolutePath, PackageManager.PackageInfoFlags.of(legacyFlags.toLong()))
-        } else {
-            @Suppress("DEPRECATION")
-            getPackageArchiveInfo(apkFile.absolutePath, legacyFlags)
-        }
+    private fun PackageManager.readArchivePackageInfo(apkFile: File): PackageInfo? {
+        val info = getPackageArchiveInfo(
+            apkFile.absolutePath,
+            PackageManager.PackageInfoFlags.of(PackageManager.GET_SIGNING_CERTIFICATES.toLong()),
+        )
 
         info?.applicationInfo?.sourceDir = apkFile.absolutePath
         info?.applicationInfo?.publicSourceDir = apkFile.absolutePath
         return info
     }
 
-    private fun PackageManager.getInstalledPackageInfoCompat(packageName: String): PackageInfo {
-        val legacyFlags = legacySignatureFlags()
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(legacyFlags.toLong()))
-        } else {
-            @Suppress("DEPRECATION")
-            getPackageInfo(packageName, legacyFlags)
-        }
-    }
-
-    private fun legacySignatureFlags(): Int {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            PackageManager.GET_SIGNING_CERTIFICATES
-        } else {
-            @Suppress("DEPRECATION")
-            PackageManager.GET_SIGNATURES
-        }
+    private fun PackageManager.readInstalledPackageInfo(packageName: String): PackageInfo {
+        return getPackageInfo(
+            packageName,
+            PackageManager.PackageInfoFlags.of(PackageManager.GET_SIGNING_CERTIFICATES.toLong()),
+        )
     }
 
     private fun PackageInfo.signatureDigests(): Set<String> {
-        val signatureBytes: List<ByteArray> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            val signingInfo = signingInfo ?: return emptySet()
-            val signatures = if (signingInfo.hasMultipleSigners()) {
-                signingInfo.apkContentsSigners
-            } else {
-                signingInfo.signingCertificateHistory
-            }
-            signatures.orEmpty().map { it.toByteArray() }
+        val signingInfo = signingInfo ?: return emptySet()
+        val signatures = if (signingInfo.hasMultipleSigners()) {
+            signingInfo.apkContentsSigners
         } else {
-            @Suppress("DEPRECATION")
-            signatures.orEmpty().map { it.toByteArray() }
+            signingInfo.signingCertificateHistory
         }
+        val signatureBytes = signatures.orEmpty().map { it.toByteArray() }
 
         if (signatureBytes.isEmpty()) return emptySet()
         val digest = MessageDigest.getInstance("SHA-256")

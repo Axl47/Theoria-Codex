@@ -2,7 +2,6 @@ package com.theoriacodex.app.viewer
 
 import android.content.Context
 import android.media.AudioManager
-import android.os.Build
 import android.provider.Settings
 import android.view.Window
 import androidx.compose.runtime.Composable
@@ -140,4 +139,4 @@ internal fun rememberViewerLevelControls(enabled: Boolean): ViewerLevelControls 
 }
 
 private fun AudioManager.minimumMediaVolume(): Int =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) getStreamMinVolume(AudioManager.STREAM_MUSIC) else 0
+    getStreamMinVolume(AudioManager.STREAM_MUSIC)

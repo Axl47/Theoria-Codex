@@ -5,7 +5,6 @@ import android.content.ContentValues
 import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
@@ -62,18 +61,11 @@ internal class AnimationExportDestination(private val context: Context) {
         val collection = MediaStore.Video.Media.EXTERNAL_CONTENT_URI
         val projection = arrayOf(MediaStore.MediaColumns._ID)
         val arguments = arrayOf(description(key, complete))
-        val cursor = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            resolver.query(collection, projection, Bundle().apply {
-                putString(ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
-                putStringArray(ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, arguments)
-                if (!complete) putInt(MediaStore.QUERY_ARG_MATCH_PENDING, MediaStore.MATCH_INCLUDE)
-            }, null)
-        } else {
-            val uri = if (!complete && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                MediaStore.setIncludePending(collection)
-            } else collection
-            resolver.query(uri, projection, selection, arguments, null)
-        } ?: throw IOException("Could not read animation export destinations")
+        val cursor = resolver.query(collection, projection, Bundle().apply {
+            putString(ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
+            putStringArray(ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, arguments)
+            if (!complete) putInt(MediaStore.QUERY_ARG_MATCH_PENDING, MediaStore.MATCH_INCLUDE)
+        }, null) ?: throw IOException("Could not read animation export destinations")
         return cursor.use {
             if (cursor.count > 1) throw IOException("Animation export identity has multiple destinations")
             if (cursor.moveToFirst()) ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
@@ -86,10 +78,8 @@ internal class AnimationExportDestination(private val context: Context) {
             put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
             put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
             key?.let { put(MediaStore.Video.VideoColumns.DESCRIPTION, description(it, complete = false)) }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_MOVIES}/TheoriaCodex")
-                put(MediaStore.MediaColumns.IS_PENDING, 1)
-            }
+            put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_MOVIES}/TheoriaCodex")
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
         }
         val destination = key?.let { findRow(it, complete = false) }
             ?: resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
@@ -101,7 +91,7 @@ internal class AnimationExportDestination(private val context: Context) {
             } ?: throw IOException("Could not open animation export")
             val publish = ContentValues().apply {
                 key?.let { put(MediaStore.Video.VideoColumns.DESCRIPTION, description(it, complete = true)) }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) put(MediaStore.MediaColumns.IS_PENDING, 0)
+                put(MediaStore.MediaColumns.IS_PENDING, 0)
             }
             if (publish.size() > 0 && resolver.update(destination, publish, null, null) != 1) {
                 throw IOException("Could not publish animation export")

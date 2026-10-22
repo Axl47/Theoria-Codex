@@ -2,6 +2,9 @@ name: Verify
 
 on:
   workflow_call:
+    secrets:
+      GRADLE_ENCRYPTION_KEY:
+        required: false
   pull_request:
     branches:
       - main
@@ -24,18 +27,22 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6.1.0
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: |
+            17
+            21
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6.4.0
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
       - name: Test core modules
         run: >-
@@ -44,6 +51,7 @@ jobs:
           :core-data:test
           :core-sources:test
           :core-stubs:test
+          :app-logic:test
           --warning-mode=all
 
   android:
@@ -53,36 +61,57 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6.1.0
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: |
+            17
+            21
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6.4.0
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
       - name: Verify Android data ownership
         run: >-
           ./gradlew
           :core-data-android:testDebugUnitTest
-          :core-data-android:lintDebug
           :core-data-android:compileDebugAndroidTestKotlin
           --warning-mode=all
 
       - name: Verify Android app
         run: >-
           ./gradlew
-          :app:lint
           :app:testDebugUnitTest
           :app:compileDebugAndroidTestKotlin
           :app:assembleDebug
           :app:assembleRelease
           --warning-mode=all
+
+      # Finish all source generation before lint reads Room's generated Java.
+      - name: Lint generated Android sources
+        run: ./gradlew :app:lint :core-data-android:lintDebug --offline --no-daemon --warning-mode=all
+
+      - name: Upload Android test and lint reports
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: android-test-and-lint-reports
+          path: |
+            app/build/test-results/
+            app/build/reports/tests/
+            app/build/reports/lint-results-*
+            core-data-android/build/test-results/
+            core-data-android/build/reports/tests/
+            core-data-android/build/reports/lint-results-*
+          if-no-files-found: warn
+          retention-days: 14
 
   maintainability:
     name: Maintainability
@@ -91,18 +120,22 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6.1.0
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: |
+            17
+            21
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6.4.0
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
       - name: Verify strict configuration-cache store and reuse
         shell: bash
@@ -137,9 +170,9 @@ jobs:
           --configuration-cache-problems=fail
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7.1.0
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
 
       - name: Install quality tooling
@@ -200,7 +233,7 @@ jobs:
 
       - name: Upload maintainability reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: maintainability-reports
           path: |

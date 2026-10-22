@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.PackageManager
 import android.graphics.Rect
-import android.os.Build
 import android.util.Rational
 import com.theoriacodex.app.MainActivity
 
@@ -41,7 +40,7 @@ internal fun Activity.viewerPictureInPictureParams(
     return PictureInPictureParams.Builder()
         .setAspectRatio(viewerPictureInPictureRatio(width, height))
         .setSourceRectHint(bounds)
-        .apply { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) setAutoEnterEnabled(autoEnter) }
+        .setAutoEnterEnabled(autoEnter)
         .build()
 }
 

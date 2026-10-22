@@ -27,7 +27,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [35], qualifiers = "w1000dp-h800dp")
+@Config(application = Application::class, qualifiers = "w1000dp-h800dp")
 class AdaptiveNavigationTest {
     @get:Rule val compose = createComposeRule()
 

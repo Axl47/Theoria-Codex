@@ -1,0 +1,275 @@
+{
+  "comparison_kind": "Exploratory different-condition comparison, not calibration or dependency-only attribution",
+  "previous_run": "build/reports/audit-viewer-observation-2026-10-13/final-five-feed/run-1/run.json",
+  "new_run": "build/reports/dependency-benchmarks-2026-10-22/full-capture/run-1/run.json",
+  "rows": [
+    {
+      "metric": "durationAcquisitionFiveFeedJourney/metrics/fixtureByteRangeCount/maximum",
+      "before": 3.0,
+      "after": 3.0,
+      "delta": 0.0,
+      "change_percent": 0.0
+    },
+    {
+      "metric": "durationAcquisitionFiveFeedJourney/metrics/journeyDurationBatchSumMs/maximum",
+      "before": 981.250833,
+      "after": 985.498958,
+      "delta": 4.248125000000073,
+      "change_percent": 0.43292956878437927
+    },
+    {
+      "metric": "durationAcquisitionFiveFeedJourney/metrics/mediaLoadCount/maximum",
+      "before": 339.0,
+      "after": 352.0,
+      "delta": 13.0,
+      "change_percent": 3.834808259587019
+    },
+    {
+      "metric": "durationAcquisitionFiveFeedJourney/metrics/memoryFixtureGpuMaxKb/maximum",
+      "before": 105344.0,
+      "after": 106948.0,
+      "delta": 1604.0,
+      "change_percent": 1.5226306196840733
+    },
+    {
+      "metric": "durationAcquisitionFiveFeedJourney/metrics/memoryFixtureRssAnonMaxKb/maximum",
+      "before": 123724.0,
+      "after": 135376.0,
+      "delta": 11652.0,
+      "change_percent": 9.417736251656915
+    },
+    {
+      "metric": "durationAcquisitionFiveFeedJourney/metrics/previewPlayerCoolCount/maximum",
+      "before": 8.0,
+      "after": 8.0,
+      "delta": 0.0,
+      "change_percent": 0.0
+    },
+    {
+      "metric": "durationAcquisitionFiveFeedJourney/metrics/previewPlayerCreateCount/maximum",
+      "before": 3.0,
+      "after": 3.0,
+      "delta": 0.0,
+      "change_percent": 0.0
+    },
+    {
+      "metric": "durationAcquisitionFiveFeedJourney/metrics/previewPlayerPrepareCount/maximum",
+      "before": 6.0,
+      "after": 6.0,
+      "delta": 0.0,
+      "change_percent": 0.0
+    },
+    {
+      "metric": "durationAcquisitionFiveFeedJourney/metrics/previewPlayerRebindCount/maximum",
+      "before": 0.0,
+      "after": 0.0,
+      "delta": 0.0,
+      "change_percent": null
+    },
+    {
+      "metric": "durationAcquisitionFiveFeedJourney/metrics/previewPlayerReleaseCount/maximum",
+      "before": 4.0,
+      "after": 6.0,
+      "delta": 2.0,
+      "change_percent": 50.0
+    },
+    {
+      "metric": "durationAcquisitionFiveFeedJourney/sampledMetrics/frameDurationCpuMsFixture/P95",
+      "before": 8.732115,
+      "after": 8.491074799999998,
+      "delta": -0.24104020000000226,
+      "change_percent": -2.760387374650952
+    },
+    {
+      "metric": "durationAcquisitionFiveFeedJourney/sampledMetrics/frameOverrunMsFixture/P95",
+      "before": 7.212246400000001,
+      "after": 7.086983699999999,
+      "delta": -0.12526270000000128,
+      "change_percent": -1.7368056088599704
+    },
+    {
+      "metric": "mixedMediaFiveFeedJourney/metrics/mediaLoadCount/maximum",
+      "before": 357.0,
+      "after": 373.0,
+      "delta": 16.0,
+      "change_percent": 4.481792717086841
+    },
+    {
+      "metric": "mixedMediaFiveFeedJourney/metrics/memoryFixtureGpuMaxKb/maximum",
+      "before": 106212.0,
+      "after": 106684.0,
+      "delta": 472.0,
+      "change_percent": 0.4443942304071191
+    },
+    {
+      "metric": "mixedMediaFiveFeedJourney/metrics/memoryFixtureRssAnonMaxKb/maximum",
+      "before": 131660.0,
+      "after": 117380.0,
+      "delta": -14280.0,
+      "change_percent": -10.846118790824855
+    },
+    {
+      "metric": "mixedMediaFiveFeedJourney/metrics/previewPlayerCoolCount/maximum",
+      "before": 8.0,
+      "after": 8.0,
+      "delta": 0.0,
+      "change_percent": 0.0
+    },
+    {
+      "metric": "mixedMediaFiveFeedJourney/metrics/previewPlayerCreateCount/maximum",
+      "before": 3.0,
+      "after": 2.0,
+      "delta": -1.0,
+      "change_percent": -33.333333333333336
+    },
+    {
+      "metric": "mixedMediaFiveFeedJourney/metrics/previewPlayerPrepareCount/maximum",
+      "before": 6.0,
+      "after": 6.0,
+      "delta": 0.0,
+      "change_percent": 0.0
+    },
+    {
+      "metric": "mixedMediaFiveFeedJourney/metrics/previewPlayerRebindCount/maximum",
+      "before": 0.0,
+      "after": 0.0,
+      "delta": 0.0,
+      "change_percent": null
+    },
+    {
+      "metric": "mixedMediaFiveFeedJourney/metrics/previewPlayerReleaseCount/maximum",
+      "before": 5.0,
+      "after": 5.0,
+      "delta": 0.0,
+      "change_percent": 0.0
+    },
+    {
+      "metric": "mixedMediaFiveFeedJourney/sampledMetrics/frameDurationCpuMsFixture/P95",
+      "before": 8.913551850000001,
+      "after": 8.4314096,
+      "delta": -0.48214225000000077,
+      "change_percent": -5.409092336182464
+    },
+    {
+      "metric": "mixedMediaFiveFeedJourney/sampledMetrics/frameOverrunMsFixture/P95",
+      "before": 7.2611334,
+      "after": 7.0647403,
+      "delta": -0.19639309999999988,
+      "change_percent": -2.704716869683177
+    }
+  ],
+  "new_measurements": {
+    "coldStartup/metrics/timeToInitialDisplayMs/median": 241.3470575,
+    "durationAcquisitionFiveFeedJourney/metrics/fixtureByteRangeCount/maximum": 3.0,
+    "durationAcquisitionFiveFeedJourney/metrics/journeyDurationBatchSumMs/maximum": 985.498958,
+    "durationAcquisitionFiveFeedJourney/metrics/mediaLoadCount/maximum": 352.0,
+    "durationAcquisitionFiveFeedJourney/metrics/memoryFixtureGpuMaxKb/maximum": 106948.0,
+    "durationAcquisitionFiveFeedJourney/metrics/memoryFixtureRssAnonMaxKb/maximum": 135376.0,
+    "durationAcquisitionFiveFeedJourney/metrics/previewPlayerCoolCount/maximum": 8.0,
+    "durationAcquisitionFiveFeedJourney/metrics/previewPlayerCreateCount/maximum": 3.0,
+    "durationAcquisitionFiveFeedJourney/metrics/previewPlayerPrepareCount/maximum": 6.0,
+    "durationAcquisitionFiveFeedJourney/metrics/previewPlayerRebindCount/maximum": 0.0,
+    "durationAcquisitionFiveFeedJourney/metrics/previewPlayerReleaseCount/maximum": 6.0,
+    "durationAcquisitionFiveFeedJourney/sampledMetrics/frameDurationCpuMsFixture/P95": 8.491074799999998,
+    "durationAcquisitionFiveFeedJourney/sampledMetrics/frameOverrunMsFixture/P95": 7.086983699999999,
+    "mixedMediaFiveFeedJourney/metrics/mediaLoadCount/maximum": 373.0,
+    "mixedMediaFiveFeedJourney/metrics/memoryFixtureGpuMaxKb/maximum": 106684.0,
+    "mixedMediaFiveFeedJourney/metrics/memoryFixtureRssAnonMaxKb/maximum": 117380.0,
+    "mixedMediaFiveFeedJourney/metrics/previewPlayerCoolCount/maximum": 8.0,
+    "mixedMediaFiveFeedJourney/metrics/previewPlayerCreateCount/maximum": 2.0,
+    "mixedMediaFiveFeedJourney/metrics/previewPlayerPrepareCount/maximum": 6.0,
+    "mixedMediaFiveFeedJourney/metrics/previewPlayerRebindCount/maximum": 0.0,
+    "mixedMediaFiveFeedJourney/metrics/previewPlayerReleaseCount/maximum": 5.0,
+    "mixedMediaFiveFeedJourney/sampledMetrics/frameDurationCpuMsFixture/P95": 8.4314096,
+    "mixedMediaFiveFeedJourney/sampledMetrics/frameOverrunMsFixture/P95": 7.0647403,
+    "searchConcurrentAutoplayScroll/metrics/mediaLoadCount/maximum": 240.0,
+    "searchConcurrentAutoplayScroll/metrics/memoryFixtureGpuMaxKb/maximum": 105964.0,
+    "searchConcurrentAutoplayScroll/metrics/memoryFixtureRssAnonMaxKb/maximum": 123736.0,
+    "searchConcurrentAutoplayScroll/metrics/previewPrepareCount/maximum": 24.0,
+    "searchConcurrentAutoplayScroll/sampledMetrics/frameDurationCpuMsFixture/P95": 6.867917,
+    "searchConcurrentAutoplayScroll/sampledMetrics/frameOverrunMsFixture/P95": 1.0651835,
+    "searchDurationEnrichmentConcurrentAutoplayScroll/metrics/durationBatchSumMs/maximum": 180.099635,
+    "searchDurationEnrichmentConcurrentAutoplayScroll/metrics/mediaLoadCount/maximum": 237.0,
+    "searchDurationEnrichmentConcurrentAutoplayScroll/metrics/memoryFixtureGpuMaxKb/maximum": 106132.0,
+    "searchDurationEnrichmentConcurrentAutoplayScroll/metrics/memoryFixtureRssAnonMaxKb/maximum": 124816.0,
+    "searchDurationEnrichmentConcurrentAutoplayScroll/metrics/previewPrepareCount/maximum": 24.0,
+    "searchDurationEnrichmentConcurrentAutoplayScroll/sampledMetrics/frameDurationCpuMsFixture/P95": 6.7038878,
+    "searchDurationEnrichmentConcurrentAutoplayScroll/sampledMetrics/frameOverrunMsFixture/P95": 0.9060491999999994,
+    "viewerRepeatedSwipes/metrics/mediaLoadCount/maximum": 272.0,
+    "viewerRepeatedSwipes/metrics/memoryFixtureGpuMaxKb/maximum": 80748.0,
+    "viewerRepeatedSwipes/metrics/memoryFixtureRssAnonMaxKb/maximum": 72712.0,
+    "viewerRepeatedSwipes/metrics/viewerPrepareCount/maximum": 10.0,
+    "viewerRepeatedSwipes/sampledMetrics/frameDurationCpuMsFixture/P95": 7.732124899999998,
+    "viewerRepeatedSwipes/sampledMetrics/frameOverrunMsFixture/P95": 1.3915036999999937,
+    "warmStartup/metrics/timeToInitialDisplayMs/median": 61.3126825
+  },
+  "validated": {
+    "previous_trace_count": 10,
+    "new_trace_count": 45,
+    "previous_context": {
+      "artMainlineVersion": 371000140,
+      "build": {
+        "brand": "samsung",
+        "device": "e2q",
+        "fingerprint": "samsung/e2qsqw/e2q:17/CP2A.260605.016/S926USQU6EZIF:user/release-keys",
+        "id": "CP2A.260605.016",
+        "model": "SM-S926U",
+        "type": "user",
+        "version": {
+          "codename": "REL",
+          "sdk": 37
+        }
+      },
+      "compilationMode": "run-from-apk",
+      "cpuCoreCount": 8,
+      "cpuLocked": true,
+      "cpuMaxFreqHz": 3398400000,
+      "memTotalBytes": 11623084032,
+      "osCodenameAbbreviated": "REL",
+      "payload": {},
+      "sustainedPerformanceModeEnabled": false
+    },
+    "new_context": {
+      "artMainlineVersion": 371000140,
+      "build": {
+        "brand": "samsung",
+        "device": "e2q",
+        "fingerprint": "samsung/e2qsqw/e2q:17/CP2A.260605.016/S926USQU6EZIF:user/release-keys",
+        "id": "CP2A.260605.016",
+        "model": "SM-S926U",
+        "type": "user",
+        "version": {
+          "codename": "REL",
+          "sdk": 37
+        }
+      },
+      "compilationMode": "run-from-apk",
+      "cpuCoreCount": 8,
+      "cpuLocked": true,
+      "cpuMaxFreqHz": 3398400000,
+      "memTotalBytes": 11623084032,
+      "osCodenameAbbreviated": "REL",
+      "payload": {},
+      "sustainedPerformanceModeEnabled": false
+    },
+    "previous_apk": "1045021a49e169f7ac4adb2840469c2249c0f64c586224506894b9a07fe1264e",
+    "new_apk": "e832ce8f2d580ec9c5cefef8813599cb99ea6c7615fbea8764f75b2d333e1e4f",
+    "previous_harness": "df3b019f83b88a510607a106bc0e28814e76d79bf3e0e6281fa58ea6565f5160",
+    "new_harness": "df3070580fd81c9673dafd1d7a736114e621ad0bbae1809f13c4c30860f9dbb6"
+  },
+  "measured_head": "af52fef01c989841105027e67333f10d23290a2e",
+  "fixture_snapshot_changes": [
+    "app/src/benchmarkRelease/AndroidManifest.xml",
+    "app/src/benchmarkRelease/java/com/theoriacodex/app/benchmark/BenchmarkAppJourney.kt",
+    "app/src/benchmarkRelease/java/com/theoriacodex/app/benchmark/BenchmarkDurationWorkload.kt",
+    "app/src/fixtures/java/com/theoriacodex/app/fixtures/JourneyAppContainer.kt"
+  ],
+  "fixture_change_note": "Obsolete Android version guards, isolated manifest boundary, and CodexCleaningService wiring differ; app and benchmark-library builds also differ. Treat the comparison as observational.",
+  "cleanup": {
+    "removed_files": 54,
+    "reclaimed_bytes": 3757089536,
+    "sleep_restored": true,
+    "screen_timeout_ms": 600000,
+    "monitor_deleted": true
+  }
+}

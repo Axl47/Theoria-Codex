@@ -32,7 +32,7 @@ class CodexCollectionSourceTest {
         val second = testPost(sourcePostId = "two")
         repository.addItems("target", listOf(first))
         repository.addItems("other", listOf(first.copy(id = first.id.copy(source = SourceKey.GELBOORU))))
-        val source = CodexCollectionSource(repository, folder.root, InMemoryCacheRepository())
+        val source = CodexCollectionSource(repository, folder.root, InMemoryCacheRepository(), StandardTestDispatcher(testScheduler))
         val ids = setOf("target", "other")
         assertEquals(setOf("target"), source.observeContainingCodexIds(ids, listOf(first)).first())
         val updates = Channel<Set<String>>(Channel.UNLIMITED)

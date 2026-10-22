@@ -58,7 +58,7 @@ import org.robolectric.annotation.Implements
 import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [35])
+@Config(application = Application::class)
 class RelatedViewerReturnTest {
     @get:Rule val compose = createComposeRule()
     @get:Rule val temporary = TemporaryFolder()
@@ -110,7 +110,9 @@ class RelatedViewerReturnTest {
             }
             compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Recents").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithContentDescription("Recents").performClick()
-            compose.onNodeWithText(if (kind == RecentSearchKind.FYP) "FYP" else "Searches").performClick()
+            val historyTab = if (kind == RecentSearchKind.FYP) "FYP" else "Searches"
+            compose.waitUntil(10_000) { compose.onNodeWithText(historyTab).isDisplayed() }
+            compose.onNodeWithText(historyTab).performClick()
             compose.waitUntil(10_000) { compose.onAllNodesWithTag("Recent search:return-query").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("Recent search:return-query").performClick()
             compose.waitUntil(10_000) { compose.onAllNodesWithTag(searchCardTestTag(posts[6].id)).fetchSemanticsNodes().isNotEmpty() }
@@ -123,7 +125,7 @@ class RelatedViewerReturnTest {
             compose.onNode(verticalGrid, useUnmergedTree = true)
                 .performScrollToNode(hasTestTag(searchCardTestTag(posts[0].id)))
             val relatedCard = compose.onNodeWithTag(searchCardTestTag(posts[0].id))
-            val shelfTop = relatedCard.fetchSemanticsNode().boundsInRoot.top
+            var returnedShelfTop: Float? = null
             val roots = graph.registry.requests.count { it.pageToken == null }
             repeat(3) { iteration ->
                 relatedCard.assertIsDisplayed().performClick()
@@ -135,7 +137,10 @@ class RelatedViewerReturnTest {
                 compose.onNodeWithContentDescription("Back").assertIsDisplayed().performClick()
                 compose.waitUntil(10_000) { compose.onAllNodesWithText("More like this").fetchSemanticsNodes().isNotEmpty() }
                 relatedCard.assertIsDisplayed()
-                assertEquals(shelfTop, relatedCard.fetchSemanticsNode().boundsInRoot.top, 1f)
+                val top = relatedCard.fetchSemanticsNode().boundsInRoot.top
+                // The first return centers the shelf; later returns must preserve that landing.
+                returnedShelfTop?.let { assertEquals(it, top, 1f) }
+                returnedShelfTop = top
                 assertEquals(roots, graph.registry.requests.count { it.pageToken == null })
             }
         } catch (error: Throwable) {

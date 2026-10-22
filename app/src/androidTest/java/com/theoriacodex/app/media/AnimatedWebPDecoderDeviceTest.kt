@@ -3,7 +3,6 @@ package com.theoriacodex.app.media
 import android.graphics.drawable.AnimatedImageDrawable
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
-import android.os.Build
 import android.util.Base64
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -61,20 +60,7 @@ class AnimatedWebPDecoderDeviceTest {
         assertTrue(controllableResult is SuccessResult)
 
         val drawable = (normalResult as SuccessResult).drawable.unwrapScaleDrawable()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            assertTrue(drawable is AnimatedImageDrawable)
-        } else {
-            assertTrue(drawable is WebPDrawable)
-            val webPDrawable = drawable as WebPDrawable
-            assertEquals(2, webPDrawable.intrinsicWidth)
-            assertEquals(2, webPDrawable.intrinsicHeight)
-            assertEquals(2, webPDrawable.frameSeqDecoder.frameCount)
-            val firstFrame = webPDrawable.frameSeqDecoder.getFrameBitmap(0)
-            val secondFrame = webPDrawable.frameSeqDecoder.getFrameBitmap(1)
-            assertNotEquals(firstFrame.getPixel(0, 0), secondFrame.getPixel(0, 0))
-            firstFrame.recycle()
-            secondFrame.recycle()
-        }
+        assertTrue(drawable is AnimatedImageDrawable)
 
         val staticDrawable = (staticResult as SuccessResult).drawable.unwrapScaleDrawable()
         assertTrue(staticDrawable is BitmapDrawable)

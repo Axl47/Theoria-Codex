@@ -26,7 +26,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.SQLiteMode
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [28])
+@Config(application = Application::class)
 @SQLiteMode(SQLiteMode.Mode.NATIVE)
 class ReadOnlyLibrarySnapshotTest {
     @get:Rule val temporary = TemporaryFolder()

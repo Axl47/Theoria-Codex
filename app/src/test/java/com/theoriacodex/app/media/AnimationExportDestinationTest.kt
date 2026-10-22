@@ -13,7 +13,6 @@ import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.os.Bundle
 import android.os.CancellationSignal
-import android.os.Build
 import android.provider.MediaStore
 import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.app.testing.testPost
@@ -40,7 +39,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowContentResolver
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [35])
+@Config(application = Application::class)
 class AnimationExportDestinationTest {
     @get:Rule val temp = TemporaryFolder()
     private lateinit var context: Context
@@ -130,18 +129,6 @@ class AnimationExportDestinationTest {
         assertTrue(provider.includedPending)
     }
 
-    @Test @Config(sdk = [28])
-    fun `legacy MediaStore rows require completion metadata rather than nonempty partial bytes`() {
-        val destination = AnimationExportDestination(context)
-        try {
-            destination.save("legacy.mp4", marker) { write(it, "partial"); throw SimulatedProcessDeath() }
-        } catch (_: SimulatedProcessDeath) { }
-        assertNull(destination.findCompleted(marker))
-        val completed = destination.save("legacy.mp4", marker) { write(it, "complete") }
-        assertEquals(completed, destination.findCompleted(marker))
-        assertEquals(1, provider.inserts)
-    }
-
     @Test fun `private fallback is atomically completed and reconciled by marker`() {
         provider.failInsert = true
         val destination = AnimationExportDestination(context)
@@ -200,7 +187,7 @@ class AnimationExportDestinationTest {
         }
         override fun query(uri: Uri, projection: Array<out String>?, selection: String?,
             selectionArgs: Array<out String>?, sortOrder: String?): Cursor =
-            rowsCursor(projection, selectionArgs, Build.VERSION.SDK_INT < 29 || uri.getQueryParameter("includePending") == "1")
+            rowsCursor(projection, selectionArgs, false)
         private fun rowsCursor(projection: Array<out String>?, arguments: Array<out String>?, include: Boolean): Cursor =
             MatrixCursor(requireNotNull(projection)).apply {
                 rows.filterValues { it.getAsString(MediaStore.Video.VideoColumns.DESCRIPTION) == arguments?.single() &&

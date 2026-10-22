@@ -21,7 +21,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [35], application = Application::class)
+@Config(application = Application::class)
 class PostTagActionTypedCountsTest {
     @get:Rule val compose = createComposeRule()
 

@@ -1,15 +1,13 @@
 package com.theoriacodex.app
 
 import android.app.Application
-import android.os.Build
 import coil.ImageLoader
 import coil.ImageLoaderFactory
-import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
 import com.theoriacodex.app.di.DefaultTheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
-import com.theoriacodex.app.media.LegacyAnimatedWebPDecoder
+import com.theoriacodex.app.media.AnimatedWebPDecoder
 import com.theoriacodex.app.viewer.VideoPlaybackInfrastructure
 import com.theoriacodex.data.storage.ApplicationDataReadiness
 import com.theoriacodex.data.storage.ApplicationDataState
@@ -47,7 +45,7 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
             benchmarkFixturesEnabled = BuildConfig.BENCHMARK_FIXTURES_ENABLED,
             developerCopyEnabled = BuildConfig.DEVELOPER_COPY_ENABLED,
             packageName = packageName,
-            processName = currentProcessName(),
+            processName = getProcessName(),
             start = ::startAppContainer,
         )
     }
@@ -61,25 +59,10 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)
             .components {
-                add(LegacyAnimatedWebPDecoder.Factory())
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    add(ImageDecoderDecoder.Factory())
-                } else {
-                    add(GifDecoder.Factory())
-                }
+                add(AnimatedWebPDecoder.Factory())
+                add(ImageDecoderDecoder.Factory())
             }
             .build()
-    }
-
-    private fun currentProcessName(): String? {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            return getProcessName()
-        }
-        val activityManager = getSystemService(ACTIVITY_SERVICE) as? android.app.ActivityManager
-        val processId = android.os.Process.myPid()
-        return activityManager?.runningAppProcesses
-            ?.firstOrNull { process -> process.pid == processId }
-            ?.processName
     }
 }
 

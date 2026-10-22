@@ -39,7 +39,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [35])
+@Config(application = Application::class)
 @OptIn(ExperimentalCoroutinesApi::class)
 class PixivUgoiraClientTest {
     @get:Rule

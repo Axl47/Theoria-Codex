@@ -3,7 +3,6 @@
 package com.theoriacodex.app.viewer
 
 import android.content.Context
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -196,7 +195,6 @@ internal class FeedPreviewPlayerPool(
     }
 
     private fun publishTraceCounters() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
         Trace.setCounter(MediaTraceCounters.PREVIEW_ACTIVE_PLAYERS, slots.activeResourceCount.toLong())
         Trace.setCounter(MediaTraceCounters.PREVIEW_TOTAL_PLAYERS, slots.totalResourceCount.toLong())
     }

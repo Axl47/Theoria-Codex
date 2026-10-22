@@ -19,10 +19,8 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28])
 class RoomCodexCleaningTest {
     private lateinit var database: TheoriaRoomDatabase
     private lateinit var repository: RoomCodexLikesRepository

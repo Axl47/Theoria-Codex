@@ -6,6 +6,9 @@ on:
       release-acceptance:
         type: boolean
         default: false
+    secrets:
+      GRADLE_ENCRYPTION_KEY:
+        required: false
   pull_request:
     branches:
       - main
@@ -23,6 +26,8 @@ on:
       - 'scripts/verify_device_apk.py'
       - 'scripts/verify_debug_device.sh'
       - 'scripts/device_validation_common.sh'
+      - 'scripts/prepare_ci_android_sdk.sh'
+      - 'scripts/verify_ci_emulator.sh'
       - '.github/workflows/device-validation.yml'
   push:
     branches:
@@ -41,6 +46,8 @@ on:
       - 'scripts/verify_device_apk.py'
       - 'scripts/verify_debug_device.sh'
       - 'scripts/device_validation_common.sh'
+      - 'scripts/prepare_ci_android_sdk.sh'
+      - 'scripts/verify_ci_emulator.sh'
       - '.github/workflows/device-validation.yml'
   schedule:
     - cron: '23 07 * * 6'
@@ -62,21 +69,26 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Hosted runners expose the stable API 35 platform package; the app still compiles and targets SDK 37.
-        api-level: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '[27,35]' || '[35]') }}
+        # Latest and previous stable Android releases; keep aligned with androidMinSdk.
+        # Android 17 packages use the literal 37.0 coordinate in the SDK catalog.
+        api-level: ["36", "37.0"]
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6.1.0
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: |
+            17
+            21
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6.4.0
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
       - name: Enable KVM
         run: |
@@ -85,14 +97,22 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      - name: Update Android command-line tools for minor API versions
+        run: bash scripts/prepare_ci_android_sdk.sh
+
+      - name: Build isolated test APKs before starting the emulator
+        run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest :core-data-android:assembleDebugAndroidTest --console=plain
+
       - name: Run connected device tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api-level }}
           target: google_apis
-          # Google's API 27 catalog provides x86, while API 35 uses x86_64.
-          arch: ${{ matrix.api-level == 27 && 'x86' || 'x86_64' }}
+          arch: x86_64
           profile: pixel_6
+          # Android 17's default data partition leaves too little room for the app/test APKs.
+          disk-size: 6G
+          ram-size: 4096M
           disable-animations: true
           emulator-options: >-
             -no-snapshot
@@ -100,14 +120,15 @@ jobs:
             -gpu swiftshader_indirect
             -noaudio
             -no-boot-anim
-          script: scripts/verify_debug_device.sh all
+          script: bash scripts/verify_ci_emulator.sh debug
 
       - name: Upload connected-test reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: connected-tests-api-${{ matrix.api-level }}
           path: |
+            build/reports/ci-emulator/
             build/reports/device-preflight/
             app/build/outputs/androidTest-results/connected/
             app/build/outputs/connected_android_test_additional_output/
@@ -118,23 +139,33 @@ jobs:
           retention-days: 14
 
   release-acceptance:
-    name: R8 release acceptance (API 35)
+    name: R8 release acceptance (API ${{ matrix.api-level }})
     if: inputs.release-acceptance || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 75
 
+    strategy:
+      fail-fast: false
+      matrix:
+        # Android 17 packages use the literal 37.0 coordinate in the SDK catalog.
+        api-level: ["36", "37.0"]
+
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6.1.0
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: |
+            17
+            21
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6.4.0
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
       - name: Enable KVM
         run: |
@@ -146,13 +177,18 @@ jobs:
       - name: Build minified release acceptance
         run: ./gradlew :app:assembleReleaseAcceptance --stacktrace
 
+      - name: Update Android command-line tools for minor API versions
+        run: bash scripts/prepare_ci_android_sdk.sh
+
       - name: Run minified release acceptance
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: ${{ matrix.api-level }}
           target: google_apis
           arch: x86_64
           profile: pixel_6
+          disk-size: 6G
+          ram-size: 4096M
           disable-animations: true
           emulator-options: >-
             -no-snapshot
@@ -160,14 +196,15 @@ jobs:
             -gpu swiftshader_indirect
             -noaudio
             -no-boot-anim
-          script: scripts/verify_release_acceptance_device.sh
+          script: bash scripts/verify_ci_emulator.sh acceptance
 
       - name: Upload release-acceptance reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
-          name: release-acceptance-api-35
+          name: release-acceptance-api-${{ matrix.api-level }}
           path: |
+            build/reports/ci-emulator/
             app/build/outputs/apk/releaseAcceptance/
             app/build/outputs/mapping/releaseAcceptance/
           if-no-files-found: warn

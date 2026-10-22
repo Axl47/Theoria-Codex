@@ -16,7 +16,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [35])
+@Config(application = Application::class)
 class ViewerLevelControlsTest {
     private val activityController = Robolectric.buildActivity(Activity::class.java)
     private lateinit var activity: Activity
@@ -68,7 +68,7 @@ class ViewerLevelControlsTest {
         assertEquals(0.3f, activity.window.attributes.screenBrightness, 0f)
     }
 
-    @Test @Config(sdk = [26, 35]) fun `volume adjusts the system media stream reaches mute and reads external changes`() {
+    @Test fun `volume adjusts the system media stream reaches mute and reads external changes`() {
         val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
         audio.setStreamVolume(AudioManager.STREAM_MUSIC, max, 0)
         controls.setEnabled(true)

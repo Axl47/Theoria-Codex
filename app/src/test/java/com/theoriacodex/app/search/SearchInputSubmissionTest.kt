@@ -1,29 +1,22 @@
 package com.theoriacodex.app.search
 
 import android.app.Application
-import android.os.Build
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.assertIsEnabled
-import androidx.compose.ui.test.assertIsFocused
-import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
-import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
-import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.search.state.SearchHistoryEntry
 import com.theoriacodex.app.search.state.SearchAction
@@ -38,7 +31,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [27, 35])
+@Config(application = Application::class)
 class SearchInputSubmissionTest {
     @get:Rule val compose = createComposeRule()
 
@@ -148,15 +141,6 @@ class SearchInputSubmissionTest {
         compose.runOnIdle {
             assertEquals("Owner input after rendered reset; actions=$actions", "", state.value.suggestions.input)
             assertTrue("Focus refresh must not resurrect submitted input: $focusRefreshInputs", focusRefreshInputs.all(String::isEmpty))
-        }
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
-            input.assertIsNotFocused()
-            compose.onRoot().performKeyInput { pressKey(Key.Tab) }
-            input.assertIsFocused()
-            compose.runOnIdle {
-                assertEquals("Keyboard re-entry must retain the cleared input", "", state.value.suggestions.input)
-                assertEquals(listOf("landscape"), submitted)
-            }
         }
     }
 }

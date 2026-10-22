@@ -47,7 +47,6 @@ import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.noMediaDurationStateForPost
 import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.media.copyTextToClipboard
-import com.theoriacodex.app.media.showClipboardCopyConfirmation
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.search.SearchVisibilityFilters
@@ -456,9 +455,7 @@ private fun shareCreatorProfile(context: Context, profileUrl: String) {
 }
 
 private fun copyCreatorProfile(context: Context, profileUrl: String) {
-    if (copyTextToClipboard(context, "Creator profile", profileUrl)) {
-        showClipboardCopyConfirmation(context, "Creator link copied")
-    } else {
+    if (!copyTextToClipboard(context, "Creator profile", profileUrl)) {
         Toast.makeText(context, "Could not copy creator link", Toast.LENGTH_SHORT).show()
     }
 }

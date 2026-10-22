@@ -11,9 +11,13 @@ permissions:
 jobs:
   verify:
     uses: ./.github/workflows/verify.yml
+    secrets:
+      GRADLE_ENCRYPTION_KEY: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
   device-validation:
     uses: ./.github/workflows/device-validation.yml
+    secrets:
+      GRADLE_ENCRYPTION_KEY: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
     with:
       release-acceptance: true
 
@@ -23,18 +27,22 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6.1.0
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: |
+            17
+            21
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v6.4.0
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
       - name: Compute release metadata
         run: |
@@ -101,21 +109,22 @@ jobs:
       - name: Sign release APK
         id: sign_app
         env:
-          BUILD_TOOLS_VERSION: "35.0.0"
-        uses: r0adkll/sign-android-release@v1
-        with:
-          releaseDirectory: app/build/outputs/apk/release
-          signingKeyBase64: ${{ secrets.THEORIA_UPLOAD_KEYSTORE_BASE64 }}
-          alias: ${{ secrets.THEORIA_UPLOAD_KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.THEORIA_UPLOAD_STORE_PASSWORD }}
-          keyPassword: ${{ secrets.THEORIA_UPLOAD_KEY_PASSWORD }}
+          BUILD_TOOLS_VERSION: '36.0.0'
+          THEORIA_UPLOAD_KEYSTORE_BASE64: ${{ secrets.THEORIA_UPLOAD_KEYSTORE_BASE64 }}
+          THEORIA_UPLOAD_KEY_ALIAS: ${{ secrets.THEORIA_UPLOAD_KEY_ALIAS }}
+          THEORIA_UPLOAD_STORE_PASSWORD: ${{ secrets.THEORIA_UPLOAD_STORE_PASSWORD }}
+          THEORIA_UPLOAD_KEY_PASSWORD: ${{ secrets.THEORIA_UPLOAD_KEY_PASSWORD }}
+        run: >-
+          python3 scripts/sign_release_apk.py
+          app/build/outputs/apk/release/app-release-unsigned.apk
+          app/build/outputs/apk/release/app-release-signed.apk
 
       - name: Normalize update asset name
         run: |
           cp "${{ steps.sign_app.outputs.signedReleaseFile }}" theoria-codex-main.apk
 
       - name: Publish prerelease
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3.0.3
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           name: ${{ env.RELEASE_TITLE }}

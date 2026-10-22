@@ -7,12 +7,12 @@ android {
     // The test APK is installed beside the isolated target app. Its package must therefore
     // remain distinct from both that target and the protected production package.
     namespace = "com.theoriacodex.baselineprofile.test"
-    compileSdk = 37
+    compileSdk = libs.versions.androidCompileSdk.get().toInt()
     targetProjectPath = ":app"
 
     defaultConfig {
-        minSdk = 26
-        targetSdk = 37
+        minSdk = libs.versions.androidMinSdk.get().toInt()
+        targetSdk = libs.versions.androidCompileSdk.get().toInt()
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments["androidx.benchmark.enabledRules"] = "BaselineProfile"
     }

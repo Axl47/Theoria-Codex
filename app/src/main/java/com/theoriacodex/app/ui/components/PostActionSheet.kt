@@ -29,7 +29,6 @@ import com.theoriacodex.app.codex.PreloadCodexSaveRelevance
 import com.theoriacodex.app.creator.CreatorProfileActionButton
 import com.theoriacodex.app.media.copyPostTagsToClipboard
 import com.theoriacodex.app.media.copyPostUrlToClipboard
-import com.theoriacodex.app.media.showClipboardCopyConfirmation
 import com.theoriacodex.app.post.displayTitleOrNull
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
@@ -181,9 +180,7 @@ fun PostActionSheet(
 }
 
 private fun copyPostTagsWithFeedback(context: Context, post: Post) {
-    if (copyPostTagsToClipboard(context, post)) {
-        showClipboardCopyConfirmation(context, "Tags copied")
-    } else {
+    if (!copyPostTagsToClipboard(context, post)) {
         Toast.makeText(context, "Could not copy tags", Toast.LENGTH_SHORT).show()
     }
 }
@@ -195,7 +192,6 @@ private fun copyPostUrlWithFeedback(
 ) {
     if (copyPostUrlToClipboard(context, post)) {
         onPostUrlCopied(post)
-        showClipboardCopyConfirmation(context, "Post URL copied")
     } else {
         Toast.makeText(context, "No post URL available", Toast.LENGTH_SHORT).show()
     }

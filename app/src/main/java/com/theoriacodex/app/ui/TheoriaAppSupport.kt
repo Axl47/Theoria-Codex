@@ -1,19 +1,18 @@
 package com.theoriacodex.app.ui
 
+
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.core.content.pm.PackageInfoCompat
 import androidx.core.net.toUri
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.ui.routes.activeRecommendationProfile
@@ -68,16 +67,11 @@ internal tailrec fun Context.findActivity(): Activity? = when (this) {
 }
 
 internal fun installedAppVersionCode(context: Context): Int {
-    val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        context.packageManager.getPackageInfo(
-            context.packageName,
-            PackageManager.PackageInfoFlags.of(0),
-        )
-    } else {
-        @Suppress("DEPRECATION")
-        context.packageManager.getPackageInfo(context.packageName, 0)
-    }
-    return PackageInfoCompat.getLongVersionCode(packageInfo).toInt()
+    val packageInfo = context.packageManager.getPackageInfo(
+        context.packageName,
+        PackageManager.PackageInfoFlags.of(0),
+    )
+    return packageInfo.longVersionCode.toInt()
 }
 
 internal suspend fun DataDependencies.currentSettingsSnapshot(): AppSettings {
@@ -89,3 +83,12 @@ internal suspend fun DataDependencies.currentActiveRecommendationProfile(): Reco
 }
 
 private val CODEX_IMPORT_MIME_TYPES = setOf("application/json", "text/json")
+
+internal fun openInBrowser(context: Context, url: String) {
+    runCatching {
+        val intent = Intent(Intent.ACTION_VIEW, url.toUri()).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    }
+}

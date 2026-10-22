@@ -5,7 +5,6 @@
     <ID>CognitiveComplexMethod:CreatorProfileScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun CreatorProfileScreen</ID>
     <ID>CognitiveComplexMethod:ForYouScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun ForYouScreen</ID>
     <ID>CognitiveComplexMethod:ForYouStateContract.kt:fun ForYouUiState.reduce: ForYouTransition</ID>
-    <ID>CognitiveComplexMethod:LegacyAnimatedWebPDecoder.kt:LegacyAnimatedWebPDecoder$override suspend fun decode: DecodeResult</ID>
     <ID>CognitiveComplexMethod:MediaTimelineBar.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun MediaTimelineBar</ID>
     <ID>CognitiveComplexMethod:PixivUgoiraPlayerUi.kt:@Composable fun PixivUgoiraPlayer</ID>
     <ID>CognitiveComplexMethod:PixivUgoiraPlayer.kt:PixivUgoiraClient$private fun encodePlaybackToMp4</ID>

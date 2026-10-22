@@ -2,7 +2,6 @@ package com.theoriacodex.app.benchmark
 
 import android.content.Context
 import android.os.Trace
-import android.os.Build
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -130,14 +129,14 @@ internal fun BenchmarkAppJourneyContent(
             BenchmarkDurationStartSignal.generation.collect { generation ->
                 if (generation > 0 && !requested) {
                     requested = true
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) Trace.beginAsyncSection(TRACE_JOURNEY_DURATION_BATCH, 1)
+                    Trace.beginAsyncSection(TRACE_JOURNEY_DURATION_BATCH, 1)
                     journey.container.data.settingsRepository.setResolveUnknownAnimatedDurations(true)
                 }
             }
         }
     }
     LaunchedEffect(settled, requested) {
-        if (requested && settled == keys.size && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        if (requested && settled == keys.size) {
             Trace.endAsyncSection(TRACE_JOURNEY_DURATION_BATCH, 1)
         }
     }
@@ -189,9 +188,7 @@ internal class BenchmarkByteTransport(
             require(start in 0 until end && end - start <= maxBodyBytes)
             val body = media.copyOfRange(start, end)
             val responseBytes = bytes.addAndGet(body.size.toLong())
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                Trace.setCounter("TheoriaFixtureResponseBytes", responseBytes)
-            }
+            Trace.setCounter("TheoriaFixtureResponseBytes", responseBytes)
             completed = true
             return SourceByteResponse(206, body, mapOf("Content-Range" to listOf("bytes $start-${end - 1}/${media.size}")))
         } finally {

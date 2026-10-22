@@ -22,7 +22,6 @@ import com.theoriacodex.app.search.state.withAutocompleteResult
 import com.theoriacodex.app.search.state.withResolvedPosts
 import com.theoriacodex.app.search.state.withSuggestionInput
 import com.theoriacodex.app.search.state.withTrendingSuggestions
-import com.theoriacodex.app.search.state.SearchQueryUiState
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.search.state.modeKey
 import com.theoriacodex.app.related.RelatedPostsLoading
@@ -78,24 +77,7 @@ internal class SearchViewModel(
     scrollPersistenceDelayMs: Long = DEFAULT_SCROLL_PERSISTENCE_DELAY_MS,
     scrollPersistenceDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel(), RouteStateOwner<SearchUiState, SearchAction, SearchEffect> {
-    private val initialSources = coordinator.availableSources
-    private val initialQuery = com.theoriacodex.app.search.state.emptySearchQuery()
-    private val mutableState = MutableStateFlow(
-        SearchUiState(
-            query = SearchQueryUiState(
-                draft = initialQuery,
-                applied = initialQuery,
-                appliedQueryHash = executionService.executionKeyFor(
-                    initialQuery,
-                    SearchSourceScope.GlobalUnified,
-                ),
-                availableSources = initialSources,
-                modeOptions = listOf(QueryMode.Unified) + initialSources.map(QueryMode::Source),
-                enabledSourceCount = initialSources.size,
-            ),
-            restoration = SearchRestorationUiState.NotStarted,
-        ),
-    )
+    private val mutableState = MutableStateFlow(initialSearchState(coordinator.availableSources, executionService))
     private val effectChannel = Channel<SearchEffect>(capacity = Channel.BUFFERED)
     private val relatedDiagnostics = com.theoriacodex.app.related.RelatedPostsDiagnostics("Search", this)
     private val relatedPosts = RelatedPostsRouteController(

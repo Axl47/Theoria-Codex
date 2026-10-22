@@ -25,7 +25,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [35])
+@Config(application = Application::class)
 class MediaTimelineBarTest {
     @get:Rule val compose = createComposeRule()
     private val visible = mutableStateOf(true)
