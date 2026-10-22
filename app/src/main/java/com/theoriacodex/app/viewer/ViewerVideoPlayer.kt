@@ -93,6 +93,7 @@ internal fun ViewerVideoPlayer(
     }
     ViewerVideoBinding(state, location, sourceKey, controls, events, recovery, { positions.position(mediaKey) }) {
         positions.save(mediaKey, it)
+        context.videoPlaybackInfrastructure().feedPositionHandoff.publish(mediaKey, it)
     }
     ViewerVideoCommands(state, controls)
     ViewerVideoLifecycle(state, controls)

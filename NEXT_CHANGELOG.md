@@ -59,6 +59,7 @@
 - Remove repeated type labels from tag names in the post hold menu.
 
 ## Fixes
+- Resume autoplaying feed videos at the position where you left fullscreen playback.
 - Open nhentai page links at the linked gallery page.
 - Close Codex when using Go to Search, including from its Viewer.
 - Make Viewer error Retry buttons respond to taps.

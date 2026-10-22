@@ -35,6 +35,7 @@ import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.app.source.requestHeaders
+import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.FirstFrameTraceGate
 import com.theoriacodex.app.viewer.MediaTraceSections
 import com.theoriacodex.app.viewer.FeedPreviewPlayerLease
@@ -52,6 +53,7 @@ import kotlinx.coroutines.delay
 internal fun SearchVideoPreview(
     media: ImageRef,
     postId: PostId,
+    mediaIndex: Int,
     sourceKey: SourceKey,
     playbackDiagnosticsEnabled: Boolean,
     isActive: Boolean,
@@ -89,6 +91,7 @@ internal fun SearchVideoPreview(
     }
 
     val playerState = rememberFeedPreviewPlayerState(
+        mediaKey = ViewerMediaKey(postId, mediaIndex),
         location = location,
         sourceKey = sourceKey,
         isActive = shouldLeasePlayer,
@@ -126,6 +129,7 @@ private fun UnpreparedSearchVideoPreview(
 
 @Composable
 private fun rememberFeedPreviewPlayerState(
+    mediaKey: ViewerMediaKey,
     location: String,
     sourceKey: SourceKey,
     isActive: Boolean,
@@ -133,12 +137,12 @@ private fun rememberFeedPreviewPlayerState(
     onDurationKnown: (Long) -> Unit,
 ): FeedPreviewPlayerState {
     val context = LocalContext.current
-    val state = remember(location, sourceKey) { FeedPreviewPlayerState() }
+    val state = remember(mediaKey, location, sourceKey) { FeedPreviewPlayerState() }
     val latestOnPlaybackError by rememberUpdatedState(onPlaybackError)
     val latestOnDurationKnown by rememberUpdatedState(onDurationKnown)
     val latestIsActive by rememberUpdatedState(isActive)
 
-    DisposableEffect(location, sourceKey, isActive) {
+    DisposableEffect(mediaKey, location, sourceKey, isActive) {
         if (!isActive) return@DisposableEffect onDispose {}
         state.reset()
         val pool = context.videoPlaybackInfrastructure().feedPreviewPlayerPool
@@ -149,6 +153,7 @@ private fun rememberFeedPreviewPlayerState(
             )
         }
         val player = lease.player
+        val handoff = context.videoPlaybackInfrastructure().feedPositionHandoff.bind(mediaKey, player::seekTo)
         val listener = feedPreviewPlayerListener(
             state = state,
             player = player,
@@ -161,6 +166,7 @@ private fun rememberFeedPreviewPlayerState(
         state.player = player
         publishReadyFeedDuration(state, player) { durationMs -> latestOnDurationKnown(durationMs) }
         onDispose {
+            handoff.close()
             recycleFeedPreviewPlayer(state, lease, listener, pool)
         }
     }

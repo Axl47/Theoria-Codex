@@ -103,6 +103,7 @@ import com.theoriacodex.app.media.isHttpNotFound
 import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.media.MediaDeliveryActivation
 import com.theoriacodex.app.media.mergeResolvedPostForPresentation
+import com.theoriacodex.app.media.postMediaItems
 import com.theoriacodex.app.media.postPlaybackMediaCandidate
 import com.theoriacodex.app.media.previewMediaDeliveryPlan
 import com.theoriacodex.app.post.displayTitleOrNull
@@ -1173,6 +1174,7 @@ fun SearchResultCard(
             } else if (videoRef != null && !videoPlaybackFailed) {
                 SearchVideoPreview(
                     media = videoRef,
+                    mediaIndex = postMediaItems(effectivePost).indexOf(videoRef).coerceAtLeast(0),
                     postId = effectivePost.id,
                     sourceKey = effectivePost.id.source,
                     playbackDiagnosticsEnabled = playbackDiagnosticsEnabled,

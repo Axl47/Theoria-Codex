@@ -97,6 +97,7 @@ internal object VideoLoadControlFactory {
 internal class VideoPlaybackInfrastructure(
     context: Context,
 ) {
+    internal val feedPositionHandoff = FeedVideoPositionHandoff()
     private val appContext = context.applicationContext
     internal val feedPreviewPlayerPool: FeedPreviewPlayerPool by lazy {
         FeedPreviewPlayerPool(appContext, this)
