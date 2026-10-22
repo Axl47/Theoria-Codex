@@ -3,7 +3,7 @@ package com.theoriacodex.data.repository
 import com.theoriacodex.domain.model.SourceKey
 
 /** Keeps the active weights and durable per-combination memory in the same settings transaction. */
-internal object SourceWeightSettings {
+object SourceWeightSettings {
     fun normalize(runtime: SourceRuntimeSettings): SourceRuntimeSettings {
         val remembered = runtime.sourceWeightsByConfiguration
             .filter { (key, weights) -> key == configurationKey(weights.keys) }
@@ -21,6 +21,29 @@ internal object SourceWeightSettings {
             enabledSources = enabledSources,
             sourceWeights = current.sourceWeightsByConfiguration[configurationKey(enabledSources)]
                 ?: current.sourceWeights,
+        )
+    }
+
+    /** Read the same combination-specific weights used by Search and its settings controls. */
+    fun weightsFor(runtime: SourceRuntimeSettings, sources: Set<SourceKey>): Map<SourceKey, Double> =
+        RepositoryPolicies.normalizeSourceWeights(
+            sources,
+            if (sources == runtime.enabledSources) runtime.sourceWeights
+            else runtime.sourceWeightsByConfiguration[configurationKey(sources)] ?: runtime.sourceWeights,
+        )
+
+    /** Update one group without changing the sources used by other browsing surfaces. */
+    fun updateWeights(
+        runtime: SourceRuntimeSettings,
+        sources: Set<SourceKey>,
+        weights: Map<SourceKey, Double>,
+    ): SourceRuntimeSettings {
+        val normalized = RepositoryPolicies.normalizeSourceWeights(sources, weights)
+        val current = normalize(runtime)
+        return current.copy(
+            sourceWeights = if (sources == current.enabledSources) normalized else current.sourceWeights,
+            sourceWeightsByConfiguration = current.sourceWeightsByConfiguration +
+                (configurationKey(sources) to normalized),
         )
     }
 

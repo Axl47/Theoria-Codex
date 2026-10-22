@@ -714,7 +714,7 @@ class SearchCoordinator(
     }
 
     private fun effectiveWeights(sources: Set<SourceKey>): Map<SourceKey, Double> =
-        SourceWeightNormalization.normalize(sources, runtimeSettings.runtime.sourceWeights)
+        com.theoriacodex.data.repository.SourceWeightSettings.weightsFor(runtimeSettings.runtime, sources)
 
     private fun excludedStatuses(
         scope: SearchSourceScope,

@@ -91,7 +91,7 @@ sealed interface SettingsAction {
     data object ConfirmRemoveProfile : SettingsAction
     data class RemoveBlacklistEntry(val source: SourceKey, val tags: List<String>) : SettingsAction
     data class SetEnabledSources(val sources: Set<SourceKey>) : SettingsAction
-    data class SetSourceWeights(val weights: Map<SourceKey, Double>) : SettingsAction
+    data class SetSourceWeights(val sources: Set<SourceKey>, val weights: Map<SourceKey, Double>) : SettingsAction
     data class SetVideoQuality(val quality: com.theoriacodex.domain.model.VideoQuality) : SettingsAction
     data class SetDownloadQuality(val quality: com.theoriacodex.domain.model.VideoQuality) : SettingsAction
     data class SetDownloadsOverMetered(val enabled: Boolean) : SettingsAction

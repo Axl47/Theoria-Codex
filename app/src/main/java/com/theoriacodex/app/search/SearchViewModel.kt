@@ -485,9 +485,20 @@ internal class SearchViewModel(
     }
 
     fun synchronizeEnvironment(settings: AppSettings) {
+        val previous = latestEnvironmentSettings
         latestEnvironmentSettings = settings
         if (!coordinator.isInitialized) return
-        reconcileEnvironment(settings, scheduleRetry = true)
+        val query = mutableState.value.query
+        val selectedSources = when (val scope = query.draftSourceScope) {
+            SearchSourceScope.GlobalUnified -> query.unifiedSources
+            else -> scope.explicitSources.toSet()
+        }
+        val weightsChanged = previous != null && selectedSources.size > 1 &&
+            com.theoriacodex.data.repository.SourceWeightSettings.weightsFor(previous.runtime, selectedSources) !=
+            com.theoriacodex.data.repository.SourceWeightSettings.weightsFor(settings.runtime, selectedSources)
+        reconcileEnvironment(settings, scheduleRetry = !weightsChanged)
+        // Returning from Settings applies the group whose weights were edited, including a pending selection.
+        if (weightsChanged) applyDraft()
     }
 
     private fun reconcileEnvironment(settings: AppSettings, scheduleRetry: Boolean): Boolean {

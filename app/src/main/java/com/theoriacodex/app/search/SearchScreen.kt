@@ -1759,7 +1759,7 @@ private fun AutocompletePanel(
     }
 }
 
-/** The current scope stays visible; long-pressing menu sources edits a temporary multi-search. */
+/** The current scope stays visible; holding menu sources edits the Unified source group. */
 @Composable
 internal fun SearchSourcePicker(
     draftSourceScope: SearchSourceScope,
@@ -1780,7 +1780,7 @@ internal fun SearchSourcePicker(
     val scopeLabel = when (draftSourceScope) {
         SearchSourceScope.GlobalUnified -> "Unified, $unifiedSourceCount sources"
         is SearchSourceScope.Single -> draftSourceScope.source.displayName()
-        is SearchSourceScope.Temporary -> "Multi-Search, ${draftSourceScope.sources.size} sources"
+        is SearchSourceScope.Temporary -> "Unified, ${draftSourceScope.sources.size} sources"
     }
     Box {
         TextButton(
@@ -1824,13 +1824,15 @@ private fun SearchSourceMenuItems(
     onModeSelected: (QueryMode) -> Unit,
     onTemporarySourceToggled: (SourceKey) -> Unit,
 ) {
-    val r34Options = options.filter { (it as? QueryMode.Source)?.source?.isRule34Family() == true }
+    val selectedSource = (draftSourceScope as? SearchSourceScope.Single)?.source
+    val sourceOptions = options.filterIsInstance<QueryMode.Source>().filter { it.source != selectedSource }
+    val r34Options = sourceOptions.filter { it.source.isRule34Family() }
     if (r34Expanded) {
         IconButton(onClick = { onR34ExpandedChange(false) }) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to sources")
         }
     }
-    val visibleOptions = if (r34Expanded) r34Options else options - r34Options.toSet()
+    val visibleOptions = if (r34Expanded) r34Options else sourceOptions - r34Options.toSet()
     visibleOptions.forEach { option ->
         SourceMenuOption(
             option = option,
@@ -1922,7 +1924,7 @@ private fun SourceMenuOption(
             .combinedClickable(
                 role = Role.Checkbox,
                 onClickLabel = "Select $label",
-                onLongClickLabel = source?.let { "Add or remove $label from temporary source search" },
+                onLongClickLabel = source?.let { "Add or remove $label from Unified search" },
                 onClick = { onModeSelected(option) },
                 onLongClick = source?.let { selectedSource -> { onTemporarySourceToggled(selectedSource) } },
             )

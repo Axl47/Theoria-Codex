@@ -24,7 +24,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -57,6 +56,7 @@ import com.theoriacodex.data.storage.CorruptionRecovery
 fun SettingsScreen(
     state: SettingsUiState,
     onAction: (SettingsAction) -> Unit,
+    searchSources: Set<com.theoriacodex.domain.model.SourceKey> = emptySet(),
     storageSummary: String? = null,
     storageTools: (@Composable () -> Unit)? = null,
 ) {
@@ -136,57 +136,11 @@ fun SettingsScreen(
                 }
         }
 
-        SettingsSection(
-            title = "Unified Mode",
-            summary = "${state.settings.runtime.enabledSources.intersect(state.availableSources.toSet()).size} of ${state.availableSources.size} sources enabled",
-            expanded = state.sectionExpansion[SettingsSectionKey.UNIFIED_MODE],
-            onToggle = {
-                onAction(
-                    SettingsAction.SetSectionExpanded(
-                        SettingsSectionKey.UNIFIED_MODE,
-                        !state.sectionExpansion[SettingsSectionKey.UNIFIED_MODE],
-                    )
-                )
-            },
-        ) {
-            state.availableSources.forEach { source ->
-                val isEnabled = source in state.settings.runtime.enabledSources
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(source.displayName())
-                    Switch(
-                        checked = isEnabled,
-                        onCheckedChange = { checked ->
-                            val updated = state.settings.runtime.enabledSources
-                                .intersect(state.availableSources.toSet())
-                                .toMutableSet()
-                            if (checked) {
-                                updated += source
-                            } else {
-                                updated -= source
-                            }
-                            onAction(SettingsAction.SetEnabledSources(updated))
-                        },
-                    )
-                }
-                if (isEnabled) {
-                    val weight = state.settings.runtime.sourceWeights[source]?.toFloat() ?: 0f
-                    Slider(
-                        value = weight,
-                        onValueChange = { raw ->
-                            val updated = state.settings.runtime.sourceWeights.toMutableMap()
-                            updated[source] = raw.toDouble()
-                            onAction(SettingsAction.SetSourceWeights(updated))
-                        },
-                        valueRange = 0f..1f,
-                    )
-                    Text("Weight: %.2f".format(weight), style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        }
+        UnifiedSourceSettings(
+            sources = searchSources,
+            runtime = state.settings.runtime,
+            onWeightsChanged = { onAction(SettingsAction.SetSourceWeights(searchSources, it)) },
+        )
 
         SettingsSection(
             title = "For You Blacklist",

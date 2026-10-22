@@ -284,7 +284,11 @@ internal class SettingsViewModel(
                 )
             }
             is SettingsAction.SetSourceWeights -> launchMutation {
-                dependencies.settingsRepository.setSourceWeights(action.weights)
+                dependencies.settingsRepository.updateSettings { current ->
+                    current.copy(runtime = com.theoriacodex.data.repository.SourceWeightSettings.updateWeights(
+                        current.runtime, action.sources, action.weights,
+                    ))
+                }
             }
             is SettingsAction.SetVideoQuality -> launchMutation {
                 dependencies.settingsRepository.updateSettings { it.copy(viewer = it.viewer.copy(videoQuality = action.quality)) }

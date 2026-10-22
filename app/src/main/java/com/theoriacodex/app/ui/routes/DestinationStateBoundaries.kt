@@ -315,12 +315,24 @@ internal fun SaveToCodexDestinationStateBoundary(
 @Composable
 internal fun SettingsDestinationStateBoundary(
     owner: SettingsViewModel,
+    searchOwner: SearchRouteOwnerHandle?,
     storageSummary: String? = null,
     storageTools: (@Composable () -> Unit)? = null,
 ) {
     val state = owner.state.collectAsStateWithLifecycle()
+    val emptySearch = remember { MutableStateFlow(com.theoriacodex.app.search.state.SearchUiState()) }
+    val searchState = (searchOwner?.state ?: emptySearch).collectAsStateWithLifecycle()
+    val query = searchState.value.query
+    val selectedSources = if (searchOwner == null) emptySet() else when (val scope = query.draftSourceScope) {
+        com.theoriacodex.app.search.state.SearchSourceScope.GlobalUnified -> query.unifiedSources
+        else -> scope.explicitSources.toSet()
+    }
     DestinationStateBoundary(state) {
-        SettingsScreen(state = it, onAction = owner::onAction, storageSummary = storageSummary, storageTools = storageTools)
+        SettingsScreen(
+            state = it, onAction = owner::onAction,
+            searchSources = selectedSources.intersect(it.availableSources.toSet()),
+            storageSummary = storageSummary, storageTools = storageTools,
+        )
     }
 }
 

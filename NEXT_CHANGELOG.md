@@ -41,7 +41,9 @@
 - Show a green highlight and checkmark for Codices that already contain the post in Save to Codex.
 - Preload Save to Codex tag matching when opening a post’s hold menu to reduce waiting in the save picker.
 - Prioritize Save to Codex destinations relevant to the applied search and incoming post tags, with an option to return to library order.
-- Choose Search sources from a compact dropdown, including long-press selection for Multi-Search.
+- Activate Unified Search by holding sources, with the current single source hidden from the picker.
+- Adjust only the selected Unified sources’ weights in Settings using stepped sliders.
+- Automatically reapply Search when returning after changing its Unified weights.
 - Remember Viewer play mode.
 - Adjust playback speed with a slider.
 - Show a thin playback progress bar while fullscreen controls are hidden.

@@ -57,6 +57,18 @@ class SearchDraftReducerTest {
     }
 
     @Test
+    fun `holding sources edits legacy unified selection and can collapse to one source`() {
+        val initial = state().copy(query = state().query.copy(
+            draftSourceScope = SearchSourceScope.GlobalUnified,
+            unifiedSources = setOf(SourceKey.PIXIV, SourceKey.GELBOORU),
+        ))
+        val reduced = SearchDraftReducer.toggleTemporarySource(initial, SourceKey.GELBOORU, context, ::noScopes)
+        assertTrue(reduced.accepted)
+        assertEquals(SearchSourceScope.Single(SourceKey.PIXIV), reduced.state.query.draftSourceScope)
+        assertEquals(QueryMode.Source(SourceKey.PIXIV), reduced.state.query.draft.mode)
+    }
+
+    @Test
     fun `temporary source transitions preserve portable terms and drop source-owned terms`() {
         val source = query(
             QueryMode.Source(SourceKey.PIXIV),

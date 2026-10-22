@@ -1472,7 +1472,7 @@ internal fun TheoriaAppContent(
                                     }
 
                                     TopLevelDestination.Settings -> {
-                                        SettingsDestinationStateBoundary(settingsOwner, libraryStorageSummary(libraryTransfers)) {
+                                        SettingsDestinationStateBoundary(settingsOwner, searchRouteOwner, libraryStorageSummary(libraryTransfers)) {
                                             LibraryTransferSettings(libraryTransfers)
                                         }
                                     }

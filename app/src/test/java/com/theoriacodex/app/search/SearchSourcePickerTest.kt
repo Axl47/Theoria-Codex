@@ -1,7 +1,6 @@
 package com.theoriacodex.app.search
 
 import android.app.Application
-import androidx.compose.ui.test.onNodeWithText
 import com.theoriacodex.app.source.displayName
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
@@ -62,7 +61,7 @@ class SearchSourcePickerTest {
             }
         }
 
-        composeRule.onNodeWithContentDescription("Search source: Multi-Search, 2 sources").performClick()
+        composeRule.onNodeWithContentDescription("Search source: Unified, 2 sources").performClick()
 
         val unified = composeRule.onNodeWithContentDescription("Unified")
         val pixiv = composeRule.onNodeWithContentDescription("Pixiv")
@@ -72,9 +71,8 @@ class SearchSourcePickerTest {
         assertTrue("Sources are stacked vertically", gelbooruBounds.top >= pixivBounds.bottom)
         pixiv.assertIsSelected()
         gelbooru.assertIsSelected()
-        unified.assertIsNotSelected()
+        unified.assertDoesNotExist()
         assertCombinedOwner(pixiv, hasLongClick = true)
-        assertCombinedOwner(unified, hasLongClick = false)
 
         pixiv.performTouchInput {
             down(center)
@@ -82,7 +80,7 @@ class SearchSourcePickerTest {
             up()
         }
         unified.assertDoesNotExist()
-        composeRule.onNodeWithContentDescription("Search source: Multi-Search, 2 sources").performClick()
+        composeRule.onNodeWithContentDescription("Search source: Unified, 2 sources").performClick()
         gelbooru.performTouchInput {
             down(center)
             advanceEventTime(1_000)
@@ -92,9 +90,9 @@ class SearchSourcePickerTest {
             assertEquals(listOf(QueryMode.Source(SourceKey.PIXIV)), clicked)
             assertEquals(listOf(SourceKey.GELBOORU), toggled)
         }
-        pixiv.assertIsSelected()
+        pixiv.assertDoesNotExist()
         gelbooru.assertIsNotSelected()
-        unified.assertIsNotSelected()
+        unified.assertDoesNotExist()
         composeRule.onNodeWithContentDescription("Search source: Pixiv").assertExists()
     }
 
@@ -117,7 +115,7 @@ class SearchSourcePickerTest {
             }
         }
         composeRule.onNodeWithContentDescription("Search source: Unified, 2 sources").performClick()
-        composeRule.onNodeWithContentDescription("Unified").assertIsSelected()
+        composeRule.onNodeWithContentDescription("Unified").assertDoesNotExist()
         composeRule.onNodeWithContentDescription("Pixiv").assertIsSelected()
         composeRule.onNodeWithContentDescription("Iwara").assertIsNotSelected()
         composeRule.onNodeWithContentDescription("R34").assertIsSelected().performClick()

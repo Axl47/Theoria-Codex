@@ -80,7 +80,12 @@ object SearchDraftReducer {
     ): SearchDraftReduction {
         if (source !in context.availableSources) return SearchDraftReduction(state, changed = false, accepted = false)
         val nextScope = when (val current = state.query.draftSourceScope) {
-            SearchSourceScope.GlobalUnified -> return SearchDraftReduction(state, changed = false, accepted = false)
+            SearchSourceScope.GlobalUnified -> {
+                val selected = state.query.unifiedSources.intersect(context.availableSources)
+                val updated = if (source in selected) selected - source else selected + source
+                if (updated.isEmpty()) return SearchDraftReduction(state, changed = false, accepted = false)
+                SearchSourceScope.fromSources(updated)
+            }
             is SearchSourceScope.Single -> {
                 if (current.source == source) return SearchDraftReduction(state, changed = false, accepted = false)
                 SearchSourceScope.fromSources(listOf(current.source, source))
