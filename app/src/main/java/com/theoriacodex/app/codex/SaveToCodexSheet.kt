@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Person
@@ -48,6 +49,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -66,6 +70,7 @@ internal fun SaveToCodexSheet(
     codexItemCounts: Map<String, Int>,
     codexCoverCandidates: Map<String, List<CodexCoverCandidate>>,
     relevanceScores: Map<String, Double> = emptyMap(),
+    containingCodexIds: Set<String> = emptySet(),
     excludedCodexIds: Set<String> = emptySet(),
     onCreateCodex: (String, String) -> Unit,
     onSelectCodex: (String) -> Unit,
@@ -106,6 +111,7 @@ internal fun SaveToCodexSheet(
         codexItemCounts = codexItemCounts,
         codexCoverCandidates = codexCoverCandidates,
         relevanceScores = relevanceScores,
+        containingCodexIds = containingCodexIds,
         onSelectCodex = onSelectCodex,
         onCycleProfile = {
             selectedProfileId = nextProfileId(profiles, selectedProfileId)
@@ -139,6 +145,7 @@ private fun SaveToCodexSheetContent(
     codexItemCounts: Map<String, Int>,
     codexCoverCandidates: Map<String, List<CodexCoverCandidate>>,
     relevanceScores: Map<String, Double>,
+    containingCodexIds: Set<String>,
     onSelectCodex: (String) -> Unit,
     onCycleProfile: () -> Unit,
     onCreateCodex: () -> Unit,
@@ -181,6 +188,8 @@ private fun SaveToCodexSheetContent(
                 modifier = Modifier.weight(1f, fill = false),
                 emptyMessage = savePickerEmptyMessage(selectedCodices, hasExcludedCodices),
                 itemCounts = codexItemCounts + (SAVED_CODEX_ID to (codexItemCounts[likesId] ?: 0)),
+                containingCodexIds = if (likesId in containingCodexIds) containingCodexIds + SAVED_CODEX_ID
+                    else containingCodexIds,
                 coverCandidates = codexCoverCandidates + (SAVED_CODEX_ID to codexCoverCandidates[likesId].orEmpty()),
                 onSelectCodex = { id ->
                     if (id == SAVED_CODEX_ID) { insideSaved = true; searchText = "" }
@@ -260,6 +269,7 @@ private fun CodexPickerList(
     emptyMessage: String,
     itemCounts: Map<String, Int>,
     coverCandidates: Map<String, List<CodexCoverCandidate>>,
+    containingCodexIds: Set<String>,
     onSelectCodex: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -291,6 +301,7 @@ private fun CodexPickerList(
                 coverCandidates = coverCandidates[codex.codexId].orEmpty(),
                 onClick = { onSelectCodex(codex.codexId) },
                 enabled = !isVirtualCodex(codex.codexId),
+                alreadySaved = codex.codexId in containingCodexIds,
                 description = if (isVirtualCodex(codex.codexId)) "Automatic feed"
                     else "${itemCounts[codex.codexId] ?: 0} items",
             )
@@ -310,9 +321,14 @@ private fun CodexPickerRow(
     coverCandidates: List<CodexCoverCandidate>,
     onClick: () -> Unit,
     enabled: Boolean = true,
+    alreadySaved: Boolean = false,
     description: String = "$itemCount items",
 ) {
+    val savedGreen = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) Color(0xFF81C784)
+        else Color(0xFF256A2B)
     Surface(
+        color = if (alreadySaved) savedGreen.copy(alpha = 0.16f).compositeOver(MaterialTheme.colorScheme.surface)
+            else MaterialTheme.colorScheme.surface,
         modifier = Modifier
             .fillMaxWidth()
             .clickable(enabled = enabled, onClick = onClick),
@@ -361,6 +377,13 @@ private fun CodexPickerRow(
                     text = description,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (alreadySaved) {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = "Already in Codex",
+                    tint = savedGreen,
                 )
             }
         }

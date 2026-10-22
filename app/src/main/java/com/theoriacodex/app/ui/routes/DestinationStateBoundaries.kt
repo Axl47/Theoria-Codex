@@ -107,6 +107,7 @@ internal data class SaveToCodexDestinationState(
     val itemCounts: Map<String, Int>,
     val coverCandidates: Map<String, List<CodexCoverCandidate>>,
     val relevanceScores: Map<String, Double>,
+    val containingCodexIds: Set<String>,
 )
 
 internal data class ViewerDestinationState(
@@ -274,6 +275,10 @@ internal fun SaveToCodexDestinationStateBoundary(
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val codices = codicesState.value
     val collection = rememberCodexCollectionState(data = data, codices = codices)
+    val containingCodexIds = remember(data.codexRepository, codices, posts) {
+        CodexCollectionSource(data.codexRepository, data.storageDirectory, data.cacheRepository)
+            .observeContainingCodexIds(codices.mapTo(linkedSetOf(), Codex::codexId), posts)
+    }.collectAsStateWithLifecycle(initialValue = emptySet())
     val relevanceLoader = LocalCodexSaveRelevanceLoader.current
     val relevance = if (relevanceLoader != null) {
         remember(relevanceLoader, posts, searchQuery) {
@@ -301,6 +306,7 @@ internal fun SaveToCodexDestinationStateBoundary(
                 itemCounts = collection.itemCounts,
                 coverCandidates = collection.coverCandidates,
                 relevanceScores = relevance.value,
+                containingCodexIds = containingCodexIds.value,
             ),
         )
     }

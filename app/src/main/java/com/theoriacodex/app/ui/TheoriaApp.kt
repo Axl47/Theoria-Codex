@@ -1848,6 +1848,7 @@ internal fun TheoriaAppContent(
                     codexItemCounts = state.itemCounts,
                     codexCoverCandidates = state.coverCandidates,
                     relevanceScores = state.relevanceScores,
+                    containingCodexIds = state.containingCodexIds,
                     excludedCodexIds = excludedCodexIdsForSave,
                     onCreateCodex = { profileId, name ->
                         codexSaveOwner.save(

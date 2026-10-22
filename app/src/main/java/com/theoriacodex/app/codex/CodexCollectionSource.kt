@@ -47,6 +47,18 @@ internal class CodexCollectionSource(
         }) { scores -> scores.toMap() }.flowOn(Dispatchers.Default)
     }
 
+    /** A completed save target contains the entire incoming selection, matched by source and post ID. */
+    fun observeContainingCodexIds(codexIds: Set<String>, posts: List<Post>): Flow<Set<String>> {
+        if (codexIds.isEmpty() || posts.isEmpty()) return flowOf(emptySet())
+        val incomingIds = posts.mapTo(linkedSetOf(), Post::id)
+        return combine(codexIds.sorted().map { id ->
+            repository.observeSavedPostIds(setOf(id))
+                .map { saved -> id to saved.containsAll(incomingIds) }
+                .catch { emit(id to false) }
+        }) { matches -> matches.filter { it.second }.mapTo(linkedSetOf()) { it.first } }
+            .flowOn(dispatcher)
+    }
+
     fun observe(codexIds: Set<String>): Flow<CodexCollectionPresentation> =
         combine(repository.observeCodexSummaries(codexIds), cacheRepository.observeNamedThumbnailRevisions()) { summaries, revision ->
             val thumbnails = storageDirectory.resolve("cache/thumbnails").listFiles().orEmpty().toList()

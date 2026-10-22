@@ -2,6 +2,9 @@ package com.theoriacodex.app.codex
 
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -22,6 +25,38 @@ import org.robolectric.annotation.Config
 @Config(application = Application::class, sdk = [35])
 class SaveToCodexSheetTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun `already saved indicators follow profile and Likes navigation and membership changes`() {
+        val likes = likesCodexIdForProfile("main")
+        val containing = mutableStateOf(setOf("a", likes))
+        compose.setContent {
+            MaterialTheme {
+                SaveToCodexSheet(
+                    profiles = listOf(RecommendationProfile("main", "Main"), RecommendationProfile("alt", "Alt")),
+                    initialProfileId = "main",
+                    codicesByProfile = mapOf(
+                        "main" to listOf(Codex("a", "Art", 0), Codex(likes, "Likes", 0)),
+                        "alt" to listOf(Codex("b", "Other", 0)),
+                    ),
+                    codexItemCounts = emptyMap(), codexCoverCandidates = emptyMap(),
+                    containingCodexIds = containing.value,
+                    onCreateCodex = { _, _ -> }, onSelectCodex = {}, onDismiss = {},
+                )
+            }
+        }
+        compose.onNodeWithText("Art").assertIsDisplayed()
+        compose.onAllNodesWithContentDescription("Already in Codex").assertCountEquals(2)
+        compose.onNodeWithText("Saved").performClick()
+        compose.onNodeWithText("Likes").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Already in Codex").assertIsDisplayed()
+        compose.runOnIdle { containing.value = setOf("a") }
+        compose.onNodeWithContentDescription("Already in Codex").assertDoesNotExist()
+        compose.onNodeWithText("All Codices").performClick()
+        compose.onNodeWithContentDescription("Already in Codex").assertIsDisplayed()
+        compose.onNodeWithText("Main", substring = false).performClick()
+        compose.onNodeWithText("Other").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Already in Codex").assertDoesNotExist()
+    }
 
     @Config(qualifiers = "w411dp-h1000dp")
     @Test fun `tag relevance is default and toggle restores normal order while search stays active`() {

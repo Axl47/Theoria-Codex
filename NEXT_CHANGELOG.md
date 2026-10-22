@@ -2,6 +2,8 @@
 
 ## New
 
+- Swipe up or down on the left or right of fullscreen videos to adjust brightness or media volume, with a centered level indicator.
+
 - Browse Likes, Followed, and Saved Searches together from the new Saved overview.
 - Combine selected Saved Searches into a live feed, with independent loading and Retry for each query.
 - Use Search Undo to revisit previous queries and source selections in the current session.
@@ -29,6 +31,7 @@
 - Reduce vertical spacing around the For You source dropdown.
 - Reduce vertical spacing around the Search toolbar.
 - Search collections in Save to Codex.
+- Show a green highlight and checkmark for Codices that already contain the post in Save to Codex.
 - Preload Save to Codex tag matching when opening a post’s hold menu to reduce waiting in the save picker.
 - Prioritize Save to Codex destinations relevant to the applied search and incoming post tags, with an option to return to library order.
 - Choose Search sources from a compact dropdown, including long-press selection for Multi-Search.

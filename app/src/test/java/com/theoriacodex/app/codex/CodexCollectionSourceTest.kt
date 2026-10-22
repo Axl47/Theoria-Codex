@@ -24,6 +24,30 @@ import org.junit.rules.TemporaryFolder
 class CodexCollectionSourceTest {
     @get:Rule val folder = TemporaryFolder()
 
+    @Test fun `save membership matches full identities and updates with the entire selection`() = runTest {
+        val repository = InMemoryCodexRepository()
+        repository.ensureCodex("target", "Target")
+        repository.ensureCodex("other", "Other")
+        val first = testPost(sourcePostId = "one")
+        val second = testPost(sourcePostId = "two")
+        repository.addItems("target", listOf(first))
+        repository.addItems("other", listOf(first.copy(id = first.id.copy(source = SourceKey.GELBOORU))))
+        val source = CodexCollectionSource(repository, folder.root, InMemoryCacheRepository())
+        val ids = setOf("target", "other")
+        assertEquals(setOf("target"), source.observeContainingCodexIds(ids, listOf(first)).first())
+        val updates = Channel<Set<String>>(Channel.UNLIMITED)
+        backgroundScope.launch {
+            source.observeContainingCodexIds(ids, listOf(first, second)).collect { updates.send(it) }
+        }
+        assertEquals(emptySet<String>(), updates.receive())
+        repository.addItems("target", listOf(second))
+        assertEquals(setOf("target"), updates.receive())
+        repository.removeItems("target", setOf(first.id))
+        assertEquals(emptySet<String>(), updates.receive())
+        assertEquals(emptySet<String>(), source.observeContainingCodexIds(ids, emptyList()).first())
+        assertEquals(emptySet<String>(), source.observeContainingCodexIds(emptySet(), listOf(first)).first())
+    }
+
     @Test fun `save relevance reads all collection members rather than bounded covers`() = runTest {
         val repository = InMemoryCodexRepository()
         repository.ensureCodex("target", "Target")
