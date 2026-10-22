@@ -15,6 +15,24 @@ import org.junit.Test
 
 class ViewerStateReducerTest {
     @Test
+    fun `live session updates retain visited positions and seed newly appended galleries`() {
+        val first = samplePost("first", media = (1..4).map { media("image/jpeg", "$it.jpg") })
+        val second = first.copy(id = PostId(SourceKey.PIXIV, "second"))
+        val identity = session("live-resume")
+        var state = reduceViewerState(ViewerUiState.Empty, ViewerAction.ReplaceSession(
+            identity, listOf(first), initialMediaIndices = mapOf(first.id to 3, second.id to 2),
+        )).state
+        state = reduceViewerState(state, ViewerAction.SelectMedia(1)).state
+        state = reduceViewerState(state, ViewerAction.ReplaceSession(
+            identity, listOf(first, second), initialMediaIndices = mapOf(first.id to 3, second.id to 2),
+        )).state
+        assertEquals(1, state.pages[0].selectedMediaIndex)
+        assertEquals(2, state.pages[1].selectedMediaIndex)
+        state = reduceViewerState(state, ViewerAction.SelectPage(1)).state
+        assertEquals(2, state.currentPage?.selectedMediaIndex)
+    }
+
+    @Test
     fun `completion modes preserve order stop at queue end and reject obsolete media`() {
         val first = samplePost("first", media = listOf(media("video/mp4", "one.mp4"), media("video/mp4", "two.mp4")))
         val second = samplePost("second", media = listOf(media("video/mp4", "three.mp4")))

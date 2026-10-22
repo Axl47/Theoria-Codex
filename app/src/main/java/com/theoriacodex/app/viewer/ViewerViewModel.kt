@@ -473,6 +473,7 @@ internal fun ViewerSession.toReplaceViewerSessionAction(
         session = toViewerSessionIdentity(),
         posts = posts.toList(),
         initialPageIndex = context.startIndex,
+        initialMediaIndices = initialMediaIndices,
         resolutionRequiredPostIds = posts
             .asSequence()
             .filter { post -> requiresResolution(post) || requiresViewerPostResolution(post, context.streamSource) }

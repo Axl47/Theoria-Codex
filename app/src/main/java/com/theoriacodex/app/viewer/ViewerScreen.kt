@@ -298,8 +298,10 @@ internal fun ViewerScreen(
         markInteraction()
     }
 
-    LaunchedEffect(selectedPost.id, currentPostIndex) {
-        onVisiblePostChanged?.invoke(selectedPost, selectedMediaIndex + 1)
+    LaunchedEffect(selectedPost.id, currentPostIndex, uiState.currentPage?.pendingMediaIndex) {
+        if (uiState.currentPage?.pendingMediaIndex == null) {
+            onVisiblePostChanged?.invoke(selectedPost, selectedMediaIndex + 1)
+        }
     }
 
     ViewerChromeAutoHideEffect(
@@ -376,8 +378,8 @@ internal fun ViewerScreen(
                 }
             }
 
-            LaunchedEffect(pendingMediaJump, postMedia.size) {
-                if (pendingMediaJump == null) return@LaunchedEffect
+            LaunchedEffect(pendingMediaJump, postMedia.size, pageState.pendingMediaIndex) {
+                if (pendingMediaJump == null || pageState.pendingMediaIndex != null) return@LaunchedEffect
                 val targetPage = pendingMediaJump.coerceIn(0, postMedia.lastIndex)
                 mediaPagerState.scrollToPage(targetPage)
                 if (postPage == currentPostIndex && selectedMediaIndex != targetPage) {
@@ -386,7 +388,8 @@ internal fun ViewerScreen(
                 pendingMediaJumpByPost.remove(postPage)
             }
 
-            LaunchedEffect(mediaPagerState.settledPage, currentPostIndex) {
+            LaunchedEffect(mediaPagerState.settledPage, currentPostIndex, pageState.pendingMediaIndex) {
+                if (pageState.pendingMediaIndex != null) return@LaunchedEffect
                 if (postPage == currentPostIndex && mediaPagerState.settledPage != selectedMediaIndex) {
                     onAction(ViewerAction.SelectMedia(mediaPagerState.settledPage))
                 }
@@ -416,6 +419,9 @@ internal fun ViewerScreen(
                     targetPostMediaCount = targetPostMediaCount,
                     direction = direction,
                     galleryMediaPending = pageState.hasPendingGalleryMedia(),
+                    targetMediaIndex = uiState.pages.getOrNull(targetPostIndex)?.let {
+                        it.pendingMediaIndex ?: it.selectedMediaIndex
+                    } ?: 0,
                 ) ?: return@navigate
 
                 markInteraction()

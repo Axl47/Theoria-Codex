@@ -1491,16 +1491,12 @@ internal fun TheoriaAppContent(
                                 scrollOffsetHint = 0,
                             )
                             scope.launch {
-                                val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
-                                    visiblePosts,
-                                    context,
-                                )
                                 viewerSessionOwner.retain(
-                                    ViewerSession(
-                                        posts = preparedPosts,
+                                    viewerRouteWorkflow.prepareResumableSession(ViewerSession(
+                                        posts = visiblePosts,
                                         context = context,
                                         liveSearchBinding = false,
-                                    ),
+                                    )),
                                 )
                                 dataDependencies.uiRestoreRepository.setViewerLaunchContext(context)
                                 navController.navigate(AppRoute.Viewer)
@@ -1672,18 +1668,14 @@ internal fun TheoriaAppContent(
                                     onToggleFollow = followsOwner::toggle,
                                     onOpenViewer = { effect ->
                                         val likeAction = creatorLikeAction()
-                                        val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
-                                            effect.posts,
-                                            effect.context,
-                                        )
                                         viewerSessionOwner.retain(
-                                            ViewerSession(
-                                                posts = preparedPosts,
+                                            viewerRouteWorkflow.prepareResumableSession(ViewerSession(
+                                                posts = effect.posts,
                                                 context = effect.context,
                                                 liveSearchBinding = effect.liveSearchBinding,
                                                 searchVisibilityFilters = effect.visibilityFilters,
                                                 onToggleLike = likeAction,
-                                            ),
+                                            )),
                                         )
                                         navController.navigate(AppRoute.Viewer) {
                                             launchSingleTop = !effect.liveSearchBinding

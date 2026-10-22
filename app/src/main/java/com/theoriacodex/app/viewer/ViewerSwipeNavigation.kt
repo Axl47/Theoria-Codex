@@ -36,6 +36,7 @@ internal fun viewerHorizontalSwipeTarget(
     targetPostMediaCount: Int,
     direction: ViewerHorizontalSwipeDirection,
     galleryMediaPending: Boolean = false,
+    targetMediaIndex: Int = 0,
 ): ViewerHorizontalSwipeTarget? {
     if (currentPostIndex !in 0 until postCount) return null
     if (currentMediaCount <= 0) return null
@@ -46,7 +47,7 @@ internal fun viewerHorizontalSwipeTarget(
     if (direction == ViewerHorizontalSwipeDirection.Next && galleryMediaPending) return null
     val postIndex = currentPostIndex + step
     if (postIndex !in 0 until postCount || targetPostMediaCount <= 0) return null
-    return ViewerHorizontalSwipeTarget(postIndex, 0)
+    return ViewerHorizontalSwipeTarget(postIndex, targetMediaIndex.coerceAtLeast(0))
 }
 
 internal fun viewerSwipeDirectionForSetting(

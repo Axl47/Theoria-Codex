@@ -96,6 +96,14 @@ class ViewerRestorationWorkflowTest {
             val resumed = workflow.prepareResumableSession(launch)
             assertEquals(1, resumed.initialMediaIndex)
             assertEquals(5, graph.data.recentsRepository.observeWatchedPosts().first().single().maxViewedMediaNumber)
+            val neighbor = testPost(SourceKey.PIXIV, "unwatched-neighbor")
+            val neighborLaunch = workflow.prepareResumableSession(launch.copy(posts = listOf(neighbor, gallery)))
+            assertEquals(0, neighborLaunch.initialMediaIndex)
+            assertEquals(1, neighborLaunch.initialMediaIndices[gallery.id])
+            val viewer = ViewerViewModel(SavedStateHandle(), scopeOverride = this@runTest)
+            viewer.replaceSession(neighborLaunch)
+            viewer.onAction(ViewerAction.SelectPage(1))
+            assertEquals(1, viewer.state.value.currentPage?.selectedMediaIndex)
             val fromDisk = FileBackedReadingPositionRepository(graph.data.storageDirectory)
             assertEquals(2, fromDisk.get(gallery.id, RecentPostSection.WATCHED)?.mediaNumber)
 
@@ -121,7 +129,7 @@ class ViewerRestorationWorkflowTest {
                     val target = launch.copy(context = context(destination, "target"))
                     val resumed = workflow.prepareResumableSession(target)
                     assertEquals(1, resumed.initialMediaIndex)
-                    assertEquals(target.copy(posts = resumed.posts, initialMediaIndex = 1), resumed)
+                    assertEquals(target.copy(posts = resumed.posts, initialMediaIndex = 1, initialMediaIndices = mapOf(gallery.id to 1)), resumed)
                 }
                 val recent = graph.data.recentsRepository.observeWatchedPosts().first().single()
                 assertEquals(RecentPostSection.WATCHED, recent.section)

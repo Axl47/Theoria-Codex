@@ -15,9 +15,11 @@ internal fun createViewerUiState(
     posts: List<Post>,
     initialPageIndex: Int = 0,
     requiresResolution: (Post) -> Boolean = { false },
+    initialMediaIndices: Map<PostId, Int> = emptyMap(),
 ): ViewerUiState {
     val pages = posts.map { post ->
         post.toViewerPageState(
+            selectedMediaIndex = initialMediaIndices[post.id] ?: 0,
             resolution = ViewerResolutionState(
                 status = if (requiresResolution(post)) {
                     ViewerResolutionStatus.IDLE
@@ -58,6 +60,10 @@ internal fun Post.toViewerPageState(
         ),
         media = mappedMedia,
         selectedMediaIndex = safeMediaIndex,
+        pendingMediaIndex = selectedMediaIndex.takeIf {
+            it > mappedMedia.lastIndex && resolution.status != ViewerResolutionStatus.NOT_REQUIRED &&
+                resolution.status != ViewerResolutionStatus.RESOLVED
+        },
         resolution = resolution,
     )
 }
@@ -96,6 +102,11 @@ internal fun reduceViewerState(state: ViewerUiState, action: ViewerAction): View
                 posts = action.posts,
                 initialPageIndex = action.initialPageIndex,
                 requiresResolution = { post -> post.id in action.resolutionRequiredPostIds },
+                initialMediaIndices = action.initialMediaIndices + if (state.session == action.session) {
+                    state.pages.associate { it.post.id to (it.pendingMediaIndex ?: it.selectedMediaIndex) }
+                } else {
+                    emptyMap()
+                },
             ).let { replacement ->
                 replacement.copy(controls = replacement.controls.copy(playbackMode = state.controls.playbackMode))
             },

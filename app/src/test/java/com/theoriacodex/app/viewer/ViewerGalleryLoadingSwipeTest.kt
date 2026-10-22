@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeRight
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerResolutionStatus
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
@@ -30,6 +31,58 @@ import org.robolectric.annotation.Config
 @Config(application = Application::class, sdk = [35])
 class ViewerGalleryLoadingSwipeTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun `swiping into a watched gallery resumes its saved page and preserves it on return`() =
+        checkWatchedGallery(sparse = false)
+
+    @Test fun `swiping into a watched sparse gallery retains the target until resolution without recording its cover`() =
+        checkWatchedGallery(sparse = true)
+
+    private fun checkWatchedGallery(sparse: Boolean) {
+        val session = ViewerSessionIdentity("watched-gallery")
+        val resolved = gallery().copy(media = (1..3).map(::image), mediaCount = 3)
+        val first = gallery().copy(id = PostId(SourceKey.GELBOORU, "first"), full = image(0))
+        val next = first.copy(id = PostId(SourceKey.GELBOORU, "next"))
+        val watched = if (sparse) gallery().copy(mediaCount = 3) else resolved
+        val recorded = mutableListOf<Int>()
+        val state = mutableStateOf(createViewerUiState(
+            session, listOf(first, watched, next), requiresResolution = { sparse && it.id == watched.id },
+            initialMediaIndices = mapOf(watched.id to 2),
+        ))
+        compose.setContent {
+            MaterialTheme {
+                ViewerScreen(
+                    uiState = state.value, creatorBrowsingSources = emptySet(),
+                    onAction = { state.value = reduceViewerState(state.value, it).state },
+                    onOpenInBrowser = {}, onRemoveIncludeTerm = { _, _ -> },
+                    onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
+                    onVisiblePostChanged = { post, number -> if (post.id == watched.id) recorded += number },
+                    onVisibleMediaChanged = { post, number -> if (post.id == watched.id) recorded += number },
+                )
+            }
+        }
+        swipeNext()
+        if (sparse) compose.runOnIdle {
+            assertEquals(2, state.value.currentPage?.pendingMediaIndex)
+            assertTrue(recorded.isEmpty())
+            state.value = reduceViewerState(state.value, ViewerAction.ResolutionCompleted(session, resolved)).state
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(1, state.value.currentPageIndex)
+            assertEquals(2, state.value.currentPage?.selectedMediaIndex)
+            assertTrue(recorded.isNotEmpty())
+            assertTrue(recorded.all { it == 3 })
+        }
+        swipeNext()
+        compose.runOnIdle { assertEquals(2, state.value.currentPageIndex) }
+        compose.onNodeWithContentDescription("Media actions").performTouchInput { swipeRight() }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(1, state.value.currentPageIndex)
+            assertEquals(2, state.value.currentPage?.selectedMediaIndex)
+        }
+    }
 
     @Test fun `early swipe stays in sparse gallery then visits its pages before next post`() {
         val session = ViewerSessionIdentity("loading-gallery")

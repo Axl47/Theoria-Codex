@@ -29,7 +29,7 @@
 
 - Show watched progress and the last watched time on Search and For You results, matching Recents.
 - Keep post previews on the last media viewed when returning from fullscreen, including in Recents.
-- Resume multi-media posts at the last viewed item when opening them from Search, For You, or Recents.
+- Resume multi-media posts at the last viewed item when opening them from Search, For You, or Recents, including when swiping between fullscreen posts.
 
 - Use a monochrome launcher icon for non-production builds so they are easier to distinguish from the production app.
 - Animate swipes between fullscreen posts and gallery media.

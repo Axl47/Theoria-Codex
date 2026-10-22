@@ -189,6 +189,8 @@ internal class ViewerRouteWorkflow(
             liveSearchBinding = false,
             sessionId = identity.value,
             initialMediaIndex = request.selectedMediaIndex,
+            initialMediaIndices = savedMediaIndices(request.recentsSection ?: recentPostSectionForViewer(restoredContext)) +
+                (selectedId to request.selectedMediaIndex),
         )
     }
 
@@ -202,9 +204,8 @@ internal class ViewerRouteWorkflow(
         val index = context.startIndex.coerceIn(0, posts.lastIndex)
         val selected = posts[index]
         val section = recentPostSectionForViewer(context)
-        val mediaNumber = if (startOver) 1 else runCatchingPreservingCancellation {
-            data.readingPositions.get(selected.id, section)?.mediaNumber
-        }.getOrNull() ?: 1
+        val mediaIndices = savedMediaIndices(section)
+        val mediaNumber = if (startOver) 1 else (mediaIndices[selected.id] ?: 0) + 1
         val prepared = preparePostsForLaunch(posts, context).toMutableList()
         if (mediaNumber > prepared[index].media.size.coerceAtLeast(1)) {
             resolveRestoredPost(selected.id)?.let { prepared[index] = it }
@@ -214,8 +215,18 @@ internal class ViewerRouteWorkflow(
                 data.readingPositions.record(ReadingPosition(selected.id, section, 1, System.currentTimeMillis()))
             }
         }
-        return session.copy(posts = prepared, initialMediaIndex = mediaNumber - 1)
+        return session.copy(
+            posts = prepared,
+            initialMediaIndex = mediaNumber - 1,
+            initialMediaIndices = mediaIndices + (selected.id to mediaNumber - 1),
+        )
     }
+
+    private suspend fun savedMediaIndices(section: RecentPostSection): Map<PostId, Int> =
+        runCatchingPreservingCancellation {
+            data.readingPositions.snapshot().filter { it.section == section }
+                .associate { it.postId to it.mediaNumber - 1 }
+        }.getOrDefault(emptyMap())
 
     private suspend fun resolveRestoredPost(postId: PostId): Post? = withTimeoutOrNull(15_000L) {
         offlineMedia?.find(postId)
