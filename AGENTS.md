@@ -27,20 +27,7 @@ Keep active ExecPlans current while working: progress, decisions, surprises, val
 ## Final Output
 
 If working by yourself, handle creating a commit for each change or fix; if working with an orchestrator/other agents, follow their instructions on commits instead.
-These commit messages feed the version changelog that we create, so make the message user-facing, concise, and clear, but still descriptive enough.
-
-For a larger change, use this style:
-
-```txt
-feat(recents): add durable watched and search history
-
-- feat(recents): add watched/search activity history
-- feat(recents): reopen watched posts as a static Viewer stream
-- feat(search): record applied queries through SearchCoordinator
-- feat(codex): add JSON import/export for saved collections
-- fix(viewer): preserve lazy media resolution across multi-page posts
-- docs(readme): document current navigation and persistence model
-```
+Use concise Conventional Commit messages that explain the change; add a body when its purpose or tradeoffs need context. Keep user-facing release notes in `NEXT_CHANGELOG.md`.
 
 ## Communication
 
