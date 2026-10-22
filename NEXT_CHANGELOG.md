@@ -41,6 +41,7 @@
 - Remove repeated type labels from tag names in the post hold menu.
 
 ## Fixes
+- Keep the background around the notification bar black in landscape.
 - Dismiss the keyboard when swiping between tabs or leaving Search input.
 
 - Collapse expanded Search controls when scrolling results, while preserving pending edits.
