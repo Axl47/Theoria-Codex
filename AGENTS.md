@@ -24,6 +24,24 @@ The current plan standard lives at `.docs/PLANS.md`. New ExecPlans should be sta
 
 Keep active ExecPlans current while working: progress, decisions, surprises, validation evidence, and outcomes should reflect reality before the work is closed.
 
+## Final Output
+
+If working by yourself, handle creating a commit for each change or fix; if working with an orchestrator/other agents, follow their instructions on commits instead.
+These commit messages feed the version changelog that we create, so make the message user-facing, concise, and clear, but still descriptive enough.
+
+For a larger change, use this style:
+
+```txt
+feat(recents): add durable watched and search history
+
+- feat(recents): add watched/search activity history
+- feat(recents): reopen watched posts as a static Viewer stream
+- feat(search): record applied queries through SearchCoordinator
+- feat(codex): add JSON import/export for saved collections
+- fix(viewer): preserve lazy media resolution across multi-page posts
+- docs(readme): document current navigation and persistence model
+```
+
 ## Communication
 
 Explain plans, questions, and completed work in plain system-level language. The user is strongest at holding how the whole app connects and flows, so focus on architecture, feature boundaries, runtime behavior, and user-visible consequences. Keep deep implementation detail available when it matters, but do not lead with it.
@@ -296,23 +314,6 @@ Physical five-feed journeys open Viewer through the real app route. On API 37 th
 AndroidX Benchmark 1.5's reported `cpuLocked` is a one-time heuristic over minimum frequencies; ordinary OS boosts can flip it on an unchanged personal device. Retain that raw observation, but exclude only that field from setup identity. Device/OS, maximum frequency, sustained-performance mode, compilation, workload, runner and thermal checks remain authoritative. Never change a personal phone's governor or frequency limits to make a comparison pass.
 
 Debug-key preflight must follow Android's configured preferences directory, including hosted Ubuntu's `XDG_CONFIG_HOME/.android` default, rather than assuming `HOME/.android`. An explicit `ANDROID_DEBUG_KEYSTORE` selects one expected key; never search for a different key to make verification pass. The API 27 Google APIs emulator lane uses `x86` because the catalog does not publish an `x86_64` image for that API. Retain device-preflight task graphs and build logs in CI artifacts so failures before installation remain diagnosable.
-
-## Final Output
-
-Include a Conventional Commit message after each change. These commit messages feed the version changelog, so make the message user-facing.
-
-For a larger change, use this style:
-
-```txt
-feat(recents): add durable watched and search history
-
-- feat(recents): add watched/search activity history
-- feat(recents): reopen watched posts as a static Viewer stream
-- feat(search): record applied queries through SearchCoordinator
-- feat(codex): add JSON import/export for saved collections
-- fix(viewer): preserve lazy media resolution across multi-page posts
-- docs(readme): document current navigation and persistence model
-```
 
 ## Source Recovery And Watching Controls
 
