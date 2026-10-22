@@ -112,7 +112,7 @@ fun PixivUgoiraPlayer(
     }
     AnimatePlayback(
         state = animation,
-        enabled = isActive && !isScrubbing && !effectivePlaybackPaused,
+        enabled = isActive && !effectivePlaybackPaused,
         rate = effectivePlaybackRate,
         loop = loopPlayback,
         onCompleted = onPlaybackCompleted,

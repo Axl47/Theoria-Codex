@@ -146,7 +146,7 @@ private fun ViewerGifMovie(
     val animation = remember(movie, duration) { AnimationPlaybackState(duration) }
     var scrubbing by remember(movie) { mutableStateOf(false) }
     LaunchedEffect(movie, duration) { events.onDurationKnown(duration) }
-    AnimatePlayback(animation, controls.isActive && !scrubbing && controls.isPlaying,
+    AnimatePlayback(animation, controls.isActive && controls.isPlaying,
         controls.playbackRate.coerceAtLeast(MIN_VIEWER_PLAYBACK_RATE), controls.loopPlayback, events.onPlaybackCompleted)
     LaunchedEffect(controls.restartRequest, animation) { if (controls.restartRequest > 0L) animation.seekTo(0L) }
     LaunchedEffect(controls.seekJumpSerial, controls.seekJumpDeltaMs, duration, controls.isActive) {
