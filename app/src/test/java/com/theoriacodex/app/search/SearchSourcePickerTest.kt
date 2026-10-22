@@ -124,7 +124,7 @@ class SearchSourcePickerTest {
         composeRule.onNodeWithContentDescription("Pixiv").assertDoesNotExist()
         composeRule.onNodeWithContentDescription(SourceKey.RULE34XXX.displayName()).assertIsSelected()
         composeRule.onNodeWithContentDescription(SourceKey.RULE34PAHEAL.displayName()).assertIsNotSelected()
-        composeRule.onNodeWithText("← Back").performClick()
+        composeRule.onNodeWithContentDescription("Back to sources").performClick()
         composeRule.onNodeWithContentDescription("R34").performClick()
         composeRule.onNodeWithContentDescription(SourceKey.RULE34VIDEO.displayName()).performClick()
         composeRule.runOnIdle { assertEquals(listOf(QueryMode.Source(SourceKey.RULE34VIDEO)), clicked) }

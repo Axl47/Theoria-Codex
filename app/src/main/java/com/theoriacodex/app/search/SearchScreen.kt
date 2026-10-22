@@ -32,6 +32,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
+import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Image
@@ -1792,13 +1795,21 @@ internal fun SearchSourcePicker(
                 SearchSourceIndicator(draftSourceScope, unifiedSourceCount)
             }
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            SearchSourceMenuItems(
-                options, draftSourceScope, highlightedSources, r34Expanded,
-                onR34ExpandedChange = { r34Expanded = it },
-                onModeSelected = { expanded = false; onModeSelected(it) },
-                onTemporarySourceToggled = onTemporarySourceToggled,
-            )
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            containerColor = if (r34Expanded) MaterialTheme.colorScheme.surfaceContainer else Color.Transparent,
+            shadowElevation = if (r34Expanded) 8.dp else 0.dp,
+            tonalElevation = 0.dp,
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(if (r34Expanded) 0.dp else 6.dp)) {
+                SearchSourceMenuItems(
+                    options, draftSourceScope, highlightedSources, r34Expanded,
+                    onR34ExpandedChange = { r34Expanded = it },
+                    onModeSelected = { expanded = false; onModeSelected(it) },
+                    onTemporarySourceToggled = onTemporarySourceToggled,
+                )
+            }
         }
     }
 }
@@ -1815,7 +1826,9 @@ private fun SearchSourceMenuItems(
 ) {
     val r34Options = options.filter { (it as? QueryMode.Source)?.source?.isRule34Family() == true }
     if (r34Expanded) {
-        DropdownMenuItem(text = { Text("← Back") }, onClick = { onR34ExpandedChange(false) })
+        IconButton(onClick = { onR34ExpandedChange(false) }) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to sources")
+        }
     }
     val visibleOptions = if (r34Expanded) r34Options else options - r34Options.toSet()
     visibleOptions.forEach { option ->
@@ -1830,16 +1843,23 @@ private fun SearchSourceMenuItems(
     }
     if (!r34Expanded && r34Options.isNotEmpty()) {
         val selected = highlightedSources.any { it.isRule34Family() }
-        DropdownMenuItem(
+        Box(
             modifier = Modifier
-                .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+                .size(width = 64.dp, height = 48.dp)
+                .clip(CircleShape)
+                .background(
+                    if (selected) MaterialTheme.colorScheme.secondaryContainer
+                    else MaterialTheme.colorScheme.surfaceContainer,
+                )
+                .clickable { onR34ExpandedChange(true) }
                 .semantics {
                     contentDescription = "R34"
                     this.selected = selected
                 },
-            text = { SearchLetterIcon("R34") },
-            onClick = { onR34ExpandedChange(true) },
-        )
+            contentAlignment = Alignment.Center,
+        ) {
+            SearchLetterIcon("R34")
+        }
     }
 }
 
@@ -1889,9 +1909,16 @@ private fun SourceMenuOption(
     val label = option.sourceChipLabel()
     Row(
         modifier = Modifier
-            .fillMaxWidth()
+            .then(if (showTitle) Modifier.fillMaxWidth() else Modifier.size(width = 64.dp, height = 48.dp))
             .heightIn(min = 48.dp)
-            .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+            .clip(if (showTitle) RoundedCornerShape(0.dp) else CircleShape)
+            .background(
+                when {
+                    selected -> MaterialTheme.colorScheme.secondaryContainer
+                    showTitle -> Color.Transparent
+                    else -> MaterialTheme.colorScheme.surfaceContainer
+                },
+            )
             .combinedClickable(
                 role = Role.Checkbox,
                 onClickLabel = "Select $label",
@@ -1904,13 +1931,16 @@ private fun SourceMenuOption(
                 contentDescription = label
             }
             .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.clearAndSetSemantics {}) {
-            if (source == null) SearchLetterIcon("U") else SearchSourceIcon(source)
+        if (showTitle) {
+            Text(label)
+        } else {
+            Box(Modifier.clearAndSetSemantics {}) {
+                if (source == null) SearchLetterIcon("U") else SearchSourceIcon(source)
+            }
         }
-        if (showTitle) Text(label)
     }
 }
 

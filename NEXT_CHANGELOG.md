@@ -23,7 +23,7 @@
 - Expand tapped post media from its feed card into fullscreen.
 - Shrink fullscreen media back into its feed card on close, bringing the current post near the center first.
 
-- Simplify Search source selection with icons, an R34 submenu, and highlights for sources included in Unified.
+- Simplify Search source selection with centered icons in separate rounded chips, a compact R34 submenu, and highlights for sources included in Unified.
 
 - Show the destination Codex’s name in post save confirmations.
 
