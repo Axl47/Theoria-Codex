@@ -34,8 +34,6 @@ class PostTagActionSectionTest {
             listOf("Tags", "Female tags", "Artists", "Languages"),
             postActionTermGroups(post).map(PostActionTermGroup::label),
         )
-        assertEquals("Tag · najar", postActionTermLabel(tag))
-        assertEquals("Artist · najar", postActionTermLabel(artist))
     }
 
     @Test

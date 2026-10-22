@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -223,7 +224,8 @@ private fun LazyListScope.tagActionGrid(
                 rowTerms.forEach { term ->
                     val generalTag = term.takeIf(SearchTerm::isGeneralPostTag)?.value
                     TagActionCell(
-                        label = postActionTermLabel(term),
+                        label = term.value,
+                        actionLabel = searchTermChipLabel(term, excluded = false),
                         videoCount = if (generalTag != null) videoCounts[generalTag] else typedCounts[term],
                         includeSelected = selection.included(term) != null,
                         excludeSelected = selection.excluded(term) != null,
@@ -249,6 +251,7 @@ private fun LazyListScope.tagActionGrid(
 @Composable
 private fun TagActionCell(
     label: String,
+    actionLabel: String,
     videoCount: Int?,
     includeSelected: Boolean,
     excludeSelected: Boolean,
@@ -287,14 +290,16 @@ private fun TagActionCell(
         ) {
             TagActionPill(
                 label = "+",
-                actionLabel = "Include $label in Search",
+                actionLabel = "Include $actionLabel in Search",
+                compact = true,
                 selected = includeSelected,
                 onClick = onInclude,
                 modifier = Modifier.weight(1f),
             )
             TagActionPill(
                 label = "-",
-                actionLabel = "Exclude $label from Search",
+                actionLabel = "Exclude $actionLabel from Search",
+                compact = true,
                 selected = excludeSelected,
                 onClick = onExclude,
                 modifier = Modifier.weight(1f),
@@ -388,10 +393,13 @@ private fun TagActionPill(
     modifier: Modifier = Modifier,
     label: String? = null,
     icon: (@Composable () -> Unit)? = null,
+    compact: Boolean = false,
 ) {
     val accent = MaterialTheme.colorScheme.primary
     Surface(
-        modifier = modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics {
+        modifier = modifier
+            .then(if (compact) Modifier.height(24.dp) else Modifier)
+            .sizeIn(minWidth = 48.dp, minHeight = if (compact) 24.dp else 48.dp).semantics {
             this.selected = selected
             contentDescription = actionLabel
             stateDescription = if (selected) "Selected" else "Not selected"
@@ -406,7 +414,7 @@ private fun TagActionPill(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 4.dp),
+                .padding(vertical = if (compact) 2.dp else 4.dp),
             contentAlignment = Alignment.Center,
         ) {
             if (icon != null) {
@@ -469,10 +477,6 @@ internal fun generalPostActionTags(post: Post): List<String> {
         .filter(SearchTerm::isGeneralPostTag)
         .map(SearchTerm::value)
         .distinct()
-}
-
-internal fun postActionTermLabel(term: SearchTerm): String {
-    return searchTermChipLabel(term, excluded = false)
 }
 
 internal fun SearchTerm.isGeneralPostTag(): Boolean {

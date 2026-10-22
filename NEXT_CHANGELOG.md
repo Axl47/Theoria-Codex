@@ -22,6 +22,7 @@
 - See storage usage in a chart with a category breakdown.
 - Use more compact collection actions, filter controls, and applied-search summaries.
 - Improve accessibility labels and touch targets for tag actions.
+- Make the post hold menu more compact with half-height include/exclude buttons and tag names without repeated type labels.
 
 ## Fixes
 
