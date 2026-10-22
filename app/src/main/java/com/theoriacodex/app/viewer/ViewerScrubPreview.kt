@@ -105,11 +105,16 @@ internal fun ViewerVideoScrubPreview(location: String, source: SourceKey, positi
             failed = true
         }
     }
-    val current = frame?.takeIf { it.first == positionMs }?.second
-    when {
-        current != null -> Image(current.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
-        failed -> Text("Preview unavailable", color = Color.White)
-        else -> CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        frame?.second?.let { bitmap ->
+            Image(bitmap.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+        }
+        when {
+            failed -> Text("Preview unavailable", color = Color.White)
+            frame?.first != positionMs -> CircularProgressIndicator(
+                Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp,
+            )
+        }
     }
 }
 
