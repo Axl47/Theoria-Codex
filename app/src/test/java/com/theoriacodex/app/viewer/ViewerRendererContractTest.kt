@@ -11,9 +11,45 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ViewerRendererContractTest {
+    @Test
+    fun `post resolution errors do not interrupt media that is already ready`() {
+        val video = ImageRef("https://example.test/clip.mp4", null, "video/mp4")
+        val post = testPost().copy(full = video, media = listOf(video))
+        val session = ViewerSessionIdentity("playing")
+        var state = createViewerUiState(session, listOf(post))
+        val key = requireNotNull(state.currentMedia).key
+        state = reduceViewerState(state, ViewerAction.MediaReady(session, key, 0L)).state
+        state = reduceViewerState(state, ViewerAction.ResolutionFailed(session, post.id, "Post resolution timed out", true)).state
+        assertNull(state.mediaError)
+        assertTrue(state.controls.playback.playing)
+        state = reduceViewerState(state, ViewerAction.ResolutionFailed(session, post.id, "Source error", true)).state
+        assertNull(state.mediaError)
+        assertTrue(state.controls.playback.playing)
+        state = reduceViewerState(state, ViewerAction.ResolutionFailed(session, post.id, "Post was deleted", false)).state
+        assertNotNull(state.mediaError)
+        assertFalse(state.controls.playback.playing)
+    }
+
+    @Test
+    fun `media becoming ready dismisses a prior resolution timeout without pausing playback`() {
+        val video = ImageRef("https://example.test/clip.mp4", null, "video/mp4")
+        val post = testPost().copy(full = video, media = listOf(video))
+        val session = ViewerSessionIdentity("loading")
+        var state = createViewerUiState(session, listOf(post))
+        val key = requireNotNull(state.currentMedia).key
+        state = reduceViewerState(state, ViewerAction.ResolutionFailed(session, post.id, "Post resolution timed out", true)).state
+        assertNotNull(state.mediaError)
+        assertTrue(state.controls.playback.playing)
+        state = reduceViewerState(state, ViewerAction.MediaReady(session, key, 0L)).state
+        assertNull(state.mediaError)
+        assertTrue(state.currentMedia?.ready == true)
+        assertTrue(state.controls.playback.playing)
+    }
+
     @Test
     fun `late renderer events cannot fail clear or complete a newer media generation`() {
         val video = ImageRef("https://example.test/clip.mp4", null, "video/mp4")
@@ -31,6 +67,8 @@ class ViewerRendererContractTest {
         assertNotNull(state.mediaError)
         assertFalse(state.controls.playback.playing)
         state = reduceViewerState(state, ViewerAction.RetryMedia).state
+        assertTrue(state.controls.playback.playing)
+        assertFalse(requireNotNull(state.currentMedia).ready)
         val retried = state
         old.onError("late failure")
         old.onPlaybackCompleted()

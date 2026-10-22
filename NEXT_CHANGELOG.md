@@ -43,6 +43,8 @@
 - Remove repeated type labels from tag names in the post hold menu.
 
 ## Fixes
+- Make Viewer error Retry buttons respond to taps.
+- Clear stale Viewer errors when video playback succeeds, and keep post-resolution timeouts from interrupting loaded media.
 - Extend the landscape navigation sidebar background to the bottom of the screen.
 - Automatically retry a video once after a decoder or rendering failure, keeping your playback position.
 - Restore the previous search’s scroll position when using Search Undo.

@@ -98,10 +98,14 @@ internal fun ViewerMediaPage(
                 events, videoOptions, videoPositions, imageSession, pixivUgoiraClient, transformModifier, onRequestMediaRecovery,
             )
             FittedSeekJumpFeedbackOverlay(interactions.feedback, viewerAspectRatio(post), interactions::clearFeedback, Modifier.matchParentSize())
-            mediaError?.let { ViewerMediaErrorOverlay(it) { onAction(ViewerAction.RetryMedia) } }
         }
         ViewerMediaGestureLayer(key, mediaCount, isVideo || isGif || isUgoira, animated, interactions, controls,
             transform, onTransformChanged, layout, onAction, onInteraction, onToggleChrome, onNavigate)
+        mediaError?.let { error ->
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                ViewerMediaErrorOverlay(error) { onAction(ViewerAction.RetryMedia) }
+            }
+        }
     }
 }
 

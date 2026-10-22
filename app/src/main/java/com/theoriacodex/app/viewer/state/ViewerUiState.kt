@@ -40,6 +40,7 @@ internal data class ViewerMediaState(
     val kind: ViewerMediaKind,
     val displayLocation: String?,
     val loadGeneration: Long = 0L,
+    val ready: Boolean = false,
 ) {
     init {
         require(loadGeneration >= 0L) { "Viewer media load generation must not be negative" }

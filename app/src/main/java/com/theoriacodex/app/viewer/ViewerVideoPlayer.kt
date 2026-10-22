@@ -222,13 +222,23 @@ private fun viewerVideoListener(
             if (state.player !== player) return
             firstFrame.recordOnce(MediaTraceSections.VIEWER_FIRST_FRAME)
             state.hasRenderedFirstFrame = true
+            state.failed = false
+            events().onReady()
         }
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
             if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_BECOMING_NOISY) {
                 events().onPlaybackIntentChanged(false)
             }
         }
-        override fun onIsPlayingChanged(isPlaying: Boolean) { state.actuallyPlaying = isPlaying }
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            if (state.player !== player) return
+            state.actuallyPlaying = isPlaying
+            if (isPlaying) {
+                state.failed = false
+                state.loading = false
+                events().onReady()
+            }
+        }
     }
 }
 

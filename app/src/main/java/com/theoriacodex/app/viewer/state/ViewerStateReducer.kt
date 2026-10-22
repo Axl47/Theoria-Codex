@@ -202,7 +202,7 @@ internal fun reduceViewerState(state: ViewerUiState, action: ViewerAction): View
             ) {
                 this
             } else {
-                copy(
+                withCurrentMediaReadiness(false).copy(
                     mediaError = action.error,
                     controls = controls.copy(
                         playback = controls.playback.copy(playing = false),
@@ -212,7 +212,7 @@ internal fun reduceViewerState(state: ViewerUiState, action: ViewerAction): View
         }
         is ViewerAction.MediaReady -> state.ifCurrentSession(action.session) {
             if (currentMedia?.key == action.key && currentMedia?.loadGeneration == action.loadGeneration) {
-                copy(mediaError = null)
+                withCurrentMediaReadiness(true).copy(mediaError = null)
             } else this
         }
         ViewerAction.ClearMediaError -> ViewerReduction(state.copy(mediaError = null))
@@ -406,6 +406,14 @@ private fun ViewerUiState.replaceResolvedPost(post: Post): ViewerUiState {
     )
 }
 
+private fun ViewerUiState.withCurrentMediaReadiness(ready: Boolean): ViewerUiState {
+    val page = currentPage ?: return this
+    val media = currentMedia ?: return this
+    if (media.ready == ready) return this
+    val updatedMedia = page.media.toMutableList().also { it[page.selectedMediaIndex] = media.copy(ready = ready) }
+    return copy(pages = pages.toMutableList().also { it[currentPageIndex] = page.copy(media = updatedMedia) })
+}
+
 private fun ViewerUiState.resolutionFailed(action: ViewerAction.ResolutionFailed): ViewerUiState {
     val updated = updateResolution(action.postId) { current ->
         current.copy(
@@ -418,6 +426,8 @@ private fun ViewerUiState.resolutionFailed(action: ViewerAction.ResolutionFailed
 
     val failedPage = updated.pages.firstOrNull { page -> page.post.id == action.postId }
     val mediaKey = failedPage?.selectedMedia?.key
+    // Post enrichment can fail independently of a working media URL.
+    if (action.recoverable && failedPage?.selectedMedia?.ready == true) return updated
     val error = if (action.recoverable && mediaKey != null) {
         ViewerMediaError.Recoverable(
             mediaKey = mediaKey,
@@ -430,7 +440,9 @@ private fun ViewerUiState.resolutionFailed(action: ViewerAction.ResolutionFailed
     return updated.copy(
         mediaError = error,
         controls = updated.controls.copy(
-            playback = updated.controls.playback.copy(playing = false),
+            playback = updated.controls.playback.copy(
+                playing = action.recoverable && updated.controls.playback.playing,
+            ),
         ),
     )
 }
@@ -478,6 +490,7 @@ private fun ViewerUiState.retryMedia(session: ViewerSessionIdentity): ViewerRedu
     if (mediaIndex < 0) return ViewerReduction(this)
     val retriedMedia = page.media[mediaIndex].copy(
         loadGeneration = page.media[mediaIndex].loadGeneration + 1L,
+        ready = false,
     )
     val updatedMedia = page.media.toMutableList().also { media -> media[mediaIndex] = retriedMedia }
     val updatedPages = pages.toMutableList().also { currentPages ->
@@ -487,6 +500,7 @@ private fun ViewerUiState.retryMedia(session: ViewerSessionIdentity): ViewerRedu
         state = copy(
             pages = updatedPages,
             mediaError = null,
+            controls = controls.copy(playback = controls.playback.copy(playing = controls.playback.available)),
         ),
         effects = listOf(ViewerEffect.RetryMedia(session, recoverable.mediaKey)),
     )
