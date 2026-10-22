@@ -1,0 +1,361 @@
+{
+  "reader": "luna-16",
+  "assigned_count": 34,
+  "completed_count": 34,
+  "metadata_read": {
+    "path": "/tmp/theoria-test-audit-luna-16.json",
+    "lines": 307,
+    "read_complete": true,
+    "note": "Assignment metadata only; not counted among manifest targets."
+  },
+  "files": [
+    {
+      "path": "core-stubs/src/main/resources/stubs/pixiv/search_page_2.json",
+      "lines": 17,
+      "read_complete": true,
+      "keep": "Terminal Pixiv page shape, null nextPageToken, stable ID, URLs, dimensions, tags, timestamp.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; static fixture.",
+      "proposal": "Keep; no change.",
+      "disposition": "Independent keep."
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/pixiv/trending_tags.json",
+      "lines": 6,
+      "read_complete": true,
+      "keep": "Trending tag text, type, and count fields.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "Independent keep."
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/rule34gen/search_page_1.json",
+      "lines": 31,
+      "read_complete": true,
+      "keep": "Paged video results with page token, mixed resolutions, URLs, tags, authors, timestamps.",
+      "redundancy": "Complements page_2; no redundant fixture proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "Independent keep."
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/rule34gen/search_page_2.json",
+      "lines": 18,
+      "read_complete": true,
+      "keep": "Terminal page and distinct third result.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "Independent keep."
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/rule34gen/trending_tags.json",
+      "lines": 6,
+      "read_complete": true,
+      "keep": "Tag trending shape and counts.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "Independent keep."
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/rule34paheal/search_page_1.json",
+      "lines": 29,
+      "read_complete": true,
+      "keep": "Mixed image/video media URLs, dimensions, tags, authors, paging.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "Independent keep."
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/rule34paheal/search_page_2.json",
+      "lines": 17,
+      "read_complete": true,
+      "keep": "Terminal page with distinct image result.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "Independent keep."
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/rule34paheal/trending_tags.json",
+      "lines": 6,
+      "read_complete": true,
+      "keep": "Tag trending fields and counts.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "Independent keep."
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/rule34video/search_page_1.json",
+      "lines": 31,
+      "read_complete": true,
+      "keep": "Paged video fixture with mixed resolutions and animation tags.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "Independent keep."
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/rule34video/search_page_2.json",
+      "lines": 18,
+      "read_complete": true,
+      "keep": "Terminal video page and distinct media identity.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "Independent keep."
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/rule34video/trending_tags.json",
+      "lines": 6,
+      "read_complete": true,
+      "keep": "Trending tag contract.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "Independent keep."
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/rule34xxx/search_page_1.json",
+      "lines": 29,
+      "read_complete": true,
+      "keep": "PNG/WebM media mix, dimensions, tags, paging, stable IDs.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "Independent keep."
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/rule34xxx/search_page_2.json",
+      "lines": 17,
+      "read_complete": true,
+      "keep": "Terminal image result and null page token.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "Independent keep."
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/rule34xxx/trending_tags.json",
+      "lines": 6,
+      "read_complete": true,
+      "keep": "Trending tag type/count shape.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "Independent keep."
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/scenarios/empties.json",
+      "lines": 7,
+      "read_complete": true,
+      "keep": "Explicit empty-source scenario flags for PIXIV, GELBOORU, and AIBOORU.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "Independent keep."
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/scenarios/failures.json",
+      "lines": 7,
+      "read_complete": true,
+      "keep": "Partial failure isolation: GELBOORU search failure plus 200 ms delay while peers succeed.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; delay is fixture configuration, not wall-clock test timing here.",
+      "proposal": "Keep; no change.",
+      "disposition": "Independent keep."
+    },
+    {
+      "path": "core-stubs/src/test/kotlin/com/theoriacodex/stubs/JsonStubSourceAdapterTest.kt",
+      "lines": 134,
+      "read_complete": true,
+      "keep": "Lines 16-62 cover paging, typed failure path, and quick-query mapping; lines 65-121 cover rule34 family, Iwara, and Hitomi fixture resolution.",
+      "redundancy": "Proven overlap with StubProviderContractTest.kt:21-86 for generic search/trending/resolve/quick-query behavior, but these tests retain explicit fixture-family and Iwara/Hitomi coverage.",
+      "flakiness": "None observed; runTest and static JSON.",
+      "proposal": "Keep. Consolidation is optional/deferred and must preserve explicit fixture identity coverage.",
+      "disposition": "Independent keep; low-priority deduplication deferred."
+    },
+    {
+      "path": "core-stubs/src/test/kotlin/com/theoriacodex/stubs/StubAdapterRegistryTest.kt",
+      "lines": 63,
+      "read_complete": true,
+      "keep": "Lines 16-31 verify merged success statuses; lines 34-51 verify partial orchestration failure and typed NETWORK reason.",
+      "redundancy": "Some adapter failure overlap with StubProviderContractTest.kt:89-100; registry-level status aggregation is distinct.",
+      "flakiness": "None observed; deterministic coroutine test.",
+      "proposal": "Keep; no change.",
+      "disposition": "Independent keep."
+    },
+    {
+      "path": "core-stubs/src/test/kotlin/com/theoriacodex/stubs/StubProviderContractTest.kt",
+      "lines": 133,
+      "read_complete": true,
+      "keep": "Lines 21-57 enforce every-source paging/identity/foreign-ID resolution; lines 60-100 enforce trending, autocomplete, quick queries, and typed failures; lines 102-121 enforce media/tag contracts.",
+      "redundancy": "Proven overlap with JsonStubSourceAdapterTest.kt:65-121 and StubAdapterRegistryTest.kt:34-51, but this is the broad provider contract gate.",
+      "flakiness": "None observed; static adapters and runTest.",
+      "proposal": "Keep. Do not remove generic contract coverage without replacing all-source guarantees.",
+      "disposition": "Independent keep."
+    },
+    {
+      "path": "deploy/libretranslate/test_gateway.py",
+      "lines": 105,
+      "read_complete": true,
+      "keep": "Lines 24-91 cover request shape, credential header, language mapping, malformed/incomplete responses, byte limit, timeout; lines 94-101 cover sliding-window boundary behavior.",
+      "redundancy": "No harmful duplication proven.",
+      "flakiness": "None observed; upstream is mocked and limiter timestamps are explicit.",
+      "proposal": "Keep; no change.",
+      "disposition": "Independent keep."
+    },
+    {
+      "path": "deploy/libretranslate/test_http_gateway.py",
+      "lines": 160,
+      "read_complete": true,
+      "keep": "Lines 54-95 cover routing, no phrase logging, payload and transport rejection; lines 97-156 cover exact bounds, budget recovery, busy admission, upstream error recovery.",
+      "redundancy": "No harmful duplication proven.",
+      "flakiness": "Potential scheduling sensitivity at lines 121-142: ThreadPoolExecutor plus 5-second Event waits; no observed failure. This concurrency coverage should not be replaced with sleeps/retries.",
+      "proposal": "Keep. If failures appear, diagnose scheduler/fixture evidence first; do not broaden waits blindly.",
+      "disposition": "Independent keep."
+    },
+    {
+      "path": "macrobenchmark/src/main/AndroidManifest.xml",
+      "lines": 2,
+      "read_complete": true,
+      "keep": "Empty benchmark manifest preserves isolated harness structure without accidental exported components.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed.",
+      "proposal": "Keep; no change.",
+      "disposition": "Deferred benchmark context."
+    },
+    {
+      "path": "macrobenchmark/src/main/java/com/theoriacodex/macrobenchmark/MixedMediaFeedJourney.kt",
+      "lines": 266,
+      "read_complete": true,
+      "keep": "Lines 27-72 exercise real navigation, collection, creator, viewer, background/resume; lines 74-143 require simultaneous changing frames for all visible media; lines 209-234 enforce lease release and duration settlement; lines 237-265 query isolated diagnostics.",
+      "redundancy": "No harmful duplication proven; pixel sampling is stricter than isPlaying-only checks.",
+      "flakiness": "Hardware timing sensitivity at lines 118-143, 147-166, and 239-265: 15-second polling, 2-second ordered-broadcast waits, screenshot thresholds, and stale-node retries. No observed failure.",
+      "proposal": "Keep and defer timing changes to physical-device evidence; do not add broad retries/sleeps or weaken simultaneous-autoplay assertions.",
+      "disposition": "Deferred physical/device benchmark work."
+    },
+    {
+      "path": "macrobenchmark/src/main/java/com/theoriacodex/macrobenchmark/TheoriaMacrobenchmark.kt",
+      "lines": 370,
+      "read_complete": true,
+      "keep": "Lines 73-236 cover startup, concurrent autoplay scroll, duration acquisition, viewer swipes, and five-feed journeys; lines 296-369 enforce visible/playing state, duration settlement, and bounded UI polling.",
+      "redundancy": "No harmful duplication proven; scenarios intentionally cover separate workload contracts.",
+      "flakiness": "Potential device scheduling sensitivity at lines 296-345 and swipe dispatch at 348-354 due fixed 15-second waits and UI Automator timing. No observed failure.",
+      "proposal": "Keep; defer any timeout/timing adjustment until retained physical-device evidence exists.",
+      "disposition": "Deferred physical/device benchmark work."
+    },
+    {
+      "path": "macrobenchmark/src/main/java/com/theoriacodex/macrobenchmark/ViewerObservationDeviceTest.kt",
+      "lines": 48,
+      "read_complete": true,
+      "keep": "Lines 18-43 verify controls hide, fitted 16:9 surface, changing frames, canonical identity rejection, route return, and departed-viewer cleanup; line 45 force-stops only isolated benchmark package.",
+      "redundancy": "No harmful duplication proven; this validates observation semantics beyond macro metrics.",
+      "flakiness": "Potential UI timing sensitivity at lines 27-43 from repeated 15-second waits and auto-hide timing. No observed failure.",
+      "proposal": "Keep; defer device synchronization changes, including RelatedViewerReturnTest synchronization per instruction.",
+      "disposition": "Deferred physical/device benchmark work."
+    },
+    {
+      "path": "scripts/benchmark_results.py",
+      "lines": 463,
+      "read_complete": true,
+      "keep": "Lines 130-185 enforce complete per-iteration metrics and unique traces; lines 188-207 reject emulator/thermal-invalid evidence; lines 209-326 archive and hash workload/report/trace evidence; lines 339-391 require three distinct same-APK physical baselines and immutable comparison; lines 394-400 reject incomplete instrumentation.",
+      "redundancy": "Tests mirror implementation intentionally; no unnecessary production duplication proven.",
+      "flakiness": "None observed; filesystem/hash validation is deterministic.",
+      "proposal": "Keep; no change.",
+      "disposition": "Deferred benchmark evidence infrastructure."
+    },
+    {
+      "path": "scripts/check_changed_coverage.py",
+      "lines": 511,
+      "read_complete": true,
+      "keep": "Lines 74-119 parse coverage safely; 141-156 parse changed lines; 175-221 scope production sources; 257-307 fail on missing/ambiguous coverage; 360-430 validate CLI scope; 433-507 fail closed on uncovered executable lines.",
+      "redundancy": "No harmful duplication proven.",
+      "flakiness": "None observed; Git/XML/filesystem inputs are deterministic.",
+      "proposal": "Keep; no change.",
+      "disposition": "Independent keep."
+    },
+    {
+      "path": "scripts/check_hotspots.py",
+      "lines": 452,
+      "read_complete": true,
+      "keep": "Lines 69-104 enforce exact quality config; 113-160 discover modules/baselines; 163-287 canonicalize Detekt owners; 333-420 enforce line budgets and baseline debt ratchet.",
+      "redundancy": "No harmful duplication proven.",
+      "flakiness": "None observed; deterministic config, Git, and source inspection.",
+      "proposal": "Keep; no change.",
+      "disposition": "Independent keep."
+    },
+    {
+      "path": "scripts/copy_production_to_debug.py",
+      "lines": 197,
+      "read_complete": true,
+      "keep": "Lines 57-90 enforce package/signing/component isolation; lines 100-137 verify installed APKs and mutate Debug only; lines 140-153 provide bounded recoverable polling; lines 187-193 suppress credential/app-output leakage.",
+      "redundancy": "No harmful duplication proven.",
+      "flakiness": "Potential device/status timing sensitivity at lines 140-153 from 1-second polling and 150-second deadline; no observed failure.",
+      "proposal": "Keep unchanged; any safety or device-lane adjustment is explicitly deferred.",
+      "disposition": "Deferred PR #27 safety/device wrapper."
+    },
+    {
+      "path": "scripts/device_validation_common.sh",
+      "lines": 22,
+      "read_complete": true,
+      "keep": "Lines 4-12 require exactly one selected connected device; lines 15-21 reject emulator/qemu performance evidence.",
+      "redundancy": "None proven.",
+      "flakiness": "None observed; selection intentionally fails closed.",
+      "proposal": "Keep; no change.",
+      "disposition": "Deferred device-validation wrapper."
+    },
+    {
+      "path": "scripts/prepare_ci_android_sdk.sh",
+      "lines": 18,
+      "read_complete": true,
+      "keep": "Lines 4-17 restrict setup to ephemeral CI, pin command-line tools, repair latest symlink, and verify resolved version.",
+      "redundancy": "None proven.",
+      "flakiness": "External SDK download/CI availability can fail, but this is infrastructure rather than test flakiness.",
+      "proposal": "Keep unchanged; CI-wrapper suggestions are deferred per PR #27 instruction.",
+      "disposition": "Deferred PR #27 CI wrapper."
+    },
+    {
+      "path": "scripts/sign_release_apk.py",
+      "lines": 61,
+      "read_complete": true,
+      "keep": "Lines 15-27 require new destination and signing secrets; lines 29-45 keep key material temporary and verify before publishing; lines 47-49 emit only artifact path.",
+      "redundancy": "No harmful duplication proven.",
+      "flakiness": "None observed in host logic; external Android SDK/signing commands are environmental.",
+      "proposal": "Keep unchanged; signing/CI safety suggestions are deferred.",
+      "disposition": "Deferred PR #27 signing/CI wrapper."
+    },
+    {
+      "path": "scripts/tests/test_app_behavior_coverage.py",
+      "lines": 70,
+      "read_complete": true,
+      "keep": "Lines 16-29 verify module/path scoping; 31-48 verify uncovered and missing reports fail; 50-54 reject unsafe globs; 56-66 include untracked production but exclude tests.",
+      "redundancy": "No harmful duplication proven.",
+      "flakiness": "None observed; temporary repositories are deterministic.",
+      "proposal": "Keep; no change.",
+      "disposition": "Independent keep."
+    },
+    {
+      "path": "scripts/tests/test_benchmark_results.py",
+      "lines": 412,
+      "read_complete": true,
+      "keep": "Lines 17-44 validate contracts/instrumentation; 126-240 validate archive, calibration, identity, emulator, and CPU-lock semantics; 240-306 reject incomplete/corrupt evidence; 324-400 protect workload hashes, thermal checks, and overwrite safety.",
+      "redundancy": "Implementation mirroring is intentional invariant coverage; no removable slop proven.",
+      "flakiness": "None observed; temporary files and fixed fixture data are deterministic.",
+      "proposal": "Keep; no change.",
+      "disposition": "Deferred benchmark evidence infrastructure."
+    }
+  ],
+  "top_findings": [
+    "All 34 manifest-assigned files were read completely; manifest byte counts, line counts, and SHA-256 values matched. No assigned binary fixtures were present.",
+    "The only meaningful overlap is intentional provider-contract coverage: JsonStubSourceAdapterTest lines 65-121 overlaps StubProviderContractTest lines 21-86, but the targeted fixture-family/Iwara/Hitomi assertions should be retained unless an equivalent explicit replacement is added.",
+    "Macrobenchmark/device tests use bounded polling and pixel/playing assertions that are necessarily hardware-sensitive. Any timing adjustment is deferred to coordinator-owned physical-device evidence; no retries, sleeps, weakened assertions, or budget reductions are recommended.",
+    "No assigned file suggests migration, navigation/restoration, membership/filter, cancellation/recovery, simultaneous-autoplay, signing isolation, or Android 16/17 behavior should be removed.",
+    "SavedSearchesCodexJourneyTest and HideLikedRelatedPostsJourneyTest synchronization remain explicitly deferred; RelatedViewerReturnTest readiness remains upstream-changed and deferred.",
+    "API37 Broken pipe/activity-service loss/sdcard ENOTCONN and subsequent Room lock ENOENT must remain classified as invalid infrastructure evidence, not migration failures."
+  ]
+}

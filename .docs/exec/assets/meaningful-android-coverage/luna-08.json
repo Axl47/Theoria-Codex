@@ -1,0 +1,314 @@
+{
+  "reader": "luna-08",
+  "assigned_count": 30,
+  "completed_count": 30,
+  "files": [
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/tags/PostTagActionTypedCountsTest.kt",
+      "lines": 90,
+      "read_complete": true,
+      "keep": "Protects typed count precedence, missing-term fetches, and same-name facet counts.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "independent"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/tags/PostTagDraftBindingTest.kt",
+      "lines": 101,
+      "read_complete": true,
+      "keep": "Protects accepted/rejected polarity changes, reopen synchronization, and external draft edits.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "independent"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/tags/TagActionAccessibilityTest.kt",
+      "lines": 65,
+      "read_complete": true,
+      "keep": "Protects contextual labels, button role, selected state, compact sizing, and accessibility callbacks.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "independent"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/testing/InMemoryCodexLikesTransactions.kt",
+      "lines": 4,
+      "read_complete": true,
+      "keep": "Compatibility typealias used by app tests and repository workflow tests.",
+      "redundancy": "Intentional alias; no harmful duplication proven.",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "independent"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/testing/PostFixtures.kt",
+      "lines": 79,
+      "read_complete": true,
+      "keep": "Shared canonical and animated Post fixtures, including media metadata and taxonomy defaults.",
+      "redundancy": "Shared helper reduces duplication.",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "independent"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/AdaptiveNavigationTest.kt",
+      "lines": 71,
+      "read_complete": true,
+      "keep": "Protects rail/bottom navigation switching while retaining content composition, scroll, and selection.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "independent"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/BottomNavigationSizingTest.kt",
+      "lines": 44,
+      "read_complete": true,
+      "keep": "Protects inset compensation and height/icon clamping across gesture, three-button, compact, and tall windows.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "independent"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/components/FeedFabRestoreRegistryTest.kt",
+      "lines": 71,
+      "read_complete": true,
+      "keep": "Protects stale-write ordering, committed-state recovery, independent contexts, and context-key identity.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; deferred coroutine is controlled.",
+      "proposal": "keep/no change",
+      "disposition": "independent"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/components/PostShelfSizingTest.kt",
+      "lines": 62,
+      "read_complete": true,
+      "keep": "Protects equal shelf height for portrait and landscape cards at both supported widths.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "independent"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/BrowsingMetadataViewModelTest.kt",
+      "lines": 86,
+      "read_complete": true,
+      "keep": "Protects shared subscriptions, single recents decoding, profile switching, and watched/liked state boundaries.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; injected test dispatcher is deterministic.",
+      "proposal": "keep/no change",
+      "disposition": "independent"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/CodexLibraryScrollReturnTest.kt",
+      "lines": 136,
+      "read_complete": true,
+      "keep": "Protects Room-backed library scroll restoration across detail return and saved-state restoration.",
+      "redundancy": "none proven",
+      "flakiness": "Concrete timing risk at lines 54-66: Dispatchers.Default plus fixed 300 ms delay is scheduler-sensitive.",
+      "proposal": "Independent recommendation: replace the fixed delay with a test-controlled readiness gate/deferred flow while retaining the same loading-state assertion.",
+      "disposition": "independent"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/CreatorNavigationRestorationTest.kt",
+      "lines": 66,
+      "read_complete": true,
+      "keep": "Protects creator navigation identity, saved-state restoration, Unicode names, and optional provider fields.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "independent"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/DestinationStateBoundarySubscriptionTest.kt",
+      "lines": 105,
+      "read_complete": true,
+      "keep": "Protects child-only recomposition and stable shell composition for four destination state boundaries.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "independent"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/HideLikedRelatedPostsJourneyTest.kt",
+      "lines": 164,
+      "read_complete": true,
+      "keep": "Protects real Room likes, original/recommended retention, fullscreen/grid behavior, and hide-liked/hide-saved dismissal filtering.",
+      "redundancy": "Adjacent journey coverage is distinct; no implementation mirroring proven.",
+      "flakiness": "Synchronization/readiness spans lines 99-145, including asynchronous membership and Viewer entry/exit; upstream synchronization is explicitly deferred.",
+      "proposal": "Do not alter synchronization or weaken assertions; defer any refinement per PR #27 instruction.",
+      "disposition": "DEFERRED"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/OfflineViewerWorkflowTest.kt",
+      "lines": 196,
+      "read_complete": true,
+      "keep": "Protects offline rendition locality, canonical source persistence, gallery restoration, media indices, resolution, and no provider fallback.",
+      "redundancy": "none proven",
+      "flakiness": "Watchpoint at line 106: selecting the first non-running job is less specific than binding to the requested job; no failure observed.",
+      "proposal": "Keep now; independently consider identifying the exact offline job if a reproducible race appears.",
+      "disposition": "independent"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/PendingRouteActionsTest.kt",
+      "lines": 43,
+      "read_complete": true,
+      "keep": "Protects ordered queue flushing and retention of work after a failed dispatch.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "independent"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/RelatedViewerReturnTest.kt",
+      "lines": 165,
+      "read_complete": true,
+      "keep": "Protects Search/FYP related shelves, video playback fixture routing, repeated fullscreen return, restoration, geometry, and no duplicate roots.",
+      "redundancy": "Adjacent journeys are source-specific and policy-specific; no implementation mirroring proven.",
+      "flakiness": "Lines 76-80 depend on a repository benchmark fixture; lines 111-145 use asynchronous navigation/readiness waits. Explicit upstream readiness changes are deferred.",
+      "proposal": "Do not change readiness synchronization in this review; defer per PR #27 instruction.",
+      "disposition": "DEFERRED"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/RouteOwnerLifecycleTest.kt",
+      "lines": 206,
+      "read_complete": true,
+      "keep": "Protects lease closure, ViewModel cleanup, stale-owner isolation, resume delivery, and immutable StateFlow exposure.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; reflection at lines 148-154 is structural brittleness, not observed flakiness.",
+      "proposal": "keep/no change",
+      "disposition": "independent"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/SavedSearchesCodexJourneyTest.kt",
+      "lines": 166,
+      "read_complete": true,
+      "keep": "Protects merged saved searches, exclusion persistence, Viewer return, route reentry, and Codex navigation.",
+      "redundancy": "Adjacent journey coverage is distinct; no implementation mirroring proven.",
+      "flakiness": "Many asynchronous waits and Back/Viewer transitions at lines 90-155; synchronization changes are explicitly deferred.",
+      "proposal": "Do not alter synchronization in this review; defer per PR #27 instruction.",
+      "disposition": "DEFERRED"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/ViewerProviderWorkTest.kt",
+      "lines": 79,
+      "read_complete": true,
+      "keep": "Protects provider resolution/recovery dispatching on Default and caller cancellation propagation.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; controlled cancellation uses CompletableDeferred.",
+      "proposal": "keep/no change",
+      "disposition": "independent"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/ViewerRestorationWorkflowTest.kt",
+      "lines": 177,
+      "read_complete": true,
+      "keep": "Protects cold reconstruction, filtered ordering, missing-neighbor behavior, reading progress monotonicity, cross-entry restoration, and transient related sessions.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; test dispatchers and temporary storage are controlled.",
+      "proposal": "keep/no change",
+      "disposition": "independent"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/ViewerRoutePolicyTest.kt",
+      "lines": 224,
+      "read_complete": true,
+      "keep": "Protects exact live-source identity, membership filters, recents section policy, session-scoped effects, and cleared-owner behavior.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "independent"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/ViewerRouteRestorationUiTest.kt",
+      "lines": 190,
+      "read_complete": true,
+      "keep": "Protects exit presentation retention, restoration loading/error/retry states, and Codex attribution cleanup.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; deferred completion is explicitly controlled.",
+      "proposal": "keep/no change",
+      "disposition": "independent"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/ViewerSaveOriginTest.kt",
+      "lines": 146,
+      "read_complete": true,
+      "keep": "Protects origin-aware fullscreen likes and preservation of For You/Search save context after handoff consumption.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "independent"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/state/RouteScreenOwnershipTest.kt",
+      "lines": 67,
+      "read_complete": true,
+      "keep": "Protects one immutable state entry point per major screen and rejects coordinator/model leakage.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; reflection is intentional architectural inspection.",
+      "proposal": "keep/no change",
+      "disposition": "independent"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/update/ApkUpdatePolicyTest.kt",
+      "lines": 93,
+      "read_complete": true,
+      "keep": "Protects package/version checks and current-or-historical signing overlap, including missing/unrelated signatures.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "independent"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/update/FileBackedUpdateStateStoreTest.kt",
+      "lines": 183,
+      "read_complete": true,
+      "keep": "Protects persisted deferrals/changelog, corrupt-file quarantine, legacy compatibility, and atomic failure/cancellation preservation.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; TemporaryFolder and injected serializers make failures deterministic.",
+      "proposal": "keep/no change",
+      "disposition": "independent"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/update/GitHubReleaseFeedClientTest.kt",
+      "lines": 281,
+      "read_complete": true,
+      "keep": "Protects legacy/semver parsing, prerelease selection/history, asset requirements, and changelog fallback/empty-section handling.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; JSON fixtures are in-memory.",
+      "proposal": "keep/no change",
+      "disposition": "independent"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/update/StartupUpdateWorkflowTest.kt",
+      "lines": 77,
+      "read_complete": true,
+      "keep": "Protects reducer transitions for eligible updates, unknown sources, installer launch, and failure effects.",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "independent"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/update/StartupUpdaterTest.kt",
+      "lines": 454,
+      "read_complete": true,
+      "keep": "Protects update eligibility/deferrals, pending-install recovery, unknown-sources and cancellation paths, changelog promotion, and installer failures.",
+      "redundancy": "none proven",
+      "flakiness": "none observed; fake feed/store/installer and temporary files isolate external effects.",
+      "proposal": "keep/no change",
+      "disposition": "independent"
+    }
+  ],
+  "top_findings": [
+    "All 30 assigned text files were read in full; manifest byte counts, line counts, and SHA-256 values matched.",
+    "No implementation-mirroring redundancy was proven.",
+    "CodexLibraryScrollReturnTest has the clearest independent flakiness/cost concern: fixed 300 ms asynchronous delay at lines 54-66.",
+    "SavedSearchesCodexJourneyTest, HideLikedRelatedPostsJourneyTest, and RelatedViewerReturnTest synchronization/readiness changes are explicitly DEFERRED per PR #27.",
+    "No recommendation removes assertions, lowers gates, adds broad retries/sleeps, or infers physical Android behavior from host tests."
+  ]
+}

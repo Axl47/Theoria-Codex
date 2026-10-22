@@ -1,0 +1,4537 @@
+{
+  "baseline": "af52fef01c989841105027e67333f10d23290a2e",
+  "model": {
+    "provider": "codex",
+    "model": "gpt-5.6-luna",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  "selection": "All tracked files in test/testDebug/androidTest/sharedTest/testFixtures/fixtures source sets; debug journey fixture; core-stubs source/resources; benchmark/baseline source/resources (read-only deferred); scripts Python/shell including tests; deploy test_*.py; FeedMediaTestTags.kt. Includes minified releaseAcceptance harness, Debug harness configuration, and committed Room schema fixtures (generated origin, retained migration inputs; not disposable build output).",
+  "exclusions": [
+    "Untracked/generated build/, .gradle/, .kotlin/, node_modules/ outputs",
+    "Vendored third-party dependencies and Gradle wrapper binaries",
+    "Historical audit documents (context only), application runtime except explicit fixture/support paths"
+  ],
+  "files": [
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/codex/CodexCollectionFiltersTest.kt",
+      "bytes": 4618,
+      "lines": 113,
+      "sha256": "ad96ab74a872323aacd2b21c00d95be656d3f71edb6dacaa0537bc234b1210ce",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/codex/CodexSaveRelevanceTest.kt",
+      "bytes": 4963,
+      "lines": 85,
+      "sha256": "0b0bbb03ce9aa19f3f549698b0506712c84016bf228e038deaead83bc91d3f66",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/codex/FollowedCodexTest.kt",
+      "bytes": 1800,
+      "lines": 35,
+      "sha256": "23e5f6388cee29f0fc44c5a08300811bd3aee7f89b333fa65485112c02553e00",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/feed/FeedPageDemandTest.kt",
+      "bytes": 7318,
+      "lines": 150,
+      "sha256": "37802111ed8d5d4ed672bcfda46b61290193ceecce374fc6b7ca668dd80d99bb",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/logic/AppLogicArchitectureTest.kt",
+      "bytes": 5789,
+      "lines": 135,
+      "sha256": "344346eb962aeaca4bc28722c47367a4050f80859e92f0ff06f1d95742d9a19b",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/media/DurationDecisionProjectionTest.kt",
+      "bytes": 1408,
+      "lines": 26,
+      "sha256": "74819868f9c99049635ca55f39931400101680fda0b92adc8d58977994da63c2",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/media/DurationDemandSchedulerTest.kt",
+      "bytes": 6299,
+      "lines": 142,
+      "sha256": "6b0aac0884fbef9465b4f09a53710ae6ae52026c62c3ca8cb3d055a9d8d52b16",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/media/DurationFilterReadinessTest.kt",
+      "bytes": 2227,
+      "lines": 66,
+      "sha256": "b7f66067c4cd55bb6f82e56a5cd1ef6dc71fa79f9d7cb1fb0ef9c6cda4daa959",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/media/MediaDurationStateTest.kt",
+      "bytes": 4243,
+      "lines": 120,
+      "sha256": "ae5d8b7b592ee0dc89138584ee6e660dd80884cd11a854edc493713af115748e",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/media/MediaStorageBreakdownTest.kt",
+      "bytes": 1449,
+      "lines": 35,
+      "sha256": "3a726c5d022e1e5148ea9099297b1b0e34470aa9cd33bbd55ef923b11b1ec57f",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/media/Mp4DurationParserTest.kt",
+      "bytes": 3753,
+      "lines": 110,
+      "sha256": "177c343ab7ce044b536f27124f2e9f9656e49d2327821f16fb77c5550f322f21",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/media/PostMediaPolicyTest.kt",
+      "bytes": 5473,
+      "lines": 125,
+      "sha256": "31f54207209b3d4c94f37e4cda0708c2535e05ef3f457b1d7eeb4ff39bb267ba",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/media/VideoQualityPolicyTest.kt",
+      "bytes": 2428,
+      "lines": 41,
+      "sha256": "648757c06e66fdd45a59d542f68e2cf6e66525b1c7bc0f78e898eb15fe045638",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/media/WebmDurationParserTest.kt",
+      "bytes": 3630,
+      "lines": 108,
+      "sha256": "080141727059416ab7ba5cf5ef6b8bd49aa6f36ff1ef105601e30271e9bcd464",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/post/PostPresentationTest.kt",
+      "bytes": 1299,
+      "lines": 41,
+      "sha256": "ab352e9a720ad4ad7e47d98336fdc4f5c3bcda26fc89ff31c3e1a87326761bf8",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/post/PostTagSelectionTest.kt",
+      "bytes": 1265,
+      "lines": 28,
+      "sha256": "07725ab7a1575e05add1b68cb871e5f14394822f891572b96865e279a10025ab",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/recommend/TrainingTagsTest.kt",
+      "bytes": 3914,
+      "lines": 98,
+      "sha256": "75172f958eb6a8c63379ed2a208c7f410417a37ce7c0d750548fcdc21b7adaed",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/related/RelatedFeedProjectionTest.kt",
+      "bytes": 2841,
+      "lines": 71,
+      "sha256": "240d7888bf3699d17a7cf2b36699bc3c9b736deb87037ec5d25323544203c61f",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/related/RelatedPostsStateTest.kt",
+      "bytes": 7121,
+      "lines": 156,
+      "sha256": "7c520f07b00b4246bb839ec1b37b348a04a5a0d74b818f3c650ea2968da4d7d7",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/search/FeedMediaLifecycleTest.kt",
+      "bytes": 2471,
+      "lines": 75,
+      "sha256": "1a007b9dc16bff9b9717f9575261c12e3a7a585bcd3f6e29f206b835a5f01315",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/search/SearchScopedInputPolicyTest.kt",
+      "bytes": 5389,
+      "lines": 120,
+      "sha256": "ced408ed3c7b951e13d156b600f242e01ff74c4468b9cae5686dde52d114576d",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/search/SearchVisibilityFiltersTest.kt",
+      "bytes": 11807,
+      "lines": 320,
+      "sha256": "5004764b94941e4f4e0b40c6c5782150e85b44d633a19aff91d4c31ce1b62422",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/search/TagSuggestionRankingTest.kt",
+      "bytes": 4286,
+      "lines": 115,
+      "sha256": "3cfade9fcae3d03dc73ed68660fa002425f88b675ba048f9e755c1232f2c2df0",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/search/state/SearchDraftReducerTest.kt",
+      "bytes": 17102,
+      "lines": 365,
+      "sha256": "e9e62994927da24898df3b9fb5d3cd2c3a4c7349969961515398ebe9979eae9b",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/search/state/SearchHistoryTest.kt",
+      "bytes": 2663,
+      "lines": 51,
+      "sha256": "8ac05ebbfdfb6a790145feb0ad4170752f1c6eb46a8d2fe40c02b83737852181",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/search/state/SearchScrollRestorationTest.kt",
+      "bytes": 1888,
+      "lines": 36,
+      "sha256": "3d8e95b3529b6924008d1c85e8008c8b84005d994a3d6827e43ddeaec7e40801",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/search/state/SearchStateContractTest.kt",
+      "bytes": 18345,
+      "lines": 458,
+      "sha256": "30dc545819ea2215d106839ae2db1111ff6a3a67219b2bfc9ad53a62b45821c5",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/statistics/StatisticsProjectionTest.kt",
+      "bytes": 6394,
+      "lines": 150,
+      "sha256": "4ea0e1e113f78ed87b10d8ff3e6ed75218e15bd1edafeb469975d04e2ed04dc0",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app-logic/src/test/kotlin/com/theoriacodex/app/ui/AdaptiveLayoutPolicyTest.kt",
+      "bytes": 740,
+      "lines": 20,
+      "sha256": "e96bce9e89be26727e2401871d2f449021af369e84cd438c2c4ab151075ec662",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/androidTest/assets/animated/two-frame.webp.b64",
+      "bytes": 189,
+      "lines": 1,
+      "sha256": "e03aea10652a69737ff20ddd3688bf1dfe04a7bd17fc5bd60755ed2f3210387b",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/FileProviderBoundaryDeviceTest.kt",
+      "bytes": 6302,
+      "lines": 157,
+      "sha256": "591a8b310ee8fcc48a3370cb5f08de492a900f19d6da9e7361a45288c5b8e216",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/MainActivityIntentFilterDeviceTest.kt",
+      "bytes": 2927,
+      "lines": 91,
+      "sha256": "41bca61df32cb98d80bd7981d372ab75c0ebf78648e3be50c208bdda52c1e87c",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/TheoriaAppContainerDeviceTest.kt",
+      "bytes": 6716,
+      "lines": 171,
+      "sha256": "a4eeaa0dafa17ae21b477dc9a0a06ca55a875dc71caefe2368169ac1bf039e33",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/TheoriaAppSmokeTest.kt",
+      "bytes": 1700,
+      "lines": 40,
+      "sha256": "708039a316c717983d8e009eed612b4f90faf569c6552f7f6a73e105ea5cc1fa",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/journeys/AppJourneyFixture.kt",
+      "bytes": 5049,
+      "lines": 113,
+      "sha256": "05004cbec01942f7cbd22e8502d17945a6af9b47be7a5b92a68eee95582f535b",
+      "kind": "text",
+      "reader": "luna-01",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/journeys/CodexCollectionJourneyTest.kt",
+      "bytes": 3644,
+      "lines": 58,
+      "sha256": "f4e7da4505a58b70a8172231e33d57da9dc40b24fe9643cd07542c85a120638c",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/journeys/ForYouPostActionsJourneyTest.kt",
+      "bytes": 4502,
+      "lines": 73,
+      "sha256": "a433e2508baab49010f7e0d006e0ed13c7885a4be0714b601e5039075a3e1b57",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/journeys/OfflineCollectionJourneyTest.kt",
+      "bytes": 8225,
+      "lines": 159,
+      "sha256": "5d066d83dc5bed0bc260cca99ef93302ff4b22eb53feb0b8f7c04f4107744500",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/journeys/OfflineImageDiagnostics.kt",
+      "bytes": 6714,
+      "lines": 131,
+      "sha256": "0ba8feb912623721d3c9df81fac3b3c97c0ad4ffb3ec172f78ec1b5496f64e9d",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/journeys/PinnedSearchJourneyTest.kt",
+      "bytes": 3445,
+      "lines": 63,
+      "sha256": "d6e90f3ecf52c699fbb1600672b05f852644862b57dd140fac253050fcc936b3",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/journeys/SearchNavigationJourneyTest.kt",
+      "bytes": 14642,
+      "lines": 263,
+      "sha256": "8455c126b3b669e927883aa30adcd3dc0c92e6bbfcf1f13a1b87e3be46fea38c",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/json/InstalledJsonCompatibilityDeviceTest.kt",
+      "bytes": 9032,
+      "lines": 207,
+      "sha256": "b6d8d123dd007d9d32643168e95992a9591de4bae7f47ec88f367325dab65abe",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/media/AnimatedWebPDecoderDeviceTest.kt",
+      "bytes": 3352,
+      "lines": 78,
+      "sha256": "6b578eda21e7459cf3d7ed9b3910555a7e7890c270adad0f229ef5291ea81443",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/media/PostDownloadDestinationDeviceTest.kt",
+      "bytes": 6486,
+      "lines": 130,
+      "sha256": "b62c49f888977247a5efb0e0100e737a6b537698611e5d61da8e7976c0ad6347",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/media/PostDownloadProcessRecoveryDeviceTest.kt",
+      "bytes": 8264,
+      "lines": 144,
+      "sha256": "7b752dc1e720b814c3456d08bd8836dafb69be37ddd6cc5359ae9cb1c54746b7",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/source/HitomiLiveTransportDeviceTest.kt",
+      "bytes": 3452,
+      "lines": 97,
+      "sha256": "ca913794ae73b452b80475b3648bf9320cf6d5711a605bc9f00aab62ae0586cf",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/source/HitomiProtocolDeviceTest.kt",
+      "bytes": 733,
+      "lines": 25,
+      "sha256": "2bc936758173e97a76c88507a3eddf9bc6d43fac10ec8b1ba92855ed8e48f1ee",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/sourceauth/AndroidCredentialEnvelopeStoreDeviceTest.kt",
+      "bytes": 5255,
+      "lines": 138,
+      "sha256": "f16a7b8c580f7266c4fd9c8bb4b3f47fcf36114159314c6da02383182f6a79c6",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/sourceauth/AndroidPixivPkceSessionStoreDeviceTest.kt",
+      "bytes": 3775,
+      "lines": 111,
+      "sha256": "465a69c86d8b2038fcf9782486c2233fc1f112cdb7fec0f214a5df6b59813b61",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/sourceauth/PixivPkceControllerDeviceTest.kt",
+      "bytes": 12454,
+      "lines": 284,
+      "sha256": "99b49e1a799881ecab9d8287fb8188dbcfb4fdfb6b3808e8294d86e13ae0a540",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/ui/CompactControlAccessibilityDeviceTest.kt",
+      "bytes": 9644,
+      "lines": 239,
+      "sha256": "b80c387b3b418d44cf476e1cce5612f5b8588b9c5c9da284ec667c4bbc56d9c3",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/ui/NavigationChromeDeviceTest.kt",
+      "bytes": 3538,
+      "lines": 76,
+      "sha256": "0fb0b8101d13f9c173b8bda5b466d26de58e98c64db7d10fe2a9ab26e9604335",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/ui/TagActionAccessibilityDeviceTest.kt",
+      "bytes": 3884,
+      "lines": 70,
+      "sha256": "835b3c5bd3b784bfcd3c7532451270b31c637c5a09f02b894d5505b8b1bb6a7c",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/benchmarkRelease/AndroidManifest.xml",
+      "bytes": 2216,
+      "lines": 59,
+      "sha256": "12078bfb045c3ba0dfde0763d45b350d40958faff61131bf400041e97484f445",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/benchmarkRelease/java/com/theoriacodex/app/benchmark/BenchmarkAppJourney.kt",
+      "bytes": 11073,
+      "lines": 227,
+      "sha256": "c6774a8569a142c8ae8999088306e10245760ba317f85ad19a18a39dc98de9c1",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/benchmarkRelease/java/com/theoriacodex/app/benchmark/BenchmarkDurationWorkload.kt",
+      "bytes": 6725,
+      "lines": 178,
+      "sha256": "09fa07aba17d329841db7d707f9f4fd2012f6e0c7adcbacb65f141aaa441d67c",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/benchmarkRelease/java/com/theoriacodex/app/benchmark/BenchmarkFixtureActivity.kt",
+      "bytes": 10579,
+      "lines": 280,
+      "sha256": "8660beb166b7ad971998212a0d25b55c18b20eaa1effee5c5799d2e95b1b14c2",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/benchmarkRelease/java/com/theoriacodex/app/benchmark/BenchmarkViewerObservation.kt",
+      "bytes": 1632,
+      "lines": 45,
+      "sha256": "4bd1602e0231ea241cb7c8f6329b457491620e90382b799cb60255e3dd011f90",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/benchmarkRelease/res/raw/benchmark_loop.mp4",
+      "bytes": 32502,
+      "lines": null,
+      "sha256": "ac3213320cd1c8acbf081cb13ce652c8706dcda37e3a18bc1af31e23a5335403",
+      "kind": "binary",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/benchmarkRelease/res/raw/benchmark_motion.mp4",
+      "bytes": 202173,
+      "lines": null,
+      "sha256": "c12b1375d4a6d46da310ea2b2c982eff74fe4fb0cb6e59110fbf7eb6998160df",
+      "kind": "binary",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/benchmarkRelease/res/raw/benchmark_two_frame_gif.gif",
+      "bytes": 89,
+      "lines": null,
+      "sha256": "d01296ebd98845e6637e7982f7d37d76a1e457d83edf14e165eb3f67b55d4c46",
+      "kind": "binary",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/benchmarkRelease/res/raw/benchmark_two_frame_webp.webp",
+      "bytes": 140,
+      "lines": null,
+      "sha256": "252a1234a210189c3a4150d8b16ff688f86e264c546d6fffd1d9a730819a9cec",
+      "kind": "binary",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/benchmarkRelease/res/raw/benchmark_ugoira.zip",
+      "bytes": 808,
+      "lines": null,
+      "sha256": "90ff2393b1a7faadafaa0430789c444e165808a9c9029798998dd716d071b19c",
+      "kind": "binary",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/debug/AndroidManifest.xml",
+      "bytes": 637,
+      "lines": 9,
+      "sha256": "347d80c626be5ba71efff9ce6e648107758825e639c046cd979c188c68627671",
+      "kind": "text",
+      "reader": "luna-18",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/debug/java/com/theoriacodex/app/fixtures/JourneyTestActivity.kt",
+      "bytes": 1650,
+      "lines": 39,
+      "sha256": "52eeb5d3e8b797ceaf54813dbd81667dfe2e9b463b4682bc5ec4dc972390bef6",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/debug/res/values/strings.xml",
+      "bytes": 76,
+      "lines": 3,
+      "sha256": "5f243d3d9a33944759955275368ecf114fd70a45b199289a903a146f988a9d90",
+      "kind": "text",
+      "reader": "luna-18",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/debug/res/xml/debug_network_security_config.xml",
+      "bytes": 361,
+      "lines": 8,
+      "sha256": "ec1dd8180ddf52c56eaffa756a3113de2894a81ee87c574d98af6d8d8f989248",
+      "kind": "text",
+      "reader": "luna-18",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/fixtures/java/com/theoriacodex/app/fixtures/JourneyAppContainer.kt",
+      "bytes": 9615,
+      "lines": 170,
+      "sha256": "e7df5d24a1bf76577861c48d8a1fb2b6295330266ee67f2301f1c8ccfa4635c1",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/fixtures/java/com/theoriacodex/app/fixtures/JourneyExternalServices.kt",
+      "bytes": 1470,
+      "lines": 26,
+      "sha256": "162c1465dce81a554417b1eed8ff85cd2daf95b692745bc4492292ca0d00daef",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/fixtures/java/com/theoriacodex/app/fixtures/JourneySourceRegistry.kt",
+      "bytes": 3761,
+      "lines": 63,
+      "sha256": "268435bdc114f57c5548fe25324aa9387115f23afa1d0ed3434228a6885b1aa9",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/main/java/com/theoriacodex/app/search/FeedMediaTestTags.kt",
+      "bytes": 528,
+      "lines": 11,
+      "sha256": "cdef6682b0f3b2109853a1acf76a7e93dc1b047bf69660bd65c03582c13d83e3",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/releaseAcceptance/AndroidManifest.xml",
+      "bytes": 304,
+      "lines": 8,
+      "sha256": "c18bedb75efd7a9cc9a50facae16516f6c36672fb303c08a31ebc767420ee0ba",
+      "kind": "text",
+      "reader": "luna-18",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/releaseAcceptance/java/com/theoriacodex/app/acceptance/ReleaseDataAcceptanceActivity.kt",
+      "bytes": 7468,
+      "lines": 148,
+      "sha256": "49cbe588cc68a4a6f75c2dae647269bd9edb3732960dff387dfac0e2eaffec1b",
+      "kind": "text",
+      "reader": "luna-18",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/TheoriaApplicationProcessPolicyTest.kt",
+      "bytes": 2438,
+      "lines": 66,
+      "sha256": "b8540a51a6be9d2769e34f9a2b8170ac5450e1d807dab5454666d5d483f1bf02",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/appshell/AppShellCreationTest.kt",
+      "bytes": 1595,
+      "lines": 37,
+      "sha256": "48f71a192f37981316cae91bb533bdb86b1ecbd1783102118f889498e164f4a6",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/appshell/AppShellViewModelTest.kt",
+      "bytes": 2411,
+      "lines": 55,
+      "sha256": "613436e7497c658c57b190191f4e9644c53635fa194527113df3986719358978",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/appshell/IncomingUriWorkflowTest.kt",
+      "bytes": 1613,
+      "lines": 50,
+      "sha256": "3f7ae668ecbe67048717b86ebc0f4e23824faf1799b4184c35c2509adf16671b",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/appshell/StartupUpdateOwnershipTest.kt",
+      "bytes": 5367,
+      "lines": 107,
+      "sha256": "29f6d2b7ffa70fccccb88763430256d89cadfb842de944ad2afd4d626b8c7d69",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/appshell/ViewerSessionRetentionViewModelTest.kt",
+      "bytes": 5168,
+      "lines": 143,
+      "sha256": "1da102c60ff00399dbb2c4fbce57d11c2f75ace901710d33fb2008a0bc75132a",
+      "kind": "text",
+      "reader": "luna-02",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/backup/BackupViewModelTest.kt",
+      "bytes": 8202,
+      "lines": 240,
+      "sha256": "6ce120c5c1ed99e765a4aed4456ddba7afe84d15c5a5fba9ba53c68587070707",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/AvailableSaveTargetCodicesTest.kt",
+      "bytes": 777,
+      "lines": 27,
+      "sha256": "b295c41da66c5eb69083d9dab53b37dbf8e5440ec5c74c0cabb0223688f43bef",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexAutomaticTagsTest.kt",
+      "bytes": 2994,
+      "lines": 76,
+      "sha256": "0f7620ca1b4c7bed9b57a252e3cb7146c75e38518ed167277965536f0052aaa2",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexCleaningUiTest.kt",
+      "bytes": 4615,
+      "lines": 85,
+      "sha256": "a7691d0341134d51cdb1dc7003c8f425ad41b5600c070a6e28499c6443730f87",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexCleaningWorkflowTest.kt",
+      "bytes": 4076,
+      "lines": 78,
+      "sha256": "4c28dd3fad607a6377b88f63195557ed0ad761d85cf55b51e9bb529926be8dc7",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexCollectionSourceTest.kt",
+      "bytes": 6389,
+      "lines": 108,
+      "sha256": "715a08bf4173333d9e43faad756bdf9deb7c05fee3a79824aef049b0b21ee9f1",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexCommandHostTest.kt",
+      "bytes": 2961,
+      "lines": 60,
+      "sha256": "c6169eb1cf2717ad4988ca79c703a4571c2d5425339f1ea28a35dcd4f45c2679",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexCoverImageRequestTest.kt",
+      "bytes": 1202,
+      "lines": 30,
+      "sha256": "62606f85ad1237f466215b032385cbeb9e0053afec9abe4ca47b29563dfe0429",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexCoverTest.kt",
+      "bytes": 3084,
+      "lines": 92,
+      "sha256": "11cc1e0123c7bdaceae15ddd39ab86e0815647fe54886a81da472b2c659303aa",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexDetailPresentationTest.kt",
+      "bytes": 1165,
+      "lines": 31,
+      "sha256": "7775546870fef883a05f0dd6fb822e5b7a3dc8b602b2f1359580a4b39cf8fdbf",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexEditSelectionTest.kt",
+      "bytes": 1617,
+      "lines": 51,
+      "sha256": "6b66aeb78e44cd835f09933d258fad6c12207ddaf4c046af67205c229d25bf6a",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexRemovalWorkflowTest.kt",
+      "bytes": 6716,
+      "lines": 136,
+      "sha256": "5deeca7b4f7bc3b6ede38b2c2fd554540b18ccee6cff853a4b3b09543bcce514",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexReorderControlsTest.kt",
+      "bytes": 2656,
+      "lines": 56,
+      "sha256": "8fcdf79df4531aa85d2d5927509ac8fee19e64e61015a330f7fdfe9b9eed7abc",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexSaveRelevanceLoaderTest.kt",
+      "bytes": 3333,
+      "lines": 82,
+      "sha256": "a926c7fcab40d035fe65823b83756cf4c147b0dde7a96df6d19098e9174f8ad1",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexSaveViewModelTest.kt",
+      "bytes": 7834,
+      "lines": 193,
+      "sha256": "ac520b3aa20639df5321bfe7babc94e30c9d3251c081dc41437b673b440edf88",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexSearchSourceOptionsTest.kt",
+      "bytes": 5691,
+      "lines": 187,
+      "sha256": "d441b43f73673b796a1bfb04df2489337a6d4c5966ef87095c4eeb25ea89823c",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/CodexShareModelsTest.kt",
+      "bytes": 18980,
+      "lines": 456,
+      "sha256": "c09818a5fb10f23db86885e87c641265664f7e0ebfd10e72dd01e9e43c2effc0",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/FollowedCodexFiltersTest.kt",
+      "bytes": 5482,
+      "lines": 108,
+      "sha256": "e902072590558b6908e15f7b95148ae14e21011e347e8d9af0e1e6e2df2672e4",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/FollowedCodexViewModelTest.kt",
+      "bytes": 9827,
+      "lines": 209,
+      "sha256": "577fe9f61505247166084b5681be622eb77fab57893af13cd6ca9cc76783bdcd",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/LikesCodexSyncServiceTest.kt",
+      "bytes": 5101,
+      "lines": 115,
+      "sha256": "05e362a1c71b55529d096bfc1af8453918f98f541a5f02a42c498df64a2a45a7",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/PostActionSheetPreloadTest.kt",
+      "bytes": 2632,
+      "lines": 63,
+      "sha256": "8f23a612bb8695f0c4ce2140851909ec85e5ffc89387f010b1b4eba5e4f29589",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/SaveToCodexSheetTest.kt",
+      "bytes": 8381,
+      "lines": 159,
+      "sha256": "893da63b505f5bd84bab2b821497ed71b229c857e70c997829df822ede3df6aa",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/SavedCodexTest.kt",
+      "bytes": 1952,
+      "lines": 42,
+      "sha256": "447180bbec1ffb97e7ed8d2dc66929946dfcce538bd46e793a46e7a3b3756e22",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/SavedSearchesCodexFiltersTest.kt",
+      "bytes": 3134,
+      "lines": 61,
+      "sha256": "ee78f9111bb0ab958e2d32821328a0413e5c53da38016ea9c28748bcdf462a29",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/SavedSearchesCodexViewModelTest.kt",
+      "bytes": 11521,
+      "lines": 222,
+      "sha256": "c0a40ea320d871dc4ae09df7274acb58208f351f288a8f8e7039acbbd92fadca",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/transfer/CodexDocumentIoTest.kt",
+      "bytes": 1365,
+      "lines": 33,
+      "sha256": "4cc1d17f9803cf5b08053399e867c1afcb5e5e0a27e52eb565fadb1ca661305c",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/transfer/CodexImportWorkflowTest.kt",
+      "bytes": 6295,
+      "lines": 138,
+      "sha256": "4a752d684c748369715c5d2fa9680d8b679f4109d12978d6a9c4569fcbb4b1a7",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/codex/transfer/CodexTransferServiceTest.kt",
+      "bytes": 9511,
+      "lines": 198,
+      "sha256": "21942755bd6c481f3d69fcc72ec39e067a26ea08fc20aa9208dc0e1f20c63360",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/creator/CreatorFollowsViewModelTest.kt",
+      "bytes": 4408,
+      "lines": 91,
+      "sha256": "4821336f692541529cedddbaf902cb7f1d46a2db18ef347068ab70bd5fdbecfd",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/creator/CreatorOpeningWorkflowTest.kt",
+      "bytes": 5080,
+      "lines": 93,
+      "sha256": "d8d87e47fc8ce0b97b2c94e0f9f9dfc2c29713112b2aa9206855542a156e45cc",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/creator/CreatorProfileActionPresentationTest.kt",
+      "bytes": 8808,
+      "lines": 243,
+      "sha256": "ef16c0beffd0419774ce6604bf1b6056c988485d4e06861ed001ee899fa23752",
+      "kind": "text",
+      "reader": "luna-03",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/creator/CreatorProfileCoordinatorTest.kt",
+      "bytes": 15871,
+      "lines": 355,
+      "sha256": "a7fa0cdcf78a288e81c13ba95a4e6bd69f4c3cd26aa4b5fd8288ec3b472ede7a",
+      "kind": "text",
+      "reader": "luna-04",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/creator/CreatorProfileViewModelTest.kt",
+      "bytes": 16354,
+      "lines": 355,
+      "sha256": "d366931b4b59efb7bcbddaee0bfde38ec38770179dbd3b2ff88b1e33dc06a0a7",
+      "kind": "text",
+      "reader": "luna-04",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/creator/CreatorRelatedPostsScreenTest.kt",
+      "bytes": 3889,
+      "lines": 84,
+      "sha256": "fa8141651e1ff1e68dfeb20365ee435fd17dcea9c520e9581e34f9c0ca7a7844",
+      "kind": "text",
+      "reader": "luna-04",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/creator/state/CreatorStateContractTest.kt",
+      "bytes": 6328,
+      "lines": 117,
+      "sha256": "fb2d48a41865461358463fd00a551f83143e46954328e6afe1054ea8e4597b05",
+      "kind": "text",
+      "reader": "luna-04",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/di/AvailabilityAwareSourceAdapterRegistryTest.kt",
+      "bytes": 7364,
+      "lines": 172,
+      "sha256": "6b37e9b451ea1889b059d118741eea7746f83a0ede9316af6d40335c3789199a",
+      "kind": "text",
+      "reader": "luna-04",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/json/GsonWireContractTest.kt",
+      "bytes": 7063,
+      "lines": 182,
+      "sha256": "9316d67ef7ce49cdac14d83dc4d691be63e255080486ddd8afa5b35e837ab379",
+      "kind": "text",
+      "reader": "luna-04",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/AnimatedWebPDecodeIntegrationTest.kt",
+      "bytes": 3833,
+      "lines": 85,
+      "sha256": "9e6e5eafa5f14fbdacb70a60a743bc90715eea2319971ece6c3e660fb19b8bd4",
+      "kind": "text",
+      "reader": "luna-04",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/AnimatedWebPDecoderTest.kt",
+      "bytes": 4989,
+      "lines": 147,
+      "sha256": "74b3dc0f419bc9e31d713f6400bc5dbdcc6c480913d4c3c5ceb8a72c28ffd0f7",
+      "kind": "text",
+      "reader": "luna-04",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/AnimationExportDestinationTest.kt",
+      "bytes": 10968,
+      "lines": 214,
+      "sha256": "b5a2e1921e779007424923f5211d8744304c7b5eb7690fc90848bff44ed9eaa8",
+      "kind": "text",
+      "reader": "luna-04",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/BoundedMediaDurationProbeTest.kt",
+      "bytes": 8930,
+      "lines": 253,
+      "sha256": "01f2734abab5fee1c726e4c86772d90c419fb980437f7dd3af2334fe99052349",
+      "kind": "text",
+      "reader": "luna-04",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/DownloadJobsSheetTest.kt",
+      "bytes": 3877,
+      "lines": 72,
+      "sha256": "143e21c4ecdaf5aad25fd46be1c119c05b7b6ae069e9a293188557fc24e0591b",
+      "kind": "text",
+      "reader": "luna-04",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/DurationBacklogIntegrationTest.kt",
+      "bytes": 4132,
+      "lines": 74,
+      "sha256": "0d8f2f2e3cc7d57a70caeccbe88771642e1abf1b8c1341caa64c0929d03db3b7",
+      "kind": "text",
+      "reader": "luna-04",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/DurationFilterProjectionTest.kt",
+      "bytes": 1521,
+      "lines": 29,
+      "sha256": "c5312909fd27836edf614c8a599aaa90496fac80b39917c75a3f70c9b3fccf0a",
+      "kind": "text",
+      "reader": "luna-04",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/DurationRouteAcquisitionTest.kt",
+      "bytes": 5333,
+      "lines": 113,
+      "sha256": "faa0ed6df2400d0817431f5f459a64d17c2043b7349f3680660de85a015bac81",
+      "kind": "text",
+      "reader": "luna-04",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/MediaDurationAcquisitionEngineTest.kt",
+      "bytes": 4840,
+      "lines": 146,
+      "sha256": "52967fa6f51be5037e1cf40ce57b00409914f12058802edf03f208fd602ccfb6",
+      "kind": "text",
+      "reader": "luna-04",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/MediaDurationCoordinatorTest.kt",
+      "bytes": 16387,
+      "lines": 455,
+      "sha256": "1d3faefe4b6cac34245920a8af14317b12b2f673f787bbc57646099052d9a828",
+      "kind": "text",
+      "reader": "luna-04",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/MediaDurationPersistenceTest.kt",
+      "bytes": 1486,
+      "lines": 35,
+      "sha256": "767ec833b8c5a88510aa33d88a114dacd71b5c4c3d58517b1d085f4039de30c5",
+      "kind": "text",
+      "reader": "luna-04",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/MediaDurationPostMetadataTest.kt",
+      "bytes": 4868,
+      "lines": 131,
+      "sha256": "ce6c2f9b1ed2d3c70046711288444f7da1d4d3c576f2b0c21d6edd9f63b755ae",
+      "kind": "text",
+      "reader": "luna-04",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/MediaDurationProbeTest.kt",
+      "bytes": 1634,
+      "lines": 50,
+      "sha256": "edde2ff1547e473cb4753149b758c90b470ecd523f5ddf945c4f212ce1122ee9",
+      "kind": "text",
+      "reader": "luna-04",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/MediaDurationRouteViewModelTest.kt",
+      "bytes": 14191,
+      "lines": 345,
+      "sha256": "cb0b3850a4e4d04e2c6561fa3c7a7d0a069ce5487c1ed8f3b3fd0deb6aa308ed",
+      "kind": "text",
+      "reader": "luna-04",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/MediaRequestFactoryTest.kt",
+      "bytes": 2100,
+      "lines": 43,
+      "sha256": "24db1c280dd95d8593c09b3711951b0bde80b1b113c6e4e24ba2ded71e04e1d9",
+      "kind": "text",
+      "reader": "luna-04",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/MediaStorageChartTest.kt",
+      "bytes": 2170,
+      "lines": 48,
+      "sha256": "6b0a5e035b63d014108c445f87a2d60212bc4fee84f0b4acb2e0179f2ea6e1a3",
+      "kind": "text",
+      "reader": "luna-04",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/OfflineMediaAcquisitionTest.kt",
+      "bytes": 2742,
+      "lines": 65,
+      "sha256": "4e158e297014970fb3794506cf3f19b3df029a29f0f0bc1c90e3199242d3c9d7",
+      "kind": "text",
+      "reader": "luna-04",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/OfflineMediaCoordinatorTest.kt",
+      "bytes": 9139,
+      "lines": 176,
+      "sha256": "cf12cfccf85b23bc3c24da6ff163289566a6a1a4a0761a5850f5ff0584d97036",
+      "kind": "text",
+      "reader": "luna-04",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/OfflineQueueRecoveryTest.kt",
+      "bytes": 7434,
+      "lines": 118,
+      "sha256": "e1842a6eec481f525f5f1aef1d595058197c983086aba5459d51a31db41a4fcf",
+      "kind": "text",
+      "reader": "luna-04",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/OfflineStorageControlsTest.kt",
+      "bytes": 3427,
+      "lines": 69,
+      "sha256": "8ed3f6d50db59ad7b978ad2889e05c38acf21d011882c439a83385e8a1e2e72c",
+      "kind": "text",
+      "reader": "luna-04",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/OfflineStorageViewModelTest.kt",
+      "bytes": 7670,
+      "lines": 162,
+      "sha256": "a0b43bdf9750bfca73860243080f67e952f8d8e752ca91a1f792d696fbeb4b64",
+      "kind": "text",
+      "reader": "luna-05",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/PostDownloadQueueTest.kt",
+      "bytes": 16334,
+      "lines": 354,
+      "sha256": "a39e015fc4f6564119fc0f5323007f6be072a533f9de0a57c10880d21fd9a877",
+      "kind": "text",
+      "reader": "luna-05",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/PostDownloadRecoveryTest.kt",
+      "bytes": 19762,
+      "lines": 331,
+      "sha256": "9d45e2e694bd41a8d4b2e2f69191abbc724c14983b22b0a08972ce7aa68716d9",
+      "kind": "text",
+      "reader": "luna-05",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/PostDownloadServiceTest.kt",
+      "bytes": 5540,
+      "lines": 145,
+      "sha256": "ffc0230a831f26a96c39702ef31532ec3387cc2be986dc90f2fbe4f3dcac5d57",
+      "kind": "text",
+      "reader": "luna-05",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/PostMediaTest.kt",
+      "bytes": 6354,
+      "lines": 166,
+      "sha256": "3891cd83a2398062edeeb0f08a319338feb2c99bd5c9daa15c97f24dbf7fee21",
+      "kind": "text",
+      "reader": "luna-05",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/media/RemoteMediaRecoveryTest.kt",
+      "bytes": 6362,
+      "lines": 160,
+      "sha256": "4504802bf80dc837dcf797a62a006db54cd0c48b97573eb9afc7fbfc7882caad",
+      "kind": "text",
+      "reader": "luna-05",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/post/PostMutationViewModelTest.kt",
+      "bytes": 3207,
+      "lines": 66,
+      "sha256": "291a480001782a092ef34c5699a8853d4314f78c0a7b3b06bf2fca6277cc9e3b",
+      "kind": "text",
+      "reader": "luna-05",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/quality/ArchitectureBoundarySourceTest.kt",
+      "bytes": 4241,
+      "lines": 106,
+      "sha256": "db09b443f83e66b388e02b29545fb7778d8a4a3bac1c51552d4a3378cf700137",
+      "kind": "text",
+      "reader": "luna-05",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/quality/PerformanceBenchmarkArchitectureTest.kt",
+      "bytes": 5391,
+      "lines": 101,
+      "sha256": "00bbbcdf3345b80e4640fc4149898606f2d322b047747cb88c5eec3801c7b5e3",
+      "kind": "text",
+      "reader": "luna-05",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/recents/RecentSearchPresentationTest.kt",
+      "bytes": 3452,
+      "lines": 96,
+      "sha256": "db8a4e3829ea42719141e37a1b26d7b307acf71d26fc6664b5a0dcb02a4f84c0",
+      "kind": "text",
+      "reader": "luna-05",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/recents/RecentsClearWorkflowTest.kt",
+      "bytes": 8686,
+      "lines": 187,
+      "sha256": "d2ccaa694387ebd37d85ff0547f5c30425425602562a3f43e9452f2e9926b798",
+      "kind": "text",
+      "reader": "luna-05",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/recents/SavedSearchControlsTest.kt",
+      "bytes": 9485,
+      "lines": 186,
+      "sha256": "3e2fda94667cfb1f023aaf31f13cb00786ddecc2a2995115b11d2c3fda0d2fc6",
+      "kind": "text",
+      "reader": "luna-05",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/recents/SavedSearchViewModelTest.kt",
+      "bytes": 5378,
+      "lines": 134,
+      "sha256": "060190a8c6b0519f22864e89a36c9b827bb741c90a56ace67c3c76506059e597",
+      "kind": "text",
+      "reader": "luna-05",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/recommend/ForYouCoordinatorFixtures.kt",
+      "bytes": 1664,
+      "lines": 35,
+      "sha256": "1681b06754c9abc6752338361bc999307a0a45e4dbb84f7ad3eaa8a593fceb10",
+      "kind": "text",
+      "reader": "luna-05",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/recommend/ForYouCoordinatorTest.kt",
+      "bytes": 19341,
+      "lines": 378,
+      "sha256": "6974f3cff2ba3bdb51ced89a9d4db2cd35100b99f25744e2fb1a06e0ee74a0b2",
+      "kind": "text",
+      "reader": "luna-05",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/recommend/ForYouViewModelTest.kt",
+      "bytes": 17227,
+      "lines": 335,
+      "sha256": "80bcb71dcd0229d8e4f8729a065435df01ddb61bc532afcffcb2d0776e567c6d",
+      "kind": "text",
+      "reader": "luna-05",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/recommend/state/ForYouStateContractTest.kt",
+      "bytes": 9554,
+      "lines": 161,
+      "sha256": "4d51965fbb235259fbb3108bb193ec81c9c76d3554e0f9c6d46b3e88eca8e4b1",
+      "kind": "text",
+      "reader": "luna-05",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/related/RelatedPostsLoaderTest.kt",
+      "bytes": 4536,
+      "lines": 106,
+      "sha256": "e967d5ed282fe10c532a9e05fb3dc9d2de1e642a3e8fb405510075ac5385e8e2",
+      "kind": "text",
+      "reader": "luna-05",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/related/RelatedPostsRouteControllerTest.kt",
+      "bytes": 7019,
+      "lines": 170,
+      "sha256": "0dd1dd825cbb462ccd15c4b1e868e8711ed5ae3195e14981023105aebc819132",
+      "kind": "text",
+      "reader": "luna-05",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/related/RelatedPostsShelfTest.kt",
+      "bytes": 3312,
+      "lines": 73,
+      "sha256": "a7187125659cacf0830debbb256f79c038f60f7ee449fb4d5bf6aa7bafa9b801",
+      "kind": "text",
+      "reader": "luna-05",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/AdmissionFailureSearchViewModelTest.kt",
+      "bytes": 7541,
+      "lines": 155,
+      "sha256": "35adc78fc38d95e79f3d9199d0b86fd56a3cec7af7dd8a2d2eaa7f03ae2df074",
+      "kind": "text",
+      "reader": "luna-05",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/CollapsedSearchContextTest.kt",
+      "bytes": 2310,
+      "lines": 71,
+      "sha256": "e7c26ee428c6f1cab38e43cd8a807838a09a0f2796093864348f9aed3ac6b48c",
+      "kind": "text",
+      "reader": "luna-05",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/EffectsRestorationSearchViewModelTest.kt",
+      "bytes": 7736,
+      "lines": 166,
+      "sha256": "d49fabb5f58a738913c4683b61f220fcdde03a5f5347dada23e27ced3dbd75f1",
+      "kind": "text",
+      "reader": "luna-05",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/FeedMediaVisibilityTest.kt",
+      "bytes": 2848,
+      "lines": 70,
+      "sha256": "a2659934feacc3c3f471e65fc678a39a0e89eac122be2b12d630d0c2e2de4592",
+      "kind": "text",
+      "reader": "luna-05",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/LiveSearchCoordinatorRouteTest.kt",
+      "bytes": 6850,
+      "lines": 159,
+      "sha256": "d837e3ce32baeef3ecf4a9d84cc0ecae8c28dbf628a0680379bd8128b64621de",
+      "kind": "text",
+      "reader": "luna-06",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/LiveSearchCoordinatorRouteTestFixture.kt",
+      "bytes": 14695,
+      "lines": 375,
+      "sha256": "f2be59b44a3174079f8be08593e4289db6d931f4450d8236ef1e5d145a7a6cc2",
+      "kind": "text",
+      "reader": "luna-06",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/LiveSearchCoordinatorRouteTestHitomiTest.kt",
+      "bytes": 11576,
+      "lines": 255,
+      "sha256": "728311e9296ec3b39e71dcf98c99e4b481392293d0c810af528af71a2c3aefc2",
+      "kind": "text",
+      "reader": "luna-06",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/LiveSearchCoordinatorRouteTestMediaTest.kt",
+      "bytes": 4423,
+      "lines": 96,
+      "sha256": "b647a7a7bad164fa4f032a7968171b13af56cdf2b75e6200225df2dd672a9eb7",
+      "kind": "text",
+      "reader": "luna-06",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/RelatedPostsSearchViewModelTest.kt",
+      "bytes": 3230,
+      "lines": 69,
+      "sha256": "417dcf90666de928624a22ed16d75999f2c9859af0085ad2286e75ef07395c44",
+      "kind": "text",
+      "reader": "luna-06",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/RequestOwnershipSearchViewModelTest.kt",
+      "bytes": 17692,
+      "lines": 421,
+      "sha256": "100e33e4c9dd345bbf1501cd8db14c87403d0c68a0cd92e65000687db02493cd",
+      "kind": "text",
+      "reader": "luna-06",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/ScrollPersistenceSearchViewModelTest.kt",
+      "bytes": 15487,
+      "lines": 346,
+      "sha256": "227cf6a22143b8be11360098ea34c3a62e553a4abc73adf72d7d8f658e9f65b1",
+      "kind": "text",
+      "reader": "luna-06",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchAnimationFilterRestoreTest.kt",
+      "bytes": 1554,
+      "lines": 38,
+      "sha256": "fdb7db517004a7bb85a6a592f33848d42503b20a6175c3cbc10d4310d106449f",
+      "kind": "text",
+      "reader": "luna-06",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchApplyScrollTest.kt",
+      "bytes": 6706,
+      "lines": 137,
+      "sha256": "858cc28ead65dd28cd65b1131ba2e86848ad40ced397f5c1a551b299ec32bdbd",
+      "kind": "text",
+      "reader": "luna-06",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchCardMediaCountTest.kt",
+      "bytes": 667,
+      "lines": 18,
+      "sha256": "b4aa4ca985072365356307ea3b1316fb7bc2fd2a61deb2c125782f7a2d49ff62",
+      "kind": "text",
+      "reader": "luna-06",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchCoordinatorFixtures.kt",
+      "bytes": 1860,
+      "lines": 37,
+      "sha256": "d94fe6ad78617e56d11e4bb4f5c840033aac870c8a3e90aa88a4795ea077c6d9",
+      "kind": "text",
+      "reader": "luna-06",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchCoordinatorTest.kt",
+      "bytes": 30682,
+      "lines": 685,
+      "sha256": "5f4e62e712f8b9f88a6f0761014bea05435793b081c9be57314385a5daa3f1f7",
+      "kind": "text",
+      "reader": "luna-06",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchExecutionBookkeepingTest.kt",
+      "bytes": 4004,
+      "lines": 72,
+      "sha256": "e41cd539a01766eeca32a782d4d3cbbc45a1a6d5402d78eabeb15f1b91de70ea",
+      "kind": "text",
+      "reader": "luna-06",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchFacetUiTest.kt",
+      "bytes": 2649,
+      "lines": 79,
+      "sha256": "b6b605203ced90766984225238d56b76fd5bf0e5d49e851be8b19ef5f007ac51",
+      "kind": "text",
+      "reader": "luna-06",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchInputSubmissionTest.kt",
+      "bytes": 7382,
+      "lines": 146,
+      "sha256": "c23613094c05dbd28bec2df8e9a933595cee6b0f89441f696ea011be88c037bd",
+      "kind": "text",
+      "reader": "luna-06",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchLoadingResponsivenessTest.kt",
+      "bytes": 3286,
+      "lines": 74,
+      "sha256": "6ef767c1164f75447a9b09837ba24b8f7fd89fee315d16e0275b194fca13f685",
+      "kind": "text",
+      "reader": "luna-06",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchPageRecoveryTest.kt",
+      "bytes": 2398,
+      "lines": 48,
+      "sha256": "dc6899a6da2de8bd0be30e833a8b43d42ffbaed6e5107daa456854b2481945b6",
+      "kind": "text",
+      "reader": "luna-06",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchRefreshPresentationTest.kt",
+      "bytes": 4651,
+      "lines": 89,
+      "sha256": "366a099cabe1405615fbc1bbd0a182b6064c3f9d4c742dcd3e8f838fc7c732f4",
+      "kind": "text",
+      "reader": "luna-06",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchSavedQueryCodecTest.kt",
+      "bytes": 1020,
+      "lines": 30,
+      "sha256": "ee6e6ffc8b46c2b665bfc883f86095f913d3019d60a69f9ebeec7474e788dd92",
+      "kind": "text",
+      "reader": "luna-06",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchScreenMediaBehaviorTest.kt",
+      "bytes": 5615,
+      "lines": 152,
+      "sha256": "52f306b53783ceb1d281a9bc06d2d45308e5c619d49502c1aa0e945b6d3f947a",
+      "kind": "text",
+      "reader": "luna-06",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchScrollResetTest.kt",
+      "bytes": 3850,
+      "lines": 89,
+      "sha256": "a63672fd0872eb9ce41b7db2982b67c7e52d70e37f277a68baabb4b564389fa8",
+      "kind": "text",
+      "reader": "luna-06",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchScrollRestorationTest.kt",
+      "bytes": 6962,
+      "lines": 144,
+      "sha256": "a28c4f77b4260690e1087adf85401fedfac17233b9a037b2b05fda430dd7f2b5",
+      "kind": "text",
+      "reader": "luna-06",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchSourcePickerTest.kt",
+      "bytes": 6343,
+      "lines": 141,
+      "sha256": "dde66a2b28b8d7386535d3870036aec2d93fd4198487c18301e94e7f678d3c93",
+      "kind": "text",
+      "reader": "luna-06",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchSuggestionCoordinatorTest.kt",
+      "bytes": 7138,
+      "lines": 172,
+      "sha256": "d7976a67dc1234b43c18199591dc1efc30e68695afecfbe76cf29426f89a16bd",
+      "kind": "text",
+      "reader": "luna-06",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchTermCountCoordinatorTest.kt",
+      "bytes": 4604,
+      "lines": 96,
+      "sha256": "9c83625f3b058b750bf086ff88a814349dd692830812c69b71aae4e0fa31d382",
+      "kind": "text",
+      "reader": "luna-06",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchUndoViewModelTest.kt",
+      "bytes": 6957,
+      "lines": 126,
+      "sha256": "df04befe0a4c22974070576ef567cc74d753d0cc71449ccfe1dc7aa857e03742",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchViewModelTestFixture.kt",
+      "bytes": 12336,
+      "lines": 305,
+      "sha256": "3d3b3ac56aacfa141e5fab0ded8dc51d38a6118c1f14967854cb87376f84eeab",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchWatchedPresentationTest.kt",
+      "bytes": 3898,
+      "lines": 79,
+      "sha256": "40be2153524bf0086b4d802108f7dc7750e4124b6ef6953bbee7310285409430",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SourceFailureUiTextTest.kt",
+      "bytes": 4896,
+      "lines": 143,
+      "sha256": "19ba3043c92413437148c674be5f225fba1a0e7445a17831d2337bdb03cc4763",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SourceRetryTest.kt",
+      "bytes": 5466,
+      "lines": 100,
+      "sha256": "eec69f29d9942ebf13a4ab1c25c7026012c0bfd15baf64d88b89eb0e98ee6ba7",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/TagCountCoordinatorTest.kt",
+      "bytes": 4877,
+      "lines": 97,
+      "sha256": "2237ab4318d0f3a1102ffcad3edaba2cc0e2066a317562cb8e789cbbec607ee0",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/TagSuggestionStoreTest.kt",
+      "bytes": 17106,
+      "lines": 453,
+      "sha256": "9b45bcbb140267dce685f3a500be64fd4946c9d91d4e8ab4d6439001f7c53a61",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/UnifiedQueryPreparationTest.kt",
+      "bytes": 1781,
+      "lines": 38,
+      "sha256": "8e24c3d838825a068e6cece9348c21ea7f65b7e3056fc6bddf75b5048ba2e234",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/UnifiedWeightsSearchViewModelTest.kt",
+      "bytes": 3357,
+      "lines": 69,
+      "sha256": "d4a2882e908bd41f163106855d40945bde417be4c4cf13111058e4afd49f7fb4",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/settings/CodexStatisticsContentTest.kt",
+      "bytes": 1588,
+      "lines": 40,
+      "sha256": "36b6f8e85a465a84a4f635478d0bd157decaa4f1205c8e60393fa569d29ffffd",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/settings/CredentialAccountControlsTest.kt",
+      "bytes": 2597,
+      "lines": 57,
+      "sha256": "e9021b1f55f1ef760f92898d35eff4e2288207ba32ecb7db77c3075f5735b91d",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/settings/CredentialSettingsPolicyTest.kt",
+      "bytes": 2900,
+      "lines": 86,
+      "sha256": "7889d43ad6bfe53ec884182f9af2da0a46bfa8dddff00825ff11d7480ec45ec9",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/settings/LegacyRecoveryPresentationTest.kt",
+      "bytes": 1092,
+      "lines": 31,
+      "sha256": "6480f14e80284236294bc9504275ea0ce9916be5a6e4bf28a6e8bda51f319a91",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/settings/SettingsMutationFailureTest.kt",
+      "bytes": 1287,
+      "lines": 28,
+      "sha256": "fd27d2d0f09a50077042f3e01ff35599aac4b3058d54a94addfe2f54fb9f0e6e",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/settings/SettingsProfileWorkflowTest.kt",
+      "bytes": 10331,
+      "lines": 178,
+      "sha256": "8c591a1995dbcbbe854bcdc2db9bd9d51f68d3cb56e63c0923bbb4a01b8e8ed5",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/settings/SettingsStatisticsSourceTest.kt",
+      "bytes": 5278,
+      "lines": 117,
+      "sha256": "5085be935219d495bbf1b978b6e2f7f8a82b45f22366c3abf7c3075aba98a6b8",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/settings/SettingsSummaryPresentationTest.kt",
+      "bytes": 1569,
+      "lines": 42,
+      "sha256": "ac4e4a9c7a07a922add18b1025c86112aa76493a0550d17229fe1378bdc31304",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/settings/SettingsViewModelFixture.kt",
+      "bytes": 5378,
+      "lines": 111,
+      "sha256": "60d9b2318893646df69442cc7fdcbeca91665207bfb05bdaa4784c7050adcd26",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/settings/SettingsViewModelTest.kt",
+      "bytes": 10678,
+      "lines": 246,
+      "sha256": "a9913a88cab0d1ce5c9822270d8c68d3809ccf8df950e92c90df4179d734441d",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/settings/UnifiedSourceSettingsTest.kt",
+      "bytes": 3640,
+      "lines": 75,
+      "sha256": "cbbab1e235f56766f265320e2e62336f2332c1f783f2478bd671941ef982ae1f",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/source/ExternalPostDeepLinksTest.kt",
+      "bytes": 10956,
+      "lines": 303,
+      "sha256": "7d50d5f2e192d59d6518a556500728efb1fa501248a3b44ae54245db569fff16",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/source/SourceMetadataTest.kt",
+      "bytes": 2864,
+      "lines": 66,
+      "sha256": "e7dddde338cf70a0c3d7ace223e691ef1051b2a41e4c95440b7311e099e0c604",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/source/SourceOperationalCapabilitiesTest.kt",
+      "bytes": 3398,
+      "lines": 90,
+      "sha256": "4b85d93a818b62f80b9b97466b6e3b9454bf02d6816f5c5a9e34d72e954a28c9",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/sourceauth/GelbooruCredentialInputParserTest.kt",
+      "bytes": 1036,
+      "lines": 34,
+      "sha256": "13942ecce2c4ab43c23bf7f63af46f377d81bd7c17498e657e4ea989cfb6ab29",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/sourceauth/ObservableSourceAccountStoreTest.kt",
+      "bytes": 6147,
+      "lines": 154,
+      "sha256": "315208bac6c6eb4336e4d0a15cc63317a04e0aeaaaac6296b9133f3dfaa641a6",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/sourceauth/PixivCallbackKindTest.kt",
+      "bytes": 855,
+      "lines": 18,
+      "sha256": "298f0bdbb3f7999687e4f246db77e9ce928db41c06ed1023da84cf75c4fcbd8c",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/sourceauth/PixivPkceSessionStoreTest.kt",
+      "bytes": 6142,
+      "lines": 165,
+      "sha256": "e4908037c9970932ea6e3fa2f640d7cfb1a9bde7b47ebad7b38b51be4f6f7ec7",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/sourceauth/Rule34XxxCredentialInputParserTest.kt",
+      "bytes": 1040,
+      "lines": 34,
+      "sha256": "8c5305525ce281e066a3ee55f822ea2ee94fa9793b16c47d06fb9442148c68d4",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/sourceauth/VersionedSourceCredentialsStoreTest.kt",
+      "bytes": 13331,
+      "lines": 325,
+      "sha256": "92171f07704a22a43f289f215373b9cc36123eb70f527866ac6f657ef9c8505f",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/statistics/AppUsageTrackerTest.kt",
+      "bytes": 5270,
+      "lines": 125,
+      "sha256": "28e29414b20a05ebe897670d0dacd341f37531f72d2a2c338f0ec42e7d2a02e0",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/tags/PostTagActionLazyLayoutTest.kt",
+      "bytes": 4396,
+      "lines": 98,
+      "sha256": "5d49a049004ffac25f79ab8412941a373ed87cc2d15137fbc27e1733b1858c8d",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/tags/PostTagActionSectionTest.kt",
+      "bytes": 3516,
+      "lines": 94,
+      "sha256": "d1037a273ac20be1ce52240806fba04e1e4c0de18bee2fc00fcf904cb140c4f3",
+      "kind": "text",
+      "reader": "luna-07",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/tags/PostTagActionTypedCountsTest.kt",
+      "bytes": 4188,
+      "lines": 90,
+      "sha256": "6bfb014e53269ac4079bcd9233dbfe22ef127d90d109103cc87230adae5049d3",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/tags/PostTagDraftBindingTest.kt",
+      "bytes": 5087,
+      "lines": 101,
+      "sha256": "465043c7bacbecd4a225e2acc5ba29be7dc6f940cfb267b39b8f51abf018b015",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/tags/TagActionAccessibilityTest.kt",
+      "bytes": 3215,
+      "lines": 65,
+      "sha256": "bda5f9fb50c36776356a34ddc011a6a68eae53ad7e200202b663f679749fd3d0",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/testing/InMemoryCodexLikesTransactions.kt",
+      "bytes": 245,
+      "lines": 4,
+      "sha256": "92117f11d0245254fd9a2451db1856ab9a8458ba87e306ac054af44faea02a96",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/testing/PostFixtures.kt",
+      "bytes": 2495,
+      "lines": 79,
+      "sha256": "0043eeccc1947a66e6fe33093800fa368a53fcdda424d6916b96134cc72c25dc",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/AdaptiveNavigationTest.kt",
+      "bytes": 3269,
+      "lines": 71,
+      "sha256": "2d10db4cef456b5b6cd9237331104b4ed200c6515a9ff5af6baf2abe92dbbb07",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/BottomNavigationSizingTest.kt",
+      "bytes": 1403,
+      "lines": 44,
+      "sha256": "9630512026866f95315031b5f5d30fab7f817d6d0d533341b46385f56d33ab46",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/components/FeedFabRestoreRegistryTest.kt",
+      "bytes": 3321,
+      "lines": 71,
+      "sha256": "d600261932f6f2b07b86c3facaaf47fb9fa135fda8ede73c2b2ecdc9863283a8",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/components/PostShelfSizingTest.kt",
+      "bytes": 2462,
+      "lines": 62,
+      "sha256": "01b7cb2b8ab15988ebc797982b2f57165c6305e96a7b7e49c89d8ba94d048fe9",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/BrowsingMetadataViewModelTest.kt",
+      "bytes": 3945,
+      "lines": 86,
+      "sha256": "cd268d3545542f11121746389a190b17ab42b81f8ac7082df75208d2ac4cbc03",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/CodexLibraryScrollReturnTest.kt",
+      "bytes": 6625,
+      "lines": 136,
+      "sha256": "63f415fb01e390c45bf74df82e139af6b78ed13c2586bd0310007c60400fd54b",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/CreatorNavigationRestorationTest.kt",
+      "bytes": 2932,
+      "lines": 66,
+      "sha256": "800188a2aa8059b8f1c6655a7d22528b2914d229e2d3a4c9009074185ab58702",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/DestinationStateBoundarySubscriptionTest.kt",
+      "bytes": 4030,
+      "lines": 105,
+      "sha256": "a316c2aa1cb9f8d2957b7880947746fccc5e8570cedf112dfacc1752390d9969",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/HideLikedRelatedPostsJourneyTest.kt",
+      "bytes": 9070,
+      "lines": 164,
+      "sha256": "d2fdcf01f013a87aeab60d0a603f10cf7f95e6b70d7fc44c8a261b968d1237a3",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/OfflineViewerWorkflowTest.kt",
+      "bytes": 11261,
+      "lines": 196,
+      "sha256": "fbee90eab816ea24fe04834f38528edd64b98f90769dbb5991da235a5fed4234",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/PendingRouteActionsTest.kt",
+      "bytes": 1414,
+      "lines": 43,
+      "sha256": "566a23059e70ba0e8597f81c11c7d4b1df0384e280124cdb206cccf2a7ca6568",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/RelatedViewerReturnTest.kt",
+      "bytes": 9213,
+      "lines": 165,
+      "sha256": "d580871d2aed711ac2edee7a05afc5ad4f2eac55f9c823882f32e740d40cd52a",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/RouteOwnerLifecycleTest.kt",
+      "bytes": 6684,
+      "lines": 206,
+      "sha256": "18fb825683c912f7b3520f0c3e1cfcf9cd42bce3f05b78cdbef1e07bdb47abf5",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/SavedSearchesCodexJourneyTest.kt",
+      "bytes": 10538,
+      "lines": 166,
+      "sha256": "57854dba72d133a1e79013b7d4bdd0db603fc1fb637e217e0d586adbc27ec12e",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/ViewerProviderWorkTest.kt",
+      "bytes": 3587,
+      "lines": 79,
+      "sha256": "fa991845446002f3f7682d4a961d9696a68ca12561ff488e451cc50fdcefadac",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/ViewerRestorationWorkflowTest.kt",
+      "bytes": 8822,
+      "lines": 177,
+      "sha256": "cc98b152e927313aa040ab8293ce8b393fc00c50d2bd5a8b07e6121b49112a4a",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/ViewerRoutePolicyTest.kt",
+      "bytes": 8459,
+      "lines": 224,
+      "sha256": "549657d2f3e7b6d17e62dcf46e7de4746cf374e1758513742e6a71a0129671d2",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/ViewerRouteRestorationUiTest.kt",
+      "bytes": 9471,
+      "lines": 190,
+      "sha256": "10e5636c08dee8c8030017ff49e8d4ccf800b9baf5f3d6f9066b0a3ab18f9142",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/ViewerSaveOriginTest.kt",
+      "bytes": 7650,
+      "lines": 146,
+      "sha256": "fbc4139b934d92b0d5808d58c087d12ef158015864a491c695a1d0c6ec42f111",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/state/RouteScreenOwnershipTest.kt",
+      "bytes": 2815,
+      "lines": 67,
+      "sha256": "8605cd5d645d0ce2098eeb57d5e57a8412e851ac0703ec2940bfd4506f87d9b8",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/update/ApkUpdatePolicyTest.kt",
+      "bytes": 3050,
+      "lines": 93,
+      "sha256": "72fc90b39af0f1c88d8480b4620be2857b99df0a222f285d0771c3ddb841c123",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/update/FileBackedUpdateStateStoreTest.kt",
+      "bytes": 6850,
+      "lines": 183,
+      "sha256": "d45215690ba8f6c8ef541439f323a927ee209ace3ab8c8ea9495317bc38bc1fd",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/update/GitHubReleaseFeedClientTest.kt",
+      "bytes": 9521,
+      "lines": 281,
+      "sha256": "1b4f8619591a5452d7cd6e5eb2fa9b9ef5e607674e4c64ca7f69a50988600d60",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/update/StartupUpdateWorkflowTest.kt",
+      "bytes": 2848,
+      "lines": 77,
+      "sha256": "422d9ae4c589c7eb24c40ad6aa04804575973051f63f645f931c3baecc186d69",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/update/StartupUpdaterTest.kt",
+      "bytes": 17084,
+      "lines": 454,
+      "sha256": "0b3692cc4bdb7b65ddc919a8a079a4b04867e7b53cb7068f3494f5392bb4c520",
+      "kind": "text",
+      "reader": "luna-08",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/update/UpdateTransportTest.kt",
+      "bytes": 6810,
+      "lines": 135,
+      "sha256": "32610214bcf12a1d9eb1fc070289005795497a7bdea59bbb1dc433ea86415d5d",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/AnimationPlaybackTest.kt",
+      "bytes": 5820,
+      "lines": 148,
+      "sha256": "34d5febb0eff99ca31d4bf914698e3efe6c3b078265313b1073fa7786465e266",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/FeedVideoPositionHandoffTest.kt",
+      "bytes": 1842,
+      "lines": 48,
+      "sha256": "b7f4a1646453b6f662330fabf5b58a7c0c937ffce8036730498292838c9f0950",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/MediaPlaybackSemanticsTest.kt",
+      "bytes": 3072,
+      "lines": 84,
+      "sha256": "4d2d31c461cace93d782389ead0ee7838c962392f1d298f03f93f75540e9156e",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/MediaTimelineBarTest.kt",
+      "bytes": 4405,
+      "lines": 107,
+      "sha256": "543d0917de29cba120a393dc1fe58f40202f2c947cc5d7268d6f87cee1724b75",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/PixivUgoiraArchiveTest.kt",
+      "bytes": 4768,
+      "lines": 125,
+      "sha256": "22b86bc8b2e03cbed3c54ef1e994345562bbd6f6a7789cf7dc1e3d72af28fac0",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/PixivUgoiraClientTest.kt",
+      "bytes": 13642,
+      "lines": 314,
+      "sha256": "20cfe531a96f225c2e2dbd434f76bef7cc3cbffc2987ea4b29475f0d34f74504",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/PixivUgoiraFramesTest.kt",
+      "bytes": 3320,
+      "lines": 74,
+      "sha256": "d11611891cb4532c789275c37acb9af4848c6fe1e7d99858f3bf5bb0e2ac86a0",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/SeekJumpFeedbackTest.kt",
+      "bytes": 2688,
+      "lines": 93,
+      "sha256": "7c72292220a34083b330db4b50be51df840403ec4c937357b113b15d18d1f73f",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/VideoCacheContentionTest.kt",
+      "bytes": 2293,
+      "lines": 54,
+      "sha256": "fb25c8923e457a2bc25fd066d31cf3bbe697e038b02e5aaaa7ef9481d077e0e0",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/VideoPlaybackInfrastructureTest.kt",
+      "bytes": 7540,
+      "lines": 202,
+      "sha256": "eb3a5956725274e24f2d60b0499bae74d8bdc107353b2a75d1772e730ef2dde9",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerAccessibilityTest.kt",
+      "bytes": 6047,
+      "lines": 127,
+      "sha256": "0c8cadb12a18f2cf722975b8c3f1214f5db727516a86332fe0ec32760b401163",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerAutoPictureInPictureTest.kt",
+      "bytes": 5081,
+      "lines": 109,
+      "sha256": "0958703dde5562fe40e1b004f16c610bc517e94ef3b1eea598720bdfab343c60",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerGalleryLoadingSwipeTest.kt",
+      "bytes": 8005,
+      "lines": 158,
+      "sha256": "27b8e7619d3e2a3890e0ce7ff83041fbdf53154f19072a86379479685dc467e4",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerGifByteStoreTest.kt",
+      "bytes": 3222,
+      "lines": 76,
+      "sha256": "ffd0684cac3ff6e361a6f4d32de8fc2f312e37b20171971c52a9f785827608b6",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerGifTransportTest.kt",
+      "bytes": 3178,
+      "lines": 73,
+      "sha256": "904ccac17671debd91c7b01a80be0c4f7325c21d8f7c73135ef19587b790df9b",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerLevelControlsTest.kt",
+      "bytes": 5508,
+      "lines": 118,
+      "sha256": "94e722f8bc05fbfd8f2c5f97b5f63a6fd0b93006c2be07768037b263088fcf9a",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerLevelGesturesTest.kt",
+      "bytes": 8025,
+      "lines": 178,
+      "sha256": "7b6f2cfa665d961c0628d90a15055748d6a4e7b7d30672356cc9673cadf402d2",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerLinkedPageTest.kt",
+      "bytes": 2477,
+      "lines": 57,
+      "sha256": "5333f42674f5d47e771775d42e171c41851eae94e98dc8fe56681294f97c6e92",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerMediaErrorInteractionTest.kt",
+      "bytes": 3392,
+      "lines": 65,
+      "sha256": "0ebb2f1b2b01e88b2917ce76cf94bf784a6b18e812e173f56a75cb65df602279",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerMediaGesturesTest.kt",
+      "bytes": 3709,
+      "lines": 83,
+      "sha256": "a4fc5dc67949a751363e19b5143833bfedd46b1adbc5fe09ac1f80125c1d82c7",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerPlatformPlaybackTest.kt",
+      "bytes": 3550,
+      "lines": 84,
+      "sha256": "742b8e1bd1c6edb4362f2b0b3ab8ebf04113bc2f2d82d00b12aceb5691d16a80",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerPlaybackSettingsTest.kt",
+      "bytes": 2353,
+      "lines": 53,
+      "sha256": "cc3eeefa8949738c22e8143306e9b4ee2b88fcba465ef69505d60d34a46f3b9b",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerPrefetchPlannerTest.kt",
+      "bytes": 3636,
+      "lines": 92,
+      "sha256": "258cc0f0573a1c9bb90a244405f669d1d3b7e15bd09e9aa54cda25d6b946d831",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerRendererContractTest.kt",
+      "bytes": 4535,
+      "lines": 90,
+      "sha256": "0ab451ed29c08e8e4bc8f981b476756f2b57237eb10e49b68201f46fec49f479",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerReturnTransitionTest.kt",
+      "bytes": 12701,
+      "lines": 259,
+      "sha256": "f9a4c8cc52e3dab671786ea43e464b086d5c13f001e94c5782203ac120987e90",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerSavedReturnTest.kt",
+      "bytes": 4924,
+      "lines": 98,
+      "sha256": "60c5cc3a68d4f53dcab06bb966b3bdc6435e0ca34af5f453f3e4bb383d6cec85",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerScreenImagePipelineTest.kt",
+      "bytes": 18045,
+      "lines": 519,
+      "sha256": "1cc63c2f621634d1313311b9edd7a73d262a46e8917171c58437e5ac019d59a6",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerScreenOwnershipTest.kt",
+      "bytes": 757,
+      "lines": 21,
+      "sha256": "96f91f1856fea5946e803bf1ff7144aa3af05a89d5773d11f3d8cdb8cae3c644",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerSessionCoordinatorTest.kt",
+      "bytes": 12348,
+      "lines": 308,
+      "sha256": "7e8dc12b0c1c6023171888f973876c2c089d0f2931419db7523cec1452c8d2e3",
+      "kind": "text",
+      "reader": "luna-09",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerSwipeAnimationTest.kt",
+      "bytes": 4077,
+      "lines": 81,
+      "sha256": "1a47a407036c783c4f1fbbca92bd67f260f4dfc52b1db37dac9a48ac9a050aa9",
+      "kind": "text",
+      "reader": "luna-10",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerTransformStateTest.kt",
+      "bytes": 3018,
+      "lines": 84,
+      "sha256": "013e996d04cd758ca77899ab546f6c86303aba1c5e3dddc7ba787b890c953c0e",
+      "kind": "text",
+      "reader": "luna-10",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerVideoPlayerPoolTest.kt",
+      "bytes": 4180,
+      "lines": 90,
+      "sha256": "9c78961a02fd3bef6343293077dec40d110531bc1550491b8a6e8bcb5c8bbb5d",
+      "kind": "text",
+      "reader": "luna-10",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerVideoPositionsTest.kt",
+      "bytes": 2778,
+      "lines": 69,
+      "sha256": "6adef9bd432764a12a98e628e2f27e398bc4669dfc2746d868aa49b2f5099cd7",
+      "kind": "text",
+      "reader": "luna-10",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerVideoPrefetchTest.kt",
+      "bytes": 2404,
+      "lines": 57,
+      "sha256": "53edf8b9db97a9835ecc3bec67af44b568913fc092e19227d3eb8d4c7379e892",
+      "kind": "text",
+      "reader": "luna-10",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerVideoRecoveryTest.kt",
+      "bytes": 2384,
+      "lines": 53,
+      "sha256": "95b46e0b094b68a98fca480f4d5a24fc5e14ac9da97d12bcf49b8dac86920776",
+      "kind": "text",
+      "reader": "luna-10",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerViewModelTest.kt",
+      "bytes": 26669,
+      "lines": 596,
+      "sha256": "db23cc7dcb951f7b2605a66c9ca366f2bad71e5ced693bb405b26db0d4579e22",
+      "kind": "text",
+      "reader": "luna-10",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/ViewerVisibilityRecordingTest.kt",
+      "bytes": 4001,
+      "lines": 89,
+      "sha256": "4b31ffdf1bbc092edf87d149569f7ff0fdd94399b808b38fe526c001eef17f3c",
+      "kind": "text",
+      "reader": "luna-10",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/viewer/state/ViewerStateReducerTest.kt",
+      "bytes": 19294,
+      "lines": 457,
+      "sha256": "32c1ee1c0e201ec188a20f447cbdff1f210002cf2e8318ce3f19c43059fe42a9",
+      "kind": "text",
+      "reader": "luna-10",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/resources/r8-json-contracts.txt",
+      "bytes": 6615,
+      "lines": 55,
+      "sha256": "752d5433ce1258dbedb897abce480971c30bdf9cac006fc91fc57253e4ef56ab",
+      "kind": "text",
+      "reader": "luna-10",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/resources/robolectric.properties",
+      "bytes": 89,
+      "lines": 2,
+      "sha256": "1c9dfc7ea6693cf73e8e0e47821802677cb7130fc701401def9d04685daa1bc9",
+      "kind": "text",
+      "reader": "luna-10",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/testDebug/java/com/theoriacodex/app/developercopy/DeveloperCopyProtocolTest.kt",
+      "bytes": 2605,
+      "lines": 51,
+      "sha256": "731c4d8a930ede55a659cbc385093f1abf056b3c4a2865621e79c5b2ffd84d11",
+      "kind": "text",
+      "reader": "luna-10",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/testDebug/java/com/theoriacodex/app/developercopy/ReadOnlyCredentialReadTest.kt",
+      "bytes": 3660,
+      "lines": 72,
+      "sha256": "78a3417bb863637cbb22fe8fee0e5885793d0ad8d2f4397aa0c7e3956982f2ab",
+      "kind": "text",
+      "reader": "luna-10",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/testDebug/java/com/theoriacodex/app/developercopy/ReadOnlyLibrarySnapshotTest.kt",
+      "bytes": 5651,
+      "lines": 110,
+      "sha256": "fde1e5df8e37c39116cb12ee7ad3ae43e6e37d0436546b5d7ed7cd5b87f33b50",
+      "kind": "text",
+      "reader": "luna-10",
+      "read_status": "complete"
+    },
+    {
+      "path": "baseline-profile/src/main/AndroidManifest.xml",
+      "bytes": 52,
+      "lines": 2,
+      "sha256": "daa0fb1f32ba7ea85a07ef6302ab3d58c3407d7fd2aa03ec132cb9e38e8d9849",
+      "kind": "text",
+      "reader": "luna-10",
+      "read_status": "complete"
+    },
+    {
+      "path": "baseline-profile/src/main/java/com/theoriacodex/baselineprofile/BaselineProfileGenerator.kt",
+      "bytes": 1391,
+      "lines": 45,
+      "sha256": "8ffa1b88bedb72db1ff70cd70b5121a9865e11eef1063af7f3d0b3b62aa4f0e0",
+      "kind": "text",
+      "reader": "luna-10",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data-android/schemas/com.theoriacodex.data.android.room.TheoriaRoomDatabase/1.json",
+      "bytes": 10476,
+      "lines": 323,
+      "sha256": "e6713248bb0a7362b20dead5098ea657c1330e69ddbfb8776dfa460e503c4bce",
+      "kind": "text",
+      "reader": "luna-18",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data-android/schemas/com.theoriacodex.data.android.room.TheoriaRoomDatabase/2.json",
+      "bytes": 17399,
+      "lines": 527,
+      "sha256": "b8c9e30d2666910594dc4b32cb81ea23b9ed1fdfd255b2e22ec62161a566bbc6",
+      "kind": "text",
+      "reader": "luna-18",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data-android/schemas/com.theoriacodex.data.android.room.TheoriaRoomDatabase/3.json",
+      "bytes": 17668,
+      "lines": 535,
+      "sha256": "3bdb94bb2156c85a9fb38b7b8b0e09339013d91e3ca25a2677b86ebbb3da4e6e",
+      "kind": "text",
+      "reader": "luna-18",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data-android/schemas/com.theoriacodex.data.android.room.TheoriaRoomDatabase/4.json",
+      "bytes": 19552,
+      "lines": 597,
+      "sha256": "37099778fe4b54b150cb9c11ed46a83cc2d1739c4f94fdc95d087c1bec8aacfc",
+      "kind": "text",
+      "reader": "luna-18",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data-android/schemas/com.theoriacodex.data.android.room.TheoriaRoomDatabase/5.json",
+      "bytes": 22214,
+      "lines": 675,
+      "sha256": "91ee859224fbe73b41153f3946aa260afb1d4876d416fe4a7b901d7724beb1a5",
+      "kind": "text",
+      "reader": "luna-18",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data-android/schemas/com.theoriacodex.data.android.room.TheoriaRoomDatabase/6.json",
+      "bytes": 22491,
+      "lines": 682,
+      "sha256": "a5b045753989e147b52ff3db30a6d2a157c30bd6fcd2d24ad33fa866b0753add",
+      "kind": "text",
+      "reader": "luna-19",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data-android/schemas/com.theoriacodex.data.android.room.TheoriaRoomDatabase/7.json",
+      "bytes": 22691,
+      "lines": 688,
+      "sha256": "9fa94d578b0df75b6e2548df849e037d57fd10d25f26fd78f66e50185e6e9645",
+      "kind": "text",
+      "reader": "luna-19",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data-android/schemas/com.theoriacodex.data.android.room.TheoriaRoomDatabase/8.json",
+      "bytes": 25097,
+      "lines": 752,
+      "sha256": "624b1f54c153ef08258fc1a74d4ba6ab894385b54a90ddb16b1953ff5376bae5",
+      "kind": "text",
+      "reader": "luna-19",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data-android/schemas/com.theoriacodex.data.android.room.TheoriaRoomDatabase/9.json",
+      "bytes": 25483,
+      "lines": 762,
+      "sha256": "a1f554644ecbbe9e7df8036aea0a0a605464691f2ec0392fba7bfd09cd945a9f",
+      "kind": "text",
+      "reader": "luna-19",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data-android/src/androidTest/kotlin/com/theoriacodex/data/android/room/RoomUpgradeJourneyDeviceTest.kt",
+      "bytes": 786,
+      "lines": 21,
+      "sha256": "3e99c2a262243d070090322c0b3c3a0f274aa0aec7dd4b3b461f5011575bd93e",
+      "kind": "text",
+      "reader": "luna-10",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data-android/src/androidTest/kotlin/com/theoriacodex/data/android/room/TheoriaRoomSchemaTest.kt",
+      "bytes": 9695,
+      "lines": 235,
+      "sha256": "94f563cdfb895f9e9e16eec552e7fb1ddb43e899211dfd7e4461ac95ad46a572",
+      "kind": "text",
+      "reader": "luna-10",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data-android/src/sharedTest/kotlin/com/theoriacodex/data/android/room/RoomUpgradeScenario.kt",
+      "bytes": 12957,
+      "lines": 202,
+      "sha256": "10215a6ae3fd7139c70fee5a04611390bb2636a26601886cce4e298ffc96f748",
+      "kind": "text",
+      "reader": "luna-10",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RetainedPostPayloadsTest.kt",
+      "bytes": 2321,
+      "lines": 46,
+      "sha256": "3b87e1fc058e199c7c9de64d0ec4b1e6618856a9f9e704688c742a2ceb9cef06",
+      "kind": "text",
+      "reader": "luna-10",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomCodexCleaningTest.kt",
+      "bytes": 8754,
+      "lines": 151,
+      "sha256": "753c4f075cd6282fb2872d848b0b8a4e95002f73df414eac79cac83207d9e109",
+      "kind": "text",
+      "reader": "luna-10",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomCodexLikesRepositoryTest.kt",
+      "bytes": 19279,
+      "lines": 508,
+      "sha256": "dc2d2a31c98319f0f9522195326cc7ff83a719afdc62cbf39d0ff782649704dd",
+      "kind": "text",
+      "reader": "luna-10",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomCollectionStorageTest.kt",
+      "bytes": 9022,
+      "lines": 171,
+      "sha256": "7926e16e029bd34e1cef5ae945ce6446939fedc31430c877b1743052885f2b4d",
+      "kind": "text",
+      "reader": "luna-10",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomLegacyJsonImporterTest.kt",
+      "bytes": 18500,
+      "lines": 442,
+      "sha256": "9bb9d7cac46b840b8f191723424575714f183b0c93c527bfe3210816de811221",
+      "kind": "text",
+      "reader": "luna-10",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomMediaDurationRepositoryTest.kt",
+      "bytes": 5577,
+      "lines": 146,
+      "sha256": "c6146a1c5f0ae9c831a4163374c4289a04d658f43cf46a3c6b8c08d2313a0c68",
+      "kind": "text",
+      "reader": "luna-10",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomProfileBackupStoreTest.kt",
+      "bytes": 7045,
+      "lines": 124,
+      "sha256": "b7d6444a5b2e9103b24b7132edf8772e261df6cbe4397bcb45852f9c4ebbc1d0",
+      "kind": "text",
+      "reader": "luna-10",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomProfileDeletionTest.kt",
+      "bytes": 4754,
+      "lines": 78,
+      "sha256": "d284f6da1b264729541187722fbf679eda8077df4048c6fc986513aee07f31b7",
+      "kind": "text",
+      "reader": "luna-11",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomRecentsLegacyImporterTest.kt",
+      "bytes": 16125,
+      "lines": 352,
+      "sha256": "2ccfbca53f7ae6e16ff6389d0040dcb001085ddd4100211b5da6bc51c9d56a0a",
+      "kind": "text",
+      "reader": "luna-11",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomRecentsRepositoryTest.kt",
+      "bytes": 17363,
+      "lines": 380,
+      "sha256": "742786df91acf26bce973e8537757cb5e0cbded53e28f11b645ab3478a773644",
+      "kind": "text",
+      "reader": "luna-11",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomUpgradeJourneyTest.kt",
+      "bytes": 1083,
+      "lines": 27,
+      "sha256": "b365b75fe3062fdf57d7a4dd84142194b1f3d0c51c9ae1d4b750d597da1c722a",
+      "kind": "text",
+      "reader": "luna-11",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomViewerTranslationCacheRepositoryTest.kt",
+      "bytes": 4379,
+      "lines": 122,
+      "sha256": "2219650c3c6a59cfa2dc7c9bd5508c3518f102b129817f411cf88321006971d2",
+      "kind": "text",
+      "reader": "luna-11",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data-android/src/test/resources/robolectric.properties",
+      "bytes": 89,
+      "lines": 2,
+      "sha256": "1c9dfc7ea6693cf73e8e0e47821802677cb7130fc701401def9d04685daa1bc9",
+      "kind": "text",
+      "reader": "luna-11",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/CodexLikesPolicyTest.kt",
+      "bytes": 6951,
+      "lines": 184,
+      "sha256": "0a9fc9ff2913035ba5110340c75a0a5659877e506b092297d151cfa00dcbcfad",
+      "kind": "text",
+      "reader": "luna-11",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/CreatorFollowsRepositoryTest.kt",
+      "bytes": 2955,
+      "lines": 54,
+      "sha256": "68c7bc14209681c95a85d4f9b0769c14c03b26e93575a291c91cd6bbe2c1ec72",
+      "kind": "text",
+      "reader": "luna-11",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/DataStoreDispatchTest.kt",
+      "bytes": 2678,
+      "lines": 62,
+      "sha256": "aa250033a3ed62e2e4fc2fd79f4b59d1984506503583cb048d9d1a78e7d7ef1c",
+      "kind": "text",
+      "reader": "luna-11",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/DataStoreRepositoriesTest.kt",
+      "bytes": 26210,
+      "lines": 600,
+      "sha256": "53f54b3763b7c8315e546175ecb4b8df6a3ceb216df7fb9e348778f275667cae",
+      "kind": "text",
+      "reader": "luna-11",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/DataStoreRepositoryContractsTest.kt",
+      "bytes": 6143,
+      "lines": 149,
+      "sha256": "71fb0c27cc49ea7ff6011575169d6a4fe9425d28ce50c781e16abb0e270e603e",
+      "kind": "text",
+      "reader": "luna-11",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/FileBackedCacheRepositoryTest.kt",
+      "bytes": 5895,
+      "lines": 120,
+      "sha256": "226044c89540a87233a2604804c1b8fa8d29983c86a9c01a2edd7144dc740bf9",
+      "kind": "text",
+      "reader": "luna-11",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/FileBackedQueryRepositoryTest.kt",
+      "bytes": 8870,
+      "lines": 211,
+      "sha256": "c4e1fa30b17806b267a29a37cbff839028f8a52057ec14ad44846e4129f5f931",
+      "kind": "text",
+      "reader": "luna-11",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/FileBackedRepositoryTestFixture.kt",
+      "bytes": 2170,
+      "lines": 57,
+      "sha256": "c1a8ab22885dcd9323d2421aba87fbb2546298f768b196c0f6c8796b05c3e640",
+      "kind": "text",
+      "reader": "luna-11",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/FileBackedSavedSearchRepositoryTest.kt",
+      "bytes": 7248,
+      "lines": 144,
+      "sha256": "687639ba0be507164ba6c5bc1db651c0b73e698d368686a97eb617c0d35cc3a7",
+      "kind": "text",
+      "reader": "luna-11",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/InMemoryRepositoriesTest.kt",
+      "bytes": 17901,
+      "lines": 469,
+      "sha256": "5d602a45ad2d1f8025d7abb4dc7ae8d11c45b610ec1d3520efbb7b2bdd6bee2b",
+      "kind": "text",
+      "reader": "luna-11",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/MediaDurationRepositoryTest.kt",
+      "bytes": 2593,
+      "lines": 66,
+      "sha256": "9e630d54d3002ebb4965cadd067aa23579421daf196dd25dc6d2f9e6016f5459",
+      "kind": "text",
+      "reader": "luna-11",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/MediaPreferencesStorageTest.kt",
+      "bytes": 2587,
+      "lines": 44,
+      "sha256": "52e20a3f3f48d59d35b44a4d66f87a5c1e0b0c168a88fd041d8bec13c9cd698a",
+      "kind": "text",
+      "reader": "luna-11",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/OfflineMediaStoreTest.kt",
+      "bytes": 13233,
+      "lines": 265,
+      "sha256": "e7430518aec33f71dd439b94191fca261eb6f5d5fb8aec368495d6b0de56e2f1",
+      "kind": "text",
+      "reader": "luna-11",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/ProfileBackupServiceTest.kt",
+      "bytes": 13181,
+      "lines": 241,
+      "sha256": "c2c1f8bccc1fd00d4d1f4ec13aedf72775563e80ca91e15f0a498f4c62232661",
+      "kind": "text",
+      "reader": "luna-11",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/ProfileCapacityTest.kt",
+      "bytes": 5006,
+      "lines": 90,
+      "sha256": "5583841849e2b3d44ab0e5f99a1d2495cb0ef8ca54e9061441e442ea325a19f1",
+      "kind": "text",
+      "reader": "luna-11",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/ProfileDeletionServiceTest.kt",
+      "bytes": 5200,
+      "lines": 86,
+      "sha256": "56525b978a5868d85c44199848fe38fb6824eff15b023a5fd5cb9a209d8eda2d",
+      "kind": "text",
+      "reader": "luna-11",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/ReadOnlyProfileBackupFilesTest.kt",
+      "bytes": 2315,
+      "lines": 43,
+      "sha256": "738ac29bc85aae7002ab4b1ff372b85672337e538577735cb8efd801cae99af5",
+      "kind": "text",
+      "reader": "luna-11",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/ReadingPositionRepositoryTest.kt",
+      "bytes": 4142,
+      "lines": 84,
+      "sha256": "2729d6ef5f804781ed6691a2aafd226e529dfd2fd280f408ef2ba30d78f7ad6c",
+      "kind": "text",
+      "reader": "luna-11",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/RepositoryContractsTest.kt",
+      "bytes": 22595,
+      "lines": 522,
+      "sha256": "44e463962e092d1f9aedb61fa4cb368d22cfd113577460b00956c7bc649e8672",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/RepositoryTestFixtures.kt",
+      "bytes": 1345,
+      "lines": 44,
+      "sha256": "3d327b99b181d4a88b112177b71b099edcc062b9329ce1735563343f5db55d9e",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/SourceWeightSettingsTest.kt",
+      "bytes": 2911,
+      "lines": 56,
+      "sha256": "7b4c118a7c8fa524e5843c97d15642ea93ca5c9f7b7c52d4956e4c3476046f23",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/StatisticsRepositoriesTest.kt",
+      "bytes": 8218,
+      "lines": 181,
+      "sha256": "fecf8d4cccc197920a948cfe2bf7273b891161d567395dae34287b0979b9ac41",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/ViewerTranslationCacheRepositoryTest.kt",
+      "bytes": 1222,
+      "lines": 38,
+      "sha256": "e6ec2532c292d3fa856cdd7f571f72f32fa3162b19f4e57da4f7ea51d1ddebf1",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/storage/ApplicationDataReadinessTest.kt",
+      "bytes": 4502,
+      "lines": 118,
+      "sha256": "0b66824073e6f2880c08a489ed635580fb923ea1056d544bd1e9546c080d3345",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/storage/AtomicJsonFileStoreTest.kt",
+      "bytes": 17703,
+      "lines": 424,
+      "sha256": "5a91646b7cc998a3082d851ec4dfb07b633d4ec02afd47b1b47d460d8329747a",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/storage/DataStoreStorageTest.kt",
+      "bytes": 1559,
+      "lines": 45,
+      "sha256": "121ee28450212f179d4c66414025a03afdc61ad38f73b5587d80be961c7b1288",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/storage/DurableMutationTest.kt",
+      "bytes": 1457,
+      "lines": 45,
+      "sha256": "9deb38ef453ec732b2fabccc9bc7a477a5b31bf662ecf5a191e279d43eafdfc2",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/storage/PostStorageRecordsTest.kt",
+      "bytes": 4426,
+      "lines": 124,
+      "sha256": "b3044369863c676d81128be580d1eb9fc9c83c3284ebf1457fd623df2180875f",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/storage/RecentSearchPayloadCodecTest.kt",
+      "bytes": 3161,
+      "lines": 87,
+      "sha256": "689eb4fcb801e61e308a9ac8b0a1681a0a28d2e7552aaed4dd0fb97f330ecea2",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/testing/ControllableIoDispatcher.kt",
+      "bytes": 879,
+      "lines": 28,
+      "sha256": "822d1959486241f9079637cc01c36bb45cd336acc1ca0f1f11876ada1a4f05f0",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/testing/RecordingIoDispatcher.kt",
+      "bytes": 1054,
+      "lines": 32,
+      "sha256": "ba491d826920220f86d6447d1ef9b47fa04e7a079eb1a0ca8721387be4bdeddc",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/test/resources/queries/legacy-and-typed-terms.json",
+      "bytes": 1275,
+      "lines": 48,
+      "sha256": "85b86da4f7207074b7b795d9443706afb84d000f7b0b0bb8b3ab927829100adc",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/testFixtures/kotlin/com/theoriacodex/data/repository/FixtureRepositoryPolicies.kt",
+      "bytes": 4016,
+      "lines": 111,
+      "sha256": "6adde13e18f36aaeb769a2b05889188db34db668108fab6f39e96ffa40b4d7f1",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/testFixtures/kotlin/com/theoriacodex/data/repository/InMemoryCacheRepository.kt",
+      "bytes": 1467,
+      "lines": 54,
+      "sha256": "6bc3776ec0e94b83714a6c1bbff180831f90dbd6db3f8b2cf84240413db1e904",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/testFixtures/kotlin/com/theoriacodex/data/repository/InMemoryCodexLikesTransactions.kt",
+      "bytes": 6467,
+      "lines": 140,
+      "sha256": "53bcf1a5fcfd11528cda45d400f99169252184545483f4aa8790eed2cf2e2677",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/testFixtures/kotlin/com/theoriacodex/data/repository/InMemoryMediaDurationRepository.kt",
+      "bytes": 1956,
+      "lines": 55,
+      "sha256": "56f34322db6e75aa446c74ae4c5375a4af5c609d45bc4d9012f2ff275be5a232",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/testFixtures/kotlin/com/theoriacodex/data/repository/InMemoryRepositories.kt",
+      "bytes": 26650,
+      "lines": 690,
+      "sha256": "55669bb09fe53bcd24af369b24b0d24ad2796783d5ae7e45e06b1d45cb9fb053",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/testFixtures/kotlin/com/theoriacodex/data/repository/InMemoryStatisticsRepository.kt",
+      "bytes": 2393,
+      "lines": 59,
+      "sha256": "f331da091fe0f81404bd0c583f54ccece84ed3fb6f2332f902571e9196ffc0e6",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-data/src/testFixtures/kotlin/com/theoriacodex/data/repository/InMemoryViewerTranslationCacheRepository.kt",
+      "bytes": 2222,
+      "lines": 60,
+      "sha256": "4cdd0b1b198537debfbcc9b9748663fe5aaef0dde95140f348a3d1378cdb32d4",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/adapter/FacetedSearchContractTest.kt",
+      "bytes": 1418,
+      "lines": 45,
+      "sha256": "7534cc39a1f9863cda0407b12ec1a228055966e10b3b1cbcde6a4cd31a2b8ae7",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/coroutines/CoroutineResultsTest.kt",
+      "bytes": 1156,
+      "lines": 40,
+      "sha256": "6327fc1f47807e02d63622757e0ffaccf7ad69f0ee0bd40b6b5f64befc98ec37",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/encoding/StrictPercentDecodingTest.kt",
+      "bytes": 896,
+      "lines": 29,
+      "sha256": "13d64b656c8f3d6cd098f696d7dde9eaa32ddbb4573a76dd3eed51c45c76593c",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/model/FacetedDomainModelsTest.kt",
+      "bytes": 5064,
+      "lines": 140,
+      "sha256": "cd4587d3dd7fdf7d5853fa95975a4f87a795ba2a11e2519c1205c28e1f0e5959",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/orchestration/GroupedSearchPagingTest.kt",
+      "bytes": 7546,
+      "lines": 152,
+      "sha256": "8c09ab18599728b1d65ffc6ba78723d27d7b6c99c66342de8e8826ab333c949d",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/orchestration/SearchMetadataHydrationTest.kt",
+      "bytes": 7370,
+      "lines": 161,
+      "sha256": "4b6cf4769eb056871595e3c6a17ce0be81a3508afa5a0991db1860c978ea3bcb",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/orchestration/SourceWeightNormalizationTest.kt",
+      "bytes": 3017,
+      "lines": 77,
+      "sha256": "71a4b3ab4bfe34e6b30ecf9368b50798cf0872d7e6ca9be46ea7aca89ebe2929",
+      "kind": "text",
+      "reader": "luna-12",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/orchestration/UnifiedSearchOrchestratorTest.kt",
+      "bytes": 22152,
+      "lines": 518,
+      "sha256": "a0c46db94b47ad0f4e95081678f185b8015d79b3308e7cd3c8d380836074d361",
+      "kind": "text",
+      "reader": "luna-13",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/query/CanonicalQueryGroupsTest.kt",
+      "bytes": 2145,
+      "lines": 40,
+      "sha256": "36605b3e38a59bfdc305fb8fc31f28cd2407cda68d6946205c412b994fbae981",
+      "kind": "text",
+      "reader": "luna-13",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/query/QueryHashTest.kt",
+      "bytes": 4409,
+      "lines": 117,
+      "sha256": "73a80ee73c8627253c7a347fa0bd19e33d94805075df5b5fee6ea712e568cfdd",
+      "kind": "text",
+      "reader": "luna-13",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/query/QueryStateMachineTest.kt",
+      "bytes": 1827,
+      "lines": 59,
+      "sha256": "79d3856079e8da02c3f3639106c3b4044a3cb209875a6dd46532529728f3ebeb",
+      "kind": "text",
+      "reader": "luna-13",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/query/SourceCapabilityGateTest.kt",
+      "bytes": 2332,
+      "lines": 61,
+      "sha256": "bd052523c8d5e12086e35c0d9f828d94c8b2aa186d392974cf879f3fd503a62f",
+      "kind": "text",
+      "reader": "luna-13",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/recommendation/ForYouTagSetGeneratorTest.kt",
+      "bytes": 5080,
+      "lines": 144,
+      "sha256": "4c307ca5a918d7ddb9adcc2154f25a56140c01ea1e9b958ba13f6cb14a6171ce",
+      "kind": "text",
+      "reader": "luna-13",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/recommendation/RecommendationTagNormalizationTest.kt",
+      "bytes": 1875,
+      "lines": 57,
+      "sha256": "b4b3ae88c49fe88793bfa166f8696beb64e23325ee168d68422399ec1a828ae6",
+      "kind": "text",
+      "reader": "luna-13",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/tags/SourceTagNormalizationTest.kt",
+      "bytes": 477,
+      "lines": 14,
+      "sha256": "c1267a01ea19ee9cc4245d4f215cec7c4bbf44d859dbae1da5eea7c7e64f2fa1",
+      "kind": "text",
+      "reader": "luna-13",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/RealAdapterRegistryTest.kt",
+      "bytes": 2302,
+      "lines": 56,
+      "sha256": "421a6bb98be106250647c90b901b005be74c6a689491bf07884eb516da815957",
+      "kind": "text",
+      "reader": "luna-13",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/RealProviderPageContractTest.kt",
+      "bytes": 4817,
+      "lines": 83,
+      "sha256": "9ce45da96c7ea0f552009072dec1198badca2d7aafe26b5eb69cbf28df46a738",
+      "kind": "text",
+      "reader": "luna-13",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/aibooru/AibooruProviderJourneyTest.kt",
+      "bytes": 5118,
+      "lines": 99,
+      "sha256": "a88e8e49590f913b0530940788d32d7e238fb2932a2821a5a7241a43a59b7c83",
+      "kind": "text",
+      "reader": "luna-13",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/aibooru/AibooruSourceAdapterTest.kt",
+      "bytes": 4531,
+      "lines": 119,
+      "sha256": "ed6f4d682c6944d940a3eb6d967ed9cac56a3ee3f662ecd1d57b3e016334ae12",
+      "kind": "text",
+      "reader": "luna-13",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/common/AutocompleteTagCountsTest.kt",
+      "bytes": 2353,
+      "lines": 52,
+      "sha256": "ab2a7dc7043032ffa8086965d0b78dab0dcc379f07308aa5a7a65525c1e23fe3",
+      "kind": "text",
+      "reader": "luna-13",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/common/SourceAdapterCommonTest.kt",
+      "bytes": 6974,
+      "lines": 171,
+      "sha256": "02093caac5e6ca253b65eccb1a85d01b70c009bc2963e1d0091a784aa4ac9f02",
+      "kind": "text",
+      "reader": "luna-13",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/gelbooru/GelbooruRelatedPostsParserTest.kt",
+      "bytes": 1610,
+      "lines": 41,
+      "sha256": "2e9de8f76f55f5b68a99a7498efa9722eb44326db7fb41ffeecd0f5be75d05dc",
+      "kind": "text",
+      "reader": "luna-13",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/gelbooru/GelbooruSourceAdapterTest.kt",
+      "bytes": 19165,
+      "lines": 493,
+      "sha256": "c60c16b8f72c4c256e0952b9f2283185c56923c6733450745ca5434a6a97b180",
+      "kind": "text",
+      "reader": "luna-13",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/health/HitomiProviderHealthProbeTest.kt",
+      "bytes": 10815,
+      "lines": 279,
+      "sha256": "1bb8ea17a937310ccd2f5429701d3a115d64a366bf36285a16bb37284a8cfdaa",
+      "kind": "text",
+      "reader": "luna-13",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/health/ProviderHealthCheckCliTest.kt",
+      "bytes": 3042,
+      "lines": 91,
+      "sha256": "9dfdf82807bb7f87dffed9a4f4c2df4e4ef0056009b075e0c5350e25d9306d55",
+      "kind": "text",
+      "reader": "luna-13",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/health/ProviderHealthCheckerTest.kt",
+      "bytes": 15815,
+      "lines": 369,
+      "sha256": "645371c454e0ffd5d92121b7fabadc3f1af0c314a401495366c73c80e3a1c811",
+      "kind": "text",
+      "reader": "luna-13",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiByteBudgetCacheTest.kt",
+      "bytes": 1317,
+      "lines": 37,
+      "sha256": "45ee60c2a6c3601ba2a3ad7be779b50b2855360e0aa3f1e66bad6d22d1a7cbbe",
+      "kind": "text",
+      "reader": "luna-13",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiCreatorFailureSourceAdapterTest.kt",
+      "bytes": 12232,
+      "lines": 293,
+      "sha256": "338274736d6a71d132257b871098fa9975ad2a081e1bafd6bbb280cab1dcd084",
+      "kind": "text",
+      "reader": "luna-13",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiDeterministicPermutationTest.kt",
+      "bytes": 2303,
+      "lines": 66,
+      "sha256": "46225a0b35818b1d96afc7c0b0fc38ef80a1912c3fdd84bad654f58e95b924c1",
+      "kind": "text",
+      "reader": "luna-13",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiFacetHydrationSourceAdapterTest.kt",
+      "bytes": 14762,
+      "lines": 326,
+      "sha256": "ad1a2da7b05c49a63ce04c9a582204b9d9f390f3946d19d85c11d6f9e5f6cbd7",
+      "kind": "text",
+      "reader": "luna-13",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiGalleryManifestStoreTest.kt",
+      "bytes": 5459,
+      "lines": 161,
+      "sha256": "e3a49cb3642e71d268a6169a6317da69235f9e94992bd5ec3a6402a9c458dd90",
+      "kind": "text",
+      "reader": "luna-13",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiGlobalIndexCacheTest.kt",
+      "bytes": 5662,
+      "lines": 156,
+      "sha256": "5be1031d58bf9120513f21381c1691ab8a4b67114026e7e2e8e7e968f4cfc837",
+      "kind": "text",
+      "reader": "luna-13",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiGlobalIndexSourceAdapterTest.kt",
+      "bytes": 12362,
+      "lines": 263,
+      "sha256": "b2190fceecf8faab7a9e08b2c8b8e8b8bbaf8b3cec95695be543c565ed85ce10",
+      "kind": "text",
+      "reader": "luna-14",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiMediaUrlResolverTest.kt",
+      "bytes": 12962,
+      "lines": 319,
+      "sha256": "d45087542ea7ea62987c1763c832d3ce1ce67ae787244016c78e107858a6b95b",
+      "kind": "text",
+      "reader": "luna-14",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiNozomiTest.kt",
+      "bytes": 5202,
+      "lines": 129,
+      "sha256": "2aa8ae312e95f5cb32beb65859ffc0be6cb33b518ffc9f682640f941d3a36949",
+      "kind": "text",
+      "reader": "luna-14",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiPaginationSourceAdapterTest.kt",
+      "bytes": 17084,
+      "lines": 368,
+      "sha256": "42c02536fdf2e9a0d52035fe3994ac2d4310919c0f4b66aa209e3d979e7d7abf",
+      "kind": "text",
+      "reader": "luna-14",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiProtocolTest.kt",
+      "bytes": 5066,
+      "lines": 123,
+      "sha256": "a98701928764bdd94f1af718eb332e56f7cbe2fd7dc8d6080e542680e0f5429a",
+      "kind": "text",
+      "reader": "luna-14",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiRandomSnapshotCacheTest.kt",
+      "bytes": 4341,
+      "lines": 116,
+      "sha256": "175025a513cfb426c6c5e2cdf2a630bc30a0f58757654e393c87820844b9577a",
+      "kind": "text",
+      "reader": "luna-14",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiSourceAdapterTestFixture.kt",
+      "bytes": 13271,
+      "lines": 307,
+      "sha256": "dfa5eb9582404ea8e4cbb277b1a4fee97e7a1c46019f8b443c868bb57fba6a9d",
+      "kind": "text",
+      "reader": "luna-14",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/http/DefaultSourceHttpClientTest.kt",
+      "bytes": 14610,
+      "lines": 394,
+      "sha256": "1e9bc4092eb3e1624702ef5de86eb20df6e2bb44d5ab159049472ae8b6670cf0",
+      "kind": "text",
+      "reader": "luna-14",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/iwara/IwaraSourceAdapterTest.kt",
+      "bytes": 22853,
+      "lines": 555,
+      "sha256": "136b9f1df08f9a7102af3d192d5513f1f31fa18984bd0bfa89c618ce1a7ffb9f",
+      "kind": "text",
+      "reader": "luna-14",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/media/MediaMimeTest.kt",
+      "bytes": 801,
+      "lines": 22,
+      "sha256": "4cbbfbb54608917ba8cb3caf34249fbee27501e2c1b12dea1ed439d32f40eca5",
+      "kind": "text",
+      "reader": "luna-14",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/nhentai/NhentaiCreatorSourceAdapterTest.kt",
+      "bytes": 3990,
+      "lines": 91,
+      "sha256": "fa60cbf3958b4631582f519416b4ae50c5ca31052a39af6403bb87c4e791097e",
+      "kind": "text",
+      "reader": "luna-14",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/nhentai/NhentaiRelatedPostsSourceAdapterTest.kt",
+      "bytes": 4914,
+      "lines": 122,
+      "sha256": "e45a49b38ad8af00212a34ab24332537636f37343538e145e8baf717fa077b08",
+      "kind": "text",
+      "reader": "luna-14",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/nhentai/NhentaiResolutionSourceAdapterTest.kt",
+      "bytes": 10216,
+      "lines": 220,
+      "sha256": "6d63e64dbcf25fb6336efeddc66b217fbd7b58964eee12dbb23d801bd8e80a54",
+      "kind": "text",
+      "reader": "luna-14",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/nhentai/NhentaiSearchSourceAdapterTest.kt",
+      "bytes": 15521,
+      "lines": 399,
+      "sha256": "b1509dd9057937f52bbced8a3e253cb04a188d7ac131a20a08f6b1cb82ee6d6e",
+      "kind": "text",
+      "reader": "luna-14",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/nhentai/NhentaiSourceAdapterTestFixture.kt",
+      "bytes": 5444,
+      "lines": 155,
+      "sha256": "ff35b5a42c099b0676acf380f3becf926d8195abbd8e240f623c0c480e938392",
+      "kind": "text",
+      "reader": "luna-14",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/nhentai/NhentaiSuggestionSourceAdapterTest.kt",
+      "bytes": 9760,
+      "lines": 238,
+      "sha256": "d930530faa55814c177bb29cd8e1adef72a0006ca1ac205f49526127c906f7de",
+      "kind": "text",
+      "reader": "luna-14",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/nhentai/NhentaiTitleTest.kt",
+      "bytes": 1435,
+      "lines": 37,
+      "sha256": "b1ae488694cc460b8771e544afe8e5c15316357dc89e2e10803eb9a665b2529d",
+      "kind": "text",
+      "reader": "luna-14",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/pixiv/PixivAccountDecisionTest.kt",
+      "bytes": 2813,
+      "lines": 58,
+      "sha256": "1c89549d74f7e88e5278bfbf01324e131632d7c14a9f96296d1dff942069ac49",
+      "kind": "text",
+      "reader": "luna-14",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/pixiv/PixivAuthApiTest.kt",
+      "bytes": 3651,
+      "lines": 99,
+      "sha256": "b36426448a63aedbf24e5184eca148ab139766c98a80a87ed27dea29482fc22b",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/pixiv/PixivSourceAdapterTest.kt",
+      "bytes": 23715,
+      "lines": 639,
+      "sha256": "018546a45fe3938d012ddd3d968ad97d78913fde8983ba8da2390bdfba02ac77",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/pixiv/PixivTokenCoordinatorTest.kt",
+      "bytes": 3951,
+      "lines": 99,
+      "sha256": "781cf16cb530bc897e20240267004cdb63c8490a21576e57c63cd3d2a4c65cc7",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/rule34/Rule34GenProviderJourneyTest.kt",
+      "bytes": 3421,
+      "lines": 64,
+      "sha256": "11edea688bd918c3920434194f853438fa0520edd39cc43bf3c689baaa8619e9",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/rule34/Rule34GenSourceAdapterTest.kt",
+      "bytes": 4246,
+      "lines": 99,
+      "sha256": "e2952b27be12b39dc796ed451cca244dac152696a46863a8be91777bb6735396",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/rule34/Rule34GroupedSearchMetadataTest.kt",
+      "bytes": 6699,
+      "lines": 148,
+      "sha256": "ee83f8db5aee289227b1b76871b08f22acc7eb18581dac0735134550aa8927b0",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/rule34/Rule34PahealSourceAdapterTest.kt",
+      "bytes": 6042,
+      "lines": 141,
+      "sha256": "ea43a3374b430c4d3f5865c0c9c3744bf7007571f6551998de3b965b06037ecb",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/rule34/Rule34VideoSourceAdapterTest.kt",
+      "bytes": 9932,
+      "lines": 248,
+      "sha256": "f4604d170ebda01603d911d4f653350577c6e6b27ab671af98be916547e893cc",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/rule34/Rule34XxxSourceAdapterTest.kt",
+      "bytes": 6416,
+      "lines": 165,
+      "sha256": "3a605a88f45d8f0f77217438b08d7f052aea07ef37cd2965dad72728de51fb98",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/testing/FakeInfrastructure.kt",
+      "bytes": 3217,
+      "lines": 96,
+      "sha256": "bd7c9d0786f7c3a2fbb8f80d178e293af594c9b8ea449a79f50386963be6e525",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/kotlin/com/theoriacodex/sources/testing/ScriptedHttpClient.kt",
+      "bytes": 1821,
+      "lines": 44,
+      "sha256": "52a171799d9dd5033bb5cfe4a909b93a53520597676697024c0904fcbd5748b1",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/resources/hitomi/2026-07-10/README.md",
+      "bytes": 1008,
+      "lines": 12,
+      "sha256": "24ecb9fd39c8abcb0b3a7b705b7d118bb4341951e0d43f03b88ead2b653abea1",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/resources/hitomi/2026-07-10/artist-kio.json",
+      "bytes": 271,
+      "lines": 1,
+      "sha256": "565c6f23bb59f0dc485b992191e4e00485b19831f621a60c9ef5acba9900681c",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/resources/hitomi/2026-07-10/artist-najar.nozomi.hex",
+      "bytes": 233,
+      "lines": 1,
+      "sha256": "6cd9ca7b82e8d9a52c61db5927f16c2cc3d1b6920e5839ec65ad8a7a02ed9396",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/resources/hitomi/2026-07-10/gallery-4042375.js",
+      "bytes": 6947,
+      "lines": 1,
+      "sha256": "b2b5b9c4f44ece1d99edde7e626317c7f5f92ef67c6e395035e61d31786d586c",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/resources/hitomi/2026-07-10/gallery-7231.js",
+      "bytes": 1685,
+      "lines": 1,
+      "sha256": "9969e6997750f5f9f7dc4436df2672ecd4e743a8062fc8f6708f3f3ad9dc566c",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/resources/hitomi/2026-07-10/gg-current-inverted-shape.js",
+      "bytes": 236,
+      "lines": 14,
+      "sha256": "7115401133bd4d57009a7cb3ac4add2a060ad01f1bcb51569828cf0142137465",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/resources/hitomi/2026-07-10/gg-shape.js",
+      "bytes": 236,
+      "lines": 14,
+      "sha256": "d87c9802dbab1f6e54c0beeffd5b50e7b3607f91142d0ae1e2fe654ab8ae1851",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-sources/src/test/resources/hitomi/2026-07-10/global-tags.json",
+      "bytes": 317,
+      "lines": 1,
+      "sha256": "fe7f8b73298c489b1ea23af3a0f8e18ad1bb8961692e5010fdd1008c8d8d0b59",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/kotlin/com/theoriacodex/stubs/JsonStubSourceAdapter.kt",
+      "bytes": 4914,
+      "lines": 137,
+      "sha256": "331646129119273f5af0139a107568aeaef9800f178102ecf219bfba5a2bd4e5",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/kotlin/com/theoriacodex/stubs/StubAdapterRegistry.kt",
+      "bytes": 1159,
+      "lines": 35,
+      "sha256": "cb8deee24db329fa89ba1d823e9ce5a962934f4d863ae97b7e8b3e016b6aec4b",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/kotlin/com/theoriacodex/stubs/StubFixtureLoader.kt",
+      "bytes": 3858,
+      "lines": 119,
+      "sha256": "9083f7b29bb4202cbd3473ed88617d02855c871c25a5ffa1ea0a0cf7a9d8a821",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/kotlin/com/theoriacodex/stubs/StubRuntime.kt",
+      "bytes": 189,
+      "lines": 8,
+      "sha256": "96b06a569446dc149fe168b34c012b412bc94b92a25e31576f09fec66b2b246a",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/kotlin/com/theoriacodex/stubs/StubScenario.kt",
+      "bytes": 384,
+      "lines": 20,
+      "sha256": "d060b14c0ea1923725e1004ef6dba045a12c558209d1332b14001e673a429781",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/aibooru/search_page_1.json",
+      "bytes": 463,
+      "lines": 17,
+      "sha256": "e4904759864f3226667bcddb355de91eb35fe8961a379dfde8e499679cd9c253",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/aibooru/search_page_2.json",
+      "bytes": 471,
+      "lines": 17,
+      "sha256": "2b46cfe6a6b0f7304a52d9d46c556e534eb85933f24a23b27a83c8799a89a432",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/aibooru/trending_tags.json",
+      "bytes": 140,
+      "lines": 6,
+      "sha256": "6758c0ebe1a67acd1ff3656ff560b80dc07b9d039187923bdd985abc0c7a6f37",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/gelbooru/search_page_1.json",
+      "bytes": 465,
+      "lines": 17,
+      "sha256": "a278f8d04c0df4cac4c70933c26659270bfcbaec9da3da0491c8d4a929cac79d",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/gelbooru/search_page_2.json",
+      "bytes": 468,
+      "lines": 17,
+      "sha256": "ce367fd39fa77f3cea0af971b80a89d9c0cf4fe1b5f2799f57f79ce157a02d32",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/gelbooru/trending_tags.json",
+      "bytes": 142,
+      "lines": 6,
+      "sha256": "9042877266b07c5477ad83fed9122d9f6b1f44638c31771cd5323fafb9cd6d4d",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/hitomi/search_page_1.json",
+      "bytes": 550,
+      "lines": 18,
+      "sha256": "87e0edac148b966842d22b3f77ae01d4c21cbf43a769b0ce6ad15b30887b99af",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/hitomi/search_page_2.json",
+      "bytes": 548,
+      "lines": 19,
+      "sha256": "65596ecb27aa18b4736e02075137ca7af1908e3daad733f55f7a886f4366c3e9",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/hitomi/trending_tags.json",
+      "bytes": 210,
+      "lines": 7,
+      "sha256": "9981328d995d9800f08a9edf7d8626ced002b4cebb862cd6d493c8ea225609af",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/iwara/search_page_1.json",
+      "bytes": 579,
+      "lines": 19,
+      "sha256": "ee1b44c4b3bcb38b41b21a3da4c369e11af1e76b8c78ffb1385e3d30d69d7f3c",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/iwara/search_page_2.json",
+      "bytes": 521,
+      "lines": 18,
+      "sha256": "5ae76b483721e4fd21e4c2379b9b97677eef3835293234ce6fa02275c8b934f5",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/iwara/trending_tags.json",
+      "bytes": 139,
+      "lines": 6,
+      "sha256": "fd977adc74e86280ba1d5a8689270ae4a5aa007da534288843f6740f5b3f85fb",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/nhentai/search_page_1.json",
+      "bytes": 490,
+      "lines": 17,
+      "sha256": "8a99ba72aa1b200bb6f3e9e596c9027e38360e852334a781830336baa8e2c175",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/nhentai/search_page_2.json",
+      "bytes": 456,
+      "lines": 17,
+      "sha256": "f1e106be226c7ad81222f41570e1cd480d1273a6759f0d7d4bcd12953cc0edfb",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/nhentai/trending_tags.json",
+      "bytes": 144,
+      "lines": 6,
+      "sha256": "0bc581ad2d646f0dcd0d954528ba2017e839638b5162b4ad6648329a5ea22cca",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/pixiv/search_page_1.json",
+      "bytes": 901,
+      "lines": 29,
+      "sha256": "f058368072d279bf1045838c0dc4ea6cb8fc39b3df72935e65f882d1e96072a9",
+      "kind": "text",
+      "reader": "luna-15",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/pixiv/search_page_2.json",
+      "bytes": 451,
+      "lines": 17,
+      "sha256": "32b57bbff2ee6940f16e82bd0bccf4649fdc4c5ea21ec19f71ff3281091a5cde",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/pixiv/trending_tags.json",
+      "bytes": 140,
+      "lines": 6,
+      "sha256": "849c343867dfec7e1b9d88c159844a990e1dee2d3cac277275a35d5f0cc76e74",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/rule34gen/search_page_1.json",
+      "bytes": 1129,
+      "lines": 31,
+      "sha256": "3d63796595d0a393d4c726db02df994737ec357c82c266be31a3b1f012f4c0b1",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/rule34gen/search_page_2.json",
+      "bytes": 589,
+      "lines": 18,
+      "sha256": "324ececb36bdb3738176cf1f319f8aa2c3e1ee6df276e427bb949f3dff03938b",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/rule34gen/trending_tags.json",
+      "bytes": 133,
+      "lines": 6,
+      "sha256": "615fdc9d04f4eeeb003ef33cc29a8d7d2e123bdff12ef509e1f5c617a4f326c4",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/rule34paheal/search_page_1.json",
+      "bytes": 974,
+      "lines": 29,
+      "sha256": "da19ee6e9821da17c9de10495bcd4f1a419b5963325a247d28292525898cb9b2",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/rule34paheal/search_page_2.json",
+      "bytes": 499,
+      "lines": 17,
+      "sha256": "a469e90c911b714c263424cc2da107f6c2d242796e680d85dd7eb71980026ac6",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/rule34paheal/trending_tags.json",
+      "bytes": 141,
+      "lines": 6,
+      "sha256": "3988639f874d9779fb1de458615b0f83f215e897ba58bcc44e9b89025c2b159a",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/rule34video/search_page_1.json",
+      "bytes": 1153,
+      "lines": 31,
+      "sha256": "eafbe6352f93a0c71d32f47474d9ddede18c07ac2328d17bbc70745f3245695f",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/rule34video/search_page_2.json",
+      "bytes": 589,
+      "lines": 18,
+      "sha256": "144c672bdfe18039c7e2d31e54c3f569262f28bd95820ab50390e0c95b05a854",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/rule34video/trending_tags.json",
+      "bytes": 139,
+      "lines": 6,
+      "sha256": "2a06fb7648c3f926895b487c7086f904f2beba48ae01f2751e1cee53a018a366",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/rule34xxx/search_page_1.json",
+      "bytes": 998,
+      "lines": 29,
+      "sha256": "8be434ca5f1974b69efc8deaaa35acaa04880cf5c19d43b591b428df8714fc1b",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/rule34xxx/search_page_2.json",
+      "bytes": 528,
+      "lines": 17,
+      "sha256": "5526f94fc6807fbbd72c9cd4f286cc24ea25f94512e3c462ce0af14d12c5965f",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/rule34xxx/trending_tags.json",
+      "bytes": 152,
+      "lines": 6,
+      "sha256": "53b9d55f12f792b9d427364ce82ff5ba5db94413bd9fd0ec147ecb44f43a822b",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/scenarios/empties.json",
+      "bytes": 84,
+      "lines": 7,
+      "sha256": "c68e49dc8d820341e3c15a4895dc1cbd9657218fef8cd71c028ef845b2881e70",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/main/resources/stubs/scenarios/failures.json",
+      "bytes": 253,
+      "lines": 7,
+      "sha256": "859d01eb7f8fcabfb9e195000cf31aa264cd7203103f475ca87be98c8933cee8",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/test/kotlin/com/theoriacodex/stubs/JsonStubSourceAdapterTest.kt",
+      "bytes": 4829,
+      "lines": 134,
+      "sha256": "d01275753922fe134cf06634abf3c1602c92842cc636773c0589f4e5009acbdf",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/test/kotlin/com/theoriacodex/stubs/StubAdapterRegistryTest.kt",
+      "bytes": 2437,
+      "lines": 63,
+      "sha256": "a6ee1b8225f5ca0e596b729cb6a87131816b2db3a387965704378fc627940adb",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "core-stubs/src/test/kotlin/com/theoriacodex/stubs/StubProviderContractTest.kt",
+      "bytes": 5681,
+      "lines": 133,
+      "sha256": "78cb795b857ac1c67cf5fcec8e91b6c17b5de5d522b1213aea7debb836637ea9",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "deploy/libretranslate/test_gateway.py",
+      "bytes": 4433,
+      "lines": 105,
+      "sha256": "eca9d018af8534f00d36edd916b866b78a72410ba7bf628ed71a85c9c80d2662",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "deploy/libretranslate/test_http_gateway.py",
+      "bytes": 8414,
+      "lines": 160,
+      "sha256": "2eed330f90a6a45635beec69586aea5cc74eb9bc91fa8556afc6357ed1040c33",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "macrobenchmark/src/main/AndroidManifest.xml",
+      "bytes": 52,
+      "lines": 2,
+      "sha256": "daa0fb1f32ba7ea85a07ef6302ab3d58c3407d7fd2aa03ec132cb9e38e8d9849",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "macrobenchmark/src/main/java/com/theoriacodex/macrobenchmark/MixedMediaFeedJourney.kt",
+      "bytes": 11811,
+      "lines": 266,
+      "sha256": "794c971c67ffab351e864270a1987960c23b7f9f22f5bab42f6cf0a157c9c21f",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "macrobenchmark/src/main/java/com/theoriacodex/macrobenchmark/TheoriaMacrobenchmark.kt",
+      "bytes": 14959,
+      "lines": 370,
+      "sha256": "8cd2d29c11adeebbe7846c8ebed1923c023a6a31678b416cfb04c909272f3d25",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "macrobenchmark/src/main/java/com/theoriacodex/macrobenchmark/ViewerObservationDeviceTest.kt",
+      "bytes": 2802,
+      "lines": 48,
+      "sha256": "a735e85a9823004c899f38735b3eff59b841d90efb0b65ded0ce086dfa2407e9",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/benchmark_results.py",
+      "bytes": 26827,
+      "lines": 463,
+      "sha256": "d0c103c158079566af49a61bba19c8e7c5551b16cb719cd647cb839009565e65",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/check_changed_coverage.py",
+      "bytes": 19354,
+      "lines": 511,
+      "sha256": "33e310a8860e06ffadb4bff7bfb31e02b9ba12713cd8f814dd7ff41f1266620e",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/check_hotspots.py",
+      "bytes": 19364,
+      "lines": 452,
+      "sha256": "9e560a8e927ee59289b203cd3cc0b5c12d3ffd03e18f06eb00cc164eb0fbad1e",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/copy_production_to_debug.py",
+      "bytes": 9743,
+      "lines": 197,
+      "sha256": "c1b88ea3a7bb4c19c400eceb3b7ccea5d5031d76f4061ab69c05e3d7a8e9e3d0",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/device_validation_common.sh",
+      "bytes": 763,
+      "lines": 22,
+      "sha256": "43ed75629681687d49afdd5d764c53e697d71db8b0da0478f2d8e243dfc8a2e8",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/prepare_ci_android_sdk.sh",
+      "bytes": 1089,
+      "lines": 18,
+      "sha256": "f184709db97b4ea7a91477c078b753e83148b57dc87cfed51ce40b39c207b64a",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/sign_release_apk.py",
+      "bytes": 2777,
+      "lines": 61,
+      "sha256": "ca08d7967ef21e342dac8bd66cf34cdd15b59aca34ebb568676bde5b085102f0",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/tests/test_app_behavior_coverage.py",
+      "bytes": 3507,
+      "lines": 70,
+      "sha256": "05c972e6487d17e05f02bdc4fb8061962e901fc674ac8d1b0c0c02b19bc44177",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/tests/test_benchmark_results.py",
+      "bytes": 23977,
+      "lines": 412,
+      "sha256": "07d77cc0c76a6da239ec3826087241702c990c4ff72e7367c1421eb54f2ab4ca",
+      "kind": "text",
+      "reader": "luna-16",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/tests/test_check_changed_coverage.py",
+      "bytes": 14606,
+      "lines": 362,
+      "sha256": "31b017ac5563d5cf79d1b5eb3763cc0e0980f02e6e5d506fcfc2405730e73d5e",
+      "kind": "text",
+      "reader": "luna-17",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/tests/test_check_hotspots.py",
+      "bytes": 11206,
+      "lines": 220,
+      "sha256": "f05ac79c51270bb1c72c49b3056fa968abc89fd3a3161431b353da859b03b91f",
+      "kind": "text",
+      "reader": "luna-17",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/tests/test_ci_emulator_environment.py",
+      "bytes": 8352,
+      "lines": 149,
+      "sha256": "ed222abdf3f39d5df61bf24f0ac9488a97583e03604d16884e0b1a44e33f692a",
+      "kind": "text",
+      "reader": "luna-17",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/tests/test_configuration_cache_contract.py",
+      "bytes": 4673,
+      "lines": 101,
+      "sha256": "1f379c00e48909b98c7c7ec9518722295e3027be7c2624d8e2043ad8355f9839",
+      "kind": "text",
+      "reader": "luna-17",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/tests/test_copy_production_to_debug.py",
+      "bytes": 7761,
+      "lines": 151,
+      "sha256": "f0e194367696d029d9ac4eeec7fe467f55bd131e017f515aab64d46648bd09f3",
+      "kind": "text",
+      "reader": "luna-17",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/tests/test_debug_journey_diagnostics.py",
+      "bytes": 2184,
+      "lines": 51,
+      "sha256": "6d00c8ba8a46983346aa0fea02c98831f0f5413ef3a971bdf23150e8bb3bcdcc",
+      "kind": "text",
+      "reader": "luna-17",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/tests/test_debug_keystore_location.py",
+      "bytes": 4411,
+      "lines": 93,
+      "sha256": "b5832bc05369197ab82c22cc0f9dae2de039182192d59f15d791af0b43884d29",
+      "kind": "text",
+      "reader": "luna-17",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/tests/test_device_validation_workflow.py",
+      "bytes": 1906,
+      "lines": 41,
+      "sha256": "2658170029e0e27ac657102c485c05a655af24a65ad3b068219e9b8a21db765a",
+      "kind": "text",
+      "reader": "luna-17",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/tests/test_r8_json_contract_build.py",
+      "bytes": 2798,
+      "lines": 58,
+      "sha256": "91a7d64451fa30dbcb939d812841a30428d80e96630bd874ddff4d9c1a876082",
+      "kind": "text",
+      "reader": "luna-17",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/tests/test_release_acceptance_preflight.py",
+      "bytes": 5693,
+      "lines": 116,
+      "sha256": "9f634e2dbced9d57838336c7c32210c18b10fb3ea9021b8d2cc0aeaee5ded500",
+      "kind": "text",
+      "reader": "luna-17",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/tests/test_sign_release_apk.py",
+      "bytes": 3578,
+      "lines": 80,
+      "sha256": "7a970670b2ecd9d931400bd18f00095cd5dbe9cd10538b211c61a2f950414713",
+      "kind": "text",
+      "reader": "luna-17",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/update_tag_store.py",
+      "bytes": 6212,
+      "lines": 181,
+      "sha256": "12df80edcfa7ae00a8b377e5faba1856d0884de69219c02a2da1982dc084a4fb",
+      "kind": "text",
+      "reader": "luna-17",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/verify_benchmark_fixture_apk.py",
+      "bytes": 4462,
+      "lines": 116,
+      "sha256": "072a110473fea4086e59f7cc94b06dd0752a0b6cb76d59dd9282c62d61e251b9",
+      "kind": "text",
+      "reader": "luna-17",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/verify_ci_emulator.sh",
+      "bytes": 4327,
+      "lines": 102,
+      "sha256": "e0c4ebab9eb942da48aea54f814c1af36e7fdc6a2c605ea77a24341fe421ea29",
+      "kind": "text",
+      "reader": "luna-17",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/verify_debug_device.sh",
+      "bytes": 2586,
+      "lines": 53,
+      "sha256": "69390f4d19aa983b4dcaae714d835f28f3b07f56b04595233dd84a55e1874902",
+      "kind": "text",
+      "reader": "luna-17",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/verify_device_apk.py",
+      "bytes": 7911,
+      "lines": 174,
+      "sha256": "614b740249148a5fc4ba9fe474f5b0a6727559262448f991b9d6c391eabbed63",
+      "kind": "text",
+      "reader": "luna-17",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/verify_macrobenchmark_runner_apk.py",
+      "bytes": 1665,
+      "lines": 53,
+      "sha256": "6600c75752e7e9428a2cb0b49b44bb380be92af7560d2dee6379e424054ec4f0",
+      "kind": "text",
+      "reader": "luna-17",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/verify_performance_device.sh",
+      "bytes": 6833,
+      "lines": 131,
+      "sha256": "58e79b397fa50b89a00b8791a27535d1cd1ad609fd24f46a8d6cd40572a54940",
+      "kind": "text",
+      "reader": "luna-17",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/verify_r8_json_contract.py",
+      "bytes": 5896,
+      "lines": 138,
+      "sha256": "1074a017cfa386dc6cb8b55b8d75a76cc8db648a24757f734c6b22240e7289d3",
+      "kind": "text",
+      "reader": "luna-17",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/verify_release_acceptance_device.sh",
+      "bytes": 3590,
+      "lines": 118,
+      "sha256": "138ccd88f9068d1399ba1af5a30b52e017bde6f66c7853007f7b9ba28e783a6b",
+      "kind": "text",
+      "reader": "luna-17",
+      "read_status": "complete"
+    },
+    {
+      "path": "scripts/verify_transfer_recovery_device.py",
+      "bytes": 4975,
+      "lines": 110,
+      "sha256": "8c193e9346033799070d89a57d7d18a6cb7386fd185e7e3c393b059dddd54eb5",
+      "kind": "text",
+      "reader": "luna-17",
+      "read_status": "complete"
+    }
+  ]
+}

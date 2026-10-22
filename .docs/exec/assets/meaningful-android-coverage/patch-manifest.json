@@ -1,0 +1,49 @@
+{
+  "moves": [
+    {
+      "from": "app/src/androidTest/java/com/theoriacodex/app/sourceauth/PixivPkceControllerDeviceTest.kt",
+      "to": "app/src/test/java/com/theoriacodex/app/sourceauth/PixivPkceControllerTest.kt"
+    },
+    {
+      "from": "app/src/androidTest/java/com/theoriacodex/app/ui/NavigationChromeDeviceTest.kt",
+      "to": "app/src/test/java/com/theoriacodex/app/ui/NavigationChromeTest.kt"
+    }
+  ],
+  "files": [
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/sourceauth/PixivPkceControllerTest.kt",
+      "lines": 367,
+      "sha256": "20d27a8b0ceed2a1a8296e8734ac1a9e02a35b2c285f1d01a023408cc12dbe29",
+      "reader": "luna-cancellation",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/NavigationChromeTest.kt",
+      "lines": 83,
+      "sha256": "de9c155b58328f4dd397df5ccb19be70548feaa4cdc93f2672b184b1ec255514",
+      "reader": "luna-patch",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/ui/routes/CodexLibraryScrollReturnTest.kt",
+      "lines": 152,
+      "sha256": "e0357d4f4e0229c3c7f5e1ccd7778187be71e2505588a80f2f256fe0792d6458",
+      "reader": "luna-patch",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/TheoriaAppSmokeTest.kt",
+      "lines": 37,
+      "sha256": "eb47e85dbcfa905baa9753537d9a64e46a050b86af6d360b03a1b5877e8f9f21",
+      "reader": "luna-patch",
+      "read_status": "complete"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/journeys/AppJourneyFixture.kt",
+      "lines": 112,
+      "sha256": "35a44aac28d5d49741eab2a5cec8a421b51a80ef9b72929d30148da47421d38d",
+      "reader": "luna-patch",
+      "read_status": "complete"
+    }
+  ]
+}

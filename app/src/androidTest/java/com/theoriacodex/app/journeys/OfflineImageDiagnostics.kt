@@ -53,6 +53,19 @@ internal class OfflineImageDiagnostics : Closeable, EventListener.Factory {
         }
     }
 
+    fun activeMediaShowsFixturePixels(compose: ComposeTestRule, decor: View): Boolean {
+        val surface = compose.onAllNodesWithContentDescription("Media actions", useUnmergedTree = true)
+            .fetchSemanticsNodes().singleOrNull() ?: return false
+        // UiAutomation captures the display, while Compose reports window-relative bounds.
+        val center = surface.boundsInWindow.center + windowGeometry(decor).second
+        val screenshot = instrumentation.uiAutomation.takeScreenshot() ?: return false
+        return try {
+            pixelAt(screenshot, center) == Color.CYAN
+        } finally {
+            screenshot.recycle()
+        }
+    }
+
     fun capture(label: String, compose: ComposeTestRule, decor: View, retainedPaths: List<String>): File {
         val outputRoot = InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")
             ?.let(::File) ?: requireNotNull(context.getExternalFilesDir(null))
@@ -106,9 +119,14 @@ internal class OfflineImageDiagnostics : Closeable, EventListener.Factory {
         if (bitmap == null || point == null) return "unavailable"
         val x = point.x.roundToInt()
         val y = point.y.roundToInt()
-        if (x !in 0 until bitmap.width || y !in 0 until bitmap.height) return "out-of-bounds ($x,$y)"
-        val color = bitmap.getPixel(x, y)
+        val color = pixelAt(bitmap, point) ?: return "out-of-bounds ($x,$y)"
         return "($x,$y) rgba=${Color.red(color)},${Color.green(color)},${Color.blue(color)},${Color.alpha(color)}"
+    }
+
+    private fun pixelAt(bitmap: Bitmap, point: Offset): Int? {
+        val x = point.x.roundToInt()
+        val y = point.y.roundToInt()
+        return if (x in 0 until bitmap.width && y in 0 until bitmap.height) bitmap.getPixel(x, y) else null
     }
 
     override fun close() {

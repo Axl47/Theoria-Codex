@@ -1,0 +1,185 @@
+{
+  "date": "2026-10-22",
+  "scope": "Host tests and instrumentation source compilation only; no devices/emulators/connected tasks.",
+  "environment": {
+    "JAVA_HOME": "/tmp/theoria-jdk21/jdk-21.0.13+9/Contents/Home",
+    "ANDROID_HOME": "/Users/axel/Library/Android/sdk"
+  },
+  "initial_command": "./gradlew :app:testDebugUnitTest --tests '*PixivPkceControllerTest' --tests '*PixivPkceSessionStoreTest' --tests '*NavigationChromeTest' --tests '*CodexLibraryScrollReturnTest' :app:compileDebugAndroidTestKotlin --offline --console=plain",
+  "initial_result": [
+    {
+      "class": "com.theoriacodex.app.sourceauth.PixivPkceControllerTest",
+      "tests": 10,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0,
+      "cases": [
+        {
+          "name": "pixivNativeCallbackCompletesWithoutForwardingBrowserState",
+          "passed": true
+        },
+        {
+          "name": "cancellationDuringTokenExchangePreservesTheExactSessionForAnotherController",
+          "passed": true
+        },
+        {
+          "name": "transientTokenExchangeFailurePreservesTheSessionForRetry",
+          "passed": true
+        },
+        {
+          "name": "callbackPropagatesCredentialPersistenceCancellationUnchanged",
+          "passed": false
+        },
+        {
+          "name": "transientCredentialSaveFailurePreservesTheSessionForRetry",
+          "passed": true
+        },
+        {
+          "name": "competingControllersExchangeAndSaveTheOneShotSessionOnlyOnce",
+          "passed": true
+        },
+        {
+          "name": "pixivNativeCallbackStillRejectsAConflictingState",
+          "passed": true
+        },
+        {
+          "name": "controllerRecreationCompletesAndThenRejectsAReplay",
+          "passed": true
+        },
+        {
+          "name": "cancellationAfterCredentialSaveReturnsTerminalSuccessAndConsumesSession",
+          "passed": true
+        },
+        {
+          "name": "missingMismatchAndExpiredStateNeverReachTheTokenExchange",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "class": "com.theoriacodex.app.sourceauth.PixivPkceSessionStoreTest",
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "cases": [
+        {
+          "name": "session diagnostics never expose state or verifier",
+          "passed": true
+        },
+        {
+          "name": "provider errors and missing codes remain terminal validation failures",
+          "passed": true
+        },
+        {
+          "name": "expired and future dated sessions fail before provider values are accepted",
+          "passed": true
+        },
+        {
+          "name": "callback requires the exact nonblank stored state",
+          "passed": true
+        },
+        {
+          "name": "in memory store consumes only the exact successfully completed session",
+          "passed": true
+        },
+        {
+          "name": "provider native callback may omit state but still rejects a conflicting state",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "class": "com.theoriacodex.app.ui.NavigationChromeTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "cases": [
+        {
+          "name": "filterFabExposesCurrentStateAndDispatchesClicks",
+          "passed": true
+        },
+        {
+          "name": "filteredCodexCardLaunchesOnlyVisiblePostsInRepositoryOrder",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "class": "com.theoriacodex.app.ui.routes.CodexLibraryScrollReturnTest",
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "cases": [
+        {
+          "name": "library retains scrolled collection across detail return and saved state restoration",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "initial_log": "/tmp/theoria-pr28-focused-host.log",
+  "initial_xml": "/tmp/theoria-pr28-first-test-results",
+  "instrumentation_compile": "passed in initial batch before host identity assertion failed",
+  "repair": "Ordinary CancellationException was copied by host coroutine debug stack recovery. Use a CopyableThrowable sentinel returning null, retaining exact assertSame and session retention; no global debug or runtime change.",
+  "rerun_command": "./gradlew :app:testDebugUnitTest --tests '*PixivPkceControllerTest' --offline --console=plain",
+  "rerun_result": [
+    {
+      "class": "com.theoriacodex.app.sourceauth.PixivPkceControllerTest",
+      "tests": 10,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "cases": [
+        {
+          "name": "pixivNativeCallbackCompletesWithoutForwardingBrowserState",
+          "passed": true
+        },
+        {
+          "name": "cancellationDuringTokenExchangePreservesTheExactSessionForAnotherController",
+          "passed": true
+        },
+        {
+          "name": "transientTokenExchangeFailurePreservesTheSessionForRetry",
+          "passed": true
+        },
+        {
+          "name": "callbackPropagatesCredentialPersistenceCancellationUnchanged",
+          "passed": true
+        },
+        {
+          "name": "transientCredentialSaveFailurePreservesTheSessionForRetry",
+          "passed": true
+        },
+        {
+          "name": "competingControllersExchangeAndSaveTheOneShotSessionOnlyOnce",
+          "passed": true
+        },
+        {
+          "name": "pixivNativeCallbackStillRejectsAConflictingState",
+          "passed": true
+        },
+        {
+          "name": "controllerRecreationCompletesAndThenRejectsAReplay",
+          "passed": true
+        },
+        {
+          "name": "cancellationAfterCredentialSaveReturnsTerminalSuccessAndConsumesSession",
+          "passed": true
+        },
+        {
+          "name": "missingMismatchAndExpiredStateNeverReachTheTokenExchange",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "rerun_log": "/tmp/theoria-pr28-pkce-host.log",
+  "final_distinct_cases": 19,
+  "final_failures": 0,
+  "final_errors": 0,
+  "final_skipped": 0,
+  "coverage_note": "Nine unaffected cases retain first-run passes; all ten affected PKCE cases pass after repair. No full suite, live authentication, hardware playback, PiP, TalkBack or performance acceptance is claimed."
+}

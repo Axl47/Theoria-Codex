@@ -1,0 +1,241 @@
+{
+  "date": "2026-10-22",
+  "upstream": "b921a664302fb26d507283e9304b8f4fdd6cfffe",
+  "main_merge_commit": "1e12025e",
+  "before_manifest_gate": {
+    "log": "/tmp/theoria-pr28-manifest-before.log",
+    "test_methods": 9,
+    "subtest_failures": 10,
+    "errors": 1,
+    "meaning": "Old string windows accepted invalid component ownership/export/process and rejected valid long attributes."
+  },
+  "after_python": {
+    "command": "python3 -m unittest discover -s scripts/tests -p 'test_*.py'",
+    "passed": 105,
+    "failures": 0,
+    "errors": 0,
+    "log": "/tmp/theoria-pr28-phase2-python.log"
+  },
+  "android_host": {
+    "command": "JAVA_HOME=/tmp/theoria-jdk21/jdk-21.0.13+9/Contents/Home ANDROID_HOME=/Users/axel/Library/Android/sdk ./gradlew :app:compileDebugAndroidTestKotlin :app:verifyBenchmarkFixtureArtifact --offline --console=plain",
+    "result": "BUILD SUCCESSFUL",
+    "log": "/tmp/theoria-pr28-phase2-host.log",
+    "artifact_contract": "com.theoriacodex.benchmark; :benchmarkFixture; res/os.mp4; 32502 bytes; video sha256 ac3213320cd1c8acbf081cb13ce652c8706dcda37e3a18bc1af31e23a5335403",
+    "device_access": false,
+    "benchmark_execution": false
+  },
+  "luna_reviews": {
+    "files": 4,
+    "readers": [
+      "luna-phase2-render",
+      "luna-phase2-manifest"
+    ],
+    "findings": []
+  },
+  "ci": {
+    "tested_code_head": "342a864c8207268c7529836b4af29a424c188841",
+    "checks": [
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-22T15:07:08Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Axl47/Theoria-Codex/actions/runs/39800398371/job/119899116234",
+        "name": "Connected tests (API 36)",
+        "startedAt": "2026-10-22T14:58:12Z",
+        "status": "COMPLETED",
+        "workflowName": "Device Validation"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-22T14:59:24Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Axl47/Theoria-Codex/actions/runs/39800398491/job/119899116079",
+        "name": "Core module tests",
+        "startedAt": "2026-10-22T14:58:12Z",
+        "status": "COMPLETED",
+        "workflowName": "Verify"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-22T15:06:37Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Axl47/Theoria-Codex/actions/runs/39800398371/job/119899115705",
+        "name": "Connected tests (API 37.0)",
+        "startedAt": "2026-10-22T14:58:12Z",
+        "status": "COMPLETED",
+        "workflowName": "Device Validation"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-22T14:58:10Z",
+        "conclusion": "SKIPPED",
+        "detailsUrl": "https://github.com/Axl47/Theoria-Codex/actions/runs/39800398371/job/119902849695",
+        "name": "R8 release acceptance (API ${{ matrix.api-level }})",
+        "startedAt": "2026-10-22T15:04:52Z",
+        "status": "COMPLETED",
+        "workflowName": "Device Validation"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-22T15:09:44Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Axl47/Theoria-Codex/actions/runs/39800398491/job/119899116717",
+        "name": "Android lint, tests, and assemblies",
+        "startedAt": "2026-10-22T14:58:13Z",
+        "status": "COMPLETED",
+        "workflowName": "Verify"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-22T15:13:26Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Axl47/Theoria-Codex/actions/runs/39800398491/job/119899116802",
+        "name": "Maintainability",
+        "startedAt": "2026-10-22T14:58:12Z",
+        "status": "COMPLETED",
+        "workflowName": "Verify"
+      }
+    ],
+    "runs": {
+      "device": "https://github.com/Axl47/Theoria-Codex/actions/runs/39800398371",
+      "verify": "https://github.com/Axl47/Theoria-Codex/actions/runs/39800398491"
+    },
+    "xml_results": {
+      "api36": {
+        "core-data-android": {
+          "tests": 9,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "skipped_cases": [],
+          "selected_cases": []
+        },
+        "app": {
+          "tests": 43,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 2,
+          "skipped_cases": [
+            "com.theoriacodex.app.media.PostDownloadProcessRecoveryDeviceTest.nativeGalleryResumesAcrossProcessDeath",
+            "com.theoriacodex.app.source.HitomiLiveTransportDeviceTest.typedAndMultiTagSearchesUseAndroidByteRangeTransport"
+          ],
+          "selected_cases": [
+            {
+              "name": "com.theoriacodex.app.journeys.OfflineCollectionJourneyTest.collectionDownloadSurvivesDisposableClearAndColdGraphThenViewerSwipesWithoutProviderResolution",
+              "passed": true
+            }
+          ]
+        }
+      },
+      "api37": {
+        "core-data-android": {
+          "tests": 9,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "skipped_cases": [],
+          "selected_cases": []
+        },
+        "app": {
+          "tests": 43,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 2,
+          "skipped_cases": [
+            "com.theoriacodex.app.media.PostDownloadProcessRecoveryDeviceTest.nativeGalleryResumesAcrossProcessDeath",
+            "com.theoriacodex.app.source.HitomiLiveTransportDeviceTest.typedAndMultiTagSearchesUseAndroidByteRangeTransport"
+          ],
+          "selected_cases": [
+            {
+              "name": "com.theoriacodex.app.journeys.OfflineCollectionJourneyTest.collectionDownloadSurvivesDisposableClearAndColdGraphThenViewerSwipesWithoutProviderResolution",
+              "passed": true
+            }
+          ]
+        }
+      },
+      "android": {
+        "core-data-android": {
+          "tests": 75,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "skipped_cases": [],
+          "selected_cases": []
+        },
+        "app": {
+          "tests": 896,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 3,
+          "skipped_cases": [
+            "com.theoriacodex.app.search.LiveSearchCoordinatorRouteTest.live seeded searches route through search coordinator",
+            "com.theoriacodex.app.search.LiveSearchCoordinatorRouteTestMediaTest.live media candidates are reachable with app headers",
+            "com.theoriacodex.app.search.LiveSearchCoordinatorRouteTestHitomiTest.live Hitomi routes typed search and mixed media through app contracts"
+          ],
+          "selected_cases": [
+            {
+              "name": "com.theoriacodex.app.sourceauth.PixivPkceControllerTest.pixivNativeCallbackCompletesWithoutForwardingBrowserState",
+              "passed": true
+            },
+            {
+              "name": "com.theoriacodex.app.sourceauth.PixivPkceControllerTest.cancellationDuringTokenExchangePreservesTheExactSessionForAnotherController",
+              "passed": true
+            },
+            {
+              "name": "com.theoriacodex.app.sourceauth.PixivPkceControllerTest.transientTokenExchangeFailurePreservesTheSessionForRetry",
+              "passed": true
+            },
+            {
+              "name": "com.theoriacodex.app.sourceauth.PixivPkceControllerTest.callbackPropagatesCredentialPersistenceCancellationUnchanged",
+              "passed": true
+            },
+            {
+              "name": "com.theoriacodex.app.sourceauth.PixivPkceControllerTest.transientCredentialSaveFailurePreservesTheSessionForRetry",
+              "passed": true
+            },
+            {
+              "name": "com.theoriacodex.app.sourceauth.PixivPkceControllerTest.competingControllersExchangeAndSaveTheOneShotSessionOnlyOnce",
+              "passed": true
+            },
+            {
+              "name": "com.theoriacodex.app.sourceauth.PixivPkceControllerTest.pixivNativeCallbackStillRejectsAConflictingState",
+              "passed": true
+            },
+            {
+              "name": "com.theoriacodex.app.sourceauth.PixivPkceControllerTest.controllerRecreationCompletesAndThenRejectsAReplay",
+              "passed": true
+            },
+            {
+              "name": "com.theoriacodex.app.sourceauth.PixivPkceControllerTest.cancellationAfterCredentialSaveReturnsTerminalSuccessAndConsumesSession",
+              "passed": true
+            },
+            {
+              "name": "com.theoriacodex.app.sourceauth.PixivPkceControllerTest.missingMismatchAndExpiredStateNeverReachTheTokenExchange",
+              "passed": true
+            }
+          ]
+        }
+      }
+    },
+    "line_coverage": {
+      "covered": 34122,
+      "missed": 8045
+    },
+    "preflight": "Retained emulator log verifies com.theoriacodex.debug, com.theoriacodex.debug.test and com.theoriacodex.data.android.test with matching Debug certificate before device access on both APIs.",
+    "artifacts_directory": "/tmp/theoria-pr28-ci-342a864",
+    "device_log": "/tmp/theoria-pr28-ci-342a864-device.log",
+    "limitations": [
+      "Release-only R8 acceptance lane skipped by existing workflow policy.",
+      "Native force-stop recovery and live Hitomi transport remain explicit opt-in skips; three live host provider cases also skipped.",
+      "Both retained screenshot observations are normal fullscreen geometry (decor screen/window origin 0,0); no separate multi-window claim.",
+      "No physical-phone playback, live authentication, PiP, TalkBack, performance or benchmark execution by this audit."
+    ],
+    "review_status": {
+      "luna_tasks": 23,
+      "unresolved_luna_findings": 0,
+      "github_codex": "Unavailable: review usage limit; no submitted reviews or inline findings.",
+      "quota_comment": "https://github.com/Axl47/Theoria-Codex/pull/28#issuecomment-6342927934"
+    },
+    "documentation_note": "A following evidence-only commit changes documentation, not the tested code; it does not alter any source hashes in final-manifest.json."
+  }
+}

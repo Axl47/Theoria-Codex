@@ -1,0 +1,15 @@
+{
+  "reader": "luna-cancellation",
+  "files": [
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/sourceauth/PixivPkceControllerTest.kt",
+      "lines": 367,
+      "sha256": "20d27a8b0ceed2a1a8296e8734ac1a9e02a35b2c285f1d01a023408cc12dbe29",
+      "read_complete": true,
+      "keep": "Keep. The sentinel preserves the exact CancellationException identity assertion while preventing host debug stack recovery from cloning the test exception. All assertions, ten cases, and host placement remain intact.",
+      "flakiness": "No new static flakiness, deadlock, or weakened assertion found. The change adds no coroutine scheduling or synchronization.",
+      "proposal": "None."
+    }
+  ],
+  "findings": []
+}

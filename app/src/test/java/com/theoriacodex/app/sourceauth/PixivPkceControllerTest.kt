@@ -1,7 +1,7 @@
 package com.theoriacodex.app.sourceauth
 
 import androidx.core.net.toUri
-import androidx.test.ext.junit.runners.AndroidJUnit4
+import android.app.Application
 import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.credentials.PixivAuthTokens
 import com.theoriacodex.sources.credentials.Rule34XxxCredentials
@@ -10,10 +10,15 @@ import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.pixiv.PixivAuthApi
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CopyableThrowable
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -21,11 +26,15 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
-@RunWith(AndroidJUnit4::class)
-class PixivPkceControllerDeviceTest {
+/** URI/controller orchestration belongs on the host; encrypted Android stores have device tests. */
+@RunWith(RobolectricTestRunner::class)
+@Config(application = Application::class)
+class PixivPkceControllerTest {
     @Test
-    fun controllerRecreationCompletesAndThenRejectsAReplay() = runBlocking {
+    fun controllerRecreationCompletesAndThenRejectsAReplay() = runTest {
         val store = InMemoryPixivPkceSessionStore()
         val http = RecordingTokenHttpClient()
         val credentials = RecordingCredentialsProvider()
@@ -48,7 +57,7 @@ class PixivPkceControllerDeviceTest {
     }
 
     @Test
-    fun missingMismatchAndExpiredStateNeverReachTheTokenExchange() = runBlocking {
+    fun missingMismatchAndExpiredStateNeverReachTheTokenExchange() = runTest {
         var now = BASE_TIME_MS
         val store = InMemoryPixivPkceSessionStore()
         val http = RecordingTokenHttpClient()
@@ -68,7 +77,7 @@ class PixivPkceControllerDeviceTest {
     }
 
     @Test
-    fun pixivNativeCallbackCompletesWithoutForwardingBrowserState() = runBlocking {
+    fun pixivNativeCallbackCompletesWithoutForwardingBrowserState() = runTest {
         val store = InMemoryPixivPkceSessionStore()
         val http = RecordingTokenHttpClient()
         val credentials = RecordingCredentialsProvider()
@@ -86,7 +95,7 @@ class PixivPkceControllerDeviceTest {
     }
 
     @Test
-    fun pixivNativeCallbackStillRejectsAConflictingState() = runBlocking {
+    fun pixivNativeCallbackStillRejectsAConflictingState() = runTest {
         val store = InMemoryPixivPkceSessionStore()
         val http = RecordingTokenHttpClient()
         val controller = controller(store, http, RecordingCredentialsProvider())
@@ -102,7 +111,7 @@ class PixivPkceControllerDeviceTest {
     }
 
     @Test
-    fun transientTokenExchangeFailurePreservesTheSessionForRetry() = runBlocking {
+    fun transientTokenExchangeFailurePreservesTheSessionForRetry() = runTest {
         val store = InMemoryPixivPkceSessionStore()
         val http = RecordingTokenHttpClient(statusCodes = ArrayDeque(listOf(503, 200)))
         val credentials = RecordingCredentialsProvider()
@@ -121,7 +130,7 @@ class PixivPkceControllerDeviceTest {
     }
 
     @Test
-    fun transientCredentialSaveFailurePreservesTheSessionForRetry() = runBlocking {
+    fun transientCredentialSaveFailurePreservesTheSessionForRetry() = runTest {
         val store = InMemoryPixivPkceSessionStore()
         val http = RecordingTokenHttpClient()
         val credentials = RecordingCredentialsProvider(remainingSaveFailures = 1)
@@ -140,8 +149,8 @@ class PixivPkceControllerDeviceTest {
     }
 
     @Test
-    fun callbackPropagatesCredentialPersistenceCancellationUnchanged() = runBlocking {
-        val expected = CancellationException("activity left during callback")
+    fun callbackPropagatesCredentialPersistenceCancellationUnchanged() = runTest {
+        val expected = CallbackCancellation("activity left during callback")
         val store = InMemoryPixivPkceSessionStore()
         val controller = controller(
             store = store,
@@ -162,7 +171,7 @@ class PixivPkceControllerDeviceTest {
     }
 
     @Test
-    fun cancellationAfterCredentialSaveReturnsTerminalSuccessAndConsumesSession() = runBlocking {
+    fun cancellationAfterCredentialSaveReturnsTerminalSuccessAndConsumesSession() = runTest {
         val store = InMemoryPixivPkceSessionStore()
         lateinit var callbackJob: Job
         val credentials = RecordingCredentialsProvider(
@@ -186,6 +195,68 @@ class PixivPkceControllerDeviceTest {
         assertTrue("the surrounding callback collector was cancelled", callbackJob.isCancelled)
     }
 
+    @Test
+    fun competingControllersExchangeAndSaveTheOneShotSessionOnlyOnce() = runTest {
+        val exchangeStarted = CompletableDeferred<Unit>()
+        val releaseExchange = CompletableDeferred<Unit>()
+        val store = InMemoryPixivPkceSessionStore()
+        val http = RecordingTokenHttpClient(beforeResponse = {
+            exchangeStarted.complete(Unit)
+            releaseExchange.await()
+        })
+        val credentials = RecordingCredentialsProvider()
+        val firstController = controller(store, http, credentials)
+        val state = requireNotNull(firstController.startAuthorizationUri().getQueryParameter("state"))
+        val secondController = controller(store, http, credentials)
+
+        val first = async { firstController.handleAuthorizationCallback(callback(state)) }
+        exchangeStarted.await()
+        // Start the competing callback while the original exchange is still suspended.
+        val second = async(start = CoroutineStart.UNDISPATCHED) {
+            secondController.handleAuthorizationCallback(callback(state))
+        }
+        assertEquals(1, http.postCalls)
+        assertNull(credentials.savedPixivTokens)
+        releaseExchange.complete(Unit)
+
+        assertTrue(first.await().isSuccess)
+        assertEquals("Pixiv authorization session not started", second.await().exceptionOrNull()?.message)
+        assertEquals(1, http.postCalls)
+        assertEquals(1, credentials.saveCalls)
+        assertEquals("access", credentials.savedPixivTokens?.accessToken)
+        assertNull(store.read())
+    }
+
+    @Test
+    fun cancellationDuringTokenExchangePreservesTheExactSessionForAnotherController() = runTest {
+        val exchangeStarted = CompletableDeferred<Unit>()
+        val releaseExchange = CompletableDeferred<Unit>()
+        val store = InMemoryPixivPkceSessionStore()
+        val credentials = RecordingCredentialsProvider()
+        val http = RecordingTokenHttpClient(beforeResponse = {
+            exchangeStarted.complete(Unit)
+            releaseExchange.await()
+        })
+        val firstController = controller(store, http, credentials)
+        val state = requireNotNull(firstController.startAuthorizationUri().getQueryParameter("state"))
+        val originalSession = requireNotNull(store.read())
+
+        val pending = launch { firstController.handleAuthorizationCallback(callback(state)) }
+        exchangeStarted.await()
+        pending.cancelAndJoin()
+        assertEquals(originalSession, store.read())
+        assertNull(credentials.savedPixivTokens)
+        assertEquals(0, credentials.saveCalls)
+
+        releaseExchange.complete(Unit)
+        val retry = controller(store, http, credentials).handleAuthorizationCallback(callback(state))
+        assertTrue(retry.isSuccess)
+        assertEquals(2, http.postCalls)
+        assertTrue(http.forms.all { it["code_verifier"] == originalSession.codeVerifier })
+        assertEquals(1, credentials.saveCalls)
+        assertNull(store.read())
+    }
+
     private fun controller(
         store: PixivPkceSessionStore,
         http: RecordingTokenHttpClient,
@@ -207,6 +278,7 @@ class PixivPkceControllerDeviceTest {
 
     private class RecordingTokenHttpClient(
         private val statusCodes: ArrayDeque<Int> = ArrayDeque(listOf(200)),
+        private val beforeResponse: suspend () -> Unit = {},
     ) : SourceHttpClient {
         var postCalls: Int = 0
             private set
@@ -225,6 +297,7 @@ class PixivPkceControllerDeviceTest {
         ): SourceHttpResponse {
             postCalls += 1
             forms += form
+            beforeResponse()
             val statusCode = if (statusCodes.size > 1) statusCodes.removeFirst() else statusCodes.first()
             return SourceHttpResponse(
                 statusCode = statusCode,
@@ -243,9 +316,12 @@ class PixivPkceControllerDeviceTest {
     ) : SourceCredentialsProvider {
         var savedPixivTokens: PixivAuthTokens? = null
             private set
+        var saveCalls: Int = 0
+            private set
 
         override suspend fun getPixivTokens(): PixivAuthTokens? = savedPixivTokens
         override suspend fun savePixivTokens(tokens: PixivAuthTokens) {
+            saveCalls += 1
             if (remainingSaveFailures > 0) {
                 remainingSaveFailures -= 1
                 throw IllegalStateException("temporary credential storage failure")
@@ -262,6 +338,13 @@ class PixivPkceControllerDeviceTest {
         override suspend fun getRule34XxxCredentials(): Rule34XxxCredentials? = null
         override suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials) = Unit
         override suspend fun clearRule34XxxCredentials() = Unit
+    }
+
+    // Host debug stack recovery may clone ordinary exceptions; this sentinel tests exact propagation.
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private class CallbackCancellation(message: String) :
+        CancellationException(message), CopyableThrowable<CallbackCancellation> {
+        override fun createCopy(): CallbackCancellation? = null
     }
 
     private class CancellingCredentialsProvider(

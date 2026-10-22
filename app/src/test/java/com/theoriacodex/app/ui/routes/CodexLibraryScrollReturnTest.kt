@@ -25,16 +25,16 @@ import com.theoriacodex.app.codex.CodexListScreen
 import com.theoriacodex.app.fixtures.JourneyAppContainer
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.domain.model.Codex
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -59,15 +59,30 @@ class CodexLibraryScrollReturnTest {
                     repeat(40) { graph.content.ensureCodex("collection-$it", "Collection $it") }
                 }
         }
-        // Give the grid time to measure the loading state on every navigation return.
+        // Hold each subscription until the test observes the destination without a grid.
+        val pendingLoads = Channel<CompletableDeferred<Unit>>(Channel.UNLIMITED)
         val repository = object : CodexRepository by graph.content {
             override fun observeCodices(): Flow<List<Codex>> = flow {
-                withContext(Dispatchers.Default) { delay(300) }
+                val ready = CompletableDeferred<Unit>()
+                pendingLoads.send(ready)
+                ready.await()
                 emitAll(graph.content.observeCodices())
             }
         }
         val data = graph.data.copy(codexRepository = repository)
         val show = mutableStateOf(true)
+        val grid = hasScrollToIndexAction() and
+            SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange)
+        fun releaseLibraryData() {
+            var pending: CompletableDeferred<Unit>? = null
+            compose.waitUntil(conditionDescription = "library subscribes to delayed collection data", timeoutMillis = 10_000) {
+                pending = pendingLoads.tryReceive().getOrNull()
+                pending != null
+            }
+            // An empty placeholder grid would clamp the saved anchor before real data arrives.
+            compose.onNode(grid).assertDoesNotExist()
+            compose.runOnIdle { requireNotNull(pending).complete(Unit) }
+        }
         try {
             val restoration = StateRestorationTester(compose)
             restoration.setContent {
@@ -104,11 +119,10 @@ class CodexLibraryScrollReturnTest {
                     }
                 }
             }
+            releaseLibraryData()
             compose.waitUntil(10_000) {
                 compose.onAllNodesWithText("Collection", substring = true).fetchSemanticsNodes().isNotEmpty()
             }
-            val grid = hasScrollToIndexAction() and
-                SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange)
             compose.onNode(grid).performScrollToIndex(24)
             val collection = compose.onNodeWithText("Collection 24")
             collection.assertIsDisplayed()
@@ -118,6 +132,7 @@ class CodexLibraryScrollReturnTest {
                 compose.onNodeWithText("Return to library").assertIsDisplayed()
                 if (iteration == 1) restoration.emulateSavedInstanceStateRestore()
                 compose.onNodeWithText("Return to library").performClick()
+                releaseLibraryData()
                 compose.waitUntil(10_000) {
                     compose.onAllNodesWithText("Collection 24").fetchSemanticsNodes().isNotEmpty()
                 }
@@ -131,6 +146,7 @@ class CodexLibraryScrollReturnTest {
             compose.runOnIdle { show.value = false }
             runBlocking(Dispatchers.IO) { graph.shutdown() }
             scope.cancel()
+            pendingLoads.close()
         }
     }
 }

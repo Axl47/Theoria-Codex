@@ -1,0 +1,52 @@
+{
+  "date": "2026-10-22",
+  "upstream": "b921a664302fb26d507283e9304b8f4fdd6cfffe",
+  "baseline_manifest": "manifest.json",
+  "phase_one_patch_manifest": "patch-manifest.json",
+  "composition": "Start with baseline files; remove each phase-one moves.from path; overlay phase-one patch files by path; overlay additional_or_updated_files below. This reconstructs the full current ledger without duplicating unchanged baseline records.",
+  "current_file_count": 503,
+  "current_text_files": 498,
+  "current_binary_assets": 5,
+  "current_text_lines": 69308,
+  "unassigned_files": 0,
+  "unread_files": 0,
+  "all_current_hashes_verified": true,
+  "additional_or_updated_files": [
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/journeys/OfflineCollectionJourneyTest.kt",
+      "lines": 145,
+      "sha256": "60734e09bd659f827d883dcfacb8127a862e1cf014d04117ceef2473c055b5e7",
+      "reader": "luna-phase2-render",
+      "read_status": "complete",
+      "bytes": 7518,
+      "kind": "text"
+    },
+    {
+      "path": "app/src/androidTest/java/com/theoriacodex/app/journeys/OfflineImageDiagnostics.kt",
+      "lines": 149,
+      "sha256": "9c4ebcc1dbc42f605cd24f135e20097ee3695c707114e593b37799fa47a8c798",
+      "reader": "luna-phase2-render",
+      "read_status": "complete",
+      "bytes": 7563,
+      "kind": "text"
+    },
+    {
+      "path": "scripts/tests/test_benchmark_fixture_manifest.py",
+      "lines": 162,
+      "sha256": "fbe3d6aedafba133874f5504ef0d05c7c52c21972fc1d3b99054e1e3cc3fab8f",
+      "reader": "luna-phase2-manifest",
+      "read_status": "complete",
+      "bytes": 8033,
+      "kind": "text"
+    },
+    {
+      "path": "scripts/verify_benchmark_fixture_apk.py",
+      "lines": 131,
+      "sha256": "2a1c04823dadc72cd7d37b6d95a7f23d5e04826889189f7a361ddc9f9ec03fea",
+      "reader": "luna-phase2-manifest",
+      "read_status": "complete",
+      "bytes": 5329,
+      "kind": "text"
+    }
+  ]
+}

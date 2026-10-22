@@ -1,0 +1,334 @@
+{
+  "reader": "luna-07",
+  "assigned_count": 32,
+  "completed_count": 32,
+  "files": [
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchUndoViewModelTest.kt",
+      "lines": 126,
+      "read_complete": true,
+      "keep": "Undo restores paginated anchors, grouped unified searches, drafts, failures, and stale-cancellation behavior (24-125).",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchViewModelTestFixture.kt",
+      "lines": 305,
+      "read_complete": true,
+      "keep": "Shared deterministic dispatcher, repository, cancellation, paging, autocomplete, persistence, and mismatch fixtures (68-304).",
+      "redundancy": "none proven; support fixture",
+      "flakiness": "none observed; NonCancellable gates intentionally model stale work",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SearchWatchedPresentationTest.kt",
+      "lines": 79,
+      "read_complete": true,
+      "keep": "Search and For You cards share Recents progress and latest-watch presentation (34-78).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; one captured timestamp is reused (45-50)",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SourceFailureUiTextTest.kt",
+      "lines": 143,
+      "read_complete": true,
+      "keep": "Auth guidance, provider failures, status chips, excluded sources, and banner suppression (12-141).",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/SourceRetryTest.kt",
+      "lines": 100,
+      "read_complete": true,
+      "keep": "Retries exact failed unified pages while preserving successful providers, facets, tokens, and execution identity (48-99).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; runTest virtualizes delays",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/TagCountCoordinatorTest.kt",
+      "lines": 97,
+      "read_complete": true,
+      "keep": "Incremental counts, timeout caching, unsupported-provider behavior, expiry, batching, and cancellation (17-95).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; timeout assertions use virtual time (35, 90)",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/TagSuggestionStoreTest.kt",
+      "lines": 453,
+      "read_complete": true,
+      "keep": "Covers recovery, persistence, ranking, facets, legacy migration, debounce, byte/entry caps, flush, and close semantics (30-447).",
+      "redundancy": "none proven; cases cover distinct storage contracts",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/UnifiedQueryPreparationTest.kt",
+      "lines": 38,
+      "read_complete": true,
+      "keep": "Successful compatibility-cache reuse/expiry and timeout fallback without cache poisoning (12-36).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; virtual clock/time",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/search/UnifiedWeightsSearchViewModelTest.kt",
+      "lines": 69,
+      "read_complete": true,
+      "keep": "Pending unified selection applies once and changed weights refresh an applied group (18-68).",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/settings/CodexStatisticsContentTest.kt",
+      "lines": 40,
+      "read_complete": true,
+      "keep": "Statistics selector changes displayed collection and preserves count/category presentation (22-35).",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/settings/CredentialAccountControlsTest.kt",
+      "lines": 57,
+      "read_complete": true,
+      "keep": "Configured accounts hide secrets/editing; disconnect exposes fields; failed save retains editing (22-56).",
+      "redundancy": "none proven",
+      "flakiness": "Possible pending recomposition after direct state writes at 51-52 before assertions at 53-55; no failure observed.",
+      "proposal": "Independent test-only hardening: call compose.waitForIdle() before final visibility assertions.",
+      "disposition": "independent recommendation"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/settings/CredentialSettingsPolicyTest.kt",
+      "lines": 86,
+      "read_complete": true,
+      "keep": "Credential redaction, replacement-key policy, and recoverable/unrecoverable presentation (10-85).",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/settings/LegacyRecoveryPresentationTest.kt",
+      "lines": 31,
+      "read_complete": true,
+      "keep": "Recovery summary omits full paths, diagnostic reasons, and full checksums while retaining safe identity (9-30).",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/settings/SettingsMutationFailureTest.kt",
+      "lines": 28,
+      "read_complete": true,
+      "keep": "Failed settings writes produce recoverable feedback and retain durable settings (15-27).",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/settings/SettingsProfileWorkflowTest.kt",
+      "lines": 178,
+      "read_complete": true,
+      "keep": "Profile creation/switching/deletion, membership isolation, dismissal, invalid deletion, cleanup retry, and cancellation (31-177).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; temporary directories are real host temp paths",
+      "proposal": "Independent hygiene only: use a managed temp-folder fixture or cleanup for paths created at 23-29.",
+      "disposition": "independent recommendation"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/settings/SettingsStatisticsSourceTest.kt",
+      "lines": 117,
+      "read_complete": true,
+      "keep": "Active-profile projection, lifetime counters, memoized content, tag-read cost, and live timer updates (25-100).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; test scheduler controls updates",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/settings/SettingsSummaryPresentationTest.kt",
+      "lines": 42,
+      "read_complete": true,
+      "keep": "Account/cache/scenario summaries and singular/plural Codex labels (9-41).",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/settings/SettingsViewModelFixture.kt",
+      "lines": 111,
+      "read_complete": true,
+      "keep": "Settings owner wiring and credential gateway recovery/save/clear/reset behavior used by workflow tests (19-110).",
+      "redundancy": "none proven; shared fixture",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/settings/SettingsViewModelTest.kt",
+      "lines": 246,
+      "read_complete": true,
+      "keep": "Expansion restoration, preference persistence, dynamic source availability, recovery presentation, and credential redaction/mutation paths (21-244).",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/settings/UnifiedSourceSettingsTest.kt",
+      "lines": 75,
+      "read_complete": true,
+      "keep": "Single-source activation guidance and multi-source stepped weight semantics (30-73).",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/source/ExternalPostDeepLinksTest.kt",
+      "lines": 303,
+      "read_complete": true,
+      "keep": "Broad post/creator route acceptance and rejection coverage across all supported providers, normalization, Unicode, and bounds (11-297).",
+      "redundancy": "none proven; repeated helper assertions encode provider-specific contracts",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/source/SourceMetadataTest.kt",
+      "lines": 66,
+      "read_complete": true,
+      "keep": "Source exposure gating, catalog ordering, grouping, family identity, headers, referers, and display labels (10-64).",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/source/SourceOperationalCapabilitiesTest.kt",
+      "lines": 90,
+      "read_complete": true,
+      "keep": "Creator browsing derives from available adapter interfaces and excludes unavailable creator-capable sources (23-37).",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/sourceauth/GelbooruCredentialInputParserTest.kt",
+      "lines": 34,
+      "read_complete": true,
+      "keep": "Query-fragment/full-URL parsing and incomplete-pair rejection (8-32).",
+      "redundancy": "none proven; parallel provider parser contract is intentional",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/sourceauth/ObservableSourceAccountStoreTest.kt",
+      "lines": 154,
+      "read_complete": true,
+      "keep": "Credential-gated source capability lifecycle, refresh authority invalidation, persisted discovery, and recovery/reset behavior (17-152).",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/sourceauth/PixivCallbackKindTest.kt",
+      "lines": 18,
+      "read_complete": true,
+      "keep": "Exact provider/app callback ownership and rejection of lookalike paths (8-16).",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/sourceauth/PixivPkceSessionStoreTest.kt",
+      "lines": 165,
+      "read_complete": true,
+      "keep": "PKCE state/code validation, missing-state policy, expiry, provider errors, single-use consume, and secret redaction (12-163).",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/sourceauth/Rule34XxxCredentialInputParserTest.kt",
+      "lines": 34,
+      "read_complete": true,
+      "keep": "Query-fragment/full-URL parsing and incomplete-pair rejection (8-32).",
+      "redundancy": "none proven; mirrored provider inputs remain separate contracts",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/sourceauth/VersionedSourceCredentialsStoreTest.kt",
+      "lines": 325,
+      "read_complete": true,
+      "keep": "Migration ordering, verified-envelope writes, retries, cleanup, legacy preservation, concurrent account updates, tamper/reconnect handling, reset, and secret-safe failures (19-237).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; concurrent async update is an intentional atomicity check",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/statistics/AppUsageTrackerTest.kt",
+      "lines": 125,
+      "read_complete": true,
+      "keep": "Codex/media timing categories, lifecycle idempotence, foreground opens, uncategorized totals, and route mapping (13-123).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; elapsed time is fully controlled",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/tags/PostTagActionLazyLayoutTest.kt",
+      "lines": 98,
+      "read_complete": true,
+      "keep": "Large-menu bounded viewport, deferred metadata, no main-thread lookups, scrolling, and exact per-tag selection/count work (38-96).",
+      "redundancy": "none proven",
+      "flakiness": "none observed; exact 300 lookup wait is an intentional duplicate-work guard (94-96)",
+      "proposal": "keep/no change; do not weaken the exact lookup invariant",
+      "disposition": "keep"
+    },
+    {
+      "path": "app/src/test/java/com/theoriacodex/app/tags/PostTagActionSectionTest.kt",
+      "lines": 94,
+      "read_complete": true,
+      "keep": "Typed facet identity/grouping, general-tag favorite filtering, and legacy taxonomy fallback (17-66).",
+      "redundancy": "none proven",
+      "flakiness": "none observed",
+      "proposal": "keep/no change",
+      "disposition": "keep"
+    }
+  ],
+  "top_findings": [
+    "All 32 assigned text files were read completely; manifest byte counts, line counts, and SHA-256 values matched.",
+    "Coverage is meaningful for search restoration/cancellation, credential migration and later writes, profile isolation/deletion, source retry/recovery, navigation-related presentation, statistics, and lazy tag behavior.",
+    "One independent test-only hardening opportunity exists in CredentialAccountControlsTest.kt: state is mutated directly at lines 51-52 and queried immediately at lines 53-55; waitForIdle would remove a possible recomposition timing hazard.",
+    "SettingsProfileWorkflowTest.kt creates real temporary directories at lines 23-29 without explicit cleanup; this is test hygiene/cost only and does not affect runtime behavior.",
+    "No proven redundancy or observed flakiness warrants deleting tests, adding retries/sleeps, weakening assertions, or changing budgets. No assigned file requires a deferred runtime/dependency/SDK/workflow/safety change."
+  ]
+}

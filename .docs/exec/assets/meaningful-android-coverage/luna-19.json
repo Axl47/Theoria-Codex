@@ -1,0 +1,62 @@
+{
+  "reader": "luna-19",
+  "assigned_count": 4,
+  "completed_count": 4,
+  "files": [
+    {
+      "path": "core-data-android/schemas/com.theoriacodex.data.android.room.TheoriaRoomDatabase/6.json",
+      "lines": 682,
+      "bytes": 22491,
+      "sha256": "a5b045753989e147b52ff3db30a6d2a157c30bd6fcd2d24ad33fa866b0753add",
+      "read_complete": true,
+      "keep": "KEEP. Version-6 Room identity and complete persisted schema: codex/likes/posts, migration metadata, recents, and media durations with keys, foreign keys, defaults, and indexes (lines 3-5, 43-675; setup identity lines 677-680).",
+      "redundancy": "Repeated entity definitions are intentional generated historical snapshots required for migration validation; no removable redundancy proven.",
+      "flakiness": "None observed; static deterministic fixture. No runtime or device behavior is executed by this file.",
+      "proposal": "No change. Preserve exact versioned schema identity and migration inputs. Any regeneration or schema change is deferred and requires an intentional migration.",
+      "disposition": "KEEP; read-only committed migration fixture."
+    },
+    {
+      "path": "core-data-android/schemas/com.theoriacodex.data.android.room.TheoriaRoomDatabase/7.json",
+      "lines": 688,
+      "bytes": 22691,
+      "sha256": "9fa94d578b0df75b6e2548df849e037d57fd10d25f26fd78f66e50185e6e9645",
+      "read_complete": true,
+      "keep": "KEEP. Version-7 schema retains all v6 structures and records non-null codex_automatic_tags.group_index (lines 3-5, 44-76), with Room identity/setup queries at lines 683-686. This preserves the 6→7 migration contract.",
+      "redundancy": "Historical repetition of unchanged tables is required to represent the complete v7 schema; no removable redundancy proven.",
+      "flakiness": "None observed; static deterministic fixture.",
+      "proposal": "No change. Preserve the group_index schema identity and all existing migration tables/indexes. Migration behavior changes are deferred.",
+      "disposition": "KEEP; read-only committed migration fixture."
+    },
+    {
+      "path": "core-data-android/schemas/com.theoriacodex.data.android.room.TheoriaRoomDatabase/8.json",
+      "lines": 752,
+      "bytes": 25097,
+      "sha256": "624b1f54c153ef08258fc1a74d4ba6ab894385b54a90ddb16b1953ff5376bae5",
+      "read_complete": true,
+      "keep": "KEEP. Version-8 adds viewer_translation_cache with compound primary key and LRU-supporting index (lines 682-744), while retaining prior persisted structures; identity/setup is lines 747-750. This is a legacy compatibility artifact and must remain.",
+      "redundancy": "Generated full-schema repetition is intentional and needed for historical migration validation; no removable redundancy proven.",
+      "flakiness": "None observed; static deterministic fixture. The retired translation feature does not justify deleting this persisted schema.",
+      "proposal": "No change. Preserve the legacy table and exact Room identity for installed databases. Any cleanup is deferred due to persisted-data compatibility.",
+      "disposition": "KEEP; read-only committed migration fixture."
+    },
+    {
+      "path": "core-data-android/schemas/com.theoriacodex.data.android.room.TheoriaRoomDatabase/9.json",
+      "lines": 762,
+      "bytes": 25483,
+      "sha256": "a1f554644ecbbe9e7df8036aea0a0a605464691f2ec0392fba7bfd09cd945a9f",
+      "read_complete": true,
+      "keep": "KEEP. Version-9 retains v8 structures and adds liked_posts(source, source_post_id) reverse-membership index (lines 228-291); viewer_translation_cache remains for compatibility (lines 693-754). Final identity/setup is lines 757-760.",
+      "redundancy": "Repeated complete schema snapshots are required Room migration fixtures; no removable redundancy proven.",
+      "flakiness": "None observed; static deterministic fixture.",
+      "proposal": "No change. Preserve the v9 index, legacy table, and exact schema identity. Any runtime/dependency/schema migration modification is deferred.",
+      "disposition": "KEEP; read-only committed migration fixture."
+    }
+  ],
+  "top_findings": [
+    "All four assigned files were read completely and their manifest byte counts and SHA-256 hashes match.",
+    "These are committed Room schema snapshots, not executable tests; they provide historical migration inputs and exact identity validation with no direct runtime cost or flakiness.",
+    "Schema evolution is coherent: v6 baseline, v7 group_index, v8 viewer_translation_cache, and v9 liked_posts reverse lookup index.",
+    "Do not remove viewer_translation_cache solely because viewer translation was retired; it remains a persisted-data compatibility artifact.",
+    "No independent test-quality change is warranted. Any schema regeneration, migration behavior, SDK, dependency, workflow, or safety change is deferred."
+  ]
+}

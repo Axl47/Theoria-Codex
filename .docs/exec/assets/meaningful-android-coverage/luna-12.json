@@ -1,0 +1,293 @@
+{
+  "reader": "luna-12",
+  "assigned_count": 28,
+  "completed_count": 28,
+  "files": [
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/RepositoryContractsTest.kt",
+      "lines": 522,
+      "read_complete": true,
+      "keep": "Codex dedup/hydration, recents restoration and section policy, source-weight repair, profile/tag policy, likes, and UI restoration contracts.",
+      "redundancy": "The parameterized contract has only IN_MEMORY at lines 24-26 and 511-520; this is fixture-only coverage, not Room persistence coverage.",
+      "flakiness": "None observed; recents/likes clocks are deterministic.",
+      "proposal": "Add a real Room/backend contract lane or explicitly scope this class as in-memory policy coverage.",
+      "disposition": "Keep; independent coverage-gap recommendation."
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/RepositoryTestFixtures.kt",
+      "lines": 44,
+      "read_complete": true,
+      "keep": "Canonical Post fixture with creator, media, tags, and IDs.",
+      "redundancy": "None proven.",
+      "flakiness": "None.",
+      "proposal": "Keep unchanged.",
+      "disposition": "Keep."
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/SourceWeightSettingsTest.kt",
+      "lines": 56,
+      "read_complete": true,
+      "keep": "Slider-step quantization, edited-weight preservation, zero-peer redistribution, and active configuration updates.",
+      "redundancy": "Distinct from orchestration normalization tests; this covers repository editing semantics.",
+      "flakiness": "None; deterministic finite loops.",
+      "proposal": "Keep unchanged.",
+      "disposition": "Keep."
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/StatisticsRepositoriesTest.kt",
+      "lines": 181,
+      "read_complete": true,
+      "keep": "In-memory counters, typed DataStore round trip, source-aware tags, codex dimensions, saturation, legacy defaults, and future-schema fail-closed behavior.",
+      "redundancy": "None proven; in-memory policy and durable persistence assertions are complementary.",
+      "flakiness": "No observed flakiness; 40 Dispatchers.Default mutations at lines 102-117 rely on mutex serialization but use no sleeps.",
+      "proposal": "Keep; optionally narrow broad Exception assertion at lines 166-169 if the production failure type is stable.",
+      "disposition": "Keep; optional independent assertion-tightening."
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/repository/ViewerTranslationCacheRepositoryTest.kt",
+      "lines": 38,
+      "read_complete": true,
+      "keep": "TTL expiry and LRU eviction with controlled clock.",
+      "redundancy": "None proven.",
+      "flakiness": "None; all timestamps are manually controlled.",
+      "proposal": "Keep unchanged.",
+      "disposition": "Keep."
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/storage/ApplicationDataReadinessTest.kt",
+      "lines": 118,
+      "read_complete": true,
+      "keep": "Dispatcher affinity, lazy single initialization, sticky failure/retry, and waiter cancellation isolation.",
+      "redundancy": "None proven.",
+      "flakiness": "Potential hang risk from unbounded yield loops at lines 58 and 109 if initialization/state transitions regress.",
+      "proposal": "Use a focused timeout or awaitable state signal around those readiness waits; do not add sleeps/retries.",
+      "disposition": "Keep; independent flakiness-hardening recommendation."
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/storage/AtomicJsonFileStoreTest.kt",
+      "lines": 424,
+      "read_complete": true,
+      "keep": "Atomic IO lane, quarantine/recovery, collision handling, failure propagation, cancellation, serialization cleanup, fallback moves, intent admission, directory sync, and rollback safety.",
+      "redundancy": "No redundant cases proven; each failure mode exercises a different safety guarantee.",
+      "flakiness": "None observed; temporary files and injected operations are deterministic.",
+      "proposal": "Keep unchanged.",
+      "disposition": "Keep."
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/storage/DataStoreStorageTest.kt",
+      "lines": 45,
+      "read_complete": true,
+      "keep": "Idempotent legacy archival and refusal to overwrite mismatched retained bytes.",
+      "redundancy": "None proven.",
+      "flakiness": "None.",
+      "proposal": "Keep unchanged.",
+      "disposition": "Keep."
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/storage/DurableMutationTest.kt",
+      "lines": 45,
+      "read_complete": true,
+      "keep": "Rollback after ordinary persistence failure and cancellation preservation.",
+      "redundancy": "The two tests cover distinct exception classes.",
+      "flakiness": "None.",
+      "proposal": "Keep unchanged.",
+      "disposition": "Keep."
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/storage/PostStorageRecordsTest.kt",
+      "lines": 124,
+      "read_complete": true,
+      "keep": "Full Post schema round trip, legacy typed fallbacks, animation/media metadata, and future-version fail-closed behavior.",
+      "redundancy": "None proven.",
+      "flakiness": "None.",
+      "proposal": "Keep unchanged.",
+      "disposition": "Keep."
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/storage/RecentSearchPayloadCodecTest.kt",
+      "lines": 87,
+      "read_complete": true,
+      "keep": "Multi-search metadata, legacy raw Query inference, FYP source tags, and grouped-term boundaries.",
+      "redundancy": "None proven.",
+      "flakiness": "None.",
+      "proposal": "Keep unchanged.",
+      "disposition": "Keep."
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/testing/ControllableIoDispatcher.kt",
+      "lines": 28,
+      "read_complete": true,
+      "keep": "Single-thread controllable dispatcher and injected dispatch failure.",
+      "redundancy": "Support helper, not a test duplicate.",
+      "flakiness": "None observed.",
+      "proposal": "Keep unchanged.",
+      "disposition": "Keep."
+    },
+    {
+      "path": "core-data/src/test/kotlin/com/theoriacodex/data/testing/RecordingIoDispatcher.kt",
+      "lines": 32,
+      "read_complete": true,
+      "keep": "Single-thread dispatcher recording actual execution thread names.",
+      "redundancy": "Complementary to ControllableIoDispatcher.",
+      "flakiness": "None observed; callers await work before closing.",
+      "proposal": "Keep unchanged.",
+      "disposition": "Keep."
+    },
+    {
+      "path": "core-data/src/test/resources/queries/legacy-and-typed-terms.json",
+      "lines": 48,
+      "read_complete": true,
+      "keep": "Legacy, typed-empty, and malformed term payload fixtures, including null/blank/unknown facets.",
+      "redundancy": "None proven; each fixture drives compatibility parsing behavior.",
+      "flakiness": "None.",
+      "proposal": "Keep unchanged.",
+      "disposition": "Keep."
+    },
+    {
+      "path": "core-data/src/testFixtures/kotlin/com/theoriacodex/data/repository/FixtureRepositoryPolicies.kt",
+      "lines": 111,
+      "read_complete": true,
+      "keep": "Deterministic fixture mechanics for codex ordering, sorting, recents normalization, and likes toggling.",
+      "redundancy": "Implementation mirroring is present at lines 12-109; repository contract tests therefore validate the fake policy implementation.",
+      "flakiness": "None.",
+      "proposal": "Retain fixtures, but add black-box coverage against real Room/durable repositories so policy-mirroring fakes cannot hide production defects.",
+      "disposition": "Keep; independent backend-coverage recommendation."
+    },
+    {
+      "path": "core-data/src/testFixtures/kotlin/com/theoriacodex/data/repository/InMemoryCacheRepository.kt",
+      "lines": 54,
+      "read_complete": true,
+      "keep": "Mutex-protected thumbnail/full cache membership and snapshot counts.",
+      "redundancy": "Expected test double; no harmful duplication proven.",
+      "flakiness": "None.",
+      "proposal": "Keep unchanged.",
+      "disposition": "Keep."
+    },
+    {
+      "path": "core-data/src/testFixtures/kotlin/com/theoriacodex/data/repository/InMemoryCodexLikesTransactions.kt",
+      "lines": 140,
+      "read_complete": true,
+      "keep": "Clean/restore, profile-library removal, import deduplication, reorder validation, like-to-codex synchronization, and clear/delete workflows.",
+      "redundancy": "This is a substantial transaction implementation mirror at lines 11-136; tests using it may not exercise the production transaction implementation.",
+      "flakiness": "None observed.",
+      "proposal": "Keep the fake for workflow tests; add real transaction integration coverage for migration, rollback, and persistence behavior.",
+      "disposition": "Keep; independent coverage-gap recommendation."
+    },
+    {
+      "path": "core-data/src/testFixtures/kotlin/com/theoriacodex/data/repository/InMemoryMediaDurationRepository.kt",
+      "lines": 55,
+      "read_complete": true,
+      "keep": "Retryable expiry, bounded entry pruning, deterministic tie-break ordering, and positive-limit validation.",
+      "redundancy": "Expected storage-independent fake; no redundant test case proven.",
+      "flakiness": "None; injected clock controls expiry.",
+      "proposal": "Keep unchanged.",
+      "disposition": "Keep."
+    },
+    {
+      "path": "core-data/src/testFixtures/kotlin/com/theoriacodex/data/repository/InMemoryRepositories.kt",
+      "lines": 690,
+      "read_complete": true,
+      "keep": "Codex/post hydration, query state, recents section/origin restoration, settings/profile policy, likes, and UI restore behavior.",
+      "redundancy": "Broad implementation mirror of repository behavior; lines 21-237, 255-433, 435-562, 564-690 are all in-memory substitutes rather than durable implementations.",
+      "flakiness": "No observed flakiness. System time/UUID at lines 55-75 are not asserted by assigned tests.",
+      "proposal": "Keep fixtures; supplement with real Room/DataStore contract coverage, especially saved-data migrations and later writes.",
+      "disposition": "Keep; independent backend-coverage recommendation."
+    },
+    {
+      "path": "core-data/src/testFixtures/kotlin/com/theoriacodex/data/repository/InMemoryStatisticsRepository.kt",
+      "lines": 59,
+      "read_complete": true,
+      "keep": "Mutex-protected statistics mutations delegated through centralized StatisticsPolicies.",
+      "redundancy": "Policy delegation is intentional; persistence is tested separately.",
+      "flakiness": "None.",
+      "proposal": "Keep unchanged.",
+      "disposition": "Keep."
+    },
+    {
+      "path": "core-data/src/testFixtures/kotlin/com/theoriacodex/data/repository/InMemoryViewerTranslationCacheRepository.kt",
+      "lines": 60,
+      "read_complete": true,
+      "keep": "TTL, LRU, blank-value rejection, and bounded cache behavior.",
+      "redundancy": "Mirrors production cache semantics, but assigned test coverage is intentionally deterministic.",
+      "flakiness": "None; injected clock and mutex make ordering deterministic.",
+      "proposal": "Keep unchanged.",
+      "disposition": "Keep."
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/adapter/FacetedSearchContractTest.kt",
+      "lines": 45,
+      "read_complete": true,
+      "keep": "All-scope distinction, namespace-aware scope, suggestion conversion, and namespace-only rejection.",
+      "redundancy": "None proven.",
+      "flakiness": "None.",
+      "proposal": "Keep unchanged.",
+      "disposition": "Keep."
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/coroutines/CoroutineResultsTest.kt",
+      "lines": 40,
+      "read_complete": true,
+      "keep": "Cancellation identity preservation and ordinary failure-as-result behavior.",
+      "redundancy": "None proven.",
+      "flakiness": "None.",
+      "proposal": "Keep unchanged.",
+      "disposition": "Keep."
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/encoding/StrictPercentDecodingTest.kt",
+      "lines": 29,
+      "read_complete": true,
+      "keep": "UTF-8 decoding, literal plus preservation, malformed escapes/bytes, and unpaired surrogate rejection.",
+      "redundancy": "None proven.",
+      "flakiness": "None.",
+      "proposal": "Keep unchanged.",
+      "disposition": "Keep."
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/model/FacetedDomainModelsTest.kt",
+      "lines": 140,
+      "read_complete": true,
+      "keep": "Legacy query compatibility, typed facets, portable unified projection, creator/taxonomy compatibility, and animated media metadata.",
+      "redundancy": "None proven.",
+      "flakiness": "None.",
+      "proposal": "Keep unchanged.",
+      "disposition": "Keep."
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/orchestration/GroupedSearchPagingTest.kt",
+      "lines": 152,
+      "read_complete": true,
+      "keep": "Grouped-page resumability, canonical dedup/order, partial-branch failure isolation, and cancellation cleanup.",
+      "redundancy": "None proven; scenarios cover distinct orchestration paths.",
+      "flakiness": "Potential hang if the cancellation branch never starts: unbounded waiting at line 113.",
+      "proposal": "Guard branch-start readiness with a focused timeout/structured signal; do not add sleeps or retries.",
+      "disposition": "Keep; independent flakiness-hardening recommendation."
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/orchestration/SearchMetadataHydrationTest.kt",
+      "lines": 161,
+      "read_complete": true,
+      "keep": "Canonical hydration deduplication, sparse-card preservation, resolution concurrency cap, timeout isolation, cancellation, and failure propagation.",
+      "redundancy": "None proven.",
+      "flakiness": "Potential wall-clock sensitivity from sourceTimeoutMs=100L at lines 86-88; unbounded branch-start wait at line 111 can hang on regressions.",
+      "proposal": "Use deterministic timeout control where possible and bound the start wait; retain the concurrency/failure assertions.",
+      "disposition": "Keep; independent flakiness-hardening recommendation."
+    },
+    {
+      "path": "core-domain/src/test/kotlin/com/theoriacodex/domain/orchestration/SourceWeightNormalizationTest.kt",
+      "lines": 77,
+      "read_complete": true,
+      "keep": "Positive normalization, explicit-zero preservation, missing fallback, invalid finite handling, and equal-share all-zero fallback.",
+      "redundancy": "Distinct from repository slider redistribution tests.",
+      "flakiness": "None; deterministic arithmetic.",
+      "proposal": "Keep unchanged.",
+      "disposition": "Keep."
+    }
+  ],
+  "top_findings": [
+    "All 28 assigned text files matched manifest SHA256 values; no assigned binaries.",
+    "The main coverage limitation is fixture-only repository/transaction testing: RepositoryContractsTest is parameterized solely with IN_MEMORY, while FixtureRepositoryPolicies, InMemoryCodexLikesTransactions, and InMemoryRepositories mirror production behavior.",
+    "ApplicationDataReadinessTest, GroupedSearchPagingTest, and SearchMetadataHydrationTest contain unbounded readiness waits; focused timeouts would reduce hang risk without retries or sleeps.",
+    "SearchMetadataHydrationTest uses a 100 ms source timeout, which is a potential wall-clock sensitivity under host load, though no failure was observed."
+  ]
+}
