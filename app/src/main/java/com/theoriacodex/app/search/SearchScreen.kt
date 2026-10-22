@@ -768,6 +768,7 @@ fun SearchScreen(
             },
             onSaveToDevice = { onSaveToDevice(post) },
             onSaveToCodex = { onRequestSaveToCodex(post) },
+            saveToCodexQuery = state.query.applied,
             onOpenCreatorProfile = onOpenCreatorProfile,
             onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
             onPostUrlCopied = onPostUrlCopied,

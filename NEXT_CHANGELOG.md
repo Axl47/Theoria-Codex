@@ -23,6 +23,7 @@
 - Reduce vertical spacing around the For You source dropdown.
 - Reduce vertical spacing around the Search toolbar.
 - Search collections in Save to Codex.
+- Preload Save to Codex tag matching when opening a post’s hold menu to reduce waiting in the save picker.
 - Prioritize Save to Codex destinations relevant to the applied search and incoming post tags, with an option to return to library order.
 - Choose Search sources from a compact dropdown, including long-press selection for Multi-Search.
 - Remember Viewer play mode.

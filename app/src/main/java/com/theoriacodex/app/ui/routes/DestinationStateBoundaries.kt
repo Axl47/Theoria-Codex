@@ -13,6 +13,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.theoriacodex.app.appshell.PendingIncomingUri
+import com.theoriacodex.app.codex.LocalCodexSaveRelevanceLoader
 import com.theoriacodex.app.codex.sortLiveCodexPosts
 import com.theoriacodex.app.codex.CodexCollectionSource
 import com.theoriacodex.app.codex.CodexCollectionPresentation
@@ -273,10 +274,17 @@ internal fun SaveToCodexDestinationStateBoundary(
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val codices = codicesState.value
     val collection = rememberCodexCollectionState(data = data, codices = codices)
-    val relevance = remember(data.codexRepository, codices, posts, searchQuery) {
-        CodexCollectionSource(data.codexRepository, data.storageDirectory, data.cacheRepository)
-            .observeSaveRelevance(codices.mapTo(linkedSetOf(), Codex::codexId), posts, searchQuery)
-    }.collectAsStateWithLifecycle(initialValue = emptyMap())
+    val relevanceLoader = LocalCodexSaveRelevanceLoader.current
+    val relevance = if (relevanceLoader != null) {
+        remember(relevanceLoader, posts, searchQuery) {
+            relevanceLoader.observe(posts, searchQuery)
+        }.collectAsStateWithLifecycle()
+    } else {
+        remember(data.codexRepository, codices, posts, searchQuery) {
+            CodexCollectionSource(data.codexRepository, data.storageDirectory, data.cacheRepository)
+                .observeSaveRelevance(codices.mapTo(linkedSetOf(), Codex::codexId), posts, searchQuery)
+        }.collectAsStateWithLifecycle(initialValue = emptyMap())
+    }
     DestinationStateBoundary(settingsState) { settings ->
         val activeProfile = settings.activeRecommendationProfile()
         content(

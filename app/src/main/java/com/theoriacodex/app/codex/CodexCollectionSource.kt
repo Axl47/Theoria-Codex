@@ -26,14 +26,14 @@ internal data class CodexActionOptions(
     val tags: Map<SourceKey, List<CodexSearchTagOption>> = emptyMap(),
 )
 
-/** Summary queries decode bounded covers; full tag projections exist only for an open sheet. */
+/** Summary queries decode bounded covers; full tag projections exist only while choosing post actions or a save target. */
 internal class CodexCollectionSource(
     private val repository: CodexRepository,
     private val storageDirectory: File,
     private val cacheRepository: CacheRepository,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
-    /** Only the open save sheet observes full membership tags; scoring stays off Main. */
+    /** Hold menus preload save relevance; full membership scoring stays off Main. */
     fun observeSaveRelevance(
         codexIds: Set<String>, posts: List<Post>, searchQuery: Query? = null,
     ): Flow<Map<String, Double>> {

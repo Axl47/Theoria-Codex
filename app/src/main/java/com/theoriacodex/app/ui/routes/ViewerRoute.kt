@@ -430,6 +430,7 @@ internal fun ViewerRoute(
     }
     ViewerScreen(
         uiState = viewerState,
+        saveToCodexQuery = activeSession?.saveQuery,
         creatorBrowsingSources = renderConfig.creatorBrowsingSources,
         onAction = { action ->
             viewerOwner.onAction(action)

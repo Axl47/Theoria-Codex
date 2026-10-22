@@ -29,6 +29,7 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -76,6 +77,9 @@ import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.codex.CodexListScreen
 import com.theoriacodex.app.codex.CodexCommandViewModel
 import com.theoriacodex.app.codex.CodexCommandHost
+import com.theoriacodex.app.codex.CodexCollectionSource
+import com.theoriacodex.app.codex.CodexSaveRelevanceLoader
+import com.theoriacodex.app.codex.LocalCodexSaveRelevanceLoader
 import com.theoriacodex.app.codex.SaveToCodexSheet
 import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.app.codex.likesCodexIdForProfile
@@ -963,6 +967,12 @@ internal fun TheoriaAppContent(
         onProfileChanged = { profile -> ensureLikesCodexId(profile) },
     )
 
+    val saveRelevanceLoader = remember(dataDependencies, scope) {
+        val source = CodexCollectionSource(dataDependencies.codexRepository,
+            dataDependencies.storageDirectory, dataDependencies.cacheRepository)
+        CodexSaveRelevanceLoader(dataDependencies.codexRepository, scope, source::observeSaveRelevance)
+    }
+    CompositionLocalProvider(LocalCodexSaveRelevanceLoader provides saveRelevanceLoader) {
     PostTagContextProvider(searchRouteOwner?.state, featureDependencies.search::fetchSearchTermCounts) {
         TheoriaNightTheme {
             if (!navReady) {
@@ -1933,6 +1943,7 @@ internal fun TheoriaAppContent(
                 )
             }
         }
+    }
     }
 }
 

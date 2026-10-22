@@ -58,10 +58,12 @@ import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerUiState
+import com.theoriacodex.app.codex.PreloadCodexSaveRelevance
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.PostTaxonomyTerm
+import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.app.media.isAuthoritativeDurationMedia
@@ -73,6 +75,7 @@ internal fun ViewerScreen(
     uiState: ViewerUiState,
     creatorBrowsingSources: Set<SourceKey>,
     onAction: (ViewerAction) -> Unit,
+    saveToCodexQuery: Query? = null,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
     fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
@@ -550,6 +553,7 @@ internal fun ViewerScreen(
 
     if (showInfoSheet) {
         val post = selectedPost
+        PreloadCodexSaveRelevance(post, saveToCodexQuery)
         AdaptiveViewerInfo(onDismiss = { setInfoSheetVisible(false) }) {
             PostTagActionSection(
                 header = {

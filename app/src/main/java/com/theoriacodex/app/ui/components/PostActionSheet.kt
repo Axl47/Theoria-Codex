@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.codex.PreloadCodexSaveRelevance
 import com.theoriacodex.app.creator.CreatorProfileActionButton
 import com.theoriacodex.app.media.copyPostTagsToClipboard
 import com.theoriacodex.app.media.copyPostUrlToClipboard
@@ -32,6 +33,7 @@ import com.theoriacodex.app.media.showClipboardCopyConfirmation
 import com.theoriacodex.app.post.displayTitleOrNull
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 
 /**
@@ -48,6 +50,7 @@ fun PostActionSheet(
     onDismiss: () -> Unit,
     onSaveToDevice: () -> Unit,
     onSaveToCodex: (() -> Unit)? = null,
+    saveToCodexQuery: Query? = null,
     saveToCodexContentDescription: String = "Save to Codex",
     onRemoveFromCodex: (() -> Unit)? = null,
     onOpenCreatorProfile: ((CreatorProfile) -> Unit)? = null,
@@ -60,6 +63,8 @@ fun PostActionSheet(
     require((onOpenCreatorProfile == null) == (onOpenLegacyCreatorProfile == null)) {
         "Creator profile callbacks must be supplied together"
     }
+
+    if (onSaveToCodex != null) PreloadCodexSaveRelevance(post, saveToCodexQuery)
 
     val context = LocalContext.current
     fun dismissThen(action: () -> Unit) {
