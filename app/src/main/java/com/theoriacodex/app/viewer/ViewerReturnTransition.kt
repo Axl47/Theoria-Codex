@@ -40,17 +40,21 @@ internal val LocalViewerReturnGrid = staticCompositionLocalOf<String?> { null }
 
 internal data class ViewerReturnRequest(val gridId: String?, val postId: PostId)
 
-/** Register a real exit clock with Navigation without fading or scaling the entire destination. */
+/** Keep both destinations alive while the media moves between its card and fullscreen bounds. */
 @Composable
 internal fun ViewerReturnLifetime(scope: AnimatedVisibilityScope) {
     scope.transition.animateFloat(
-        transitionSpec = { tween(VIEWER_RETURN_HOLD_MS) }, label = "Viewer return lifetime",
-    ) { state -> if (state == EnterExitState.PostExit) 1f else 0f }
+        transitionSpec = {
+            tween(if (targetState == EnterExitState.PostExit) VIEWER_RETURN_HOLD_MS else VIEWER_RETURN_DURATION_MS)
+        }, label = "Viewer media transition lifetime",
+    ) { state -> if (state == EnterExitState.Visible) 0f else 1f }
 }
 
-/** Transient geometry shared by the outgoing viewer and its original feed only. */
+/** Transient geometry shared by the viewer and its originating feed. */
 internal class ViewerReturnTransition {
     private var originGridId: String? = null
+    var openingBounds by mutableStateOf<Rect?>(null)
+        private set
     var request by mutableStateOf<ViewerReturnRequest?>(null)
         private set
     var targetBounds by mutableStateOf<Rect?>(null)
@@ -58,12 +62,18 @@ internal class ViewerReturnTransition {
     private var centered = false
     private val mediaBounds = mutableMapOf<PostId, Rect>()
 
-    fun openedFrom(gridId: String?) {
+    fun openedFrom(gridId: String?, bounds: Rect? = null) {
         clear()
         originGridId = gridId
+        openingBounds = bounds?.takeUnless { it.isEmpty }
+    }
+
+    fun finishOpening() {
+        openingBounds = null
     }
 
     fun begin(postId: PostId) {
+        openingBounds = null
         request = ViewerReturnRequest(originGridId, postId)
         targetBounds = null
         centered = false
@@ -87,6 +97,7 @@ internal class ViewerReturnTransition {
         request = null
         targetBounds = null
         originGridId = null
+        openingBounds = null
         centered = false
         mediaBounds.clear()
     }
@@ -115,15 +126,21 @@ internal fun ViewerReturnGridEffect(gridId: String, postIds: List<PostId?>, stat
 internal fun viewerReturnCenterScroll(itemTop: Int, itemHeight: Int, viewportStart: Int, viewportEnd: Int): Float =
     itemTop + itemHeight / 2f - (viewportStart + viewportEnd) / 2f
 
-/** The navigation exit keeps the renderer alive while the returned feed measures its target. */
+/** One progress value describes both directions: zero is fullscreen and one is the feed card. */
 @Composable
 internal fun rememberViewerReturnProgress(): Float {
     val transition = LocalViewerReturnTransition.current
     val request = transition?.request
-    val progress = remember { Animatable(0f) }
+    val progress = remember { Animatable(if (transition?.openingBounds != null) 1f else 0f) }
     LaunchedEffect(request) {
+        if (request == null) {
+            if (transition?.openingBounds != null) {
+                progress.animateTo(0f, tween(VIEWER_RETURN_DURATION_MS))
+                transition.finishOpening()
+            }
+            return@LaunchedEffect
+        }
         progress.snapTo(0f)
-        if (request == null) return@LaunchedEffect
         withTimeoutOrNull(VIEWER_RETURN_TARGET_WAIT_MS) {
             snapshotFlow { transition.targetBounds }.filterNotNull().first()
         }
@@ -136,15 +153,18 @@ internal fun rememberViewerReturnProgress(): Float {
 @Composable
 internal fun Modifier.viewerReturnMedia(progress: Float, aspectRatio: Float?): Modifier {
     val transition = LocalViewerReturnTransition.current ?: return this
-    if (transition.request == null) return this
+    if (transition.request == null && transition.openingBounds == null) return this
     var windowBounds by remember { mutableStateOf(Rect.Zero) }
-    val target = remember(transition.request, progress > 0f) { transition.targetBounds }
+    val closing = transition.request != null
+    val target = remember(transition.request, progress > 0f) {
+        if (closing) transition.targetBounds else transition.openingBounds
+    }
     val geometry = viewerReturnGeometry(windowBounds, target, aspectRatio, progress)
     return onGloballyPositioned {
-        if (progress == 0f) windowBounds = it.boundsInWindow(clipBounds = false)
+        if (windowBounds.isEmpty || progress == 0f) windowBounds = it.boundsInWindow(clipBounds = false)
     }
         .drawWithContent {
-            if (progress >= 1f) return@drawWithContent
+            if (closing && progress >= 1f) return@drawWithContent
             if (progress <= 0f) {
                 drawContent()
                 return@drawWithContent

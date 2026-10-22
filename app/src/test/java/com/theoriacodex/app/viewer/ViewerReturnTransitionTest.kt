@@ -105,7 +105,7 @@ class ViewerReturnTransitionTest {
         }
     }
 
-    @Test fun `navigation retains outgoing media until the return motion completes`() {
+    @Test fun `navigation expands from the card and retains media until return completes`() {
         val returning = ViewerReturnTransition()
         lateinit var navigation: NavHostController
         var progress = 0f
@@ -114,7 +114,7 @@ class ViewerReturnTransitionTest {
             CompositionLocalProvider(LocalViewerReturnTransition provides returning) {
                 NavHost(navigation, startDestination = "feed", enterTransition = { EnterTransition.None },
                     exitTransition = { ExitTransition.None }) {
-                    composable("feed") { Box(Modifier.fillMaxSize()) }
+                    composable("feed") { Box(Modifier.fillMaxSize().testTag("source feed")) }
                     composable("viewer") {
                         ViewerReturnLifetime(this)
                         val value = rememberViewerReturnProgress()
@@ -124,9 +124,29 @@ class ViewerReturnTransitionTest {
                 }
             }
         }
-        compose.runOnIdle { navigation.navigate("viewer") }
         compose.waitForIdle()
         compose.mainClock.autoAdvance = false
+        val origin = Rect(20f, 200f, 220f, 500f)
+        compose.runOnIdle {
+            returning.openedFrom("feed", origin)
+            navigation.navigate("viewer")
+        }
+        compose.mainClock.advanceTimeBy(96)
+        compose.onNodeWithTag("source feed").assertExists()
+        compose.onNodeWithTag("returning media").assertExists()
+        compose.runOnIdle {
+            assertEquals(origin, returning.openingBounds)
+            assertTrue("Opening should be partway from card to fullscreen: $progress", progress > 0f && progress < 1f)
+        }
+        val openingMidpoint = progress
+        compose.mainClock.advanceTimeBy(96)
+        compose.runOnIdle { assertTrue(progress < openingMidpoint) }
+        compose.mainClock.advanceTimeBy(240)
+        compose.runOnIdle {
+            assertEquals(0f, progress, 0.001f)
+            assertNull(returning.openingBounds)
+        }
+        compose.onNodeWithTag("source feed").assertDoesNotExist()
         compose.runOnIdle {
             returning.openedFrom("feed")
             returning.begin(postId)

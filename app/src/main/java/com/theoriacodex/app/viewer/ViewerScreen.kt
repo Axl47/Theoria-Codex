@@ -100,6 +100,7 @@ internal fun ViewerScreen(
 ) {
     val returnProgress = rememberViewerReturnProgress()
     val returning = LocalViewerReturnTransition.current?.request != null
+    val opening = !returning && returnProgress > 0f
     val activity = LocalContext.current.viewerActivity()
     val inPictureInPicture = activity?.viewerPictureInPictureActive == true
     var quality by remember(videoQuality) { mutableStateOf(videoQuality) }
@@ -161,7 +162,7 @@ internal fun ViewerScreen(
     val selectedMediaOverviewItems = remember(selectedPost) { viewerMediaOverviewItems(selectedPost) }
     val mediaOverviewAvailable = viewerMediaOverviewAvailable(selectedMediaOverviewItems)
     val touchExplorationEnabled = rememberViewerTouchExploration()
-    val chromeVisible = (uiState.controls.chromeVisible || touchExplorationEnabled) && !inPictureInPicture && !returning
+    val chromeVisible = (uiState.controls.chromeVisible || touchExplorationEnabled) && !inPictureInPicture && !returning && !opening
     val showInfoSheet = uiState.controls.metadataVisible && !inPictureInPicture
     val mediaPlaybackEnabled = uiState.controls.playback.playing
     val playbackRestartRequest = uiState.controls.playback.restartRequest
@@ -229,8 +230,8 @@ internal fun ViewerScreen(
         }
     }
 
-    LaunchedEffect(pendingDismiss, swipeInProgress) {
-        if (!pendingDismiss || swipeInProgress) return@LaunchedEffect
+    LaunchedEffect(pendingDismiss, swipeInProgress, opening) {
+        if (!pendingDismiss || swipeInProgress || opening) return@LaunchedEffect
         withFrameNanos { }
         onAction(ViewerAction.Dismiss)
     }
@@ -247,7 +248,7 @@ internal fun ViewerScreen(
 
     fun markInteraction() {
         interactionSerial += 1
-        if (!chromeVisible) {
+        if (!chromeVisible && !opening && !returning) {
             onAction(ViewerAction.ToggleChrome)
         }
     }
@@ -398,7 +399,7 @@ internal fun ViewerScreen(
             }
 
             val navigateFromHorizontalSwipe: (ViewerHorizontalSwipeDirection) -> Unit = navigate@{ direction ->
-                if (viewerTransform.isZoomed || swipeInProgress || pendingDismiss || returning) return@navigate
+                if (viewerTransform.isZoomed || swipeInProgress || pendingDismiss || returning || opening) return@navigate
                 if (postPage != postPagerState.currentPage) return@navigate
                 val targetPostIndex = when (direction) {
                     ViewerHorizontalSwipeDirection.Previous -> postPage - 1

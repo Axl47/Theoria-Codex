@@ -2,6 +2,8 @@ package com.theoriacodex.app.viewer
 
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -30,7 +32,9 @@ class ViewerSwipeAnimationTest {
     @Test fun `post selection waits for a visible slide`() = checkSlide(gallery = false)
     @Test fun `gallery selection waits for a visible slide`() = checkSlide(gallery = true)
 
-    private fun checkSlide(gallery: Boolean) {
+    @Test fun `opening preserves controls and allows swiping after expansion`() = checkSlide(gallery = false, opening = true)
+
+    private fun checkSlide(gallery: Boolean, opening: Boolean = false) {
         val image = ImageRef(url = null, localPath = "/missing/swipe.jpg", mime = "image/jpeg")
         val first = Post(
             id = PostId(SourceKey.GELBOORU, "first"), preview = image, full = image,
@@ -40,17 +44,23 @@ class ViewerSwipeAnimationTest {
         )
         val posts = if (gallery) listOf(first) else listOf(first, first.copy(id = PostId(SourceKey.GELBOORU, "second")))
         val state = mutableStateOf(createViewerUiState(ViewerSessionIdentity("swipe"), posts, requiresResolution = { false }))
+        val transition = ViewerReturnTransition().apply {
+            if (opening) openedFrom("feed", Rect(20f, 100f, 220f, 400f))
+        }
         compose.setContent {
-            MaterialTheme {
-                ViewerScreen(
-                    uiState = state.value, creatorBrowsingSources = emptySet(),
-                    onAction = { state.value = reduceViewerState(state.value, it).state },
-                    onOpenInBrowser = {}, onRemoveIncludeTerm = { _, _ -> },
-                    onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
-                )
+            CompositionLocalProvider(LocalViewerReturnTransition provides transition) {
+                MaterialTheme {
+                    ViewerScreen(
+                        uiState = state.value, creatorBrowsingSources = emptySet(),
+                        onAction = { state.value = reduceViewerState(state.value, it).state },
+                        onOpenInBrowser = {}, onRemoveIncludeTerm = { _, _ -> },
+                        onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
+                    )
+                }
             }
         }
         compose.waitForIdle()
+        if (opening) compose.runOnIdle { assertTrue(state.value.controls.chromeVisible) }
         compose.mainClock.autoAdvance = false
         val actions = compose.onNodeWithContentDescription("Media actions")
         val width = actions.fetchSemanticsNode().size.width

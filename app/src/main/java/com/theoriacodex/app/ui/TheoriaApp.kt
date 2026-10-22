@@ -2,6 +2,7 @@ package com.theoriacodex.app.ui
 
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import com.theoriacodex.app.viewer.LocalViewerReturnTransition
@@ -1051,6 +1052,10 @@ internal fun TheoriaAppContent(
                     NavHost(
                         navController = navController,
                         startDestination = AppRoute.Home,
+                        exitTransition = {
+                            if (targetState.destination.route == AppRoute.Viewer) ExitTransition.None
+                            else fadeOut(tween(700))
+                        },
                         popEnterTransition = {
                             if (initialState.destination.route == AppRoute.Viewer) EnterTransition.None
                             else fadeIn(tween(700))
@@ -1685,7 +1690,8 @@ internal fun TheoriaAppContent(
                         }
                         composable(
                             AppRoute.Viewer,
-                            // Keep the live outgoing renderer until its card-return animation finishes.
+                            // Media owns the expansion/shrink; navigation retains both destinations.
+                            enterTransition = { EnterTransition.None },
                             popExitTransition = { ExitTransition.None },
                         ) {
                             ViewerReturnLifetime(this)

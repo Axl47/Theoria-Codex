@@ -2,6 +2,7 @@ package com.theoriacodex.app.search
 
 import com.theoriacodex.app.viewer.LocalViewerReturnTransition
 import com.theoriacodex.app.viewer.LocalViewerReturnGrid
+import androidx.compose.ui.layout.LayoutCoordinates
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -954,6 +955,7 @@ fun SearchResultCard(
 ) {
     val viewerReturn = LocalViewerReturnTransition.current
     val viewerReturnGrid = LocalViewerReturnGrid.current
+    var viewerMediaCoordinates by remember(post.id) { mutableStateOf<LayoutCoordinates?>(null) }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
@@ -1010,7 +1012,10 @@ fun SearchResultCard(
             .testTag(searchCardTestTag(post.id))
             .combinedClickable(
                 onClick = {
-                    viewerReturn?.openedFrom(viewerReturnGrid)
+                    viewerReturn?.openedFrom(
+                        viewerReturnGrid,
+                        viewerMediaCoordinates?.takeIf { it.isAttached }?.boundsInWindow(clipBounds = false),
+                    )
                     onClick()
                 },
                 onLongClick = onLongPress,
@@ -1129,6 +1134,7 @@ fun SearchResultCard(
                 .fillMaxWidth()
                 .aspectRatio(ratio)
                 .onGloballyPositioned { coordinates ->
+                    viewerMediaCoordinates = coordinates
                     viewerReturn?.recordBounds(viewerReturnGrid, post.id, coordinates.boundsInWindow(clipBounds = false))
                     val visible = coordinates.isAttached &&
                         isVisibleFeedBounds(coordinates.boundsInWindow(clipBounds = true))
