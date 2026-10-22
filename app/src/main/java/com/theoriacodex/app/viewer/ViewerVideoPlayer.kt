@@ -14,6 +14,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
@@ -81,8 +82,16 @@ internal fun ViewerVideoPlayer(
         Box(modifier.background(Color.Black)) {}
         return
     }
-    val state = remember(location, sourceKey, controls.loadGeneration) { ViewerVideoState() }
-    ViewerVideoBinding(state, location, sourceKey, controls, events, positions.position(mediaKey)) {
+    val recovery = remember(mediaKey, location, sourceKey, controls.loadGeneration) { ViewerVideoRecovery() }
+    var recoveryGeneration by remember(recovery) { mutableIntStateOf(0) }
+    val state = remember(recovery, recoveryGeneration) { ViewerVideoState() }
+    LaunchedEffect(state, state.retryPending) {
+        if (state.retryPending) {
+            delay(250L)
+            recoveryGeneration += 1
+        }
+    }
+    ViewerVideoBinding(state, location, sourceKey, controls, events, recovery, { positions.position(mediaKey) }) {
         positions.save(mediaKey, it)
     }
     ViewerVideoCommands(state, controls)
@@ -97,6 +106,7 @@ private class ViewerVideoState {
     var loading by mutableStateOf(true)
     var hasRenderedFirstFrame by mutableStateOf(false)
     var failed by mutableStateOf(false)
+    var retryPending by mutableStateOf(false)
     var duration by mutableLongStateOf(0L)
     var position by mutableLongStateOf(0L)
     var scrubbing by mutableStateOf(false)
@@ -142,7 +152,8 @@ private fun ViewerVideoBinding(
     source: SourceKey,
     controls: ViewerRendererControls,
     events: ViewerRendererEvents,
-    resumePosition: Long,
+    recovery: ViewerVideoRecovery,
+    resumePosition: () -> Long,
     onReleasePosition: (Long) -> Unit,
 ) {
     val context = LocalContext.current
@@ -156,9 +167,10 @@ private fun ViewerVideoBinding(
             val session = createViewerMediaSession(context, player) { latestEvents.onPlaybackIntentChanged(it) }
             java.io.Closeable { session.release() }
         }
-        if (resumePosition > 0L) player.seekTo(resumePosition)
+        // Read after the previous binding's disposal has saved its final position.
+        resumePosition().takeIf { it > 0L }?.let(player::seekTo)
         player.playbackParameters = PlaybackParameters(controls.playbackRate.coerceAtLeast(MIN_VIEWER_PLAYBACK_RATE))
-        val listener = viewerVideoListener(player, state) { latestEvents }
+        val listener = viewerVideoListener(player, state, recovery) { latestEvents }
         player.addListener(listener)
         state.player = player
         state.setPlaying(controls.isActive && controls.isPlaying)
@@ -181,6 +193,7 @@ private fun ViewerVideoBinding(
 private fun viewerVideoListener(
     player: ExoPlayer,
     state: ViewerVideoState,
+    recovery: ViewerVideoRecovery,
     events: () -> ViewerRendererEvents,
 ): Player.Listener {
     val firstFrame = FirstFrameTraceGate()
@@ -195,6 +208,12 @@ private fun viewerVideoListener(
         }
         override fun onPlayerError(error: PlaybackException) {
             if (state.player !== player) return
+            if (state.retryPending || state.failed) return
+            if (recovery.requestRetry(error.errorCode)) {
+                state.loading = true
+                state.retryPending = true
+                return
+            }
             state.loading = false
             state.failed = true
             events().onError(error.message ?: "Could not play video")

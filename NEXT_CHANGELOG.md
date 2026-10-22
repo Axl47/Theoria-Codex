@@ -43,6 +43,7 @@
 - Remove repeated type labels from tag names in the post hold menu.
 
 ## Fixes
+- Automatically retry a video once after a decoder or rendering failure, keeping your playback position.
 - Restore the previous search’s scroll position when using Search Undo.
 - Keep the background around the notification bar black in landscape.
 - Dismiss the keyboard when swiping between tabs or leaving Search input.
