@@ -884,13 +884,6 @@ internal fun TheoriaAppContent(
     val bottomBarHeight = bottomNavigationSizing.totalHeightDp.dp
     val bottomBarIconSize = bottomNavigationSizing.iconSizeDp.dp
 
-    if (showFollowedCreators) {
-        com.theoriacodex.app.creator.FollowedCreatorsSheet(
-            owner = followsOwner,
-            onDismiss = { showFollowedCreators = false },
-            onOpen = { creator -> showFollowedCreators = false; scope.launch { openCreatorProfile(creator) } },
-        )
-    }
     CollectRouteEffects(followsOwner.messages) { message ->
         Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
     }
@@ -1018,6 +1011,13 @@ internal fun TheoriaAppContent(
     com.theoriacodex.app.codex.SavedCodexSession {
     PostTagContextProvider(searchRouteOwner?.state, featureDependencies.search::fetchSearchTermCounts) {
         TheoriaNightTheme {
+            if (showFollowedCreators) {
+                com.theoriacodex.app.creator.FollowedCreatorsSheet(
+                    owner = followsOwner,
+                    onDismiss = { showFollowedCreators = false },
+                    onOpen = { creator -> showFollowedCreators = false; scope.launch { openCreatorProfile(creator) } },
+                )
+            }
             if (!navReady) {
                 val promptRemote = updateChoiceRemote
                 Column(

@@ -99,6 +99,7 @@
 - Remove repeated type labels from tag names in the post hold menu.
 
 ## Fixes
+- Apply the app’s dark sheet theme to Followed Authors, matching Saved Searches.
 - Look beyond already-visible Pixiv recommendations before reporting “No new results”.
 - Reduce timing-related video playback failures.
 - Include navigation fixes for predictive-back races and transition clipping.
