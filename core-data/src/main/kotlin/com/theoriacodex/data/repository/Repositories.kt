@@ -435,6 +435,7 @@ fun defaultRecommendationProfiles(): List<RecommendationProfile> {
 }
 
 data class AppSettings(
+    val oldSearchBar: Boolean = false,
     val followedCreators: List<FollowedCreator> = emptyList(),
     val runtime: SourceRuntimeSettings = SourceRuntimeSettings(),
     val cache: CacheSettings = CacheSettings(),

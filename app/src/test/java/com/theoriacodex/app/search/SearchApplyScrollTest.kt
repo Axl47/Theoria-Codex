@@ -8,6 +8,10 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.onNode
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -102,11 +106,11 @@ class SearchApplyScrollTest {
         grid.performTouchInput { swipeUp() }
         compose.onNodeWithText("Apply").assertDoesNotExist()
         compose.runOnIdle { assertEquals(SortMode.POPULAR, state.value.query.draft.sort) }
-        compose.onNodeWithTag("Search query input").performClick()
+        compose.onNode(hasContentDescription("Expand Search") or hasTestTag("Search query input")).performClick()
         compose.onNodeWithText("Apply").assertIsDisplayed()
         repeat(2) {
             grid.performScrollToIndex(20)
-            compose.onNodeWithTag("Search query input").performClick()
+            compose.onNode(hasContentDescription("Expand Search") or hasTestTag("Search query input")).performClick()
             compose.onNodeWithText("Apply").performClick()
             compose.runOnIdle {
                 reduce(SearchStateChange.ReplaceResults(

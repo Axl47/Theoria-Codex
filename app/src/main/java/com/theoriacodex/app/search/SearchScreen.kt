@@ -62,6 +62,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInWindow
@@ -183,6 +186,7 @@ fun SearchScreen(
     onRemoveFavoriteTag: (SourceKey, String) -> Unit = { _, _ -> },
     fabRestoreState: FeedFabRestoreState = FeedFabRestoreState(),
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit = {},
+    oldSearchBar: Boolean = false,
 ) {
     val input = state.suggestions.input
     val animationRestoreState = fabRestoreState.searchAnimationFilter(state.query.draft.mode)
@@ -201,6 +205,8 @@ fun SearchScreen(
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var selectedActionPostResolving by remember { mutableStateOf(false) }
     val inputFocus = rememberSearchInputFocus()
+    val inputRequester = remember { FocusRequester() }
+    var requestInputFocus by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyStaggeredGridState()
     val queryHash = state.query.appliedQueryHash
@@ -424,6 +430,34 @@ fun SearchScreen(
         onAction(SearchAction.ClearAutocomplete)
     }
 
+    val searchBarExpanded = showSearchControls || (!state.content.hasExecutedSearch && !searchControlsDismissedByScroll)
+    LaunchedEffect(searchBarExpanded, requestInputFocus) {
+        if (searchBarExpanded && requestInputFocus) {
+            withFrameNanos { }
+            inputRequester.requestFocus()
+            requestInputFocus = false
+        }
+    }
+    val sourcePicker: @Composable () -> Unit = {
+SearchSourcePicker(
+                            draftSourceScope = state.query.draftSourceScope,
+                            options = state.query.modeOptions,
+                            unifiedSourceCount = state.query.unifiedSources.size,
+                            unifiedSources = state.query.unifiedSources,
+                            onOpen = { inputFocus.clear() },
+                            onModeSelected = { mode ->
+                                searchControlsDismissedByScroll = false
+                                searchControlsRequested = true
+                                onAction(SearchAction.SelectMode(mode))
+                            },
+                            onTemporarySourceToggled = { source ->
+                                searchControlsDismissedByScroll = false
+                                searchControlsRequested = true
+                                onAction(SearchAction.ToggleTemporarySource(source))
+                            },
+                        )
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         floatingActionButton = {
@@ -438,17 +472,22 @@ fun SearchScreen(
             )
         }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .then(inputFocus.rootModifier)
-                .fillMaxSize()
-                .padding(padding)
-                .padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
+        CollapsingSearchChrome(
+            expanded = searchBarExpanded,
+            legacy = oldSearchBar,
+            onExpand = {
+                searchControlsDismissedByScroll = false
+                searchControlsRequested = true
+                requestInputFocus = true
+            },
+            sourcePicker = sourcePicker,
+            modifier = Modifier.then(inputFocus.rootModifier).fillMaxSize().padding(padding)
+                .padding(start = 16.dp, end = 16.dp, top = if (oldSearchBar) 6.dp else 0.dp, bottom = 8.dp),
+            inputField = {
             OutlinedTextField(
                 modifier = Modifier
                     .testTag("Search query input")
+                    .focusRequester(inputRequester)
                     .fillMaxWidth()
                     .onFocusChanged { state ->
                         searchFieldFocused = state.isFocused
@@ -499,23 +538,7 @@ fun SearchScreen(
                         modifier = Modifier.padding(end = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        SearchSourcePicker(
-                            draftSourceScope = state.query.draftSourceScope,
-                            options = state.query.modeOptions,
-                            unifiedSourceCount = state.query.unifiedSources.size,
-                            unifiedSources = state.query.unifiedSources,
-                            onOpen = { inputFocus.clear() },
-                            onModeSelected = { mode ->
-                                searchControlsDismissedByScroll = false
-                                searchControlsRequested = true
-                                onAction(SearchAction.SelectMode(mode))
-                            },
-                            onTemporarySourceToggled = { source ->
-                                searchControlsDismissedByScroll = false
-                                searchControlsRequested = true
-                                onAction(SearchAction.ToggleTemporarySource(source))
-                            },
-                        )
+                        if (oldSearchBar) sourcePicker()
                         if (showAddInputAction) {
                             TextButton(
                                 onClick = { commitTagInput() },
@@ -528,6 +551,8 @@ fun SearchScreen(
                 }
             )
 
+            },
+        ) {
             AnimatedVisibility(
                 visible = showSearchControls,
                 enter = slideInVertically(initialOffsetY = { fullHeight -> fullHeight / 4 }) + fadeIn(),

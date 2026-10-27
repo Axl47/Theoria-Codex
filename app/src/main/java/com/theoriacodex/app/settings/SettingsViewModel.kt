@@ -293,6 +293,9 @@ internal class SettingsViewModel(
             is SettingsAction.SetInvertScrollDirection -> launchMutation {
                 dependencies.settingsRepository.setInvertMultiImageScrollDirection(action.enabled)
             }
+            is SettingsAction.SetOldSearchBar -> launchMutation {
+                dependencies.settingsRepository.updateSettings { it.copy(oldSearchBar = action.enabled) }
+            }
             is SettingsAction.SetInstantSeek -> launchMutation {
                 dependencies.settingsRepository.updateSettings { it.copy(viewer = it.viewer.copy(instantSeek = action.enabled)) }
             }

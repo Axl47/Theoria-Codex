@@ -94,6 +94,7 @@ sealed interface SettingsAction {
     data class SetEnabledSources(val sources: Set<SourceKey>) : SettingsAction
     data class SetSourceWeights(val sources: Set<SourceKey>, val weights: Map<SourceKey, Double>) : SettingsAction
     data class SetInvertScrollDirection(val enabled: Boolean) : SettingsAction
+    data class SetOldSearchBar(val enabled: Boolean) : SettingsAction
     data class SetInstantSeek(val enabled: Boolean) : SettingsAction
     data class SetVideoQuality(val quality: com.theoriacodex.domain.model.VideoQuality) : SettingsAction
     data class SetDownloadQuality(val quality: com.theoriacodex.domain.model.VideoQuality) : SettingsAction

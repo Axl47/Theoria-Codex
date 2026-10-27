@@ -26,9 +26,9 @@ internal fun validateBackupSettings(root: JsonObject, profileIds: Set<String>) {
         val value = root.get(key)
         require(value?.isJsonPrimitive == true && value.asJsonPrimitive.isBoolean) { "Invalid backup preference: $key" }
     }
-    if (root.has("instantSeek")) {
-        val value = root.get("instantSeek")
-        require(value.isJsonPrimitive && value.asJsonPrimitive.isBoolean) { "Invalid backup preference: instantSeek" }
+    listOf("instantSeek", "oldSearchBar").filter(root::has).forEach { key ->
+        val value = root.get(key)
+        require(value.isJsonPrimitive && value.asJsonPrimitive.isBoolean) { "Invalid backup preference: $key" }
     }
     validateProfileTags(root, "favoriteTagsByProfile", profileIds, grouped = false)
     validateProfileTags(root, "forYouBlacklistByProfile", profileIds, grouped = true)

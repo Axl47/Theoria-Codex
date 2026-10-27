@@ -23,6 +23,8 @@ internal fun PreferencesSection(state: SettingsUiState, onAction: (SettingsActio
         PreferenceToggle("Invert scroll direction", "Reverse swipes within multi-media posts.",
             state.settings.viewer.invertMultiImageScrollDirection) { onAction(SettingsAction.SetInvertScrollDirection(it)) }
         Text("Legacy", style = MaterialTheme.typography.titleSmall)
+        PreferenceToggle("Old Search Bar", "Keep the full search field visible above the grid.",
+            state.settings.oldSearchBar) { onAction(SettingsAction.SetOldSearchBar(it)) }
         PreferenceToggle("Instant Seek", "Seek while dragging instead of showing thumbnail previews.",
             state.settings.viewer.instantSeek) { onAction(SettingsAction.SetInstantSeek(it)) }
     }

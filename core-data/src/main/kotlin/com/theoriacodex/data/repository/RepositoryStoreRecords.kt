@@ -32,6 +32,7 @@ internal data class LegacySettingsStoreRecord(
     val resolveUnknownAnimatedDurations: Boolean = false,
     @field:SerializedName("invertMultiImageScrollDirection")
     val invertMultiImageScrollDirection: Boolean = false,
+    @field:SerializedName("oldSearchBar") val oldSearchBar: Boolean = false,
     @field:SerializedName("instantSeek") val instantSeek: Boolean = false,
     @field:SerializedName("viewerAutomaticTextTranslationEnabled")
     val viewerAutomaticTextTranslationEnabled: Boolean = false,
@@ -84,6 +85,7 @@ internal data class LegacySettingsStoreRecord(
             ?: profiles.first().profileId
         return RepositoryPolicies.normalizeSettings(
             AppSettings(
+                oldSearchBar = oldSearchBar,
                 followedCreators = followedCreators.orEmpty().mapNotNull { it.toDomain() }.distinctBy { it.creator.followKey() }.take(MAX_FOLLOWED_CREATORS),
                 runtime = runtime,
                 cache = toCacheSettings(),
@@ -162,6 +164,7 @@ internal data class LegacySettingsStoreRecord(
             return LegacySettingsStoreRecord(
                 followedCreators = settings.followedCreators.map(FollowedCreatorRecord::fromDomain),
                 sourceCatalogVersion = SHARED_SOURCE_CATALOG_VERSION,
+                oldSearchBar = settings.oldSearchBar,
                 enabledSources = settings.runtime.enabledSources.map { it.name },
                 sourceWeights = settings.runtime.sourceWeights.mapKeys { it.key.name },
                 sourceWeightsByConfiguration = settings.runtime.sourceWeightsByConfiguration.mapValues { (_, weights) ->

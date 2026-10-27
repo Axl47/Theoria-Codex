@@ -34,7 +34,7 @@ class DataStoreRepositoriesTest {
         val firstScope = newScope()
         try {
             DataStoreSettingsRepository(directory, firstScope).updateSettings { current ->
-                current.copy(viewer = current.viewer.copy(
+                current.copy(oldSearchBar = true, viewer = current.viewer.copy(
                     playbackMode = com.theoriacodex.domain.model.ViewerPlaybackMode.ONCE,
                     instantSeek = true,
                 ))
@@ -47,6 +47,7 @@ class DataStoreRepositoriesTest {
             val restored = DataStoreSettingsRepository(directory, secondScope).observeSettings().first()
             assertEquals(com.theoriacodex.domain.model.ViewerPlaybackMode.ONCE, restored.viewer.playbackMode)
             assertTrue(restored.viewer.instantSeek)
+            assertTrue(restored.oldSearchBar)
         } finally {
             closeScope(secondScope)
         }

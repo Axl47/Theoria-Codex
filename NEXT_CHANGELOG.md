@@ -2,6 +2,8 @@
 
 ## New
 
+- Collapse Search into floating search and source buttons so posts can fill the screen; restore the previous layout with Legacy “Old Search Bar”.
+
 - Find Invert scroll direction in the new Preferences category, with a Legacy Instant Seek option to seek continuously while dragging.
 
 - Jump between fullscreen posts with a centered seven-thumbnail strip below the seek bar.
