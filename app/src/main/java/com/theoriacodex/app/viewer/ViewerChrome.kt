@@ -23,7 +23,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -73,9 +72,6 @@ internal fun ViewerChrome(
     mediaOverviewAvailable: Boolean,
     mediaOverviewVisible: Boolean,
     onToggleMediaOverview: () -> Unit,
-    invertScrollOptionVisible: Boolean,
-    invertMultiImageScrollDirection: Boolean,
-    onInvertMultiImageScrollDirectionChange: (Boolean) -> Unit,
     downloadEnabled: Boolean,
     onDownload: () -> Unit,
     onInfo: () -> Unit,
@@ -119,9 +115,6 @@ internal fun ViewerChrome(
         ViewerActionsMenu(
             expanded = actionsMenuExpanded,
             onExpandedChange = onActionsMenuExpandedChange,
-            invertScrollOptionVisible = invertScrollOptionVisible,
-            invertMultiImageScrollDirection = invertMultiImageScrollDirection,
-            onInvertMultiImageScrollDirectionChange = onInvertMultiImageScrollDirectionChange,
             downloadEnabled = downloadEnabled,
             onDownload = onDownload,
             onInfo = onInfo,
@@ -224,9 +217,6 @@ private fun ViewerActionsMenu(
     onPictureInPicture: (() -> Unit)?,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
-    invertScrollOptionVisible: Boolean,
-    invertMultiImageScrollDirection: Boolean,
-    onInvertMultiImageScrollDirectionChange: (Boolean) -> Unit,
     downloadEnabled: Boolean,
     onDownload: () -> Unit,
     onInfo: () -> Unit,
@@ -263,17 +253,7 @@ private fun ViewerActionsMenu(
                     leadingIcon = { Icon(Icons.Default.PictureInPictureAlt, contentDescription = null) },
                 )
             }
-            if (invertScrollOptionVisible) {
-                DropdownMenuItem(
-                    text = { Text("Invert scroll direction") },
-                    onClick = {
-                        onInvertMultiImageScrollDirectionChange(!invertMultiImageScrollDirection)
-                    },
-                    trailingIcon = {
-                        Switch(checked = invertMultiImageScrollDirection, onCheckedChange = null)
-                    },
-                )
-            }
+
         }
     }
 }

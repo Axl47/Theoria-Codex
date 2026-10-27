@@ -32,6 +32,7 @@ internal data class LegacySettingsStoreRecord(
     val resolveUnknownAnimatedDurations: Boolean = false,
     @field:SerializedName("invertMultiImageScrollDirection")
     val invertMultiImageScrollDirection: Boolean = false,
+    @field:SerializedName("instantSeek") val instantSeek: Boolean = false,
     @field:SerializedName("viewerAutomaticTextTranslationEnabled")
     val viewerAutomaticTextTranslationEnabled: Boolean = false,
     @field:SerializedName("viewerEnabledOcrLanguages")
@@ -136,6 +137,7 @@ internal data class LegacySettingsStoreRecord(
             } ?: com.theoriacodex.domain.model.ViewerPlaybackMode.LOOP,
             videoQuality = decodeVideoQuality(videoQuality, com.theoriacodex.domain.model.VideoQuality.AUTO),
             invertMultiImageScrollDirection = invertMultiImageScrollDirection,
+            instantSeek = instantSeek,
             automaticTextTranslationEnabled = viewerAutomaticTextTranslationEnabled,
             enabledOcrLanguages = viewerEnabledOcrLanguages.mapNotNullTo(linkedSetOf()) { name ->
                 runCatching { ViewerOcrLanguage.valueOf(name) }.getOrNull()
@@ -173,6 +175,7 @@ internal data class LegacySettingsStoreRecord(
                 downloadsOverRoaming = settings.cache.downloadsOverRoaming,
                 resolveUnknownAnimatedDurations = settings.contentFilters.resolveUnknownAnimatedDurations,
                 invertMultiImageScrollDirection = settings.viewer.invertMultiImageScrollDirection,
+                instantSeek = settings.viewer.instantSeek,
                 viewerAutomaticTextTranslationEnabled = settings.viewer.automaticTextTranslationEnabled,
                 viewerEnabledOcrLanguages = settings.viewer.enabledOcrLanguages
                     .sortedBy(ViewerOcrLanguage::ordinal)

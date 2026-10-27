@@ -77,6 +77,7 @@ internal data class ViewerRouteRenderConfig(
     val playbackMode: com.theoriacodex.domain.model.ViewerPlaybackMode = com.theoriacodex.domain.model.ViewerPlaybackMode.LOOP,
     val videoQuality: com.theoriacodex.domain.model.VideoQuality = com.theoriacodex.domain.model.VideoQuality.AUTO,
     val invertMultiImageScrollDirection: Boolean = false,
+    val instantSeek: Boolean = false,
     val likedPostIds: Set<PostId> = emptySet(),
     val creatorBrowsingSources: Set<SourceKey>,
 )
@@ -160,7 +161,6 @@ internal data class ViewerRouteEffectCallbacks(
 internal data class ViewerRouteScreenCallbacks(
     val onOwnerChanged: (ViewerRouteOwnerHandle?) -> Unit = {},
     val onPlaybackModeSelected: (com.theoriacodex.domain.model.ViewerPlaybackMode) -> Unit = {},
-    val onInvertMultiImageScrollDirectionChange: (Boolean) -> Unit = {},
     val onVisiblePostChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
     val onVisibleMediaChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
     val onOpenInBrowser: (Post) -> Unit,
@@ -437,6 +437,7 @@ internal fun ViewerRoute(
             resolveInBackground = false,
         )
     }
+    androidx.compose.runtime.CompositionLocalProvider(com.theoriacodex.app.viewer.LocalViewerInstantSeek provides renderConfig.instantSeek) {
     ViewerScreen(
         uiState = viewerState,
         saveToCodexQuery = activeSession?.saveQuery,
@@ -454,8 +455,6 @@ internal fun ViewerRoute(
         loadingMoreFromSource = matchingSourceState?.loadingMore == true,
         invertMultiImageScrollDirection = renderConfig.invertMultiImageScrollDirection,
         videoQuality = renderConfig.videoQuality,
-        onInvertMultiImageScrollDirectionChange =
-            screenCallbacks.onInvertMultiImageScrollDirectionChange,
         likedPostIds = renderConfig.likedPostIds,
         onRequestMediaRecovery = { post, failedMedia ->
             routeScope.launch {
@@ -493,6 +492,7 @@ internal fun ViewerRoute(
         },
         onOpenCreatorFallback = screenCallbacks.onOpenCreatorFallback,
     )
+    }
 }
 
 /** Prevents buffered or suspended effects from crossing a Viewer session replacement. */

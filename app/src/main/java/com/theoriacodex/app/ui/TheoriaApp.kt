@@ -1702,6 +1702,7 @@ internal fun TheoriaAppContent(
                                     fetchTagVideoCounts = featureDependencies.search::fetchTagVideoCounts,
                                     invertMultiImageScrollDirection =
                                         state.browsing.settings.viewer.invertMultiImageScrollDirection,
+                                    instantSeek = state.browsing.settings.viewer.instantSeek,
                                     likedPostIds = state.browsing.likedPostIds,
                                     creatorBrowsingSources = state.browsing.creatorBrowsingSources,
                                 ),
@@ -1806,12 +1807,6 @@ internal fun TheoriaAppContent(
                                         }
                                     },
                                     onOwnerChanged = { owner -> activeViewerOwner = owner },
-                                    onInvertMultiImageScrollDirectionChange = { enabled ->
-                                        scope.launch {
-                                            dataDependencies.settingsRepository
-                                                .setInvertMultiImageScrollDirection(enabled)
-                                        }
-                                    },
                                     onVisiblePostChanged = { post, viewedMediaNumber, session ->
                                         viewerRouteWorkflow.recordVisiblePost(post, viewedMediaNumber, session)
                                     },

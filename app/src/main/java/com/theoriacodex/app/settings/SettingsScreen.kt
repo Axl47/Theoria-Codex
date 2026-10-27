@@ -294,6 +294,7 @@ fun SettingsScreen(
             }
         }
 
+        PreferencesSection(state, onAction)
         MediaPreferencesSection(state, onAction)
 
         SettingsSection(

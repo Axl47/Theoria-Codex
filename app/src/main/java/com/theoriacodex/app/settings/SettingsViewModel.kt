@@ -290,6 +290,12 @@ internal class SettingsViewModel(
                     ))
                 }
             }
+            is SettingsAction.SetInvertScrollDirection -> launchMutation {
+                dependencies.settingsRepository.setInvertMultiImageScrollDirection(action.enabled)
+            }
+            is SettingsAction.SetInstantSeek -> launchMutation {
+                dependencies.settingsRepository.updateSettings { it.copy(viewer = it.viewer.copy(instantSeek = action.enabled)) }
+            }
             is SettingsAction.SetVideoQuality -> launchMutation {
                 dependencies.settingsRepository.updateSettings { it.copy(viewer = it.viewer.copy(videoQuality = action.quality)) }
             }

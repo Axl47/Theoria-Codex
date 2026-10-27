@@ -85,7 +85,6 @@ internal fun ViewerScreen(
     loadingMoreFromSource: Boolean = false,
     videoQuality: com.theoriacodex.domain.model.VideoQuality = com.theoriacodex.domain.model.VideoQuality.AUTO,
     invertMultiImageScrollDirection: Boolean = false,
-    onInvertMultiImageScrollDirectionChange: (Boolean) -> Unit = {},
     likedPostIds: Set<PostId> = emptySet(),
     onRequestMediaRecovery: ((Post, ImageRef) -> Unit)? = null,
     onVisiblePostChanged: ((Post, Int) -> Unit)? = null,
@@ -605,9 +604,6 @@ internal fun ViewerScreen(
                         markInteraction()
                     }
                 },
-                invertScrollOptionVisible = selectedPostMedia.size > 1,
-                invertMultiImageScrollDirection = invertMultiImageScrollDirection,
-                onInvertMultiImageScrollDirectionChange = onInvertMultiImageScrollDirectionChange,
                 onDownload = { onAction(ViewerAction.Download) },
                 downloadEnabled = canDownloadCurrentMedia,
                 onInfo = {

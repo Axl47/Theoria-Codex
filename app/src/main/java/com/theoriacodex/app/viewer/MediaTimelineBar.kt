@@ -33,6 +33,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.Modifier
@@ -44,6 +45,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToLong
+
+internal val LocalViewerInstantSeek = staticCompositionLocalOf { false }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,6 +60,7 @@ fun MediaTimelineBar(
     preview: @Composable (Long) -> Unit,
     onInteractionActiveChanged: (Boolean) -> Unit = {},
 ) {
+    val instantSeek = LocalViewerInstantSeek.current
     val safeDuration = durationMs.coerceAtLeast(1L)
     val clampedPosition = positionMs.coerceIn(0L, safeDuration)
     var isScrubbing by remember { mutableStateOf(false) }
@@ -103,6 +107,7 @@ fun MediaTimelineBar(
             .roundToLong()
             .coerceIn(0L, safeDuration)
         scrubPositionMs = target
+        if (instantSeek) latestFinish(target)
     }
 
     Row(
@@ -118,7 +123,7 @@ fun MediaTimelineBar(
                 .defaultMinSize(minHeight = 40.dp)
                 .onSizeChanged { sliderWidthPx = it.width.toFloat().coerceAtLeast(1f) }
                 .testTag("viewer-timeline-track")
-                .pointerInput(safeDuration) {
+                .pointerInput(safeDuration, instantSeek) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         var released = false
@@ -176,7 +181,7 @@ fun MediaTimelineBar(
                 },
                 modifier = Modifier.fillMaxWidth(),
             )
-            if (isScrubbing) {
+            if (isScrubbing && !instantSeek) {
                 ViewerScrubPreview(scrubPositionMs, normalizedValue) { preview(scrubPositionMs) }
             }
         }

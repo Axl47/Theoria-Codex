@@ -2,6 +2,8 @@
 
 ## New
 
+- Find Invert scroll direction in the new Preferences category, with a Legacy Instant Seek option to seek continuously while dragging.
+
 - Jump between fullscreen posts with a centered seven-thumbnail strip below the seek bar.
 
 - Swipe up or down on the left or right of fullscreen videos to adjust brightness or media volume, with a centered level indicator.
