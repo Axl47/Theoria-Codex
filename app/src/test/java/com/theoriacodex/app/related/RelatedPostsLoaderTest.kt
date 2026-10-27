@@ -28,6 +28,17 @@ import org.junit.Test
 
 class RelatedPostsLoaderTest {
     @Test
+    fun `Pixiv candidates survive existing feed matches before the six card shelf limit`() = runTest {
+        val seed = testPost(sourcePostId = "seed")
+        val alreadyVisible = (0..5).map { testPost(sourcePostId = "existing-$it") }
+        val fresh = (0..7).map { testPost(sourcePostId = "fresh-$it") }
+        val loader = RelatedPostsLoader(FakeRelatedRegistry(FakeRelatedAdapter(alreadyVisible + fresh)))
+        val loading = RelatedPostsUiState.Idle.begin(seed, 0, 1)
+        val loaded = loading.complete(loading.request, loader.load(seed.id), alreadyVisible.mapTo(mutableSetOf(), Post::id))
+        assertEquals(fresh.take(6), loaded.loadedPosts)
+    }
+
+    @Test
     fun `provider parsing runs off the route dispatcher and retains parent cancellation`() = runTest {
         val started = CompletableDeferred<ContinuationInterceptor?>()
         val cancelled = CompletableDeferred<Unit>()
@@ -54,7 +65,7 @@ class RelatedPostsLoaderTest {
             add(testPost(sourcePostId = "one"))
             add(testPost(sourcePostId = "one"))
             add(testPost(source = SourceKey.GELBOORU, sourcePostId = "cross"))
-            repeat(8) { index -> add(testPost(sourcePostId = "item-$index")) }
+            repeat(40) { index -> add(testPost(sourcePostId = "item-$index")) }
         }
         val adapter = FakeRelatedAdapter(candidates)
         val loader = RelatedPostsLoader(FakeRelatedRegistry(adapter))
@@ -63,8 +74,8 @@ class RelatedPostsLoaderTest {
 
         assertTrue(loader.supports(SourceKey.PIXIV))
         assertFalse(loader.supports(SourceKey.GELBOORU))
-        assertEquals(6, posts.size)
-        assertEquals(listOf("one", "item-0", "item-1", "item-2", "item-3", "item-4"), posts.map { it.id.sourcePostId })
+        assertEquals(30, posts.size)
+        assertEquals(listOf("one") + (0..28).map { "item-$it" }, posts.map { it.id.sourcePostId })
     }
 }
 

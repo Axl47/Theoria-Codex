@@ -1,5 +1,6 @@
 package com.theoriacodex.app.related
 
+import com.theoriacodex.domain.adapter.MAX_RELATED_POST_CANDIDATES
 import com.theoriacodex.domain.adapter.RelatedPostsSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.model.Post
@@ -22,11 +23,11 @@ class RelatedPostsLoader(
 
     override suspend fun load(seed: PostId): List<Post> = withContext(Dispatchers.Default) {
         val adapter = registry.adapterFor(seed.source) as? RelatedPostsSourceAdapter ?: return@withContext emptyList()
-        adapter.relatedPosts(seed, MAX_RELATED_POSTS)
+        adapter.relatedPosts(seed, MAX_RELATED_POST_CANDIDATES)
             .asSequence()
             .filter { post -> post.id.source == seed.source && post.id != seed }
             .distinctBy(Post::id)
-            .take(MAX_RELATED_POSTS)
+            .take(MAX_RELATED_POST_CANDIDATES)
             .toList()
     }
 }

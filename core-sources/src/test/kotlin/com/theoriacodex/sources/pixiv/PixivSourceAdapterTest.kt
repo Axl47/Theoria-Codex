@@ -97,6 +97,19 @@ class PixivSourceAdapterTest {
     }
 
     @Test
+    fun `related candidates are not truncated to the six visible shelf slots`() = runTest {
+        val credentials = FakeCredentialsProvider().apply {
+            pixivTokens = PixivAuthTokens("access", "refresh", Long.MAX_VALUE)
+        }
+        val http = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(200,
+                "{\"illusts\":[" + (20..39).joinToString(",") { pixivIllustJson(it) } + "]}")
+        }
+        val adapter = PixivSourceAdapter(httpClient = http, credentialsProvider = credentials, minRequestIntervalMs = 0L)
+        assertEquals(20, adapter.relatedPosts(PostId(SourceKey.PIXIV, "10"), 30).size)
+    }
+
+    @Test
     fun `search requires credentials`() = runTest {
         val adapter = PixivSourceAdapter(
             httpClient = FakeHttpClient(),

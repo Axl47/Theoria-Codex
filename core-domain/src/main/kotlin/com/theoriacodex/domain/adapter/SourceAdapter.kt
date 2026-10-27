@@ -36,6 +36,9 @@ interface CreatorPostsSourceAdapter {
     ): Page<Post>
 }
 
+/** Candidate budget; presentation removes already-visible posts before choosing its smaller shelf. */
+const val MAX_RELATED_POST_CANDIDATES = 30
+
 /** Optional source-owned discovery for a bounded set of posts related to one canonical post. */
 interface RelatedPostsSourceAdapter {
     suspend fun relatedPosts(seed: PostId, limit: Int): List<Post>

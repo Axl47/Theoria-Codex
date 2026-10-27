@@ -87,6 +87,7 @@
 - Remove repeated type labels from tag names in the post hold menu.
 
 ## Fixes
+- Look beyond already-visible Pixiv recommendations before reporting “No new results”.
 - Reduce timing-related video playback failures.
 - Include navigation fixes for predictive-back races and transition clipping.
 - Return fullscreen Saved previews to their sub-Codex cards, scrolling the carousel to the exited post.

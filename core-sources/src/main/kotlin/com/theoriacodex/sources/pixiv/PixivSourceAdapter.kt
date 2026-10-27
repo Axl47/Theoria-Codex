@@ -5,6 +5,7 @@ import com.google.gson.JsonObject
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
+import com.theoriacodex.domain.adapter.MAX_RELATED_POST_CANDIDATES
 import com.theoriacodex.domain.adapter.RelatedPostsSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
@@ -175,7 +176,7 @@ class PixivSourceAdapter(
             .asSequence()
             .filterNot { post -> post.id == seed }
             .distinctBy(Post::id)
-            .take(limit.coerceAtMost(MAX_RELATED_POSTS))
+            .take(limit.coerceAtMost(MAX_RELATED_POST_CANDIDATES))
             .toList()
     }
 
@@ -420,7 +421,6 @@ private fun formatEpochDate(value: Long): String {
 }
 
 private const val PIXIV_API_BASE: String = "https://app-api.pixiv.net"
-private const val MAX_RELATED_POSTS: Int = 6
 const val PIXIV_UGOIRA_MIME: String = com.theoriacodex.domain.model.PIXIV_UGOIRA_MIME
 private val PIXIV_TRAILING_PARENTHESIS_REGEX = Regex("\\s*\\([^)]*\\)\\s*$")
 private val PIXIV_TAG_WHITESPACE_REGEX = Regex("\\s+")
