@@ -593,7 +593,6 @@ internal fun ViewerScreen(
                 playbackRate = playbackRate,
                 onPlaybackRateSelected = { selectedRate ->
                     onAction(ViewerAction.SetPlaybackRate(selectedRate.speed))
-                    setPlaybackSettingsExpanded(false)
                     markInteraction()
                 },
                 mediaOverviewAvailable = mediaOverviewAvailable,

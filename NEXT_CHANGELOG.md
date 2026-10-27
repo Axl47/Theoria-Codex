@@ -21,6 +21,8 @@
 
 ## Improvements
 
+- Keep playback settings open while adjusting options; close them on an outside tap or after five seconds without interaction.
+
 - Make fullscreen posts and gallery media follow your finger while swiping, including when cancelling a swipe.
 
 - Focus support on Android 16 and Android 17; new builds require Android 16 or newer.

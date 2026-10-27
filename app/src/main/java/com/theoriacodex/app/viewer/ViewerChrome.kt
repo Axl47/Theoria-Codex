@@ -26,6 +26,15 @@ import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
@@ -161,7 +170,7 @@ private fun ViewerOverviewAction(
 }
 
 @Composable
-private fun PlaybackSettingsMenu(
+internal fun PlaybackSettingsMenu(
     playbackRateEnabled: Boolean,
     playbackMode: com.theoriacodex.app.viewer.state.ViewerPlaybackMode,
     onPlaybackModeSelected: (com.theoriacodex.app.viewer.state.ViewerPlaybackMode) -> Unit,
@@ -174,14 +183,38 @@ private fun PlaybackSettingsMenu(
     playbackRate: ViewerPlaybackRate,
     onPlaybackRateSelected: (ViewerPlaybackRate) -> Unit,
 ) {
+    var interactionSerial by remember { mutableIntStateOf(0) }
+    var pointerDown by remember { mutableStateOf(false) }
+    LaunchedEffect(expanded) { if (!expanded) pointerDown = false }
+    LaunchedEffect(expanded, interactionSerial, pointerDown) {
+        if (expanded && !pointerDown) {
+            delay(5_000L)
+            onExpandedChange(false)
+        }
+    }
+    fun interact() { interactionSerial++ }
     Box {
-        IconButton(onClick = { onExpandedChange(!expanded) }) {
+        IconButton(onClick = { interact(); onExpandedChange(!expanded) }) {
             Icon(Icons.Default.Settings, contentDescription = "Playback settings")
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { onExpandedChange(false) }) {
-            PlaybackModeChoices(playbackMode, onPlaybackModeSelected, onExpandedChange)
-            VideoQualityChoices(videoVariants, quality, qualityHeight, onQualitySelected, onExpandedChange)
-            if (playbackRateEnabled) PlaybackRateSlider(playbackRate, onPlaybackRateSelected)
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { onExpandedChange(false) },
+            modifier = Modifier.pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        pointerDown = event.changes.any { it.pressed }
+                        interact()
+                    }
+                }
+            },
+        ) {
+            PlaybackModeChoices(playbackMode, { interact(); onPlaybackModeSelected(it) }, ::interact)
+            VideoQualityChoices(videoVariants, quality, qualityHeight, { selected, height ->
+                interact(); onQualitySelected(selected, height)
+            })
+            if (playbackRateEnabled) PlaybackRateSlider(playbackRate) { interact(); onPlaybackRateSelected(it) }
         }
     }
 }
@@ -249,7 +282,7 @@ private fun ViewerActionsMenu(
 internal fun PlaybackModeChoices(
     playbackMode: com.theoriacodex.app.viewer.state.ViewerPlaybackMode,
     onPlaybackModeSelected: (com.theoriacodex.app.viewer.state.ViewerPlaybackMode) -> Unit,
-    onExpandedChange: (Boolean) -> Unit,
+    onInteraction: () -> Unit,
 ) {
     com.theoriacodex.app.viewer.state.ViewerPlaybackMode.entries.forEach { mode ->
         val selected = playbackMode == mode
@@ -271,7 +304,7 @@ internal fun PlaybackModeChoices(
                 )
             },
             colors = MenuDefaults.itemColors(textColor = contentColor, leadingIconColor = contentColor),
-            onClick = { onPlaybackModeSelected(mode); onExpandedChange(false) },
+            onClick = { onPlaybackModeSelected(mode); onInteraction() },
         )
     }
 }
@@ -282,21 +315,20 @@ private fun VideoQualityChoices(
     quality: com.theoriacodex.domain.model.VideoQuality,
     qualityHeight: Int?,
     onQualitySelected: (com.theoriacodex.domain.model.VideoQuality, Int?) -> Unit,
-    onExpandedChange: (Boolean) -> Unit,
 ) {
             if (videoVariants.isNotEmpty()) {
                 com.theoriacodex.domain.model.VideoQuality.entries.forEach { option ->
                     DropdownMenuItem(
                         text = { Text("Quality: " + com.theoriacodex.app.media.videoQualityLabel(option)) },
                         leadingIcon = { if (qualityHeight == null && quality == option) Icon(Icons.Default.Check, null) },
-                        onClick = { onQualitySelected(option, null); onExpandedChange(false) },
+                        onClick = { onQualitySelected(option, null) },
                     )
                 }
                 videoVariants.mapNotNull { it.height }.distinct().sortedDescending().forEach { height ->
                     DropdownMenuItem(
                         text = { Text("${height}p") },
                         leadingIcon = { if (qualityHeight == height) Icon(Icons.Default.Check, null) },
-                        onClick = { onQualitySelected(quality, height); onExpandedChange(false) },
+                        onClick = { onQualitySelected(quality, height) },
                     )
                 }
             }
