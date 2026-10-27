@@ -225,7 +225,7 @@ internal fun rememberViewerReturnProgress(): Float {
         withTimeoutOrNull(VIEWER_RETURN_TARGET_WAIT_MS) {
             snapshotFlow { transition.targetBounds }.filterNotNull().first()
         }
-        progress.animateTo(1f, tween(VIEWER_RETURN_DURATION_MS))
+        progress.animateTo(1f, tween(if (transition.targetBounds == null) 180 else VIEWER_RETURN_DURATION_MS))
     }
     return progress.value
 }
@@ -267,9 +267,8 @@ internal data class ViewerReturnGeometry(val crop: Rect, val scale: Float, val t
 internal fun viewerReturnGeometry(source: Rect, target: Rect?, aspectRatio: Float?, progress: Float): ViewerReturnGeometry {
     val local = Rect(0f, 0f, source.width, source.height)
     if (source.isEmpty || progress <= 0f) return ViewerReturnGeometry(local, 1f, 0f, 0f)
-    val destination = target?.translate(-source.topLeft) ?: Rect(
-        source.width * 0.35f, source.height * 0.35f, source.width * 0.65f, source.height * 0.65f,
-    )
+    if (target == null) return ViewerReturnGeometry(local, 1f, 0f, source.height * progress.coerceIn(0f, 1f))
+    val destination = target.translate(-source.topLeft)
     val ratio = aspectRatio?.takeIf { it.isFinite() && it > 0f } ?: (source.width / source.height)
     val fittedWidth = minOf(source.width, source.height * ratio)
     val fittedHeight = fittedWidth / ratio

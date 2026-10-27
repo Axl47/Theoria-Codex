@@ -81,6 +81,16 @@ class ViewerReturnTransitionTest {
         assertTrue(viewerReturnGeometry(source, null, null, 1f).scale.isFinite())
     }
 
+    @Test fun `fallback keeps media size and slides it below the viewport`() {
+        val source = Rect(0f, 40f, 400f, 840f)
+        val halfway = viewerReturnGeometry(source, null, 0.5f, 0.5f)
+        assertEquals(1f, halfway.scale)
+        assertEquals(Rect(0f, 0f, 400f, 800f), halfway.crop)
+        assertEquals(0f, halfway.translationX)
+        assertEquals(400f, halfway.translationY)
+        assertEquals(800f, viewerReturnGeometry(source, null, 0.5f, 1f).translationY)
+    }
+
     @Test fun `Recents and Codex grid centers the exited offscreen post`() = checkGridReturn(projected = false)
 
     @Test fun `FYP projected grid centers the exited post past inserted shelves`() = checkGridReturn(projected = true)

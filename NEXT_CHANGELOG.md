@@ -21,6 +21,8 @@
 
 ## Improvements
 
+- Dismiss fullscreen media with a quick downward slide when its feed card is unavailable.
+
 - Keep playback settings open while adjusting options; close them on an outside tap or after five seconds without interaction.
 
 - Make fullscreen posts and gallery media follow your finger while swiping, including when cancelling a swipe.
