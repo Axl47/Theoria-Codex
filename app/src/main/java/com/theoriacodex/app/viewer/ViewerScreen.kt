@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -319,6 +320,20 @@ internal fun ViewerScreen(
         }
     }
 
+    fun navigateToPost(index: Int) {
+        if (index == currentPostIndex || swipeInProgress || pendingDismiss || returning || opening) return
+        markInteraction()
+        swipeInProgress = true
+        scope.launch {
+            try {
+                postPagerState.animateScrollToPage(index, animationSpec = tween(300))
+                onAction(ViewerAction.SelectPage(index))
+            } finally {
+                swipeInProgress = false
+            }
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -344,7 +359,7 @@ internal fun ViewerScreen(
                 reverseLayout = viewerMediaPagerReverseLayout(
                     uiState.currentPage?.swipeMediaCount() ?: 1, invertMultiImageScrollDirection,
                 ),
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().padding(bottom = if (chromeVisible) 56.dp else 0.dp),
             ) { postPage ->
             val post = posts[postPage]
             val pageState = uiState.pages[postPage]
@@ -507,6 +522,9 @@ internal fun ViewerScreen(
         }
         }
 
+        if (chromeVisible && !mediaOverviewVisible) {
+            ViewerPostStrip(posts, postPagerState.currentPage, ::navigateToPost, Modifier.align(Alignment.BottomCenter))
+        }
         if (chromeVisible) {
             ViewerChrome(
                 onPictureInPicture = viewerPictureInPictureAction(activity, selectedPost, selectedCurrentMedia, uiState.mediaError != null),

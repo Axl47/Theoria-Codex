@@ -2,6 +2,8 @@
 
 ## New
 
+- Jump between fullscreen posts with a centered seven-thumbnail strip below the seek bar.
+
 - Swipe up or down on the left or right of fullscreen videos to adjust brightness or media volume, with a centered level indicator.
 
 - Browse Likes, Followed, and Saved Searches together from the new Saved overview.

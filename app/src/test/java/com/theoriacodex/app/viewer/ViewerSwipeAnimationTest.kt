@@ -7,6 +7,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
@@ -34,7 +35,9 @@ class ViewerSwipeAnimationTest {
 
     @Test fun `opening preserves controls and allows swiping after expansion`() = checkSlide(gallery = false, opening = true)
 
-    private fun checkSlide(gallery: Boolean, opening: Boolean = false) {
+    @Test fun `thumbnail selection slides the content before committing selection`() = checkSlide(gallery = false, thumbnail = true)
+
+    private fun checkSlide(gallery: Boolean, opening: Boolean = false, thumbnail: Boolean = false) {
         val image = ImageRef(url = null, localPath = "/missing/swipe.jpg", mime = "image/jpeg")
         val first = Post(
             id = PostId(SourceKey.GELBOORU, "first"), preview = image, full = image,
@@ -64,7 +67,8 @@ class ViewerSwipeAnimationTest {
         compose.mainClock.autoAdvance = false
         val actions = compose.onNodeWithContentDescription("Media actions")
         val width = actions.fetchSemanticsNode().size.width
-        actions.performTouchInput { swipeLeft() }
+        if (thumbnail) compose.onNodeWithContentDescription("Open post second").performClick()
+        else actions.performTouchInput { swipeLeft() }
         compose.mainClock.advanceTimeBy(96)
         compose.runOnIdle {
             assertEquals(0, state.value.currentPageIndex)
