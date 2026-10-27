@@ -10,7 +10,7 @@
 
 - Use Legacy Instant Seek to seek continuously while dragging instead of previewing timeline thumbnails.
 
-- Jump between fullscreen posts with a centered seven-thumbnail strip below the seek bar.
+- Jump between fullscreen posts with a centered seven-thumbnail strip below the seek bar, with evenly spaced thumbnails and matching screen-edge gaps.
 
 - Swipe up or down on the left or right of fullscreen videos to adjust brightness or media volume, with a centered level indicator.
 

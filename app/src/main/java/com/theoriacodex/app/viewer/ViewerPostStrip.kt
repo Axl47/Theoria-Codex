@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.ui.Alignment
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -34,7 +32,7 @@ import com.theoriacodex.domain.model.Post
 
 internal val LocalViewerPostStripInset = staticCompositionLocalOf { 0.dp }
 
-/** Center padding keeps three post slots on either side, including at the feed's ends. */
+/** Seven centered slots share equal gaps between thumbnails and at both viewport edges. */
 @Composable
 internal fun ViewerPostStrip(
     posts: List<Post>,
@@ -44,18 +42,17 @@ internal fun ViewerPostStrip(
 ) {
     val list = rememberLazyListState(initialFirstVisibleItemIndex = selectedIndex)
     LaunchedEffect(selectedIndex) { list.animateScrollToItem(selectedIndex) }
-    Box(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)), contentAlignment = Alignment.Center) {
-        BoxWithConstraints(Modifier.widthIn(max = 360.dp).fillMaxWidth()) {
-            val cell = ((maxWidth - 24.dp) / 7).coerceAtMost(48.dp)
-            LazyRow(
-                state = list,
-                contentPadding = PaddingValues(horizontal = (maxWidth - cell) / 2, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                userScrollEnabled = false,
-            ) {
-                itemsIndexed(posts, key = { _, post -> "${post.id.source}:${post.id.sourcePostId}" }) { index, post ->
-                    ViewerPostThumbnail(post, index == selectedIndex, Modifier.size(cell)) { onSelect(index) }
-                }
+    BoxWithConstraints(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))) {
+        val cell = ((maxWidth - 32.dp) / 7).coerceIn(1.dp, 48.dp)
+        val gap = ((maxWidth - cell * 7) / 8).coerceAtLeast(0.dp)
+        LazyRow(
+            state = list,
+            contentPadding = PaddingValues(horizontal = (maxWidth - cell) / 2, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(gap),
+            userScrollEnabled = false,
+        ) {
+            itemsIndexed(posts, key = { _, post -> "${post.id.source}:${post.id.sourcePostId}" }) { index, post ->
+                ViewerPostThumbnail(post, index == selectedIndex, Modifier.size(cell)) { onSelect(index) }
             }
         }
     }
