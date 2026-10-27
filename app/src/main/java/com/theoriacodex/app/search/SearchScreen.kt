@@ -1,5 +1,7 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.viewer.ViewerReturnCorners
+import com.theoriacodex.app.viewer.viewerReturnCorners
 import com.theoriacodex.app.viewer.LocalViewerReturnTransition
 import com.theoriacodex.app.viewer.LocalViewerReturnGrid
 import com.theoriacodex.app.viewer.LocalViewerReturnShelf
@@ -70,6 +72,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.toSize
+import androidx.compose.material3.CardDefaults
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -1070,6 +1075,10 @@ fun SearchResultCard(
         }
     }
 
+    var mediaCorners by remember { mutableStateOf(ViewerReturnCorners()) }
+    val cardShape = CardDefaults.elevatedShape
+    val layoutDirection = LocalLayoutDirection.current
+    val cardDensity = LocalDensity.current
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
@@ -1080,6 +1089,7 @@ fun SearchResultCard(
                         viewerReturnGrid,
                         viewerMediaCoordinates?.takeIf { it.isAttached }?.boundsInWindow(clipBounds = false),
                         shelfId = viewerReturnShelf,
+                        corners = mediaCorners,
                     )
                     onClick()
                 },
@@ -1200,7 +1210,9 @@ fun SearchResultCard(
                 .aspectRatio(ratio)
                 .onGloballyPositioned { coordinates ->
                     viewerMediaCoordinates = coordinates
-                    viewerReturn?.recordBounds(viewerReturnGrid, post.id, coordinates.boundsInWindow(clipBounds = false), viewerReturnShelf)
+                    mediaCorners = viewerReturnCorners(cardShape.createOutline(coordinates.size.toSize(), layoutDirection, cardDensity),
+                        showTitle && supportingContent.showTitleFooter)
+                    viewerReturn?.recordBounds(viewerReturnGrid, post.id, coordinates.boundsInWindow(clipBounds = false), viewerReturnShelf, mediaCorners)
                     val visible = coordinates.isAttached &&
                         isVisibleFeedBounds(coordinates.boundsInWindow(clipBounds = true))
                     if (isInViewport != visible) {

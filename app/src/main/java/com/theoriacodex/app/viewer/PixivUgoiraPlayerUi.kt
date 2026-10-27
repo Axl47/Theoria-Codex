@@ -1,5 +1,7 @@
 package com.theoriacodex.app.viewer
 
+import androidx.compose.foundation.layout.padding
+
 import androidx.compose.foundation.Image
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -134,7 +136,7 @@ fun PixivUgoiraPlayer(
         if (!showProgressBar) {
             ViewerPassiveProgressBar(animation.positionMs, totalDurationMs, Modifier.align(Alignment.BottomCenter))
         } else Row(
-            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(bottom = LocalViewerPostStripInset.current),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

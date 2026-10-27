@@ -18,6 +18,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -89,6 +92,24 @@ class ViewerReturnTransitionTest {
         assertEquals(0f, halfway.translationX)
         assertEquals(400f, halfway.translationY)
         assertEquals(800f, viewerReturnGeometry(source, null, 0.5f, 1f).translationY)
+    }
+
+    @Test fun `card corners interpolate with the crop and preserve square caption edges`() {
+        val bounds = Rect(0f, 0f, 200f, 300f)
+        val outline = Outline.Rounded(RoundRect(bounds, CornerRadius(12f)))
+        val fullCard = viewerReturnCorners(outline, false)
+        assertEquals(CornerRadius(6f), fullCard.roundRect(bounds, 0.5f).bottomLeftCornerRadius)
+        assertEquals(CornerRadius.Zero, fullCard.roundRect(bounds, 0f).topLeftCornerRadius)
+        val caption = viewerReturnCorners(outline, true)
+        assertEquals(CornerRadius(12f), caption.roundRect(bounds, 1f).topRightCornerRadius)
+        assertEquals(CornerRadius.Zero, caption.roundRect(bounds, 1f).bottomRightCornerRadius)
+        val transition = ViewerReturnTransition()
+        transition.openedFrom("feed", bounds, corners = fullCard)
+        assertEquals(fullCard, transition.openingCorners)
+        transition.begin(postId)
+        transition.recordBounds("feed", postId, bounds, corners = caption)
+        transition.centered("feed", postId)
+        assertEquals(caption, transition.targetCorners)
     }
 
     @Test fun `Recents and Codex grid centers the exited offscreen post`() = checkGridReturn(projected = false)

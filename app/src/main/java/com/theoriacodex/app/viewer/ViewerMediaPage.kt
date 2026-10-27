@@ -166,6 +166,6 @@ private fun ViewerMediaGestureLayer(
                 onSwipeCancelled = onSwipeCancelled,
             )
             .transformable(transformState, canPan = { transform.isZoomed }).then(gestures))
-        if (controls.showControls && animated) Spacer(Modifier.fillMaxWidth().height(96.dp))
+        if (controls.showControls && animated) Spacer(Modifier.fillMaxWidth().height(96.dp + LocalViewerPostStripInset.current))
     }
 }

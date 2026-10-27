@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,6 +28,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -334,6 +334,7 @@ internal fun ViewerScreen(
         }
     }
 
+    CompositionLocalProvider(LocalViewerPostStripInset provides if (chromeVisible && !mediaOverviewVisible) 56.dp else 0.dp) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -359,7 +360,7 @@ internal fun ViewerScreen(
                 reverseLayout = viewerMediaPagerReverseLayout(
                     uiState.currentPage?.swipeMediaCount() ?: 1, invertMultiImageScrollDirection,
                 ),
-                modifier = Modifier.fillMaxSize().padding(bottom = if (chromeVisible) 56.dp else 0.dp),
+                modifier = Modifier.fillMaxSize(),
             ) { postPage ->
             val post = posts[postPage]
             val pageState = uiState.pages[postPage]
@@ -618,6 +619,7 @@ internal fun ViewerScreen(
         }
     }
 
+    }
     if (showInfoSheet) {
         val post = selectedPost
         PreloadCodexSaveRelevance(post, saveToCodexQuery)

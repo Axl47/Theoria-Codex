@@ -25,6 +25,8 @@
 
 ## Improvements
 
+- Preserve the feed card’s rounded corners and crop while expanding media into fullscreen and returning it to the grid.
+
 - Show Codex post counts in cover badges, with compact titles and aligned overflow menus.
 
 - Give Saved a full-width library card with a larger title and separate, tappable Likes, Followed, and Searches counts.
