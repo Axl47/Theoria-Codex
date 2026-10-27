@@ -25,6 +25,8 @@
 
 ## Improvements
 
+- Give Saved a full-width library card with a larger title and separate, tappable Likes, Followed, and Searches counts.
+
 - Expand Search controls when changing sources.
 
 - Dismiss fullscreen media with a quick downward slide when its feed card is unavailable.

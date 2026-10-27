@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -206,7 +207,7 @@ private fun CodexGrid(
     ) {
         val likesId = presentation.likesCodexId
         savedCodexLibraryEntries(presentation.codices, likesId).forEach { codex ->
-            item(key = codex.codexId) {
+            item(key = codex.codexId, span = { GridItemSpan(if (codex.codexId == SAVED_CODEX_ID) maxLineSpan else 1) }) {
                 CodexLibraryTile(codex, presentation, state, onOpenCodex)
             }
         }
@@ -221,6 +222,10 @@ private fun CodexLibraryTile(
     onOpenCodex: (String) -> Unit,
 ) {
     val saved = codex.codexId == SAVED_CODEX_ID
+    if (saved) {
+        SavedCodexLibraryTile(presentation, onOpenCodex)
+        return
+    }
     val openActions = {
         if (saved) onOpenCodex(codex.codexId) else state.actionTarget = codex
     }
