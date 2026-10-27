@@ -27,6 +27,7 @@ import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.lerp
 import androidx.compose.ui.graphics.TransformOrigin
@@ -286,13 +287,7 @@ internal fun Modifier.viewerReturnMedia(progress: Float, aspectRatio: Float?): M
         if (windowBounds.isEmpty || progress == 0f) windowBounds = it.boundsInWindow(clipBounds = false)
     }
         .drawWithContent {
-            if (closing && progress >= 1f) return@drawWithContent
-            if (progress <= 0f) {
-                drawContent()
-                return@drawWithContent
-            }
-            val path = Path().apply { addRoundRect(corners.roundRect(geometry.crop, progress)) }
-            clipPath(path) { this@drawWithContent.drawContent() }
+            drawViewerReturnFrame(progress, closing, geometry.crop, corners)
         }
         .graphicsLayer {
             transformOrigin = TransformOrigin(0.5f, 0.5f)
@@ -301,6 +296,16 @@ internal fun Modifier.viewerReturnMedia(progress: Float, aspectRatio: Float?): M
             translationX = geometry.translationX
             translationY = geometry.translationY
         }
+}
+
+private fun ContentDrawScope.drawViewerReturnFrame(progress: Float, closing: Boolean, crop: Rect, corners: ViewerReturnCorners) {
+    if (closing && progress >= 1f) return
+    if (progress <= 0f) {
+        drawContent()
+        return
+    }
+    val path = Path().apply { addRoundRect(corners.roundRect(crop, progress)) }
+    clipPath(path) { this@drawViewerReturnFrame.drawContent() }
 }
 
 internal data class ViewerReturnGeometry(val crop: Rect, val scale: Float, val translationX: Float, val translationY: Float)

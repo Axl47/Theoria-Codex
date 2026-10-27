@@ -96,6 +96,7 @@ sealed interface SettingsAction {
     data class SetInvertScrollDirection(val enabled: Boolean) : SettingsAction
     data class SetOldSearchBar(val enabled: Boolean) : SettingsAction
     data class SetInstantSeek(val enabled: Boolean) : SettingsAction
+    data class SetViewerPlaybackMode(val mode: com.theoriacodex.domain.model.ViewerPlaybackMode) : SettingsAction
     data class SetVideoQuality(val quality: com.theoriacodex.domain.model.VideoQuality) : SettingsAction
     data class SetDownloadQuality(val quality: com.theoriacodex.domain.model.VideoQuality) : SettingsAction
     data class SetDownloadsOverMetered(val enabled: Boolean) : SettingsAction

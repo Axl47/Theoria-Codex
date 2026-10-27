@@ -98,12 +98,12 @@ internal fun ViewerScreen(
     onGoToSearch: () -> Unit,
     onOpenCreatorFallback: ((Post) -> Unit)? = null,
     playbackDiagnosticsEnabled: Boolean = com.theoriacodex.app.BuildConfig.BENCHMARK_FIXTURES_ENABLED,
-    relatedState: com.theoriacodex.app.related.RelatedPostsUiState = com.theoriacodex.app.related.RelatedPostsUiState.Idle,
-    relatedPosts: List<Post> = emptyList(),
     onIncludeRelatedPosts: () -> Unit = {},
     onDismissRelatedPosts: () -> Unit = {},
     onRetryRelatedPosts: () -> Unit = {},
 ) {
+    val relatedState = uiState.related.state
+    val relatedPosts = uiState.related.posts
     val returnProgress = rememberViewerReturnProgress()
     val returning = LocalViewerReturnTransition.current?.request != null
     val opening = !returning && returnProgress > 0f

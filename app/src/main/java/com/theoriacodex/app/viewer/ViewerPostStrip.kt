@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -42,16 +44,18 @@ internal fun ViewerPostStrip(
 ) {
     val list = rememberLazyListState(initialFirstVisibleItemIndex = selectedIndex)
     LaunchedEffect(selectedIndex) { list.animateScrollToItem(selectedIndex) }
-    BoxWithConstraints(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))) {
-        val cell = ((maxWidth - 24.dp) / 7).coerceAtMost(48.dp)
-        LazyRow(
-            state = list,
-            contentPadding = PaddingValues(horizontal = (maxWidth - cell) / 2, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            userScrollEnabled = false,
-        ) {
-            itemsIndexed(posts, key = { _, post -> "${post.id.source}:${post.id.sourcePostId}" }) { index, post ->
-                ViewerPostThumbnail(post, index == selectedIndex, Modifier.size(cell)) { onSelect(index) }
+    Box(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)), contentAlignment = Alignment.Center) {
+        BoxWithConstraints(Modifier.widthIn(max = 360.dp).fillMaxWidth()) {
+            val cell = ((maxWidth - 24.dp) / 7).coerceAtMost(48.dp)
+            LazyRow(
+                state = list,
+                contentPadding = PaddingValues(horizontal = (maxWidth - cell) / 2, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                userScrollEnabled = false,
+            ) {
+                itemsIndexed(posts, key = { _, post -> "${post.id.source}:${post.id.sourcePostId}" }) { index, post ->
+                    ViewerPostThumbnail(post, index == selectedIndex, Modifier.size(cell)) { onSelect(index) }
+                }
             }
         }
     }

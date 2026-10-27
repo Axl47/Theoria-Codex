@@ -115,6 +115,20 @@ internal class ViewerRouteWorkflow(
         return recovered
     }
 
+    fun dismissRelatedPosts(source: ViewerStreamSource) = updateRelatedPosts(source, retry = false)
+
+    fun retryRelatedPosts(source: ViewerStreamSource) = updateRelatedPosts(source, retry = true)
+
+    private fun updateRelatedPosts(source: ViewerStreamSource, retry: Boolean) {
+        when (source) {
+            ViewerStreamSource.SEARCH -> searchOwner()?.dispatch(if (retry) SearchAction.RetryRelatedPosts else SearchAction.DismissRelatedPosts)
+            ViewerStreamSource.FOR_YOU -> forYouOwner()?.dispatch(if (retry) ForYouAction.RetryRelatedPosts else ForYouAction.DismissRelatedPosts)
+            ViewerStreamSource.CREATOR_PROFILE -> creatorOwner()?.dispatch(if (retry)
+                com.theoriacodex.app.creator.state.CreatorAction.RetryRelatedPosts else com.theoriacodex.app.creator.state.CreatorAction.DismissRelatedPosts)
+            else -> Unit
+        }
+    }
+
     fun loadMore(streamSource: ViewerStreamSource) {
         when (streamSource) {
             ViewerStreamSource.SEARCH -> searchOwner()?.dispatch(SearchAction.LoadNextPage)

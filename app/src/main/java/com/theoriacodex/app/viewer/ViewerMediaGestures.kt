@@ -104,25 +104,37 @@ internal fun Modifier.viewerMediaSwipe(
         try {
             awaitEachGesture {
                 navigating = false
-                val down = awaitFirstDown(requireUnconsumed = false)
-                val threshold = maxOf(48f, size.width * 0.12f)
-                val control = if (down.position.x < size.width / 2f) ViewerLevelControl.Brightness else ViewerLevelControl.Volume
-                val swipe = readViewerSwipe(down.id, threshold, levelControls, control) { displacement ->
-                    val reversed = invertMultiImageScrollDirection && mediaCount > 1
-                    currentProgress(if (reversed) -displacement else displacement)
-                }
-                levelControls?.end()
-                val direction = swipe.direction(threshold)
-                if (direction != null) {
-                    navigating = true
-                    currentOnNavigate(viewerSwipeDirectionForSetting(direction, mediaCount, invertMultiImageScrollDirection))
-                } else currentCancel()
+                navigating = readViewerNavigationGesture(mediaCount, invertMultiImageScrollDirection, levelControls,
+                    { currentOnNavigate(it) }, { currentProgress(it) }, { currentCancel() })
             }
         } finally {
             if (!navigating) currentCancel()
             levelControls?.end()
         }
     }
+}
+
+private suspend fun AwaitPointerEventScope.readViewerNavigationGesture(
+    mediaCount: Int,
+    inverted: Boolean,
+    levels: ViewerLevelControls?,
+    onNavigate: (ViewerHorizontalSwipeDirection) -> Unit,
+    onProgress: (Float) -> Unit,
+    onCancel: () -> Unit,
+): Boolean {
+    val down = awaitFirstDown(requireUnconsumed = false)
+    val threshold = maxOf(48f, size.width * 0.12f)
+    val control = if (down.position.x < size.width / 2f) ViewerLevelControl.Brightness else ViewerLevelControl.Volume
+    val reversed = inverted && mediaCount > 1
+    val swipe = readViewerSwipe(down.id, threshold, levels, control) { onProgress(if (reversed) -it else it) }
+    levels?.end()
+    val direction = swipe.direction(threshold)
+    if (direction == null) {
+        onCancel()
+        return false
+    }
+    onNavigate(viewerSwipeDirectionForSetting(direction, mediaCount, inverted))
+    return true
 }
 
 private enum class ViewerSwipeAxis { Pending, Horizontal, Vertical }

@@ -1811,29 +1811,9 @@ internal fun TheoriaAppContent(
                                     },
                                 ),
                                 screenCallbacks = ViewerRouteScreenCallbacks(
-                                    onDismissRelatedPosts = { source ->
-                                        when (source) {
-                                            ViewerStreamSource.SEARCH -> searchRouteOwnerBinding.current?.dispatch(SearchAction.DismissRelatedPosts)
-                                            ViewerStreamSource.FOR_YOU -> forYouRouteOwnerBinding.current?.dispatch(ForYouAction.DismissRelatedPosts)
-                                            ViewerStreamSource.CREATOR_PROFILE -> creatorRouteOwnerBinding.current?.dispatch(CreatorAction.DismissRelatedPosts)
-                                            else -> Unit
-                                        }
-                                    },
-                                    onRetryRelatedPosts = { source ->
-                                        when (source) {
-                                            ViewerStreamSource.SEARCH -> searchRouteOwnerBinding.current?.dispatch(SearchAction.RetryRelatedPosts)
-                                            ViewerStreamSource.FOR_YOU -> forYouRouteOwnerBinding.current?.dispatch(ForYouAction.RetryRelatedPosts)
-                                            ViewerStreamSource.CREATOR_PROFILE -> creatorRouteOwnerBinding.current?.dispatch(CreatorAction.RetryRelatedPosts)
-                                            else -> Unit
-                                        }
-                                    },
-                                    onPlaybackModeSelected = { mode ->
-                                        scope.launch {
-                                            dataDependencies.settingsRepository.updateSettings { current ->
-                                                current.copy(viewer = current.viewer.copy(playbackMode = mode))
-                                            }
-                                        }
-                                    },
+                                    onDismissRelatedPosts = viewerRouteWorkflow::dismissRelatedPosts,
+                                    onRetryRelatedPosts = viewerRouteWorkflow::retryRelatedPosts,
+                                    onPlaybackModeSelected = { settingsOwner.onAction(SettingsAction.SetViewerPlaybackMode(it)) },
                                     onOwnerChanged = { owner -> activeViewerOwner = owner },
                                     onVisiblePostChanged = { post, viewedMediaNumber, session ->
                                         viewerRouteWorkflow.recordVisiblePost(post, viewedMediaNumber, session)

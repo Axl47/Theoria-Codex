@@ -8,7 +8,7 @@
 
 - Collapse Search into floating search and source buttons so posts can fill the screen; restore the previous layout with Legacy “Old Search Bar”.
 
-- Find Invert scroll direction in the new Preferences category, with a Legacy Instant Seek option to seek continuously while dragging.
+- Use Legacy Instant Seek to seek continuously while dragging instead of previewing timeline thumbnails.
 
 - Jump between fullscreen posts with a centered seven-thumbnail strip below the seek bar.
 
@@ -28,6 +28,8 @@
 - Automatically enter picture-in-picture when leaving Viewer during video playback.
 
 ## Improvements
+
+- Find Invert scroll direction in the new Preferences category.
 
 - Preserve the feed card’s rounded corners and crop while expanding media into fullscreen and returning it to the grid.
 

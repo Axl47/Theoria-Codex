@@ -78,31 +78,9 @@ internal fun ViewerRelatedStrip(
             exit = slideOutHorizontally { -it } + fadeOut(),
             modifier = Modifier.padding(end = 36.dp),
         ) {
-            Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-                Column(Modifier.padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("More like this", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                        IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, "Dismiss related posts") }
-                    }
-                    when (state) {
-                        is RelatedPostsUiState.Loading -> LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 12.dp))
-                        is RelatedPostsUiState.Failed -> TextButton(onClick = onRetry) { Text("Could not load related posts. Retry") }
-                        is RelatedPostsUiState.Empty -> Text("No new related posts", Modifier.padding(horizontal = 12.dp))
-                        else -> if (posts.isEmpty()) Text("No matching related posts", Modifier.padding(horizontal = 12.dp))
-                    }
-                    if (posts.isNotEmpty()) LazyRow(
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        items(posts, key = { "${it.id.source}:${it.id.sourcePostId}" }) { post ->
-                            ViewerPostThumbnail(post, post.id == currentPostId, Modifier.size(52.dp)) {
-                                if (enabled) onSelect(post)
-                            }
-                        }
-                    }
-                }
-            }
+            ViewerRelatedStripContent(state, posts, currentPostId, enabled, onSelect, onDismiss, onRetry)
         }
+
         Surface(
             onClick = { expanded = !expanded; onInteraction() },
             modifier = Modifier.align(Alignment.TopEnd).size(width = 32.dp, height = 48.dp),
@@ -113,6 +91,44 @@ internal fun ViewerRelatedStrip(
                 Icon(if (expanded) Icons.AutoMirrored.Filled.KeyboardArrowRight else Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                     if (expanded) "Collapse related posts" else "Show related posts")
             }
+        }
+    }
+}
+
+@Composable
+private fun ViewerRelatedStripContent(
+    state: RelatedPostsUiState, posts: List<Post>, currentPostId: PostId, enabled: Boolean,
+    onSelect: (Post) -> Unit, onDismiss: () -> Unit, onRetry: () -> Unit,
+) {
+    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+        Column(Modifier.padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("More like this", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, "Dismiss related posts") }
+            }
+            ViewerRelatedStatus(state, posts.isEmpty(), onRetry)
+            ViewerRelatedThumbnails(posts, currentPostId, enabled, onSelect)
+        }
+    }
+}
+
+@Composable
+private fun ViewerRelatedStatus(state: RelatedPostsUiState, empty: Boolean, onRetry: () -> Unit) {
+    when (state) {
+        is RelatedPostsUiState.Loading -> LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 12.dp))
+        is RelatedPostsUiState.Failed -> TextButton(onClick = onRetry) { Text("Could not load related posts. Retry") }
+        is RelatedPostsUiState.Empty -> Text("No new related posts", Modifier.padding(horizontal = 12.dp))
+        else -> if (empty) Text("No matching related posts", Modifier.padding(horizontal = 12.dp))
+    }
+}
+
+@Composable
+private fun ViewerRelatedThumbnails(posts: List<Post>, currentPostId: PostId, enabled: Boolean, onSelect: (Post) -> Unit) {
+    if (posts.isEmpty()) return
+    LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        items(posts, key = { "${it.id.source}:${it.id.sourcePostId}" }) { post ->
+            ViewerPostThumbnail(post, post.id == currentPostId, Modifier.size(52.dp)) { if (enabled) onSelect(post) }
         }
     }
 }

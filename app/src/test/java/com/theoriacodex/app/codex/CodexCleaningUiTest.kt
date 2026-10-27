@@ -12,6 +12,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import com.theoriacodex.data.repository.ProfileLibraryIds
 import com.theoriacodex.domain.model.Codex
 import kotlinx.coroutines.flow.flowOf
@@ -41,7 +42,7 @@ class CodexCleaningUiTest {
                 likesCodexId = likesId, onCleanCodex = { id, sources -> submitted = id to sources },
             )
         } }
-        compose.onNodeWithContentDescription("Actions for Collection").performClick()
+        compose.onNodeWithContentDescription("Actions for Collection").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Clean Codex").performClick()
         compose.onNodeWithText("Clean Collection").assertIsDisplayed()
         compose.onNode(hasText("Collection") and isToggleable()).assertDoesNotExist()
@@ -52,7 +53,7 @@ class CodexCleaningUiTest {
         compose.onNodeWithText("Clean Codex").assertIsEnabled().performClick()
         compose.runOnIdle { assertEquals("target" to setOf("a", "b"), submitted) }
 
-        compose.onNodeWithContentDescription("Actions for Collection").performClick()
+        compose.onNodeWithContentDescription("Actions for Collection").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Clean Codex").performClick()
         compose.onNodeWithText("Clean Codex").assertIsNotEnabled()
         compose.onNode(hasText("Source A") and isToggleable()).performClick()

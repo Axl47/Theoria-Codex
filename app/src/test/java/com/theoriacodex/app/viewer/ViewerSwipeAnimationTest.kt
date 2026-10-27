@@ -42,9 +42,11 @@ class ViewerSwipeAnimationTest {
     @Test fun `gallery follows a held drag before release`() = checkSlide(gallery = true, heldDrag = true)
     @Test fun `short post drag returns to the current page`() = checkSlide(gallery = false, heldDrag = true, cancelled = true)
 
+    @Test fun `inverted gallery follows a held right drag`() = checkSlide(gallery = true, heldDrag = true, inverted = true)
+
     @Test fun `related thumbnail joins the session and animates to its post`() = checkSlide(gallery = false, related = true)
 
-    private fun checkSlide(gallery: Boolean, opening: Boolean = false, thumbnail: Boolean = false, heldDrag: Boolean = false, cancelled: Boolean = false, related: Boolean = false) {
+    private fun checkSlide(gallery: Boolean, opening: Boolean = false, thumbnail: Boolean = false, heldDrag: Boolean = false, cancelled: Boolean = false, related: Boolean = false, inverted: Boolean = false) {
         val image = ImageRef(url = null, localPath = "/missing/swipe.jpg", mime = "image/jpeg")
         val first = Post(
             id = PostId(SourceKey.GELBOORU, "first"), preview = image, full = image,
@@ -61,12 +63,14 @@ class ViewerSwipeAnimationTest {
             CompositionLocalProvider(LocalViewerReturnTransition provides transition) {
                 MaterialTheme {
                     ViewerScreen(
-                        uiState = state.value, creatorBrowsingSources = emptySet(),
+                        uiState = state.value.copy(related = com.theoriacodex.app.viewer.state.ViewerRelatedUiState(
+                            if (related) com.theoriacodex.app.related.RelatedPostsUiState.Loaded(
+                                com.theoriacodex.app.related.RelatedPostsRequest(first, 0, 1), posts.drop(1))
+                                else com.theoriacodex.app.related.RelatedPostsUiState.Idle,
+                            if (related) posts.drop(1) else emptyList(),
+                        )), creatorBrowsingSources = emptySet(),
+                        invertMultiImageScrollDirection = inverted,
                         onAction = { state.value = reduceViewerState(state.value, it).state },
-                        relatedState = if (related) com.theoriacodex.app.related.RelatedPostsUiState.Loaded(
-                            com.theoriacodex.app.related.RelatedPostsRequest(first, 0, 1), posts.drop(1))
-                            else com.theoriacodex.app.related.RelatedPostsUiState.Idle,
-                        relatedPosts = if (related) posts.drop(1) else emptyList(),
                         onIncludeRelatedPosts = {
                             state.value = reduceViewerState(state.value,
                                 com.theoriacodex.app.viewer.state.ViewerAction.ReplaceSession(ViewerSessionIdentity("swipe"), posts)).state
@@ -88,16 +92,17 @@ class ViewerSwipeAnimationTest {
             compose.onNodeWithContentDescription("Open post second").performClick()
         } else if (heldDrag) {
             actions.performTouchInput {
-                down(Offset(width * 0.8f, height * 0.5f))
-                moveTo(Offset(width * if (cancelled) 0.72f else 0.55f, height * 0.5f))
-                moveTo(Offset(width * if (cancelled) 0.72f else 0.55f, height * 0.5f))
+                down(Offset(width * if (inverted) 0.2f else 0.8f, height * 0.5f))
+                moveTo(Offset(width * if (inverted) 0.45f else if (cancelled) 0.72f else 0.55f, height * 0.5f))
+                moveTo(Offset(width * if (inverted) 0.45f else if (cancelled) 0.72f else 0.55f, height * 0.5f))
             }
             compose.mainClock.advanceTimeBy(96)
             compose.runOnIdle {
                 assertEquals(0, state.value.currentPageIndex)
                 assertEquals(0, state.value.currentPage?.selectedMediaIndex)
             }
-            assertTrue("Content must move before release", actions.fetchSemanticsNode().positionInRoot.x < 0f)
+            val dragX = actions.fetchSemanticsNode().positionInRoot.x
+            assertTrue("Content must follow the drag before release: $dragX", if (inverted) dragX > 0f else dragX < 0f)
             actions.performTouchInput { up() }
         } else if (thumbnail) compose.onNodeWithContentDescription("Open post second").performClick()
         else actions.performTouchInput { swipeLeft() }
@@ -107,7 +112,7 @@ class ViewerSwipeAnimationTest {
             assertEquals(0, state.value.currentPage?.selectedMediaIndex)
         }
         val x = actions.fetchSemanticsNode().positionInRoot.x
-        assertTrue("The outgoing page should be partway across the screen: x=$x", x < 0f && x > -width)
+        assertTrue("The outgoing page should be partway across the screen: x=$x", if (inverted) x > 0f && x < width else x < 0f && x > -width)
         compose.mainClock.advanceTimeBy(400)
         compose.runOnIdle {
             assertEquals(if (gallery || cancelled) 0 else 1, state.value.currentPageIndex)

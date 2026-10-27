@@ -466,7 +466,7 @@ internal fun ViewerRoute(
     }.orEmpty()
     androidx.compose.runtime.CompositionLocalProvider(com.theoriacodex.app.viewer.LocalViewerInstantSeek provides renderConfig.instantSeek) {
     ViewerScreen(
-        uiState = viewerState,
+        uiState = viewerState.copy(related = com.theoriacodex.app.viewer.state.ViewerRelatedUiState(relatedState, relatedPosts)),
         saveToCodexQuery = activeSession?.saveQuery,
         creatorBrowsingSources = renderConfig.creatorBrowsingSources,
         onAction = { action ->
@@ -483,8 +483,6 @@ internal fun ViewerRoute(
         invertMultiImageScrollDirection = renderConfig.invertMultiImageScrollDirection,
         videoQuality = renderConfig.videoQuality,
         likedPostIds = renderConfig.likedPostIds,
-        relatedState = relatedState,
-        relatedPosts = relatedPosts,
         onIncludeRelatedPosts = {
             val incoming = relatedState.availablePages.flatMap { it.posts }
             viewerOwner.updateSession { current -> current.copy(posts = mergeViewerPosts(current.posts, incoming)) }
