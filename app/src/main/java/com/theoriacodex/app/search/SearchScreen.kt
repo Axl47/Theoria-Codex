@@ -194,6 +194,7 @@ fun SearchScreen(
     val durationMaxBucket = animationRestoreState.durationMaxBucket
     var searchFieldFocused by remember { mutableStateOf(false) }
     var searchControlsDismissedByScroll by remember { mutableStateOf(false) }
+    var searchControlsRequested by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
     var showFavoriteTagSheet by remember { mutableStateOf(false) }
     var editingIncludeGroupIndex by remember { mutableStateOf<Int?>(null) }
@@ -381,6 +382,7 @@ fun SearchScreen(
             .collectLatest { scrolling ->
                 if (scrolling) {
                     searchControlsDismissedByScroll = true
+                    searchControlsRequested = false
                     inputFocus.clear()
                 }
             }
@@ -399,7 +401,7 @@ fun SearchScreen(
         visibleSourceStatusChipStatuses(state.content.statuses)
     }
     val clearFocusInteraction = remember { MutableInteractionSource() }
-    val showSearchControls = !searchControlsDismissedByScroll && (searchFieldFocused ||
+    val showSearchControls = !searchControlsDismissedByScroll && (searchControlsRequested || searchFieldFocused ||
         input.isNotBlank() ||
         autocompleteSuggestions.isNotEmpty() ||
         facetedAutocompleteSuggestions.isNotEmpty() ||
@@ -503,8 +505,14 @@ fun SearchScreen(
                             unifiedSourceCount = state.query.unifiedSources.size,
                             unifiedSources = state.query.unifiedSources,
                             onOpen = { inputFocus.clear() },
-                            onModeSelected = { mode -> onAction(SearchAction.SelectMode(mode)) },
+                            onModeSelected = { mode ->
+                                searchControlsDismissedByScroll = false
+                                searchControlsRequested = true
+                                onAction(SearchAction.SelectMode(mode))
+                            },
                             onTemporarySourceToggled = { source ->
+                                searchControlsDismissedByScroll = false
+                                searchControlsRequested = true
                                 onAction(SearchAction.ToggleTemporarySource(source))
                             },
                         )
