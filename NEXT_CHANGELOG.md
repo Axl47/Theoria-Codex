@@ -6,7 +6,7 @@
 
 - Like posts directly from Searches and Followed feeds, including their previews in Saved.
 
-- Collapse Search into floating search and source buttons so posts can fill the screen; restore the previous layout with Legacy “Old Search Bar”.
+- Collapse Search into a compact strip attached to the top-right corner, with a rounded left edge and closer search and source buttons; restore the previous layout with Legacy “Old Search Bar”.
 
 - Use Legacy Instant Seek to seek continuously while dragging instead of previewing timeline thumbnails.
 

@@ -486,8 +486,9 @@ SearchSourcePicker(
                 requestInputFocus = true
             },
             sourcePicker = sourcePicker,
+            horizontalPadding = 16.dp,
             modifier = Modifier.then(inputFocus.rootModifier).fillMaxSize().padding(padding)
-                .padding(start = 16.dp, end = 16.dp, top = if (oldSearchBar) 6.dp else 0.dp, bottom = 8.dp),
+                .padding(top = if (oldSearchBar) 6.dp else 0.dp, bottom = 8.dp),
             inputField = {
             OutlinedTextField(
                 modifier = Modifier
