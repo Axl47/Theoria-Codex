@@ -43,6 +43,7 @@
 
 - Make fullscreen posts and gallery media follow your finger while swiping, including when cancelling a swipe.
 
+- Keep the app responsive while preparing large Codices for fullscreen viewing.
 - Focus support on Android 16 and Android 17; new builds require Android 16 or newer.
 - Use Android’s configured interaction sounds for Compose controls.
 

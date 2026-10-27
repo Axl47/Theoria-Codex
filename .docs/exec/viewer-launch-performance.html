@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Keep large Viewer launches off the UI thread</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { max-width: 1050px; margin: auto; padding: 24px; font: 16px/1.5 system-ui, sans-serif; }
+    nav { position: sticky; top: 0; background: Canvas; padding: 12px 0; }
+    nav a { margin-right: 16px; }
+    section { margin: 28px 0; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #888; padding: 8px; text-align: left; vertical-align: top; }
+    code { overflow-wrap: anywhere; }
+    pre { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Keep large Viewer launches off the UI thread</h1>
+  <p>Owner: isolated performance task. Created and updated: 2026-10-27.</p>
+  <p><strong>Status: host implementation complete; physical acceptance pending.</strong> The narrow fix moves collection-wide offline media normalization to the existing worker dispatcher. No viewer appearance or playback policy changes.</p>
+  <table><tr><th>Next action</th><th>Risk</th><th>Validation</th></tr>
+    <tr><td>Parent cherry-picks the dedicated commit; measure on an isolated physical-device lane when available.</td><td>Physical device unavailable; transition latency and thermal behavior remain unmeasured.</td><td>16 focused host tests passed, plus Debug Detekt, hotspot and whitespace checks.</td></tr></table>
+</header>
+<nav><a href="#purpose">Purpose</a><a href="#context">Context</a><a href="#work">Work plan</a><a href="#validation">Validation</a><a href="#log">Living log</a><a href="#recovery">Recovery</a></nav>
+<main>
+<section id="purpose">
+  <h2>Purpose / Big picture</h2>
+  <p>Opening a post in a large Codex should leave the app's UI thread available while the collection's media references are prepared. A Codex is an ordered saved collection; normalization restores canonical remote references from transient offline playback references.</p>
+  <p>This fixes a demonstrated source of UI-thread work. It does not establish that this work explains all reported opening/closing lag.</p>
+</section>
+<section id="context">
+  <h2>Context and orientation</h2>
+  <p><code>app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt</code>, in <code>openCodexViewer</code>, launches preparation on the route/UI scope before navigating. <code>ViewerRouteWorkflow.preparePostsForLaunch</code> maps every post, calling <code>OfflineMediaCoordinator.withoutOfflineLocations</code>. The store examines and rebuilds media collections even for remote-only galleries. Cost therefore grows with all posts and their gallery media, rather than just visible cards.</p>
+  <p>The workflow already injects <code>providerDispatcher</code> (default <code>Dispatchers.Default</code>) for background parsing. Use that same dispatcher for the collection map. Selected/current-plus-next offline hydration remains bounded to two posts. Required selected-post resolution stays after preparation on its existing path, including its existing error handling. Existing offline fallbacks remain intact.</p>
+  <p>Inspection also found eager full-collection page/media state construction in <code>app/src/main/java/com/theoriacodex/app/viewer/state/ViewerStateReducer.kt:createViewerUiState</code>. It remains synchronous and is a separate candidate for future measurement. Grid video players already pool leases, pace preparation/cooling, and defer player release. No evidence justifies reducing visible autoplay or changing those timings.</p>
+</section>
+<section id="work">
+  <h2>Phases and work plan</h2>
+  <ol>
+    <li>Trace launch, offline preparation, immutable Viewer state creation, and grid player reuse; identify source-level work that grows with collection size.</li>
+    <li>In <code>app/src/main/java/com/theoriacodex/app/ui/routes/ViewerRouteWorkflow.kt:preparePostsForLaunch</code>, wrap only the existing collection map in <code>withContext(providerDispatcher)</code>. Check caller cancellation between posts with <code>ensureActive</code>. Keep post order, selection, offline fallback, provider resolution and error behavior unchanged.</li>
+    <li>Extend <code>app/src/test/java/com/theoriacodex/app/ui/routes/ViewerProviderWorkTest.kt</code> with 2,000-post thread-confinement and cancellation cases. Keep existing offline and playback policy tests as behavioral checks. Add one user-visible bullet in <code>NEXT_CHANGELOG.md</code>.</li>
+    <li>Run one focused host validation batch, record results here, and commit for parent cherry-pick. Do not install, contact a device, alter production, create another thread, or touch viewer UI/layout/gesture/transition appearance files.</li>
+  </ol>
+</section>
+<section id="validation">
+  <h2>Validation and acceptance</h2>
+  <p>Run commands from repository root with Java 25 (the default Java 19 cannot run the Android 36 Robolectric runtime) and the existing Android SDK. Host tasks only.</p>
+  <pre><code>JAVA_HOME=/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home ANDROID_HOME=/Users/axel/Library/Android/sdk ./gradlew :app:testDebugUnitTest --offline --tests '*ViewerProviderWorkTest' --tests '*OfflineViewerWorkflowTest' --tests '*VideoPlaybackInfrastructureTest' --tests '*ViewerVideoPlayerPoolTest' :app:detektDebug
+python3 scripts/check_hotspots.py
+git diff --check</code></pre>
+  <p>The initial Gradle attempt inside the filesystem sandbox could not open the shared Gradle cache lock. Automatic approval allowed the same host-only command to use that existing cache. No device task was requested or run.</p>
+  <table><tr><th>Host evidence</th><th>Result</th></tr>
+    <tr><td><code>ViewerProviderWorkTest</code></td><td>3 passed on focused rerun, including 2,000-post thread confinement and early cancellation. Command: same Java/SDK environment above, <code>./gradlew :app:testDebugUnitTest --offline --tests '*ViewerProviderWorkTest'</code>; BUILD SUCCESSFUL in 15s.</td></tr>
+    <tr><td><code>OfflineViewerWorkflowTest</code></td><td>2 passed in initial batch; offline metadata boundaries, gallery launch/lookahead and cold restoration retained.</td></tr>
+    <tr><td><code>VideoPlaybackInfrastructureTest</code></td><td>8 passed in initial batch; includes independent simultaneous visible leases and idle reuse/retention.</td></tr>
+    <tr><td><code>ViewerVideoPlayerPoolTest</code></td><td>3 passed in initial batch; independent overlapping bindings, reuse and delayed release retained.</td></tr>
+    <tr><td>Static/build checks</td><td>Debug production/test compilation and <code>:app:detektDebug</code> passed. <code>python3 scripts/check_hotspots.py</code> and <code>git diff --check</code> passed.</td></tr>
+  </table>
+  <p>Expected: traversal occurs off caller thread, all 2,000 posts retain order/selection, cancellation prevents traversing the whole collection, offline gallery and cold restoration remain correct, simultaneous visible player leases remain independent. No hardware decoding claim follows from these tests.</p>
+  <p>Physical acceptance still required: use a verified isolated package/signing lane and matching APK/conditions; retain complete frame/trace iteration evidence for long mixed-media Codices, repeated open/close and return-to-scrolled-post journeys, cold/warm media, ordinary and thermal-pressure conditions. Confirm every visible video/GIF/Ugoira card autoplays together after return, position handoff works, and offline galleries resolve without network. Calibration requires three complete runs of the same APK under matching conditions. Do not claim a speedup or complete performance acceptance until this is done.</p>
+</section>
+<section id="log">
+  <h2>Living log</h2>
+  <h3>Progress</h3>
+  <ul>
+    <li>2026-10-27: Completed source investigation and scoped patch; no parent-owned appearance files touched.</li>
+    <li>2026-10-27: Implemented worker dispatch and cooperative cancellation. Debug source/test compilation and Detekt passed. First focused batch: 15/16 tests passed; cancellation correctly stopped at 11 posts, while the new test incorrectly expected 12. Replaced that implementation-specific expectation with the required early-stop behavior; focused class rerun passed all 3 tests.</li>
+    <li>2026-10-27: All 16 distinct focused tests now pass; hotspot and whitespace checks pass. Implementation is ready for parent integration. Physical acceptance remains pending.</li>
+  </ul>
+  <h3>Surprises and discoveries</h3>
+  <p>The suspected grid stop/preparation path already has pooling, paced preparation/cooling, and delayed release. The concrete collection-size-dependent issue appears earlier: an unsuspended full-collection offline normalization map on the route dispatcher. The first batch confirmed all 2,000 list accesses run outside the route thread. Cancellation at index 10 stops before normalization of that item, after 11 accesses.</p>
+  <h3>Decision log</h3>
+  <p>2026-10-27 / Codex: Reuse the existing injected dispatcher instead of introducing a scheduler, changing autoplay, or speculating about decoder budgets. Keep only the map off-thread so selected-post persistence/callback context stays as before.</p>
+  <h3>Outcomes and retrospective</h3>
+  <p>Implementation and focused host validation complete. The collection traversal no longer runs on the route thread and can stop between posts on cancellation. Offline selection, order, hydration, fallback and restoration behavior passed existing tests. Simultaneous visible player policy is unchanged and its existing host checks passed. No frame-time, speedup, thermal, actual autoplay or closing-lag acceptance is claimed. Eager Viewer state hydration and transition-time grid media work remain measurement candidates; no parent-owned appearance files were edited.</p>
+</section>
+<section id="recovery">
+  <h2>Idempotence and recovery</h2>
+  <p>Host tests and checks are safe to rerun and only generate local build outputs. No destructive operations are expected. On dependency or sandbox failures, record the exact blocker; do not install onto a device to bypass it. Revert the dedicated commit to roll back this change; preserve unrelated parent work.</p>
+</section>
+</main>
+</body>
+</html>
