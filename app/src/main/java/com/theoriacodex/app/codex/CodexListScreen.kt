@@ -226,12 +226,8 @@ private fun CodexLibraryTile(
         SavedCodexLibraryTile(presentation, onOpenCodex)
         return
     }
-    val openActions = {
-        if (saved) onOpenCodex(codex.codexId) else state.actionTarget = codex
-    }
-    val covers = if (saved) savedCodexChildren(presentation.likesCodexId).flatMap {
-        presentation.coverCandidates[it.codexId].orEmpty()
-    } else presentation.coverCandidates[codex.codexId].orEmpty()
+    val openActions = { state.actionTarget = codex }
+    val covers = presentation.coverCandidates[codex.codexId].orEmpty()
     CodexGridTile(
         codex = codex,
         itemCount = presentation.itemCounts[codex.codexId] ?: 0,
@@ -239,7 +235,6 @@ private fun CodexLibraryTile(
         onOpen = { onOpenCodex(codex.codexId) },
         onOpenActions = openActions,
         onLongPress = openActions,
-        summary = if (saved) savedCodexSummary(presentation.likesCodexId, presentation.itemCounts) else null,
     )
 }
 
@@ -755,7 +750,6 @@ private fun CodexGridTile(
     onOpen: () -> Unit,
     onOpenActions: () -> Unit,
     onLongPress: () -> Unit,
-    summary: String? = null,
 ) {
     Column(
         modifier = Modifier
@@ -791,15 +785,11 @@ private fun CodexGridTile(
                     }
                 },
             )
-
+            com.theoriacodex.app.ui.components.MediaCountBadge(
+                itemCount.toString(), "Posts in ${codex.name}", Modifier.align(Alignment.TopEnd).padding(8.dp),
+            )
         }
 
-        if (summary != null) {
-            Text(codex.name, style = MaterialTheme.typography.titleMedium)
-            Text(summary, style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            CodexTileMetadata(codex = codex, itemCount = itemCount, onOpenActions = onOpenActions)
-        }
+        CodexTileMetadata(codex = codex, onOpenActions = onOpenActions)
     }
 }

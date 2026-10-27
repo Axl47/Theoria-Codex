@@ -14,9 +14,6 @@ internal fun savedCodexChildren(likesCodexId: String) = listOf(
     Codex(SAVED_SEARCHES_CODEX_ID, "Searches", 0),
 )
 
-internal fun savedCodexSummary(likesCodexId: String, counts: Map<String, Int>): String =
-    "Likes: ${counts[likesCodexId] ?: 0}, Followed: ${counts[FOLLOWED_CODEX_ID] ?: 0}, Search: ${counts[SAVED_SEARCHES_CODEX_ID] ?: 0}"
-
 internal fun savedCodexLibraryEntries(codices: List<Codex>, likesCodexId: String): List<Codex> {
     val saved = Codex(SAVED_CODEX_ID, "Saved", 0)
     return if (codices.any { it.codexId == likesCodexId }) {

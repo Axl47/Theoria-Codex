@@ -25,6 +25,8 @@
 
 ## Improvements
 
+- Show Codex post counts in cover badges, with compact titles and aligned overflow menus.
+
 - Give Saved a full-width library card with a larger title and separate, tappable Likes, Followed, and Searches counts.
 
 - Expand Search controls when changing sources.

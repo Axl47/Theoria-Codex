@@ -1313,9 +1313,9 @@ fun SearchResultCard(
                 }
             }
             if (mediaCount > 1) {
-                ImageCountBadge(
-                    count = mediaCount,
-                    viewedMediaNumber = cardViewedMediaNumber,
+                com.theoriacodex.app.ui.components.MediaCountBadge(
+                    text = imageCountBadgeLabel(mediaCount, cardViewedMediaNumber),
+                    description = if (cardViewedMediaNumber == null) "Image count" else "Watched media progress",
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(8.dp),
@@ -1442,40 +1442,6 @@ private fun PreviewMetadataLabel(label: String) {
     }
 }
 
-@Composable
-private fun ImageCountBadge(
-    count: Int,
-    viewedMediaNumber: Int?,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        modifier = modifier,
-        color = Color.Gray.copy(alpha = 0.65f),
-        shape = CircleShape,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = Icons.Default.Image,
-                contentDescription = if (viewedMediaNumber == null) {
-                    "Image count"
-                } else {
-                    "Watched media progress"
-                },
-                tint = Color.White,
-                modifier = Modifier.size(14.dp),
-            )
-            Text(
-                text = imageCountBadgeLabel(count, viewedMediaNumber),
-                color = Color.White,
-                style = MaterialTheme.typography.labelSmall,
-            )
-        }
-    }
-}
 
 internal fun imageCountBadgeLabel(count: Int, viewedMediaNumber: Int?): String {
     val progress = viewedMediaNumber?.coerceIn(1, count)
