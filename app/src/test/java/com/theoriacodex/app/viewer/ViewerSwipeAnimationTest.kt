@@ -42,7 +42,9 @@ class ViewerSwipeAnimationTest {
     @Test fun `gallery follows a held drag before release`() = checkSlide(gallery = true, heldDrag = true)
     @Test fun `short post drag returns to the current page`() = checkSlide(gallery = false, heldDrag = true, cancelled = true)
 
-    private fun checkSlide(gallery: Boolean, opening: Boolean = false, thumbnail: Boolean = false, heldDrag: Boolean = false, cancelled: Boolean = false) {
+    @Test fun `related thumbnail joins the session and animates to its post`() = checkSlide(gallery = false, related = true)
+
+    private fun checkSlide(gallery: Boolean, opening: Boolean = false, thumbnail: Boolean = false, heldDrag: Boolean = false, cancelled: Boolean = false, related: Boolean = false) {
         val image = ImageRef(url = null, localPath = "/missing/swipe.jpg", mime = "image/jpeg")
         val first = Post(
             id = PostId(SourceKey.GELBOORU, "first"), preview = image, full = image,
@@ -51,7 +53,7 @@ class ViewerSwipeAnimationTest {
             authorName = null, createdAtEpochMs = null,
         )
         val posts = if (gallery) listOf(first) else listOf(first, first.copy(id = PostId(SourceKey.GELBOORU, "second")))
-        val state = mutableStateOf(createViewerUiState(ViewerSessionIdentity("swipe"), posts, requiresResolution = { false }))
+        val state = mutableStateOf(createViewerUiState(ViewerSessionIdentity("swipe"), if (related) posts.take(1) else posts, requiresResolution = { false }))
         val transition = ViewerReturnTransition().apply {
             if (opening) openedFrom("feed", Rect(20f, 100f, 220f, 400f))
         }
@@ -61,6 +63,14 @@ class ViewerSwipeAnimationTest {
                     ViewerScreen(
                         uiState = state.value, creatorBrowsingSources = emptySet(),
                         onAction = { state.value = reduceViewerState(state.value, it).state },
+                        relatedState = if (related) com.theoriacodex.app.related.RelatedPostsUiState.Loaded(
+                            com.theoriacodex.app.related.RelatedPostsRequest(first, 0, 1), posts.drop(1))
+                            else com.theoriacodex.app.related.RelatedPostsUiState.Idle,
+                        relatedPosts = if (related) posts.drop(1) else emptyList(),
+                        onIncludeRelatedPosts = {
+                            state.value = reduceViewerState(state.value,
+                                com.theoriacodex.app.viewer.state.ViewerAction.ReplaceSession(ViewerSessionIdentity("swipe"), posts)).state
+                        },
                         onOpenInBrowser = {}, onRemoveIncludeTerm = { _, _ -> },
                         onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
                     )
@@ -72,7 +82,11 @@ class ViewerSwipeAnimationTest {
         compose.mainClock.autoAdvance = false
         val actions = compose.onNodeWithContentDescription("Media actions")
         val width = actions.fetchSemanticsNode().size.width
-        if (heldDrag) {
+        if (related) {
+            compose.onNodeWithContentDescription("Show related posts").performClick()
+            compose.mainClock.advanceTimeBy(400)
+            compose.onNodeWithContentDescription("Open post second").performClick()
+        } else if (heldDrag) {
             actions.performTouchInput {
                 down(Offset(width * 0.8f, height * 0.5f))
                 moveTo(Offset(width * if (cancelled) 0.72f else 0.55f, height * 0.5f))

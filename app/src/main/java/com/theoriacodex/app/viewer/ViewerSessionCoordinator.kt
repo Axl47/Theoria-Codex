@@ -8,6 +8,8 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 import java.util.UUID
 
+internal data class ViewerRelatedBinding(val source: ViewerStreamSource, val queryHash: String)
+
 internal data class ViewerSession(
     val posts: List<Post>,
     val context: ViewerLaunchContext,
@@ -20,6 +22,7 @@ internal data class ViewerSession(
     val onToggleLike: ((Post) -> Unit)? = null,
     // Captured applied query for contextual save ranking; never inferred from another live route.
     val saveQuery: com.theoriacodex.domain.model.Query? = null,
+    val relatedBinding: ViewerRelatedBinding? = null,
 )
 
 private val LAZY_MEDIA_RESOLUTION_SOURCES = setOf(

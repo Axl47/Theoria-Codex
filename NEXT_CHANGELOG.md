@@ -2,6 +2,8 @@
 
 ## New
 
+- Open a collapsible “More like this” thumbnail stripe after liking in fullscreen, and jump to related posts without leaving the viewer.
+
 - Like posts directly from Searches and Followed feeds, including their previews in Saved.
 
 - Collapse Search into floating search and source buttons so posts can fill the screen; restore the previous layout with Legacy “Old Search Bar”.

@@ -33,6 +33,9 @@ import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.search.filterSearchResults
+import com.theoriacodex.app.related.RelatedPostsUiState
+import com.theoriacodex.app.related.availablePages
+import com.theoriacodex.app.related.loadedPosts
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.ViewerMediaPrefetcher
 import com.theoriacodex.app.viewer.ViewerPostResolver
@@ -89,6 +92,7 @@ internal data class ViewerRouteLiveSourceSnapshot(
     val canLoadMore: Boolean = false,
     val loadingMore: Boolean = false,
     val retainedLikedPostIds: Set<PostId> = emptySet(),
+    val relatedPosts: RelatedPostsUiState = RelatedPostsUiState.Idle,
 )
 
 /**
@@ -116,6 +120,12 @@ internal data class ViewerRouteLiveSourceState(
         ViewerStreamSource.CODEX,
         ViewerStreamSource.RECENTS,
         -> null
+    }
+
+    fun relatedSourceFor(session: ViewerSession): ViewerRouteLiveSourceSnapshot? {
+        val source = session.relatedBinding?.source ?: session.context.streamSource
+        val query = session.relatedBinding?.queryHash ?: session.context.queryHash
+        return forSource(source)?.takeIf { it.queryHash == query }
     }
 
     fun visiblePostsFor(session: ViewerSession): List<Post>? {
@@ -168,6 +178,8 @@ internal data class ViewerRouteScreenCallbacks(
     val onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
     val onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
     val onGoToSearch: () -> Unit,
+    val onDismissRelatedPosts: (ViewerStreamSource) -> Unit = {},
+    val onRetryRelatedPosts: (ViewerStreamSource) -> Unit = {},
     val onOpenCreatorFallback: ((Post) -> Unit)? = null,
 )
 
@@ -290,7 +302,9 @@ internal fun ViewerRoute(
         viewerOwner,
         session?.sessionId,
         session?.searchVisibilityFilters,
-        activeLiveSource,
+        activeLiveSource?.queryHash,
+        activeLiveSource?.results,
+        activeLiveSource?.retainedLikedPostIds,
         liveSourceState.likedPostIds,
         liveSourceState.savedPostIds,
         liveSourceState.watchedPostIds,
@@ -437,6 +451,19 @@ internal fun ViewerRoute(
             resolveInBackground = false,
         )
     }
+    val relatedSource = activeSession?.relatedBinding?.source ?: activeSession?.context?.streamSource
+    val relatedSnapshot = activeSession?.let(liveSourceState::relatedSourceFor)
+    val relatedState = relatedSnapshot?.relatedPosts ?: RelatedPostsUiState.Idle
+    val relatedPosts = activeSession?.let { active ->
+        filterSearchResults(
+            results = relatedState.loadedPosts, filters = active.searchVisibilityFilters,
+            likedPostIds = if (relatedSource == ViewerStreamSource.FOR_YOU) emptySet() else liveSourceState.likedPostIds,
+            savedPostIds = if (relatedSource == ViewerStreamSource.FOR_YOU) emptySet() else liveSourceState.savedPostIds,
+            watchedPostIds = if (relatedSource == ViewerStreamSource.FOR_YOU) emptySet() else liveSourceState.watchedPostIds,
+            retainedLikedPostIds = relatedSnapshot?.retainedLikedPostIds.orEmpty(),
+            unknownAnimatedDurationPolicy = liveSourceState.unknownAnimatedDurationPolicy,
+        )
+    }.orEmpty()
     androidx.compose.runtime.CompositionLocalProvider(com.theoriacodex.app.viewer.LocalViewerInstantSeek provides renderConfig.instantSeek) {
     ViewerScreen(
         uiState = viewerState,
@@ -456,6 +483,14 @@ internal fun ViewerRoute(
         invertMultiImageScrollDirection = renderConfig.invertMultiImageScrollDirection,
         videoQuality = renderConfig.videoQuality,
         likedPostIds = renderConfig.likedPostIds,
+        relatedState = relatedState,
+        relatedPosts = relatedPosts,
+        onIncludeRelatedPosts = {
+            val incoming = relatedState.availablePages.flatMap { it.posts }
+            viewerOwner.updateSession { current -> current.copy(posts = mergeViewerPosts(current.posts, incoming)) }
+        },
+        onDismissRelatedPosts = { relatedSource?.let(screenCallbacks.onDismissRelatedPosts) },
+        onRetryRelatedPosts = { relatedSource?.let(screenCallbacks.onRetryRelatedPosts) },
         onRequestMediaRecovery = { post, failedMedia ->
             routeScope.launch {
                 if (viewerOwner.session.value == null) return@launch

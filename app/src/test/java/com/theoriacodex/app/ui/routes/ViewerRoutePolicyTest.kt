@@ -26,6 +26,17 @@ import org.junit.Test
 
 class ViewerRoutePolicyTest {
     @Test
+    fun `related launches keep explicit origin and reject a replaced source query`() {
+        val snapshot = ViewerRouteLiveSourceSnapshot(queryHash = "origin")
+        val state = ViewerRouteLiveSourceState(search = snapshot)
+        val related = session("related:PIXIV:seed", ViewerStreamSource.RELATED, SearchVisibilityFilters())
+        val bound = related.copy(relatedBinding = com.theoriacodex.app.viewer.ViewerRelatedBinding(ViewerStreamSource.SEARCH, "origin"))
+        assertEquals(snapshot, state.relatedSourceFor(bound))
+        assertEquals(null, state.relatedSourceFor(related))
+        assertEquals(null, state.copy(search = snapshot.copy(queryHash = "replacement")).relatedSourceFor(bound))
+    }
+
+    @Test
     fun `search and creator viewer retain liked seeds until related shelf dismissal`() {
         val liked = post("liked")
         val snapshot = ViewerRouteLiveSourceSnapshot(

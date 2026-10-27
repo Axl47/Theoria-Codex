@@ -6,6 +6,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import com.theoriacodex.domain.model.Codex
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -32,7 +33,7 @@ class SavedCodexTest {
                     likesId, { _, _ -> })
             }
         }
-        compose.onNodeWithText("4").assertIsDisplayed()
+        compose.onNodeWithText("4").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("2").assertIsDisplayed()
         compose.onNodeWithText("3").assertIsDisplayed()
         compose.onNodeWithText("Likes").performClick()

@@ -1134,6 +1134,8 @@ internal fun TheoriaAppContent(
                                                             liveSearchBinding = effect.liveSearchBinding,
                                                             searchVisibilityFilters = effect.visibilityFilters,
                                                             onToggleLike = likeAction,
+                                                            relatedBinding = com.theoriacodex.app.viewer.ViewerRelatedBinding(
+                                                                ViewerStreamSource.SEARCH, searchRouteOwner?.currentState()?.query?.appliedQueryHash.orEmpty()),
                                                             saveQuery = saveQuery,
                                                         )),
                                                     )
@@ -1202,6 +1204,8 @@ internal fun TheoriaAppContent(
                                                             liveSearchBinding = effect.liveSearchBinding,
                                                             searchVisibilityFilters = effect.visibilityFilters,
                                                             onToggleLike = likeAction,
+                                                            relatedBinding = com.theoriacodex.app.viewer.ViewerRelatedBinding(
+                                                                ViewerStreamSource.FOR_YOU, "for_you:${forYouRouteOwnerBinding.current?.state?.value?.seedId}"),
                                                         )),
                                                     )
                                                     if (effect.liveSearchBinding) {
@@ -1642,6 +1646,8 @@ internal fun TheoriaAppContent(
                                                 liveSearchBinding = effect.liveSearchBinding,
                                                 searchVisibilityFilters = effect.visibilityFilters,
                                                 onToggleLike = likeAction,
+                                                relatedBinding = com.theoriacodex.app.viewer.ViewerRelatedBinding(
+                                                    ViewerStreamSource.CREATOR_PROFILE, creatorRouteOwnerBinding.current?.currentState()?.queryHash.orEmpty()),
                                             )),
                                         )
                                         navController.navigate(AppRoute.Viewer) {
@@ -1714,6 +1720,7 @@ internal fun TheoriaAppContent(
                                         queryHash = state.search.query.appliedQueryHash
                                             .takeIf(String::isNotBlank),
                                         results = state.search.content.results,
+                                        relatedPosts = state.search.relatedPosts,
                                         retainedLikedPostIds = state.search.relatedPosts.retainedLikedPostIds +
                                             pendingLikePostIds[state.browsing.activeProfile.profileId].orEmpty(),
                                         canLoadMore = state.search.content.canLoadMore,
@@ -1721,6 +1728,7 @@ internal fun TheoriaAppContent(
                                     ),
                                     forYou = ViewerRouteLiveSourceSnapshot(
                                         queryHash = "for_you:${state.forYou.seedId}",
+                                        relatedPosts = state.forYou.relatedPosts,
                                         results = state.forYou.results,
                                         canLoadMore = state.forYou.canLoadMore,
                                         loadingMore = state.forYou.isPaging,
@@ -1728,6 +1736,7 @@ internal fun TheoriaAppContent(
                                     creatorProfile = ViewerRouteLiveSourceSnapshot(
                                         queryHash = state.creator.queryHash,
                                         results = state.creator.results,
+                                        relatedPosts = state.creator.relatedPosts,
                                         retainedLikedPostIds = state.creator.relatedPosts.retainedLikedPostIds +
                                             pendingLikePostIds[state.browsing.activeProfile.profileId].orEmpty(),
                                         canLoadMore = state.creator.canLoadMore,
@@ -1802,6 +1811,22 @@ internal fun TheoriaAppContent(
                                     },
                                 ),
                                 screenCallbacks = ViewerRouteScreenCallbacks(
+                                    onDismissRelatedPosts = { source ->
+                                        when (source) {
+                                            ViewerStreamSource.SEARCH -> searchRouteOwnerBinding.current?.dispatch(SearchAction.DismissRelatedPosts)
+                                            ViewerStreamSource.FOR_YOU -> forYouRouteOwnerBinding.current?.dispatch(ForYouAction.DismissRelatedPosts)
+                                            ViewerStreamSource.CREATOR_PROFILE -> creatorRouteOwnerBinding.current?.dispatch(CreatorAction.DismissRelatedPosts)
+                                            else -> Unit
+                                        }
+                                    },
+                                    onRetryRelatedPosts = { source ->
+                                        when (source) {
+                                            ViewerStreamSource.SEARCH -> searchRouteOwnerBinding.current?.dispatch(SearchAction.RetryRelatedPosts)
+                                            ViewerStreamSource.FOR_YOU -> forYouRouteOwnerBinding.current?.dispatch(ForYouAction.RetryRelatedPosts)
+                                            ViewerStreamSource.CREATOR_PROFILE -> creatorRouteOwnerBinding.current?.dispatch(CreatorAction.RetryRelatedPosts)
+                                            else -> Unit
+                                        }
+                                    },
                                     onPlaybackModeSelected = { mode ->
                                         scope.launch {
                                             dataDependencies.settingsRepository.updateSettings { current ->

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -97,6 +98,11 @@ internal fun ViewerScreen(
     onGoToSearch: () -> Unit,
     onOpenCreatorFallback: ((Post) -> Unit)? = null,
     playbackDiagnosticsEnabled: Boolean = com.theoriacodex.app.BuildConfig.BENCHMARK_FIXTURES_ENABLED,
+    relatedState: com.theoriacodex.app.related.RelatedPostsUiState = com.theoriacodex.app.related.RelatedPostsUiState.Idle,
+    relatedPosts: List<Post> = emptyList(),
+    onIncludeRelatedPosts: () -> Unit = {},
+    onDismissRelatedPosts: () -> Unit = {},
+    onRetryRelatedPosts: () -> Unit = {},
 ) {
     val returnProgress = rememberViewerReturnProgress()
     val returning = LocalViewerReturnTransition.current?.request != null
@@ -133,10 +139,12 @@ internal fun ViewerScreen(
     }
     var interactionSerial by remember { mutableIntStateOf(0) }
     var timelineInteractionActive by remember { mutableStateOf(false) }
+    var relatedStripExpanded by remember { mutableStateOf(false) }
     var lastViewerPaginationRequestSize by remember(posts.size) { mutableIntStateOf(-1) }
     var pendingDismiss by remember { mutableStateOf(false) }
     var swipeInProgress by remember { mutableStateOf(false) }
     var dragInProgress by remember { mutableStateOf(false) }
+    var pendingRelatedPostId by remember(uiState.session) { mutableStateOf<PostId?>(null) }
     val pendingMediaJumpByPost = remember { mutableStateMapOf<Int, Int>() }
     val currentPostIndex = uiState.currentPageIndex.coerceIn(0, posts.lastIndex)
     SideEffect { videoPositions.retainAround(posts.map { it.id }, currentPostIndex) }
@@ -309,7 +317,7 @@ internal fun ViewerScreen(
         chromeVisible = chromeVisible,
         interactionSerial = interactionSerial,
         interactionBlocked = timelineInteractionActive || mediaOverviewVisible || showInfoSheet ||
-            actionsMenuExpanded || playbackSettingsExpanded,
+            actionsMenuExpanded || playbackSettingsExpanded || relatedStripExpanded,
         touchExplorationEnabled = touchExplorationEnabled,
         onHide = { onAction(ViewerAction.ToggleChrome) },
     )
@@ -331,6 +339,16 @@ internal fun ViewerScreen(
             } finally {
                 swipeInProgress = false
             }
+        }
+    }
+
+    LaunchedEffect(pendingRelatedPostId, posts.size, swipeInProgress, opening) {
+        val pending = pendingRelatedPostId ?: return@LaunchedEffect
+        if (swipeInProgress || opening) return@LaunchedEffect
+        val index = posts.indexOfFirst { it.id == pending }
+        if (index >= 0) {
+            navigateToPost(index)
+            pendingRelatedPostId = null
         }
     }
 
@@ -612,6 +630,22 @@ internal fun ViewerScreen(
                     setInfoSheetVisible(true)
                     markInteraction()
                 },
+            )
+        }
+        if (chromeVisible && !mediaOverviewVisible) {
+            ViewerRelatedStrip(
+                state = relatedState, posts = relatedPosts, currentPostId = selectedPost.id,
+                onSelect = { post ->
+                    markInteraction()
+                    pendingRelatedPostId = post.id
+                    if (posts.none { it.id == post.id }) onIncludeRelatedPosts()
+                },
+                onDismiss = { onDismissRelatedPosts(); markInteraction() },
+                onRetry = { onRetryRelatedPosts(); markInteraction() },
+                enabled = !swipeInProgress && !dragInProgress,
+                onExpandedChange = { relatedStripExpanded = it },
+                onInteraction = ::markInteraction,
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 72.dp),
             )
         }
         if (!inPictureInPicture && !mediaOverviewVisible) {
