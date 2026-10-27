@@ -1490,6 +1490,7 @@ internal fun TheoriaAppContent(
                                     onRenameSearch = savedSearchOwner::rename,
                                     onRemoveSearch = savedSearchOwner::remove,
                                     resolvePost = { viewerRouteWorkflow.resolvePost(it, ViewerStreamSource.CODEX) },
+                                    onToggleLike = { toggleLikeAndSyncCodex(it) },
                                 )
                                 return@composable
                             }
@@ -1530,6 +1531,8 @@ internal fun TheoriaAppContent(
                                 codexName = state.codex?.name,
                                 onTitleLongPress = { codexActionTargetId = codexId },
                                 customHeader = virtualUi?.header,
+                                likedPostIds = state.likedPostIds,
+                                onToggleLike = if (virtualUi != null) ({ post -> toggleLikeAndSyncCodex(post) }) else null,
                                 customFilters = virtualUi?.filters,
                                 customFiltersActive = virtualUi?.filtersActive == true,
                                 emptyMessage = virtualUi?.emptyMessage,

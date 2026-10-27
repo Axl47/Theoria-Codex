@@ -115,6 +115,8 @@ fun CodexDetailScreen(
     loading: Boolean = false,
     fabRestoreState: FeedFabRestoreState = FeedFabRestoreState(),
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit = {},
+    likedPostIds: Set<PostId> = emptySet(),
+    onToggleLike: ((Post) -> Unit)? = null,
 ) {
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -244,6 +246,8 @@ fun CodexDetailScreen(
             )
             CodexDetailGrid(
                 posts = visiblePosts,
+                likedPostIds = likedPostIds,
+                onToggleLike = onToggleLike,
                 collectionIsEmpty = posts.isEmpty(),
                 loading = loading,
                 resolvingDurations = durationReadiness.isResolving,
@@ -468,6 +472,8 @@ private fun CodexDetailHeaderActions(
 @Composable
 private fun CodexDetailGrid(
     posts: List<Post>,
+    likedPostIds: Set<PostId>,
+    onToggleLike: ((Post) -> Unit)?,
     collectionIsEmpty: Boolean,
     loading: Boolean,
     resolvingDurations: Boolean,
@@ -520,6 +526,8 @@ private fun CodexDetailGrid(
         val observedDurationMs = observedMediaDurationMs(post, durationStateForPost)
         CodexSelectablePostCard(
             post = post,
+            liked = post.id in likedPostIds,
+            onToggleLike = onToggleLike,
             index = index,
             editSelection = editSelection,
             pixivUgoiraClient = pixivUgoiraClient,
@@ -537,6 +545,8 @@ private fun CodexDetailGrid(
 @Composable
 private fun CodexSelectablePostCard(
     post: Post,
+    liked: Boolean,
+    onToggleLike: ((Post) -> Unit)?,
     index: Int,
     editSelection: CodexEditSelection,
     pixivUgoiraClient: PixivUgoiraClient?,
@@ -551,6 +561,8 @@ private fun CodexSelectablePostCard(
     Box {
         SearchResultCard(
             post = post,
+            liked = liked,
+            onToggleLike = onToggleLike?.takeUnless { editSelection.active }?.let { toggle -> ({ toggle(post) }) },
             pixivUgoiraClient = pixivUgoiraClient,
             acquiredDurationMs = acquiredDurationMs,
             showSourceBadge = true,

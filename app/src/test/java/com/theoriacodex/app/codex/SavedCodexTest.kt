@@ -32,10 +32,15 @@ class SavedCodexTest {
                     likesId, { _, _ -> })
             }
         }
-        compose.onNodeWithText("Likes").assertDoesNotExist()
-        compose.onNodeWithText("Followed").assertDoesNotExist()
-        compose.onNodeWithText("Searches").assertDoesNotExist()
-        compose.onNodeWithText("Likes: 4, Followed: 2, Search: 3").assertIsDisplayed()
+        compose.onNodeWithText("4").assertIsDisplayed()
+        compose.onNodeWithText("2").assertIsDisplayed()
+        compose.onNodeWithText("3").assertIsDisplayed()
+        compose.onNodeWithText("Likes").performClick()
+        compose.runOnIdle { assertEquals(likesId, opened) }
+        compose.onNodeWithText("Followed").performClick()
+        compose.runOnIdle { assertEquals(FOLLOWED_CODEX_ID, opened) }
+        compose.onNodeWithText("Searches").performClick()
+        compose.runOnIdle { assertEquals(SAVED_SEARCHES_CODEX_ID, opened) }
         compose.onNodeWithText("Saved").performClick()
         compose.runOnIdle { assertEquals(SAVED_CODEX_ID, opened) }
     }

@@ -2,6 +2,8 @@
 
 ## New
 
+- Like posts directly from Searches and Followed feeds, including their previews in Saved.
+
 - Collapse Search into floating search and source buttons so posts can fill the screen; restore the previous layout with Legacy “Old Search Bar”.
 
 - Find Invert scroll direction in the new Preferences category, with a Legacy Instant Seek option to seek continuously while dragging.
