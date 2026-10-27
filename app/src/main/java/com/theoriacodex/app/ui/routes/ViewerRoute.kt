@@ -34,7 +34,6 @@ import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.related.RelatedPostsUiState
-import com.theoriacodex.app.related.availablePages
 import com.theoriacodex.app.related.loadedPosts
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.ViewerMediaPrefetcher
@@ -44,6 +43,8 @@ import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.ViewerRestorationRequest
 import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.mergeViewerPosts
+import com.theoriacodex.app.viewer.withRelatedPosts
+import com.theoriacodex.app.related.requestOrNull
 import com.theoriacodex.app.viewer.state.ViewerEffect
 import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.data.repository.ViewerStreamSource
@@ -466,7 +467,9 @@ internal fun ViewerRoute(
     }.orEmpty()
     androidx.compose.runtime.CompositionLocalProvider(com.theoriacodex.app.viewer.LocalViewerInstantSeek provides renderConfig.instantSeek) {
     ViewerScreen(
-        uiState = viewerState.copy(related = com.theoriacodex.app.viewer.state.ViewerRelatedUiState(relatedState, relatedPosts)),
+        uiState = viewerState.copy(related = com.theoriacodex.app.viewer.state.ViewerRelatedUiState(
+            relatedState, relatedPosts, activeSession?.relatedNavigation, activeSession?.relatedPostIds.orEmpty(),
+        )),
         saveToCodexQuery = activeSession?.saveQuery,
         creatorBrowsingSources = renderConfig.creatorBrowsingSources,
         onAction = { action ->
@@ -484,8 +487,9 @@ internal fun ViewerRoute(
         videoQuality = renderConfig.videoQuality,
         likedPostIds = renderConfig.likedPostIds,
         onIncludeRelatedPosts = {
-            val incoming = relatedState.availablePages.flatMap { it.posts }
-            viewerOwner.updateSession { current -> current.copy(posts = mergeViewerPosts(current.posts, incoming)) }
+            relatedState.requestOrNull?.seed?.id?.let { seedId ->
+                viewerOwner.updateSession { current -> current.withRelatedPosts(seedId, relatedPosts) }
+            }
         },
         onDismissRelatedPosts = { relatedSource?.let(screenCallbacks.onDismissRelatedPosts) },
         onRetryRelatedPosts = { relatedSource?.let(screenCallbacks.onRetryRelatedPosts) },

@@ -68,6 +68,8 @@ class ViewerSwipeAnimationTest {
                                 com.theoriacodex.app.related.RelatedPostsRequest(first, 0, 1), posts.drop(1))
                                 else com.theoriacodex.app.related.RelatedPostsUiState.Idle,
                             if (related) posts.drop(1) else emptyList(),
+                            if (related) com.theoriacodex.app.viewer.state.ViewerRelatedNavigation(first.id, posts.drop(1).map { it.id }) else null,
+                            if (related) posts.drop(1).mapTo(mutableSetOf()) { it.id } else emptySet(),
                         )), creatorBrowsingSources = emptySet(),
                         invertMultiImageScrollDirection = inverted,
                         onAction = { state.value = reduceViewerState(state.value, it).state },

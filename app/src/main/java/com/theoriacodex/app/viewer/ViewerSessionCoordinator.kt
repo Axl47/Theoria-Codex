@@ -23,6 +23,8 @@ internal data class ViewerSession(
     // Captured applied query for contextual save ranking; never inferred from another live route.
     val saveQuery: com.theoriacodex.domain.model.Query? = null,
     val relatedBinding: ViewerRelatedBinding? = null,
+    val relatedNavigation: com.theoriacodex.app.viewer.state.ViewerRelatedNavigation? = null,
+    val relatedPostIds: Set<com.theoriacodex.domain.model.PostId> = emptySet(),
 )
 
 private val LAZY_MEDIA_RESOLUTION_SOURCES = setOf(

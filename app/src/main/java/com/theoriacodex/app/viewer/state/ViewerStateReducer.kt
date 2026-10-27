@@ -108,7 +108,10 @@ internal fun reduceViewerState(state: ViewerUiState, action: ViewerAction): View
                     emptyMap()
                 },
             ).let { replacement ->
-                replacement.copy(controls = replacement.controls.copy(playbackMode = state.controls.playbackMode))
+                replacement.copy(
+                    controls = replacement.controls.copy(playbackMode = state.controls.playbackMode),
+                    related = ViewerRelatedUiState(navigation = action.relatedNavigation, extraPostIds = action.relatedPostIds),
+                )
             },
         )
     }
@@ -332,7 +335,9 @@ private fun ViewerUiState.completePlayback(action: ViewerAction.PlaybackComplete
     if (controls.playbackMode == ViewerPlaybackMode.NEXT) {
         val page = currentPage ?: return ViewerReduction(this)
         if (page.selectedMediaIndex < page.media.lastIndex) return selectMedia(page.selectedMediaIndex + 1)
-        if (currentPageIndex < pages.lastIndex) return selectPage(currentPageIndex + 1).state.selectMedia(0)
+        val navigation = com.theoriacodex.app.viewer.viewerPostNavigation(this)
+        val nextIndex = navigation.sourceIndices.getOrNull(navigation.currentIndex + 1)
+        if (nextIndex != null) return selectPage(nextIndex).state.selectMedia(0)
     }
     return ViewerReduction(copy(controls = controls.copy(
         playback = controls.playback.copy(playing = false, completed = true),

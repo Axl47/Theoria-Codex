@@ -12,6 +12,8 @@ internal sealed interface ViewerAction {
         val initialPageIndex: Int = 0,
         val resolutionRequiredPostIds: Set<PostId> = emptySet(),
         val initialMediaIndices: Map<PostId, Int> = emptyMap(),
+        val relatedNavigation: ViewerRelatedNavigation? = null,
+        val relatedPostIds: Set<PostId> = emptySet(),
     ) : ViewerAction
 
     data class SelectPage(val pageIndex: Int) : ViewerAction

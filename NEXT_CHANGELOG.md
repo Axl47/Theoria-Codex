@@ -106,6 +106,7 @@
 - Remove repeated type labels from tag names in the post hold menu.
 
 ## Fixes
+- Keep fullscreen recommendations out of the bottom strip and preserve the original feed order, returning to its next post after the last recommendation.
 - Apply the app’s dark sheet theme to Followed Authors, matching Saved Searches.
 - Look beyond already-visible Pixiv recommendations before reporting “No new results”.
 - Reduce timing-related video playback failures.
