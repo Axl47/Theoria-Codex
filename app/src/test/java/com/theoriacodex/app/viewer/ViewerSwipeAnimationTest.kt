@@ -3,6 +3,7 @@ package com.theoriacodex.app.viewer
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -37,7 +38,11 @@ class ViewerSwipeAnimationTest {
 
     @Test fun `thumbnail selection slides the content before committing selection`() = checkSlide(gallery = false, thumbnail = true)
 
-    private fun checkSlide(gallery: Boolean, opening: Boolean = false, thumbnail: Boolean = false) {
+    @Test fun `post follows a held drag before release`() = checkSlide(gallery = false, heldDrag = true)
+    @Test fun `gallery follows a held drag before release`() = checkSlide(gallery = true, heldDrag = true)
+    @Test fun `short post drag returns to the current page`() = checkSlide(gallery = false, heldDrag = true, cancelled = true)
+
+    private fun checkSlide(gallery: Boolean, opening: Boolean = false, thumbnail: Boolean = false, heldDrag: Boolean = false, cancelled: Boolean = false) {
         val image = ImageRef(url = null, localPath = "/missing/swipe.jpg", mime = "image/jpeg")
         val first = Post(
             id = PostId(SourceKey.GELBOORU, "first"), preview = image, full = image,
@@ -67,7 +72,20 @@ class ViewerSwipeAnimationTest {
         compose.mainClock.autoAdvance = false
         val actions = compose.onNodeWithContentDescription("Media actions")
         val width = actions.fetchSemanticsNode().size.width
-        if (thumbnail) compose.onNodeWithContentDescription("Open post second").performClick()
+        if (heldDrag) {
+            actions.performTouchInput {
+                down(Offset(width * 0.8f, height * 0.5f))
+                moveTo(Offset(width * if (cancelled) 0.72f else 0.55f, height * 0.5f))
+                moveTo(Offset(width * if (cancelled) 0.72f else 0.55f, height * 0.5f))
+            }
+            compose.mainClock.advanceTimeBy(96)
+            compose.runOnIdle {
+                assertEquals(0, state.value.currentPageIndex)
+                assertEquals(0, state.value.currentPage?.selectedMediaIndex)
+            }
+            assertTrue("Content must move before release", actions.fetchSemanticsNode().positionInRoot.x < 0f)
+            actions.performTouchInput { up() }
+        } else if (thumbnail) compose.onNodeWithContentDescription("Open post second").performClick()
         else actions.performTouchInput { swipeLeft() }
         compose.mainClock.advanceTimeBy(96)
         compose.runOnIdle {
@@ -78,8 +96,8 @@ class ViewerSwipeAnimationTest {
         assertTrue("The outgoing page should be partway across the screen: x=$x", x < 0f && x > -width)
         compose.mainClock.advanceTimeBy(400)
         compose.runOnIdle {
-            assertEquals(if (gallery) 0 else 1, state.value.currentPageIndex)
-            assertEquals(if (gallery) 1 else 0, state.value.currentPage?.selectedMediaIndex)
+            assertEquals(if (gallery || cancelled) 0 else 1, state.value.currentPageIndex)
+            assertEquals(if (gallery && !cancelled) 1 else 0, state.value.currentPage?.selectedMediaIndex)
         }
     }
 }
