@@ -7,6 +7,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -26,6 +31,25 @@ class ViewerPostStripTest {
 
     @Test fun `compact strip centers its selected post with equal inner and edge gaps`() = checkSpacing(320.dp)
     @Test fun `wide strip spreads seven slots evenly across the viewport`() = checkSpacing(720.dp)
+
+    @Test fun `strip scrolls beyond the seven visible slots selects distant posts and requests more`() {
+        val posts = (0..39).map { testPost(sourcePostId = "strip-$it") }
+        var selected = -1
+        var loadRequests = 0
+        compose.setContent {
+            MaterialTheme {
+                ViewerPostStrip(posts, 0, { selected = it }, Modifier.width(320.dp), onLoadMore = { loadRequests++ })
+            }
+        }
+        compose.onNode(androidx.compose.ui.test.hasScrollToIndexAction()).performTouchInput { swipeLeft(durationMillis = 500) }
+        compose.onNodeWithContentDescription("Open post strip-0").assertIsNotDisplayed()
+        compose.onNode(androidx.compose.ui.test.hasScrollToIndexAction()).performScrollToIndex(36)
+        compose.onNodeWithContentDescription("Open post strip-36").performClick()
+        compose.runOnIdle {
+            assertEquals(36, selected)
+            org.junit.Assert.assertTrue(loadRequests > 0)
+        }
+    }
 
     private fun checkSpacing(width: Dp) {
         val image = ImageRef(null, "/missing/strip.jpg", "image/jpeg")

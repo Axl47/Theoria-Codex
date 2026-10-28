@@ -29,6 +29,8 @@
 
 ## Improvements
 
+- Scroll the fullscreen thumbnail strip through the full post list, loading more posts as you reach the end.
+
 - Find Invert scroll direction in the new Preferences category.
 
 - Preserve the feed card’s rounded corners and crop while expanding media into fullscreen and returning it to the grid.

@@ -20,6 +20,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
@@ -30,6 +34,8 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.theoriacodex.domain.model.Post
 
+internal const val VIEWER_PAGINATION_PREFETCH_RATIO = 0.8f
+
 internal val LocalViewerPostStripInset = staticCompositionLocalOf { 0.dp }
 
 /** Seven centered slots share equal gaps between thumbnails and at both viewport edges. */
@@ -39,9 +45,23 @@ internal fun ViewerPostStrip(
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    onLoadMore: () -> Unit = {},
+    onInteraction: () -> Unit = {},
 ) {
+    val loadMore by rememberUpdatedState(onLoadMore)
+    val interact by rememberUpdatedState(onInteraction)
     val list = rememberLazyListState(initialFirstVisibleItemIndex = selectedIndex)
     LaunchedEffect(selectedIndex) { list.animateScrollToItem(selectedIndex) }
+    LaunchedEffect(list, posts.size) {
+        snapshotFlow { list.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
+            .distinctUntilChanged().collect { lastVisible ->
+                if (lastVisible != null && lastVisible >= posts.lastIndex * VIEWER_PAGINATION_PREFETCH_RATIO) loadMore()
+            }
+    }
+    LaunchedEffect(list) {
+        snapshotFlow { list.firstVisibleItemIndex to list.firstVisibleItemScrollOffset }
+            .collect { if (list.isScrollInProgress) interact() }
+    }
     BoxWithConstraints(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))) {
         val cell = ((maxWidth - 32.dp) / 7).coerceIn(1.dp, 48.dp)
         val gap = ((maxWidth - cell * 7) / 8).coerceAtLeast(0.dp)
@@ -49,7 +69,6 @@ internal fun ViewerPostStrip(
             state = list,
             contentPadding = PaddingValues(horizontal = (maxWidth - cell) / 2, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(gap),
-            userScrollEnabled = false,
         ) {
             itemsIndexed(posts, key = { _, post -> "${post.id.source}:${post.id.sourcePostId}" }) { index, post ->
                 ViewerPostThumbnail(post, index == selectedIndex, Modifier.size(cell)) { onSelect(index) }

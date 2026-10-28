@@ -283,15 +283,18 @@ internal fun ViewerScreen(
         onAction(ViewerAction.QueuePrefetch(keys))
     }
 
+    fun loadMoreFromStrip() {
+        if (loadingMoreFromSource || !canLoadMoreFromSource || lastViewerPaginationRequestSize == navigation.originalPosts.size) return
+        lastViewerPaginationRequestSize = navigation.originalPosts.size
+        onAction(ViewerAction.LoadMore)
+    }
+
     LaunchedEffect(navigation.originalPosts.size, navigation.stripAnchorIndex, canLoadMoreFromSource, loadingMoreFromSource) {
         if (loadingMoreFromSource || !canLoadMoreFromSource) return@LaunchedEffect
         val triggerIndex = ((navigation.originalPosts.lastIndex.coerceAtLeast(0)) * VIEWER_PAGINATION_PREFETCH_RATIO)
             .toInt()
             .coerceAtLeast(0)
-        if (navigation.stripAnchorIndex >= triggerIndex && lastViewerPaginationRequestSize != navigation.originalPosts.size) {
-            lastViewerPaginationRequestSize = navigation.originalPosts.size
-            onAction(ViewerAction.LoadMore)
-        }
+        if (navigation.stripAnchorIndex >= triggerIndex) loadMoreFromStrip()
     }
 
     fun onTimelineInteractionChanged(isActive: Boolean) {
@@ -572,7 +575,8 @@ internal fun ViewerScreen(
                 .takeIf { it >= 0 } ?: navigation.stripAnchorIndex
             ViewerPostStrip(navigation.originalPosts, stripIndex, { index ->
                 pendingPostId = navigation.originalPosts[index].id
-            }, Modifier.align(Alignment.BottomCenter).testTag("viewer-post-navigation-strip"))
+            }, Modifier.align(Alignment.BottomCenter).testTag("viewer-post-navigation-strip"),
+                onLoadMore = ::loadMoreFromStrip, onInteraction = ::markInteraction)
         }
         if (chromeVisible) {
             ViewerChrome(
@@ -792,6 +796,3 @@ internal fun ViewerScreen(
     }
 
 }
-
-
-private const val VIEWER_PAGINATION_PREFETCH_RATIO = 0.8f
