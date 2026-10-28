@@ -103,6 +103,11 @@ internal fun ViewerMediaPage(
         ViewerMediaGestureLayer(key, mediaCount, isVideo || isGif || isUgoira, animated, interactions, controls,
             transform, onTransformChanged, layout, onAction, onInteraction, onToggleChrome, onNavigate,
             levelControls.takeIf { isVideo }, onSwipeProgress, onSwipeCancelled)
+        if (controls.isActive && isVideo && !layout.pictureInPicture && levelControls != null) {
+            FittedViewerMediaOverlay(viewerAspectRatio(post), Modifier.matchParentSize()) {
+                ViewerLevelFeedbackOverlay(levelControls, Modifier.align(Alignment.TopCenter).padding(top = 8.dp))
+            }
+        }
         mediaError?.let { error ->
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 ViewerMediaErrorOverlay(error) { onAction(ViewerAction.RetryMedia) }

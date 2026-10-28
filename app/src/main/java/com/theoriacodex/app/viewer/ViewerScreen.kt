@@ -657,9 +657,6 @@ internal fun ViewerScreen(
                 modifier = Modifier.align(Alignment.TopEnd).padding(top = 72.dp),
             )
         }
-        if (!inPictureInPicture && !mediaOverviewVisible) {
-            ViewerLevelFeedbackOverlay(levelControls, Modifier.align(Alignment.Center))
-        }
     }
 
     }

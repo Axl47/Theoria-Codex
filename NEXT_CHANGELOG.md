@@ -12,7 +12,7 @@
 
 - Jump between fullscreen posts with a centered seven-thumbnail strip below the seek bar, with evenly spaced thumbnails and matching screen-edge gaps.
 
-- Swipe up or down on the left or right of fullscreen videos to adjust brightness or media volume, with a centered level indicator.
+- Swipe up or down on the left or right of fullscreen videos to adjust brightness or media volume, with a compact level indicator at the top of the video.
 
 - Browse Likes, Followed, and Saved Searches together from the new Saved overview.
 - Combine selected Saved Searches into a live feed, with independent loading and Retry for each query.
@@ -28,6 +28,8 @@
 - Automatically enter picture-in-picture when leaving Viewer during video playback.
 
 ## Improvements
+
+- Show brightness and volume indicators at half their previous size, just inside the top of the video.
 
 - Find fullscreen downloads in the post’s long-press menu.
 
