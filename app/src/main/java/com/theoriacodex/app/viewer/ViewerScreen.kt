@@ -19,6 +19,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
@@ -631,8 +632,6 @@ internal fun ViewerScreen(
                         markInteraction()
                     }
                 },
-                onDownload = { onAction(ViewerAction.Download) },
-                downloadEnabled = canDownloadCurrentMedia,
                 onInfo = {
                     setActionsMenuExpanded(false)
                     setInfoSheetVisible(true)
@@ -678,6 +677,12 @@ internal fun ViewerScreen(
                         ) {
                             Text("Info", style = MaterialTheme.typography.titleMedium)
                             Row {
+                                IconButton(enabled = canDownloadCurrentMedia, onClick = {
+                                    onAction(ViewerAction.Download)
+                                    setInfoSheetVisible(false)
+                                }) {
+                                    Icon(Icons.Default.Download, contentDescription = "Save to device")
+                                }
                                 IconButton(onClick = {
                                     onAction(ViewerAction.Save)
                                     setInfoSheetVisible(false)

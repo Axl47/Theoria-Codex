@@ -29,6 +29,8 @@
 
 ## Improvements
 
+- Find fullscreen downloads in the post’s long-press menu.
+
 - Scroll the fullscreen thumbnail strip through the full post list, loading more posts as you reach the end.
 
 - Find Invert scroll direction in the new Preferences category.

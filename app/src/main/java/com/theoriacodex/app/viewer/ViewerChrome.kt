@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Collections
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
@@ -72,8 +71,6 @@ internal fun ViewerChrome(
     mediaOverviewAvailable: Boolean,
     mediaOverviewVisible: Boolean,
     onToggleMediaOverview: () -> Unit,
-    downloadEnabled: Boolean,
-    onDownload: () -> Unit,
     onInfo: () -> Unit,
     modifier: Modifier = Modifier,
     onToggleLike: (() -> Unit)? = null,
@@ -115,8 +112,6 @@ internal fun ViewerChrome(
         ViewerActionsMenu(
             expanded = actionsMenuExpanded,
             onExpandedChange = onActionsMenuExpandedChange,
-            downloadEnabled = downloadEnabled,
-            onDownload = onDownload,
             onInfo = onInfo,
             onPictureInPicture = onPictureInPicture,
         )
@@ -217,8 +212,6 @@ private fun ViewerActionsMenu(
     onPictureInPicture: (() -> Unit)?,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
-    downloadEnabled: Boolean,
-    onDownload: () -> Unit,
     onInfo: () -> Unit,
 ) {
     Box {
@@ -233,15 +226,6 @@ private fun ViewerActionsMenu(
                     onInfo()
                 },
                 leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) },
-            )
-            DropdownMenuItem(
-                text = { Text("Download") },
-                onClick = {
-                    onExpandedChange(false)
-                    onDownload()
-                },
-                enabled = downloadEnabled,
-                leadingIcon = { Icon(Icons.Default.Download, contentDescription = null) },
             )
             if (onPictureInPicture != null) {
                 DropdownMenuItem(
