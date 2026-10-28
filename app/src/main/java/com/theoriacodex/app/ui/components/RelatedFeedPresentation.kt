@@ -1,6 +1,7 @@
 package com.theoriacodex.app.ui.components
 
 import androidx.compose.runtime.Composable
+import com.theoriacodex.app.viewer.retainPostsUntilViewerCloses
 import androidx.compose.runtime.remember
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
@@ -36,9 +37,9 @@ fun rememberRelatedFeedPresentation(
     durationFilterActive: Boolean,
     pendingLikePostIds: Set<PostId> = emptySet(),
 ): RelatedFeedPresentation {
-    val retainedLikedPostIds = remember(relatedState, pendingLikePostIds) {
+    val retainedLikedPostIds = retainPostsUntilViewerCloses(remember(relatedState, pendingLikePostIds) {
         relatedState.retainedLikedPostIds + pendingLikePostIds
-    }
+    })
     val relatedPosts = relatedState.loadedPosts
     val durationMetadata = rememberDurationFilterMetadata(relatedPosts, durationStates, durationFilterActive)
     val visiblePosts = remember(

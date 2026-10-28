@@ -255,6 +255,8 @@ internal fun ViewerRoute(
     val ownerHandle = remember(viewerOwner) { ViewerRouteOwnerHandle(viewerOwner) }
     val viewerState by viewerOwner.state.collectAsStateWithLifecycle()
     val session by viewerOwner.session.collectAsStateWithLifecycle()
+    val retainedPostIds = remember(viewerState.pages) { viewerState.pages.mapTo(mutableSetOf()) { it.post.id } }
+    SideEffect { viewerReturn?.retainPosts(retainedPostIds) }
     val claimedSessionId = remember(viewerOwner) {
         dependencies.sessionRetentionOwner.session.value?.sessionId
     }

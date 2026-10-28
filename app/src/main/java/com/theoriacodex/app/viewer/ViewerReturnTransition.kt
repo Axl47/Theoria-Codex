@@ -89,6 +89,13 @@ internal fun viewerReturnCorners(outline: Outline, titleFooter: Boolean): Viewer
 
 /** Transient geometry shared by the viewer and its originating feed. */
 internal class ViewerReturnTransition {
+    var retainedPostIds by mutableStateOf<Set<PostId>>(emptySet())
+        private set
+
+    fun retainPosts(postIds: Set<PostId>) {
+        retainedPostIds = postIds
+    }
+
     private var originGridId: String? = null
     private var originShelfId: ViewerReturnShelfId? = null
     var openingBounds by mutableStateOf<Rect?>(null)
@@ -153,6 +160,7 @@ internal class ViewerReturnTransition {
     }
 
     fun clear() {
+        retainedPostIds = emptySet()
         openingCorners = ViewerReturnCorners()
         targetCorners = ViewerReturnCorners()
         mediaCorners.clear()
@@ -165,6 +173,13 @@ internal class ViewerReturnTransition {
         centered = false
         mediaBounds.clear()
     }
+}
+
+/** Hide policies resume only after ViewerRoute is disposed at the end of its exit animation. */
+@Composable
+internal fun retainPostsUntilViewerCloses(postIds: Set<PostId>): Set<PostId> {
+    val viewerPostIds = LocalViewerReturnTransition.current?.retainedPostIds.orEmpty()
+    return remember(postIds, viewerPostIds) { postIds + viewerPostIds }
 }
 
 /** Runs after the underlying destination returns to composition, including offscreen posts. */

@@ -52,6 +52,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import com.theoriacodex.app.viewer.retainPostsUntilViewerCloses
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -277,9 +278,9 @@ fun SearchScreen(
     val durationMetadata = rememberDurationFilterMetadata(displayResults, durationStates, animatedDurationFilterActive)
     val acquiredDurations = durationMetadata.knownDurationMsByPostId
     val durationReadiness = durationMetadata.readiness
-    val retainedLikedPostIds = remember(state.relatedPosts, pendingLikePostIds) {
+    val retainedLikedPostIds = retainPostsUntilViewerCloses(remember(state.relatedPosts, pendingLikePostIds) {
         state.relatedPosts.retainedLikedPostIds + pendingLikePostIds
-    }
+    })
     val visibleResults = remember(
         displayResults,
         visibilityFilters,

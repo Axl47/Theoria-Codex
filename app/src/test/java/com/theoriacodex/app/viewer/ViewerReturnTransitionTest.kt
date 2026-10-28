@@ -53,6 +53,35 @@ class ViewerReturnTransitionTest {
     @get:Rule val compose = createComposeRule()
     private val postId = PostId(SourceKey.GELBOORU, "return")
 
+    @Test fun `hide policies keep viewer posts until the return transition is released`() {
+        val transition = ViewerReturnTransition()
+        val post = com.theoriacodex.app.testing.testPost(sourcePostId = "return")
+        var visible: List<Post> = emptyList()
+        transition.openedFrom("origin")
+        transition.retainPosts(setOf(post.id))
+        compose.setContent {
+            CompositionLocalProvider(LocalViewerReturnTransition provides transition) {
+                val retained = retainPostsUntilViewerCloses(emptySet())
+                val filtered = com.theoriacodex.app.search.filterSearchResults(
+                    listOf(post), com.theoriacodex.app.search.SearchVisibilityFilters(
+                        hideLiked = true, hideSaved = true, hideWatched = true),
+                    likedPostIds = setOf(post.id), savedPostIds = setOf(post.id), watchedPostIds = setOf(post.id),
+                    retainedLikedPostIds = retained,
+                )
+                SideEffect { visible = filtered }
+            }
+        }
+        compose.runOnIdle {
+            assertEquals(listOf(post), visible)
+            transition.begin(post.id)
+        }
+        compose.runOnIdle {
+            assertEquals(listOf(post), visible)
+            transition.clear()
+        }
+        compose.runOnIdle { assertTrue(visible.isEmpty()) }
+    }
+
     @Test fun `only the originating grid and current post can supply a centered target`() {
         val transition = ViewerReturnTransition()
         val target = Rect(10f, 200f, 210f, 500f)
