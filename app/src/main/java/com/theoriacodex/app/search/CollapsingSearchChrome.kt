@@ -50,12 +50,13 @@ internal fun CollapsingSearchChrome(
 ) {
     var toolbarHeight by remember { mutableIntStateOf(0) }
     val height = with(LocalDensity.current) { toolbarHeight.toDp() }
-    val reservedHeight by animateDpAsState(if (legacy || expanded) height else 0.dp, label = "Search toolbar space")
+    // Include the toolbar gap so removing the spacer cannot snap the grid upward.
+    val reservedHeight by animateDpAsState(if (legacy || expanded) height + 6.dp else 0.dp, label = "Search toolbar space")
     val collapsed = !legacy && !expanded
     Box(modifier) {
-        Column(Modifier.fillMaxSize().padding(horizontal = horizontalPadding), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.fillMaxSize().padding(horizontal = horizontalPadding)) {
             if (reservedHeight > 0.dp) Spacer(Modifier.height(reservedHeight))
-            content()
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp), content = content)
         }
         Row(
             Modifier.fillMaxWidth().align(Alignment.TopEnd)
