@@ -27,7 +27,7 @@ Keep active ExecPlans current while working: progress, decisions, surprises, val
 ## Final Output
 
 If working by yourself, handle creating a commit for each change or fix; if working with an orchestrator/other agents, follow their instructions on commits instead.
-Use concise Conventional Commit messages that explain the change; add a body when its purpose or tradeoffs need context. Keep user-facing release notes in `NEXT_CHANGELOG.md`.
+Use concise Conventional Commit messages that explain the change; add a body when its purpose or tradeoffs need context.
 
 ## Communication
 
@@ -57,7 +57,3 @@ Keep `AGENTS.md` limited to durable product intent, safety boundaries, and accep
 
 - Builds, mocks, and host tests do not establish live provider authentication, hardware playback, PiP, or TalkBack behavior. Performance acceptance requires physical-device measurements, simultaneous-autoplay coverage, and retained complete iteration evidence. Calibration requires three complete runs of the same APK under matching conditions.
 - Use `.codex/skills/theoria-release/SKILL.md` for release preparation and publishing. Preparing a release does not authorize creating or pushing its tag; publishing requires a separate explicit instruction.
-
-## Next Changelog
-
-After completing a change, add or refine a concise bullet in root `NEXT_CHANGELOG.md` only if app users would notice its effect. Describe the benefit or corrected behavior, following `release-notes/` wording and grouping under `New`, `Improvements`, or `Fixes` as relevant; omit internal refactors, tests, and documentation-only work. Give each distinct user-visible change its own bullet on a separate line, even when one task includes multiple changes. Consolidate only entries describing the same change. The release skill curates these notes and clears published content only after successful publication.
