@@ -42,7 +42,7 @@
   <ol>
     <li>Trace launch, offline preparation, immutable Viewer state creation, and grid player reuse; identify source-level work that grows with collection size.</li>
     <li>In <code>app/src/main/java/com/theoriacodex/app/ui/routes/ViewerRouteWorkflow.kt:preparePostsForLaunch</code>, wrap only the existing collection map in <code>withContext(providerDispatcher)</code>. Check caller cancellation between posts with <code>ensureActive</code>. Keep post order, selection, offline fallback, provider resolution and error behavior unchanged.</li>
-    <li>Extend <code>app/src/test/java/com/theoriacodex/app/ui/routes/ViewerProviderWorkTest.kt</code> with 2,000-post thread-confinement and cancellation cases. Keep existing offline and playback policy tests as behavioral checks. Add one user-visible bullet in <code>NEXT_CHANGELOG.md</code>.</li>
+    <li>Extend <code>app/src/test/java/com/theoriacodex/app/ui/routes/ViewerProviderWorkTest.kt</code> with 2,000-post thread-confinement and cancellation cases. Keep existing offline and playback policy tests as behavioral checks. Add one user-visible bullet in <code>CHANGELOG.md</code>.</li>
     <li>Run one focused host validation batch, record results here, and commit for parent cherry-pick. Do not install, contact a device, alter production, create another thread, or touch viewer UI/layout/gesture/transition appearance files.</li>
   </ol>
 </section>
