@@ -38,8 +38,8 @@ class DeviceValidationWorkflowTest(unittest.TestCase):
 
     def test_acceptance_signing_directory_is_initialized_before_build(self) -> None:
         acceptance = self.workflow.split("  release-acceptance:", 1)[1]
-        self.assertIn("ANDROID_USER_HOME: ${{ runner.temp }}/theoria-android-user-home", acceptance)
-        self.assertLess(acceptance.index('mkdir -p "$ANDROID_USER_HOME"'),
+        self.assertIn('echo "ANDROID_USER_HOME=$android_user_home" >> "$GITHUB_ENV"', acceptance)
+        self.assertLess(acceptance.index('mkdir -p "$android_user_home"'),
                         acceptance.index("run: ./gradlew :app:assembleReleaseAcceptance"))
 
 
