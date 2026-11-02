@@ -54,15 +54,14 @@ internal fun SearchScrollRestorationEffect(
 internal fun SearchScrollPersistenceEffect(
     queryHash: String,
     restoration: SearchRestorationUiState,
-    animatedFilterActive: Boolean,
     projection: RelatedFeedProjection,
     gridState: LazyStaggeredGridState,
     onAction: (SearchAction) -> Unit,
 ) {
     val currentProjection by rememberUpdatedState(projection)
     val dispatch by rememberUpdatedState(onAction)
-    LaunchedEffect(queryHash, animatedFilterActive, restoration.allowsScrollPersistence) {
-        if (animatedFilterActive || !restoration.allowsScrollPersistence) return@LaunchedEffect
+    LaunchedEffect(queryHash, restoration.allowsScrollPersistence) {
+        if (!restoration.allowsScrollPersistence) return@LaunchedEffect
         snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
             .distinctUntilChanged()
             .collect { (index, offset) ->

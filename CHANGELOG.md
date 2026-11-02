@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep Search's scroll position current with the Animated filter enabled, so returning to Search does not jump to an older position.
+
 ## [1.0.0] - 2026-11-02
 
 ### Fixed

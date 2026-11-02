@@ -27,6 +27,7 @@ import com.theoriacodex.app.search.state.SearchStateReducer
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.FeedFabRestoreState
+import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SortMode
 import org.junit.Assert.assertEquals
@@ -43,6 +44,43 @@ class SearchApplyScrollTest {
 
     @Test fun `Apply resets overlapping results and repeated same-query results after acceptance`() = verifyReset(false)
     @Test fun `Apply resets animated-only results after acceptance`() = verifyReset(true)
+
+    @Test fun `animated-only scrolling updates the canonical anchor used on return`() {
+        val stills = resetPosts(false)
+        val posts = resetPosts(true).flatMapIndexed { index, animated ->
+            listOf(animated, stills[index].copy(id = animated.id.copy(sourcePostId = "still-$index")))
+        }
+        val state = mutableStateOf(SearchUiState(
+            query = SearchQueryUiState(appliedQueryHash = "query"),
+            content = SearchContentUiState(results = posts, hasExecutedSearch = true),
+            restoration = SearchRestorationUiState.Restored(false),
+        ))
+        var saved = SearchScrollState(0, 0)
+        setSearchContent(state, animatedOnly = true) { action ->
+            when (action) {
+                is SearchAction.ScrollChanged -> saved = SearchScrollState(
+                    action.firstVisibleItemIndex, action.firstVisibleItemOffsetPx,
+                )
+                is SearchAction.ScrollRestorationApplied -> state.value = SearchStateReducer.reduce(
+                    state.value, SearchStateChange.ScrollRestorationApplied(action.requestId),
+                ).state
+                else -> Unit
+            }
+        }
+        val grid = compose.onNode(
+            hasScrollToIndexAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange),
+            useUnmergedTree = true,
+        )
+        grid.performScrollToIndex(12)
+        compose.runOnIdle {
+            assertEquals(24, saved.firstVisibleItemIndex)
+            state.value = SearchStateReducer.reduce(
+                state.value, SearchStateChange.RouteEntryScrollRestorationRequested(saved),
+            ).state
+        }
+        compose.onNodeWithTag(searchCardTestTag(posts[24].id)).assertIsDisplayed()
+        compose.onNodeWithTag(searchCardTestTag(posts[0].id)).assertDoesNotExist()
+    }
 
     private fun verifyReset(animatedOnly: Boolean) {
         val posts = resetPosts(animatedOnly)

@@ -138,7 +138,7 @@ class SearchScrollRestorationTest {
                 }
             }
             SearchScrollRestorationEffect(current, projection, grid, dispatch)
-            SearchScrollPersistenceEffect("query", current.restoration, false, projection, grid, dispatch)
+            SearchScrollPersistenceEffect("query", current.restoration, projection, grid, dispatch)
         }
     }
 }

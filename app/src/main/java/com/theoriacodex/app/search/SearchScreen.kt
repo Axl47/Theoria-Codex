@@ -352,7 +352,7 @@ fun SearchScreen(
         state, feedProjection, gridState, onAction,
     )
     SearchScrollPersistenceEffect(
-        queryHash, state.restoration, animatedFilterActive, feedProjection, gridState, onAction,
+        queryHash, state.restoration, feedProjection, gridState, onAction,
     )
 
     val pageDemand = rememberFeedPageDemand(
