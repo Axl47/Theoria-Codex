@@ -1,6 +1,8 @@
 package com.theoriacodex.app.ui.components
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -28,7 +30,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -38,8 +39,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -86,7 +85,7 @@ internal fun rememberFeedScrollSignal(): FeedScrollSignal {
 
 /**
  * The feeds' filter button. It names up to [MAX_NAMED_FILTERS] active filters; beyond that, and
- * while the feed scrolls, it shows their number at the width it already has so it does not jump.
+ * while the feed scrolls, it animates down to just their number so it covers less of the feed.
  * [onClear] clears every filter and returns how to restore them, which the button offers briefly.
  */
 @Composable
@@ -125,18 +124,20 @@ internal fun FeedFilterFab(
             stateDescription = if (active) "Filters active" else "No active filters"
         },
     ) {
-        if (active) {
-            ActiveFilterContent(labels, contentDescription, scrollSignal?.scrolling == true) {
-                undo = onClear()
-            }
-        } else {
-            Row(
-                modifier = Modifier.heightIn(min = 48.dp).padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Default.FilterList, contentDescription)
-                Text(if (pendingUndo != null) "Undo" else "Filter", style = MaterialTheme.typography.labelLarge)
+        Box(Modifier.animateContentSize()) {
+            if (active) {
+                ActiveFilterContent(labels, contentDescription, scrollSignal?.scrolling == true) {
+                    undo = onClear()
+                }
+            } else {
+                Row(
+                    modifier = Modifier.heightIn(min = 48.dp).padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Default.FilterList, contentDescription)
+                    Text(if (pendingUndo != null) "Undo" else "Filter", style = MaterialTheme.typography.labelLarge)
+                }
             }
         }
     }
@@ -150,13 +151,8 @@ private fun ActiveFilterContent(
     onClear: () -> Unit,
 ) {
     val compact = scrolling || labels.size > MAX_NAMED_FILTERS
-    var namedWidth by remember { mutableIntStateOf(0) }
-    val minWidth = with(LocalDensity.current) { namedWidth.toDp() }
     Row(
-        modifier = Modifier
-            .heightIn(min = 48.dp)
-            .then(if (compact) Modifier.widthIn(min = minWidth) else Modifier.onSizeChanged { namedWidth = it.width })
-            .padding(start = 16.dp, end = 4.dp),
+        modifier = Modifier.heightIn(min = 48.dp).padding(start = 16.dp, end = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -166,8 +162,7 @@ private fun ActiveFilterContent(
             style = MaterialTheme.typography.labelLarge,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            textAlign = if (compact) androidx.compose.ui.text.style.TextAlign.Center else null,
-            modifier = if (compact) Modifier.weight(1f, fill = false) else Modifier.widthIn(max = 200.dp),
+            modifier = Modifier.widthIn(max = 200.dp),
         )
         IconButton(onClick = onClear, modifier = Modifier.size(40.dp)) {
             Icon(Icons.Default.Close, "Clear filters", Modifier.size(18.dp))
