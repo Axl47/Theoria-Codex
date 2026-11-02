@@ -72,6 +72,7 @@ import com.theoriacodex.app.ui.components.ListReorderHandle
 import com.theoriacodex.app.ui.components.FeedErrorTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedLoadingState
+import com.theoriacodex.app.ui.components.POST_SHELF_CARD_WIDTH
 import com.theoriacodex.app.ui.components.POST_SHELF_MEDIA_ASPECT_RATIO
 import com.theoriacodex.app.ui.components.PostShelfSection
 import com.theoriacodex.app.viewer.ViewerReturnColumn
@@ -127,7 +128,7 @@ internal fun ForYouHomeScreen(
                 onSectionMenu = { sectionMenuId = it },
                 header = { ForYouHomeHeader(state, sourceMenu, { sourceMenu = it }, onAction, false, onReorder) { homeMenu = true } },
                 preview = { id, posts ->
-                    ForYouPreviewPosts(id ?: "mixed", if (id == null) MIX_CARD_WIDTH else SHELF_CARD_WIDTH, posts, likedPostIds, pixivUgoiraClient, durationStateForPost,
+                    ForYouPreviewPosts(id ?: "mixed", if (id == null) MIX_CARD_WIDTH else POST_SHELF_CARD_WIDTH, posts, likedPostIds, pixivUgoiraClient, durationStateForPost,
                         onDurationPostVisibilityChanged, onAuthoritativeDurationKnown, onToggleLike, onLongPress) { index ->
                         onOpenPreview(id, posts, index)
                     }
@@ -361,5 +362,4 @@ private fun ForYouPreviewPosts(
     }
 }
 
-private val SHELF_CARD_WIDTH = 164.dp
 private val MIX_CARD_WIDTH = 220.dp

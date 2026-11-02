@@ -50,6 +50,7 @@ import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.ui.components.PostShelfSection
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
+import com.theoriacodex.app.ui.components.POST_SHELF_CARD_WIDTH
 import com.theoriacodex.app.ui.components.POST_SHELF_MEDIA_ASPECT_RATIO
 import com.theoriacodex.app.ui.components.FeedFabRestoreRegistry
 import com.theoriacodex.app.ui.components.codexFeedFabContext
@@ -137,7 +138,7 @@ private fun SavedCodexSection(
             metadata.knownDurationMsByPostId)
     }
     SideEffect { owner.onFilterChanged(!filters.animatedDurationRange.isFullRange) }
-    val cardWidth = 164.dp
+    val cardWidth = POST_SHELF_CARD_WIDTH
     val rowHeight = cardWidth / POST_SHELF_MEDIA_ASPECT_RATIO
     val row = rememberLazyListState()
     DurationRouteEnvironmentEffect({ parentScrolling() || row.isScrollInProgress }, owner::onEnvironmentChanged)

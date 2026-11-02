@@ -1,5 +1,6 @@
 package com.theoriacodex.app.recents
 
+import com.theoriacodex.app.search.searchCardTestTag
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -118,8 +119,8 @@ class SavedSearchControlsTest {
         } }
         compose.onNodeWithContentDescription("Filter Recents by source").performClick()
         compose.onNodeWithText("Pixiv").performClick()
-        compose.onNodeWithText("Gelbooru post").assertDoesNotExist()
-        compose.onNodeWithText("Pixiv post").performClick()
+        compose.onNodeWithTag(searchCardTestTag(gelbooru.post.id)).assertDoesNotExist()
+        compose.onNodeWithTag(searchCardTestTag(pixiv.post.id)).performClick()
         assertEquals(listOf(pixiv) to 0, opened)
         compose.onNodeWithContentDescription("Recents actions").performClick()
         compose.onNodeWithText("Clear all Recents (all sources)").assertExists()

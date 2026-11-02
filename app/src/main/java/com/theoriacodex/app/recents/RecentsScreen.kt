@@ -1,5 +1,8 @@
 package com.theoriacodex.app.recents
 
+import androidx.compose.foundation.layout.height
+import com.theoriacodex.app.ui.components.POST_SHELF_CARD_WIDTH
+import com.theoriacodex.app.ui.components.POST_SHELF_MEDIA_ASPECT_RATIO
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
@@ -439,10 +442,14 @@ private fun RecentPostCard(
     viewedMediaNumber: Int?,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
+    mediaAspectRatio: Float? = null,
+    showTitle: Boolean = true,
 ) {
     val post = entry.post
     SearchResultCard(
         post = post,
+        mediaAspectRatio = mediaAspectRatio,
+        showTitle = showTitle,
         pixivUgoiraClient = pixivUgoiraClient,
         acquiredDurationMs = observedMediaDurationMs(post, durationStateForPost),
         showSourceBadge = true,
@@ -526,9 +533,13 @@ private fun ActivityList(
         itemsIndexed(timeline, key = { index, item -> timelineKey(index, item) }) { _, item ->
             when (item) {
                 is RecentsTimelineItem.Day -> RecentsDayHeading(item.label)
-                is RecentsTimelineItem.Posts -> LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                is RecentsTimelineItem.Posts -> LazyRow(
+                    // The same square frame as other shelves keeps every card in a row the same height.
+                    modifier = Modifier.height(POST_SHELF_CARD_WIDTH / POST_SHELF_MEDIA_ASPECT_RATIO),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
                     items(item.entries, key = { "${it.section}:${it.post.id.source.name}:${it.post.id.sourcePostId}" }) { entry ->
-                        Box(Modifier.width(TIMELINE_CARD_WIDTH)) {
+                        Box(Modifier.width(POST_SHELF_CARD_WIDTH)) {
                             RecentPostCard(
                                 entry, now, pixivUgoiraClient, likedPostIds, durationStateForPost,
                                 onDurationPostVisibilityChanged, onAuthoritativeDurationKnown, onToggleLike,
@@ -537,6 +548,8 @@ private fun ActivityList(
                                     openRecentPost(entry, watchedPosts, codexPosts, onOpenWatchedPost, onOpenCodexPost)
                                 },
                                 onLongPress = { onLongPress(entry.post, entry.section) },
+                                mediaAspectRatio = POST_SHELF_MEDIA_ASPECT_RATIO,
+                                showTitle = false,
                             )
                         }
                     }
@@ -667,8 +680,6 @@ private enum class RecentSearchFilter(val label: String) {
     SEARCH("Search"),
     FOR_YOU("For You"),
 }
-
-private val TIMELINE_CARD_WIDTH = 132.dp
 
 internal data class RecentSearchPresentation(
     val title: String,
