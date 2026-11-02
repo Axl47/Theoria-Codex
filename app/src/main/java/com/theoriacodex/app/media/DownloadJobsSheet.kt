@@ -197,16 +197,18 @@ private fun DownloadItemCard(
 private fun DownloadItemPreview(item: PostDownloadItem, localFile: suspend (PostDownloadItem) -> DownloadedPostFile?) {
     val context = LocalContext.current
     val preview = item.request.post.preview
-    val local by produceState<DownloadedPostFile?>(null, item.id, item.status) {
+    val local by produceState<Any?>(null, item.id, item.status) {
         if (preview.url == null && preview.localPath == null &&
             item.status in setOf(PostDownloadStatus.SAVED, PostDownloadStatus.ALREADY_EXISTS)) {
-            value = runCatchingPreservingCancellation { localFile(item) }.getOrNull()
+            value = runCatchingPreservingCancellation {
+                localFile(item)?.let { downloadedPostPreview(context, it) }
+            }.getOrNull()
         }
     }
     val model = remember(item.request, local, context) {
         preview.localPath ?: preview.url?.let {
             MediaRequestFactory.imageRequest(context, it, item.request.post.id.source, crossfade = false, staticAnimatedWebPFrame = true)
-        } ?: local?.uri
+        } ?: local
     }
     Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f), contentAlignment = Alignment.Center) {
         Icon(Icons.Default.Image, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)

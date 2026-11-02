@@ -3,14 +3,27 @@ package com.theoriacodex.app.media
 import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Environment
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import java.io.File
 import java.io.IOException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 internal data class DownloadedPostFile(val uri: Uri, val mime: String?)
+
+/** Restored jobs have no remote preview; decode videos from their tracked local destination. */
+internal suspend fun downloadedPostPreview(context: Context, file: DownloadedPostFile): Any? =
+    withContext(Dispatchers.IO) {
+        if (file.mime?.startsWith("video/") != true) return@withContext file.uri
+        MediaMetadataRetriever().use { retriever ->
+            retriever.setDataSource(context, file.uri)
+            retriever.getScaledFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 512, 512)
+        }
+    }
 
 /** Resolve tracked Android destinations; never persist or guess a provider's media path. */
 internal class PostDownloadFiles(private val context: Context) {

@@ -104,6 +104,8 @@
 
 ### Fixed
 
+- Restore thumbnails for downloaded videos and exported animations after reopening the app, using the saved files.
+
 - Smooth the grid’s movement when collapsing the search bar by animating the remaining toolbar gap.
 - Wait until fullscreen finishes closing before Hide liked, Hide saved, and Hide watched remove its posts from the feed.
 - Keep fullscreen recommendations out of the bottom strip and preserve the original feed order, returning to its next post after the last recommendation.
