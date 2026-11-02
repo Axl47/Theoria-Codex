@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Skim the in-app changelog with collapsible, highlight-colored version titles; older versions start collapsed.
+
 - Gelbooru’s Animated filter now matches any of animated, animation, video, gif, or animated_gif.
 
 ### Added

@@ -15,6 +15,17 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -93,19 +104,36 @@ private fun ReleaseChangelogList(
         verticalArrangement = Arrangement.spacedBy(itemSpacing),
     ) {
         releases.forEachIndexed { index, release ->
-            ReleaseChangelogEntryContent(release, installedVersionCode)
+            ReleaseChangelogEntryContent(release, installedVersionCode, initiallyExpanded = index == 0)
             if (index != releases.lastIndex) HorizontalDivider()
         }
     }
 }
 
 @Composable
-private fun ReleaseChangelogEntryContent(release: ReleaseChangelogEntry, installedVersionCode: Int) {
+private fun ReleaseChangelogEntryContent(
+    release: ReleaseChangelogEntry,
+    installedVersionCode: Int,
+    initiallyExpanded: Boolean,
+) {
+    var expanded by rememberSaveable(release.versionCode) { mutableStateOf(initiallyExpanded) }
     val titleBase = releaseDisplayTitle(release.releaseName, release.versionCode)
-    Text(
-        if (release.versionCode == installedVersionCode) "$titleBase (Current)" else titleBase,
-        style = MaterialTheme.typography.titleMedium,
-    )
+    Row(
+        modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp)
+            .semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" }
+            .clickable(role = Role.Button) { expanded = !expanded },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            if (release.versionCode == installedVersionCode) "$titleBase (Current)" else titleBase,
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Text(if (expanded) "−" else "+", color = MaterialTheme.colorScheme.primary)
+    }
+    if (!expanded) return
     val sections = release.changelogSections.filter { it.bullets.isNotEmpty() }
     if (sections.isNotEmpty()) {
         sections.forEach { section ->
