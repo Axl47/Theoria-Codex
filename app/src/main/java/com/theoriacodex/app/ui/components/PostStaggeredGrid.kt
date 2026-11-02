@@ -60,6 +60,7 @@ fun TwoColumnProjectedPostStaggeredGrid(
     footerMessage: String? = null,
     postContent: @Composable LazyStaggeredGridItemScope.(canonicalIndex: Int, post: Post) -> Unit,
     shelfContent: @Composable LazyStaggeredGridItemScope.(RelatedFeedEntry.ShelfEntry) -> Unit,
+    footerContent: (@Composable () -> Unit)? = null,
 ) {
     val postIds = remember(projection) { projection.entries.map { (it as? RelatedFeedEntry.PostEntry)?.post?.id } }
     val shelfIds = remember(projection) {
@@ -92,6 +93,9 @@ fun TwoColumnProjectedPostStaggeredGrid(
         }
         if (showPagingTile || footerMessage != null) {
             item(span = StaggeredGridItemSpan.FullLine) { FeedPagingTile(message = footerMessage) }
+        }
+        if (footerContent != null) {
+            item(key = "feed-footer", span = StaggeredGridItemSpan.FullLine) { footerContent() }
         }
     }
 }

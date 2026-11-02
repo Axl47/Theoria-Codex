@@ -25,6 +25,8 @@
 
 ### Changed
 
+- Show Search’s “Continue loading” control at the bottom of the results grid.
+
 - Move the Recents source dropdown into the header, replacing the Saved searches shortcut now available in its own subcodex.
 - Use the same trash icon as For You for clearing Recents.
 

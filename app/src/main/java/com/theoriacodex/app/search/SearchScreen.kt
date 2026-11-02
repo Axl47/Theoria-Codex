@@ -661,7 +661,6 @@ SearchSourcePicker(
 
             val retrySearch = { inputFocus.clear(); onAction(SearchAction.Retry) }
             state.pageFailure?.let { SearchFailureSurface(it, retrySearch) }
-            FeedContinueLoading(pageDemand)
             if (state.retainsResultsWhileRefreshing) SearchRefreshProgress()
             when {
                 state.loading && !state.retainsResultsWhileRefreshing -> {
@@ -691,6 +690,7 @@ SearchSourcePicker(
                             ) { inputFocus.clear() }
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FeedContinueLoading(pageDemand)
                             sourceAuthErrorMessage?.let { authMessage ->
                                 ErrorBlock(
                                     title = "Source account required",
@@ -750,6 +750,11 @@ SearchSourcePicker(
                             state = gridState,
                             modifier = Modifier.weight(1f).testTag("Search results"),
                             showPagingTile = state.loadingMore,
+                            footerContent = if (pageDemand.showContinue) {
+                                { FeedContinueLoading(pageDemand) }
+                            } else {
+                                null
+                            },
                             footerMessage = if (durationReadiness.isResolving) {
                                 "Resolving durations…"
                             } else {
