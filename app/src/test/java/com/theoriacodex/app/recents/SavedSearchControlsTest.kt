@@ -39,13 +39,13 @@ class SavedSearchControlsTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
-    fun `recent search long press names a pin`() {
+    fun `recent search long press saves the named search`() {
         val recent = search(RecentSearchKind.SOURCE)
-        val pins = mutableStateOf(emptyList<SavedSearchEntry>())
+        val savedSearches = mutableStateOf(emptyList<SavedSearchEntry>())
         compose.setContent { MaterialTheme {
             TestRecents(
                 searches = listOf(recent),
-                onSave = { name, entry -> pins.value = listOf(SavedSearchEntry("pin", name, entry, 100)) },
+                onSave = { name, entry -> savedSearches.value = listOf(SavedSearchEntry("pin", name, entry, 100)) },
             )
         } }
         compose.onNodeWithText("Searches").performClick()
@@ -53,17 +53,23 @@ class SavedSearchControlsTest {
             .performSemanticsAction(SemanticsActions.OnLongClick) { it() }
         compose.onNode(hasSetTextAction()).performTextReplacement("Night recipe")
         compose.onNodeWithText("Save", substring = false).performClick()
-        assertEquals(recent, pins.value.single().search)
+        assertEquals(recent, savedSearches.value.single().search)
+        assertEquals("Night recipe", savedSearches.value.single().name)
 
     }
 
     @Test
-    fun `the visible pin button names a pin like the long press`() {
+    fun `the visible save button saves the named search like the long press`() {
         val recent = search(RecentSearchKind.SOURCE)
-        compose.setContent { MaterialTheme { TestRecents(searches = listOf(recent)) } }
+        var saved: Pair<String, RecentSearchEntry>? = null
+        compose.setContent { MaterialTheme {
+            TestRecents(searches = listOf(recent), onSave = { name, entry -> saved = name to entry })
+        } }
         compose.onNodeWithText("Searches").performClick()
         compose.onNodeWithContentDescription("Save search").performClick()
-        compose.onNode(hasSetTextAction()).assertExists()
+        compose.onNode(hasSetTextAction()).performTextReplacement("Morning recipe")
+        compose.onNodeWithText("Save", substring = false).performClick()
+        assertEquals("Morning recipe" to recent, saved)
     }
 
     @Test

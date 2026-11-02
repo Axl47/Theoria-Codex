@@ -22,7 +22,7 @@ import org.robolectric.annotation.Config
 class SavedCodexTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun `holding each Saved collection opens that collection's actions`() {
+    @Test fun `holding each library tile dispatches that Saved collection's actions`() {
         val likesId = "likes"
         val held = mutableListOf<String>()
         compose.setContent {
