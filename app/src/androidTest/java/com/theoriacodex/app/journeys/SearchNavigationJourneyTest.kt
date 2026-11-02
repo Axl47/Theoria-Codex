@@ -1,6 +1,8 @@
 package com.theoriacodex.app.journeys
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasContentDescription
@@ -191,12 +193,13 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         }
         activate(input)
         input.performTextInput(value)
-        val add = hasText("Add", substring = false) and isEnabled() and hasClickAction()
+        val add = hasAnyDescendant(hasText("Add", substring = false)) and
+            isEnabled() and hasClickAction() and !hasSetTextAction()
         compose.waitUntil(10_000) {
             input.fetchSemanticsNode().config[SemanticsProperties.EditableText].text == value &&
-                compose.onAllNodes(add).fetchSemanticsNodes().isNotEmpty()
+                compose.onAllNodes(add, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
-        activate(compose.onNode(add))
+        activate(compose.onNode(add, useUnmergedTree = true))
         try {
             compose.waitUntil(10_000) {
                 input.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.isEmpty() &&
