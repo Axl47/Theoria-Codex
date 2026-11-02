@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-02
+
 ### Changed
 
 - Start loading fullscreen swipe destinations and buffering their media during the drag, showing thumbnails and waiting until the transition settles to play.
