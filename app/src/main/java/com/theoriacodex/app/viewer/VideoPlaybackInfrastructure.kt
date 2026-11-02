@@ -16,6 +16,8 @@ import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.LoadControl
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
@@ -100,9 +102,9 @@ internal class VideoPlaybackInfrastructure(
     internal val feedPositionHandoff = FeedVideoPositionHandoff()
     private val appContext = context.applicationContext
     internal val feedPreviewPlayerPool: FeedPreviewPlayerPool by lazy {
-        FeedPreviewPlayerPool(appContext, this)
+        FeedPreviewPlayerPool(this)
     }
-    private val viewerPlayers = lazy { ViewerVideoPlayerPool(appContext, this) }
+    private val viewerPlayers = lazy { ViewerVideoPlayerPool(this) }
     internal val viewerVideoPlayerPool: ViewerVideoPlayerPool
         get() = viewerPlayers.value
     internal val hasActiveViewerPlayer: Boolean
@@ -144,8 +146,11 @@ internal class VideoPlaybackInfrastructure(
         )
     }
 
-    internal fun loadControl(profile: VideoPlaybackProfile): LoadControl {
-        return VideoLoadControlFactory.create(profile)
+    /** A supported hardware codec can still run out of resources during simultaneous autoplay. */
+    internal fun playerBuilder(profile: VideoPlaybackProfile): ExoPlayer.Builder {
+        val renderers = DefaultRenderersFactory(appContext).setEnableDecoderFallback(true)
+        return ExoPlayer.Builder(appContext, renderers)
+            .setLoadControl(VideoLoadControlFactory.create(profile))
     }
 
     internal suspend fun prefetch(

@@ -2,7 +2,6 @@
 
 package com.theoriacodex.app.viewer
 
-import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -16,12 +15,10 @@ internal const val VIEWER_PLAYER_IDLE_TIMEOUT_MS = 30_000L
 
 /** Return stops media immediately; decoder/thread release never belongs to a page's disposal. */
 internal class ViewerVideoPlayerPool(
-    context: Context,
     private val infrastructure: VideoPlaybackInfrastructure,
     private val handler: Handler = Handler(Looper.getMainLooper()),
     clock: () -> Long = SystemClock::elapsedRealtime,
 ) {
-    private val appContext = context.applicationContext
     private val slots = ReusableVideoSlotPool<ExoPlayer, VideoPlaybackIdentity>(
         maxIdleResources = 1,
         idleTimeoutMs = VIEWER_PLAYER_IDLE_TIMEOUT_MS,
@@ -72,8 +69,7 @@ internal class ViewerVideoPlayerPool(
     fun activePlayerCount(): Int = slots.activeResourceCount
 
     private fun createPlayer(): ExoPlayer = traceMediaSection(MediaTraceSections.VIEWER_PLAYER_CREATE) {
-        ExoPlayer.Builder(appContext)
-            .setLoadControl(infrastructure.loadControl(VideoPlaybackProfile.VIEWER))
+        infrastructure.playerBuilder(VideoPlaybackProfile.VIEWER)
             .build()
             .apply {
                 addAnalyticsListener(MediaLoadTraceListener)
