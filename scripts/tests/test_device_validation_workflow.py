@@ -36,6 +36,12 @@ class DeviceValidationWorkflowTest(unittest.TestCase):
         self.assertEqual(2, self.workflow.count("ram-size: 4096M"))
         self.assertEqual(2, self.workflow.count("run: bash scripts/prepare_ci_android_sdk.sh"))
 
+    def test_acceptance_signing_directory_is_initialized_before_build(self) -> None:
+        acceptance = self.workflow.split("  release-acceptance:", 1)[1]
+        self.assertIn("ANDROID_USER_HOME: ${{ runner.temp }}/theoria-android-user-home", acceptance)
+        self.assertLess(acceptance.index('mkdir -p "$ANDROID_USER_HOME"'),
+                        acceptance.index("run: ./gradlew :app:assembleReleaseAcceptance"))
+
 
 if __name__ == "__main__":
     unittest.main()

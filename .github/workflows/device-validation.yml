@@ -143,6 +143,9 @@ jobs:
     if: inputs.release-acceptance || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 75
+    env:
+      # Keep APK signing and preflight on one directory across SDK setup.
+      ANDROID_USER_HOME: ${{ runner.temp }}/theoria-android-user-home
 
     strategy:
       fail-fast: false
@@ -173,6 +176,9 @@ jobs:
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+
+      - name: Initialize Android signing directory
+        run: mkdir -p "$ANDROID_USER_HOME"
 
       - name: Build minified release acceptance
         run: ./gradlew :app:assembleReleaseAcceptance --stacktrace
