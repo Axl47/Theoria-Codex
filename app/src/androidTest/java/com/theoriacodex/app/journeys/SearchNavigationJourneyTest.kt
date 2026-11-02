@@ -170,7 +170,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         assertTrue(io { container.data.queryRepository.observeAppliedQuery("unified").first() == null })
         container.registry.requests.clear()
         tab("Recents")
-        activate(compose.onNodeWithText("FYP"))
+        activate(compose.onNodeWithText("Searches"))
         activate(compose.onNodeWithTag("Recent search:for_you:journey"))
         compose.waitUntil(10_000) { container.registry.requests.count { it.pageToken == null } >= 2 }
         val replay = container.registry.requests.filter { it.pageToken == null }

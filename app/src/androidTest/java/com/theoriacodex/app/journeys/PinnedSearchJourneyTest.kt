@@ -43,8 +43,8 @@ class PinnedSearchJourneyTest : AppJourneyFixture() {
             io { container.data.savedSearches.observeSavedSearches().first().singleOrNull()?.name == "My landscapes" }
         }
         val pinned = io { container.data.savedSearches.observeSavedSearches().first().single() }
-        compose.onNodeWithText("All", substring = false).performClick()
-        compose.onNodeWithContentDescription("Clear").performClick()
+        compose.onNodeWithContentDescription("Recents actions").performClick()
+        compose.onNodeWithText("Clear all Recents").performClick()
         compose.waitUntil(10_000) { io { container.data.recentsRepository.observeSearches().first().isEmpty() } }
         coldGraphRelaunch()
         assertEquals(listOf(pinned), io { container.data.savedSearches.observeSavedSearches().first() })

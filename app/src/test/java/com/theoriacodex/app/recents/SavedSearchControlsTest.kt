@@ -9,6 +9,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
@@ -56,6 +57,15 @@ class SavedSearchControlsTest {
     }
 
     @Test
+    fun `the visible pin button names a pin like the long press`() {
+        val recent = search(RecentSearchKind.SOURCE)
+        compose.setContent { MaterialTheme { TestRecents(searches = listOf(recent)) } }
+        compose.onNodeWithText("Searches").performClick()
+        compose.onNodeWithContentDescription("Pin search").performClick()
+        compose.onNode(hasSetTextAction()).assertExists()
+    }
+
+    @Test
     fun `source dropdown filters searches and FYP without changing multi-source replay`() {
         val pixiv = search(RecentSearchKind.SOURCE)
         val gelbooru = pixiv.copy(
@@ -75,8 +85,14 @@ class SavedSearchControlsTest {
         compose.onNodeWithTag("Recent search:${gelbooru.queryHash}").assertDoesNotExist()
         compose.onNodeWithTag("Recent search:${multi.queryHash}").performClick()
         assertEquals(multi, opened)
-        compose.onNodeWithText("FYP", substring = false).performClick()
         compose.onNodeWithTag("Recent search:${fyp.queryHash}").assertExists()
+        compose.onNodeWithText("Search", substring = false).performClick()
+        compose.onNodeWithTag("Recent search:${fyp.queryHash}").assertDoesNotExist()
+        compose.onNodeWithText("For You", substring = false).performClick()
+        compose.onNodeWithTag("Recent search:${fyp.queryHash}").assertExists()
+        compose.onNodeWithTag("Recent search:${pixiv.queryHash}").assertDoesNotExist()
+        // The first "All" is the Recents tab; the second is the Searches filter.
+        compose.onAllNodesWithText("All", substring = false)[1].performClick()
         compose.onNodeWithContentDescription("Filter Recents by source").performClick()
         compose.onNodeWithText("All sources").performClick()
         compose.onNodeWithText("Searches").performClick()
@@ -100,13 +116,13 @@ class SavedSearchControlsTest {
                 onOpenPost = { entries, index -> opened = entries to index },
             )
         } }
-        compose.onNodeWithText("All", substring = false).performClick()
         compose.onNodeWithContentDescription("Filter Recents by source").performClick()
         compose.onNodeWithText("Pixiv").performClick()
         compose.onNodeWithText("Gelbooru post").assertDoesNotExist()
         compose.onNodeWithText("Pixiv post").performClick()
         assertEquals(listOf(pixiv) to 0, opened)
-        compose.onNodeWithContentDescription("Clear section").assertExists()
+        compose.onNodeWithContentDescription("Recents actions").performClick()
+        compose.onNodeWithText("Clear all Recents (all sources)").assertExists()
     }
 
     @Composable

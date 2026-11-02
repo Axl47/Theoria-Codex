@@ -13,7 +13,7 @@ enum class RecentsClearTarget(
 ) {
     WATCHED("Watched history cleared", "watched history"),
     CODEX("Codex history cleared", "Codex history"),
-    FYP("FYP history cleared", "FYP history"),
+    FYP("For You history cleared", "For You history"),
     SEARCHES("Search history cleared", "search history"),
     ALL("All history cleared", "all history"),
 }

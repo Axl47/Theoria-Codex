@@ -13,6 +13,8 @@
 - Use one filter sheet layout across Search, For You, Codices, and creators. Search filters now apply together when the sheet closes.
 - Filter Search by more date ranges, including custom dates, on every source using each post's date.
 - Open Likes, Followed, and Searches directly from their own covers in the Codex library, with See all and actions visible on the Saved screen.
+- Reach any For You interest from jump chips under a larger Your mix shelf, with each shelf's Pin, Save to Codex, and Dismiss in its own menu, and New search and Reorder in the header menu.
+- Open Recents on a day-by-day timeline of posts and searches, with For You searches now filtered inside Searches, a visible pin button, and clear actions that name what they clear.
 
 ### Removed
 

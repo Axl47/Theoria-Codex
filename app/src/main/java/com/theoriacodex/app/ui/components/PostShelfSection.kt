@@ -1,7 +1,6 @@
 package com.theoriacodex.app.ui.components
 
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.IconButton
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -38,6 +37,7 @@ internal fun PostShelfSection(
     icon: ImageVector? = null,
     countSuffix: String? = null,
     onMore: (() -> Unit)? = null,
+    showSeeAll: Boolean = onMore != null,
     content: @Composable () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -50,7 +50,7 @@ internal fun PostShelfSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (onMore != null) {
+            if (showSeeAll) {
                 ManagedShelfHeading(title, count, icon, countSuffix, onMore)
             } else {
                 Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
@@ -78,21 +78,17 @@ private fun RowScope.ManagedShelfHeading(
     count: Int?,
     icon: ImageVector?,
     countSuffix: String?,
-    onMore: () -> Unit,
+    onMore: (() -> Unit)?,
 ) {
     icon?.let { Icon(it, null, Modifier.padding(end = 8.dp), tint = MaterialTheme.colorScheme.primary) }
     Text(title, style = MaterialTheme.typography.titleMedium)
-    if (count != null) {
-        Text(
-            listOfNotNull(count.toString(), countSuffix).joinToString(" "),
-            Modifier.padding(start = 8.dp).weight(1f),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-        )
-    } else {
-        Spacer(Modifier.weight(1f))
-    }
+    Text(
+        listOfNotNull(count?.toString(), countSuffix).joinToString(" "),
+        Modifier.padding(start = 8.dp).weight(1f),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+    )
     Text("See all", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-    IconButton(onClick = onMore) { Icon(Icons.Default.MoreVert, "Actions for $title") }
+    onMore?.let { IconButton(onClick = it) { Icon(Icons.Default.MoreVert, "Actions for $title") } }
 }

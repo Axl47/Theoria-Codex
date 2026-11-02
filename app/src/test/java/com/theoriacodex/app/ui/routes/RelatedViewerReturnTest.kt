@@ -110,7 +110,7 @@ class RelatedViewerReturnTest {
             }
             compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Recents").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithContentDescription("Recents").performClick()
-            val historyTab = if (kind == RecentSearchKind.FYP) "FYP" else "Searches"
+            val historyTab = "Searches"
             compose.waitUntil(10_000) { compose.onNodeWithText(historyTab).isDisplayed() }
             compose.onNodeWithText(historyTab).performClick()
             compose.waitUntil(10_000) { compose.onAllNodesWithTag("Recent search:return-query").fetchSemanticsNodes().isNotEmpty() }

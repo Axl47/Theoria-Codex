@@ -22,6 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -153,18 +154,13 @@ internal fun PostCreatorRows(
  */
 @Composable
 internal fun PostActionHeader(post: Post, showPostId: Boolean = false) {
-    val context = LocalContext.current
-    val location = post.preview.localPath ?: post.preview.url
-    val request = remember(context, location, post.id.source) {
-        location?.let { buildViewerImageRequest(context, it, post.id.source, staticAnimatedWebPFrame = true) }
-    }
     val pageCount = maxOf(post.mediaCount ?: 1, post.media.size)
     ActionMenuHeader(
         title = post.displayTitleOrNull()
             ?: post.authorName?.trim()?.takeIf(String::isNotBlank)
             ?: post.id.source.displayName(),
         image = { modifier ->
-            AsyncImage(request, null, modifier, contentScale = ContentScale.Crop)
+            PostThumbnail(post, modifier)
         },
         details = {
             Row(
@@ -177,6 +173,17 @@ internal fun PostActionHeader(post: Post, showPostId: Boolean = false) {
             }
         },
     )
+}
+
+/** A post's static preview image, for menus and lists rather than feed cards. */
+@Composable
+internal fun PostThumbnail(post: Post, modifier: Modifier) {
+    val context = LocalContext.current
+    val location = post.preview.localPath ?: post.preview.url
+    val request = remember(context, location, post.id.source) {
+        location?.let { buildViewerImageRequest(context, it, post.id.source, staticAnimatedWebPFrame = true) }
+    }
+    AsyncImage(request, null, modifier, contentScale = ContentScale.Crop)
 }
 
 private fun copyPostTagsWithFeedback(context: Context, post: Post) {

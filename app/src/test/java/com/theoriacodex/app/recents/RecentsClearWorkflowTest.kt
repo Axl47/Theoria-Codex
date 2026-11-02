@@ -105,7 +105,7 @@ class RecentsClearWorkflowTest {
             searches = searches.filterNot { it.kind == RecentSearchKind.FYP },
             fypSearches = fyp,
             showActionableFeedback = { message, action ->
-                assertEquals("FYP history cleared", message)
+                assertEquals("For You history cleared", message)
                 assertEquals("Undo", action)
                 assertEquals(searches.filterNot { it.kind == RecentSearchKind.FYP }, repository.observeSearches().first())
                 true
@@ -148,8 +148,8 @@ class RecentsClearWorkflowTest {
             true
         }
         assertEquals(
-            listOf("Could not clear FYP history" to "Retry", "FYP history cleared" to "Undo",
-                "Could not restore FYP history" to "Retry"), messages,
+            listOf("Could not clear For You history" to "Retry", "For You history cleared" to "Undo",
+                "Could not restore For You history" to "Retry"), messages,
         )
         assertEquals(2, clears)
         assertEquals(2, restores)

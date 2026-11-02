@@ -7,6 +7,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.theoriacodex.app.media.noMediaDurationStateForPost
@@ -30,19 +31,18 @@ class ForYouHomeScreenTest {
         val actions = mutableListOf<ForYouAction>()
         val section = emptySection()
         render(ForYouHomeState(visible = true, sections = listOf(section)), actions)
-        compose.onNodeWithText("forest").performClick()
+        // The first "forest" is the jump chip; the second is the shelf heading.
+        compose.onAllNodesWithText("forest")[1].performClick()
         compose.onNodeWithText("Pin").assertDoesNotExist()
-        compose.onNodeWithText("Save to Codex").assertDoesNotExist()
-        compose.onNodeWithText("Dismiss").assertDoesNotExist()
-        compose.onNodeWithContentDescription("Show actions for forest").performClick()
-        compose.onNodeWithText("Pin").assertIsEnabled()
-        compose.onNodeWithContentDescription("Hide actions for forest").performClick()
-        compose.onNodeWithText("Pin").assertDoesNotExist()
-        compose.onNodeWithContentDescription("Show actions for forest").performClick()
-        compose.onNodeWithText("Pin").performClick()
-        compose.onNodeWithText("Dismiss").performClick()
-        compose.onNodeWithText("Save to Codex").performClick()
-        compose.onNodeWithText("New search").performScrollTo().performClick()
+        fun inMenu(label: String) {
+            compose.onNodeWithContentDescription("Actions for forest").performClick()
+            compose.onNodeWithText(label).performClick()
+        }
+        inMenu("Pin")
+        inMenu("Dismiss")
+        inMenu("Save to Codex")
+        compose.onNodeWithContentDescription("For You actions").performClick()
+        compose.onNodeWithText("New search").performClick()
         compose.onNodeWithContentDescription("Refresh For You").performClick()
         compose.runOnIdle {
             assertEquals(listOf(ForYouAction.OpenSection(section.id), ForYouAction.PinSection(section.id),
@@ -54,7 +54,7 @@ class ForYouHomeScreenTest {
         val section = emptySection().copy(savedSearchId = "pin")
         val actions = mutableListOf<ForYouAction>()
         render(ForYouHomeState(visible = true, sections = listOf(section)), actions)
-        compose.onNodeWithContentDescription("Show actions for forest").performClick()
+        compose.onNodeWithContentDescription("Actions for forest").performClick()
         compose.onNodeWithText("Dismiss").assertIsEnabled()
         compose.onNodeWithText("Unpin").performClick()
         compose.runOnIdle { assertEquals(listOf(ForYouAction.PinSection(section.id)), actions) }
@@ -65,11 +65,22 @@ class ForYouHomeScreenTest {
         val first = emptySection()
         val second = first.copy(id = "PIXIV:city", title = "city")
         render(ForYouHomeState(visible = true, sections = listOf(first, second)), actions)
-        compose.onNodeWithContentDescription("Reorder searches").performClick()
+        compose.onNodeWithContentDescription("For You actions").performClick()
+        compose.onNodeWithText("Reorder").performClick()
         compose.onNodeWithContentDescription("Reorder forest").performClick()
         compose.onNodeWithText("Move down").performClick()
         compose.onNodeWithContentDescription("Done reordering searches").performClick()
         compose.runOnIdle { assertEquals(listOf(ForYouAction.ReorderSections(listOf(second.id, first.id))), actions) }
+    }
+
+    @Test fun `interest chips jump to their shelf and mark pinned and explore shelves`() {
+        val first = emptySection()
+        val second = first.copy(id = "PIXIV:city", title = "city", discovery = true)
+        render(ForYouHomeState(visible = true, sections = listOf(first, second)), mutableListOf())
+        compose.onNodeWithText("Your mix").assertExists()
+        compose.onNodeWithText("Explore").assertExists()
+        compose.onAllNodesWithText("city")[0].performClick()
+        compose.onNodeWithContentDescription("Actions for city").assertExists()
     }
 
     @Test fun `source selector sits on the header center line without a redundant row source label`() {
