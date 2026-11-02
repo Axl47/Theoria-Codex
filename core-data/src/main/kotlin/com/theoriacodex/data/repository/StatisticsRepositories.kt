@@ -1,6 +1,9 @@
 package com.theoriacodex.data.repository
 
 import androidx.datastore.core.DataStore
+import androidx.datastore.core.DataMigration
+import java.time.Clock
+import java.time.LocalDate
 import androidx.datastore.core.DataStoreFactory
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import com.google.gson.Gson
@@ -34,7 +37,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 const val DATASTORE_STATISTICS_FILE_NAME = "statistics_store_v1.json"
-internal const val STATISTICS_DATASTORE_SCHEMA_VERSION = 1
+internal const val STATISTICS_DATASTORE_SCHEMA_VERSION = 2
 
 internal data class StatisticsTagCountRecord(
     @field:SerializedName("source") val source: String = "",
@@ -43,6 +46,7 @@ internal data class StatisticsTagCountRecord(
 )
 
 internal data class StatisticsStoreRecord(
+    @field:SerializedName("history") val history: Map<String, DailyActivity> = emptyMap(),
     @field:SerializedName("codexStatistics") val codexStatistics: Map<String, CodexStatistics> = emptyMap(),
     @field:SerializedName("appOpenCount") val appOpenCount: Long = 0L,
     @field:SerializedName("totalForegroundMs") val totalForegroundMs: Long = 0L,
@@ -73,6 +77,7 @@ internal data class StatisticsStoreRecord(
         }
         return StatisticsPolicies.normalize(
             LifetimeStatistics(
+                history = history.mapKeys { LocalDate.parse(it.key) },
                 codexStatistics = codexStatistics,
                 appOpenCount = appOpenCount,
                 totalForegroundMs = totalForegroundMs,
@@ -130,6 +135,7 @@ internal data class StatisticsStoreRecord(
         fun fromDomain(statistics: LifetimeStatistics): StatisticsStoreRecord {
             val normalized = StatisticsPolicies.normalize(statistics)
             return StatisticsStoreRecord(
+                history = normalized.history.entries.associate { it.key.toString() to it.value },
                 codexStatistics = normalized.codexStatistics,
                 appOpenCount = normalized.appOpenCount,
                 totalForegroundMs = normalized.totalForegroundMs,
@@ -230,12 +236,16 @@ internal object StatisticsPolicies {
         )))
     }
 
-    fun recordAppOpen(current: LifetimeStatistics): LifetimeStatistics {
-        return current.copy(appOpenCount = current.appOpenCount.saturatingAdd(1L))
+    fun recordAppOpen(current: LifetimeStatistics, date: LocalDate = LocalDate.now()): LifetimeStatistics {
+        return current.copy(
+            appOpenCount = current.appOpenCount.saturatingAdd(1L),
+            history = current.history.updateDay(date) { it.copy(appOpenCount = it.appOpenCount.saturatingAdd(1L)) },
+        )
     }
 
-    fun addUsage(current: LifetimeStatistics, delta: UsageDurationDelta): LifetimeStatistics {
+    fun addUsage(current: LifetimeStatistics, delta: UsageDurationDelta, date: LocalDate = LocalDate.now()): LifetimeStatistics {
         return current.copy(
+            history = current.history.withDailyUsage(delta.dailyUsage.ifEmpty { listOf(DailyUsageDuration(date, delta)) }),
             totalForegroundMs = current.totalForegroundMs.saturatingAdd(delta.totalMs),
             browsingMs = current.browsingMs.saturatingAdd(delta.browsingMs),
             watchingMs = current.watchingMs.saturatingAdd(delta.watchingMs),
@@ -247,6 +257,7 @@ internal object StatisticsPolicies {
         current: LifetimeStatistics,
         source: SourceKey,
         tags: Set<String>,
+        date: LocalDate = LocalDate.now(),
     ): LifetimeStatistics {
         val normalizedTags = tags.mapNotNullTo(linkedSetOf()) { tag ->
             tag.trim().takeIf(String::isNotBlank)
@@ -258,16 +269,18 @@ internal object StatisticsPolicies {
             tagCounts[key] = (tagCounts[key] ?: 0L).saturatingAdd(1L)
         }
         return current.copy(
+            history = current.history.updateDay(date) { it.copy(watchedPostCount = it.watchedPostCount.saturatingAdd(1L)) },
             watchedPostCount = current.watchedPostCount.saturatingAdd(1L),
             watchedBySource = sourceCounts,
             watchedByTag = tagCounts,
         )
     }
 
-    fun recordSearch(current: LifetimeStatistics, sources: Set<SourceKey>): LifetimeStatistics {
+    fun recordSearch(current: LifetimeStatistics, sources: Set<SourceKey>, date: LocalDate = LocalDate.now()): LifetimeStatistics {
         var sourceCounts = current.searchesBySource
         sources.forEach { source -> sourceCounts = sourceCounts.increment(source) }
         return current.copy(
+            history = current.history.updateDay(date) { it.copy(searchCount = it.searchCount.saturatingAdd(1L)) },
             searchCount = current.searchCount.saturatingAdd(1L),
             searchesBySource = sourceCounts,
         )
@@ -308,6 +321,7 @@ class DataStoreStatisticsRepository(
     baseDirectory: File,
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     gson: Gson = Gson(),
+    private val clock: Clock = Clock.systemDefaultZone(),
 ) : StatisticsRepository, AsynchronousStore {
     private val storeFile = baseDirectory.resolve(DATASTORE_STATISTICS_FILE_NAME)
     private val mutableStorageStatus = MutableStateFlow(DurableStoreStatus())
@@ -326,12 +340,18 @@ class DataStoreStatisticsRepository(
                         supported = STATISTICS_DATASTORE_SCHEMA_VERSION,
                     )
                 }
-                require(stored.schemaVersion == STATISTICS_DATASTORE_SCHEMA_VERSION) {
+                require(stored.schemaVersion in 1..STATISTICS_DATASTORE_SCHEMA_VERSION) {
                     "Unsupported statistics schema ${stored.schemaVersion}"
                 }
                 stored.validate()
             },
         ),
+        migrations = listOf(object : DataMigration<StatisticsDataStoreFile> {
+            override suspend fun shouldMigrate(currentData: StatisticsDataStoreFile) = currentData.schemaVersion == 1
+            override suspend fun migrate(currentData: StatisticsDataStoreFile) =
+                currentData.copy(schemaVersion = STATISTICS_DATASTORE_SCHEMA_VERSION)
+            override suspend fun cleanUp() = Unit
+        }),
         corruptionHandler = ReplaceFileCorruptionHandler { corruption ->
             mutableStorageStatus.update { current ->
                 current.copy(
@@ -371,18 +391,18 @@ class DataStoreStatisticsRepository(
         StatisticsPolicies.recordCodexPostOpen(it, codexId, postKey, label)
     }
 
-    override suspend fun recordAppOpen() = mutate(StatisticsPolicies::recordAppOpen)
+    override suspend fun recordAppOpen() = mutate { StatisticsPolicies.recordAppOpen(it, LocalDate.now(clock)) }
 
     override suspend fun addUsageDuration(delta: UsageDurationDelta) = mutate { current ->
-        StatisticsPolicies.addUsage(current, delta)
+        StatisticsPolicies.addUsage(current, delta, LocalDate.now(clock))
     }
 
     override suspend fun recordWatchedPost(source: SourceKey, tags: Set<String>) = mutate { current ->
-        StatisticsPolicies.recordWatched(current, source, tags)
+        StatisticsPolicies.recordWatched(current, source, tags, LocalDate.now(clock))
     }
 
     override suspend fun recordSearch(sources: Set<SourceKey>) = mutate { current ->
-        StatisticsPolicies.recordSearch(current, sources)
+        StatisticsPolicies.recordSearch(current, sources, LocalDate.now(clock))
     }
 
     override suspend fun recordForYouSearch() = mutate(StatisticsPolicies::recordForYouSearch)
@@ -402,7 +422,8 @@ class DataStoreStatisticsRepository(
 
     private suspend fun mutate(transform: (LifetimeStatistics) -> LifetimeStatistics) {
         dataStore.updateDataInBackground { stored ->
-            StatisticsDataStoreFile.fromDomain(transform(stored.toDomain()))
+            val next = transform(stored.toDomain())
+            StatisticsDataStoreFile.fromDomain(next.copy(history = next.history.retainedHistory(LocalDate.now(clock))))
         }
     }
 

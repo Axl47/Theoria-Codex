@@ -22,7 +22,7 @@ class InMemoryStatisticsRepository(
         StatisticsPolicies.recordCodexPostOpen(it, codexId, postKey, label)
     }
 
-    override suspend fun recordAppOpen() = mutate(StatisticsPolicies::recordAppOpen)
+    override suspend fun recordAppOpen() = mutate { StatisticsPolicies.recordAppOpen(it) }
 
     override suspend fun addUsageDuration(delta: UsageDurationDelta) = mutate { current ->
         StatisticsPolicies.addUsage(current, delta)

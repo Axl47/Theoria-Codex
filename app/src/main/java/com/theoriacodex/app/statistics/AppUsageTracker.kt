@@ -1,6 +1,8 @@
 package com.theoriacodex.app.statistics
 
 import android.os.SystemClock
+import java.time.Clock
+import com.theoriacodex.data.repository.splitDailyUsage
 import com.theoriacodex.data.repository.CodexUsageTarget
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.data.repository.UsageDurationDelta
@@ -28,7 +30,9 @@ class AppUsageTracker internal constructor(
     private val scope: CoroutineScope,
     private val elapsedRealtime: () -> Long = SystemClock::elapsedRealtime,
     tickIntervalMs: Long = LIVE_USAGE_TICK_MS,
+    private val clock: Clock = Clock.systemDefaultZone(),
 ) {
+    private var intervalWallStart = clock.instant()
     private val events = Channel<UsageEvent>(capacity = Channel.UNLIMITED)
     private val mutableLiveUsage = MutableStateFlow(UsageDurationDelta())
     val liveUsage: StateFlow<UsageDurationDelta> = mutableLiveUsage.asStateFlow()
@@ -104,6 +108,7 @@ class AppUsageTracker internal constructor(
         if (state.foreground) return state
         mutableLiveUsage.value = UsageDurationDelta()
         runCatchingPreservingCancellation { repository.recordAppOpen() }
+        intervalWallStart = clock.instant()
         return state.copy(foreground = true, intervalStartedAtMs = elapsedRealtime())
     }
 
@@ -130,11 +135,16 @@ class AppUsageTracker internal constructor(
 
     private fun refreshLiveUsage(state: UsageTrackingState): UsageTrackingState {
         mutableLiveUsage.value = if (state.foreground) {
-            usageDelta(elapsedRealtime() - state.intervalStartedAtMs, state.category)
+            datedUsage(elapsedRealtime() - state.intervalStartedAtMs, state.category)
         } else {
             UsageDurationDelta()
         }
         return state
+    }
+
+    private fun datedUsage(elapsedMs: Long, category: StatisticsUsageCategory?): UsageDurationDelta {
+        val usage = usageDelta(elapsedMs, category)
+        return usage.copy(dailyUsage = splitDailyUsage(intervalWallStart, clock.zone, usage))
     }
 
     private suspend fun flushInterval(
@@ -143,7 +153,8 @@ class AppUsageTracker internal constructor(
         target: CodexUsageTarget?,
     ): Long {
         val now = elapsedRealtime()
-        val delta = usageDelta(now - startedAtMs, category)
+        val delta = datedUsage(now - startedAtMs, category)
+        intervalWallStart = clock.instant()
         if (delta.totalMs > 0L) {
             runCatchingPreservingCancellation { repository.addUsageDuration(delta) }
         }

@@ -4,6 +4,9 @@
 
 ### Changed
 
+- Keep up to 400 days of local activity history for Stats trends while preserving existing lifetime totals.
+- Keep private thumbnails for posts in Codex statistics top lists, even after cache clearing or removing a like.
+
 - Choose Codex actions from a labeled, grouped menu, with automatic tag rules moved into their own Auto-save sheet that shows source icons and reveals the tag list only while adding a tag.
 - Choose post actions from the same labeled long-press menu, led by saving, with search terms moved into their own sheet and Remove from Codex set apart at the end.
 - Search from a one-line bar that opens a full-screen editor showing every tag, grouped by type on sources like Hitomi, with Must have, Any of, and Without always on screen.

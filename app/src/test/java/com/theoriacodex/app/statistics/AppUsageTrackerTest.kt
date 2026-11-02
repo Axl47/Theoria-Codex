@@ -10,6 +10,34 @@ import org.junit.Test
 
 class AppUsageTrackerTest {
     @Test
+    fun `live midnight slices are memory only and flush exactly once including Other`() = runTest {
+        var elapsed = 0L
+        val zone = java.time.ZoneId.of("America/Puerto_Rico")
+        val date = java.time.LocalDate.now(zone)
+        val clock = java.time.Clock.fixed(date.atTime(23, 59, 59).atZone(zone).toInstant(), zone)
+        val repository = InMemoryStatisticsRepository()
+        val tracker = AppUsageTracker(repository, this, { elapsed }, tickIntervalMs = 0L, clock = clock)
+        tracker.onForeground()
+        tracker.awaitIdle()
+        elapsed = 3_000L
+        tracker.refreshLiveUsage()
+        tracker.awaitIdle()
+        val settled = repository.observeStatistics().first()
+        assertEquals(0L, settled.totalForegroundMs)
+        assertEquals(0L, settled.history.values.sumOf { it.totalForegroundMs })
+        val live = StatisticsProjection.build(settled).withLiveUsage(tracker.liveUsage.value)
+        assertEquals(listOf(1_000L, 2_000L), live.history.map { it.totalForegroundMs })
+        assertEquals(0L, live.history.sumOf { it.browsingMs + it.watchingMs + it.codexMs })
+        tracker.onBackground()
+        tracker.awaitIdle()
+        val flushed = repository.observeStatistics().first()
+        assertEquals(live.history, StatisticsProjection.build(flushed).history)
+        assertEquals(3_000L, flushed.totalForegroundMs)
+        assertEquals(0L, tracker.liveUsage.value.totalMs)
+        tracker.close()
+    }
+
+    @Test
     fun `codex timing follows collection and selected media and excludes background and unrelated routes`() = runTest {
         var time = 0L
         val repository = InMemoryStatisticsRepository()
