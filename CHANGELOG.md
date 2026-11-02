@@ -15,6 +15,7 @@
 - Keep GIF cards animating when a static sample is also available, instead of replacing the animation with a still image.
 - Let large GIFs finish loading in the Viewer on slow connections instead of restarting after 20 seconds.
 - Show a thumbnail instead of the animated GIF on collection covers, so covers load faster.
+- Keep the Viewer on the current post when a swipe is abandoned, instead of bouncing to the previous post and getting stuck on its thumbnail.
 
 ## [1.0.0] - 2026-11-02
 

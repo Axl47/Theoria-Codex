@@ -72,6 +72,31 @@ class ViewerSwipeAnimationTest {
         compose.runOnIdle { assertEquals(0, state.value.currentPageIndex) }
     }
 
+    @Test fun `short drag after a completed swipe stays on the selected post`() {
+        val first = slidePosts(gallery = false).first()
+        val posts = listOf("first", "second", "third").map { first.copy(id = PostId(SourceKey.GELBOORU, it)) }
+        val state = mutableStateOf(createViewerUiState(ViewerSessionIdentity("swipe"), posts, requiresResolution = { false }))
+        setSlideContent(state, ViewerReturnTransition(), posts.first(), posts, related = false, inverted = false)
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Media actions").performTouchInput { swipeLeft() }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(1, state.value.currentPageIndex) }
+
+        val actions = compose.onNodeWithContentDescription("Media actions")
+        val width = actions.fetchSemanticsNode().size.width
+        actions.performTouchInput {
+            down(Offset(width * 0.8f, height * 0.5f))
+            moveTo(Offset(width * 0.72f, height * 0.5f))
+            moveTo(Offset(width * 0.72f, height * 0.5f))
+            up()
+        }
+        compose.waitForIdle()
+
+        compose.runOnIdle { assertEquals(1, state.value.currentPageIndex) }
+        // Only the selected page exposes these actions, so a mismatched pager leaves no such node.
+        assertEquals(0, compose.onNodeWithContentDescription("Media actions").fetchSemanticsNode().positionInRoot.x.toInt())
+    }
+
     private fun checkSlide(gallery: Boolean, opening: Boolean = false, thumbnail: Boolean = false, heldDrag: Boolean = false, cancelled: Boolean = false, related: Boolean = false, inverted: Boolean = false) {
         val posts = slidePosts(gallery)
         val first = posts.first()
