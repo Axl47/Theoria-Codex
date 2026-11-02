@@ -520,6 +520,26 @@ private fun CodexSearchTagSelectionSheet(
         }
     }
 
+    CodexTagSelectionContent(
+        selection, tags, selectedTags, randomAmount, maxRandomAmount, onDismiss, onApply,
+        onSelectedTagsChanged = { selectedTags = it },
+        onRandomAmountChanged = { randomAmount = it },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CodexTagSelectionContent(
+    selection: CodexSourceSelection,
+    tags: List<CodexSearchTagOption>,
+    selectedTags: Set<String>,
+    randomAmount: Int,
+    maxRandomAmount: Int,
+    onDismiss: () -> Unit,
+    onApply: (List<String>) -> Unit,
+    onSelectedTagsChanged: (Set<String>) -> Unit,
+    onRandomAmountChanged: (Int) -> Unit,
+) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         dragHandle = null,
@@ -530,58 +550,9 @@ private fun CodexSearchTagSelectionSheet(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(
-                text = selection.codex.name,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center,
-            )
-            Text(
-                text = selection.source.displayName(),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            CodexTagSelectionHeader(selection)
 
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "Tag Amount: ${randomAmount.coerceAtLeast(0)}",
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                    TextButton(
-                        enabled = tags.isNotEmpty(),
-                        onClick = {
-                            selectedTags = tags
-                                .map { option -> option.tag }
-                                .shuffled()
-                                .take(randomAmount.coerceIn(0, tags.size))
-                                .toSet()
-                        },
-                    ) {
-                        Text("Randomize")
-                    }
-                }
-                Slider(
-                    value = randomAmount.coerceAtLeast(1).toFloat(),
-                    onValueChange = { value ->
-                        randomAmount = value.roundToInt().coerceIn(1, maxRandomAmount.coerceAtLeast(1))
-                    },
-                    enabled = maxRandomAmount > 1,
-                    valueRange = 1f..maxRandomAmount.coerceAtLeast(2).toFloat(),
-                    steps = if (maxRandomAmount > 1) maxRandomAmount - 2 else 0,
-                )
-            }
+            CodexRandomTagSelection(tags, randomAmount, maxRandomAmount, onSelectedTagsChanged, onRandomAmountChanged)
 
             CodexSearchApplyButton(
                 enabled = selectedTags.isNotEmpty(),
@@ -597,11 +568,7 @@ private fun CodexSearchTagSelectionSheet(
                 tags = tags,
                 selectedTags = selectedTags,
                 onToggleTag = { tag ->
-                    selectedTags = if (tag in selectedTags) {
-                        selectedTags - tag
-                    } else {
-                        selectedTags + tag
-                    }
+                    onSelectedTagsChanged(if (tag in selectedTags) selectedTags - tag else selectedTags + tag)
                 },
             )
 
@@ -613,6 +580,70 @@ private fun CodexSearchTagSelectionSheet(
             }
         }
     }
+}
+
+@Composable
+private fun CodexTagSelectionHeader(selection: CodexSourceSelection) {
+    Text(
+        text = selection.codex.name,
+        style = MaterialTheme.typography.titleMedium,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.fillMaxWidth(),
+        textAlign = TextAlign.Center,
+    )
+    Text(
+        text = selection.source.displayName(),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth(),
+    )
+
+}
+
+@Composable
+private fun CodexRandomTagSelection(
+    tags: List<CodexSearchTagOption>,
+    randomAmount: Int,
+    maxRandomAmount: Int,
+    onSelectedTagsChanged: (Set<String>) -> Unit,
+    onRandomAmountChanged: (Int) -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Tag Amount: ${randomAmount.coerceAtLeast(0)}",
+                style = MaterialTheme.typography.labelLarge,
+            )
+            TextButton(
+                enabled = tags.isNotEmpty(),
+                onClick = {
+                    onSelectedTagsChanged(tags.map { it.tag }.shuffled()
+                        .take(randomAmount.coerceIn(0, tags.size)).toSet())
+                },
+            ) {
+                Text("Randomize")
+            }
+        }
+        Slider(
+            value = randomAmount.coerceAtLeast(1).toFloat(),
+            onValueChange = { value ->
+                onRandomAmountChanged(value.roundToInt().coerceIn(1, maxRandomAmount.coerceAtLeast(1)))
+            },
+            enabled = maxRandomAmount > 1,
+            valueRange = 1f..maxRandomAmount.coerceAtLeast(2).toFloat(),
+            steps = if (maxRandomAmount > 1) maxRandomAmount - 2 else 0,
+        )
+    }
+
 }
 
 @Composable

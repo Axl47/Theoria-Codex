@@ -124,20 +124,29 @@ internal fun FeedFilterFab(
             stateDescription = if (active) "Filters active" else "No active filters"
         },
     ) {
-        Box(Modifier.animateContentSize()) {
-            if (active) {
-                ActiveFilterContent(labels, contentDescription, scrollSignal?.scrolling == true) {
-                    undo = onClear()
-                }
-            } else {
-                Row(
-                    modifier = Modifier.heightIn(min = 48.dp).padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Default.FilterList, contentDescription)
-                    Text(if (pendingUndo != null) "Undo" else "Filter", style = MaterialTheme.typography.labelLarge)
-                }
+        FeedFilterContent(labels, contentDescription, scrollSignal, pendingUndo != null) { undo = onClear() }
+    }
+}
+
+@Composable
+private fun FeedFilterContent(
+    labels: List<String>,
+    contentDescription: String,
+    scrollSignal: FeedScrollSignal?,
+    canUndo: Boolean,
+    onClear: () -> Unit,
+) {
+    Box(Modifier.animateContentSize()) {
+        if (labels.isNotEmpty()) {
+            ActiveFilterContent(labels, contentDescription, scrollSignal?.scrolling == true, onClear)
+        } else {
+            Row(
+                modifier = Modifier.heightIn(min = 48.dp).padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Default.FilterList, contentDescription)
+                Text(if (canUndo) "Undo" else "Filter", style = MaterialTheme.typography.labelLarge)
             }
         }
     }

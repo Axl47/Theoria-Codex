@@ -11,11 +11,9 @@ import androidx.compose.animation.core.tween
 import com.theoriacodex.app.viewer.LocalViewerReturnTransition
 import com.theoriacodex.app.viewer.ViewerReturnTransition
 import com.theoriacodex.app.viewer.ViewerReturnLifetime
-
 import com.theoriacodex.app.update.ReleaseChangelogEntry
 import com.theoriacodex.app.update.mergeReleaseHistory
 import com.theoriacodex.app.update.toReleaseHistoryEntry
-
 import com.theoriacodex.data.repository.followKey
 import android.content.ClipData
 import android.content.Intent
@@ -32,7 +30,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
@@ -1954,30 +1951,9 @@ internal fun TheoriaAppContent(
                 owner = settingsOwner,
                 recoveryState = sourceDependencies.accounts.recoveryState,
             ) { show ->
-                if (show) AlertDialog(
-                    onDismissRequest = { settingsOwner.onAction(SettingsAction.DismissCredentialRecovery) },
-                    confirmButton = {
-                        TextButton(
-                            onClick = { settingsOwner.onAction(SettingsAction.ResetCredentialStore) },
-                        ) {
-                            Text("Reconnect")
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(
-                            onClick = { settingsOwner.onAction(SettingsAction.DismissCredentialRecovery) },
-                        ) {
-                            Text("Not now")
-                        }
-                    },
-                    title = { Text("Reconnect source accounts") },
-                    text = {
-                        Text(
-                            "Encrypted source credentials cannot be read on this device. " +
-                                "Reconnect clears the unreadable shared credential store, then opens " +
-                                "Settings so Pixiv, Gelbooru, and rule34.xxx can be connected again."
-                        )
-                    },
+                if (show) CredentialRecoveryDialog(
+                    onDismiss = { settingsOwner.onAction(SettingsAction.DismissCredentialRecovery) },
+                    onReconnect = { settingsOwner.onAction(SettingsAction.ResetCredentialStore) },
                 )
             }
         }
