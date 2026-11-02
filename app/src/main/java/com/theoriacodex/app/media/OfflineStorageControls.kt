@@ -36,6 +36,7 @@ internal fun OfflineStorageSheet(
     onConfirmRemoval: () -> Unit,
     onDismissRemoval: () -> Unit,
     onClearDisposable: () -> Unit,
+    downloadBytes: Long,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         LazyColumn(
@@ -45,7 +46,7 @@ internal fun OfflineStorageSheet(
         ) {
             item {
                 Text("Storage", style = MaterialTheme.typography.titleLarge)
-                OfflineStorageSummary(state)
+                OfflineStorageSummary(state, downloadBytes)
                 if (state.refreshing || state.working) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 state.message?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
             }
@@ -95,10 +96,18 @@ private fun OfflineStorageBreakdown(state: OfflineStorageUiState) {
 }
 
 @Composable
-internal fun OfflineStorageSummary(state: OfflineStorageUiState) {
-    val size = Formatter.formatShortFileSize(LocalContext.current, state.offline.bytes)
-    Text("Offline: $size · ${state.offline.postCount} posts · ${state.offline.mediaCount} media files")
+internal fun OfflineStorageSummary(state: OfflineStorageUiState, downloadBytes: Long) {
+    val context = LocalContext.current
+    fun size(bytes: Long) = Formatter.formatShortFileSize(context, bytes)
+    Text(
+        "Offline ${size(state.offline.bytes)} · Cache ${size(state.disposable?.totalBytes ?: 0L)} · " +
+            "Downloads ${size(downloadBytes)}",
+    )
 }
+
+/** Offline + cache + downloads; the single figure shown on the Settings storage row. */
+internal fun OfflineStorageUiState.totalBytes(downloadBytes: Long): Long =
+    offline.bytes + (disposable?.totalBytes ?: 0L) + downloadBytes
 
 @Composable
 private fun DisposableCacheControls(state: OfflineStorageUiState, onClear: () -> Unit) {

@@ -34,6 +34,8 @@ import com.theoriacodex.app.media.PostDownloadsViewModel
 import com.theoriacodex.app.media.MediaCacheMaintenance
 import com.theoriacodex.app.media.OfflineStorageViewModel
 import com.theoriacodex.app.media.OfflineStorageSummary
+import com.theoriacodex.app.media.savedBytes
+import com.theoriacodex.app.media.totalBytes
 import com.theoriacodex.app.media.OfflineStorageSheet
 import kotlinx.coroutines.launch
 import com.theoriacodex.app.media.PostDownloadItem
@@ -106,16 +108,17 @@ internal fun rememberLibraryTransferTools(
 internal fun libraryStorageSummary(tools: LibraryTransferTools): String? {
     val owner = tools.offline ?: return null
     val state by owner.state.collectAsStateWithLifecycle()
-    return "${state.offline.postCount} offline posts · ${Formatter.formatShortFileSize(LocalContext.current, state.offline.bytes)}"
+    val batches by tools.downloads.batches.collectAsStateWithLifecycle()
+    return "${Formatter.formatShortFileSize(LocalContext.current, state.totalBytes(batches.savedBytes()))} used"
 }
 
 @Composable
 internal fun LibraryTransferSettings(tools: LibraryTransferTools) {
+    val batches by tools.downloads.batches.collectAsStateWithLifecycle()
     tools.offline?.let { owner ->
         val state by owner.state.collectAsStateWithLifecycle()
-        OfflineStorageSummary(state)
+        OfflineStorageSummary(state, batches.savedBytes())
     }
-    val batches by tools.downloads.batches.collectAsStateWithLifecycle()
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         tools.offline?.let { owner ->
             OutlinedButton(onClick = owner::open, modifier = Modifier.weight(1f)) {
@@ -141,9 +144,11 @@ internal fun LibraryTransferDialogs(tools: LibraryTransferTools, onOpenPost: sus
     var openingDownload by remember { mutableStateOf(false) }
     tools.offline?.let { owner ->
         val state by owner.state.collectAsStateWithLifecycle()
+        val downloadBatches by tools.downloads.batches.collectAsStateWithLifecycle()
         if (state.isOpen) OfflineStorageSheet(
             state, owner::dismiss, owner::retry, owner::cancel, owner::requestRemove,
             owner::requestClearOffline, owner::confirmRemoval, owner::dismissRemoval, owner::clearDisposableCache,
+            downloadBytes = downloadBatches.savedBytes(),
         )
     }
     if (tools.showDownloads) {

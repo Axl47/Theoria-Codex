@@ -48,6 +48,10 @@ internal data class PostDownloadBatch(val id: Long, val title: String, val items
     val settledCount: Int get() = items.count { !it.active }
 }
 
+/** Bytes of downloads this app saved to the device's public Downloads folder. */
+internal fun List<PostDownloadBatch>.savedBytes(): Long =
+    sumOf { batch -> batch.items.filter { it.status == PostDownloadStatus.SAVED }.sumOf(PostDownloadItem::downloadedBytes) }
+
 internal sealed interface PreparedPostDownload {
     data class Transfer(val enqueue: () -> Long?) : PreparedPostDownload
     data class Gallery(val pages: List<PostDownloadRequest>) : PreparedPostDownload
