@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Refresh storage usage when Settings opens so Storage & caching shows totals before Manage storage is opened.
+
 - Keep Search's scroll position current with the Animated filter enabled, so returning to Search does not jump to an older position.
 - Keep Search's saved scroll position aligned when local filters change which posts are visible.
 - Wait for the saved post's duration filter decision before restoring Search's scroll position.
