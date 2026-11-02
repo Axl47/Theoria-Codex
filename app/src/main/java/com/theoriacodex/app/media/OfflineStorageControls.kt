@@ -50,7 +50,8 @@ internal fun OfflineStorageSheet(
                 state.message?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
             }
             item {
-                OfflineStorageBreakdown(state, downloadBytes)
+                OfflineStorageBreakdown(state)
+                Text("Retained download history: ${Formatter.formatShortFileSize(LocalContext.current, downloadBytes)} (excluded from storage usage)")
             }
             item {
                 DisposableCacheControls(state, onClearDisposable)
@@ -77,7 +78,7 @@ internal fun OfflineStorageSheet(
 }
 
 @Composable
-private fun OfflineStorageBreakdown(state: OfflineStorageUiState, downloadBytes: Long) {
+private fun OfflineStorageBreakdown(state: OfflineStorageUiState) {
     state.disposable?.let { cache ->
         MediaStorageChart(
             mediaStorageBreakdown(
@@ -86,7 +87,7 @@ private fun OfflineStorageBreakdown(state: OfflineStorageUiState, downloadBytes:
                 videoBytes = cache.videoBytes,
                 gifBytes = cache.gifBytes,
                 animationBytes = cache.animationBytes,
-                downloadBytes = downloadBytes,
+                downloadBytes = 0L,
             ),
         )
     } ?: Text(
@@ -101,13 +102,13 @@ internal fun OfflineStorageSummary(state: OfflineStorageUiState, downloadBytes: 
     fun size(bytes: Long) = Formatter.formatShortFileSize(context, bytes)
     Text(
         "Offline ${size(state.offline.bytes)} · Cache ${size(state.disposable?.totalBytes ?: 0L)} · " +
-            "Downloads ${size(downloadBytes)}",
+            "Retained download history ${size(downloadBytes)} (excluded from storage usage)",
     )
 }
 
-/** Offline + cache + downloads; the single figure shown on the Settings storage row. */
-internal fun OfflineStorageUiState.totalBytes(downloadBytes: Long): Long =
-    offline.bytes + (disposable?.totalBytes ?: 0L) + downloadBytes
+/** Managed offline copies and cache; download history does not measure files on disk. */
+internal fun OfflineStorageUiState.totalBytes(): Long =
+    offline.bytes + (disposable?.totalBytes ?: 0L)
 
 @Composable
 private fun DisposableCacheControls(state: OfflineStorageUiState, onClear: () -> Unit) {

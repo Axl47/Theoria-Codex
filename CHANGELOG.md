@@ -4,6 +4,11 @@
 
 ## [1.0.0] - 2026-11-02
 
+### Fixed
+
+- Restore language and Full color filters when undoing Clear filters.
+- Exclude retained download history from storage usage totals and label it separately.
+
 ### Changed
 
 - Start loading fullscreen swipe destinations and buffering their media during the drag, showing thumbnails and waiting until the transition settles to play.

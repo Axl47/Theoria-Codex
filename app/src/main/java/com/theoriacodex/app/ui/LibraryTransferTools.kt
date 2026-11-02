@@ -108,8 +108,7 @@ internal fun rememberLibraryTransferTools(
 internal fun libraryStorageSummary(tools: LibraryTransferTools): String? {
     val owner = tools.offline ?: return null
     val state by owner.state.collectAsStateWithLifecycle()
-    val batches by tools.downloads.batches.collectAsStateWithLifecycle()
-    return "${Formatter.formatShortFileSize(LocalContext.current, state.totalBytes(batches.savedBytes()))} used"
+    return "${Formatter.formatShortFileSize(LocalContext.current, state.totalBytes())} used"
 }
 
 @Composable

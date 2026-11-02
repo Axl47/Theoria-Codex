@@ -48,7 +48,7 @@ internal data class PostDownloadBatch(val id: Long, val title: String, val items
     val settledCount: Int get() = items.count { !it.active }
 }
 
-/** Bytes of downloads this app saved to the device's public Downloads folder. */
+/** Completed bytes in retained job history; not a measurement of files on disk. */
 internal fun List<PostDownloadBatch>.savedBytes(): Long =
     sumOf { batch -> batch.items.filter { it.status == PostDownloadStatus.SAVED }.sumOf(PostDownloadItem::downloadedBytes) }
 

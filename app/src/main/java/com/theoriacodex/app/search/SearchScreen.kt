@@ -394,12 +394,14 @@ fun SearchScreen(
     }
     val clearFocusInteraction = remember { MutableInteractionSource() }
 
+    val currentServerFilters by androidx.compose.runtime.rememberUpdatedState(serverFilters)
+
     fun applyServerFilters(filters: SearchServerFilters) {
         onAction(SearchAction.SelectSort(filters.sort))
         onAction(SearchAction.SetDateRange(filters.dateRange))
         // These two rewrite the draft's nhentai terms, so only a real change may dispatch them.
-        if (filters.fullColor != serverFilters.fullColor) onAction(SearchAction.SetNhentaiFullColor(filters.fullColor))
-        if (filters.language != serverFilters.language) onAction(SearchAction.SetNhentaiLanguage(filters.language))
+        if (filters.fullColor != currentServerFilters.fullColor) onAction(SearchAction.SetNhentaiFullColor(filters.fullColor))
+        if (filters.language != currentServerFilters.language) onAction(SearchAction.SetNhentaiLanguage(filters.language))
     }
 
     fun closeComposer() {
