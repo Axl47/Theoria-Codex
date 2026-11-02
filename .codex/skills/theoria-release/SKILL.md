@@ -18,6 +18,18 @@ Treat these files and identifiers as one release unit:
 
 Never use a low sequential Android code. Existing releases and the updater compare against the high SemVer-derived range. Never move, delete, reuse, or force-push a release tag.
 
+## Versioning Policy
+
+Starting with 1.0.0, choose the version based on the most significant user-facing change in the release:
+
+- **Major:** A fundamental product change or deliberate breaking change to a supported user-facing contract that meaningfully changes what users should expect.
+- **Minor:** New capabilities or meaningful expansions and redesigns of existing flows.
+- **Patch:** Fixes, performance and reliability improvements, and small refinements that do not substantially change what the app can do.
+
+Judge by user impact, not implementation size: an internal rewrite or data-schema migration can be a patch when behavior remains the same and existing data carries forward. A major release does not permit losing saved data or credentials; preserve migrations and clearly communicate any unavoidable incompatibility.
+
+Keep minor and patch components below 100 so the Android version-code formula remains collision-free.
+
 ## Draft A Release By Default
 
 Start without changing files or Git state.
