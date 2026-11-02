@@ -151,11 +151,6 @@ internal fun normalizeUiRestoreState(state: PersistedUiRestoreState): PersistedU
     return PersistedUiRestoreState(
         lastTab = state.lastTab?.trim()?.takeIf(String::isNotBlank),
         scrollStates = boundedScrollStates,
-        settingsSectionExpansion = state.settingsSectionExpansion
-            .mapNotNull { (key, expanded) ->
-                key.trim().takeIf(String::isNotBlank)?.let { normalizedKey -> normalizedKey to expanded }
-            }
-            .toMap(),
         feedFabRestoreStates = boundedFabStates,
         viewerLaunchContext = state.viewerLaunchContext,
     )

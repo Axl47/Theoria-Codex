@@ -77,7 +77,6 @@ internal class UiRestoreLegacyDataMigration(
             var state = legacyUi?.toMemoryState() ?: PersistedUiRestoreState(
                 lastTab = null,
                 scrollStates = emptyMap(),
-                settingsSectionExpansion = emptyMap(),
                 feedFabRestoreStates = emptyMap(),
                 viewerLaunchContext = null,
             )

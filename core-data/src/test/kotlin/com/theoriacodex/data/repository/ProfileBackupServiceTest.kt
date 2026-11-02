@@ -28,6 +28,20 @@ class ProfileBackupServiceTest {
     @get:Rule val temporary = TemporaryFolder()
     private val codec = ProfileBackupCodec()
 
+    @Test fun `backup with retired expansion metadata still decodes and restores`() = runTest {
+        val expected = backup()
+        val root = JsonParser.parseString(codec.encode(expected).toString(Charsets.UTF_8)).asJsonObject
+        val retired = JsonParser.parseString("""{"UNIFIED_MODE":false}""")
+        root.add("settingsSectionExpansion", retired)
+        root.getAsJsonObject("settings").add("settingsSectionExpansion", retired)
+        val bytes = root.toString().toByteArray(Charsets.UTF_8)
+        assertEquals(expected, codec.decode(bytes))
+        val harness = harness()
+        val result = harness.service.restore(bytes)
+        assertEquals(2, result.profilesAdded)
+        assertEquals(1, harness.pins.observeSavedSearches().first().size)
+    }
+
     @Test fun `developer copy selects the imported active profile and repeats without duplicate identities`() = runTest {
         val harness = harness()
         val bytes = codec.encode(backup())

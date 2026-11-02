@@ -385,23 +385,44 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
-    fun `ui restore reconstructs settings section expansion after reopening`() = runTest {
-        val directory = tempFolder.newFolder("ui-settings-expansion")
-        val firstScope = newScope()
-        val first = DataStoreUiRestoreRepository(directory, firstScope)
-        val expansion = mapOf(
-            "UNIFIED_MODE" to false,
-            "STORAGE_AND_CACHING" to false,
-        )
-
-        first.setSettingsSectionExpansion(expansion)
-        closeScope(firstScope)
-
-        val secondScope = newScope()
-        val reconstructed = DataStoreUiRestoreRepository(directory, secondScope)
-
-        assertEquals(expansion, reconstructed.getSettingsSectionExpansion())
-        closeScope(secondScope)
+    fun `retired expansion field loads from current and legacy files without recovery or losing restore state`() = runTest {
+        val payload = """{
+            "lastTab":"codex",
+            "searchScrollStates":{"query":{"firstVisibleItemIndex":4,"firstVisibleItemOffsetPx":12}},
+            "settingsSectionExpansion":{"UNIFIED_MODE":false},
+            "feedFabRestoreStates":{"search":{"animatedOnly":true}},
+            "viewerLaunchContext":{"streamSource":"SEARCH","queryHash":"query","startIndex":2}
+        }"""
+        for (legacy in listOf(false, true)) {
+            val directory = tempFolder.newFolder("retired-expansion-$legacy")
+            val file = directory.resolve(if (legacy) "ui_restore_store.json" else DATASTORE_UI_RESTORE_FILE_NAME)
+            val original = if (legacy) payload else
+                """{"schemaVersion":2,"state":$payload,"legacyImports":[]}"""
+            file.writeText(original)
+            val scope = newScope()
+            val repository = DataStoreUiRestoreRepository(directory, scope)
+            assertEquals("codex", repository.getLastTab())
+            assertEquals(SearchScrollState(4, 12), repository.getSearchScrollState("query"))
+            assertTrue(repository.getFeedFabRestoreStates().getValue("search").animatedOnly)
+            assertEquals(2, repository.observeViewerLaunchContext().first()?.startIndex)
+            assertNull(repository.storageStatus.value.corruptionRecovery)
+            if (legacy) {
+                assertEquals(original, directory.resolve("ui_restore_store.json.migrated-v2").readText())
+            } else {
+                assertEquals(original, file.readText())
+            }
+            repository.setLastTab("search")
+            closeScope(scope)
+            val reopenedScope = newScope()
+            val reopened = DataStoreUiRestoreRepository(directory, reopenedScope)
+            assertEquals("search", reopened.getLastTab())
+            assertEquals(SearchScrollState(4, 12), reopened.getSearchScrollState("query"))
+            assertTrue(reopened.getFeedFabRestoreStates().getValue("search").animatedOnly)
+            assertEquals(2, reopened.observeViewerLaunchContext().first()?.startIndex)
+            assertNull(reopened.storageStatus.value.corruptionRecovery)
+            assertFalse(directory.resolve(DATASTORE_UI_RESTORE_FILE_NAME).readText().contains("settingsSectionExpansion"))
+            closeScope(reopenedScope)
+        }
     }
 
     @Test

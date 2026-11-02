@@ -391,14 +391,6 @@ class DataStoreUiRestoreRepository(
         return records.first().toMemoryState().scrollStates[queryHash.trim()]
     }
 
-    override suspend fun setSettingsSectionExpansion(expansion: Map<String, Boolean>) {
-        mutateState { current -> current.copy(settingsSectionExpansion = expansion) }
-    }
-
-    override suspend fun getSettingsSectionExpansion(): Map<String, Boolean> {
-        return records.first().toMemoryState().settingsSectionExpansion
-    }
-
     override suspend fun setFeedFabRestoreState(contextKey: String, state: FeedFabRestoreState) {
         val normalizedKey = contextKey.trim()
         if (normalizedKey.isBlank()) return
