@@ -48,6 +48,7 @@ Keep `AGENTS.md` limited to durable product intent, safety boundaries, and accep
 
 ## Personal-device Safety
 
+- The Windows development PC has a hardware-accelerated Android 17 (API 37) emulator available as AVD `Theoria_API_37` (Pixel 6 profile, 4 GB RAM, 6 GB data). Start it with the desktop **Theoria Android Emulator** shortcut or `%LOCALAPPDATA%\TheoriaAndroid\Start-TheoriaEmulator.ps1`; shell setup and local instructions are in the same directory. Discover its current ADB serial before use rather than assuming `emulator-5554`. Use isolated app packages and the checks below for emulator testing; emulator profiling does not satisfy physical-device performance acceptance.
 - Protect `com.theoriacodex` and its data. Before any device installation or test, verify every packaged APK’s application ID and signing lane; variant names are insufficient. New or changed device commands require a host-only task-graph/preflight check.
 - Automated device lanes must use isolated packages. Production changes require explicit authorization; destructive actions require authorization for the exact action after explaining possible data loss. Production installs use the signed release/update path.
 - Developer profile copying must remain read-only against production and excluded from public builds.
