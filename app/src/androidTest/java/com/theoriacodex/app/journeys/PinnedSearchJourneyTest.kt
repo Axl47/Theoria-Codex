@@ -22,7 +22,7 @@ import org.junit.Test
 
 class PinnedSearchJourneyTest : AppJourneyFixture() {
     @Test
-    fun namedGroupedMultiSearchSurvivesClearingHistoryAndColdGraphThenReplaysExactSources() {
+    fun namedGroupedMultiSearchSurvivesClearingHistoryAndColdGraphThenFeedsExactSources() {
         val participating = listOf(SourceKey.GELBOORU, SourceKey.PIXIV)
         val query = Query(QueryMode.Unified, emptyList<String>(), listOf("red"), SortMode.POPULAR, null, null)
             .withIncludeTermGroups(listOf(
@@ -50,8 +50,7 @@ class PinnedSearchJourneyTest : AppJourneyFixture() {
         assertEquals(listOf(pinned), io { container.data.savedSearches.observeSavedSearches().first() })
         assertTrue(io { container.data.recentsRepository.observeSearches().first().isEmpty() })
         tab("Codex")
-        compose.onNodeWithText("Searches").performClick()
-        compose.onNodeWithText("My landscapes").performClick()
+        activate(compose.onNodeWithText("Searches"))
         compose.waitUntil(10_000) { container.registry.requests.count { it.pageToken == null } >= 2 }
         val requests = container.registry.requests.filter { it.pageToken == null }
         assertEquals(participating.toSet(), requests.map { it.source }.toSet())

@@ -160,7 +160,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         assertEquals(SourceKey.PIXIV, restoredRequest.source)
         assertEquals(applied, restoredRequest.query)
         // The compact search bar hides individual terms until expanded.
-        activate(compose.onNodeWithTag("Search query input"))
+        activate(compose.onNodeWithContentDescription("Expand Search"))
         compose.onNodeWithText("landscape").assertIsDisplayed()
     }
 
