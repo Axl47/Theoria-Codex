@@ -23,13 +23,15 @@ object ForYouInterests {
         val counts = stats.tagDocumentCounts
         val knownCounts = providerCounts.values.filterNotNull().filter { it > 0 }.sorted()
         val typicalCount = knownCounts.getOrNull((knownCounts.size - 1) / 2) ?: 0
-        val anchors = counts.keys.filter { providerCounts[it] != 0 }.sortedByDescending { tag ->
+        val weights = counts.keys.filter { providerCounts[it] != 0 }.associateWith { tag ->
             val prevalence = counts.getValue(tag).toDouble() / stats.totalDocuments
             val genericPenalty = if (prevalence > 0.85 && counts.size > 2) 0.25 else 1.0
             val specificity = 1.0 / (1.0 + ln(1.0 + (providerCounts[tag] ?: typicalCount).coerceAtLeast(0)))
             val variation = random?.nextDouble(0.8, 1.2) ?: 1.0
             sqrt(counts.getValue(tag).toDouble()) * genericPenalty * specificity * variation
         }
+        // Sample each weight once: comparator keys must stay constant throughout the sort.
+        val anchors = weights.keys.sortedByDescending { weights.getValue(it) }
         val chosen = mutableListOf<ForYouInterest>()
         for (anchor in anchors) {
             if (chosen.any { anchor in it.tags }) continue

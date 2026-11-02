@@ -6,8 +6,18 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.random.Random
 
 class ForYouInterestsTest {
+    @Test fun `shuffle samples one stable weight per tag before sorting a large interest set`() {
+        val documents = (1..300).map { listOf("interest_$it") }
+        val random = CountingRandom()
+        val generated = ForYouInterests.generate(SourceKey.GELBOORU, documents, random = random)
+        assertEquals(documents.size, random.draws)
+        assertEquals(generated, ForYouInterests.generate(SourceKey.GELBOORU, documents, random = CountingRandom()))
+        assertEquals(5, generated.size)
+    }
+
     @Test fun `separate interests stay together rather than creating unrelated pairs`() {
         val documents = List(4) { listOf("common", "night", "city") } +
             List(4) { listOf("common", "forest", "watercolor") }
@@ -39,5 +49,15 @@ class ForYouInterestsTest {
         assertEquals(5, interests.flatMap { it.tags }.distinct().size)
         assertEquals(emptyList<ForYouInterest>(), ForYouInterests.generate(SourceKey.PIXIV, listOf(listOf("1000users入り"))))
         assertTrue(CodexSaveRelevance.fromTags(listOf("Blue Hair", "blue_hair")).hasSignals)
+    }
+}
+
+private class CountingRandom : Random() {
+    private val delegate = Random(42)
+    var draws = 0
+    override fun nextBits(bitCount: Int): Int = delegate.nextBits(bitCount)
+    override fun nextDouble(from: Double, until: Double): Double {
+        draws++
+        return delegate.nextDouble(from, until)
     }
 }

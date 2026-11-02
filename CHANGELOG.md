@@ -104,6 +104,8 @@
 
 ### Fixed
 
+- Prevent shuffled For You interests and Explore from failing with a comparison-contract error.
+
 - Restore thumbnails for downloaded videos and exported animations after reopening the app, using the saved files.
 
 - Smooth the grid’s movement when collapsing the search bar by animating the remaining toolbar gap.
