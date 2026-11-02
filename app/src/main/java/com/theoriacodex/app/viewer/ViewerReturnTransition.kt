@@ -50,6 +50,7 @@ internal val LocalViewerReturnGrid = staticCompositionLocalOf<String?> { null }
 internal sealed interface ViewerReturnShelfId {
     data class Related(val seedId: PostId) : ViewerReturnShelfId
     data class Saved(val codexId: String) : ViewerReturnShelfId
+    data class ForYou(val sectionId: String) : ViewerReturnShelfId
 }
 
 internal val LocalViewerReturnShelf = staticCompositionLocalOf<ViewerReturnShelfId?> { null }
@@ -219,7 +220,7 @@ internal fun ViewerReturnShelfEffect(shelfId: ViewerReturnShelfId, postIds: List
     }
 }
 
-/** Saved's vertical overview participates in the same two-axis return as a related shelf. */
+/** Vertical overviews participate in the same two-axis return as a related shelf. */
 @Composable
 internal fun ViewerReturnColumn(
     shelfIds: List<ViewerReturnShelfId?>,

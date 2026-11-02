@@ -10,6 +10,10 @@
 
 ### Added
 
+- Browse personalized interest sections and an exploration section in For You, with previews that open the full feed or Viewer.
+- Pin For You sections in Saved Searches, dismiss unwanted interests, and shuffle suggestions while keeping pins.
+- Find more focused For You sections through co-occurring liked tags, provider tag counts, and the smart Codex tag-matching lookup.
+
 - Open a collapsible “More like this” thumbnail stripe after liking in fullscreen, and jump to related posts without leaving the viewer.
 - Like posts directly from Searches and Followed feeds, including their previews in Saved.
 - Collapse Search into a compact strip attached to the top-right corner, with a rounded left edge and closer search and source buttons; restore the previous layout with Legacy “Old Search Bar”.

@@ -20,6 +20,8 @@ internal fun testForYouCoordinator(
     recentsRepository: RecentsRepository = InMemoryRecentsRepository(),
     statisticsRepository: StatisticsRepository = InMemoryStatisticsRepository(),
     tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
+    savedSearches: com.theoriacodex.data.repository.SavedSearchRepository =
+        com.theoriacodex.data.repository.InMemorySavedSearchRepository(),
     seedSource: () -> Long = System::currentTimeMillis,
 ): ForYouCoordinator {
     return ForYouCoordinator(
@@ -30,6 +32,7 @@ internal fun testForYouCoordinator(
         statisticsRepository = statisticsRepository,
         tagSuggestionStore = tagSuggestionStore,
         seedSource = seedSource,
+        savedSearches = savedSearches,
         computationDispatcher = Dispatchers.Unconfined,
     )
 }

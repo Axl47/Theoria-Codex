@@ -15,6 +15,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CodexSaveRelevanceTest {
+    @Test fun `tag-only interests reuse smart save normalization and scoring`() {
+        val tags = listOf("Blue Hair", "cat", "cat", " ")
+        val incoming = post("incoming", tags)
+        val candidates = listOf(post("one", listOf("blue_hair", "CAT")), post("two", listOf("cat")))
+        assertEquals(CodexSaveRelevance(listOf(incoming)).score(candidates),
+            CodexSaveRelevance.fromTags(tags).score(candidates), 0.000001)
+        assertFalse(CodexSaveRelevance.fromTags(emptyList()).hasSignals)
+    }
+
     @Test fun `small search specialist beats a large common-tag collection`() {
         val relevance = CodexSaveRelevance(listOf(post("incoming", listOf("yellow", "common", "popular"))), query("yellow"))
         val specialized = collection(10, listOf("yellow"))

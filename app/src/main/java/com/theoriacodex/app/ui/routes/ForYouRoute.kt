@@ -115,8 +115,9 @@ internal fun ForYouRoute(
         ),
     )
     val state by owner.state.collectAsStateWithLifecycle()
-    val durationPosts = remember(state.results, state.relatedPosts) {
-        (state.results + state.relatedPosts.loadedPosts).distinctBy(Post::id)
+    val durationPosts = remember(state.results, state.relatedPosts, state.home) {
+        (state.results + state.relatedPosts.loadedPosts + state.home.sections.flatMap { it.feed.page.items } +
+            state.home.mixedFeed?.page?.items.orEmpty()).distinctBy(Post::id)
     }
     val duration = rememberMediaDurationRouteBinding(
         coordinator = mediaDurationCoordinator,

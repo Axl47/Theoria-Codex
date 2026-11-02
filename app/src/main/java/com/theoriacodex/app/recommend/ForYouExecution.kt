@@ -50,6 +50,8 @@ data class ForYouFeedResult(
 data class ForYouBlacklistChange(val settings: AppSettings, val entries: List<ForYouBlacklistEntry>)
 
 interface ForYouRouteEngine {
+    suspend fun loadSections(request: ForYouFeedRequest): List<ForYouSection> = emptyList()
+    suspend fun pinSection(section: ForYouSection, pinned: Boolean): String? = error("Section pins unavailable")
     fun availableSources(settings: AppSettings): List<SourceKey>
     suspend fun execute(request: ForYouFeedRequest): ForYouFeedResult
     suspend fun loadPage(continuation: ForYouContinuation, sources: Set<SourceKey>): UnifiedSearchResult

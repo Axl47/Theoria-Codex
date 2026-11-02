@@ -333,6 +333,7 @@ internal class DefaultTheoriaAppContainer(
             registry = sourceRegistry,
             settingsRepository = settingsRepository,
             likesRepository = likesRepository,
+            savedSearches = savedSearches,
             recentsRepository = recentsRepository,
             statisticsRepository = statisticsRepository,
             tagSuggestionStore = tagSuggestionStore,

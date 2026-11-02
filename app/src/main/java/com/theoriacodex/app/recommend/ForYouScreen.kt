@@ -12,6 +12,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
@@ -28,6 +30,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -102,7 +105,10 @@ fun ForYouScreen(
     fabRestoreState: FeedFabRestoreState = FeedFabRestoreState(),
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit = {},
 ) {
+    BackHandler(enabled = !state.home.visible) { onAction(ForYouAction.ShowHome) }
+    val savedStates = rememberSaveableStateHolder()
     val gridState = rememberLazyStaggeredGridState()
+    LaunchedEffect(state.seedId) { gridState.scrollToItem(0) }
     var showSortSheet by remember { mutableStateOf(false) }
     var showSourceMenu by remember { mutableStateOf(false) }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
@@ -121,8 +127,11 @@ fun ForYouScreen(
             animatedDurationRange = animatedDurationRange,
         )
     }
+    val durationPosts = if (state.home.visible) {
+        state.home.sections.flatMap { it.feed.page.items } + state.home.mixedFeed?.page?.items.orEmpty()
+    } else state.results
     val durationFilter = rememberSearchDurationFilterPresentation(
-        state.results, animatedDurationRange, durationStates, resolveUnknownAnimatedDurations,
+        durationPosts, animatedDurationRange, durationStates, resolveUnknownAnimatedDurations,
     )
     val animatedDurationFilterActive = durationFilter.active
     val unknownAnimatedDurationPolicy = durationFilter.unknownPolicy
@@ -168,7 +177,7 @@ fun ForYouScreen(
             canonicalCount = state.results.size,
             visibleCount = visibleResults.size,
             canLoadMore = state.canLoadMore,
-            ready = state.seedSummaryBySource.isNotEmpty(),
+            ready = !state.home.visible && state.seedSummaryBySource.isNotEmpty(),
             refreshing = state.isRefreshing,
             paging = state.isPaging,
             failed = state.errorMessage != null,
@@ -181,6 +190,23 @@ fun ForYouScreen(
         onLoadNextPage = { onAction(ForYouAction.LoadNextPage) },
     )
 
+    if (state.home.visible) {
+        savedStates.SaveableStateProvider("overview") {
+        ForYouHomeScreen(state, likedPostIds, pixivUgoiraClient,
+            filterPosts = { posts -> filterSearchResults(posts, visibilityFilters, emptySet(), emptySet(),
+                unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
+                knownDurationMsByPostId = acquiredDurations) },
+            durationStateForPost = durationStateForPost,
+            onDurationPostVisibilityChanged = onDurationPostVisibilityChanged,
+            onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
+            onToggleLike = onToggleLike, onLongPress = { selectedActionPost = it },
+            onAction = onAction, onShowFilters = { showSortSheet = true },
+            filtersActive = animatedOnly || animatedDurationFilterActive || state.sortMode != SortMode.NEWEST,
+            onOpenPreview = { id, posts, index ->
+                onAction(ForYouAction.OpenSectionResult(id, index, posts, visibilityFilters))
+            })
+        }
+    } else {
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         floatingActionButton = {
@@ -207,7 +233,13 @@ fun ForYouScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("For You", style = MaterialTheme.typography.titleLarge)
+            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { onAction(ForYouAction.ShowHome) }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to interests")
+                }
+                Text(state.home.activeSection?.title ?: "For You", style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.weight(1f), maxLines = 2)
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 IconButton(
                     enabled = state.canBlacklistCurrentSeed,
@@ -224,7 +256,7 @@ fun ForYouScreen(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
-                        contentDescription = "Shuffle recommendations",
+                        contentDescription = if (state.home.activeSection == null) "Shuffle recommendations" else "Refresh this interest",
                     )
                 }
             }
@@ -377,6 +409,8 @@ fun ForYouScreen(
             }
         }
         }
+    }
+
     }
 
     selectedActionPost?.let { post ->

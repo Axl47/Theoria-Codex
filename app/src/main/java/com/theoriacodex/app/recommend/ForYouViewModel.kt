@@ -74,6 +74,7 @@ internal class ForYouViewModel(
     private var replaySearch: ForYouAction.ReplaySearch? = null
     private var hasRequestedFeed = false
     private val mutableState = MutableStateFlow(ForYouUiState(
+        home = ForYouHomeState(visible = true),
         profiles = initialProfiles,
         activeProfileId = savedStateHandle.get<String>(KEY_PROFILE_ID)
             ?.takeIf { id -> initialProfiles.any { it.profileId == id } }
@@ -109,7 +110,42 @@ internal class ForYouViewModel(
     private val effectChannel = Channel<ForYouEffect>(capacity = Channel.BUFFERED)
     override val effects: Flow<ForYouEffect> = effectChannel.receiveAsFlow()
 
+    private val home = ForYouHomeController(
+        scope = ownerScope, engine = engine, state = { mutableState.value },
+        update = { value -> mutableState.value = mutableState.value.copy(home = value) },
+        request = {
+            latestSettings?.let { settings ->
+                val current = mutableState.value
+                ForYouFeedRequest(settings.copy(activeProfileId = current.activeProfileId), current.availableSources,
+                    current.selectedSource, current.sortMode, false, current.activeProfileLikesCount)
+            }
+        },
+        admit = ::admitPreview,
+        emit = { effectChannel.trySend(it) },
+        settingsChanged = { settings -> synchronizeEnvironment(settings, mutableState.value.activeProfileLikesCount) },
+    )
+
+    private fun admitPreview(result: ForYouFeedResult) {
+        cancelActiveReduction()
+        relatedPosts.clear("interest selected")
+        val current = mutableState.value
+        mutableState.value = current.copy(
+            results = result.page.items, statuses = result.page.statuses, continuation = result.continuation,
+            seedId = result.seedId, seedSummaryBySource = result.seed,
+            isRefreshing = false, isPaging = false, errorMessage = null,
+            emptyReason = if (result.page.items.isEmpty()) ForYouEmptyReason.NO_RESULTS else null,
+        )
+        hasRequestedFeed = true
+        replaySearch = null
+        ownerScope.launch { runCatchingPreservingCancellation { engine.recordAccepted(result) } }
+    }
+
     override fun onAction(action: ForYouAction) {
+        if (action is ForYouAction.OpenSectionResult) {
+            openSectionPreview(action)
+            return
+        }
+        if (home.handle(action)) return
         when (action) {
             is ForYouAction.RelatedLikeCommitted -> {
                 relatedPosts.onLikeCommitted(action.post, action.outcome)
@@ -138,7 +174,15 @@ internal class ForYouViewModel(
             return
         }
         val previous = mutableState.value
-        val transition = previous.reduce(action)
+        if (action is ForYouAction.ReplaySearch) {
+            mutableState.value = previous.copy(home = previous.home.copy(visible = false, activeSection = null))
+        }
+        val reduced = mutableState.value.reduce(action)
+        val startsNewScope = reduced.effect is ForYouEffect.ChangeSource ||
+            reduced.effect is ForYouEffect.ChangeProfile || reduced.effect is ForYouEffect.BlacklistSeed
+        val transition = if (startsNewScope) reduced.copy(
+            state = reduced.state.copy(home = reduced.state.home.copy(activeSection = null)),
+        ) else reduced
         if (transition.state.activeRequest?.kind == ForYouRequestKind.REFRESH &&
             transition.state.activeRequest != previous.activeRequest
         ) {
@@ -149,6 +193,20 @@ internal class ForYouViewModel(
         mutableState.value = transition.state
         persistRouteInputs(transition.state)
         transition.effect?.let(::handleEffect)
+        if (action is ForYouAction.SelectSource || action is ForYouAction.SelectSort) home.synchronize()
+    }
+
+    private fun openSectionPreview(action: ForYouAction.OpenSectionResult) {
+        if (action.index !in action.visibleResults.indices) return
+        val current = mutableState.value.home
+        val section = action.sectionId?.let { id -> current.sections.firstOrNull { it.id == id } }
+        if (action.sectionId != null && section == null) return
+        if (action.sectionId == null && current.mixedFeed == null) return
+        val select = action.sectionId?.let { ForYouAction.OpenSection(it) } ?: ForYouAction.OpenMixedFeed
+        home.handle(select)
+        home.handle(ForYouAction.ShowHome)
+        onAction(ForYouAction.OpenResult(action.index, visibleResults = action.visibleResults,
+            visibilityFilters = action.visibilityFilters))
     }
 
     /** A count-only Like update never regenerates an admitted feed. */
@@ -189,6 +247,7 @@ internal class ForYouViewModel(
             continuation = if (refreshRequired) null else current.continuation,
             seedSummaryBySource = if (profileChanged) emptyMap() else current.seedSummaryBySource,
         )
+        home.synchronize()
         if (pendingReplaySearch != null) {
             replayPendingSearchIfReady()
             return
@@ -212,6 +271,7 @@ internal class ForYouViewModel(
                 continuation = null,
             )
         }
+        home.synchronize()
         if (pendingReplaySearch != null) replayPendingSearchIfReady() else refreshForEnvironment(changed)
     }
 
@@ -276,12 +336,22 @@ internal class ForYouViewModel(
         identity: ForYouRequestIdentity,
         shuffle: Boolean,
         seed: Map<SourceKey, List<String>>? = null,
-    ) = launchRequest(identity) { acceptRoot(identity, engine.execute(feedRequest(identity, shuffle, seed))) }
+    ) = launchRequest(identity) {
+        val scopedSeed = seed ?: mutableState.value.home.activeSection?.feed?.seed
+        acceptRoot(identity, engine.execute(feedRequest(identity, shuffle, scopedSeed)))
+    }
 
     private suspend fun acceptRoot(identity: ForYouRequestIdentity, result: ForYouFeedResult) {
         kotlinx.coroutines.currentCoroutineContext().ensureActive()
         if (mutableState.value.activeRequest != identity) return
         onAction(ForYouAction.RefreshCompleted(identity, result))
+        val current = mutableState.value
+        val selected = current.home.activeSection
+        mutableState.value = current.copy(home = if (selected == null) {
+            current.home.copy(mixedFeed = result)
+        } else {
+            current.home.copy(activeSection = selected.copy(feed = result))
+        })
         // A later refresh cannot cancel bookkeeping for an already accepted root.
         ownerScope.launch { runCatchingPreservingCancellation { engine.recordAccepted(result) } }
     }
@@ -301,6 +371,7 @@ internal class ForYouViewModel(
             )
             if (mutableState.value.activeRequest != identity) return@launchRequest
             latestSettings = changed.settings
+            home.synchronize()
             mutableState.value = mutableState.value.copy(
                 blacklistEntries = changed.settings.forYouBlacklistByProfile[identity.profileId].orEmpty(),
             )

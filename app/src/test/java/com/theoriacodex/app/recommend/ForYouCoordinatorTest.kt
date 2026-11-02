@@ -48,6 +48,35 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ForYouCoordinatorTest {
+    @Test fun `section pins reload native searches and dismissal survives generation`() = runTest {
+        val adapter = FakeAdapter(SourceKey.GELBOORU, "section")
+        val settings = InMemorySettingsRepository()
+        val saved = com.theoriacodex.data.repository.InMemorySavedSearchRepository()
+        val service = testForYouCoordinator(registryOf(adapter), settingsRepository = settings,
+            likesRepository = liked(SourceKey.GELBOORU), savedSearches = saved)
+        val section = service.loadSections(request(service)).single()
+        assertEquals(mapOf(SourceKey.GELBOORU to listOf("cloud")), section.feed.seed)
+        assertEquals(listOf("cloud"), section.feed.continuation?.queriesBySource?.get(SourceKey.GELBOORU)?.includeTags)
+        val pinId = service.pinSection(section, true)
+        assertEquals(RecentSearchKind.FYP, saved.observeSavedSearches().first().single().search.kind)
+        val reloaded = service.loadSections(request(service)).single()
+        assertEquals(pinId, reloaded.savedSearchId)
+        service.pinSection(reloaded, false)
+        assertTrue(saved.observeSavedSearches().first().isEmpty())
+        settings.addForYouBlacklistEntry(defaultRecommendationProfiles().first().profileId,
+            SourceKey.GELBOORU, section.feed.seed.getValue(SourceKey.GELBOORU))
+        assertTrue(service.loadSections(request(service, settings.observeSettings().first())).isEmpty())
+    }
+
+    @Test fun `overview source selection constrains pins and generated sections without history writes`() = runTest {
+        val recents = InMemoryRecentsRepository()
+        val service = testForYouCoordinator(registryOf(FakeAdapter(SourceKey.GELBOORU, "g"), FakeAdapter(SourceKey.PIXIV, "p")),
+            likesRepository = liked(SourceKey.GELBOORU, SourceKey.PIXIV), recentsRepository = recents)
+        val sections = service.loadSections(request(service).copy(selectedSource = SourceKey.PIXIV))
+        assertEquals(setOf(SourceKey.PIXIV), sections.flatMap { it.feed.seed.keys }.toSet())
+        assertTrue(recents.observeSearches().first().isEmpty())
+    }
+
     @Test
     fun `cold fallback acquisition overlaps while seed order remains deterministic`() = runTest {
         val adapters = listOf(SourceKey.PIXIV, SourceKey.GELBOORU).map { source ->

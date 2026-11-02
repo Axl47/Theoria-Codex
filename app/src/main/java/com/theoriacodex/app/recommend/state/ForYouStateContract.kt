@@ -65,6 +65,7 @@ data class ForYouUiState(
     val emptyReason: ForYouEmptyReason? = null,
     val nextRequestGeneration: Long = 1L,
     val activeRequest: ForYouRequestIdentity? = null,
+    val home: com.theoriacodex.app.recommend.ForYouHomeState = com.theoriacodex.app.recommend.ForYouHomeState(),
     val relatedPosts: RelatedPostsUiState = RelatedPostsUiState.Idle,
 ) {
     val retryableSources: Set<SourceKey>
@@ -82,10 +83,22 @@ data class ForYouUiState(
         get() = (activeProfileLikesCount > 0 || seedSummaryBySource.isNotEmpty()) && !isRefreshing && !isPaging
 
     val canBlacklistCurrentSeed: Boolean
-        get() = canRefresh && seedSummaryBySource.isNotEmpty()
+        get() = canRefresh && seedSummaryBySource.isNotEmpty() && home.activeSection?.pinned != true
 }
 
 sealed interface ForYouAction {
+    data object ShowHome : ForYouAction
+    data object OpenMixedFeed : ForYouAction
+    data class OpenSection(val id: String) : ForYouAction
+    data class OpenSectionResult(
+        val sectionId: String?,
+        val index: Int,
+        val visibleResults: List<Post>,
+        val visibilityFilters: SearchVisibilityFilters = SearchVisibilityFilters(),
+    ) : ForYouAction
+    data object RefreshSections : ForYouAction
+    data class PinSection(val id: String) : ForYouAction
+    data class DismissSection(val id: String) : ForYouAction
     data class Refresh(val shuffle: Boolean = true) : ForYouAction
     data class SelectProfile(val profileId: String) : ForYouAction
     data class SelectSource(val source: SourceKey?) : ForYouAction
@@ -354,6 +367,13 @@ fun ForYouUiState.reduce(action: ForYouAction): ForYouTransition {
                 )
             }
         }
+        ForYouAction.ShowHome,
+        ForYouAction.OpenMixedFeed,
+        is ForYouAction.OpenSection,
+        is ForYouAction.OpenSectionResult,
+        ForYouAction.RefreshSections,
+        is ForYouAction.PinSection,
+        is ForYouAction.DismissSection,
         is ForYouAction.RelatedLikeCommitted,
         ForYouAction.RetryRelatedPosts,
         ForYouAction.DismissRelatedPosts,

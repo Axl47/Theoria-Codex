@@ -1,6 +1,5 @@
 package com.theoriacodex.app.ui.routes
 
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,7 +7,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,7 +14,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -31,7 +28,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -50,6 +46,7 @@ import com.theoriacodex.app.viewer.ViewerReturnShelf
 import com.theoriacodex.app.viewer.ViewerReturnShelfId
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
+import com.theoriacodex.app.ui.components.PostShelfSection
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.POST_SHELF_MEDIA_ASPECT_RATIO
 import com.theoriacodex.app.ui.components.FeedFabRestoreRegistry
@@ -166,7 +163,7 @@ private fun SavedCodexSection(
     val feed = liveOwner?.state?.collectAsStateWithLifecycle()?.value
     val postIds = remember(posts) { posts.map { it.id } }
     ViewerReturnShelf(ViewerReturnShelfId.Saved(id), postIds, row) {
-        SavedCodexCarousel(title, count, posts, state.loading, feed?.errors?.isNotEmpty() == true,
+        PostShelfSection(title, count, posts, state.loading, feed?.errors?.isNotEmpty() == true,
             onOpen, { liveOwner?.retry() }, onLongPress) {
             LazyRow(state = row, modifier = Modifier.height(rowHeight), contentPadding = PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -187,45 +184,6 @@ private fun SavedCodexSection(
                 }
                 if (feed?.canLoadMore == true) item(key = "more") { TextButton(onClick = onOpen) { Text("View all") } }
             }
-        }
-    }
-}
-
-@Composable
-internal fun SavedCodexCarousel(
-    title: String,
-    count: Int,
-    posts: List<Post>,
-    loading: Boolean,
-    failed: Boolean,
-    onOpen: () -> Unit,
-    onRetry: () -> Unit,
-    onLongPress: () -> Unit,
-    content: @Composable () -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
-                .combinedClickable(onClick = onOpen, onLongClick = onLongPress,
-                    role = Role.Button, onLongClickLabel = "Actions for $title")
-                .heightIn(min = 48.dp)
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(count.toString(), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            }
-        }
-        when {
-            posts.isNotEmpty() -> content()
-            loading -> Text("Loading posts…", Modifier.padding(horizontal = 16.dp))
-            !failed -> Text("No posts in this view yet", Modifier.padding(horizontal = 16.dp))
-        }
-        if (failed) TextButton(onClick = onRetry, modifier = Modifier.padding(horizontal = 8.dp)) {
-            Text("Could not load some posts. Retry")
         }
     }
 }

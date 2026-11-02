@@ -39,8 +39,15 @@ class ForYouCoordinator(
     private val statisticsRepository: StatisticsRepository,
     private val tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
     private val seedSource: () -> Long = System::currentTimeMillis,
+    private val savedSearches: com.theoriacodex.data.repository.SavedSearchRepository =
+        com.theoriacodex.data.repository.InMemorySavedSearchRepository(),
     private val computationDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ForYouRouteEngine {
+    private val sections = ForYouSectionsLoader(registry, tagSuggestionStore, likesRepository, savedSearches, ::runFeedSeed)
+
+    override suspend fun loadSections(request: ForYouFeedRequest): List<ForYouSection> = sections.load(request)
+    override suspend fun pinSection(section: ForYouSection, pinned: Boolean): String? = sections.pin(section, pinned)
+
     override fun availableSources(settings: AppSettings): List<SourceKey> =
         settings.runtime.enabledSources.intersect(registry.availableSources()).inPresentationOrder()
 

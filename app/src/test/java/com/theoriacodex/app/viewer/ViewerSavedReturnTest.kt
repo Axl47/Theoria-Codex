@@ -18,7 +18,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.search.SearchResultCard
-import com.theoriacodex.app.ui.routes.SavedCodexCarousel
+import com.theoriacodex.app.ui.components.PostShelfSection
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -58,7 +58,7 @@ class ViewerSavedReturnTest {
                             val row = rememberLazyListState()
                             rows[shelf] = row
                             ViewerReturnShelf(shelf, posts.map { it.id }, row) {
-                                SavedCodexCarousel(shelf.codexId, posts.size, posts, false, false, {}, {}, {}) {
+                                PostShelfSection(shelf.codexId, posts.size, posts, false, false, {}, {}, {}) {
                                     LazyRow(state = row, modifier = Modifier.height(260.dp)) {
                                         items(posts) { post ->
                                             Box(Modifier.width(164.dp)) {
