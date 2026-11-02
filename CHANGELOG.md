@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Keep For You row actions collapsed behind a chevron until opened.
+
 - Show person-plus and person-check icons for artist follow actions.
 
 - Dismiss For You rows and undo dismissal without refreshing the other searches or their posts.

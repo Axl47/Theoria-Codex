@@ -1,5 +1,6 @@
 package com.theoriacodex.app.recommend
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +25,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Reorder
 import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -36,6 +39,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -47,6 +51,7 @@ import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.recommend.state.ForYouUiState
 import com.theoriacodex.app.search.SearchResultCard
+import com.theoriacodex.app.ui.components.expandableControlSemantics
 import com.theoriacodex.app.ui.components.ReorderListState
 import com.theoriacodex.app.ui.components.ListReorderHandle
 import com.theoriacodex.app.ui.components.FeedErrorTile
@@ -231,7 +236,25 @@ private fun ForYouHomeStatus(state: ForYouUiState, onAction: (ForYouAction) -> U
 
 @Composable
 private fun ForYouSectionActions(section: ForYouSection, enabled: Boolean, onAction: (ForYouAction) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.End) {
+    var expanded by rememberSaveable(section.id) { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalAlignment = Alignment.End) {
+        IconButton(
+            modifier = Modifier.expandableControlSemantics(expanded,
+                if (expanded) "Expanded" else "Collapsed", { expanded = it }),
+            onClick = { expanded = !expanded },
+        ) {
+            Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                contentDescription = "${if (expanded) "Hide" else "Show"} actions for ${section.title}")
+        }
+        AnimatedVisibility(visible = expanded) {
+            ForYouSectionActionButtons(section, enabled, onAction)
+        }
+    }
+}
+
+@Composable
+private fun ForYouSectionActionButtons(section: ForYouSection, enabled: Boolean, onAction: (ForYouAction) -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         TextButton(enabled = enabled, onClick = { onAction(ForYouAction.PinSection(section.id)) }) {
             Icon(Icons.Default.PushPin, contentDescription = null)
             Text(if (section.pinned) "Unpin" else "Pin")
