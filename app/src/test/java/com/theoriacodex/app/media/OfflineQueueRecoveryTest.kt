@@ -13,6 +13,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -42,7 +44,7 @@ class OfflineQueueRecoveryTest {
             first.saveOnCollectionSave(posts.values.last())
             while (queue.load()[AUTOMATIC_OFFLINE_OWNER]?.size != 3) kotlinx.coroutines.yield()
             assertFalse(directory.resolve("queue.json").readText().contains("signed-token"))
-            firstScope.cancel()
+            firstScope.coroutineContext[Job]!!.cancelAndJoin()
             val reopenedStore = OfflineMediaStore(directory.resolve("media"), ioDispatcher = StandardTestDispatcher(testScheduler))
             reopenedStore.load()
             val reopened = OfflineMediaCoordinator(reopenedStore, secondScope, { posts.getValue(it.id) }, { it.media },
