@@ -676,7 +676,10 @@ internal fun TheoriaAppContent(
         }
     }
     codexActionTargetId?.let { id ->
-        androidx.compose.runtime.key(id) { codexLibrary(id) }
+        // This overlay is composed above the app shell's theme, so it must apply the theme itself.
+        TheoriaNightTheme {
+            androidx.compose.runtime.key(id) { codexLibrary(id) }
+        }
     }
 
     suspend fun completeAppStartup() {
