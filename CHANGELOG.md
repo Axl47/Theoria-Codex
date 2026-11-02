@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-01
+
 ### Changed
 
 - Read a prominent Highlights summary first in each release, with detailed changes available under “Full details” and larger, bold section headings with separators.
