@@ -4,10 +4,6 @@
 
 ## [1.0.1] - 2026-11-02
 
-### Highlights
-
-- Faster GIF loading (3 performance changes) plus 6 other fixes.
-
 ### Fixed
 
 - Refresh storage usage when Settings opens so Storage & caching shows totals before Manage storage is opened.
