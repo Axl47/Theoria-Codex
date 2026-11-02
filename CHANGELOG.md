@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Gelbooru’s Animated filter now matches any of animated, animation, video, gif, or animated_gif.
+
 ### Added
 
 - Open a collapsible “More like this” thumbnail stripe after liking in fullscreen, and jump to related posts without leaving the viewer.

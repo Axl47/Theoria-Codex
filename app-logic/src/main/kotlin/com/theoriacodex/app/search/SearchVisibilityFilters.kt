@@ -39,7 +39,7 @@ fun filterSearchResults(
     retainedLikedPostIds: Set<PostId> = emptySet(),
 ): List<Post> {
     return results.filter { post ->
-        (!filters.animatedOnly || isAnimatedPost(post)) &&
+        (!filters.animatedOnly || matchesAnimatedFilter(post)) &&
             matchesAnimatedDurationFilter(
                 post,
                 filters,
@@ -51,6 +51,15 @@ fun filterSearchResults(
             (!filters.hideWatched || post.id !in watchedPostIds || post.id in retainedLikedPostIds)
     }
 }
+
+private val gelbooruAnimatedTags = setOf("animated", "animation", "video", "gif", "animated_gif")
+
+private fun matchesAnimatedFilter(post: Post): Boolean =
+    if (post.id.source == SourceKey.GELBOORU) {
+        (post.rawTags + post.canonicalTags).any { it.lowercase() in gelbooruAnimatedTags }
+    } else {
+        isAnimatedPost(post)
+    }
 
 private fun matchesAnimatedDurationFilter(
     post: Post,
