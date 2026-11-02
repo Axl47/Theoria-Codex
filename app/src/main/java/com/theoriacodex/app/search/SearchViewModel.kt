@@ -152,19 +152,8 @@ internal class SearchViewModel(
                 SearchDraftReducer.mutateQuery(it) { query -> query.copy(dateRange = action.range) }.state
             }
 
-            is SearchAction.SetMinimumScore -> mutateDraft {
-                SearchDraftReducer.mutateQuery(it) { query -> query.copy(minScore = action.score) }.state
-            }
-
             is SearchAction.SetDateRangePreset -> mutateDraft {
-                val now = System.currentTimeMillis()
-                val day = 24L * 60L * 60L * 1000L
-                val range = when (action.preset) {
-                    DateRangePreset.NONE -> null
-                    DateRangePreset.TODAY -> com.theoriacodex.domain.model.DateRange(now - day, now)
-                    DateRangePreset.LAST_7_DAYS -> com.theoriacodex.domain.model.DateRange(now - 7L * day, now)
-                    DateRangePreset.LAST_30_DAYS -> com.theoriacodex.domain.model.DateRange(now - 30L * day, now)
-                }
+                val range = action.preset.rangeEndingAt(System.currentTimeMillis())
                 SearchDraftReducer.mutateQuery(it) { query -> query.copy(dateRange = range) }.state
             }
 
@@ -293,7 +282,7 @@ internal class SearchViewModel(
 
             SearchAction.ResetFilters -> mutateDraft {
                 SearchDraftReducer.mutateQuery(it) { query ->
-                    query.copy(sort = com.theoriacodex.domain.model.SortMode.NEWEST, dateRange = null, minScore = null)
+                    query.copy(sort = com.theoriacodex.domain.model.SortMode.NEWEST, dateRange = null)
                 }.state
             }
 

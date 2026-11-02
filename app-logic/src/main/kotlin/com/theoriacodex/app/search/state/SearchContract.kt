@@ -171,7 +171,6 @@ sealed interface SearchAction {
     data class ToggleTemporarySource(val source: SourceKey) : SearchAction
     data class SelectSort(val sort: SortMode) : SearchAction
     data class SetDateRange(val range: DateRange?) : SearchAction
-    data class SetMinimumScore(val score: Int?) : SearchAction
     data class SetDateRangePreset(val preset: DateRangePreset) : SearchAction
     data class AddIncludeTerm(val term: SearchTerm) : SearchAction
     data class AddExcludeTerm(val term: SearchTerm) : SearchAction

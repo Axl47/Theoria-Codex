@@ -1,5 +1,7 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.app.codex.savedCodexChildIcon
+import com.theoriacodex.app.codex.savedCodexCountSuffix
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -164,7 +166,10 @@ private fun SavedCodexSection(
     val postIds = remember(posts) { posts.map { it.id } }
     ViewerReturnShelf(ViewerReturnShelfId.Saved(id), postIds, row) {
         PostShelfSection(title, count, posts, state.loading, feed?.errors?.isNotEmpty() == true,
-            onOpen, { liveOwner?.retry() }, onLongPress) {
+            onOpen, { liveOwner?.retry() }, onLongPress,
+            icon = savedCodexChildIcon(id),
+            countSuffix = savedCodexCountSuffix(id),
+            onMore = onLongPress) {
             LazyRow(state = row, modifier = Modifier.height(rowHeight), contentPadding = PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 itemsIndexed(posts, key = { _, post -> "${post.id.source.name}:${post.id.sourcePostId}" }) { index, post ->

@@ -3,6 +3,7 @@ package com.theoriacodex.app.search
 import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.media.animatedDurationMs
 import com.theoriacodex.app.media.isAnimatedPost
+import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.QueryMode
@@ -15,6 +16,8 @@ data class SearchVisibilityFilters(
     val hideSaved: Boolean = false,
     val hideWatched: Boolean = false,
     val animatedDurationRange: AnimatedDurationRange = AnimatedDurationRange.Full,
+    /** Applied on the device so every source can filter by date, including those with no server support. */
+    val dateRange: DateRange? = null,
 )
 
 enum class UnknownAnimatedDurationPolicy {
@@ -40,6 +43,7 @@ fun filterSearchResults(
 ): List<Post> {
     return results.filter { post ->
         (!filters.animatedOnly || matchesAnimatedFilter(post)) &&
+            matchesDateRange(post, filters.dateRange) &&
             matchesAnimatedDurationFilter(
                 post,
                 filters,
@@ -50,6 +54,13 @@ fun filterSearchResults(
             (!filters.hideSaved || post.id !in savedPostIds || post.id in retainedLikedPostIds) &&
             (!filters.hideWatched || post.id !in watchedPostIds || post.id in retainedLikedPostIds)
     }
+}
+
+/** A post with no known date cannot be shown to be in range, so a date filter hides it. */
+private fun matchesDateRange(post: Post, range: DateRange?): Boolean {
+    if (range == null) return true
+    val created = post.createdAtEpochMs ?: return false
+    return created >= (range.fromEpochMs ?: Long.MIN_VALUE) && created <= (range.toEpochMs ?: Long.MAX_VALUE)
 }
 
 private val gelbooruAnimatedTags = setOf("animated", "animation", "video", "gif", "animated_gif")

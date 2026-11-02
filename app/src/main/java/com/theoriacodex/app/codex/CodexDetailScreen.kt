@@ -1,15 +1,19 @@
 package com.theoriacodex.app.codex
 
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import com.theoriacodex.app.media.animatedDurationRangeLabel
+import com.theoriacodex.app.ui.components.FilterChoiceChip
+import com.theoriacodex.app.ui.components.FilterSection
+import com.theoriacodex.app.ui.components.SourceFilterChip
+import com.theoriacodex.app.ui.components.rememberFeedScrollSignal
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.shape.CircleShape
@@ -22,8 +26,6 @@ import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -41,8 +43,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
@@ -197,14 +197,26 @@ fun CodexDetailScreen(
         return
     }
 
+    val filterScroll = rememberFeedScrollSignal()
+    val filterLabels = codexFilterLabels(filters, sortMode, customFiltersActive)
+    val resetFilters = {
+        onFabRestoreStateChange(FeedFabRestoreState(sortMode = CodexSortMode.NEWEST_SAVED.name))
+    }
     Scaffold(
+        modifier = Modifier.nestedScroll(filterScroll.connection),
         contentWindowInsets = WindowInsets(0),
         floatingActionButton = {
             FeedFilterFab(
                 modifier = Modifier.padding(bottom = 8.dp),
-                active = filters.isActive || customFiltersActive || sortMode != CodexSortMode.NEWEST_SAVED,
+                labels = filterLabels,
                 contentDescription = "Filter Codex collection",
                 onClick = { showFilterSheet = true },
+                onClear = {
+                    val previous = fabRestoreState
+                    resetFilters()
+                    ({ onFabRestoreStateChange(previous) })
+                },
+                scrollSignal = filterScroll,
             )
         },
     ) { padding ->
@@ -278,9 +290,7 @@ fun CodexDetailScreen(
             onSortChange = { updatedSort ->
                 onFabRestoreStateChange(fabRestoreState.copy(sortMode = updatedSort.name))
             },
-            onReset = {
-                onFabRestoreStateChange(FeedFabRestoreState(sortMode = CodexSortMode.NEWEST_SAVED.name))
-            },
+            onReset = resetFilters,
             onDismiss = { showFilterSheet = false },
             followedFilters = customFilters?.let { content -> ({ content { showFilterSheet = false } }) },
         )
@@ -617,125 +627,61 @@ internal fun CodexFilterSheet(
     onDismiss: () -> Unit,
     followedFilters: (@Composable () -> Unit)? = null,
 ) {
-    FeedFilterSheet(onDismiss = onDismiss, title = "Codex filters",
-        modifier = Modifier.testTag("codex-filter-scroll").verticalScroll(rememberScrollState())) {
-        CodexVisibilityFilters(filters, supportsFullColor, onFiltersChange)
-        CodexSortFilters(sortMode, onSortChange)
-        if (followedFilters != null) followedFilters()
-        else CodexSourceFilters(filters.source, sourceOptions) { source ->
-            onFiltersChange(filters.copy(source = source))
+    FeedFilterSheet(onDismiss = onDismiss, onReset = onReset, modifier = Modifier.testTag("codex-filter-scroll")) {
+        FilterSection("Sort") {
+            CodexSortMode.entries.forEach { mode ->
+                FilterChoiceChip(mode.displayLabel(), sortMode == mode) { onSortChange(mode) }
+            }
+        }
+        FilterSection("Show") {
+            FilterChoiceChip("Animated only", filters.animatedOnly) {
+                onFiltersChange(filters.copy(animatedOnly = !filters.animatedOnly))
+            }
+            if (supportsFullColor) {
+                FilterChoiceChip("Full color", filters.fullColorOnly) {
+                    onFiltersChange(filters.copy(fullColorOnly = !filters.fullColorOnly))
+                }
+            }
+        }
+        AnimatedDurationRangeControl(
+            range = filters.animatedDurationRange,
+            onRangeChange = { range -> onFiltersChange(filters.copy(animatedDurationRange = range)) },
+        )
+        if (followedFilters != null) {
+            followedFilters()
+        } else {
+            FilterSection("Source") {
+                FilterChoiceChip("All", filters.source == null) { onFiltersChange(filters.copy(source = null)) }
+                sourceOptions.forEach { source ->
+                    SourceFilterChip(source, filters.source == source) { onFiltersChange(filters.copy(source = source)) }
+                }
+            }
         }
         if (supportsLanguage) {
-            CodexLanguageFilters(filters.language) { language ->
-                onFiltersChange(filters.copy(language = language))
+            FilterSection("Language") {
+                CodexLanguageFilter.entries.forEach { option ->
+                    FilterChoiceChip(option.displayLabel(), filters.language == option) {
+                        onFiltersChange(filters.copy(language = option))
+                    }
+                }
             }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-        ) {
-            TextButton(onClick = onReset) { Text("Reset") }
-            TextButton(onClick = onDismiss) { Text("Done") }
         }
     }
 }
 
-@Composable
-private fun CodexVisibilityFilters(
+private fun codexFilterLabels(
     filters: CodexCollectionFilters,
-    supportsFullColor: Boolean,
-    onFiltersChange: (CodexCollectionFilters) -> Unit,
-) {
-    Text("Visibility", style = MaterialTheme.typography.titleMedium)
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (supportsFullColor) {
-            item {
-                FilterChip(
-                    selected = filters.fullColorOnly,
-                    onClick = {
-                        onFiltersChange(filters.copy(fullColorOnly = !filters.fullColorOnly))
-                    },
-                    label = { Text("Full Color") },
-                )
-            }
-        }
-        item {
-            FilterChip(
-                selected = filters.animatedOnly,
-                onClick = { onFiltersChange(filters.copy(animatedOnly = !filters.animatedOnly)) },
-                label = { Text("Animated only") },
-            )
-        }
-    }
-    AnimatedDurationRangeControl(
-        range = filters.animatedDurationRange,
-        onRangeChange = { range ->
-            onFiltersChange(filters.copy(animatedDurationRange = range))
-        },
-    )
-}
-
-@Composable
-private fun CodexSourceFilters(
-    selectedSource: SourceKey?,
-    sourceOptions: List<SourceKey>,
-    onSourceChange: (SourceKey?) -> Unit,
-) {
-    HorizontalDivider()
-    Text("Source", style = MaterialTheme.typography.titleMedium)
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        item {
-            FilterChip(
-                selected = selectedSource == null,
-                onClick = { onSourceChange(null) },
-                label = { Text("All") },
-            )
-        }
-        items(sourceOptions, key = SourceKey::name) { source ->
-            FilterChip(
-                selected = selectedSource == source,
-                onClick = { onSourceChange(source) },
-                label = { Text(source.displayName()) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun CodexLanguageFilters(
-    selectedLanguage: CodexLanguageFilter,
-    onLanguageChange: (CodexLanguageFilter) -> Unit,
-) {
-    HorizontalDivider()
-    Text("Language", style = MaterialTheme.typography.titleMedium)
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(CodexLanguageFilter.entries, key = CodexLanguageFilter::name) { option ->
-            FilterChip(
-                selected = selectedLanguage == option,
-                onClick = { onLanguageChange(option) },
-                label = { Text(option.displayLabel()) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun CodexSortFilters(
     sortMode: CodexSortMode,
-    onSortChange: (CodexSortMode) -> Unit,
-) {
-    HorizontalDivider()
-    Text("Sort", style = MaterialTheme.typography.titleMedium)
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(CodexSortMode.entries, key = CodexSortMode::name) { mode ->
-            FilterChip(
-                selected = sortMode == mode,
-                onClick = { onSortChange(mode) },
-                label = { Text(mode.displayLabel()) },
-            )
-        }
-    }
-}
+    customFiltersActive: Boolean,
+): List<String> = listOfNotNull(
+    sortMode.displayLabel().takeIf { sortMode != CodexSortMode.NEWEST_SAVED },
+    "Animated".takeIf { filters.animatedOnly },
+    animatedDurationRangeLabel(filters.animatedDurationRange).takeIf { !filters.animatedDurationRange.isFullRange },
+    "Full color".takeIf { filters.fullColorOnly },
+    filters.source?.displayName(),
+    filters.language.displayLabel().takeIf { filters.language != CodexLanguageFilter.ANY },
+    "Selection".takeIf { customFiltersActive },
+)
 
 internal fun codexItemSummary(
     visibleCount: Int,

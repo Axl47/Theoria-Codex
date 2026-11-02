@@ -85,7 +85,7 @@ class ForYouHomeScreenTest {
             MaterialTheme {
                 ForYouHomeScreen(ForYouUiState(home = home), emptySet(), null, { it },
                     noMediaDurationStateForPost, { _, _ -> }, { _, _ -> }, {}, {},
-                    onAction = { actions += it }, onShowFilters = {}, filtersActive = false,
+                    onAction = { actions += it }, onShowFilters = {}, filterLabels = emptyList(), onClearFilters = { {} },
                     onOpenPreview = { _, _, _ -> })
             }
         }

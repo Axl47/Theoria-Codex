@@ -51,8 +51,6 @@ class SourceCapabilityGateTest {
             setOf(
                 CapabilityExclusionReason.SORT_UNSUPPORTED,
                 CapabilityExclusionReason.EXCLUDE_TAGS_UNSUPPORTED,
-                CapabilityExclusionReason.DATE_RANGE_UNSUPPORTED,
-                CapabilityExclusionReason.MIN_SCORE_UNSUPPORTED,
             ),
             excluded[SourceKey.PIXIV],
         )

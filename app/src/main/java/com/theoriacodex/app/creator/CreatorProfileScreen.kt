@@ -1,15 +1,18 @@
 package com.theoriacodex.app.creator
 
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import com.theoriacodex.app.media.animatedDurationRangeLabel
+import com.theoriacodex.app.ui.components.FilterChoiceChip
+import com.theoriacodex.app.ui.components.FilterSection
+import com.theoriacodex.app.ui.components.rememberFeedScrollSignal
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
@@ -19,13 +22,10 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import com.theoriacodex.app.viewer.retainPostsUntilViewerCloses
 import androidx.compose.runtime.LaunchedEffect
@@ -210,14 +210,37 @@ fun CreatorProfileScreen(
         return
     }
 
+    val filterScroll = rememberFeedScrollSignal()
+    val filterLabels = listOfNotNull(
+        "Animated".takeIf { animatedOnly },
+        animatedDurationRangeLabel(animatedDurationRange).takeIf { animatedDurationFilterActive },
+        "Hide liked".takeIf { hideLiked },
+        "Hide saved".takeIf { hideSaved },
+    )
+    fun clearFilters(): () -> Unit {
+        val previous = fabRestoreState
+        onFabRestoreStateChange(
+            fabRestoreState.copy(
+                animatedOnly = false,
+                hideLiked = false,
+                hideSaved = false,
+                durationMinBucket = AnimatedDurationRange.Full.normalizedMinBucket,
+                durationMaxBucket = AnimatedDurationRange.Full.normalizedMaxBucket,
+            ),
+        )
+        return { onFabRestoreStateChange(previous) }
+    }
     Scaffold(
+        modifier = Modifier.nestedScroll(filterScroll.connection),
         contentWindowInsets = WindowInsets(0),
         floatingActionButton = {
             FeedFilterFab(
                 modifier = Modifier.padding(bottom = 8.dp),
-                active = animatedOnly || hideLiked || hideSaved || animatedDurationFilterActive,
+                labels = filterLabels,
                 contentDescription = "Filter creator uploads",
                 onClick = { showFilterSheet = true },
+                onClear = ::clearFilters,
+                scrollSignal = filterScroll,
             )
         },
     ) { padding ->
@@ -374,51 +397,29 @@ fun CreatorProfileScreen(
     }
 
     if (showFilterSheet) {
-        FeedFilterSheet(onDismiss = { showFilterSheet = false }) {
-                Text("Visibility", style = MaterialTheme.typography.titleMedium)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    FilterChip(
-                        selected = animatedOnly,
-                        onClick = {
-                            onFabRestoreStateChange(fabRestoreState.copy(animatedOnly = !animatedOnly))
-                        },
-                        label = { Text("Animated only") },
-                    )
-                    FilterChip(
-                        selected = hideLiked,
-                        onClick = {
-                            onFabRestoreStateChange(fabRestoreState.copy(hideLiked = !hideLiked))
-                        },
-                        label = { Text("Hide liked") },
-                    )
-                    FilterChip(
-                        selected = hideSaved,
-                        onClick = {
-                            onFabRestoreStateChange(fabRestoreState.copy(hideSaved = !hideSaved))
-                        },
-                        label = { Text("Hide saved") },
-                    )
+        FeedFilterSheet(onDismiss = { showFilterSheet = false }, onReset = { clearFilters() }) {
+            FilterSection("Show") {
+                FilterChoiceChip("Animated only", animatedOnly) {
+                    onFabRestoreStateChange(fabRestoreState.copy(animatedOnly = !animatedOnly))
                 }
-                AnimatedDurationRangeControl(
-                    range = animatedDurationRange,
-                    onRangeChange = { range ->
-                        onFabRestoreStateChange(
-                            fabRestoreState.copy(
-                                durationMinBucket = range.normalizedMinBucket,
-                                durationMaxBucket = range.normalizedMaxBucket,
-                            ),
-                        )
-                    },
-                )
-                TextButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = { showFilterSheet = false },
-                ) {
-                    Text("Done")
+                FilterChoiceChip("Hide liked", hideLiked) {
+                    onFabRestoreStateChange(fabRestoreState.copy(hideLiked = !hideLiked))
                 }
+                FilterChoiceChip("Hide saved", hideSaved) {
+                    onFabRestoreStateChange(fabRestoreState.copy(hideSaved = !hideSaved))
+                }
+            }
+            AnimatedDurationRangeControl(
+                range = animatedDurationRange,
+                onRangeChange = { range ->
+                    onFabRestoreStateChange(
+                        fabRestoreState.copy(
+                            durationMinBucket = range.normalizedMinBucket,
+                            durationMaxBucket = range.normalizedMaxBucket,
+                        ),
+                    )
+                },
+            )
         }
     }
 

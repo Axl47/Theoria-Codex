@@ -9,6 +9,14 @@
 - Search from a one-line bar that opens a full-screen editor showing every tag, grouped by type on sources like Hitomi, with Must have, Any of, and Without always on screen.
 - Tap any search tag to choose what happens to it, instead of excluded tags being removed immediately.
 - Use labeled menus for viewer Info, download actions, and the Codex search source picker, and remove redundant Cancel and Done buttons from related sheets.
+- See active filters on a filter button that names them, shows their number when there are more than two or while scrolling, and clears them in one tap with Undo.
+- Use one filter sheet layout across Search, For You, Codices, and creators. Search filters now apply together when the sheet closes.
+- Filter Search by more date ranges, including custom dates, on every source using each post's date.
+- Open Likes, Followed, and Searches directly from their own covers in the Codex library, with See all and actions visible on the Saved screen.
+
+### Removed
+
+- Remove the minimum score filter. Older saved searches keep working and ignore any score they stored.
 
 ### Fixed
 

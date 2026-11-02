@@ -1,5 +1,7 @@
 package com.theoriacodex.app.recommend
 
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import com.theoriacodex.app.ui.components.rememberFeedScrollSignal
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -80,7 +82,8 @@ internal fun ForYouHomeScreen(
     onLongPress: (Post) -> Unit,
     onAction: (ForYouAction) -> Unit,
     onShowFilters: () -> Unit,
-    filtersActive: Boolean,
+    filterLabels: List<String>,
+    onClearFilters: () -> () -> Unit,
     onOpenPreview: (String?, List<Post>, Int) -> Unit,
 ) {
     val scroll = rememberLazyListState()
@@ -90,8 +93,9 @@ internal fun ForYouHomeScreen(
     val onReorder = {
         ordering.toggle(state.home.sections) { onAction(ForYouAction.ReorderSections(it)) }
     }
-    Scaffold(contentWindowInsets = WindowInsets(0), floatingActionButton = {
-        FeedFilterFab(active = filtersActive, onClick = onShowFilters, contentDescription = "Filter and sort recommendations")
+    val filterScroll = rememberFeedScrollSignal()
+    Scaffold(modifier = Modifier.nestedScroll(filterScroll.connection), contentWindowInsets = WindowInsets(0), floatingActionButton = {
+        FeedFilterFab(filterLabels, "Filter and sort recommendations", onShowFilters, onClearFilters, scrollSignal = filterScroll)
     }) { padding ->
         if (ordering.reorderMode) {
             ForYouReorderList(state, ordering, sourceMenu, { sourceMenu = it }, onAction, onReorder,

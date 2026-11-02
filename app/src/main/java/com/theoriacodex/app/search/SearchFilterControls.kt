@@ -1,5 +1,13 @@
 package com.theoriacodex.app.search
 
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DateRangePicker
+import androidx.compose.material3.SelectableDates
+import androidx.compose.material3.rememberDateRangePickerState
+import com.theoriacodex.app.ui.components.FilterChoiceChip
+import com.theoriacodex.app.ui.components.FilterSection
+import com.theoriacodex.domain.model.DateRange
+import com.theoriacodex.domain.model.SortMode
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -158,6 +166,54 @@ private fun FavoriteTagSectionContent(
             onAddTag = onAddTag,
             onRemoveTag = { tag -> onRemoveTag(section.source, tag) },
         )
+    }
+}
+
+internal fun sortModeLabel(sortMode: SortMode): String = when (sortMode) {
+    SortMode.NEWEST -> "Newest"
+    SortMode.POPULAR -> "Popular"
+    SortMode.TOP -> "Top"
+    SortMode.RANDOM -> "Random"
+}
+
+/** Quick ranges plus a calendar. Picker values and local filtering both read dates in UTC. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun DateRangeFilterSection(range: DateRange?, onPreset: (DateRangePreset) -> Unit, onCustom: (DateRange) -> Unit) {
+    val now = remember { System.currentTimeMillis() }
+    val preset = presetFor(range, now)
+    var picking by remember { mutableStateOf(false) }
+    FilterSection("Date") {
+        DateRangePreset.entries.forEach { option ->
+            FilterChoiceChip(option.label, preset == option) { onPreset(option) }
+        }
+        val customLabel = range?.takeIf { preset == null }?.let { dateRangeLabel(it, now) } ?: "Custom"
+        FilterChoiceChip(customLabel, preset == null) { picking = true }
+    }
+    if (!picking) return
+    val pickerState = rememberDateRangePickerState(
+        initialSelectedStartDateMillis = range?.fromEpochMs?.takeIf { preset == null },
+        initialSelectedEndDateMillis = range?.toEpochMs?.takeIf { preset == null },
+        selectableDates = object : SelectableDates {
+            override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis <= now
+        },
+    )
+    DatePickerDialog(
+        onDismissRequest = { picking = false },
+        dismissButton = { TextButton(onClick = { picking = false }) { Text("Cancel") } },
+        confirmButton = {
+            TextButton(
+                enabled = pickerState.selectedEndDateMillis != null,
+                onClick = {
+                    val from = pickerState.selectedStartDateMillis
+                    val to = pickerState.selectedEndDateMillis
+                    if (from != null && to != null) onCustom(customDateRange(from, to))
+                    picking = false
+                },
+            ) { Text("Apply") }
+        },
+    ) {
+        DateRangePicker(state = pickerState, modifier = Modifier.weight(1f))
     }
 }
 

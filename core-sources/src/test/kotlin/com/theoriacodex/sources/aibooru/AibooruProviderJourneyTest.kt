@@ -87,7 +87,7 @@ class AibooruProviderJourneyTest {
     )
 
     private fun searchParams(page: String) = mapOf(
-        "limit" to "40", "page" to page, "tags" to "landscape -comic score:>=100 order:score",
+        "limit" to "40", "page" to page, "tags" to "landscape -comic order:score",
     )
 
     private fun postJson(id: Int) =

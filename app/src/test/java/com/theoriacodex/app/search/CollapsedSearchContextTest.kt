@@ -53,8 +53,9 @@ class CollapsedSearchContextTest {
     fun `filter count includes query and route local filters`() {
         val query = emptySearchQuery().copy(sort = SortMode.POPULAR, minScore = 10)
 
+        // A retired minimum score stored in an old query does not count as an active filter.
         assertEquals(
-            6,
+            5,
             activeSearchFilterCount(
                 appliedQuery = query,
                 animatedOnly = true,

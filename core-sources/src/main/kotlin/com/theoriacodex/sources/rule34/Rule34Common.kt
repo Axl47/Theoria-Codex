@@ -39,9 +39,6 @@ internal fun compileRule34BooruTags(query: Query): String {
         .map { tag -> "-$tag" }
 
     val metatags = mutableListOf<String>()
-    if (query.minScore != null) {
-        metatags += "score:>=${query.minScore}"
-    }
     if (query.sort == SortMode.TOP || query.sort == SortMode.POPULAR) {
         metatags += "sort:score"
     }

@@ -1,5 +1,11 @@
 package com.theoriacodex.app.search
 
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import com.theoriacodex.app.media.animatedDurationRangeLabel
+import com.theoriacodex.app.ui.components.FilterChoiceChip
+import com.theoriacodex.app.ui.components.FilterSection
+import com.theoriacodex.app.ui.components.rememberFeedScrollSignal
+import com.theoriacodex.domain.model.DateRange
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import com.theoriacodex.app.viewer.ViewerReturnCorners
@@ -16,8 +22,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,7 +32,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
@@ -37,15 +40,11 @@ import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Card
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import com.theoriacodex.app.viewer.retainPostsUntilViewerCloses
 import androidx.compose.runtime.DisposableEffect
@@ -62,13 +61,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.toSize
 import androidx.compose.material3.CardDefaults
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
@@ -205,11 +201,23 @@ fun SearchScreen(
         )
     }
     val animatedDurationFilterActive = !animatedDurationRange.isFullRange && !isNhentaiSourceMode
-    val searchFiltersActive = animatedFilterActive || animatedDurationFilterActive ||
-        hideLiked || hideSaved || hideWatched || state.query.draft.sort != SortMode.NEWEST ||
-        state.query.draft.dateRange != null || state.query.draft.minScore != null ||
-        state.query.nhentaiFullColorFilter ||
-        state.query.nhentaiLanguageFilter != NhentaiLanguageFilter.ANY
+    val serverFilters = SearchServerFilters(
+        state.query.draft.sort, state.query.draft.dateRange,
+        state.query.nhentaiFullColorFilter, state.query.nhentaiLanguageFilter,
+    )
+    val filterLabels = listOfNotNull(
+        sortModeLabel(serverFilters.sort).takeIf { serverFilters.sort != SortMode.NEWEST },
+        serverFilters.dateRange?.let { dateRangeLabel(it, System.currentTimeMillis()) },
+        "Animated".takeIf { animatedFilterActive },
+        animatedDurationRangeLabel(animatedDurationRange).takeIf { animatedDurationFilterActive },
+        "Full color".takeIf { serverFilters.fullColor },
+        nhentaiLanguageLabel(serverFilters.language).takeIf { serverFilters.language != NhentaiLanguageFilter.ANY },
+        "Hide liked".takeIf { hideLiked },
+        "Hide saved".takeIf { hideSaved },
+        "Hide watched".takeIf { hideWatched },
+    )
+    val filterScroll = rememberFeedScrollSignal()
+    var filterSheetBaseline by remember { mutableStateOf(serverFilters) }
     val appliedFilterCount = activeSearchFilterCount(
         appliedQuery = state.query.applied,
         animatedOnly = animatedFilterActive,
@@ -230,8 +238,10 @@ fun SearchScreen(
         hideSaved,
         hideWatched,
         animatedDurationRange,
+        state.query.applied.dateRange,
     ) {
         SearchVisibilityFilters(
+            dateRange = state.query.applied.dateRange,
             animatedOnly = animatedFilterActive,
             hideLiked = hideLiked,
             hideSaved = hideSaved,
@@ -381,6 +391,14 @@ fun SearchScreen(
     }
     val clearFocusInteraction = remember { MutableInteractionSource() }
 
+    fun applyServerFilters(filters: SearchServerFilters) {
+        onAction(SearchAction.SelectSort(filters.sort))
+        onAction(SearchAction.SetDateRange(filters.dateRange))
+        // These two rewrite the draft's nhentai terms, so only a real change may dispatch them.
+        if (filters.fullColor != serverFilters.fullColor) onAction(SearchAction.SetNhentaiFullColor(filters.fullColor))
+        if (filters.language != serverFilters.language) onAction(SearchAction.SetNhentaiLanguage(filters.language))
+    }
+
     fun closeComposer() {
         onAction(SearchAction.ClearAutocomplete)
         composerOpen = false
@@ -393,6 +411,39 @@ fun SearchScreen(
         onAction(SearchAction.ClearAutocomplete)
         composerOpen = false
         searchBarDismissedByScroll = false
+    }
+
+    fun resetFilterDraft() {
+        applyServerFilters(SearchServerFilters(SortMode.NEWEST, null, false, NhentaiLanguageFilter.ANY))
+        onFabRestoreStateChange(
+            fabRestoreState.copy(hideLiked = false, hideSaved = false, hideWatched = false)
+                .withSearchAnimationFilter(state.query.draft.mode) { restoreState ->
+                    restoreState.copy(
+                        animatedOnly = false,
+                        durationMinBucket = AnimatedDurationRange.Full.normalizedMinBucket,
+                        durationMaxBucket = AnimatedDurationRange.Full.normalizedMaxBucket,
+                    )
+                },
+        )
+    }
+
+    // Results change once, when the filters are settled, however many were adjusted.
+    fun closeFilterSheet() {
+        showFilterSheet = false
+        if (serverFilters != filterSheetBaseline) applyDraft()
+    }
+
+    fun clearFilters(): () -> Unit {
+        val previousFab = fabRestoreState
+        val previousServerFilters = serverFilters
+        val serverFiltersActive = serverFilters != SearchServerFilters(SortMode.NEWEST, null, false, NhentaiLanguageFilter.ANY)
+        resetFilterDraft()
+        if (serverFiltersActive) applyDraft()
+        return {
+            onFabRestoreStateChange(previousFab)
+            applyServerFilters(previousServerFilters)
+            if (serverFiltersActive) applyDraft()
+        }
     }
 
     val sourcePicker: @Composable () -> Unit = {
@@ -414,16 +465,20 @@ SearchSourcePicker(
     }
 
     Scaffold(
+        modifier = Modifier.nestedScroll(filterScroll.connection),
         contentWindowInsets = WindowInsets(0),
         floatingActionButton = {
             FeedFilterFab(
                 modifier = Modifier.padding(bottom = 8.dp),
-                active = searchFiltersActive,
+                labels = filterLabels,
                 contentDescription = "Filter and sort",
                 onClick = {
                     inputFocus.clear()
+                    filterSheetBaseline = serverFilters
                     showFilterSheet = true
                 },
+                onClear = ::clearFilters,
+                scrollSignal = filterScroll,
             )
         }
     ) { padding ->
@@ -718,17 +773,9 @@ SearchSourcePicker(
                 onFabRestoreStateChange(fabRestoreState.copy(hideWatched = enabled))
             },
             nhentaiFullColorFilter = state.query.nhentaiFullColorFilter,
-            onNhentaiFullColorFilterChange = { enabled ->
-                onAction(SearchAction.SetNhentaiFullColor(enabled))
-                applyDraft()
-            },
             nhentaiLanguageFilter = state.query.nhentaiLanguageFilter,
-            onNhentaiLanguageFilterChange = { filter ->
-                onAction(SearchAction.SetNhentaiLanguage(filter))
-                applyDraft()
-            },
-            onSortChanged = { applyDraft() },
-            onDismiss = { showFilterSheet = false },
+            onReset = ::resetFilterDraft,
+            onDismiss = ::closeFilterSheet,
         )
     }
 }
@@ -1258,7 +1305,6 @@ internal fun allowsInlineAutoplayInSearch(post: Post): Boolean {
     return post.id.source != SourceKey.IWARA && post.id.source != SourceKey.HITOMI
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FilterSheet(
     query: Query,
@@ -1275,173 +1321,61 @@ private fun FilterSheet(
     hideWatched: Boolean,
     onHideWatchedChange: (Boolean) -> Unit,
     nhentaiFullColorFilter: Boolean,
-    onNhentaiFullColorFilterChange: (Boolean) -> Unit,
     nhentaiLanguageFilter: NhentaiLanguageFilter,
-    onNhentaiLanguageFilterChange: (NhentaiLanguageFilter) -> Unit,
-    onSortChanged: () -> Unit,
+    onReset: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var minScoreInput by remember(query.minScore) {
-        mutableStateOf(query.minScore?.toString().orEmpty())
-    }
-    var selectedPreset by remember(query.dateRange) {
-        mutableStateOf(inferPreset(query.dateRange?.fromEpochMs, query.dateRange?.toEpochMs))
-    }
-    val focusManager = LocalFocusManager.current
-
-    FeedFilterSheet(onDismiss = onDismiss) {
-            Text("Visibility", style = MaterialTheme.typography.titleMedium)
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (!showAnimatedOnlyFilter) {
-                    item {
-                        FilterChip(
-                            selected = nhentaiFullColorFilter,
-                            onClick = {
-                                onNhentaiFullColorFilterChange(!nhentaiFullColorFilter)
-                            },
-                            label = { Text("Full Color") },
-                        )
-                    }
-                }
-                if (showAnimatedOnlyFilter) {
-                    item {
-                        FilterChip(
-                            selected = animatedOnly,
-                            onClick = { onAnimatedOnlyChange(!animatedOnly) },
-                            label = { Text("Animated only") },
-                        )
-                    }
-                }
-                item {
-                    FilterChip(
-                        selected = hideLiked,
-                        onClick = { onHideLikedChange(!hideLiked) },
-                        label = { Text("Hide liked") },
-                    )
-                }
-                item {
-                    FilterChip(
-                        selected = hideSaved,
-                        onClick = { onHideSavedChange(!hideSaved) },
-                        label = { Text("Hide saved") },
-                    )
-                }
-                item {
-                    FilterChip(
-                        selected = hideWatched,
-                        onClick = { onHideWatchedChange(!hideWatched) },
-                        label = { Text("Hide watched") },
-                    )
-                }
+    FeedFilterSheet(onDismiss = onDismiss, onReset = onReset) {
+        FilterSection("Sort") {
+            SortMode.entries.forEach { mode ->
+                FilterChoiceChip(sortModeLabel(mode), query.sort == mode) { onAction(SearchAction.SelectSort(mode)) }
             }
-
+        }
+        FilterSection("Show") {
             if (showAnimatedOnlyFilter) {
-                AnimatedDurationRangeControl(
-                    range = animatedDurationRange,
-                    onRangeChange = onAnimatedDurationRangeChange,
-                )
+                FilterChoiceChip("Animated only", animatedOnly) { onAnimatedOnlyChange(!animatedOnly) }
+            } else {
+                FilterChoiceChip("Full color", nhentaiFullColorFilter) {
+                    onAction(SearchAction.SetNhentaiFullColor(!nhentaiFullColorFilter))
+                }
             }
-
-            if (!showAnimatedOnlyFilter) {
-                HorizontalDivider()
-                Text("Language", style = MaterialTheme.typography.titleMedium)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(NhentaiLanguageFilter.entries.size) { index ->
-                        val languageFilter = NhentaiLanguageFilter.entries[index]
-                        val label = when (languageFilter) {
-                            NhentaiLanguageFilter.ANY -> "Any"
-                            NhentaiLanguageFilter.ENGLISH -> "English"
-                            NhentaiLanguageFilter.CHINESE -> "Chinese"
-                            NhentaiLanguageFilter.JAPANESE -> "Japanese"
-                        }
-                        FilterChip(
-                            selected = nhentaiLanguageFilter == languageFilter,
-                            onClick = {
-                                if (nhentaiLanguageFilter == languageFilter) return@FilterChip
-                                onNhentaiLanguageFilterChange(languageFilter)
-                            },
-                            label = { Text(label) },
-                        )
+            FilterChoiceChip("Hide liked", hideLiked) { onHideLikedChange(!hideLiked) }
+            FilterChoiceChip("Hide saved", hideSaved) { onHideSavedChange(!hideSaved) }
+            FilterChoiceChip("Hide watched", hideWatched) { onHideWatchedChange(!hideWatched) }
+        }
+        if (showAnimatedOnlyFilter) {
+            AnimatedDurationRangeControl(range = animatedDurationRange, onRangeChange = onAnimatedDurationRangeChange)
+        } else {
+            FilterSection("Language") {
+                NhentaiLanguageFilter.entries.forEach { filter ->
+                    FilterChoiceChip(nhentaiLanguageLabel(filter), nhentaiLanguageFilter == filter) {
+                        onAction(SearchAction.SetNhentaiLanguage(filter))
                     }
                 }
             }
-
-            HorizontalDivider()
-            Text("Sort", style = MaterialTheme.typography.titleMedium)
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(SortMode.entries.size) { index ->
-                    val mode = SortMode.entries[index]
-                    FilterChip(
-                        selected = query.sort == mode,
-                        onClick = {
-                            if (query.sort == mode) return@FilterChip
-                            onAction(SearchAction.SelectSort(mode))
-                            onSortChanged()
-                        },
-                        label = { Text(mode.name.lowercase().replaceFirstChar(Char::uppercase)) },
-                    )
-                }
-            }
-
-            HorizontalDivider()
-            Text("Date range", style = MaterialTheme.typography.titleMedium)
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(DateRangePreset.entries.size) { index ->
-                    val preset = DateRangePreset.entries[index]
-                    val label = when (preset) {
-                        DateRangePreset.NONE -> "None"
-                        DateRangePreset.TODAY -> "Today"
-                        DateRangePreset.LAST_7_DAYS -> "7d"
-                        DateRangePreset.LAST_30_DAYS -> "30d"
-                    }
-                    FilterChip(
-                        selected = selectedPreset == preset,
-                        onClick = {
-                            selectedPreset = preset
-                            onAction(SearchAction.SetDateRangePreset(preset))
-                        },
-                        label = { Text(label) },
-                    )
-                }
-            }
-
-            HorizontalDivider()
-            Text("Min score", style = MaterialTheme.typography.titleMedium)
-            OutlinedTextField(
-                modifier = Modifier.fillMaxWidth(),
-                value = minScoreInput,
-                onValueChange = { value ->
-                    minScoreInput = value.filter { it.isDigit() }
-                    onAction(SearchAction.SetMinimumScore(minScoreInput.toIntOrNull()))
-                },
-                label = { Text("Optional") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Number,
-                    imeAction = ImeAction.Done,
-                ),
-                keyboardActions = KeyboardActions(
-                    onDone = { focusManager.clearFocus() }
-                ),
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                TextButton(onClick = {
-                    onAction(SearchAction.ResetFilters)
-                    selectedPreset = DateRangePreset.NONE
-                    minScoreInput = ""
-                }) {
-                    Text("Reset")
-                }
-                TextButton(onClick = onDismiss) {
-                    Text("Done")
-                }
-            }
+        }
+        DateRangeFilterSection(
+            range = query.dateRange,
+            onPreset = { preset -> onAction(SearchAction.SetDateRangePreset(preset)) },
+            onCustom = { range -> onAction(SearchAction.SetDateRange(range)) },
+        )
     }
 }
+
+private fun nhentaiLanguageLabel(filter: NhentaiLanguageFilter): String = when (filter) {
+    NhentaiLanguageFilter.ANY -> "Any"
+    NhentaiLanguageFilter.ENGLISH -> "English"
+    NhentaiLanguageFilter.CHINESE -> "Chinese"
+    NhentaiLanguageFilter.JAPANESE -> "Japanese"
+}
+
+/** The filters that change what a source returns, so changing them needs a new search. */
+private data class SearchServerFilters(
+    val sort: SortMode,
+    val dateRange: DateRange?,
+    val fullColor: Boolean,
+    val language: NhentaiLanguageFilter,
+)
 
 @Composable
 private fun SourceBadge(

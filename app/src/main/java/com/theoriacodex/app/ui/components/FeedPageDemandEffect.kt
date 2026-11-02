@@ -47,7 +47,8 @@ fun rememberFeedPageDemand(
             val indices = gridState.layoutInfo.visibleItemsInfo.map { it.index }
             currentInput.copy(
                 hasLocalFilters = filters.animatedOnly || filters.hideLiked || filters.hideSaved ||
-                    filters.hideWatched || !filters.animatedDurationRange.isFullRange,
+                    filters.hideWatched || !filters.animatedDurationRange.isFullRange ||
+                    filters.dateRange != null,
                 lastVisibleCanonicalIndex = currentCanonicalIndex(indices),
                 atVisibleEnd = currentItemCount > 0 && indices.any { it >= currentItemCount - 1 },
                 scrolling = gridState.isScrollInProgress,

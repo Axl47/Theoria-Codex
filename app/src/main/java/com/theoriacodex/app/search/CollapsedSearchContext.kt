@@ -38,7 +38,6 @@ internal fun activeSearchFilterCount(
     hideWatched,
     appliedQuery.sort != SortMode.NEWEST,
     appliedQuery.dateRange != null,
-    appliedQuery.minScore != null,
     fullColor,
     language != NhentaiLanguageFilter.ANY,
 ).count { it }

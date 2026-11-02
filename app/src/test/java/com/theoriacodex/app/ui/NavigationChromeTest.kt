@@ -10,6 +10,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import com.theoriacodex.app.codex.CodexDetailScreen
@@ -34,18 +35,39 @@ class NavigationChromeTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
-    fun filterFabExposesCurrentStateAndDispatchesClicks() {
-        var active by mutableStateOf(false)
+    fun filterButtonNamesFiltersCountsBeyondTwoAndOffersUndoAfterClearing() {
+        var labels by mutableStateOf(emptyList<String>())
         var clicks = 0
+        var restored = 0
         compose.setContent {
-            MaterialTheme { FeedFilterFab(active, "Filters", { clicks++ }) }
+            MaterialTheme {
+                FeedFilterFab(labels, "Filters", { clicks++ }, {
+                    val previous = labels
+                    labels = emptyList()
+                    ({ labels = previous; restored++ })
+                })
+            }
         }
         val fab = compose.onNodeWithContentDescription("Filters")
         fab.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "No active filters"))
-        compose.runOnIdle { active = true }
+        compose.onNodeWithText("Filter").assertExists()
+
+        compose.runOnIdle { labels = listOf("Popular", "Animated") }
         fab.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Filters active"))
+        compose.onNodeWithText("Popular · Animated").assertExists()
         fab.performClick()
         compose.runOnIdle { assertEquals(1, clicks) }
+
+        compose.runOnIdle { labels = listOf("Popular", "Animated", "Hide liked") }
+        compose.onNodeWithText("3").assertExists()
+
+        compose.onNodeWithContentDescription("Clear filters").performClick()
+        compose.onNodeWithText("Undo").performClick()
+        compose.runOnIdle {
+            assertEquals(1, restored)
+            assertEquals(3, labels.size)
+            assertEquals(1, clicks)
+        }
     }
 
     @Test
