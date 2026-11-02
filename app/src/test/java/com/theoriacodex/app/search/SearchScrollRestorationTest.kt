@@ -49,6 +49,71 @@ class SearchScrollRestorationTest {
     private val writes = mutableListOf<SearchAction.ScrollChanged>()
     private lateinit var grid: LazyStaggeredGridState
     private var hideAnchor = false
+    private val hiddenIndices = mutableStateOf(emptySet<Int>())
+    private val visibilityReady = mutableStateOf(true)
+
+    @Test fun `filter changes save the new post even when grid coordinates stay unchanged`() {
+        state.value = state.value.copy(restoration = SearchRestorationUiState.Restored(false))
+        render()
+        compose.runOnIdle {
+            assertEquals(SearchAction.ScrollChanged(0, 0), writes.last())
+            hiddenIndices.value = setOf(0)
+        }
+        compose.runOnIdle {
+            assertEquals(0, grid.firstVisibleItemIndex)
+            assertEquals(0, grid.firstVisibleItemScrollOffset)
+            assertEquals(SearchAction.ScrollChanged(1, 0), writes.last())
+            hiddenIndices.value = posts.indices.toSet()
+        }
+        compose.runOnIdle { hiddenIndices.value = (0..4).toSet() }
+        compose.runOnIdle {
+            assertEquals(0, grid.firstVisibleItemIndex)
+            assertEquals(SearchAction.ScrollChanged(5, 0), writes.last())
+        }
+    }
+
+    @Test fun `duration lookup keeps an empty projection pending then restores the revealed anchor once`() {
+        state.value = state.value.copy(content = state.value.content.copy(results = posts.take(40)))
+        hiddenIndices.value = posts.indices.toSet()
+        visibilityReady.value = false
+        render()
+        compose.runOnIdle {
+            assertTrue(acknowledgements.isEmpty())
+            assertTrue(writes.isEmpty())
+            hiddenIndices.value = emptySet()
+            visibilityReady.value = true
+        }
+        compose.runOnIdle {
+            assertEquals(listOf(1L), acknowledgements)
+            assertEquals(22, grid.firstVisibleItemIndex)
+            assertEquals(17, grid.firstVisibleItemScrollOffset)
+            assertEquals(SearchAction.ScrollChanged(22, 17), writes.first())
+        }
+        compose.onNodeWithTag("restore-grid").performScrollToIndex(25)
+        compose.runOnIdle { visibilityReady.value = false }
+        compose.runOnIdle { visibilityReady.value = true }
+        compose.runOnIdle {
+            assertEquals(25, grid.firstVisibleItemIndex)
+            assertEquals(listOf(1L), acknowledgements)
+        }
+    }
+
+    @Test fun `duration decision that hides the anchor permits predecessor fallback`() {
+        state.value = state.value.copy(content = state.value.content.copy(results = posts.take(40)))
+        visibilityReady.value = false
+        hideAnchor = true
+        render()
+        compose.runOnIdle {
+            assertTrue(acknowledgements.isEmpty())
+            assertTrue(writes.isEmpty())
+            visibilityReady.value = true
+        }
+        compose.runOnIdle {
+            assertEquals(listOf(1L), acknowledgements)
+            assertEquals(21, grid.firstVisibleItemIndex)
+            assertEquals(17, grid.firstVisibleItemScrollOffset)
+        }
+    }
 
     @Test fun `delayed second page restores exact anchor and offset once without layout writes`() {
         render()
@@ -101,6 +166,7 @@ class SearchScrollRestorationTest {
     }
 
     @Test fun `deliberate drag supersedes pending restore so later pages do not jump`() {
+        visibilityReady.value = false
         render()
         compose.runOnIdle { assertTrue(acknowledgements.isEmpty()) }
         compose.onNodeWithTag("restore-grid").performTouchInput { swipeUp() }
@@ -110,21 +176,38 @@ class SearchScrollRestorationTest {
         }
         compose.runOnIdle {
             state.value = state.value.copy(content = state.value.content.copy(results = posts.take(40)))
+            visibilityReady.value = true
         }
         compose.runOnIdle {
             assertEquals(userPosition, grid.firstVisibleItemIndex to grid.firstVisibleItemScrollOffset)
         }
     }
 
+    @Test fun `explicit reset to top does not wait for duration lookups`() {
+        state.value = state.value.copy(restoration = SearchRestorationUiState.Restored(
+            false, SearchScrollState(0, 0), 1L, resetToTop = true,
+        ))
+        visibilityReady.value = false
+        render()
+        compose.runOnIdle {
+            assertEquals(listOf(1L), acknowledgements)
+            assertEquals(0, grid.firstVisibleItemIndex)
+        }
+    }
+
     private fun render() {
         compose.setContent {
             val current = state.value
-            val visible = current.content.results.filterNot { hideAnchor && it.id == posts[22].id }
+            val visible = current.content.results.filterIndexed { index, post ->
+                index !in hiddenIndices.value && !(hideAnchor && post.id == posts[22].id)
+            }
             val projection = buildRelatedFeedProjection(current.content.results, visible, RelatedPostsUiState.Idle)
             grid = rememberLazyStaggeredGridState()
             LazyVerticalStaggeredGrid(columns = StaggeredGridCells.Fixed(1), state = grid,
                 modifier = Modifier.height(300.dp).testTag("restore-grid")) {
-                items(visible.size) { BasicText("Post $it", Modifier.height(100.dp)) }
+                items(visible.size, key = { visible[it].id.sourcePostId }) {
+                    BasicText("Post $it", Modifier.height(100.dp))
+                }
             }
             val dispatch: (SearchAction) -> Unit = { action ->
                 when (action) {
@@ -137,8 +220,8 @@ class SearchScrollRestorationTest {
                     else -> Unit
                 }
             }
-            SearchScrollRestorationEffect(current, projection, grid, dispatch)
-            SearchScrollPersistenceEffect("query", current.restoration, false, projection, grid, dispatch)
+            SearchScrollRestorationEffect(current, projection, grid, dispatch, visibilityReady.value)
+            SearchScrollPersistenceEffect("query", current.restoration, projection, grid, dispatch)
         }
     }
 }

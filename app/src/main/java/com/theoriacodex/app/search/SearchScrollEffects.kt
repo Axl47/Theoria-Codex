@@ -22,6 +22,7 @@ internal fun SearchScrollRestorationEffect(
     projection: RelatedFeedProjection,
     gridState: LazyStaggeredGridState,
     onAction: (SearchAction) -> Unit,
+    visibilityReady: Boolean = true,
 ) {
     val currentProjection by rememberUpdatedState(projection)
     val restoration = state.restoration as? SearchRestorationUiState.Restored
@@ -35,10 +36,11 @@ internal fun SearchScrollRestorationEffect(
             }
         }
     }
-    LaunchedEffect(restoration?.scrollRequestId, state.canApplyScrollRestoration) {
+    val canRestore = state.canApplyScrollRestoration && (restoration?.resetToTop == true || visibilityReady)
+    LaunchedEffect(restoration?.scrollRequestId, canRestore) {
         val request = restoration ?: return@LaunchedEffect
         val restored = request.scrollState ?: return@LaunchedEffect
-        if (!state.canApplyScrollRestoration) return@LaunchedEffect
+        if (!canRestore) return@LaunchedEffect
         val activeProjection = currentProjection
         if (activeProjection.entries.isNotEmpty()) {
             gridState.scrollToItem(
@@ -54,19 +56,23 @@ internal fun SearchScrollRestorationEffect(
 internal fun SearchScrollPersistenceEffect(
     queryHash: String,
     restoration: SearchRestorationUiState,
-    animatedFilterActive: Boolean,
     projection: RelatedFeedProjection,
     gridState: LazyStaggeredGridState,
     onAction: (SearchAction) -> Unit,
 ) {
     val currentProjection by rememberUpdatedState(projection)
     val dispatch by rememberUpdatedState(onAction)
-    LaunchedEffect(queryHash, animatedFilterActive, restoration.allowsScrollPersistence) {
-        if (animatedFilterActive || !restoration.allowsScrollPersistence) return@LaunchedEffect
-        snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
+    LaunchedEffect(queryHash, restoration.allowsScrollPersistence) {
+        if (!restoration.allowsScrollPersistence) return@LaunchedEffect
+        // Filtering can replace the post at an unchanged grid index and offset.
+        snapshotFlow {
+            currentProjection.canonicalPositionForGridIndex(
+                gridState.firstVisibleItemIndex, gridState.firstVisibleItemScrollOffset,
+            )
+        }
             .distinctUntilChanged()
-            .collect { (index, offset) ->
-                currentProjection.canonicalPositionForGridIndex(index, offset)?.let { position ->
+            .collect { position ->
+                if (position != null) {
                     dispatch(SearchAction.ScrollChanged(position.index, position.offsetPx))
                 }
             }

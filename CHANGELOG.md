@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-02
+
+### Fixed
+
+- Refresh storage usage when Settings opens so Storage & caching shows totals before Manage storage is opened.
+- Keep Search's scroll position current with the Animated filter enabled, so returning to Search does not jump to an older position.
+- Keep Search's saved scroll position aligned when local filters change which posts are visible.
+- Wait for the saved post's duration filter decision before restoring Search's scroll position.
+- Show a GIF card's thumbnail immediately while the full GIF downloads, instead of leaving the card blank until the download finishes.
+- Stop large GIFs from holding up other thumbnails, and stop downloading GIFs that are scrolled past before they are visible.
+- Keep GIF cards animating when a static sample is also available, instead of replacing the animation with a still image.
+- Let large GIFs finish loading in the Viewer on slow connections instead of restarting after 20 seconds.
+- Show a thumbnail instead of the animated GIF on collection covers, so covers load faster.
+- Keep the Viewer on the current post when a swipe is abandoned, instead of bouncing to the previous post and getting stuck on its thumbnail.
+
 ## [1.0.0] - 2026-11-02
 
 ### Fixed

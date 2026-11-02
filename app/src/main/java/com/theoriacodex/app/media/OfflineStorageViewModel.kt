@@ -77,6 +77,10 @@ internal class OfflineStorageViewModel(
 
     fun open() {
         controls.update { it.copy(isOpen = true, message = null) }
+        refreshUsage()
+    }
+
+    fun refreshUsage() {
         if (!controls.value.controlsEnabled) return
         controls.update { it.copy(refreshing = true) }
         scope.launch {

@@ -242,6 +242,7 @@ internal fun ViewerScreen(
         onAction(ViewerAction.Dismiss)
     }
 
+    // Pass these local functions as lambdas: a memoized `::function` keeps the values it first captured.
     fun requestDismissViewer() {
         if (pendingDismiss) return
         setPlaybackEnabled(false)
@@ -541,7 +542,7 @@ internal fun ViewerScreen(
                     events = viewerRendererEvents(
                         session = uiState.session, key = key, generation = loadGeneration,
                         onAction = onAction,
-                        onTimelineInteractionActiveChanged = ::onTimelineInteractionChanged,
+                        onTimelineInteractionActiveChanged = { onTimelineInteractionChanged(it) },
                         onDurationKnown = { duration ->
                             if (isPixivUgoiraMedia(post, media) || isAuthoritativeDurationMedia(post, media)) onAuthoritativeDurationKnown(post, duration)
                         },
@@ -555,7 +556,7 @@ internal fun ViewerScreen(
                     mediaError = uiState.mediaError?.takeIf { active && it.mediaKey == key },
                     pixivUgoiraClient = pixivUgoiraClient,
                     onAction = onAction,
-                    onInteraction = ::markInteraction,
+                    onInteraction = { markInteraction() },
                     onToggleChrome = { onAction(ViewerAction.ToggleChrome); interactionSerial += 1 },
                     imageSession = imageSession,
                     onNavigate = navigateFromHorizontalSwipe,
@@ -570,7 +571,7 @@ internal fun ViewerScreen(
                         mediaPagerState.dragViewerPage(selectedMediaIndex, mediaTarget?.mediaIndex, displacement)
                         postPagerState.dragViewerPage(currentPostIndex, postTarget?.postIndex, displacement)
                     },
-                    onSwipeCancelled = ::cancelSwipe,
+                    onSwipeCancelled = { cancelSwipe() },
                     onRequestMediaRecovery = onRequestMediaRecovery,
                 )
             }
@@ -584,7 +585,7 @@ internal fun ViewerScreen(
             ViewerPostStrip(navigation.originalPosts, stripIndex, { index ->
                 pendingPostId = navigation.originalPosts[index].id
             }, Modifier.align(Alignment.BottomCenter).testTag("viewer-post-navigation-strip"),
-                onLoadMore = ::loadMoreFromStrip, onInteraction = ::markInteraction)
+                onLoadMore = { loadMoreFromStrip() }, onInteraction = { markInteraction() })
         }
         if (chromeVisible) {
             ViewerChrome(
@@ -600,7 +601,7 @@ internal fun ViewerScreen(
                 indexLabel = if (selectedPostMedia.size > 1) {
                     "${selectedMediaIndex + 1} / ${selectedPostMedia.size}"
                 } else null,
-                onBack = ::requestDismissViewer,
+                onBack = { requestDismissViewer() },
                 liked = selectedPostLiked,
                 onToggleLike = {
                     onAction(ViewerAction.ToggleLike)
@@ -660,7 +661,7 @@ internal fun ViewerScreen(
                 onRetry = { onRetryRelatedPosts(); markInteraction() },
                 enabled = !swipeInProgress && !dragInProgress,
                 onExpandedChange = { relatedStripExpanded = it },
-                onInteraction = ::markInteraction,
+                onInteraction = { markInteraction() },
                 modifier = Modifier.align(Alignment.TopEnd).padding(top = 72.dp),
             )
         }

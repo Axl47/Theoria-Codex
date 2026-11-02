@@ -81,6 +81,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.imageLoader
+import coil.memory.MemoryCache
+import coil.request.ErrorResult
 import coil.request.SuccessResult
 import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.feed.FeedPageDemandInput
@@ -134,7 +136,7 @@ import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -350,9 +352,13 @@ fun SearchScreen(
         ?.takeIf { restored -> restored.scrollState != null }
     SearchScrollRestorationEffect(
         state, feedProjection, gridState, onAction,
+        visibilityReady = !animatedDurationFilterActive || durationMetadata.isVisibilityResolved(
+            displayResults.getOrNull(scrollRestoration?.scrollState?.firstVisibleItemIndex ?: -1),
+            resolveInBackground = resolveUnknownAnimatedDurations,
+        ),
     )
     SearchScrollPersistenceEffect(
-        queryHash, state.restoration, animatedFilterActive, feedProjection, gridState, onAction,
+        queryHash, state.restoration, feedProjection, gridState, onAction,
     )
 
     val pageDemand = rememberFeedPageDemand(
@@ -912,6 +918,19 @@ fun SearchResultCard(
         }
     }
 
+    fun canRecoverMedia(error: Throwable, location: String?): Boolean =
+        recoverPostMedia != null && isHttpNotFound(error) && mediaRecoveryAttemptedUrls.add(location.orEmpty())
+
+    /** Returns whether the provider supplied replacement media for this card. */
+    suspend fun recoverCardMedia(failedRef: ImageRef): Boolean {
+        val recovered = runCatchingPreservingCancellation {
+            recoverPostMedia?.invoke(effectivePost, failedRef)
+        }.getOrNull()
+        if (recovered == null || recovered == effectivePost) return false
+        resolvedPostOverride = recovered
+        return true
+    }
+
     var mediaCorners by remember { mutableStateOf(ViewerReturnCorners()) }
     val cardShape = CardDefaults.elevatedShape
     val layoutDirection = LocalLayoutDirection.current
@@ -974,6 +993,9 @@ fun SearchResultCard(
             mutableIntStateOf(0)
         }
         var hasVisibleImage by remember(effectivePost.id, imageDeliveryPlan) { mutableStateOf(false) }
+        var posterMemoryCacheKey by remember(effectivePost.id, imageDeliveryPlan) {
+            mutableStateOf<MemoryCache.Key?>(null)
+        }
         val previewCandidate = imageCandidates.getOrNull(displayedImageCandidateIndex)
         val previewUrl = previewCandidate?.location
         val ratio = remember(post.id, mediaAspectRatio) {
@@ -998,10 +1020,21 @@ fun SearchResultCard(
                     url = it,
                     sourceKey = effectivePost.id.source,
                     decodeSize = decodeSize,
+                    // Animated drawables skip the memory cache, so keep the poster up while one decodes.
+                    placeholderMemoryCacheKey = posterMemoryCacheKey.takeIf {
+                        previewCandidate.activation == MediaDeliveryActivation.ANIMATION_UPGRADE
+                    },
                 )
             }
         }
         val mediaCount = postMediaCount(effectivePost)
+        val pendingUpgrades = remember(imageDeliveryPlan, displayedImageCandidateIndex) {
+            imageDeliveryPlan.upgradeIndicesAfter(displayedImageCandidateIndex)
+        }
+        val upgradesToAnimation = pendingUpgrades.firstOrNull()
+            ?.let { index -> imageCandidates[index].activation == MediaDeliveryActivation.ANIMATION_UPGRADE } == true
+        // Whole-file animation downloads are costly, so like video players they follow settled visibility.
+        val upgradeWanted = !upgradesToAnimation || playbackActive
 
         LaunchedEffect(
             imageDeliveryPlan,
@@ -1009,28 +1042,37 @@ fun SearchResultCard(
             maxPreparedImageCandidateIndex,
             hasVisibleImage,
             decodeSize,
+            upgradeWanted,
         ) {
-            if (!hasVisibleImage || displayedImageCandidateIndex != maxPreparedImageCandidateIndex) {
+            if (!hasVisibleImage || !upgradeWanted || displayedImageCandidateIndex != maxPreparedImageCandidateIndex) {
                 return@LaunchedEffect
             }
-            val nextIndex = displayedImageCandidateIndex + 1
-            val nextCandidate = imageCandidates.getOrNull(nextIndex) ?: return@LaunchedEffect
-            if (nextCandidate.activation != MediaDeliveryActivation.QUALITY_UPGRADE) {
-                return@LaunchedEffect
-            }
-            val result = runCatchingPreservingCancellation {
-                context.imageLoader.execute(
-                    buildFeedImageRequest(
-                        context = context,
-                        url = nextCandidate.location,
-                        sourceKey = effectivePost.id.source,
-                        decodeSize = decodeSize,
+            if (upgradesToAnimation) delay(FEED_PLAYER_ACTIVATION_DELAY_MS)
+            pendingUpgrades.forEach { nextIndex ->
+                val nextCandidate = imageCandidates[nextIndex]
+                val result = runCatchingPreservingCancellation {
+                    context.imageLoader.execute(
+                        buildFeedImageRequest(
+                            context = context,
+                            url = nextCandidate.location,
+                            sourceKey = effectivePost.id.source,
+                            decodeSize = decodeSize,
+                        )
                     )
-                )
-            }.getOrNull()
-            if (result is SuccessResult) {
-                maxPreparedImageCandidateIndex = nextIndex
-                displayedImageCandidateIndex = nextIndex
+                }.getOrNull()
+                if (result is SuccessResult) {
+                    maxPreparedImageCandidateIndex = nextIndex
+                    displayedImageCandidateIndex = nextIndex
+                    return@LaunchedEffect
+                }
+                if (
+                    upgradesToAnimation &&
+                    result is ErrorResult &&
+                    canRecoverMedia(result.throwable, nextCandidate.location) &&
+                    recoverCardMedia(nextCandidate.ref.copy(url = nextCandidate.location))
+                ) {
+                    return@LaunchedEffect
+                }
             }
         }
 
@@ -1115,31 +1157,20 @@ fun SearchResultCard(
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                     isActive = playbackActive,
-                    onSuccess = {
+                    onSuccess = { result ->
                         hasVisibleImage = true
                         maxPreparedImageCandidateIndex = displayedImageCandidateIndex
+                        if (previewCandidate?.activation != MediaDeliveryActivation.ANIMATION_UPGRADE) {
+                            posterMemoryCacheKey = result.memoryCacheKey
+                        }
                     },
                     onError = { state ->
                         val canAdvance = !hasVisibleImage &&
                             displayedImageCandidateIndex < imageCandidates.lastIndex
                         val failedRef = previewCandidate?.ref?.copy(url = previewUrl)
-                        if (
-                            failedRef != null &&
-                            recoverPostMedia != null &&
-                            isHttpNotFound(state.result.throwable) &&
-                            mediaRecoveryAttemptedUrls.add(previewUrl.orEmpty())
-                        ) {
+                        if (failedRef != null && canRecoverMedia(state.result.throwable, previewUrl)) {
                             scope.launch {
-                                val recovered = try {
-                                    recoverPostMedia(effectivePost, failedRef)
-                                } catch (error: CancellationException) {
-                                    throw error
-                                } catch (_: Exception) {
-                                    null
-                                }
-                                if (recovered != null && recovered != effectivePost) {
-                                    resolvedPostOverride = recovered
-                                } else if (canAdvance) {
+                                if (!recoverCardMedia(failedRef) && canAdvance) {
                                     displayedImageCandidateIndex += 1
                                 }
                             }

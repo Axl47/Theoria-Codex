@@ -59,10 +59,19 @@ internal data class DurationFilterMetadata(
     val knownDurationMsByPostId: Map<PostId, Long>,
     val stateByPostId: Map<PostId, MediaDurationState>,
     val readiness: DurationFilterReadiness = DurationFilterReadiness(0, 0),
+    val isPrepared: Boolean = true,
 ) {
+    /** A hidden anchor is final once its duration is decided, or probing is disabled. */
+    fun isVisibilityResolved(post: Post?, resolveInBackground: Boolean): Boolean {
+        if (!isPrepared) return false
+        if (post == null || !resolveInBackground || !isAnimatedPost(post) || animatedDurationMs(post) != null) return true
+        val state = stateByPostId[post.id]
+        return state != null && state != MediaDurationState.Pending
+    }
+
     companion object {
         val EMPTY = DurationFilterMetadata(emptyMap(), emptyMap())
-        val RESOLVING = DurationFilterMetadata(emptyMap(), emptyMap(), DurationFilterReadiness(1, 1))
+        val RESOLVING = DurationFilterMetadata(emptyMap(), emptyMap(), DurationFilterReadiness(1, 1), isPrepared = false)
     }
 }
 

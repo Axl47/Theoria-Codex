@@ -15,6 +15,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.StateFlow
+import okhttp3.Dispatcher
+import okhttp3.OkHttpClient
 
 class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContainerOwner {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -62,9 +64,17 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
                 add(AnimatedWebPDecoder.Factory())
                 add(ImageDecoderDecoder.Factory())
             }
+            // OkHttp's default of five per host lets a few large GIFs stall every thumbnail behind them.
+            .okHttpClient {
+                OkHttpClient.Builder()
+                    .dispatcher(Dispatcher().apply { maxRequestsPerHost = IMAGE_MAX_REQUESTS_PER_HOST })
+                    .build()
+            }
             .build()
     }
 }
+
+private const val IMAGE_MAX_REQUESTS_PER_HOST = 16
 
 internal fun shouldStartAppContainer(
     benchmarkFixturesEnabled: Boolean,

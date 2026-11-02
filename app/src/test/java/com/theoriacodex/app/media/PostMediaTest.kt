@@ -9,10 +9,7 @@ import org.junit.Test
 
 class PostMediaTest {
     @Test
-    fun `preview candidate prefers animated full image and playback keeps source headers`() {
-        val animated = post(SourceKey.GELBOORU, ref("file.gif", "image/gif"))
-        assertEquals(PostMediaSelectionReason.FULL_ANIMATED_IMAGE, postPreviewImageCandidate(animated)?.reason)
-
+    fun `playback keeps source headers`() {
         val video = ref("file.mp4", "video/mp4")
         val videoPost = post(SourceKey.GELBOORU, ref("full.jpg", "image/jpeg")).copy(media = listOf(video))
         assertEquals(video, postPlaybackMediaCandidate(videoPost)?.ref)
@@ -132,6 +129,55 @@ class PostMediaTest {
             ),
             plan.candidates.map { it.activation },
         )
+    }
+
+    @Test
+    fun `remote gif paints its poster first and never upgrades to a static sample`() {
+        val gif = ref("file.gif", "image/gif").copy(progressiveUrls = listOf("https://example.test/sample.jpg"))
+
+        val plan = previewMediaDeliveryPlan(post(SourceKey.GELBOORU, gif))
+
+        assertEquals(
+            listOf("https://example.test/preview.jpg", "https://example.test/file.gif"),
+            plan.candidates.map { it.location },
+        )
+        assertEquals(
+            listOf(MediaDeliveryActivation.PRIMARY, MediaDeliveryActivation.ANIMATION_UPGRADE),
+            plan.candidates.map { it.activation },
+        )
+        assertEquals(listOf(1), plan.upgradeIndicesAfter(0))
+        assertEquals(emptyList<Int>(), plan.upgradeIndicesAfter(1))
+    }
+
+    @Test
+    fun `animated mirrors are alternatives for a single upgrade`() {
+        val animated = ref("a.webp", "image/webp").copy(
+            isAnimated = true,
+            progressiveUrls = listOf("https://example.test/a.webp", "https://mirror.test/a.webp"),
+        )
+
+        val plan = previewMediaDeliveryPlan(post(SourceKey.HITOMI, animated))
+
+        assertEquals(
+            listOf(
+                "https://example.test/preview.jpg",
+                "https://example.test/a.webp",
+                "https://mirror.test/a.webp",
+            ),
+            plan.candidates.map { it.location },
+        )
+        assertEquals(listOf(1, 2), plan.upgradeIndicesAfter(0))
+        assertEquals(emptyList<Int>(), plan.upgradeIndicesAfter(1))
+    }
+
+    @Test
+    fun `saved gif plays directly without waiting on a remote poster`() {
+        val saved = ref("file.gif", "image/gif").copy(localPath = "/saved/file.gif")
+
+        val plan = previewMediaDeliveryPlan(post(SourceKey.GELBOORU, saved))
+
+        assertEquals("/saved/file.gif", plan.primary?.location)
+        assertEquals(emptyList<Int>(), plan.upgradeIndicesAfter(0))
     }
 
     @Test
