@@ -16,7 +16,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.printToString
-import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
@@ -197,7 +196,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
             input.fetchSemanticsNode().config[SemanticsProperties.EditableText].text == value &&
                 compose.onAllNodes(add).fetchSemanticsNodes().isNotEmpty()
         }
-        input.performImeAction()
+        activate(compose.onNode(add))
         compose.waitUntil(10_000) {
             input.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.isEmpty() &&
                 compose.onAllNodes(hasText(value, substring = false) and hasClickAction())
