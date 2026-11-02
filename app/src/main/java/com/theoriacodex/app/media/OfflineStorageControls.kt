@@ -46,12 +46,11 @@ internal fun OfflineStorageSheet(
         ) {
             item {
                 Text("Storage", style = MaterialTheme.typography.titleLarge)
-                OfflineStorageSummary(state, downloadBytes)
                 if (state.refreshing || state.working) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 state.message?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
             }
             item {
-                OfflineStorageBreakdown(state)
+                OfflineStorageBreakdown(state, downloadBytes)
             }
             item {
                 DisposableCacheControls(state, onClearDisposable)
@@ -78,7 +77,7 @@ internal fun OfflineStorageSheet(
 }
 
 @Composable
-private fun OfflineStorageBreakdown(state: OfflineStorageUiState) {
+private fun OfflineStorageBreakdown(state: OfflineStorageUiState, downloadBytes: Long) {
     state.disposable?.let { cache ->
         MediaStorageChart(
             mediaStorageBreakdown(
@@ -87,6 +86,7 @@ private fun OfflineStorageBreakdown(state: OfflineStorageUiState) {
                 videoBytes = cache.videoBytes,
                 gifBytes = cache.gifBytes,
                 animationBytes = cache.animationBytes,
+                downloadBytes = downloadBytes,
             ),
         )
     } ?: Text(

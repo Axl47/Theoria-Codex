@@ -6,11 +6,12 @@ enum class MediaStorageCategory {
     VIDEO,
     GIF,
     ANIMATION,
+    DOWNLOADS,
 }
 
 data class MediaStorageUsage(val category: MediaStorageCategory, val bytes: Long)
 
-/** Categories are disjoint disk stores; percentages share the complete managed-media total. */
+/** Categories are disjoint stores (downloads live in the public Downloads folder); percentages share the complete managed-media total. */
 data class MediaStorageBreakdown(val categories: List<MediaStorageUsage>) {
     val totalBytes: Long = categories.sumOf(MediaStorageUsage::bytes)
 
@@ -24,6 +25,7 @@ fun mediaStorageBreakdown(
     videoBytes: Long,
     gifBytes: Long,
     animationBytes: Long,
+    downloadBytes: Long,
 ): MediaStorageBreakdown = MediaStorageBreakdown(
     listOf(
         MediaStorageUsage(MediaStorageCategory.OFFLINE, offlineBytes.coerceAtLeast(0)),
@@ -31,5 +33,6 @@ fun mediaStorageBreakdown(
         MediaStorageUsage(MediaStorageCategory.VIDEO, videoBytes.coerceAtLeast(0)),
         MediaStorageUsage(MediaStorageCategory.GIF, gifBytes.coerceAtLeast(0)),
         MediaStorageUsage(MediaStorageCategory.ANIMATION, animationBytes.coerceAtLeast(0)),
+        MediaStorageUsage(MediaStorageCategory.DOWNLOADS, downloadBytes.coerceAtLeast(0)),
     ),
 )
