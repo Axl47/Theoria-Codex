@@ -2,7 +2,7 @@
 # Android support: current and previous stable major releases (Android 17 / 16).
 androidMinSdk = "36"
 androidCompileSdk = "37"
-agp = "9.3.3"
+agp = "9.4.1"
 kotlin = "2.4.21"
 coreKtx = "1.19.1"
 junit4 = "4.13.2"
