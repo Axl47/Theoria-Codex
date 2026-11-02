@@ -31,6 +31,7 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
+import coil.memory.MemoryCache
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.theoriacodex.app.media.MediaRequestFactory
@@ -333,6 +334,7 @@ internal fun buildFeedImageRequest(
     url: String,
     sourceKey: SourceKey,
     decodeSize: FeedPreviewDecodeSize,
+    placeholderMemoryCacheKey: MemoryCache.Key? = null,
 ): ImageRequest {
     return MediaRequestFactory.imageRequest(
         context = context,
@@ -341,7 +343,7 @@ internal fun buildFeedImageRequest(
         crossfade = false,
         targetWidthPx = decodeSize.widthPx,
         targetHeightPx = decodeSize.heightPx,
-    )
+    ).newBuilder().placeholderMemoryCacheKey(placeholderMemoryCacheKey).build()
 }
 
 internal fun isVisibleFeedBounds(bounds: Rect): Boolean {

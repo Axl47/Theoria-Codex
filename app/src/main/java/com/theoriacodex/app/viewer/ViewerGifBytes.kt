@@ -97,7 +97,8 @@ internal suspend fun loadRemoteViewerGifBytes(context: Context, source: SourceKe
         val warmed = context.imageLoader.diskCache?.openSnapshot(url)?.use { snapshot ->
             snapshot.data.toFile().takeIf { it.length() in 1..MAX_VIEWER_GIF_BYTES.toLong() }?.readBytes()
         }
-        warmed ?: withTimeout(20_000L) {
+        // The client's read timeout catches stalls; this bound must leave room for large files on slow links.
+        warmed ?: withTimeout(GIF_DOWNLOAD_TIMEOUT_MS) {
             val response = gifHttpClient.getBytes(url, headers = source.requestHeaders(), maxBodyBytes = MAX_VIEWER_GIF_BYTES)
             if (response.statusCode !in 200..299) throw IOException("GIF HTTP ${response.statusCode}")
             response.body
@@ -122,3 +123,4 @@ private fun gifByteStore(context: Context): ViewerGifByteStore = synchronized(gi
 private val gifStores = linkedMapOf<File, ViewerGifByteStore>()
 private val gifHttpClient = DefaultSourceHttpClient(maxRetries = 0)
 internal const val MAX_VIEWER_GIF_BYTES = 64 * 1024 * 1024
+private const val GIF_DOWNLOAD_TIMEOUT_MS = 120_000L

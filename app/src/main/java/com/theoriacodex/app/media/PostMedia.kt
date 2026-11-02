@@ -11,7 +11,6 @@ enum class PostMediaSelectionReason {
     EXPLICIT_MEDIA,
     FULL_MEDIA,
     PREVIEW_MEDIA,
-    FULL_ANIMATED_IMAGE,
 }
 
 data class PostMediaCandidate(
@@ -27,6 +26,9 @@ data class PostMediaCandidate(
 enum class MediaDeliveryActivation {
     PRIMARY,
     QUALITY_UPGRADE,
+
+    /** Full animated media replacing a visible poster; consecutive entries are mirrors of one file. */
+    ANIMATION_UPGRADE,
     FAILURE_FALLBACK,
 }
 
@@ -42,15 +44,25 @@ data class MediaDeliveryPlan(
 ) {
     val primary: MediaDeliveryCandidate?
         get() = candidates.firstOrNull()
+
+    /** Candidates to try in order to replace the displayed one; the first success ends the attempt. */
+    fun upgradeIndicesAfter(displayedIndex: Int): List<Int> {
+        if (candidates.getOrNull(displayedIndex)?.activation == MediaDeliveryActivation.ANIMATION_UPGRADE) {
+            return emptyList()
+        }
+        val nextIndex = displayedIndex + 1
+        return when (candidates.getOrNull(nextIndex)?.activation) {
+            MediaDeliveryActivation.QUALITY_UPGRADE -> listOf(nextIndex)
+            MediaDeliveryActivation.ANIMATION_UPGRADE -> (nextIndex..candidates.lastIndex).takeWhile { index ->
+                candidates[index].activation == MediaDeliveryActivation.ANIMATION_UPGRADE
+            }
+            else -> emptyList()
+        }
+    }
 }
 
 fun postPreviewImageCandidate(post: Post): PostMediaCandidate? {
     val full = post.full
-    if (full != null && isAnimatedImageMediaRef(full)) {
-        full.url?.takeIf(String::isNotBlank)?.let { url ->
-            return post.candidate(full, url, PostMediaSelectionReason.FULL_ANIMATED_IMAGE)
-        }
-    }
     if (post.id.source == SourceKey.PIXIV && full != null) {
         full.progressiveUrls.firstOrNull(String::isNotBlank)?.let { mediumUrl ->
             val aspectPreservingPreview = full.copy(
@@ -100,8 +112,15 @@ fun postMediaItems(post: Post): List<ImageRef> {
         .ifEmpty { listOf(normalizedMediaRef(post, post.preview)) }
 }
 
+/**
+ * Orders what a feed card shows. Remote animated images must download completely before their first
+ * frame, so the card paints its poster first and swaps to the animation once that is ready.
+ */
 fun previewMediaDeliveryPlan(post: Post): MediaDeliveryPlan {
-    val preferred = postPreviewImageCandidate(post)?.ref
+    val animatedFull = post.full?.takeIf(::isAnimatedImageMediaRef)
+    val hasLocalAnimation = !animatedFull?.localPath.isNullOrBlank()
+    val preferred = if (hasLocalAnimation) animatedFull else postPreviewImageCandidate(post)?.ref
+    val animationUpgrade = animatedFull?.takeUnless { hasLocalAnimation || it.url.isNullOrBlank() }
     val refs = buildList {
         preferred?.let(::add)
         add(post.preview)
@@ -117,6 +136,7 @@ fun previewMediaDeliveryPlan(post: Post): MediaDeliveryPlan {
             emptySet()
         },
         preferredUrlFirst = preferred,
+        animationUpgradeRef = animationUpgrade,
     )
 }
 
@@ -140,16 +160,15 @@ private fun mediaDeliveryPlan(
     refs: List<ImageRef>,
     qualityUpgradeRefs: Set<ImageRef>,
     preferredUrlFirst: ImageRef?,
+    animationUpgradeRef: ImageRef? = null,
 ): MediaDeliveryPlan {
     val seen = linkedSetOf<String>()
     val candidates = buildList {
         refs.forEach refsLoop@ { ref ->
             if (mediaKind(ref) == PostMediaKind.VIDEO) return@refsLoop
             val normalizedRef = normalizedMediaRef(post, ref)
-            val locations = orderedImageLocations(
-                ref = normalizedRef,
-                urlFirst = ref == preferredUrlFirst,
-            )
+            val isAnimationUpgrade = ref == animationUpgradeRef
+            val locations = imageLocations(normalizedRef, isAnimationUpgrade, urlFirst = ref == preferredUrlFirst)
             locations.forEach locationsLoop@ { rawLocation ->
                 val location = normalizeMediaUrl(post.id.source, rawLocation)
                     ?.takeIf(String::isNotBlank)
@@ -159,6 +178,7 @@ private fun mediaDeliveryPlan(
                 }
                 val activation = mediaDeliveryActivation(
                     isFirstCandidate = isEmpty(),
+                    isAnimationUpgrade = isAnimationUpgrade,
                     isQualityUpgrade = ref in qualityUpgradeRefs && normalizedRef.localPath.isNullOrBlank(),
                 )
                 add(
@@ -177,12 +197,17 @@ private fun mediaDeliveryPlan(
 
 private fun mediaDeliveryActivation(
     isFirstCandidate: Boolean,
+    isAnimationUpgrade: Boolean,
     isQualityUpgrade: Boolean,
 ): MediaDeliveryActivation = when {
     isFirstCandidate -> MediaDeliveryActivation.PRIMARY
+    isAnimationUpgrade -> MediaDeliveryActivation.ANIMATION_UPGRADE
     isQualityUpgrade -> MediaDeliveryActivation.QUALITY_UPGRADE
     else -> MediaDeliveryActivation.FAILURE_FALLBACK
 }
+
+private fun imageLocations(ref: ImageRef, isAnimationUpgrade: Boolean, urlFirst: Boolean): List<String> =
+    if (isAnimationUpgrade) animatedImageLocations(ref) else orderedImageLocations(ref, urlFirst)
 
 private fun orderedImageLocations(ref: ImageRef, urlFirst: Boolean): List<String> = buildList {
     ref.localPath?.takeIf(String::isNotBlank)?.let(::add)
@@ -195,12 +220,23 @@ private fun orderedImageLocations(ref: ImageRef, urlFirst: Boolean): List<String
     }
 }
 
+/** The animated URL and its mirrors; a static sample must never replace a playing animation. */
+private fun animatedImageLocations(ref: ImageRef): List<String> = buildList {
+    ref.url?.takeIf(String::isNotBlank)?.let(::add)
+    ref.progressiveUrls
+        .filter(String::isNotBlank)
+        .filterNot { location -> location.fileExtension() in STATIC_IMAGE_EXTENSIONS }
+        .let(::addAll)
+}
+
+private fun String.fileExtension(): String =
+    substringBefore('?').substringBefore('#').trim().lowercase().substringAfterLast('.', "")
+
 fun isLikelyImageLocation(mime: String?, location: String): Boolean {
     val normalizedMime = mime?.trim()?.lowercase()
     if (normalizedMime?.startsWith("image/") == true) return true
     if (normalizedMime?.startsWith("video/") == true) return false
-    return location.substringBefore('?').substringBefore('#').trim().lowercase()
-        .substringAfterLast('.', "") in IMAGE_EXTENSIONS
+    return location.fileExtension() in IMAGE_EXTENSIONS
 }
 
 fun normalizeMediaUrl(source: SourceKey, location: String?): String? =
@@ -243,6 +279,7 @@ private fun ImageRef.bestLocation(): String? =
     localPath?.takeIf(String::isNotBlank) ?: url?.takeIf(String::isNotBlank)
 
 private val IMAGE_EXTENSIONS = setOf("gif", "png", "webp", "jpg", "jpeg", "bmp", "heic", "heif", "avif")
+private val STATIC_IMAGE_EXTENSIONS = setOf("png", "jpg", "jpeg", "bmp")
 private val QUALITY_UPGRADE_IMAGE_SOURCES = setOf(
     SourceKey.PIXIV,
     SourceKey.GELBOORU,
