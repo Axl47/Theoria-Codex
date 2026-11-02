@@ -51,6 +51,7 @@ fun PixivUgoiraPlayer(
     loadingPreview: (@Composable () -> Unit)? = null,
     showPassiveProgress: Boolean = false,
     mediaModifier: Modifier = Modifier,
+    isPreloading: Boolean = false,
 ) {
     var playback by remember(postId, client, sizeBucket, loadGeneration) {
         mutableStateOf(client.cached(postId, sizeBucket))
@@ -61,12 +62,13 @@ fun PixivUgoiraPlayer(
     val effectivePlaybackRate = playbackRate.coerceAtLeast(0.1f)
     val effectivePlaybackPaused = isPlaying?.not() ?: playbackPaused
 
-    LaunchedEffect(postId, client, sizeBucket, isActive, loadGeneration) {
+    val shouldLoad = isActive || isPreloading
+    LaunchedEffect(postId, client, sizeBucket, shouldLoad, loadGeneration) {
         isScrubbing = false
         playbackPaused = false
         errorMessage = null
         playback = client.cached(postId, sizeBucket) ?: playback?.takeIf { it.isComplete }
-        if (playback != null || !isActive) return@LaunchedEffect
+        if (playback != null || !shouldLoad) return@LaunchedEffect
         if (sizeBucket == UgoiraSizeBucket.CARD) delay(FEED_PLAYER_ACTIVATION_DELAY_MS)
         client.observeLoad(postId, sizeBucket).collect { result ->
             result.onSuccess { playback = it }.onFailure { error ->

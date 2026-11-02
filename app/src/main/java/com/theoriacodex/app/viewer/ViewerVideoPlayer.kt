@@ -78,8 +78,8 @@ internal fun ViewerVideoPlayer(
         ViewerVideoMessage("Video unavailable", modifier)
         return
     }
-    if (!controls.isActive) {
-        Box(modifier.background(Color.Black)) {}
+    if (!controls.isActive && !controls.isPreloading) {
+        Box(modifier.background(Color.Black)) { loadingPreview?.invoke() }
         return
     }
     val recovery = remember(mediaKey, location, sourceKey, controls.loadGeneration) { ViewerVideoRecovery() }
@@ -95,6 +95,7 @@ internal fun ViewerVideoPlayer(
         positions.save(mediaKey, it)
         context.videoPlaybackInfrastructure().feedPositionHandoff.publish(mediaKey, it)
     }
+    ViewerVideoSystemBindings(state.player, controls.isActive, events)
     ViewerVideoCommands(state, controls)
     ViewerVideoLifecycle(state, controls)
     ViewerVideoProgress(state, events)
@@ -158,16 +159,11 @@ private fun ViewerVideoBinding(
     onReleasePosition: (Long) -> Unit,
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
     val latestEvents by rememberUpdatedState(events)
     DisposableEffect(state, location, source) {
         val pool = context.videoPlaybackInfrastructure().viewerVideoPlayerPool
         val lease = pool.acquire(location, source.requestHeaders())
         val player = lease.resource
-        val binding = attachViewerMediaSession(lifecycleOwner.lifecycle) {
-            val session = createViewerMediaSession(context, player) { latestEvents.onPlaybackIntentChanged(it) }
-            java.io.Closeable { session.release() }
-        }
         // Read after the previous binding's disposal has saved its final position.
         resumePosition().takeIf { it > 0L }?.let(player::seekTo)
         player.playbackParameters = PlaybackParameters(controls.playbackRate.coerceAtLeast(MIN_VIEWER_PLAYBACK_RATE))
@@ -175,10 +171,7 @@ private fun ViewerVideoBinding(
         player.addListener(listener)
         state.player = player
         state.setPlaying(controls.isActive && controls.isPlaying)
-        val pictureInPicture = context.viewerActivity()?.viewerAutoPictureInPicture?.bind(player)
         onDispose {
-            pictureInPicture?.close()
-            binding.close()
             onReleasePosition(player.currentPosition.coerceAtLeast(0L))
             player.removeListener(listener)
             state.actuallyPlaying = false
@@ -187,6 +180,27 @@ private fun ViewerVideoBinding(
             runCatching { state.view?.player = null }
             pool.recycle(lease)
             state.view = null
+        }
+    }
+}
+
+/** Only the selected page owns system playback controls; a swipe target merely buffers. */
+@Composable
+private fun ViewerVideoSystemBindings(player: ExoPlayer?, active: Boolean, events: ViewerRendererEvents) {
+    val context = LocalContext.current
+    val owner = LocalLifecycleOwner.current
+    val latestEvents by rememberUpdatedState(events)
+    DisposableEffect(player, active, owner) {
+        val binding = if (active && player != null) attachViewerMediaSession(owner.lifecycle) {
+            val session = createViewerMediaSession(context, player) { latestEvents.onPlaybackIntentChanged(it) }
+            java.io.Closeable { session.release() }
+        } else null
+        val pictureInPicture = if (active && player != null) {
+            context.viewerActivity()?.viewerAutoPictureInPicture?.bind(player)
+        } else null
+        onDispose {
+            pictureInPicture?.close()
+            binding?.close()
         }
     }
 }
@@ -339,7 +353,7 @@ private fun ViewerVideoContent(
                 view.tag = if (diagnosticsEnabled) viewerVideoTestTag(postId) else null
             },
         )
-        if (!state.hasRenderedFirstFrame && !state.failed) loadingPreview?.invoke()
+        if ((!controls.isActive || !state.hasRenderedFirstFrame) && !state.failed) loadingPreview?.invoke()
         if (state.loading && !state.failed) CircularProgressIndicator()
         if (state.failed) Text("Could not play video", color = MaterialTheme.colorScheme.onBackground)
         ViewerVideoTimelineOverlay(state, postId.source, controls, events, Modifier.align(Alignment.BottomCenter))

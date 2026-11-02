@@ -46,6 +46,32 @@ class ViewerSwipeAnimationTest {
 
     @Test fun `related thumbnail joins the session and animates to its post`() = checkSlide(gallery = false, related = true)
 
+    @Test fun `held drag resolves destination without selecting it and cancellation preserves selection`() {
+        val posts = slidePosts(gallery = false)
+        val state = mutableStateOf(createViewerUiState(
+            ViewerSessionIdentity("swipe"), posts, requiresResolution = { it.id == posts[1].id },
+        ))
+        setSlideContent(state, ViewerReturnTransition(), posts.first(), posts, related = false, inverted = false)
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        val actions = compose.onNodeWithContentDescription("Media actions")
+        val width = actions.fetchSemanticsNode().size.width
+        actions.performTouchInput {
+            down(Offset(width * 0.8f, height * 0.5f))
+            moveTo(Offset(width * 0.72f, height * 0.5f))
+            moveTo(Offset(width * 0.72f, height * 0.5f))
+        }
+        compose.mainClock.advanceTimeBy(96)
+        compose.runOnIdle {
+            assertEquals(0, state.value.currentPageIndex)
+            assertEquals(com.theoriacodex.app.viewer.state.ViewerResolutionStatus.REQUESTED,
+                state.value.pages[1].resolution.status)
+        }
+        actions.performTouchInput { up() }
+        compose.mainClock.advanceTimeBy(400)
+        compose.runOnIdle { assertEquals(0, state.value.currentPageIndex) }
+    }
+
     private fun checkSlide(gallery: Boolean, opening: Boolean = false, thumbnail: Boolean = false, heldDrag: Boolean = false, cancelled: Boolean = false, related: Boolean = false, inverted: Boolean = false) {
         val posts = slidePosts(gallery)
         val first = posts.first()

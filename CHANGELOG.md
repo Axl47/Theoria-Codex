@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Start loading fullscreen swipe destinations and buffering their media during the drag, showing thumbnails and waiting until the transition settles to play.
+
 - Keep up to 400 days of local activity history for Stats trends while preserving existing lifetime totals.
 - Keep private thumbnails for posts in Codex statistics top lists, even after cache clearing or removing a like.
 
