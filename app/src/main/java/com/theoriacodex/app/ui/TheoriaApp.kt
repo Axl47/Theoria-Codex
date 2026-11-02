@@ -1310,10 +1310,7 @@ internal fun TheoriaAppContent(
                                                 )
                                             }
                                             RecentsScreen(
-                                            savedSearches = savedSearches,
                                             onSaveSearch = savedSearchOwner::save,
-                                            onRenameSavedSearch = savedSearchOwner::rename,
-                                            onRemoveSavedSearch = savedSearchOwner::remove,
                                             watchedPosts = state.watchedPosts,
                                             codexPosts = state.codexPosts,
                                             searches = state.searches,

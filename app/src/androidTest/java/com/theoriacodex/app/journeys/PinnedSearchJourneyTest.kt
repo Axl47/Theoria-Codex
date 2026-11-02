@@ -2,6 +2,7 @@ package com.theoriacodex.app.journeys
 
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -43,12 +44,12 @@ class PinnedSearchJourneyTest : AppJourneyFixture() {
         }
         val pinned = io { container.data.savedSearches.observeSavedSearches().first().single() }
         compose.onNodeWithText("All", substring = false).performClick()
-        compose.onNodeWithText("Clear", substring = false).performClick()
+        compose.onNodeWithContentDescription("Clear").performClick()
         compose.waitUntil(10_000) { io { container.data.recentsRepository.observeSearches().first().isEmpty() } }
         coldGraphRelaunch()
         assertEquals(listOf(pinned), io { container.data.savedSearches.observeSavedSearches().first() })
         assertTrue(io { container.data.recentsRepository.observeSearches().first().isEmpty() })
-        tab("Recents")
+        tab("Codex")
         compose.onNodeWithText("Saved searches").performClick()
         compose.onNodeWithText("My landscapes").performClick()
         compose.waitUntil(10_000) { container.registry.requests.count { it.pageToken == null } >= 2 }

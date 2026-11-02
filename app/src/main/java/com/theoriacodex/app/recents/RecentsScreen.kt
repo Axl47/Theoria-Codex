@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
@@ -24,7 +25,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,7 +56,6 @@ import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.MAX_SAVED_SEARCH_NAME_LENGTH
-import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -98,10 +98,7 @@ fun RecentsScreen(
     onOpenSearch: (RecentSearchEntry) -> Unit,
     onOpenFypSearch: (RecentSearchEntry) -> Unit,
     onClear: (RecentsClearTarget) -> Unit,
-    savedSearches: List<SavedSearchEntry> = emptyList(),
     onSaveSearch: ((String, RecentSearchEntry) -> Unit)? = null,
-    onRenameSavedSearch: (String, String) -> Unit = { _, _ -> },
-    onRemoveSavedSearch: (String) -> Unit = {},
     onStartOver: (Post, RecentPostSection) -> Unit = { _, _ -> },
 ) {
     var filter by rememberSaveable { mutableStateOf(RecentsFilter.WATCHED) }
@@ -122,9 +119,7 @@ fun RecentsScreen(
     val now = remember(watchedPosts, codexPosts, searches, fypSearches, activity) { System.currentTimeMillis() }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var selectedActionSection by remember { mutableStateOf(RecentPostSection.WATCHED) }
-    var showSavedSearches by rememberSaveable { mutableStateOf(false) }
     var searchToPin by remember { mutableStateOf<RecentSearchEntry?>(null) }
-    var searchToRename by remember { mutableStateOf<SavedSearchEntry?>(null) }
     val onPinSearch: ((RecentSearchEntry) -> Unit)? = onSaveSearch?.let {
         { entry: RecentSearchEntry -> searchToPin = entry }
     }
@@ -139,22 +134,22 @@ fun RecentsScreen(
         RecentsHeader(
             hasContent = hasContent,
             sourceFiltered = selectedSource != null,
-            onOpenSavedSearches = onSaveSearch?.let { { showSavedSearches = true } },
             onClear = { onClear(filter.clearTarget) },
-        )
-
-        SourceSelector(
-            selectedSource = selectedSource,
-            availableSources = SourceKey.entries,
-            allSourcesLabel = "All sources",
-            accessibilityLabel = "Filter Recents by source",
-            iconTestTag = "Recents source icon",
-            enabled = true,
-            expanded = sourceMenuExpanded,
-            onExpandedChange = { sourceMenuExpanded = it },
-            onSourceSelected = {
-                selectedSource = it
-                sourceMenuExpanded = false
+            sourceSelector = {
+                SourceSelector(
+                    selectedSource = selectedSource,
+                    availableSources = SourceKey.entries,
+                    allSourcesLabel = "All sources",
+                    accessibilityLabel = "Filter Recents by source",
+                    iconTestTag = "Recents source icon",
+                    enabled = true,
+                    expanded = sourceMenuExpanded,
+                    onExpandedChange = { sourceMenuExpanded = it },
+                    onSourceSelected = {
+                        selectedSource = it
+                        sourceMenuExpanded = false
+                    },
+                )
             },
         )
 
@@ -277,16 +272,6 @@ fun RecentsScreen(
         )
     }
 
-    if (showSavedSearches) {
-        RecentsSavedSearchPicker(
-            searches = savedSearches,
-            onDismiss = { showSavedSearches = false },
-            onOpenSearch = onOpenSearch,
-            onOpenFypSearch = onOpenFypSearch,
-            onRename = { searchToRename = it },
-            onRemoveSavedSearch = onRemoveSavedSearch,
-        )
-    }
     searchToPin?.let { entry ->
         SavedSearchNameDialog(
             initialName = recentSearchPresentation(entry).title.take(MAX_SAVED_SEARCH_NAME_LENGTH),
@@ -298,23 +283,14 @@ fun RecentsScreen(
             },
         )
     }
-    searchToRename?.let { entry ->
-        SavedSearchNameDialog(
-            initialName = entry.name,
-            renaming = true,
-            onDismiss = { searchToRename = null },
-            onConfirm = { name ->
-                onRenameSavedSearch(entry.id, name)
-                searchToRename = null
-            },
-        )
-    }
 }
 
 @Composable
 private fun RecentsHeader(
-    hasContent: Boolean, sourceFiltered: Boolean,
-    onOpenSavedSearches: (() -> Unit)?, onClear: () -> Unit,
+    hasContent: Boolean,
+    sourceFiltered: Boolean,
+    onClear: () -> Unit,
+    sourceSelector: @Composable () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -322,37 +298,14 @@ private fun RecentsHeader(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text("Recents", style = MaterialTheme.typography.titleLarge)
-        if (onOpenSavedSearches != null) {
-            TextButton(onClick = onOpenSavedSearches) { Text("Saved searches") }
-        }
-        TextButton(
-            enabled = hasContent,
-            onClick = {
-                onClear()
-            },
-        ) {
-            Text(if (sourceFiltered) "Clear section" else "Clear")
+        sourceSelector()
+        IconButton(enabled = hasContent, onClick = onClear) {
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = if (sourceFiltered) "Clear section" else "Clear",
+            )
         }
     }
-}
-
-@Composable
-private fun RecentsSavedSearchPicker(
-    searches: List<SavedSearchEntry>, onDismiss: () -> Unit,
-    onOpenSearch: (RecentSearchEntry) -> Unit, onOpenFypSearch: (RecentSearchEntry) -> Unit,
-    onRename: (SavedSearchEntry) -> Unit, onRemoveSavedSearch: (String) -> Unit,
-) {
-    SavedSearchSheet(
-        searches = searches,
-        onDismiss = onDismiss,
-        onOpen = { entry ->
-            onDismiss()
-            if (entry.search.kind == RecentSearchKind.FYP) onOpenFypSearch(entry.search)
-            else onOpenSearch(entry.search)
-        },
-        onRename = onRename,
-        onRemove = { onRemoveSavedSearch(it.id) },
-    )
 }
 
 private fun recentsHasContent(
