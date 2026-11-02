@@ -47,6 +47,7 @@ internal fun ViewerMediaContent(
                 showPassiveProgress = controls.showPassiveProgress,
                 mediaModifier = transformModifier,
                 isActive = controls.isActive,
+                isPreloading = controls.isPreloading,
                 isPlaying = controls.isPlaying,
                 seekJumpSerial = controls.seekJumpSerial,
                 seekJumpDeltaMs = controls.seekJumpDeltaMs,

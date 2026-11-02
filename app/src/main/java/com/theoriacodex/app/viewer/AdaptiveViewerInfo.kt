@@ -1,5 +1,6 @@
 package com.theoriacodex.app.viewer
 
+import com.theoriacodex.app.ui.components.ExpandedBottomSheet
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -39,6 +39,6 @@ internal fun AdaptiveViewerInfo(onDismiss: () -> Unit, content: @Composable () -
             }
         }
     } else {
-        ModalBottomSheet(onDismissRequest = onDismiss, dragHandle = null) { content() }
+        ExpandedBottomSheet(onDismiss) { content() }
     }
 }

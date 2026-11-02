@@ -36,13 +36,14 @@ internal fun CodexListScreen(
     onMakeAvailableOffline: ((String) -> Unit)? = null,
     initialActionCodexId: String? = null,
     onActionsDismissed: () -> Unit = {},
+    onOpenSavedCollectionActions: (String) -> Unit = {},
 ) {
     val state = remember {
         CodexListUiState(codices).apply {
             actionTarget = codices.firstOrNull { it.codexId == initialActionCodexId }
         }
     }
-    val targetId = state.actionTarget?.codexId ?: state.searchSourceTarget?.codexId
+    val targetId = state.actionTarget?.codexId ?: state.autoSaveTarget?.codexId ?: state.searchSourceTarget?.codexId
         ?: state.tagSelectionTarget?.codex?.codexId
     var retry by remember(targetId) { mutableIntStateOf(0) }
     val options = key(targetId, retry) { rememberCodexActionOptions(targetId, observeActionOptions) }
@@ -57,11 +58,11 @@ internal fun CodexListScreen(
     val actions = CodexListActions(
         onOpenCodex, onImportCodex, onDownloadCodex, onShareCodex, onSearchFromCodex,
         onCommitReorder, onCreateCodex, onRenameCodex, onSetAutomaticTag, onDeleteCodex,
-        onCleanCodex, onMakeAvailableOffline,
+        onCleanCodex, onMakeAvailableOffline, onOpenSavedCollectionActions,
     )
     LaunchedEffect(codices, state.ordering.reorderMode) { state.synchronizeCodices(codices) }
     if (initialActionCodexId == null) CodexListContent(presentation, state, actions)
-    val hasOverlay = state.actionTarget != null || state.searchSourceTarget != null ||
+    val hasOverlay = state.actionTarget != null || state.autoSaveTarget != null || state.searchSourceTarget != null ||
         state.tagSelectionTarget != null || state.renameTarget != null ||
         state.deleteTarget != null || state.cleaningTargetId != null
     LaunchedEffect(hasOverlay) {

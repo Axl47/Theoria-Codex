@@ -1,5 +1,14 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.data.repository.SavedSearchEntry
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import com.theoriacodex.app.media.animatedDurationRangeLabel
+import com.theoriacodex.app.ui.components.FilterChoiceChip
+import com.theoriacodex.app.ui.components.FilterSection
+import com.theoriacodex.app.ui.components.rememberFeedScrollSignal
+import com.theoriacodex.domain.model.DateRange
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import com.theoriacodex.app.viewer.ViewerReturnCorners
 import com.theoriacodex.app.viewer.viewerReturnCorners
 import com.theoriacodex.app.viewer.LocalViewerReturnTransition
@@ -7,11 +16,6 @@ import com.theoriacodex.app.viewer.LocalViewerReturnGrid
 import com.theoriacodex.app.viewer.LocalViewerReturnShelf
 import androidx.compose.ui.layout.LayoutCoordinates
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.combinedClickable
@@ -19,8 +23,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,55 +33,39 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Card
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import com.theoriacodex.app.viewer.retainPostsUntilViewerCloses
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.toSize
 import androidx.compose.material3.CardDefaults
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
@@ -119,7 +105,6 @@ import com.theoriacodex.app.R
 import com.theoriacodex.app.source.SourceLogo
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.isRule34Family
-import com.theoriacodex.app.ui.components.AutocompleteListShell
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
 import com.theoriacodex.app.ui.components.FeedLoadingState
@@ -137,9 +122,6 @@ import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.app.viewer.PixivUgoiraPlayer
 import com.theoriacodex.app.viewer.UgoiraSizeBucket
-import com.theoriacodex.domain.adapter.FacetedSearchScope
-import com.theoriacodex.domain.adapter.FacetedTagSuggestion
-import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
@@ -147,7 +129,6 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
-import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
@@ -193,6 +174,8 @@ fun SearchScreen(
     fabRestoreState: FeedFabRestoreState = FeedFabRestoreState(),
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit = {},
     oldSearchBar: Boolean = false,
+    savedSearches: List<SavedSearchEntry> = emptyList(),
+    onOpenSavedSearch: (SavedSearchEntry) -> Unit = {},
 ) {
     val input = state.suggestions.input
     val animationRestoreState = fabRestoreState.searchAnimationFilter(state.query.draft.mode)
@@ -202,17 +185,13 @@ fun SearchScreen(
     val hideWatched = fabRestoreState.hideWatched
     val durationMinBucket = animationRestoreState.durationMinBucket
     val durationMaxBucket = animationRestoreState.durationMaxBucket
-    var searchFieldFocused by remember { mutableStateOf(false) }
-    var searchControlsDismissedByScroll by remember { mutableStateOf(false) }
-    var searchControlsRequested by remember { mutableStateOf(false) }
+    var searchBarDismissedByScroll by remember { mutableStateOf(false) }
+    var composerOpen by rememberSaveable { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
     var showFavoriteTagSheet by remember { mutableStateOf(false) }
-    var editingIncludeGroupIndex by remember { mutableStateOf<Int?>(null) }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var selectedActionPostResolving by remember { mutableStateOf(false) }
     val inputFocus = rememberSearchInputFocus()
-    val inputRequester = remember { FocusRequester() }
-    var requestInputFocus by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyStaggeredGridState()
     val queryHash = state.query.appliedQueryHash
@@ -225,11 +204,23 @@ fun SearchScreen(
         )
     }
     val animatedDurationFilterActive = !animatedDurationRange.isFullRange && !isNhentaiSourceMode
-    val searchFiltersActive = animatedFilterActive || animatedDurationFilterActive ||
-        hideLiked || hideSaved || hideWatched || state.query.draft.sort != SortMode.NEWEST ||
-        state.query.draft.dateRange != null || state.query.draft.minScore != null ||
-        state.query.nhentaiFullColorFilter ||
-        state.query.nhentaiLanguageFilter != NhentaiLanguageFilter.ANY
+    val serverFilters = SearchServerFilters(
+        state.query.draft.sort, state.query.draft.dateRange,
+        state.query.nhentaiFullColorFilter, state.query.nhentaiLanguageFilter,
+    )
+    val filterLabels = listOfNotNull(
+        sortModeLabel(serverFilters.sort).takeIf { serverFilters.sort != SortMode.NEWEST },
+        serverFilters.dateRange?.let { dateRangeLabel(it, System.currentTimeMillis()) },
+        "Animated".takeIf { animatedFilterActive },
+        animatedDurationRangeLabel(animatedDurationRange).takeIf { animatedDurationFilterActive },
+        "Full color".takeIf { serverFilters.fullColor },
+        nhentaiLanguageLabel(serverFilters.language).takeIf { serverFilters.language != NhentaiLanguageFilter.ANY },
+        "Hide liked".takeIf { hideLiked },
+        "Hide saved".takeIf { hideSaved },
+        "Hide watched".takeIf { hideWatched },
+    )
+    val filterScroll = rememberFeedScrollSignal()
+    var filterSheetBaseline by remember { mutableStateOf(serverFilters) }
     val appliedFilterCount = activeSearchFilterCount(
         appliedQuery = state.query.applied,
         animatedOnly = animatedFilterActive,
@@ -240,24 +231,20 @@ fun SearchScreen(
         fullColor = state.query.nhentaiFullColorFilter,
         language = state.query.nhentaiLanguageFilter,
     )
-    val collapsedSearchContext = if (
-        state.content.hasExecutedSearch || state.query.appliedQueryHash.isNotBlank()
-    ) {
-        collapsedSearchContextSummary(
-            appliedQuery = state.query.applied,
-            activeFilterCount = appliedFilterCount,
-        )
-    } else {
-        null
-    }
+    val searchBarSummary = collapsedSearchContextSummary(
+        query = state.query.draft,
+        activeFilterCount = appliedFilterCount,
+    )
     val visibilityFilters = remember(
         animatedFilterActive,
         hideLiked,
         hideSaved,
         hideWatched,
         animatedDurationRange,
+        state.query.applied.dateRange,
     ) {
         SearchVisibilityFilters(
+            dateRange = state.query.applied.dateRange,
             animatedOnly = animatedFilterActive,
             hideLiked = hideLiked,
             hideSaved = hideSaved,
@@ -393,57 +380,77 @@ fun SearchScreen(
         snapshotFlow { gridState.isScrollInProgress }
             .collectLatest { scrolling ->
                 if (scrolling) {
-                    searchControlsDismissedByScroll = true
-                    searchControlsRequested = false
+                    searchBarDismissedByScroll = true
                     inputFocus.clear()
                 }
             }
     }
 
-    val autocompleteSuggestions = state.suggestions.autocomplete
-    val facetedAutocompleteSuggestions = state.suggestions.facetedAutocomplete
-    val supportedSearchScopes = state.query.supportedScopes
     val sourceAuthErrorMessage = remember(state.content.statuses) {
         buildSourceAuthErrorMessage(state.content.statuses)
     }
     val sourceFailureMessage = remember(state.content.statuses) {
         buildSourceFailureMessage(state.content.statuses)
     }
-    val sourceStatusChips = remember(state.content.statuses) {
-        visibleSourceStatusChipStatuses(state.content.statuses)
-    }
     val clearFocusInteraction = remember { MutableInteractionSource() }
-    val showSearchControls = !searchControlsDismissedByScroll && (searchControlsRequested || searchFieldFocused ||
-        input.isNotBlank() ||
-        autocompleteSuggestions.isNotEmpty() ||
-        facetedAutocompleteSuggestions.isNotEmpty() ||
-        state.hasPendingChanges)
-    val showAddInputAction = searchFieldFocused && input.isNotBlank()
 
-    fun commitTagInput() {
-        val typed = input.trim()
-        if (!state.suggestions.canCommitInput) return
-        onAction(SearchAction.CommitTagInput(input))
-        inputFocus.clear()
-        if (typed.isDigitsOnly()) {
-            scope.launch { resetScrollToTop() }
-        }
+    val currentServerFilters by androidx.compose.runtime.rememberUpdatedState(serverFilters)
+
+    fun applyServerFilters(filters: SearchServerFilters) {
+        onAction(SearchAction.SelectSort(filters.sort))
+        onAction(SearchAction.SetDateRange(filters.dateRange))
+        // These two rewrite the draft's nhentai terms, so only a real change may dispatch them.
+        if (filters.fullColor != currentServerFilters.fullColor) onAction(SearchAction.SetNhentaiFullColor(filters.fullColor))
+        if (filters.language != currentServerFilters.language) onAction(SearchAction.SetNhentaiLanguage(filters.language))
+    }
+
+    fun closeComposer() {
+        onAction(SearchAction.ClearAutocomplete)
+        composerOpen = false
+        searchBarDismissedByScroll = false
     }
 
     fun applyDraft() {
         inputFocus.clear(force = true)
         onAction(SearchAction.ApplyDraft)
         onAction(SearchAction.ClearAutocomplete)
+        composerOpen = false
+        searchBarDismissedByScroll = false
     }
 
-    val searchBarExpanded = showSearchControls || (!state.content.hasExecutedSearch && !searchControlsDismissedByScroll)
-    LaunchedEffect(searchBarExpanded, requestInputFocus) {
-        if (searchBarExpanded && requestInputFocus) {
-            withFrameNanos { }
-            inputRequester.requestFocus()
-            requestInputFocus = false
+    fun resetFilterDraft() {
+        applyServerFilters(SearchServerFilters(SortMode.NEWEST, null, false, NhentaiLanguageFilter.ANY))
+        onFabRestoreStateChange(
+            fabRestoreState.copy(hideLiked = false, hideSaved = false, hideWatched = false)
+                .withSearchAnimationFilter(state.query.draft.mode) { restoreState ->
+                    restoreState.copy(
+                        animatedOnly = false,
+                        durationMinBucket = AnimatedDurationRange.Full.normalizedMinBucket,
+                        durationMaxBucket = AnimatedDurationRange.Full.normalizedMaxBucket,
+                    )
+                },
+        )
+    }
+
+    // Results change once, when the filters are settled, however many were adjusted.
+    fun closeFilterSheet() {
+        showFilterSheet = false
+        if (serverFilters != filterSheetBaseline) applyDraft()
+    }
+
+    fun clearFilters(): () -> Unit {
+        val previousFab = fabRestoreState
+        val previousServerFilters = serverFilters
+        val serverFiltersActive = serverFilters != SearchServerFilters(SortMode.NEWEST, null, false, NhentaiLanguageFilter.ANY)
+        resetFilterDraft()
+        if (serverFiltersActive) applyDraft()
+        return {
+            onFabRestoreStateChange(previousFab)
+            applyServerFilters(previousServerFilters)
+            if (serverFiltersActive) applyDraft()
         }
     }
+
     val sourcePicker: @Composable () -> Unit = {
 SearchSourcePicker(
                             draftSourceScope = state.query.draftSourceScope,
@@ -452,213 +459,53 @@ SearchSourcePicker(
                             unifiedSources = state.query.unifiedSources,
                             onOpen = { inputFocus.clear() },
                             onModeSelected = { mode ->
-                                searchControlsDismissedByScroll = false
-                                searchControlsRequested = true
+                                searchBarDismissedByScroll = false
                                 onAction(SearchAction.SelectMode(mode))
                             },
                             onTemporarySourceToggled = { source ->
-                                searchControlsDismissedByScroll = false
-                                searchControlsRequested = true
+                                searchBarDismissedByScroll = false
                                 onAction(SearchAction.ToggleTemporarySource(source))
                             },
                         )
     }
 
     Scaffold(
+        modifier = Modifier.nestedScroll(filterScroll.connection),
         contentWindowInsets = WindowInsets(0),
         floatingActionButton = {
             FeedFilterFab(
                 modifier = Modifier.padding(bottom = 8.dp),
-                active = searchFiltersActive,
+                labels = filterLabels,
                 contentDescription = "Filter and sort",
                 onClick = {
                     inputFocus.clear()
+                    filterSheetBaseline = serverFilters
                     showFilterSheet = true
                 },
+                onClear = ::clearFilters,
+                scrollSignal = filterScroll,
             )
         }
     ) { padding ->
         CollapsingSearchChrome(
-            expanded = searchBarExpanded,
+            expanded = !searchBarDismissedByScroll,
             legacy = oldSearchBar,
-            onExpand = {
-                searchControlsDismissedByScroll = false
-                searchControlsRequested = true
-                requestInputFocus = true
-            },
+            onExpand = { composerOpen = true },
             sourcePicker = sourcePicker,
             horizontalPadding = 16.dp,
             modifier = Modifier.then(inputFocus.rootModifier).fillMaxSize().padding(padding)
                 .padding(top = if (oldSearchBar) 6.dp else 0.dp, bottom = 8.dp),
             inputField = {
-            OutlinedTextField(
-                modifier = Modifier
-                    .testTag("Search query input")
-                    .focusRequester(inputRequester)
-                    .fillMaxWidth()
-                    .onFocusChanged { state ->
-                        searchFieldFocused = state.isFocused
-                        if (state.isFocused) {
-                            searchControlsDismissedByScroll = false
-                            // Focus can return before the cleared input has recomposed after submission.
-                            onAction(SearchAction.RefreshAutocomplete)
-                        } else {
-                            onAction(SearchAction.ClearAutocomplete)
-                        }
-                    },
-                value = input,
-                onValueChange = {
-                    onAction(SearchAction.DismissValidation)
-                    onAction(SearchAction.AutocompleteChanged(it))
-                },
-                shape = RoundedCornerShape(28.dp),
-                singleLine = true,
-                isError = state.query.validationMessage != null,
-                supportingText = state.query.validationMessage?.let { message ->
-                    { Text(message) }
-                },
-                placeholder = if (!searchFieldFocused) {
-                    {
-                        Text(
-                            text = collapsedSearchContext ?: if (supportedSearchScopes.isEmpty()) {
-                                "tag or -tag"
-                            } else {
-                                "tag, artist:, or -tag"
-                            },
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                } else {
-                    null
-                },
-                keyboardOptions = KeyboardOptions(
-                    imeAction = ImeAction.Done,
-                    keyboardType = KeyboardType.Text,
-                    capitalization = KeyboardCapitalization.None,
-                ),
-                keyboardActions = KeyboardActions(
-                    onDone = { commitTagInput() },
-                ),
-                trailingIcon = {
-                    Row(
-                        modifier = Modifier.padding(end = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        if (oldSearchBar) sourcePicker()
-                        if (showAddInputAction) {
-                            TextButton(
-                                onClick = { commitTagInput() },
-                                enabled = state.suggestions.canCommitInput,
-                            ) {
-                                Text("Add")
-                            }
-                        }
-                    }
-                }
-            )
-
+                SearchSummaryBar(
+                    summary = searchBarSummary,
+                    validationMessage = state.query.validationMessage,
+                    showSearchAction = state.hasPendingChanges && !composerOpen,
+                    onOpen = { composerOpen = true },
+                    onSearch = { applyDraft() },
+                    trailing = { if (oldSearchBar) sourcePicker() },
+                )
             },
         ) {
-            AnimatedVisibility(
-                visible = showSearchControls,
-                enter = slideInVertically(initialOffsetY = { fullHeight -> fullHeight / 4 }) + fadeIn(),
-                exit = slideOutVertically(targetOffsetY = { fullHeight -> fullHeight / 5 }) + fadeOut(),
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (supportedSearchScopes.isNotEmpty()) {
-                        SearchScopeRow(
-                            scopes = supportedSearchScopes,
-                            selectedScope = state.query.selectedScope,
-                            onScopeSelected = { selected ->
-                                onAction(SearchAction.SelectSuggestionScope(selected))
-                                true
-                            },
-                        )
-                    }
-
-                    if (facetedAutocompleteSuggestions.isNotEmpty()) {
-                        FacetedAutocompletePanel(
-                            suggestions = facetedAutocompleteSuggestions,
-                            onInclude = { suggestion ->
-                                onAction(SearchAction.IncludeSuggestion(suggestion))
-                                onAction(SearchAction.ClearAutocomplete)
-                            },
-                            onExclude = { suggestion ->
-                                onAction(SearchAction.ExcludeSuggestion(suggestion))
-                                onAction(SearchAction.ClearAutocomplete)
-                            },
-                        )
-                    } else if (autocompleteSuggestions.isNotEmpty()) {
-                        AutocompletePanel(
-                            suggestions = autocompleteSuggestions,
-                            onInclude = { tag ->
-                                onAction(SearchAction.AddIncludeTerm(SearchTerm(tag)))
-                                onAction(SearchAction.ClearAutocomplete)
-                            },
-                            onExclude = { tag ->
-                                onAction(SearchAction.AddExcludeTerm(SearchTerm(tag)))
-                                onAction(SearchAction.ClearAutocomplete)
-                            },
-                        )
-                    }
-
-                    TagRow(
-                        includeGroups = state.query.draft.effectiveIncludeTermGroups,
-                        excludeTerms = state.query.draft.excludeTerms,
-                        onEditIncludeGroup = { groupIndex -> editingIncludeGroupIndex = groupIndex },
-                        onRemoveExclude = { term -> onAction(SearchAction.RemoveExcludeTerm(term)) },
-                    )
-
-                    if (
-                        state.query.appliedSourceScope !is SearchSourceScope.Single &&
-                        sourceStatusChips.isNotEmpty()
-                    ) {
-                        SourceStatusActions(state, onAction, onOpenSourceAccounts)
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Row {
-                            TextButton(
-                                enabled = state.canUndoSearch,
-                                onClick = {
-                                    inputFocus.clear()
-                                    onAction(SearchAction.UndoSearch)
-                                    onAction(SearchAction.ClearAutocomplete)
-                                    showFilterSheet = false
-                                },
-                            ) { Text("Undo") }
-                            TextButton(
-                                onClick = {
-                                    inputFocus.clear()
-                                    onAction(SearchAction.ClearDraft)
-                                    onAction(SearchAction.ClearAutocomplete)
-                                    showFilterSheet = false
-                                    scope.launch { resetScrollToTop() }
-                                },
-                                enabled = state.hasPendingChanges,
-                            ) {
-                                Text("Reset")
-                            }
-                        }
-                        Row {
-                            TextButton(onClick = {
-                                inputFocus.clear()
-                                showFavoriteTagSheet = true
-                            }) {
-                                Text("List")
-                            }
-                            TextButton(onClick = { applyDraft() }) {
-                                Text("Apply")
-                            }
-                        }
-                    }
-                }
-            }
-
             val retrySearch = { inputFocus.clear(); onAction(SearchAction.Retry) }
             state.pageFailure?.let { SearchFailureSurface(it, retrySearch) }
             if (state.retainsResultsWhileRefreshing) SearchRefreshProgress()
@@ -831,12 +678,10 @@ SearchSourcePicker(
             onOpenCreatorProfile = onOpenCreatorProfile,
             onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
             onPostUrlCopied = onPostUrlCopied,
-            tagContent = { header, footer ->
+            tagContent = {
                 PostTagActionSection(
                     draftQuery = state.query.draft,
                     loading = selectedActionPostResolving && !post.hasActionableTags(),
-                    header = header,
-                    footer = footer,
                     post = post,
                     tagVideoCountProvider = tagVideoCountProvider,
                     fetchTagVideoCounts = fetchTagVideoCounts,
@@ -856,6 +701,35 @@ SearchSourcePicker(
         )
     }
 
+    if (composerOpen) {
+        SearchComposer(
+            state = state,
+            onAction = onAction,
+            sourcePicker = sourcePicker,
+            onApply = ::applyDraft,
+            onReset = {
+                onAction(SearchAction.ClearDraft)
+                onAction(SearchAction.ClearAutocomplete)
+                showFilterSheet = false
+                scope.launch { resetScrollToTop() }
+            },
+            onUndo = {
+                onAction(SearchAction.UndoSearch)
+                onAction(SearchAction.ClearAutocomplete)
+                showFilterSheet = false
+            },
+            onOpenFavorites = { showFavoriteTagSheet = true },
+            onOpenSourceAccounts = onOpenSourceAccounts,
+            onDigitsCommitted = { scope.launch { resetScrollToTop() } },
+            onDismiss = ::closeComposer,
+            savedSearches = savedSearches,
+            onOpenSavedSearch = { entry ->
+                closeComposer()
+                onOpenSavedSearch(entry)
+            },
+        )
+    }
+
     if (showFavoriteTagSheet) {
         FavoriteTagSheet(
             sections = favoriteSections,
@@ -870,42 +744,6 @@ SearchSourcePicker(
             },
             onDismiss = { showFavoriteTagSheet = false },
         )
-    }
-
-    editingIncludeGroupIndex?.let { groupIndex ->
-        val group = state.query.draft.effectiveIncludeTermGroups.getOrNull(groupIndex)
-        if (group == null) {
-            editingIncludeGroupIndex = null
-        } else {
-            IncludeTagGroupSheet(
-                groupIndex = groupIndex,
-                group = group,
-                autocompleteInput = state.suggestions.input,
-                facetedSuggestions = facetedAutocompleteSuggestions.filter { suggestion ->
-                    val anchor = group.terms.first()
-                    suggestion.facet == anchor.facet && suggestion.sourceNamespace == anchor.sourceNamespace
-                },
-                suggestions = autocompleteSuggestions,
-                onAutocompleteChanged = { value -> onAction(SearchAction.AutocompleteChanged(value)) },
-                onAddAlternative = { term ->
-                    onAction(SearchAction.AddIncludeAlternative(groupIndex, term))
-                    onAction(SearchAction.ClearAutocomplete)
-                },
-                onRemoveTerm = { term -> onAction(SearchAction.RemoveIncludeTerm(term)) },
-                onRequireTerm = { term ->
-                    onAction(SearchAction.SplitIncludeAlternative(groupIndex, term))
-                    editingIncludeGroupIndex = null
-                },
-                onRemoveGroup = {
-                    onAction(SearchAction.RemoveIncludeGroup(groupIndex))
-                    editingIncludeGroupIndex = null
-                },
-                onDismiss = {
-                    onAction(SearchAction.ClearAutocomplete)
-                    editingIncludeGroupIndex = null
-                },
-            )
-        }
     }
 
     if (showFilterSheet) {
@@ -945,17 +783,9 @@ SearchSourcePicker(
                 onFabRestoreStateChange(fabRestoreState.copy(hideWatched = enabled))
             },
             nhentaiFullColorFilter = state.query.nhentaiFullColorFilter,
-            onNhentaiFullColorFilterChange = { enabled ->
-                onAction(SearchAction.SetNhentaiFullColor(enabled))
-                applyDraft()
-            },
             nhentaiLanguageFilter = state.query.nhentaiLanguageFilter,
-            onNhentaiLanguageFilterChange = { filter ->
-                onAction(SearchAction.SetNhentaiLanguage(filter))
-                applyDraft()
-            },
-            onSortChanged = { applyDraft() },
-            onDismiss = { showFilterSheet = false },
+            onReset = ::resetFilterDraft,
+            onDismiss = ::closeFilterSheet,
         )
     }
 }
@@ -1485,7 +1315,6 @@ internal fun allowsInlineAutoplayInSearch(post: Post): Boolean {
     return post.id.source != SourceKey.IWARA && post.id.source != SourceKey.HITOMI
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FilterSheet(
     query: Query,
@@ -1502,310 +1331,61 @@ private fun FilterSheet(
     hideWatched: Boolean,
     onHideWatchedChange: (Boolean) -> Unit,
     nhentaiFullColorFilter: Boolean,
-    onNhentaiFullColorFilterChange: (Boolean) -> Unit,
     nhentaiLanguageFilter: NhentaiLanguageFilter,
-    onNhentaiLanguageFilterChange: (NhentaiLanguageFilter) -> Unit,
-    onSortChanged: () -> Unit,
+    onReset: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var minScoreInput by remember(query.minScore) {
-        mutableStateOf(query.minScore?.toString().orEmpty())
-    }
-    var selectedPreset by remember(query.dateRange) {
-        mutableStateOf(inferPreset(query.dateRange?.fromEpochMs, query.dateRange?.toEpochMs))
-    }
-    val focusManager = LocalFocusManager.current
-
-    FeedFilterSheet(onDismiss = onDismiss) {
-            Text("Visibility", style = MaterialTheme.typography.titleMedium)
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (!showAnimatedOnlyFilter) {
-                    item {
-                        FilterChip(
-                            selected = nhentaiFullColorFilter,
-                            onClick = {
-                                onNhentaiFullColorFilterChange(!nhentaiFullColorFilter)
-                            },
-                            label = { Text("Full Color") },
-                        )
-                    }
-                }
-                if (showAnimatedOnlyFilter) {
-                    item {
-                        FilterChip(
-                            selected = animatedOnly,
-                            onClick = { onAnimatedOnlyChange(!animatedOnly) },
-                            label = { Text("Animated only") },
-                        )
-                    }
-                }
-                item {
-                    FilterChip(
-                        selected = hideLiked,
-                        onClick = { onHideLikedChange(!hideLiked) },
-                        label = { Text("Hide liked") },
-                    )
-                }
-                item {
-                    FilterChip(
-                        selected = hideSaved,
-                        onClick = { onHideSavedChange(!hideSaved) },
-                        label = { Text("Hide saved") },
-                    )
-                }
-                item {
-                    FilterChip(
-                        selected = hideWatched,
-                        onClick = { onHideWatchedChange(!hideWatched) },
-                        label = { Text("Hide Watched") },
-                    )
-                }
+    FeedFilterSheet(onDismiss = onDismiss, onReset = onReset) {
+        FilterSection("Sort") {
+            SortMode.entries.forEach { mode ->
+                FilterChoiceChip(sortModeLabel(mode), query.sort == mode) { onAction(SearchAction.SelectSort(mode)) }
             }
-
+        }
+        FilterSection("Show") {
             if (showAnimatedOnlyFilter) {
-                AnimatedDurationRangeControl(
-                    range = animatedDurationRange,
-                    onRangeChange = onAnimatedDurationRangeChange,
-                )
-            }
-
-            if (!showAnimatedOnlyFilter) {
-                HorizontalDivider()
-                Text("Language", style = MaterialTheme.typography.titleMedium)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(NhentaiLanguageFilter.entries.size) { index ->
-                        val languageFilter = NhentaiLanguageFilter.entries[index]
-                        val label = when (languageFilter) {
-                            NhentaiLanguageFilter.ANY -> "Any"
-                            NhentaiLanguageFilter.ENGLISH -> "English"
-                            NhentaiLanguageFilter.CHINESE -> "Chinese"
-                            NhentaiLanguageFilter.JAPANESE -> "Japanese"
-                        }
-                        FilterChip(
-                            selected = nhentaiLanguageFilter == languageFilter,
-                            onClick = {
-                                if (nhentaiLanguageFilter == languageFilter) return@FilterChip
-                                onNhentaiLanguageFilterChange(languageFilter)
-                            },
-                            label = { Text(label) },
-                        )
-                    }
+                FilterChoiceChip("Animated only", animatedOnly) { onAnimatedOnlyChange(!animatedOnly) }
+            } else {
+                FilterChoiceChip("Full color", nhentaiFullColorFilter) {
+                    onAction(SearchAction.SetNhentaiFullColor(!nhentaiFullColorFilter))
                 }
             }
-
-            HorizontalDivider()
-            Text("Sort", style = MaterialTheme.typography.titleMedium)
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(SortMode.entries.size) { index ->
-                    val mode = SortMode.entries[index]
-                    FilterChip(
-                        selected = query.sort == mode,
-                        onClick = {
-                            if (query.sort == mode) return@FilterChip
-                            onAction(SearchAction.SelectSort(mode))
-                            onSortChanged()
-                        },
-                        label = { Text(mode.name) },
-                    )
-                }
-            }
-
-            HorizontalDivider()
-            Text("Date range", style = MaterialTheme.typography.titleMedium)
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(DateRangePreset.entries.size) { index ->
-                    val preset = DateRangePreset.entries[index]
-                    val label = when (preset) {
-                        DateRangePreset.NONE -> "None"
-                        DateRangePreset.TODAY -> "Today"
-                        DateRangePreset.LAST_7_DAYS -> "7d"
-                        DateRangePreset.LAST_30_DAYS -> "30d"
-                    }
-                    FilterChip(
-                        selected = selectedPreset == preset,
-                        onClick = {
-                            selectedPreset = preset
-                            onAction(SearchAction.SetDateRangePreset(preset))
-                        },
-                        label = { Text(label) },
-                    )
-                }
-            }
-
-            HorizontalDivider()
-            Text("Min score", style = MaterialTheme.typography.titleMedium)
-            OutlinedTextField(
-                modifier = Modifier.fillMaxWidth(),
-                value = minScoreInput,
-                onValueChange = { value ->
-                    minScoreInput = value.filter { it.isDigit() }
-                    onAction(SearchAction.SetMinimumScore(minScoreInput.toIntOrNull()))
-                },
-                label = { Text("Optional") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Number,
-                    imeAction = ImeAction.Done,
-                ),
-                keyboardActions = KeyboardActions(
-                    onDone = { focusManager.clearFocus() }
-                ),
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                TextButton(onClick = {
-                    onAction(SearchAction.ResetFilters)
-                    selectedPreset = DateRangePreset.NONE
-                    minScoreInput = ""
-                }) {
-                    Text("Reset")
-                }
-                TextButton(onClick = onDismiss) {
-                    Text("Done")
-                }
-            }
-    }
-}
-
-@Composable
-private fun SearchScopeRow(
-    scopes: List<FacetedSearchScope>,
-    selectedScope: FacetedSearchScope,
-    onScopeSelected: (FacetedSearchScope) -> Boolean,
-) {
-    var moreExpanded by remember { mutableStateOf(false) }
-    val allScope = scopes.firstOrNull(FacetedSearchScope::isAll)
-    val primaryScopes = primarySearchFacets.mapNotNull { facet ->
-        scopes.firstOrNull { scope -> scope.facet == facet }
-    }
-    val secondaryScopes = secondarySearchFacets.mapNotNull { facet ->
-        scopes.firstOrNull { scope -> scope.facet == facet }
-    }
-
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        allScope?.let { scope ->
-            item {
-                FilterChip(
-                    selected = selectedScope.isAll,
-                    onClick = { onScopeSelected(scope) },
-                    label = { Text(searchScopeLabel(scope)) },
-                )
-            }
+            FilterChoiceChip("Hide liked", hideLiked) { onHideLikedChange(!hideLiked) }
+            FilterChoiceChip("Hide saved", hideSaved) { onHideSavedChange(!hideSaved) }
+            FilterChoiceChip("Hide watched", hideWatched) { onHideWatchedChange(!hideWatched) }
         }
-        items(primaryScopes.size) { index ->
-            val scope = primaryScopes[index]
-            FilterChip(
-                selected = selectedScope.facet == scope.facet &&
-                    (selectedScope == scope || scope.facet == SearchFacet.TAG),
-                onClick = { onScopeSelected(scope) },
-                label = { Text(searchScopeLabel(scope)) },
-            )
-        }
-        if (secondaryScopes.isNotEmpty()) {
-            item {
-                Box {
-                    val selectedSecondary = secondaryScopes.firstOrNull { scope ->
-                        scope.facet == selectedScope.facet
-                    }
-                    FilterChip(
-                        selected = selectedSecondary != null,
-                        onClick = { moreExpanded = true },
-                        label = {
-                            Text(selectedSecondary?.let(::searchScopeLabel) ?: "More")
-                        },
-                    )
-                    DropdownMenu(
-                        expanded = moreExpanded,
-                        onDismissRequest = { moreExpanded = false },
-                    ) {
-                        secondaryScopes.forEach { scope ->
-                            DropdownMenuItem(
-                                text = { Text(searchScopeLabel(scope)) },
-                                onClick = {
-                                    onScopeSelected(scope)
-                                    moreExpanded = false
-                                },
-                            )
-                        }
+        if (showAnimatedOnlyFilter) {
+            AnimatedDurationRangeControl(range = animatedDurationRange, onRangeChange = onAnimatedDurationRangeChange)
+        } else {
+            FilterSection("Language") {
+                NhentaiLanguageFilter.entries.forEach { filter ->
+                    FilterChoiceChip(nhentaiLanguageLabel(filter), nhentaiLanguageFilter == filter) {
+                        onAction(SearchAction.SetNhentaiLanguage(filter))
                     }
                 }
             }
         }
+        DateRangeFilterSection(
+            range = query.dateRange,
+            onPreset = { preset -> onAction(SearchAction.SetDateRangePreset(preset)) },
+            onCustom = { range -> onAction(SearchAction.SetDateRange(range)) },
+        )
     }
 }
 
-@Composable
-private fun FacetedAutocompletePanel(
-    suggestions: List<FacetedTagSuggestion>,
-    onInclude: (FacetedTagSuggestion) -> Unit,
-    onExclude: (FacetedTagSuggestion) -> Unit,
-) {
-    AutocompleteListShell(
-        items = suggestions,
-    ) { item ->
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = item.text, style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    text = facetedSuggestionMetaLabel(item),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = { onInclude(item) }) {
-                    Text("+")
-                }
-                TextButton(onClick = { onExclude(item) }) {
-                    Text("−")
-                }
-            }
-        }
-    }
+private fun nhentaiLanguageLabel(filter: NhentaiLanguageFilter): String = when (filter) {
+    NhentaiLanguageFilter.ANY -> "Any"
+    NhentaiLanguageFilter.ENGLISH -> "English"
+    NhentaiLanguageFilter.CHINESE -> "Chinese"
+    NhentaiLanguageFilter.JAPANESE -> "Japanese"
 }
 
-@Composable
-private fun AutocompletePanel(
-    suggestions: List<TagSuggestion>,
-    onInclude: (String) -> Unit,
-    onExclude: (String) -> Unit,
-) {
-    AutocompleteListShell(
-        items = suggestions,
-    ) { item ->
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = tagSuggestionDisplayText(item), style = MaterialTheme.typography.bodyMedium)
-                val meta = tagSuggestionMetaLabel(item)
-                if (meta.isNotBlank()) {
-                    Text(text = meta, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = { onInclude(item.text) }) {
-                    Text("+")
-                }
-                TextButton(onClick = { onExclude(item.text) }) {
-                    Text("-")
-                }
-            }
-        }
-    }
-}
+/** The filters that change what a source returns, so changing them needs a new search. */
+private data class SearchServerFilters(
+    val sort: SortMode,
+    val dateRange: DateRange?,
+    val fullColor: Boolean,
+    val language: NhentaiLanguageFilter,
+)
 
 @Composable
 private fun SourceBadge(
@@ -1843,10 +1423,6 @@ internal fun previewAspectRatio(post: Post): Float {
     val height = post.height ?: return 1f
     if (width <= 0 || height <= 0) return 1f
     return width.toFloat() / height.toFloat()
-}
-
-private fun String.isDigitsOnly(): Boolean {
-    return isNotBlank() && all { ch -> ch.isDigit() }
 }
 
 private fun Post.hasActionableTags(): Boolean {

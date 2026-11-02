@@ -19,53 +19,15 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class SettingsViewModelTest {
     @Test
-    fun `expansion restores as one keyed state and persists each independent update`() = runTest {
-        val restoreRepository = InMemoryUiRestoreRepository().apply {
-            setSettingsSectionExpansion(
-                mapOf(
-                    SettingsSectionKey.SOURCE_ACCOUNTS.name to false,
-                    SettingsSectionKey.UPDATES.name to true,
-                )
-            )
-        }
-        val owner = settingsOwner(uiRestoreRepository = restoreRepository)
+    fun `source accounts request opens the Accounts page and navigates to Settings`() = runTest {
+        val owner = settingsOwner()
         runCurrent()
 
-        assertFalse(owner.state.value.sectionExpansion[SettingsSectionKey.SOURCE_ACCOUNTS])
-        assertTrue(owner.state.value.sectionExpansion[SettingsSectionKey.UPDATES])
-        assertFalse(owner.state.value.sectionExpansion[SettingsSectionKey.STORAGE_AND_CACHING])
-
-        owner.onAction(
-            SettingsAction.SetSectionExpanded(SettingsSectionKey.UPDATES, expanded = false),
-        )
+        owner.onAction(SettingsAction.OpenSourceAccounts)
         runCurrent()
 
-        val persisted = restoreRepository.getSettingsSectionExpansion()
-        assertFalse(persisted.getValue(SettingsSectionKey.SOURCE_ACCOUNTS.name))
-        assertFalse(persisted.getValue(SettingsSectionKey.UPDATES.name))
-        assertFalse(persisted.getValue(SettingsSectionKey.STORAGE_AND_CACHING.name))
-    }
-
-    @Test
-    fun `first open starts collapsed without overriding explicit restored choices`() = runTest {
-        val firstOpen = settingsOwner()
-        runCurrent()
-
-        assertTrue(SettingsSectionKey.entries.none { firstOpen.state.value.sectionExpansion[it] })
-
-        val restored = settingsOwner(
-            uiRestoreRepository = InMemoryUiRestoreRepository().apply {
-                setSettingsSectionExpansion(
-                    SettingsSectionKey.entries.associate { section ->
-                        section.name to (section == SettingsSectionKey.UPDATES)
-                    },
-                )
-            },
-        )
-        runCurrent()
-
-        assertTrue(restored.state.value.sectionExpansion[SettingsSectionKey.UPDATES])
-        assertFalse(restored.state.value.sectionExpansion[SettingsSectionKey.SOURCE_ACCOUNTS])
+        assertEquals(SettingsPage.ACCOUNTS, owner.state.value.page)
+        assertEquals(SettingsEffect.NavigateToSettings, owner.effects.first())
     }
 
     @Test

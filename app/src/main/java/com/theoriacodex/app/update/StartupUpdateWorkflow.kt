@@ -68,17 +68,7 @@ internal object StartupUpdateWorkflowReducer {
                 current.copy(actionLocked = true)
             )
             is StartupUpdateWorkflowEvent.InstallFinished -> reduceInstallOutcome(current, event.outcome)
-            is StartupUpdateWorkflowEvent.Failed -> StartupUpdateWorkflowTransition(
-                current.copy(
-                    updateState = StartupUpdateState.Failed(event.message),
-                    statusMessage = event.message,
-                    choice = null,
-                    pendingInstall = null,
-                    awaitingUnknownSources = false,
-                    awaitingInstallerReturn = false,
-                    actionLocked = false,
-                ),
-            )
+            is StartupUpdateWorkflowEvent.Failed -> failed(current, event.message)
             is StartupUpdateWorkflowEvent.ContinuedToApp -> StartupUpdateWorkflowTransition(
                 current.copy(
                     updateState = StartupUpdateState.NoUpdate,
@@ -100,6 +90,19 @@ internal object StartupUpdateWorkflowReducer {
             )
         }
     }
+
+    private fun failed(current: StartupUpdateWorkflowState, message: String) =
+        StartupUpdateWorkflowTransition(
+            current.copy(
+                updateState = StartupUpdateState.Failed(message),
+                statusMessage = message,
+                choice = null,
+                pendingInstall = null,
+                awaitingUnknownSources = false,
+                awaitingInstallerReturn = false,
+                actionLocked = false,
+            ),
+        )
 
     private fun reduceInstallOutcome(
         current: StartupUpdateWorkflowState,

@@ -1,5 +1,7 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.app.codex.savedCodexChildIcon
+import com.theoriacodex.app.codex.savedCodexCountSuffix
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -48,6 +50,7 @@ import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.ui.components.PostShelfSection
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
+import com.theoriacodex.app.ui.components.POST_SHELF_CARD_WIDTH
 import com.theoriacodex.app.ui.components.POST_SHELF_MEDIA_ASPECT_RATIO
 import com.theoriacodex.app.ui.components.FeedFabRestoreRegistry
 import com.theoriacodex.app.ui.components.codexFeedFabContext
@@ -66,9 +69,6 @@ internal fun SavedCodexRoute(
     onOpenCodex: (String) -> Unit,
     onOpenViewer: (String, List<Post>, Int) -> Unit,
     onOpenCodexActions: (String) -> Unit,
-    onManageFollowed: () -> Unit,
-    onRenameSearch: (String, String) -> Unit,
-    onRemoveSearch: (String) -> Unit,
     resolvePost: suspend (PostId) -> Post?,
     onToggleLike: (Post) -> Unit = {},
 ) {
@@ -81,17 +81,6 @@ internal fun SavedCodexRoute(
         data.likesRepository.observeLikes(settings.activeRecommendationProfile().profileId)
     }.collectAsStateWithLifecycle(initialValue = null).value?.size ?: return
     val counts = listOf(likesCount, settings.followedCreators.size, searches.size)
-    var showSearches by remember { mutableStateOf(false) }
-    if (showSearches) {
-        val id = com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID
-        val context = codexFeedFabContext(id)
-        restoreRegistry.state(context)?.let { restore ->
-            com.theoriacodex.app.codex.SavedSearchesManagementSheet(
-                searches, restore, { restoreRegistry.update(context, it) }, onRenameSearch, onRemoveSearch,
-                onDismiss = { showSearches = false },
-            )
-        }
-    }
     val scroll = rememberLazyListState()
     val children = remember(likesId) { savedCodexChildren(likesId) }
     val shelfIds = remember(children) { listOf(null) + children.map { ViewerReturnShelfId.Saved(it.codexId) } }
@@ -113,13 +102,7 @@ internal fun SavedCodexRoute(
                         SavedCodexSection(state, child.codexId, child.name, counts[index], restore,
                             durations, sources, { scroll.isScrollInProgress },
                             { onOpenCodex(child.codexId) },
-                            {
-                                when (child.codexId) {
-                                    com.theoriacodex.app.codex.FOLLOWED_CODEX_ID -> onManageFollowed()
-                                    com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID -> showSearches = true
-                                    else -> onOpenCodexActions(child.codexId)
-                                }
-                            },
+                            { onOpenCodexActions(child.codexId) },
                             { posts, position -> onOpenViewer(child.codexId, posts, position) }, resolvePost, onToggleLike)
                     }
                 }
@@ -155,7 +138,7 @@ private fun SavedCodexSection(
             metadata.knownDurationMsByPostId)
     }
     SideEffect { owner.onFilterChanged(!filters.animatedDurationRange.isFullRange) }
-    val cardWidth = 164.dp
+    val cardWidth = POST_SHELF_CARD_WIDTH
     val rowHeight = cardWidth / POST_SHELF_MEDIA_ASPECT_RATIO
     val row = rememberLazyListState()
     DurationRouteEnvironmentEffect({ parentScrolling() || row.isScrollInProgress }, owner::onEnvironmentChanged)
@@ -164,7 +147,10 @@ private fun SavedCodexSection(
     val postIds = remember(posts) { posts.map { it.id } }
     ViewerReturnShelf(ViewerReturnShelfId.Saved(id), postIds, row) {
         PostShelfSection(title, count, posts, state.loading, feed?.errors?.isNotEmpty() == true,
-            onOpen, { liveOwner?.retry() }, onLongPress) {
+            onOpen, { liveOwner?.retry() }, onLongPress,
+            icon = savedCodexChildIcon(id),
+            countSuffix = savedCodexCountSuffix(id),
+            onMore = onLongPress) {
             LazyRow(state = row, modifier = Modifier.height(rowHeight), contentPadding = PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 itemsIndexed(posts, key = { _, post -> "${post.id.source.name}:${post.id.sourcePostId}" }) { index, post ->

@@ -2,6 +2,55 @@
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-02
+
+### Fixed
+
+- Keep committed search input cleared when autocomplete finishes late.
+
+- Restore the previous For You sort when Undo is tapped before a filter reset finishes loading.
+
+- Keep Recents days distinct across years.
+- Clear the Auto-save alternative target when removing a tag group to avoid editing the wrong rule.
+
+- Restore language and Full color filters when undoing Clear filters.
+- Exclude retained download history from storage usage totals and label it separately.
+
+### Changed
+
+- Start loading fullscreen swipe destinations and buffering their media during the drag, showing thumbnails and waiting until the transition settles to play.
+
+- Keep up to 400 days of local activity history for Stats trends while preserving existing lifetime totals.
+- Keep private thumbnails for posts in Codex statistics top lists, even after cache clearing or removing a like.
+
+- Choose Codex actions from a labeled, grouped menu, with automatic tag rules moved into their own Auto-save sheet that shows source icons and reveals the tag list only while adding a tag.
+- Choose post actions from the same labeled long-press menu, led by saving, with search terms moved into their own sheet and Remove from Codex set apart at the end.
+- Search from a one-line bar that opens a full-screen editor showing every tag, grouped by type on sources like Hitomi, with Must have, Any of, and Without always on screen.
+- Tap any search tag to choose what happens to it, instead of excluded tags being removed immediately.
+- Use labeled menus for viewer Info, download actions, and the Codex search source picker, and remove redundant Cancel and Done buttons from related sheets.
+- See active filters on a filter button that names them, shows their number when there are more than two or while scrolling, and clears them in one tap with Undo.
+- Use one filter sheet layout across Search, For You, Codices, and creators. Search filters now apply together when the sheet closes.
+- Filter Search by more date ranges, including custom dates, on every source using each post's date.
+- Open Likes, Followed, and Searches directly from their own covers in the Codex library, with See all and actions visible on the Saved screen.
+- Reach any For You interest from jump chips under a larger Your mix shelf, with each shelf's Pin, Save to Codex, and Dismiss in its own menu, and New search and Reorder in the header menu.
+- Open Recents on a day-by-day timeline of posts and searches, with evenly sized post shelves, For You searches filtered inside Searches, a visible pin button, and clear actions that name what they clear.
+- Say Save and Saved instead of Pin across Recents and For You, with a bookmark icon.
+- Rerun a saved search in one tap from the Saved row in the search editor.
+- Hold Likes, Followed, or Searches in the Codex library to open their menus, as on the Saved screen.
+- Read your whole setup at a glance on a redesigned Settings screen, where each row shows its current value and opens a sheet or page.
+- See Stats on their own screen, with time split by activity, 7-day, 30-day, and yearly trends, jump chips, and a ranked list of Codices with their top posts.
+
+### Removed
+
+- Remove the minimum score filter. Older saved searches keep working and ignore any score they stored.
+
+### Fixed
+
+- Android Back buttons and gestures now play the Codex exit animation, including Saved Sub-Codices.
+
+- Slide Codex screens from left to right when going back, with the previous screen entering from the left.
+- Try another available video decoder when the preferred decoder cannot start, allowing feed previews and fullscreen playback to recover from hardware decoder resource exhaustion.
+
 ## [0.12.0] - 2026-11-01
 
 ### Changed

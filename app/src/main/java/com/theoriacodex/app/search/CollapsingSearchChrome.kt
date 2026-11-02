@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -23,6 +24,9 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -33,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -78,6 +83,45 @@ internal fun CollapsingSearchChrome(
     }
 }
 
+
+/** One-line search summary shown above results; tapping it opens the [SearchComposer]. */
+@Composable
+internal fun SearchSummaryBar(
+    summary: String?,
+    validationMessage: String?,
+    showSearchAction: Boolean,
+    onOpen: () -> Unit,
+    onSearch: () -> Unit,
+    trailing: @Composable () -> Unit,
+) {
+    Surface(
+        onClick = onOpen,
+        shape = RoundedCornerShape(28.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("Search bar"),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 16.dp, end = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                text = validationMessage ?: summary ?: "Search tags",
+                modifier = Modifier.weight(1f),
+                color = when {
+                    validationMessage != null -> MaterialTheme.colorScheme.error
+                    summary != null -> MaterialTheme.colorScheme.onSurface
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (showSearchAction) TextButton(onClick = onSearch) { Text("Search") }
+            trailing()
+        }
+    }
+}
 
 @Composable
 private fun SearchCornerControls(

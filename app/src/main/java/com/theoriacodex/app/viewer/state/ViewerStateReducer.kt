@@ -95,26 +95,7 @@ internal fun viewerMediaKind(post: Post, media: ImageRef): ViewerMediaKind {
 }
 
 internal fun reduceViewerState(state: ViewerUiState, action: ViewerAction): ViewerReduction {
-    if (action is ViewerAction.ReplaceSession) {
-        return ViewerReduction(
-            createViewerUiState(
-                session = action.session,
-                posts = action.posts,
-                initialPageIndex = action.initialPageIndex,
-                requiresResolution = { post -> post.id in action.resolutionRequiredPostIds },
-                initialMediaIndices = action.initialMediaIndices + if (state.session == action.session) {
-                    state.pages.associate { it.post.id to (it.pendingMediaIndex ?: it.selectedMediaIndex) }
-                } else {
-                    emptyMap()
-                },
-            ).let { replacement ->
-                replacement.copy(
-                    controls = replacement.controls.copy(playbackMode = state.controls.playbackMode),
-                    related = ViewerRelatedUiState(navigation = action.relatedNavigation, extraPostIds = action.relatedPostIds),
-                )
-            },
-        )
-    }
+    if (action is ViewerAction.ReplaceSession) return state.replaceSession(action)
 
     val session = state.session ?: return ViewerReduction(state)
     return when (action) {
@@ -123,112 +104,31 @@ internal fun reduceViewerState(state: ViewerUiState, action: ViewerAction): View
         is ViewerAction.SelectMedia -> state.selectMedia(action.mediaIndex)
         is ViewerAction.SelectOverviewMedia -> state.selectMedia(action.mediaIndex)
         ViewerAction.ToggleChrome -> ViewerReduction(state.toggleChrome())
-        ViewerAction.ToggleOverview -> ViewerReduction(
-            state.copy(
-                overview = state.overview.copy(
-                    visible = state.overview.available && !state.overview.visible,
-                ),
-            ),
-        )
-        ViewerAction.ShowMetadata -> ViewerReduction(
-            state.copy(controls = state.controls.copy(metadataVisible = true)),
-        )
-        ViewerAction.HideMetadata -> ViewerReduction(
-            state.copy(controls = state.controls.copy(metadataVisible = false)),
-        )
-        ViewerAction.ShowActionsMenu -> ViewerReduction(
-            state.copy(controls = state.controls.copy(actionsMenuVisible = true)),
-        )
-        ViewerAction.HideActionsMenu -> ViewerReduction(
-            state.copy(controls = state.controls.copy(actionsMenuVisible = false)),
-        )
-        ViewerAction.ShowPlaybackSettings -> ViewerReduction(
-            state.copy(
-                controls = state.controls.copy(
-                    playbackSettingsVisible = state.controls.playback.available,
-                ),
-            ),
-        )
-        ViewerAction.HidePlaybackSettings -> ViewerReduction(
-            state.copy(controls = state.controls.copy(playbackSettingsVisible = false)),
-        )
-        is ViewerAction.SetPlaybackMode -> ViewerReduction(state.copy(
-            controls = state.controls.copy(playbackMode = action.mode),
-        ))
+        ViewerAction.ToggleOverview -> state.reduceToggleOverview()
+        ViewerAction.ShowMetadata -> state.withControls(state.controls.copy(metadataVisible = true))
+        ViewerAction.HideMetadata -> state.withControls(state.controls.copy(metadataVisible = false))
+        ViewerAction.ShowActionsMenu -> state.withControls(state.controls.copy(actionsMenuVisible = true))
+        ViewerAction.HideActionsMenu -> state.withControls(state.controls.copy(actionsMenuVisible = false))
+        ViewerAction.ShowPlaybackSettings -> state.reduceShowPlaybackSettings()
+        ViewerAction.HidePlaybackSettings -> state.withControls(state.controls.copy(playbackSettingsVisible = false))
+        is ViewerAction.SetPlaybackMode -> state.withControls(state.controls.copy(playbackMode = action.mode))
         is ViewerAction.PlaybackCompleted -> state.completePlayback(action)
         ViewerAction.Play -> ViewerReduction(state.setPlaying(true))
         ViewerAction.Pause -> ViewerReduction(state.setPlaying(false))
-        ViewerAction.TogglePlayback -> ViewerReduction(
-            state.setPlaying(!state.controls.playback.playing),
-        )
+        ViewerAction.TogglePlayback -> ViewerReduction(state.setPlaying(!state.controls.playback.playing))
         ViewerAction.RestartPlayback -> ViewerReduction(state.restartPlayback())
         is ViewerAction.SetPlaybackRate -> ViewerReduction(state.setPlaybackRate(action.rate))
         ViewerAction.RequestCurrentPageResolution -> state.requestResolution(session, state.currentPage?.post?.id)
         is ViewerAction.RequestPageResolution -> state.requestResolution(session, action.postId)
-        is ViewerAction.ResolutionCancelled -> state.ifCurrentSession(action.session) {
-            updateResolution(action.postId) { it.copy(status = ViewerResolutionStatus.IDLE) }
-        }
-        is ViewerAction.ResolutionStarted -> state.ifCurrentSession(action.session) {
-            updateResolution(action.postId) { current ->
-                current.copy(
-                    status = ViewerResolutionStatus.RESOLVING,
-                    attempt = current.attempt + 1,
-                    message = null,
-                )
-            }
-        }
-        is ViewerAction.ResolutionCompleted -> state.ifCurrentSession(action.session) {
-            replaceResolvedPost(action.post)
-        }
-        is ViewerAction.ResolutionFailed -> state.ifCurrentSession(action.session) {
-            resolutionFailed(action)
-        }
+        is ViewerAction.ResolutionCancelled,
+        is ViewerAction.ResolutionStarted,
+        is ViewerAction.ResolutionCompleted,
+        is ViewerAction.ResolutionFailed -> state.reduceResolution(action)
         is ViewerAction.QueuePrefetch -> state.queuePrefetch(session, action.mediaKeys)
-        is ViewerAction.PrefetchStarted -> state.ifCurrentSession(action.session) {
-            copy(
-                prefetch = prefetch.copy(
-                    queued = prefetch.queued - action.mediaKey,
-                    inFlight = prefetch.inFlight + action.mediaKey,
-                ),
-            )
-        }
-        is ViewerAction.PrefetchCompleted -> state.ifCurrentSession(action.session) {
-            copy(
-                prefetch = prefetch.copy(
-                    queued = prefetch.queued - action.mediaKey,
-                    inFlight = prefetch.inFlight - action.mediaKey,
-                    warmed = if (action.result.outcome == ViewerPrefetchOutcome.WARMED) {
-                        prefetch.warmed + (action.mediaKey to action.result.bytesCached)
-                    } else prefetch.warmed,
-                    skipped = if (action.result.outcome == ViewerPrefetchOutcome.SKIPPED) {
-                        prefetch.skipped + action.mediaKey
-                    } else prefetch.skipped,
-                    failed = if (action.result.outcome == ViewerPrefetchOutcome.FAILED) {
-                        prefetch.failed + action.mediaKey
-                    } else prefetch.failed,
-                ),
-            )
-        }
-        is ViewerAction.MediaFailed -> state.ifCurrentSession(action.session) {
-            val failedMediaKey = action.error.mediaKey
-            if ((failedMediaKey != null && failedMediaKey != currentMedia?.key) ||
-                (action.loadGeneration != null && action.loadGeneration != currentMedia?.loadGeneration)
-            ) {
-                this
-            } else {
-                withCurrentMediaReadiness(false).copy(
-                    mediaError = action.error,
-                    controls = controls.copy(
-                        playback = controls.playback.copy(playing = false),
-                    ),
-                )
-            }
-        }
-        is ViewerAction.MediaReady -> state.ifCurrentSession(action.session) {
-            if (currentMedia?.key == action.key && currentMedia?.loadGeneration == action.loadGeneration) {
-                withCurrentMediaReadiness(true).copy(mediaError = null)
-            } else this
-        }
+        is ViewerAction.PrefetchStarted -> state.reducePrefetchStarted(action)
+        is ViewerAction.PrefetchCompleted -> state.reducePrefetchCompleted(action)
+        is ViewerAction.MediaFailed -> state.reduceMediaFailed(action)
+        is ViewerAction.MediaReady -> state.reduceMediaReady(action)
         ViewerAction.ClearMediaError -> ViewerReduction(state.copy(mediaError = null))
         ViewerAction.RetryMedia -> state.retryMedia(session)
         ViewerAction.Save -> state.currentPageEffect { page, _ ->
@@ -247,26 +147,152 @@ internal fun reduceViewerState(state: ViewerUiState, action: ViewerAction): View
             state,
             listOf(ViewerEffect.OpenCreatorProfile(session, action.creator)),
         )
-        is ViewerAction.IncludeTag -> state.currentPageEffect { page, _ ->
-            ViewerEffect.ApplyTag(
-                session = session,
-                postId = page.post.id,
-                term = action.term,
-                excluded = false,
-            )
-        }
-        is ViewerAction.ExcludeTag -> state.currentPageEffect { page, _ ->
-            ViewerEffect.ApplyTag(
-                session = session,
-                postId = page.post.id,
-                term = action.term,
-                excluded = true,
-            )
-        }
+        is ViewerAction.IncludeTag -> state.reduceIncludeTag(session, action)
+        is ViewerAction.ExcludeTag -> state.reduceExcludeTag(session, action)
         ViewerAction.LoadMore -> ViewerReduction(state, listOf(ViewerEffect.LoadMore(session)))
         ViewerAction.Dismiss -> ViewerReduction(state, listOf(ViewerEffect.Dismiss(session)))
     }
 }
+
+private fun ViewerUiState.withControls(controls: ViewerControlsState): ViewerReduction =
+    ViewerReduction(copy(controls = controls))
+
+private fun ViewerUiState.replaceSession(action: ViewerAction.ReplaceSession): ViewerReduction {
+    return ViewerReduction(
+        createViewerUiState(
+            session = action.session,
+            posts = action.posts,
+            initialPageIndex = action.initialPageIndex,
+            requiresResolution = { post -> post.id in action.resolutionRequiredPostIds },
+            initialMediaIndices = action.initialMediaIndices + if (session == action.session) {
+                pages.associate { it.post.id to (it.pendingMediaIndex ?: it.selectedMediaIndex) }
+            } else {
+                emptyMap()
+            },
+        ).let { replacement ->
+            replacement.copy(
+                controls = replacement.controls.copy(playbackMode = controls.playbackMode),
+                related = ViewerRelatedUiState(navigation = action.relatedNavigation, extraPostIds = action.relatedPostIds),
+            )
+        },
+    )
+}
+
+private fun ViewerUiState.reduceToggleOverview(): ViewerReduction =
+    ViewerReduction(
+        this.copy(
+            overview = this.overview.copy(
+                visible = this.overview.available && !this.overview.visible,
+            ),
+        ),
+    )
+
+private fun ViewerUiState.reduceShowPlaybackSettings(): ViewerReduction =
+    ViewerReduction(
+        this.copy(
+            controls = this.controls.copy(
+                playbackSettingsVisible = this.controls.playback.available,
+            ),
+        ),
+    )
+
+private fun ViewerUiState.reduceResolution(action: ViewerAction): ViewerReduction = when (action) {
+    is ViewerAction.ResolutionCancelled -> this.ifCurrentSession(action.session) {
+        updateResolution(action.postId) { it.copy(status = ViewerResolutionStatus.IDLE) }
+    }
+    is ViewerAction.ResolutionStarted -> this.reduceResolutionStarted(action)
+    is ViewerAction.ResolutionCompleted -> this.ifCurrentSession(action.session) {
+        replaceResolvedPost(action.post)
+    }
+    is ViewerAction.ResolutionFailed -> this.ifCurrentSession(action.session) {
+        resolutionFailed(action)
+    }
+    else -> error("Not a resolution action: $action")
+}
+
+private fun ViewerUiState.reduceResolutionStarted(action: ViewerAction.ResolutionStarted): ViewerReduction =
+    this.ifCurrentSession(action.session) {
+        updateResolution(action.postId) { current ->
+            current.copy(
+                status = ViewerResolutionStatus.RESOLVING,
+                attempt = current.attempt + 1,
+                message = null,
+            )
+        }
+    }
+
+private fun ViewerUiState.reducePrefetchStarted(action: ViewerAction.PrefetchStarted): ViewerReduction =
+    this.ifCurrentSession(action.session) {
+        copy(
+            prefetch = prefetch.copy(
+                queued = prefetch.queued - action.mediaKey,
+                inFlight = prefetch.inFlight + action.mediaKey,
+            ),
+        )
+    }
+
+private fun ViewerUiState.reducePrefetchCompleted(action: ViewerAction.PrefetchCompleted): ViewerReduction =
+    this.ifCurrentSession(action.session) {
+        copy(
+            prefetch = prefetch.copy(
+                queued = prefetch.queued - action.mediaKey,
+                inFlight = prefetch.inFlight - action.mediaKey,
+                warmed = if (action.result.outcome == ViewerPrefetchOutcome.WARMED) {
+                    prefetch.warmed + (action.mediaKey to action.result.bytesCached)
+                } else prefetch.warmed,
+                skipped = if (action.result.outcome == ViewerPrefetchOutcome.SKIPPED) {
+                    prefetch.skipped + action.mediaKey
+                } else prefetch.skipped,
+                failed = if (action.result.outcome == ViewerPrefetchOutcome.FAILED) {
+                    prefetch.failed + action.mediaKey
+                } else prefetch.failed,
+            ),
+        )
+    }
+
+private fun ViewerUiState.reduceMediaFailed(action: ViewerAction.MediaFailed): ViewerReduction =
+    this.ifCurrentSession(action.session) {
+        val failedMediaKey = action.error.mediaKey
+        if ((failedMediaKey != null && failedMediaKey != currentMedia?.key) ||
+            (action.loadGeneration != null && action.loadGeneration != currentMedia?.loadGeneration)
+        ) {
+            this
+        } else {
+            withCurrentMediaReadiness(false).copy(
+                mediaError = action.error,
+                controls = controls.copy(
+                    playback = controls.playback.copy(playing = false),
+                ),
+            )
+        }
+    }
+
+private fun ViewerUiState.reduceMediaReady(action: ViewerAction.MediaReady): ViewerReduction =
+    this.ifCurrentSession(action.session) {
+        if (currentMedia?.key == action.key && currentMedia?.loadGeneration == action.loadGeneration) {
+            withCurrentMediaReadiness(true).copy(mediaError = null)
+        } else this
+    }
+
+private fun ViewerUiState.reduceIncludeTag(session: ViewerSessionIdentity, action: ViewerAction.IncludeTag): ViewerReduction =
+    this.currentPageEffect { page, _ ->
+        ViewerEffect.ApplyTag(
+            session = session,
+            postId = page.post.id,
+            term = action.term,
+            excluded = false,
+        )
+    }
+
+private fun ViewerUiState.reduceExcludeTag(session: ViewerSessionIdentity, action: ViewerAction.ExcludeTag): ViewerReduction =
+    this.currentPageEffect { page, _ ->
+        ViewerEffect.ApplyTag(
+            session = session,
+            postId = page.post.id,
+            term = action.term,
+            excluded = true,
+        )
+    }
 
 private fun ViewerUiState.selectPage(pageIndex: Int): ViewerReduction {
     val target = pageIndex.coerceInPages(pages)

@@ -648,6 +648,7 @@ class SearchCoordinator(
     }
 
     private suspend fun rememberSeenTags(posts: List<Post>) = withContext(computationDispatcher) {
+        posts.forEach { post -> runCatchingPreservingCancellation { statisticsRepository.recordPostAvailable(post) } }
         posts.groupBy { it.id.source }.forEach { (source, sourcePosts) ->
             val suggestions = sourcePosts.asSequence()
                 .flatMap { post -> recommendationTaxonomyFor(post).asSequence() }

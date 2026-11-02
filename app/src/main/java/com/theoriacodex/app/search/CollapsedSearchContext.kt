@@ -3,22 +3,23 @@ package com.theoriacodex.app.search
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SortMode
 
+/** The search bar's one line: the first tags, how many more there are, and active filters. */
 internal fun collapsedSearchContextSummary(
-    appliedQuery: Query,
+    query: Query,
     activeFilterCount: Int,
 ): String? {
-    val query = appliedQuery.effectiveIncludeTermGroups.takeIf(List<*>::isNotEmpty)?.joinToString(" & ") { group ->
-        if (group.terms.size == 1) group.terms.single().value
-        else group.terms.joinToString(prefix = "(", postfix = ")", separator = " || ") { it.value }
+    val terms = query.effectiveIncludeTermGroups.flatMap { it.terms }.map { it.value } +
+        query.excludeTerms.map { "-${it.value}" }
+    val tags = terms.take(MAX_SUMMARY_TAGS).joinToString(", ").takeIf(String::isNotBlank)?.let { shown ->
+        val hidden = terms.size - MAX_SUMMARY_TAGS
+        if (hidden > 0) "$shown +$hidden" else shown
     }
-        ?: appliedQuery.excludeTerms.firstOrNull()?.value?.let { value -> "-$value" }
-    return buildList {
-        query?.takeIf(String::isNotBlank)?.let(::add)
-        if (activeFilterCount > 0) {
-            add("$activeFilterCount ${if (activeFilterCount == 1) "filter" else "filters"}")
-        }
-    }.joinToString(" · ").takeIf(String::isNotBlank)
+    val filters = "$activeFilterCount ${if (activeFilterCount == 1) "filter" else "filters"}"
+        .takeIf { activeFilterCount > 0 }
+    return listOfNotNull(tags, filters).joinToString(" · ").takeIf(String::isNotBlank)
 }
+
+private const val MAX_SUMMARY_TAGS = 2
 
 internal fun activeSearchFilterCount(
     appliedQuery: Query,
@@ -37,7 +38,6 @@ internal fun activeSearchFilterCount(
     hideWatched,
     appliedQuery.sort != SortMode.NEWEST,
     appliedQuery.dateRange != null,
-    appliedQuery.minScore != null,
     fullColor,
     language != NhentaiLanguageFilter.ANY,
 ).count { it }

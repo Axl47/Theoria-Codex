@@ -13,21 +13,11 @@ import androidx.compose.ui.Modifier
 
 @Composable
 internal fun PreferencesSection(state: SettingsUiState, onAction: (SettingsAction) -> Unit) {
-    SettingsSection(
-        title = "Preferences",
-        summary = "Browsing and viewer controls",
-        expanded = state.sectionExpansion[SettingsSectionKey.PREFERENCES],
-        onToggle = { onAction(SettingsAction.SetSectionExpanded(SettingsSectionKey.PREFERENCES,
-            !state.sectionExpansion[SettingsSectionKey.PREFERENCES])) },
-    ) {
-        PreferenceToggle("Invert scroll direction", "Reverse swipes within multi-media posts.",
-            state.settings.viewer.invertMultiImageScrollDirection) { onAction(SettingsAction.SetInvertScrollDirection(it)) }
-        Text("Legacy", style = MaterialTheme.typography.titleSmall)
-        PreferenceToggle("Old Search Bar", "Keep the full search field visible above the grid.",
+    Text("Classic controls", style = MaterialTheme.typography.titleMedium)
+        PreferenceToggle("Old Search Bar", "Keep the search bar visible while scrolling.",
             state.settings.oldSearchBar) { onAction(SettingsAction.SetOldSearchBar(it)) }
         PreferenceToggle("Instant Seek", "Seek while dragging instead of showing thumbnail previews.",
             state.settings.viewer.instantSeek) { onAction(SettingsAction.SetInstantSeek(it)) }
-    }
 }
 
 @Composable

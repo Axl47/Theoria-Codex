@@ -8,8 +8,6 @@ import com.theoriacodex.domain.model.SourceKey
 enum class CapabilityExclusionReason {
     SORT_UNSUPPORTED,
     EXCLUDE_TAGS_UNSUPPORTED,
-    DATE_RANGE_UNSUPPORTED,
-    MIN_SCORE_UNSUPPORTED,
 }
 
 object SourceCapabilityGate {
@@ -25,12 +23,6 @@ object SourceCapabilityGate {
             }
             if (query.excludeTerms.isNotEmpty() && !capability.supportsExcludeTagsServerSide) {
                 reasons += CapabilityExclusionReason.EXCLUDE_TAGS_UNSUPPORTED
-            }
-            if (query.dateRange != null && !capability.supportsDateRangeServerSide) {
-                reasons += CapabilityExclusionReason.DATE_RANGE_UNSUPPORTED
-            }
-            if (query.minScore != null && !capability.supportsMinScoreServerSide) {
-                reasons += CapabilityExclusionReason.MIN_SCORE_UNSUPPORTED
             }
 
             if (reasons.isEmpty()) {

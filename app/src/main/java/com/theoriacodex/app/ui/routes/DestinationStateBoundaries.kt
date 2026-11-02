@@ -1,6 +1,7 @@
 package com.theoriacodex.app.ui.routes
 
 import androidx.compose.runtime.Composable
+import kotlinx.coroutines.flow.onEach
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
@@ -244,7 +245,8 @@ internal fun CodexDetailDestinationStateBoundary(
         .collectAsStateWithLifecycle(initialValue = null)
     val itemsState = remember(data.codexRepository, codexId) { data.codexRepository.observeCodexItems(codexId) }
         .collectAsStateWithLifecycle(initialValue = emptyList())
-    val postsState = remember(data.codexRepository, codexId, sortMode) { data.codexRepository.observeCodexPosts(codexId, sortMode) }
+    val postsState = remember(data.codexRepository, codexId, sortMode) { data.codexRepository.observeCodexPosts(codexId, sortMode)
+        .onEach { posts -> posts.forEach { data.statisticsRepository.recordPostAvailable(it) } } }
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val settingsState = remember(data.settingsRepository) { data.settingsRepository.observeSettings() }
         .collectAsStateWithLifecycle(initialValue = null)

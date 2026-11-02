@@ -5,7 +5,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.theoriacodex.app.search.state.emptySearchQuery
 import com.theoriacodex.app.testing.testPost
@@ -47,7 +47,7 @@ class PostActionSheetPreloadTest {
                 MaterialTheme {
                     PostActionSheet(post = post, onDismiss = {}, onSaveToDevice = {},
                         onSaveToCodex = { saves++ }, saveToCodexQuery = query,
-                        tagContent = { header, footer -> header(); footer() })
+                        tagContent = {})
                 }
             }
         }
@@ -57,7 +57,7 @@ class PostActionSheetPreloadTest {
             assertEquals(0, saves)
             assertEquals(mapOf("target" to 0.8), loader.observe(listOf(post), query).value)
         }
-        compose.onNodeWithContentDescription("Save to Codex").performClick()
+        compose.onNodeWithText("Save to Codex").performClick()
         compose.runOnIdle { assertEquals(1, saves) }
     }
 }

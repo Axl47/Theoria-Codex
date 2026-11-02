@@ -29,11 +29,9 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.recommend.ForYouSourceSelector
 import com.theoriacodex.app.search.SearchResultCard
-import com.theoriacodex.app.settings.SettingsSection
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsScreen
-import com.theoriacodex.app.settings.SettingsSectionExpansionState
-import com.theoriacodex.app.settings.SettingsSectionKey
+import com.theoriacodex.app.settings.SettingsPage
 import com.theoriacodex.app.settings.SettingsUiState
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -116,66 +114,21 @@ class CompactControlAccessibilityDeviceTest {
     }
 
     @Test
-    fun settingsHeaderPublishesButtonRoleAndExpansionAction() {
-        var expanded by mutableStateOf(true)
-        composeRule.setContent {
-            MaterialTheme {
-                Column {
-                    SettingsSection(
-                        title = "Updates",
-                        expanded = expanded,
-                        onToggle = { expanded = !expanded },
-                    ) {
-                        Text("Update controls")
-                    }
-                }
-            }
-        }
-
-        val header = composeRule.onNode(hasText("Updates") and hasClickAction())
-        header.assertRole(Role.Button)
-        header.assertStateDescription("Expanded")
-        // Text scaling can grow the header; its clickable row promises a minimum, not a fixed size.
-        header.assertHeightIsAtLeast(48.dp)
-        assertTrue(header.fetchSemanticsNode().config.contains(SemanticsActions.Collapse))
-        assertFalse(header.fetchSemanticsNode().config.contains(SemanticsActions.Expand))
-
-        header.performClick()
-
-        val collapsed = composeRule.onNode(hasText("Updates") and hasClickAction())
-        collapsed.assertStateDescription("Collapsed")
-        assertTrue(collapsed.fetchSemanticsNode().config.contains(SemanticsActions.Expand))
-        assertFalse(collapsed.fetchSemanticsNode().config.contains(SemanticsActions.Collapse))
-    }
-
-    @Test
-    fun settingsScreenRoutesKeyedExpansionThroughItsOwnerContract() {
+    fun settingsRowsRouteThroughTheirOwnerContract() {
         var received: SettingsAction? = null
-        val expansion = SettingsSectionExpansionState(
-            expandedBySection = SettingsSectionKey.entries.associateWith { section ->
-                section == SettingsSectionKey.UPDATES
-            },
-        )
         composeRule.setContent {
             MaterialTheme {
-                SettingsScreen(
-                    state = SettingsUiState(sectionExpansion = expansion),
-                    onAction = { received = it },
-                )
+                SettingsScreen(state = SettingsUiState(), onAction = { received = it })
             }
         }
 
-        composeRule.onNode(hasText("Updates") and hasClickAction())
-            .performScrollTo()
-            .performClick()
+        val row = composeRule.onNode(hasText("Accounts") and hasClickAction()).performScrollTo()
+        row.assertRole(Role.Button)
+        row.assertHeightIsAtLeast(48.dp)
+        row.performClick()
 
         composeRule.runOnIdle {
-            assertTrue(
-                received == SettingsAction.SetSectionExpanded(
-                    SettingsSectionKey.UPDATES,
-                    expanded = false,
-                ),
-            )
+            assertTrue(received == SettingsAction.OpenPage(SettingsPage.ACCOUNTS))
         }
     }
 
@@ -186,11 +139,7 @@ class CompactControlAccessibilityDeviceTest {
             MaterialTheme {
                 SettingsScreen(
                     state = SettingsUiState(
-                        sectionExpansion = SettingsSectionExpansionState(
-                            expandedBySection = mapOf(
-                                SettingsSectionKey.STORAGE_AND_CACHING to true,
-                            ),
-                        ),
+                        page = SettingsPage.STORAGE,
                         legacyJsonRecoveries = listOf(
                             CorruptionRecovery(
                                 reason = "query_store.json contains malformed JSON",

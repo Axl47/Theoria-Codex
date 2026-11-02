@@ -1,5 +1,15 @@
 package com.theoriacodex.app.search
 
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DateRangePicker
+import androidx.compose.material3.SelectableDates
+import androidx.compose.material3.rememberDateRangePickerState
+import com.theoriacodex.app.ui.components.FilterChoiceChip
+import com.theoriacodex.app.ui.components.FilterSection
+import com.theoriacodex.domain.model.DateRange
+import com.theoriacodex.domain.model.SortMode
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -17,17 +27,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import com.theoriacodex.app.source.SourceLogo
+import com.theoriacodex.app.ui.components.ExpandedBottomSheet
+import com.theoriacodex.app.source.SourceIcon
+import com.theoriacodex.app.source.SourceLetterIcon
 import com.theoriacodex.app.source.isRule34Family
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.domain.model.QueryMode
@@ -41,7 +51,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -117,13 +126,13 @@ internal fun FavoriteTagSheet(
     onRemoveTag: (SourceKey, String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ExpandedBottomSheet(onDismiss) {
         Column(
             modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("Favorite Tags", style = MaterialTheme.typography.titleMedium)
+            Text("Favorite tags", style = MaterialTheme.typography.titleLarge)
             if (sections.isEmpty()) {
                 Text(emptyMessage, style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -135,7 +144,6 @@ internal fun FavoriteTagSheet(
                     if (index != sections.lastIndex) HorizontalDivider()
                 }
             }
-            TextButton(modifier = Modifier.fillMaxWidth(), onClick = onDismiss) { Text("Done") }
         }
     }
 }
@@ -158,6 +166,54 @@ private fun FavoriteTagSectionContent(
             onAddTag = onAddTag,
             onRemoveTag = { tag -> onRemoveTag(section.source, tag) },
         )
+    }
+}
+
+internal fun sortModeLabel(sortMode: SortMode): String = when (sortMode) {
+    SortMode.NEWEST -> "Newest"
+    SortMode.POPULAR -> "Popular"
+    SortMode.TOP -> "Top"
+    SortMode.RANDOM -> "Random"
+}
+
+/** Quick ranges plus a calendar. Picker values and local filtering both read dates in UTC. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun DateRangeFilterSection(range: DateRange?, onPreset: (DateRangePreset) -> Unit, onCustom: (DateRange) -> Unit) {
+    val now = remember { System.currentTimeMillis() }
+    val preset = presetFor(range, now)
+    var picking by remember { mutableStateOf(false) }
+    FilterSection("Date") {
+        DateRangePreset.entries.forEach { option ->
+            FilterChoiceChip(option.label, preset == option) { onPreset(option) }
+        }
+        val customLabel = range?.takeIf { preset == null }?.let { dateRangeLabel(it, now) } ?: "Custom"
+        FilterChoiceChip(customLabel, preset == null) { picking = true }
+    }
+    if (!picking) return
+    val pickerState = rememberDateRangePickerState(
+        initialSelectedStartDateMillis = range?.fromEpochMs?.takeIf { preset == null },
+        initialSelectedEndDateMillis = range?.toEpochMs?.takeIf { preset == null },
+        selectableDates = object : SelectableDates {
+            override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis <= now
+        },
+    )
+    DatePickerDialog(
+        onDismissRequest = { picking = false },
+        dismissButton = { TextButton(onClick = { picking = false }) { Text("Cancel") } },
+        confirmButton = {
+            TextButton(
+                enabled = pickerState.selectedEndDateMillis != null,
+                onClick = {
+                    val from = pickerState.selectedStartDateMillis
+                    val to = pickerState.selectedEndDateMillis
+                    if (from != null && to != null) onCustom(customDateRange(from, to))
+                    picking = false
+                },
+            ) { Text("Apply") }
+        },
+    ) {
+        DateRangePicker(state = pickerState, modifier = Modifier.weight(1f))
     }
 }
 
@@ -262,7 +318,7 @@ private fun SearchSourceMenuItems(
                 },
             contentAlignment = Alignment.Center,
         ) {
-            SearchLetterIcon("R34")
+            SourceLetterIcon("R34")
         }
     }
 }
@@ -273,7 +329,7 @@ private fun SearchSourceIndicator(draftSourceScope: SearchSourceScope, unifiedSo
     when (draftSourceScope) {
         is SearchSourceScope.Single -> {
             val source = draftSourceScope.source
-            SearchSourceIcon(source)
+            SourceIcon(source)
         }
         SearchSourceScope.GlobalUnified, is SearchSourceScope.Temporary -> {
             val count = when (draftSourceScope) {
@@ -281,7 +337,7 @@ private fun SearchSourceIndicator(draftSourceScope: SearchSourceScope, unifiedSo
                 else -> unifiedSourceCount
             }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                SearchLetterIcon("U")
+                SourceLetterIcon("U")
                 Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary) {
                     Text(
                         text = count.toString(),
@@ -342,29 +398,9 @@ private fun SourceMenuOption(
             Text(label)
         } else {
             Box(Modifier.clearAndSetSemantics {}) {
-                if (source == null) SearchLetterIcon("U") else SearchSourceIcon(source)
+                if (source == null) SourceLetterIcon("U") else SourceIcon(source)
             }
         }
-    }
-}
-
-/** Letter marks share the white, bold treatment of Hitomi's icon. */
-@Composable
-private fun SearchLetterIcon(label: String) {
-    Text(
-        text = label,
-        color = Color.White,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-    )
-}
-
-@Composable
-private fun SearchSourceIcon(source: SourceKey) {
-    when {
-        source == SourceKey.IWARA -> SearchLetterIcon("I")
-        source.isRule34Family() -> SearchLetterIcon("R34")
-        else -> SourceLogo(source, size = 18.dp)
     }
 }
 

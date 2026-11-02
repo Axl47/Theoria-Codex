@@ -35,6 +35,7 @@ internal fun MediaStorageChart(breakdown: MediaStorageBreakdown) {
         MediaStorageCategory.VIDEO to Color(0xFFBB9AF7),
         MediaStorageCategory.GIF to Color(0xFFE0AF68),
         MediaStorageCategory.ANIMATION to Color(0xFF7DCFFF),
+        MediaStorageCategory.DOWNLOADS to Color(0xFFF7768E),
     )
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -135,4 +136,5 @@ private fun MediaStorageCategory.label(): String = when (this) {
     MediaStorageCategory.VIDEO -> "Video cache"
     MediaStorageCategory.GIF -> "GIF cache"
     MediaStorageCategory.ANIMATION -> "Animation cache"
+    MediaStorageCategory.DOWNLOADS -> "Downloads"
 }

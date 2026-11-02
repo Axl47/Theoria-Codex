@@ -29,65 +29,19 @@ fun parseExternalPostDeepLink(uri: Uri): ExternalPostDeepLink? {
 
 fun parseExternalPostDeepLink(rawUrl: String): ExternalPostDeepLink? {
     val uri = parseExternalUri(rawUrl) ?: return null
-    parsePixivPostIdFromUri(uri)?.let { postId ->
-        return ExternalPostDeepLink(
-            source = SourceKey.PIXIV,
-            sourceLabel = SourceKey.PIXIV.displayName(),
-            postId = postId,
-        )
-    }
+    postIdDeepLink(SourceKey.PIXIV, parsePixivPostIdFromUri(uri))?.let { return it }
     parseNhentaiPostDeepLink(uri)?.let { return it }
-    parseHitomiGalleryIdFromUri(uri)?.let { postId ->
-        return ExternalPostDeepLink(
-            source = SourceKey.HITOMI,
-            sourceLabel = SourceKey.HITOMI.displayName(),
-            postId = postId,
-        )
-    }
-    parseIwaraVideoIdFromUri(uri)?.let { postId ->
-        return ExternalPostDeepLink(
-            source = SourceKey.IWARA,
-            sourceLabel = SourceKey.IWARA.displayName(),
-            postId = postId,
-        )
-    }
-    parseRule34XxxPostIdFromUri(uri)?.let { postId ->
-        return ExternalPostDeepLink(
-            source = SourceKey.RULE34XXX,
-            sourceLabel = SourceKey.RULE34XXX.displayName(),
-            postId = postId,
-        )
-    }
-    parseRule34PahealPostIdFromUri(uri)?.let { postId ->
-        return ExternalPostDeepLink(
-            source = SourceKey.RULE34PAHEAL,
-            sourceLabel = SourceKey.RULE34PAHEAL.displayName(),
-            postId = postId,
-        )
-    }
-    parseRule34VideoPostIdFromUri(uri)?.let { postId ->
-        return ExternalPostDeepLink(
-            source = SourceKey.RULE34VIDEO,
-            sourceLabel = SourceKey.RULE34VIDEO.displayName(),
-            postId = postId,
-        )
-    }
-    parseRule34GenPostIdFromUri(uri)?.let { postId ->
-        return ExternalPostDeepLink(
-            source = SourceKey.RULE34GEN,
-            sourceLabel = SourceKey.RULE34GEN.displayName(),
-            postId = postId,
-        )
-    }
-    parseGelbooruPostIdFromUri(uri)?.let { postId ->
-        return ExternalPostDeepLink(
-            source = SourceKey.GELBOORU,
-            sourceLabel = SourceKey.GELBOORU.displayName(),
-            postId = postId,
-        )
-    }
-    return null
+    postIdDeepLink(SourceKey.HITOMI, parseHitomiGalleryIdFromUri(uri))?.let { return it }
+    postIdDeepLink(SourceKey.IWARA, parseIwaraVideoIdFromUri(uri))?.let { return it }
+    postIdDeepLink(SourceKey.RULE34XXX, parseRule34XxxPostIdFromUri(uri))?.let { return it }
+    postIdDeepLink(SourceKey.RULE34PAHEAL, parseRule34PahealPostIdFromUri(uri))?.let { return it }
+    postIdDeepLink(SourceKey.RULE34VIDEO, parseRule34VideoPostIdFromUri(uri))?.let { return it }
+    postIdDeepLink(SourceKey.RULE34GEN, parseRule34GenPostIdFromUri(uri))?.let { return it }
+    return postIdDeepLink(SourceKey.GELBOORU, parseGelbooruPostIdFromUri(uri))
 }
+
+private fun postIdDeepLink(source: SourceKey, postId: String?): ExternalPostDeepLink? =
+    postId?.let { ExternalPostDeepLink(source = source, sourceLabel = source.displayName(), postId = it) }
 
 fun parseExternalCreatorDeepLink(uri: Uri): ExternalCreatorDeepLink? {
     return parseExternalCreatorDeepLink(uri.toString())

@@ -1,5 +1,9 @@
 package com.theoriacodex.app.ui.components
 
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -30,6 +34,10 @@ internal fun PostShelfSection(
     onOpen: () -> Unit,
     onRetry: () -> Unit,
     onLongPress: () -> Unit,
+    icon: ImageVector? = null,
+    countSuffix: String? = null,
+    onMore: (() -> Unit)? = null,
+    showSeeAll: Boolean = onMore != null,
     content: @Composable () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -42,10 +50,14 @@ internal fun PostShelfSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (count != null) Text(count.toString(), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            if (showSeeAll) {
+                ManagedShelfHeading(title, count, icon, countSuffix, onMore)
+            } else {
+                Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (count != null) Text(count.toString(), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                }
             }
         }
         when {
@@ -57,4 +69,26 @@ internal fun PostShelfSection(
             Text("Could not load some posts. Retry")
         }
     }
+}
+
+/** A shelf heading that identifies its collection and shows where See all and its actions are. */
+@Composable
+private fun RowScope.ManagedShelfHeading(
+    title: String,
+    count: Int?,
+    icon: ImageVector?,
+    countSuffix: String?,
+    onMore: (() -> Unit)?,
+) {
+    icon?.let { Icon(it, null, Modifier.padding(end = 8.dp), tint = MaterialTheme.colorScheme.primary) }
+    Text(title, style = MaterialTheme.typography.titleMedium)
+    Text(
+        listOfNotNull(count?.toString(), countSuffix).joinToString(" "),
+        Modifier.padding(start = 8.dp).weight(1f),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+    )
+    Text("See all", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+    onMore?.let { IconButton(onClick = it) { Icon(Icons.Default.MoreVert, "Actions for $title") } }
 }

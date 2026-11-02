@@ -45,11 +45,7 @@ class SearchApplyScrollTest {
     @Test fun `Apply resets animated-only results after acceptance`() = verifyReset(true)
 
     private fun verifyReset(animatedOnly: Boolean) {
-        val posts = (0..39).map { index ->
-            val media = ImageRef(null, "/nonexistent/apply-$index.${if (animatedOnly) "gif" else "jpg"}",
-                if (animatedOnly) "image/gif" else "image/jpeg")
-            testPost(sourcePostId = "apply-$index").copy(preview = media, full = media, media = listOf(media))
-        }
+        val posts = resetPosts(animatedOnly)
         val state = mutableStateOf(SearchUiState(
             query = SearchQueryUiState(appliedQueryHash = "query"),
             content = SearchContentUiState(results = posts, hasExecutedSearch = true),
@@ -60,35 +56,16 @@ class SearchApplyScrollTest {
         fun reduce(change: SearchStateChange) {
             state.value = SearchStateReducer.reduce(state.value, change).state
         }
-        compose.setContent {
-            MaterialTheme {
-                SearchScreen(
-                    state = state.value,
-                    creatorBrowsingSources = emptySet(),
-                    fabRestoreState = FeedFabRestoreState().withSearchAnimationFilter(state.value.query.draft.mode) {
-                        it.copy(animatedOnly = animatedOnly)
-                    },
-                    onAction = { action ->
-                        when (action) {
-                            SearchAction.ApplyDraft -> reduce(SearchStateChange.BeginRequest(
-                                ++request, SearchRequestKind.REPLACE, state.value.query.draft,
-                            ))
-                            is SearchAction.ScrollRestorationApplied -> {
-                                acknowledgements += action.requestId
-                                reduce(SearchStateChange.ScrollRestorationApplied(action.requestId))
-                            }
-                            else -> Unit
-                        }
-                    },
-                    resolvePostById = { null },
-                    recoverPostMedia = { _, _ -> null },
-                    tagVideoCountProvider = { _, _ -> null },
-                    fetchTagVideoCounts = { _, _ -> emptyMap() },
-                    onOpenCreatorProfile = {},
-                    onOpenLegacyCreatorProfile = {},
-                    onRequestSaveToCodex = {},
-                    onSaveToDevice = {},
-                )
+        setSearchContent(state, animatedOnly) { action ->
+            when (action) {
+                SearchAction.ApplyDraft -> reduce(SearchStateChange.BeginRequest(
+                    ++request, SearchRequestKind.REPLACE, state.value.query.draft,
+                ))
+                is SearchAction.ScrollRestorationApplied -> {
+                    acknowledgements += action.requestId
+                    reduce(SearchStateChange.ScrollRestorationApplied(action.requestId))
+                }
+                else -> Unit
             }
         }
         val grid = compose.onNode(
@@ -101,16 +78,17 @@ class SearchApplyScrollTest {
                 draft = state.value.query.draft.copy(sort = SortMode.POPULAR),
             ))
         }
-        compose.onNodeWithText("Apply").assertIsDisplayed()
+        compose.onNodeWithText("Search").assertIsDisplayed()
         grid.performTouchInput { swipeUp() }
-        compose.onNodeWithText("Apply").assertDoesNotExist()
+        compose.onNodeWithText("Search").assertDoesNotExist()
         compose.runOnIdle { assertEquals(SortMode.POPULAR, state.value.query.draft.sort) }
-        compose.onNode(hasContentDescription("Expand Search") or hasTestTag("Search query input")).performClick()
-        compose.onNodeWithText("Apply").assertIsDisplayed()
+        compose.onNode(hasContentDescription("Expand Search")).performClick()
+        compose.onNodeWithTag("Search composer apply").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Close search editor").performClick()
         repeat(2) {
             grid.performScrollToIndex(20)
-            compose.onNode(hasContentDescription("Expand Search") or hasTestTag("Search query input")).performClick()
-            compose.onNodeWithText("Apply").performClick()
+            compose.onNode(hasContentDescription("Expand Search") or hasTestTag("Search bar")).performClick()
+            compose.onNodeWithTag("Search composer apply").performClick()
             compose.runOnIdle {
                 reduce(SearchStateChange.ReplaceResults(
                     requestId = request,
@@ -125,16 +103,65 @@ class SearchApplyScrollTest {
             compose.onNodeWithTag(searchCardTestTag(replacements.first().id)).assertIsDisplayed()
             compose.runOnIdle { assertEquals(it + 1, acknowledgements.size) }
         }
+        verifyPagingAnchor(grid, replacements, state, acknowledgements, { ++request }, ::reduce)
+    }
+
+    private fun setSearchContent(
+        state: androidx.compose.runtime.State<SearchUiState>,
+        animatedOnly: Boolean,
+        onAction: (SearchAction) -> Unit,
+    ) {
+        compose.setContent {
+            MaterialTheme {
+                SearchScreen(
+                    state = state.value,
+                    creatorBrowsingSources = emptySet(),
+                    fabRestoreState = FeedFabRestoreState().withSearchAnimationFilter(state.value.query.draft.mode) {
+                        it.copy(animatedOnly = animatedOnly)
+                    },
+                    onAction = onAction,
+                    resolvePostById = { null },
+                    recoverPostMedia = { _, _ -> null },
+                    tagVideoCountProvider = { _, _ -> null },
+                    fetchTagVideoCounts = { _, _ -> emptyMap() },
+                    onOpenCreatorProfile = {},
+                    onOpenLegacyCreatorProfile = {},
+                    onRequestSaveToCodex = {},
+                    onSaveToDevice = {},
+                )
+            }
+        }
+    }
+
+
+    private fun verifyPagingAnchor(
+        grid: androidx.compose.ui.test.SemanticsNodeInteraction,
+        replacements: List<com.theoriacodex.domain.model.Post>,
+        state: androidx.compose.runtime.State<SearchUiState>,
+        acknowledgements: List<Long>,
+        nextRequest: () -> Long,
+        reduce: (SearchStateChange) -> Unit,
+    ) {
         grid.performScrollToIndex(20)
         val card = compose.onNodeWithTag(searchCardTestTag(replacements[20].id))
         card.assertIsDisplayed()
         val top = card.fetchSemanticsNode().boundsInRoot.top
         compose.runOnIdle {
-            reduce(SearchStateChange.BeginRequest(++request, SearchRequestKind.PAGE, state.value.query.applied))
+            val request = nextRequest()
+            reduce(SearchStateChange.BeginRequest(request, SearchRequestKind.PAGE, state.value.query.applied))
             reduce(SearchStateChange.AppendPage(request, listOf(testPost(sourcePostId = "next")), emptyList(), false))
         }
         card.assertIsDisplayed()
         assertEquals(top, card.fetchSemanticsNode().boundsInRoot.top, 1f)
         compose.runOnIdle { assertEquals(2, acknowledgements.size) }
     }
+
+    private fun resetPosts(animatedOnly: Boolean): List<com.theoriacodex.domain.model.Post> {
+        return (0..39).map { index ->
+            val media = ImageRef(null, "/nonexistent/apply-$index.${if (animatedOnly) "gif" else "jpg"}",
+                if (animatedOnly) "image/gif" else "image/jpeg")
+            testPost(sourcePostId = "apply-$index").copy(preview = media, full = media, media = listOf(media))
+        }
+    }
+
 }

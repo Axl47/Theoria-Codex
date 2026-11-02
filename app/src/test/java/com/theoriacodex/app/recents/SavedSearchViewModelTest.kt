@@ -43,7 +43,7 @@ class SavedSearchViewModelTest {
     }
 
     @Test
-    fun `dismissing picker cannot cancel accepted pin job and feedback waits for commit`() = runTest {
+    fun `dismissing picker cannot cancel accepted save job and feedback waits for commit`() = runTest {
         val gate = CompletableDeferred<Unit>()
         val gated = object : SavedSearchRepository by repository {
             override suspend fun save(name: String, search: RecentSearchEntry): SavedSearchEntry {
@@ -61,11 +61,11 @@ class SavedSearchViewModelTest {
         advanceUntilIdle()
 
         assertEquals(search(), repository.observeSavedSearches().first().single().search)
-        assertEquals("Search pinned.", owner.effects.first())
+        assertEquals("Search saved.", owner.effects.first())
     }
 
     @Test
-    fun `rename and removal use stable pin identity`() = runTest {
+    fun `rename and removal use stable saved search identity`() = runTest {
         val saved = repository.save("Original", search())
         val owner = owner()
         owner.rename(saved.id, "Renamed")
@@ -80,7 +80,7 @@ class SavedSearchViewModelTest {
     }
 
     @Test
-    fun `storage failure reports actionable feedback without publishing a pin`() = runTest {
+    fun `storage failure reports actionable feedback without publishing a saved search`() = runTest {
         val failing = object : SavedSearchRepository by repository {
             override suspend fun save(name: String, search: RecentSearchEntry): SavedSearchEntry = error("disk unavailable")
         }
@@ -93,7 +93,7 @@ class SavedSearchViewModelTest {
     }
 
     @Test
-    fun `pin remains replayable after rolling history prunes it and clear removes all recent activity`() = runTest {
+    fun `saved search remains replayable after rolling history prunes it and clear removes all recent activity`() = runTest {
         val recents = InMemoryRecentsRepository(searchLimit = 1)
         val original = search()
         recents.recordSearch(original.query, original.queryHash)

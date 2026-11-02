@@ -40,7 +40,7 @@ class ForYouPostActionsJourneyTest : AppJourneyFixture() {
         }
         launch()
         tab("Recents")
-        compose.onNodeWithText("FYP").performClick()
+        compose.onNodeWithText("Searches").performClick()
         compose.onNodeWithTag("Recent search:for_you:actions").performClick()
         val card = searchCardTestTag(first.id)
         compose.waitUntil(10_000) { compose.onAllNodesWithTag(card).fetchSemanticsNodes().isNotEmpty() }
@@ -56,7 +56,7 @@ class ForYouPostActionsJourneyTest : AppJourneyFixture() {
         assertEquals(historyBeforeLike, io { container.data.recentsRepository.observeSearches().first() })
         compose.onNodeWithText("Dismiss").performClick()
         compose.onNodeWithTag(card).performTouchInput { longClick() }
-        compose.onNodeWithContentDescription("Save to Codex").performClick()
+        compose.onNodeWithText("Save to Codex").performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("FYP saved").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("FYP saved").performClick()
         compose.waitUntil(10_000) { io { container.content.observeCodexItems(collection.codexId).first().isNotEmpty() } }

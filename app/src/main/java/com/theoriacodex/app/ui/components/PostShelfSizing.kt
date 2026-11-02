@@ -13,6 +13,7 @@ import com.theoriacodex.domain.model.Post
 
 // Shelf previews share a square frame; titles retain their natural height below it.
 internal const val POST_SHELF_MEDIA_ASPECT_RATIO = 1f
+internal val POST_SHELF_CARD_WIDTH = 164.dp
 
 @Composable
 internal fun rememberPostShelfHeight(sizingPosts: List<Post>, cardWidth: Dp): Dp {

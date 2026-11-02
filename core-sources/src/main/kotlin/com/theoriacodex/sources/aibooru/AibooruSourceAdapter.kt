@@ -190,9 +190,6 @@ private fun compileTags(query: Query): String {
         .map { "-$it" }
 
     val metatags = mutableListOf<String>()
-    if (query.minScore != null) {
-        metatags += "score:>=${query.minScore}"
-    }
     if (query.sort == SortMode.TOP || query.sort == SortMode.POPULAR) {
         metatags += "order:score"
     } else {

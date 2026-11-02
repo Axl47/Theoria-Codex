@@ -43,7 +43,7 @@ class CodexCleaningUiTest {
             )
         } }
         compose.onNodeWithContentDescription("Actions for Collection").performScrollTo().performClick()
-        compose.onNodeWithContentDescription("Clean Codex").performClick()
+        compose.onNodeWithText("Clean").performClick()
         compose.onNodeWithText("Clean Collection").assertIsDisplayed()
         compose.onNode(hasText("Collection") and isToggleable()).assertDoesNotExist()
         compose.onNodeWithText("Matching posts will also be unliked.").assertDoesNotExist()
@@ -54,7 +54,7 @@ class CodexCleaningUiTest {
         compose.runOnIdle { assertEquals("target" to setOf("a", "b"), submitted) }
 
         compose.onNodeWithContentDescription("Actions for Collection").performScrollTo().performClick()
-        compose.onNodeWithContentDescription("Clean Codex").performClick()
+        compose.onNodeWithText("Clean").performClick()
         compose.onNodeWithText("Clean Codex").assertIsNotEnabled()
         compose.onNode(hasText("Source A") and isToggleable()).performClick()
         compose.runOnIdle { codices.value = codices.value.filterNot { it.codexId == "a" }; submitted = null }

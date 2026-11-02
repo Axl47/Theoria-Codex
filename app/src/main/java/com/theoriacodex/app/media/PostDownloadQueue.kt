@@ -48,6 +48,10 @@ internal data class PostDownloadBatch(val id: Long, val title: String, val items
     val settledCount: Int get() = items.count { !it.active }
 }
 
+/** Completed bytes in retained job history; not a measurement of files on disk. */
+internal fun List<PostDownloadBatch>.savedBytes(): Long =
+    sumOf { batch -> batch.items.filter { it.status == PostDownloadStatus.SAVED }.sumOf(PostDownloadItem::downloadedBytes) }
+
 internal sealed interface PreparedPostDownload {
     data class Transfer(val enqueue: () -> Long?) : PreparedPostDownload
     data class Gallery(val pages: List<PostDownloadRequest>) : PreparedPostDownload

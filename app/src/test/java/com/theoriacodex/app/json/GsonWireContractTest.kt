@@ -55,80 +55,7 @@ class GsonWireContractTest {
 
     @Test
     fun `representative legacy fixtures still decode through every storage family`() {
-        val fixtures = listOf(
-            LegacyFixture(
-                "com.theoriacodex.data.storage.PostStorageRecord",
-                """{"source":"PIXIV","sourcePostId":"legacy-post","previewUrl":"https://example.test/p.jpg"}""",
-                "sourcePostId",
-                "legacy-post",
-            ),
-            LegacyFixture(
-                "com.theoriacodex.data.repository.SettingsDataStoreFile",
-                """{"schemaVersion":2,"settings":{"lastSelectedTabRoute":"recents"},"legacyImports":[]}""",
-                "schemaVersion",
-                2,
-            ),
-            LegacyFixture(
-                "com.theoriacodex.data.repository.QueryStoreFile",
-                """{"queries":{},"scrollOffsets":{"legacy-query":7}}""",
-                "queries",
-                emptyMap<String, Any>(),
-            ),
-            LegacyFixture(
-                "com.theoriacodex.data.storage.LegacyRecentsStoreFile",
-                """{"watchedPosts":[],"searches":[]}""",
-                "watchedPosts",
-                emptyList<Any>(),
-            ),
-            LegacyFixture(
-                "com.theoriacodex.data.android.room.LegacyCodexStoreFile",
-                """{"codices":[],"items":{},"posts":[]}""",
-                "items",
-                emptyMap<String, Any>(),
-            ),
-            LegacyFixture(
-                "com.theoriacodex.app.update.UpdateStateSnapshot",
-                """{"lastSeenReleaseId":701,"ignoredReleaseId":702}""",
-                "ignoredReleaseId",
-                702L,
-            ),
-            LegacyFixture(
-                "com.theoriacodex.app.search.TagStoreSnapshot",
-                """{"sources":{"GELBOORU":[{"text":"legacy","type":"trending","count":9}]}}""",
-                "sources",
-                mapOf(
-                    "GELBOORU" to listOf(
-                        mapOf(
-                            "text" to "legacy",
-                            "facet" to null,
-                            "sourceNamespace" to null,
-                            "type" to "trending",
-                            "count" to 9,
-                            "alternateText" to null,
-                            "origins" to null,
-                        )
-                    )
-                ),
-            ),
-            LegacyFixture(
-                "com.theoriacodex.app.codex.CodexShareFile",
-                """{"version":1,"title":"Legacy","posts":[{"source":"PIXIV","sourcePostId":"42"}]}""",
-                "version",
-                1,
-            ),
-            LegacyFixture(
-                "com.theoriacodex.app.sourceauth.CredentialEnvelopeRecord",
-                """{"formatVersion":1,"keyVersion":1,"iv":"aXY=","ciphertext":"Y3Q="}""",
-                "formatVersion",
-                1,
-            ),
-            LegacyFixture(
-                "com.theoriacodex.sources.hitomi.HitomiPageToken",
-                """{"version":2,"queryHash":"legacy-query","primaryKey":"all","primaryOffset":12}""",
-                "primaryOffset",
-                12L,
-            ),
-        )
+        val fixtures = storageFixtures() + appAndProviderFixtures()
 
         fixtures.forEach { fixture ->
             val type = Class.forName(fixture.className)
@@ -180,3 +107,81 @@ private fun loadContracts(): List<JsonContract> {
 }
 
 private const val CONTRACT_RESOURCE = "r8-json-contracts.txt"
+
+private fun storageFixtures() = listOf(
+    LegacyFixture(
+        "com.theoriacodex.data.storage.PostStorageRecord",
+        """{"source":"PIXIV","sourcePostId":"legacy-post","previewUrl":"https://example.test/p.jpg"}""",
+        "sourcePostId",
+        "legacy-post",
+    ),
+    LegacyFixture(
+        "com.theoriacodex.data.repository.SettingsDataStoreFile",
+        """{"schemaVersion":2,"settings":{"lastSelectedTabRoute":"recents"},"legacyImports":[]}""",
+        "schemaVersion",
+        2,
+    ),
+    LegacyFixture(
+        "com.theoriacodex.data.repository.QueryStoreFile",
+        """{"queries":{},"scrollOffsets":{"legacy-query":7}}""",
+        "queries",
+        emptyMap<String, Any>(),
+    ),
+    LegacyFixture(
+        "com.theoriacodex.data.storage.LegacyRecentsStoreFile",
+        """{"watchedPosts":[],"searches":[]}""",
+        "watchedPosts",
+        emptyList<Any>(),
+    ),
+    LegacyFixture(
+        "com.theoriacodex.data.android.room.LegacyCodexStoreFile",
+        """{"codices":[],"items":{},"posts":[]}""",
+        "items",
+        emptyMap<String, Any>(),
+    ),
+    LegacyFixture(
+        "com.theoriacodex.app.update.UpdateStateSnapshot",
+        """{"lastSeenReleaseId":701,"ignoredReleaseId":702}""",
+        "ignoredReleaseId",
+        702L,
+    ),
+)
+
+private fun appAndProviderFixtures() = listOf(
+    LegacyFixture(
+        "com.theoriacodex.app.search.TagStoreSnapshot",
+        """{"sources":{"GELBOORU":[{"text":"legacy","type":"trending","count":9}]}}""",
+        "sources",
+        mapOf(
+            "GELBOORU" to listOf(
+                mapOf(
+                    "text" to "legacy",
+                    "facet" to null,
+                    "sourceNamespace" to null,
+                    "type" to "trending",
+                    "count" to 9,
+                    "alternateText" to null,
+                    "origins" to null,
+                )
+            )
+        ),
+    ),
+    LegacyFixture(
+        "com.theoriacodex.app.codex.CodexShareFile",
+        """{"version":1,"title":"Legacy","posts":[{"source":"PIXIV","sourcePostId":"42"}]}""",
+        "version",
+        1,
+    ),
+    LegacyFixture(
+        "com.theoriacodex.app.sourceauth.CredentialEnvelopeRecord",
+        """{"formatVersion":1,"keyVersion":1,"iv":"aXY=","ciphertext":"Y3Q="}""",
+        "formatVersion",
+        1,
+    ),
+    LegacyFixture(
+        "com.theoriacodex.sources.hitomi.HitomiPageToken",
+        """{"version":2,"queryHash":"legacy-query","primaryKey":"all","primaryOffset":12}""",
+        "primaryOffset",
+        12L,
+    ),
+)

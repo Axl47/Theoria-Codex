@@ -459,19 +459,6 @@ class RepositoryContractTest(
     }
 
     @Test
-    fun `ui restore persists settings section expansion`() = runTest {
-        val repository = createUiRestoreRepository()
-        val expansion = mapOf(
-            "UNIFIED_MODE" to false,
-            "STORAGE_AND_CACHING" to false,
-        )
-
-        repository.setSettingsSectionExpansion(expansion)
-
-        assertEquals(expansion, repository.getSettingsSectionExpansion())
-    }
-
-    @Test
     fun `ui restore keeps feed FAB contexts independent`() = runTest {
         val repository = createUiRestoreRepository()
         val search = FeedFabRestoreState(animatedOnly = true, hideWatched = true)

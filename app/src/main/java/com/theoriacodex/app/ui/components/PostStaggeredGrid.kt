@@ -101,7 +101,7 @@ fun TwoColumnProjectedPostStaggeredGrid(
 }
 
 @Composable
-private fun AdaptivePostGrid(
+internal fun AdaptivePostGrid(
     postIds: List<PostId?>,
     state: LazyStaggeredGridState,
     modifier: Modifier,

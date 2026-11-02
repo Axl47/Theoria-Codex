@@ -261,6 +261,7 @@ internal class ViewerRouteWorkflow(
     ) {
         val origin = session?.context?.streamSource ?: ViewerStreamSource.SEARCH
         recordReadingPosition(post, viewedMediaNumber, session)
+        runCatchingPreservingCancellation { data.statisticsRepository.recordPostAvailable(post) }
         statisticsCodexId(session?.context)?.let { codexId ->
             runCatchingPreservingCancellation {
                 data.statisticsRepository.recordCodexPostOpen(

@@ -86,7 +86,11 @@ class ForYouCoordinator(
             pageTokens = continuation.pageTokens.filterKeys { it in sources },
             weights = SourceWeightNormalization.normalize(sources, continuation.weights),
             queryOverridesBySource = continuation.queriesBySource.filterKeys { it in sources },
-        )
+        ).also { page ->
+            page.items.forEach { post ->
+                runCatchingPreservingCancellation { statisticsRepository.recordPostAvailable(post) }
+            }
+        }
 
     override suspend fun updateBlacklist(
         profileId: String,

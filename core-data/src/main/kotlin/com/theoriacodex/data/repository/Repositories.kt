@@ -193,6 +193,7 @@ data class UsageDurationDelta(
     val browsingMs: Long = 0L,
     val watchingMs: Long = 0L,
     val codexMs: Long = 0L,
+    val dailyUsage: List<DailyUsageDuration> = emptyList(),
 )
 
 data class CodexPostStatistics(
@@ -211,6 +212,9 @@ data class CodexStatistics(
 data class CodexUsageTarget(val codexId: String, val postKey: String? = null, val video: Boolean = false)
 
 data class LifetimeStatistics(
+    /** Process projection of durable private files; not serialized into the totals store. */
+    val thumbnails: Map<String, String> = emptyMap(),
+    val history: Map<java.time.LocalDate, DailyActivity> = emptyMap(),
     val codexStatistics: Map<String, CodexStatistics> = emptyMap(),
     val appOpenCount: Long = 0L,
     val totalForegroundMs: Long = 0L,
@@ -232,6 +236,8 @@ data class LifetimeStatistics(
 
 /** Local-only cumulative statistics. Feature data remains authoritative for current library composition. */
 interface StatisticsRepository {
+    /** Supply already available post data; never resolves a post remotely. */
+    suspend fun recordPostAvailable(post: Post) = Unit
     fun observeStatistics(): Flow<LifetimeStatistics>
     suspend fun addCodexUsage(target: CodexUsageTarget, durationMs: Long)
     suspend fun recordCodexPostOpen(codexId: String, postKey: String, label: String)
@@ -570,8 +576,6 @@ interface UiRestoreRepository {
     suspend fun migrateLegacyLastTab(legacyRoute: String?): String?
     suspend fun setSearchScrollState(queryHash: String, state: SearchScrollState)
     suspend fun getSearchScrollState(queryHash: String): SearchScrollState?
-    suspend fun setSettingsSectionExpansion(expansion: Map<String, Boolean>)
-    suspend fun getSettingsSectionExpansion(): Map<String, Boolean>
     suspend fun setFeedFabRestoreState(contextKey: String, state: FeedFabRestoreState)
     suspend fun getFeedFabRestoreStates(): Map<String, FeedFabRestoreState>
     fun observeViewerLaunchContext(): Flow<ViewerLaunchContext?>

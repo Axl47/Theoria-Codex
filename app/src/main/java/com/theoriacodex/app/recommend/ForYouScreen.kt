@@ -1,7 +1,12 @@
 package com.theoriacodex.app.recommend
 
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import com.theoriacodex.app.media.animatedDurationRangeLabel
+import com.theoriacodex.app.search.sortModeLabel
+import com.theoriacodex.app.ui.components.FilterChoiceChip
+import com.theoriacodex.app.ui.components.FilterSection
+import com.theoriacodex.app.ui.components.rememberFeedScrollSignal
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -18,7 +23,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -177,6 +181,30 @@ fun ForYouScreen(
     }
     DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
 
+    val filterScroll = rememberFeedScrollSignal()
+    val filterLabels = listOfNotNull(
+        sortModeLabel(state.sortMode).takeIf { state.sortMode != SortMode.NEWEST },
+        "Animated".takeIf { animatedOnly },
+        animatedDurationRangeLabel(animatedDurationRange).takeIf { animatedDurationFilterActive },
+    )
+    fun clearFilters(): () -> Unit {
+        val previous = fabRestoreState
+        val previousSort = state.sortMode
+        onFabRestoreStateChange(
+            fabRestoreState.copy(
+                sortMode = SortMode.NEWEST.name,
+                animatedOnly = false,
+                durationMinBucket = AnimatedDurationRange.Full.normalizedMinBucket,
+                durationMaxBucket = AnimatedDurationRange.Full.normalizedMaxBucket,
+            ),
+        )
+        onAction(ForYouAction.SelectSort(SortMode.NEWEST))
+        return {
+            onFabRestoreStateChange(previous)
+            onAction(ForYouAction.SelectSort(previousSort))
+        }
+    }
+
     val pageDemand = rememberFeedPageDemand(
         input = FeedPageDemandInput(
             contextKey = "${state.activeProfileId}:${state.selectedSource}:${state.sortMode}:${state.seedId}",
@@ -208,23 +236,24 @@ fun ForYouScreen(
             onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
             onToggleLike = onToggleLike, onLongPress = { selectedActionPost = it },
             onAction = onAction, onShowFilters = { showSortSheet = true },
-            filtersActive = animatedOnly || animatedDurationFilterActive || state.sortMode != SortMode.NEWEST,
+            filterLabels = filterLabels,
+            onClearFilters = ::clearFilters,
             onOpenPreview = { id, posts, index ->
                 onAction(ForYouAction.OpenSectionResult(id, index, posts, visibilityFilters))
             })
         }
     } else {
     Scaffold(
+        modifier = Modifier.nestedScroll(filterScroll.connection),
         contentWindowInsets = WindowInsets(0),
         floatingActionButton = {
             FeedFilterFab(
                 modifier = Modifier.padding(bottom = 8.dp),
-                active = animatedOnly || animatedDurationFilterActive ||
-                    state.sortMode != SortMode.NEWEST,
+                labels = filterLabels,
                 contentDescription = "Filter and sort recommendations",
-                onClick = {
-                    showSortSheet = true
-                },
+                onClick = { showSortSheet = true },
+                onClear = ::clearFilters,
+                scrollSignal = filterScroll,
             )
         },
     ) { padding ->
@@ -431,10 +460,8 @@ fun ForYouScreen(
             onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
             onGoToSearch = onGoToSearch,
             onPostUrlCopied = onPostUrlCopied,
-            tagContent = { header, footer ->
+            tagContent = {
                 PostTagActionSection(
-                    header = header,
-                    footer = footer,
                     post = post,
                     onAddIncludeTerm = { term -> onAddIncludeTerm(post, term) },
                     onAddExcludeTerm = { term -> onAddExcludeTerm(post, term) },
@@ -466,6 +493,7 @@ fun ForYouScreen(
                     ),
                 )
             },
+            onReset = { clearFilters() },
             onDismiss = { showSortSheet = false },
         )
     }
@@ -505,53 +533,19 @@ private fun ForYouSortSheet(
     onSelectSort: (SortMode) -> Unit,
     onAnimatedOnlyChange: (Boolean) -> Unit,
     onAnimatedDurationRangeChange: (AnimatedDurationRange) -> Unit,
+    onReset: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    FeedFilterSheet(onDismiss = onDismiss) {
-            Text("Media Types", style = MaterialTheme.typography.titleMedium)
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                item {
-                    FilterChip(
-                        selected = animatedOnly,
-                        onClick = { onAnimatedOnlyChange(!animatedOnly) },
-                        label = { Text("Animated only") },
-                    )
-                }
+    FeedFilterSheet(onDismiss = onDismiss, onReset = onReset) {
+        FilterSection("Sort") {
+            SortMode.entries.forEach { mode ->
+                FilterChoiceChip(sortModeLabel(mode), selectedSort == mode) { onSelectSort(mode) }
             }
-            AnimatedDurationRangeControl(
-                range = animatedDurationRange,
-                onRangeChange = onAnimatedDurationRangeChange,
-            )
-
-            Text("Sort", style = MaterialTheme.typography.titleMedium)
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(SortMode.entries.toList()) { mode ->
-                    FilterChip(
-                        selected = selectedSort == mode,
-                        onClick = {
-                            onSelectSort(mode)
-                            onDismiss()
-                        },
-                        label = { Text(sortModeLabel(mode)) },
-                    )
-                }
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                TextButton(onClick = onDismiss) {
-                    Text("Close")
-                }
-            }
+        }
+        FilterSection("Show") {
+            FilterChoiceChip("Animated only", animatedOnly) { onAnimatedOnlyChange(!animatedOnly) }
+        }
+        AnimatedDurationRangeControl(range = animatedDurationRange, onRangeChange = onAnimatedDurationRangeChange)
     }
 }
 
-private fun sortModeLabel(sortMode: SortMode): String {
-    return when (sortMode) {
-        SortMode.NEWEST -> "Newest"
-        SortMode.POPULAR -> "Popular"
-        SortMode.TOP -> "Top"
-        SortMode.RANDOM -> "Random"
-    }
-}

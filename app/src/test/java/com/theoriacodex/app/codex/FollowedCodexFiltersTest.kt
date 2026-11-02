@@ -14,6 +14,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import com.theoriacodex.data.repository.CodexSortMode
 import org.junit.Assert.assertTrue
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -84,10 +85,10 @@ class FollowedCodexFiltersTest {
                 FollowedCodexFilters(follows, state.value, { state.value = it }, {})
             } }
         }
-        compose.onNodeWithText(SourceKey.PIXIV.displayName()).performClick()
+        compose.onNodeWithContentDescription(SourceKey.PIXIV.displayName()).performClick()
         compose.onNodeWithTag("followed-author:IWARA:1").assertDoesNotExist()
         compose.onNodeWithTag("followed-author:PIXIV:1").assertIsDisplayed()
-        compose.onNodeWithText(SourceKey.IWARA.displayName()).performClick()
+        compose.onNodeWithContentDescription(SourceKey.IWARA.displayName()).performClick()
         follows.forEach { follow ->
             compose.onNodeWithTag("followed-author:${follow.creator.followKey()}").performClick()
         }

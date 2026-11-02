@@ -44,7 +44,7 @@ class AibooruSourceAdapterTest {
 
         assertEquals(40, page.items.size)
         assertEquals("2", page.nextPageToken)
-        assertEquals("landscape -comic score:>=100 order:score", httpClient.lastGet?.query?.get("tags"))
+        assertEquals("landscape -comic order:score", httpClient.lastGet?.query?.get("tags"))
     }
 
     @Test

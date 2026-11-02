@@ -6,7 +6,9 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
 import com.theoriacodex.domain.model.Codex
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -19,6 +21,23 @@ import org.robolectric.annotation.Config
 @Config(application = Application::class)
 class SavedCodexTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun `holding each library tile dispatches that Saved collection's actions`() {
+        val likesId = "likes"
+        val held = mutableListOf<String>()
+        compose.setContent {
+            MaterialTheme {
+                CodexListScreen(listOf(Codex(likesId, "Likes", 0)), mapOf(likesId to 1), emptyMap(),
+                    { kotlinx.coroutines.flow.flowOf(CodexActionOptions()) },
+                    {}, {}, {}, {}, { _, _, _ -> }, {}, {}, { _, _ -> }, { _, _, _ -> }, {},
+                    likesId, { _, _ -> }, onOpenSavedCollectionActions = { held += it })
+            }
+        }
+        listOf("Likes", "Followed", "Searches").forEach { name ->
+            compose.onNodeWithText(name).performScrollTo().performTouchInput { longClick() }
+        }
+        compose.runOnIdle { assertEquals(listOf(likesId, FOLLOWED_CODEX_ID, SAVED_SEARCHES_CODEX_ID), held) }
+    }
 
     @Test fun `Saved replaces Likes at its ordered position and opens its container`() {
         val likesId = likesCodexIdForProfile("profile-main")

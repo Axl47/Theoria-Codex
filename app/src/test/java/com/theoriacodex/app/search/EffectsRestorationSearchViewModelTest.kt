@@ -136,7 +136,6 @@ internal class EffectsRestorationSearchViewModelTest : SearchViewModelTestFixtur
             first.onAction(SearchAction.AddIncludeTerm(SearchTerm("restored tag")))
             first.onAction(SearchAction.SelectSort(SortMode.POPULAR))
             first.onAction(SearchAction.SetDateRange(range))
-            first.onAction(SearchAction.SetMinimumScore(42))
             first.onAction(SearchAction.ScrollChanged(4, 19))
             runCurrent()
 
@@ -152,7 +151,6 @@ internal class EffectsRestorationSearchViewModelTest : SearchViewModelTestFixtur
             assertEquals(listOf("restored tag"), restored.query.draft.includeTags)
             assertEquals(SortMode.POPULAR, restored.query.draft.sort)
             assertEquals(range, restored.query.draft.dateRange)
-            assertEquals(42, restored.query.draft.minScore)
             assertEquals(
                 SearchRestorationUiState.Restored(
                     restoredQuery = true,

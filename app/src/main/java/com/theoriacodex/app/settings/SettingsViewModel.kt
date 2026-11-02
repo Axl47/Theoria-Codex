@@ -172,24 +172,8 @@ internal class SettingsViewModel(
     private var likesJob: Job? = null
     private var observedLikesProfileId: String? = null
     private val accountRefreshRunning = AtomicBoolean(false)
-    private var sectionExpansionRevision = 0L
 
     init {
-        val restoreRevision = sectionExpansionRevision
-        ownerScope.launch {
-            val restored = try {
-                dependencies.uiRestoreRepository.getSettingsSectionExpansion()
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Exception) {
-                emptyMap()
-            }
-            if (sectionExpansionRevision == restoreRevision) {
-                updateState {
-                    copy(sectionExpansion = SettingsSectionExpansionState.fromPersistenceMap(restored))
-                }
-            }
-        }
         ownerScope.launch {
             dependencies.availableSources.collect { sources ->
                 updateState { copy(availableSources = sources.inPresentationOrder()) }
@@ -256,7 +240,7 @@ internal class SettingsViewModel(
 
     private fun handleProfileAction(action: SettingsAction): Boolean {
         when (action) {
-            is SettingsAction.SetSectionExpanded -> setSectionExpanded(action.section, action.expanded)
+            is SettingsAction.OpenPage -> updateState { copy(page = action.page) }
             is SettingsAction.SetActiveProfile -> launchMutation {
                 check(!dependencies.profileMutations.isRemoving(action.profileId)) { "This profile is being removed" }
                 dependencies.settingsRepository.setActiveProfile(action.profileId)
@@ -379,7 +363,7 @@ internal class SettingsViewModel(
             SettingsAction.DismissCredentialRecovery -> updateAccounts { copy(showRecoveryDialog = false) }
             SettingsAction.ResetCredentialStore -> resetCredentialStore()
             SettingsAction.OpenSourceAccounts -> {
-                onAction(SettingsAction.SetSectionExpanded(SettingsSectionKey.SOURCE_ACCOUNTS, true))
+                updateState { copy(page = SettingsPage.ACCOUNTS) }
                 effectChannel.trySend(SettingsEffect.NavigateToSettings)
             }
             SettingsAction.SettingsEntered -> {
@@ -387,15 +371,6 @@ internal class SettingsViewModel(
                 refreshAccounts()
             }
             else -> error("Settings action was routed to the wrong owner handler")
-        }
-    }
-
-    private fun setSectionExpanded(section: SettingsSectionKey, expanded: Boolean) {
-        sectionExpansionRevision += 1
-        val updated = state.value.sectionExpansion.updated(section, expanded)
-        updateState { copy(sectionExpansion = updated) }
-        launchMutation {
-            dependencies.uiRestoreRepository.setSettingsSectionExpansion(updated.toPersistenceMap())
         }
     }
 

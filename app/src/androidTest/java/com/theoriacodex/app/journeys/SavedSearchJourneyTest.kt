@@ -20,7 +20,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class PinnedSearchJourneyTest : AppJourneyFixture() {
+class SavedSearchJourneyTest : AppJourneyFixture() {
     @Test
     fun namedGroupedMultiSearchSurvivesClearingHistoryAndColdGraphThenFeedsExactSources() {
         val participating = listOf(SourceKey.GELBOORU, SourceKey.PIXIV)
@@ -38,16 +38,16 @@ class PinnedSearchJourneyTest : AppJourneyFixture() {
         compose.onNodeWithTag("Recent search:pin-journey")
             .performSemanticsAction(SemanticsActions.OnLongClick) { it() }
         compose.onNode(hasSetTextAction()).performTextReplacement("My landscapes")
-        compose.onNodeWithText("Pin", substring = false).performClick()
+        compose.onNodeWithText("Save", substring = false).performClick()
         compose.waitUntil(10_000) {
             io { container.data.savedSearches.observeSavedSearches().first().singleOrNull()?.name == "My landscapes" }
         }
-        val pinned = io { container.data.savedSearches.observeSavedSearches().first().single() }
-        compose.onNodeWithText("All", substring = false).performClick()
-        compose.onNodeWithContentDescription("Clear").performClick()
+        val savedSearch = io { container.data.savedSearches.observeSavedSearches().first().single() }
+        compose.onNodeWithContentDescription("Recents actions").performClick()
+        compose.onNodeWithText("Clear all Recents").performClick()
         compose.waitUntil(10_000) { io { container.data.recentsRepository.observeSearches().first().isEmpty() } }
         coldGraphRelaunch()
-        assertEquals(listOf(pinned), io { container.data.savedSearches.observeSavedSearches().first() })
+        assertEquals(listOf(savedSearch), io { container.data.savedSearches.observeSavedSearches().first() })
         assertTrue(io { container.data.recentsRepository.observeSearches().first().isEmpty() })
         tab("Codex")
         activate(compose.onNodeWithText("Searches"))

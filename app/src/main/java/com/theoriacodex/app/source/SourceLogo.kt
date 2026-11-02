@@ -13,8 +13,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
@@ -66,4 +68,25 @@ fun SourceLogo(
             )
         }
     }
+}
+
+/** Compact source selector mark; sources without a legible small logo use a letter mark. */
+@Composable
+fun SourceIcon(source: SourceKey) {
+    when {
+        source == SourceKey.IWARA -> SourceLetterIcon("I")
+        source.isRule34Family() -> SourceLetterIcon("R34")
+        else -> SourceLogo(source, size = 18.dp)
+    }
+}
+
+/** Letter marks share the white, bold treatment of Hitomi's icon. */
+@Composable
+fun SourceLetterIcon(label: String) {
+    Text(
+        text = label,
+        color = Color.White,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+    )
 }

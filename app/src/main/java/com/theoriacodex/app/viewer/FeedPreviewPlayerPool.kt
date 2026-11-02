@@ -2,7 +2,6 @@
 
 package com.theoriacodex.app.viewer
 
-import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -31,12 +30,10 @@ internal const val FEED_PREVIEW_RELEASE_SPACING_MS = 1_000L
  * the UI path and route disposal never synchronously releases every visible player one by one.
  */
 internal class FeedPreviewPlayerPool(
-    context: Context,
     private val infrastructure: VideoPlaybackInfrastructure,
     private val handler: Handler = Handler(Looper.getMainLooper()),
     clock: () -> Long = SystemClock::elapsedRealtime,
 ) {
-    private val appContext = context.applicationContext
     private val slots = ReusableVideoSlotPool<ExoPlayer, VideoPlaybackIdentity>(
         maxIdleResources = FEED_PREVIEW_MAX_IDLE_PLAYERS,
         idleTimeoutMs = FEED_PREVIEW_IDLE_TIMEOUT_MS,
@@ -130,8 +127,7 @@ internal class FeedPreviewPlayerPool(
 
     private fun createPlayer(): ExoPlayer {
         return traceMediaSection(MediaTraceSections.PREVIEW_PLAYER_CREATE) {
-            ExoPlayer.Builder(appContext)
-                .setLoadControl(infrastructure.loadControl(VideoPlaybackProfile.FEED_PREVIEW))
+            infrastructure.playerBuilder(VideoPlaybackProfile.FEED_PREVIEW)
                 .build()
                 .apply {
                     addAnalyticsListener(MediaLoadTraceListener)

@@ -13,6 +13,7 @@ internal class CodexListUiState(initialCodices: List<Codex>) {
     var renameTarget by mutableStateOf<Codex?>(null)
     var deleteTarget by mutableStateOf<Codex?>(null)
     var actionTarget by mutableStateOf<Codex?>(null)
+    var autoSaveTarget by mutableStateOf<Codex?>(null)
     var searchSourceTarget by mutableStateOf<Codex?>(null)
     var tagSelectionTarget by mutableStateOf<CodexSourceSelection?>(null)
     val ordering = com.theoriacodex.app.ui.components.ReorderListState(initialCodices, Codex::codexId)
@@ -49,6 +50,7 @@ internal data class CodexListActions(
     val deleteCodex: (String) -> Unit,
     val cleanCodex: (String, Set<String>) -> Unit,
     val makeAvailableOffline: ((String) -> Unit)? = null,
+    val openSavedCollectionActions: (String) -> Unit = {},
 )
 
 internal data class CodexSourceSelection(val codex: Codex, val source: SourceKey)

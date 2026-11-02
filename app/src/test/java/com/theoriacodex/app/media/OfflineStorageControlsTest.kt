@@ -40,7 +40,7 @@ class OfflineStorageControlsTest {
                     onClearOffline = { state.value = state.value.copy(pendingRemoval = OfflineRemovalTarget.All) },
                     onConfirmRemoval = { offlineRemovals++; state.value = state.value.copy(pendingRemoval = null) },
                     onDismissRemoval = { state.value = state.value.copy(pendingRemoval = null) },
-                    onClearDisposable = { cacheClears++ },
+                    onClearDisposable = { cacheClears++ }, downloadBytes = 0L,
                 )
             }
         }

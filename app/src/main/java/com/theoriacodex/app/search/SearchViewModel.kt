@@ -140,61 +140,30 @@ internal class SearchViewModel(
 
     override fun onAction(action: SearchAction) {
         when (action) {
+            is SearchAction.SelectSort,
+            is SearchAction.SetDateRange,
+            is SearchAction.SetDateRangePreset,
+            is SearchAction.AddIncludeTerm,
+            is SearchAction.AddExcludeTerm,
+            is SearchAction.RemoveIncludeTerm,
+            is SearchAction.RemoveExcludeTerm,
+            is SearchAction.AddIncludeAlternative,
+            is SearchAction.SplitIncludeAlternative,
+            is SearchAction.RemoveIncludeGroup,
+            is SearchAction.IncludeSuggestion,
+            is SearchAction.ExcludeSuggestion,
+            SearchAction.ResetDraft,
+            SearchAction.ClearDraft,
+            is SearchAction.AddPostIncludeTerm,
+            is SearchAction.AddPostExcludeTerm,
+            is SearchAction.SetNhentaiLanguage,
+            is SearchAction.SetNhentaiFullColor,
+            SearchAction.ResetFilters,
+            -> applyDraftAction(action)
+
             is SearchAction.SelectMode -> selectMode(action.mode)
 
             is SearchAction.ToggleTemporarySource -> toggleTemporarySource(action.source)
-
-            is SearchAction.SelectSort -> mutateDraft {
-                SearchDraftReducer.mutateQuery(it) { query -> query.copy(sort = action.sort) }.state
-            }
-
-            is SearchAction.SetDateRange -> mutateDraft {
-                SearchDraftReducer.mutateQuery(it) { query -> query.copy(dateRange = action.range) }.state
-            }
-
-            is SearchAction.SetMinimumScore -> mutateDraft {
-                SearchDraftReducer.mutateQuery(it) { query -> query.copy(minScore = action.score) }.state
-            }
-
-            is SearchAction.SetDateRangePreset -> mutateDraft {
-                val now = System.currentTimeMillis()
-                val day = 24L * 60L * 60L * 1000L
-                val range = when (action.preset) {
-                    DateRangePreset.NONE -> null
-                    DateRangePreset.TODAY -> com.theoriacodex.domain.model.DateRange(now - day, now)
-                    DateRangePreset.LAST_7_DAYS -> com.theoriacodex.domain.model.DateRange(now - 7L * day, now)
-                    DateRangePreset.LAST_30_DAYS -> com.theoriacodex.domain.model.DateRange(now - 30L * day, now)
-                }
-                SearchDraftReducer.mutateQuery(it) { query -> query.copy(dateRange = range) }.state
-            }
-
-            is SearchAction.AddIncludeTerm -> mutateDraft {
-                SearchDraftReducer.addTerm(it, action.term, excluded = false).state
-            }
-
-            is SearchAction.AddExcludeTerm -> mutateDraft {
-                SearchDraftReducer.addTerm(it, action.term, excluded = true).state
-            }
-
-            is SearchAction.RemoveIncludeTerm -> mutateDraft {
-                SearchDraftReducer.removeTerm(it, action.term, excluded = false).state
-            }
-
-            is SearchAction.RemoveExcludeTerm -> mutateDraft {
-                SearchDraftReducer.removeTerm(it, action.term, excluded = true).state
-            }
-
-            is SearchAction.AddIncludeAlternative -> mutateDraft {
-                SearchDraftReducer.addIncludeAlternative(it, action.groupIndex, action.term).state
-            }
-
-            is SearchAction.SplitIncludeAlternative -> mutateDraft {
-                SearchDraftReducer.splitIncludeAlternative(it, action.groupIndex, action.term).state
-            }
-
-            is SearchAction.RemoveIncludeGroup -> mutateDraft {
-                SearchDraftReducer.removeIncludeGroup(it, action.groupIndex).state
-            }
 
             is SearchAction.SelectSuggestionScope -> {
                 val reduction = SearchDraftReducer.selectScope(mutableState.value, action.scope)
@@ -207,14 +176,6 @@ internal class SearchViewModel(
             is SearchAction.AutocompleteChanged -> refreshAutocomplete(action.input)
 
             SearchAction.RefreshAutocomplete -> refreshAutocomplete(mutableState.value.suggestions.input)
-
-            is SearchAction.IncludeSuggestion -> mutateDraft {
-                SearchDraftReducer.addTerm(it, action.suggestion.toSearchTerm(), excluded = false).state
-            }
-
-            is SearchAction.ExcludeSuggestion -> mutateDraft {
-                SearchDraftReducer.addTerm(it, action.suggestion.toSearchTerm(), excluded = true).state
-            }
 
             SearchAction.ClearAutocomplete -> {
                 cancelAutocomplete()
@@ -229,14 +190,6 @@ internal class SearchViewModel(
             is SearchAction.ApplyHistoricalQuery -> acceptHistoricalQuery(action)
 
             is SearchAction.ApplyTagSearch -> applyTagSearch(action)
-
-            SearchAction.ResetDraft -> mutateDraft {
-                SearchDraftReducer.resetDraft(it).state
-            }
-
-            SearchAction.ClearDraft -> mutateDraft {
-                SearchDraftReducer.clearDraft(it).state
-            }
 
             is SearchAction.RetrySource -> retrySource(action.source)
 
@@ -267,36 +220,6 @@ internal class SearchViewModel(
 
             is SearchAction.CommitTagInput -> commitTagInput(action.input)
 
-            is SearchAction.AddPostIncludeTerm -> mutateDraft {
-                SearchDraftReducer.addPostTerm(
-                    it, action.post, action.term, excluded = false,
-                    availableSources = it.query.availableSources.toSet(),
-                    supportedScopes = coordinator::supportedSearchScopes,
-                ).state
-            }
-
-            is SearchAction.AddPostExcludeTerm -> mutateDraft {
-                SearchDraftReducer.addPostTerm(
-                    it, action.post, action.term, excluded = true,
-                    availableSources = it.query.availableSources.toSet(),
-                    supportedScopes = coordinator::supportedSearchScopes,
-                ).state
-            }
-
-            is SearchAction.SetNhentaiLanguage -> mutateDraft {
-                SearchDraftReducer.setNhentaiLanguage(it, action.filter).state
-            }
-
-            is SearchAction.SetNhentaiFullColor -> mutateDraft {
-                SearchDraftReducer.setNhentaiFullColor(it, action.enabled).state
-            }
-
-            SearchAction.ResetFilters -> mutateDraft {
-                SearchDraftReducer.mutateQuery(it) { query ->
-                    query.copy(sort = com.theoriacodex.domain.model.SortMode.NEWEST, dateRange = null, minScore = null)
-                }.state
-            }
-
             is SearchAction.RememberResolvedPost -> {
                 mutableState.value = mutableState.value.withResolvedPosts(
                     mutableState.value.query.appliedQueryHash, listOf(action.post),
@@ -324,6 +247,52 @@ internal class SearchViewModel(
             is SearchAction.OpenResult -> publishReduction(
                 SearchStateReducer.reduce(mutableState.value, action),
             )
+        }
+    }
+
+    private fun applyDraftAction(action: SearchAction) {
+        mutateDraft {
+            when (action) {
+                is SearchAction.SelectSort -> SearchDraftReducer.mutateQuery(it) { query -> query.copy(sort = action.sort) }.state
+                is SearchAction.SetDateRange -> SearchDraftReducer.mutateQuery(it) { query -> query.copy(dateRange = action.range) }.state
+                is SearchAction.SetDateRangePreset -> {
+                    val range = action.preset.rangeEndingAt(System.currentTimeMillis())
+                    SearchDraftReducer.mutateQuery(it) { query -> query.copy(dateRange = range) }.state
+                }
+                is SearchAction.AddIncludeTerm -> SearchDraftReducer.addTerm(it, action.term, excluded = false).state
+                is SearchAction.AddExcludeTerm -> SearchDraftReducer.addTerm(it, action.term, excluded = true).state
+                is SearchAction.RemoveIncludeTerm -> SearchDraftReducer.removeTerm(it, action.term, excluded = false).state
+                is SearchAction.RemoveExcludeTerm -> SearchDraftReducer.removeTerm(it, action.term, excluded = true).state
+                is SearchAction.AddIncludeAlternative -> SearchDraftReducer.addIncludeAlternative(it, action.groupIndex, action.term).state
+                is SearchAction.SplitIncludeAlternative -> SearchDraftReducer.splitIncludeAlternative(it, action.groupIndex, action.term).state
+                is SearchAction.RemoveIncludeGroup -> SearchDraftReducer.removeIncludeGroup(it, action.groupIndex).state
+                is SearchAction.IncludeSuggestion -> SearchDraftReducer.addTerm(it, action.suggestion.toSearchTerm(), excluded = false).state
+                is SearchAction.ExcludeSuggestion -> SearchDraftReducer.addTerm(it, action.suggestion.toSearchTerm(), excluded = true).state
+                SearchAction.ResetDraft -> SearchDraftReducer.resetDraft(it).state
+                SearchAction.ClearDraft -> SearchDraftReducer.clearDraft(it).state
+                is SearchAction.AddPostIncludeTerm -> {
+                    SearchDraftReducer.addPostTerm(
+                        it, action.post, action.term, excluded = false,
+                        availableSources = it.query.availableSources.toSet(),
+                        supportedScopes = coordinator::supportedSearchScopes,
+                    ).state
+                }
+                is SearchAction.AddPostExcludeTerm -> {
+                    SearchDraftReducer.addPostTerm(
+                        it, action.post, action.term, excluded = true,
+                        availableSources = it.query.availableSources.toSet(),
+                        supportedScopes = coordinator::supportedSearchScopes,
+                    ).state
+                }
+                is SearchAction.SetNhentaiLanguage -> SearchDraftReducer.setNhentaiLanguage(it, action.filter).state
+                is SearchAction.SetNhentaiFullColor -> SearchDraftReducer.setNhentaiFullColor(it, action.enabled).state
+                SearchAction.ResetFilters -> {
+                    SearchDraftReducer.mutateQuery(it) { query ->
+                        query.copy(sort = com.theoriacodex.domain.model.SortMode.NEWEST, dateRange = null)
+                    }.state
+                }
+                else -> error("Not a draft action: $action")
+            }
         }
     }
 
@@ -1035,6 +1004,7 @@ internal class SearchViewModel(
     )
 
     private fun clearSuggestionState() {
+        cancelAutocomplete()
         val current = mutableState.value
         mutableState.value = current.copy(
             suggestions = current.suggestions.copy(

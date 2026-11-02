@@ -27,7 +27,7 @@ class SourceFailureUiTextTest {
         )
 
         assertEquals(
-            "Pixiv, R34X need account setup. Connect or refresh the account in Settings > Source Accounts.",
+            "Pixiv, R34X need account setup. Connect or refresh the account in Settings > Accounts.",
             message,
         )
     }

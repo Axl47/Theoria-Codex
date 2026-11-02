@@ -34,7 +34,7 @@ internal fun buildSourceAuthErrorMessage(statuses: List<SourceRunStatus>): Strin
 
     val names = authSources.joinToString(", ")
     val verb = if (authSources.size == 1) "needs" else "need"
-    return "$names $verb account setup. Connect or refresh the account in Settings > Source Accounts."
+    return "$names $verb account setup. Connect or refresh the account in Settings > Accounts."
 }
 
 internal fun buildSourceFailureMessage(statuses: List<SourceRunStatus>): String? {

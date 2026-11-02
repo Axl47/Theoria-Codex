@@ -1,6 +1,11 @@
 package com.theoriacodex.app.journeys
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isEnabled
@@ -13,7 +18,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.printToString
-import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
@@ -43,39 +47,28 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
     @Test
     fun groupedSearchPagesReturnsFromViewerAndSurvivesActivityRecreation() {
         launch()
-        activate(compose.onNodeWithTag("Search query input"))
-        activate(compose.onNodeWithContentDescription("Search source:", substring = true))
+        activate(compose.onNodeWithTag("Search bar"))
+        activate(compose.onNode(hasContentDescription("Search source:", substring = true) and
+            hasAnyAncestor(hasTestTag("Search composer"))))
         activate(compose.onNodeWithContentDescription("Pixiv"))
         addSearchTag("landscape")
         addSearchTag("blue")
-        activate(compose.onNodeWithText("blue"))
-        val alternativeInput = compose.onNodeWithText("Tag")
-        alternativeInput.performTextInput("green")
-        compose.waitUntil(conditionDescription = "OR alternative input is ready", timeoutMillis = 10_000) {
-            alternativeInput.fetchSemanticsNode().config[SemanticsProperties.EditableText].text == "green"
-        }
-        activate(compose.onNodeWithText("Add alternative"))
-        compose.waitUntil(conditionDescription = "Green alternative is committed to the group", timeoutMillis = 10_000) {
-            alternativeInput.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.isEmpty() &&
-                compose.onNodeWithText("green", substring = false).isDisplayed()
-        }
+        activate(compose.onNode(hasText("blue") and hasClickAction() and
+            hasAnyAncestor(hasTestTag("Search composer"))))
+        activate(compose.onNodeWithText("Add “or”"))
+        addSearchTag("green")
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-        compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.Dismiss), useUnmergedTree = true)
-            .performSemanticsAction(SemanticsActions.Dismiss)
-        compose.waitUntil(conditionDescription = "Include group sheet is fully dismissed", timeoutMillis = 10_000) {
-            compose.onAllNodesWithTag("Include group sheet").fetchSemanticsNodes().isEmpty()
-        }
         // This assertion concerns touch-driven focus dismissal, so Apply receives a real tap.
         var nativeTouchModeBeforeApply = false
         scenario.onActivity { nativeTouchModeBeforeApply = it.window.decorView.isInTouchMode }
-        compose.onNodeWithText("Apply").performClick()
+        compose.onNodeWithTag("Search composer apply").performClick()
         compose.waitUntil(conditionDescription = "Provider receives the grouped search", timeoutMillis = 10_000) {
             container.registry.requests.any { it.source == SourceKey.PIXIV && it.pageToken == null }
         }
         val root = container.registry.requests.single { it.source == SourceKey.PIXIV && it.pageToken == null }
         assertEquals(listOf(listOf("landscape"), listOf("blue", "green")),
             root.query.effectiveIncludeTermGroups.map { group -> group.terms.map { it.value } })
-        val summary = compose.onNodeWithText("landscape & (blue || green)")
+        val summary = compose.onNodeWithText("landscape, blue +1", useUnmergedTree = true)
         try {
             compose.waitUntil(conditionDescription = "Grouped query is applied and its field is collapsed", timeoutMillis = 10_000) {
                 summary.isDisplayed()
@@ -126,11 +119,12 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
     @Test
     fun coldGraphRelaunchRestoresAppliedSourceQueryAndCanonicalScrollFromDisk() {
         launch()
-        activate(compose.onNodeWithTag("Search query input"))
-        activate(compose.onNodeWithContentDescription("Search source:", substring = true))
+        activate(compose.onNodeWithTag("Search bar"))
+        activate(compose.onNode(hasContentDescription("Search source:", substring = true) and
+            hasAnyAncestor(hasTestTag("Search composer"))))
         activate(compose.onNodeWithContentDescription("Pixiv"))
         addSearchTag("landscape")
-        activate(compose.onNodeWithText("Apply"))
+        activate(compose.onNodeWithTag("Search composer apply"))
         waitForCard(0)
         val applied = container.registry.requests.single { it.source == SourceKey.PIXIV && it.pageToken == null }.query
         val queryHash = QueryHash.from(applied)
@@ -159,9 +153,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         val restoredRequest = container.registry.requests.single { it.pageToken == null }
         assertEquals(SourceKey.PIXIV, restoredRequest.source)
         assertEquals(applied, restoredRequest.query)
-        // The compact search bar hides individual terms until expanded.
-        activate(compose.onNodeWithContentDescription("Expand Search"))
-        compose.onNodeWithText("landscape").assertIsDisplayed()
+        compose.onNodeWithText("landscape", useUnmergedTree = true).assertIsDisplayed()
     }
 
     @Test
@@ -185,7 +177,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         assertTrue(io { container.data.queryRepository.observeAppliedQuery("unified").first() == null })
         container.registry.requests.clear()
         tab("Recents")
-        activate(compose.onNodeWithText("FYP"))
+        activate(compose.onNodeWithText("Searches"))
         activate(compose.onNodeWithTag("Recent search:for_you:journey"))
         compose.waitUntil(10_000) { container.registry.requests.count { it.pageToken == null } >= 2 }
         val replay = container.registry.requests.filter { it.pageToken == null }
@@ -202,16 +194,26 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         }
         activate(input)
         input.performTextInput(value)
-        val add = hasText("Add", substring = false) and isEnabled() and hasClickAction()
+        val add = hasAnyDescendant(hasText("Add", substring = false)) and
+            isEnabled() and hasClickAction() and !hasSetTextAction()
         compose.waitUntil(10_000) {
             input.fetchSemanticsNode().config[SemanticsProperties.EditableText].text == value &&
-                compose.onAllNodes(add).fetchSemanticsNodes().isNotEmpty()
+                compose.onAllNodes(add, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
-        input.performImeAction()
-        compose.waitUntil(10_000) {
-            input.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.isEmpty() &&
-                compose.onAllNodes(hasText(value, substring = false) and hasClickAction())
-                    .fetchSemanticsNodes().isNotEmpty()
+        activate(compose.onNode(add, useUnmergedTree = true))
+        try {
+            compose.waitUntil(10_000) {
+                input.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.isEmpty() &&
+                    compose.onAllNodes(hasText(value, substring = false) and hasClickAction())
+                        .fetchSemanticsNodes().isNotEmpty()
+            }
+        } catch (timeout: ComposeTimeoutException) {
+            throw AssertionError(
+                "Tag entry did not settle for $value; input=" +
+                    input.fetchSemanticsNode().config[SemanticsProperties.EditableText].text + "\n" +
+                    compose.onNodeWithTag("Search composer", useUnmergedTree = true).printToString(),
+                timeout,
+            )
         }
     }
 

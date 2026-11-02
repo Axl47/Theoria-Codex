@@ -144,13 +144,7 @@ class OfflineViewerWorkflowTest {
                 selectedPostId = galleries[1].id, orderedPostIds = galleries.map(Post::id),
                 selectedMediaIndex = 2, recentsSection = null,
             )))
-            assertEquals(1, restored.context.startIndex)
-            assertEquals(2, restored.initialMediaIndex)
-            assertEquals(galleries.map(Post::id), restored.posts.map(Post::id))
-            assertNull(restored.posts[0].full?.localPath)
-            assertLocalGallery(restored.posts[1], directory)
-            assertLocalGallery(restored.posts[2], directory)
-            assertNull(restored.posts[3].full?.localPath)
+            assertRestoredGallery(restored, galleries, directory)
             assertTrue(graph.registry.resolveRequests.isEmpty())
         } finally {
             graph.shutdown()
@@ -193,4 +187,19 @@ class OfflineViewerWorkflowTest {
         bitmap.recycle()
         return file
     }
+
+    private fun assertRestoredGallery(
+        restored: com.theoriacodex.app.viewer.ViewerSession,
+        galleries: List<Post>,
+        directory: File,
+    ) {
+        assertEquals(1, restored.context.startIndex)
+        assertEquals(2, restored.initialMediaIndex)
+        assertEquals(galleries.map(Post::id), restored.posts.map(Post::id))
+        assertNull(restored.posts[0].full?.localPath)
+        assertLocalGallery(restored.posts[1], directory)
+        assertLocalGallery(restored.posts[2], directory)
+        assertNull(restored.posts[3].full?.localPath)
+    }
+
 }

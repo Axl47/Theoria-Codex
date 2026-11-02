@@ -15,9 +15,9 @@ class CollapsedSearchContextTest {
         val query = emptySearchQuery(QueryMode.Source(SourceKey.PIXIV)).withIncludeTermsAsRequired(listOf(SearchTerm("klee"), SearchTerm("landscape")))
 
         assertEquals(
-            "klee & landscape · 2 filters",
+            "klee, landscape · 2 filters",
             collapsedSearchContextSummary(
-                appliedQuery = query,
+                query = query,
                 activeFilterCount = 2,
             ),
         )
@@ -31,7 +31,7 @@ class CollapsedSearchContextTest {
             ))
 
         assertEquals(
-            "tag1 & (tag2 || tag3)",
+            "tag1, tag2 +1",
             collapsedSearchContextSummary(query, 0),
         )
     }
@@ -43,7 +43,7 @@ class CollapsedSearchContextTest {
         assertEquals(
             "-comic",
             collapsedSearchContextSummary(
-                appliedQuery = query,
+                query = query,
                 activeFilterCount = 0,
             ),
         )
@@ -53,8 +53,9 @@ class CollapsedSearchContextTest {
     fun `filter count includes query and route local filters`() {
         val query = emptySearchQuery().copy(sort = SortMode.POPULAR, minScore = 10)
 
+        // A retired minimum score stored in an old query does not count as an active filter.
         assertEquals(
-            6,
+            5,
             activeSearchFilterCount(
                 appliedQuery = query,
                 animatedOnly = true,

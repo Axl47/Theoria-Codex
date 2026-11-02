@@ -1,13 +1,13 @@
 package com.theoriacodex.app.codex
 
+import com.theoriacodex.app.ui.components.FilterChoiceChip
+import com.theoriacodex.app.ui.components.FilterSection
+import com.theoriacodex.app.ui.components.SourceFilterChip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -36,16 +36,12 @@ internal fun FollowedCodexFilters(
     onChange: (FeedFabRestoreState) -> Unit,
     onManage: () -> Unit,
 ) {
-    Text("Source", style = MaterialTheme.typography.titleMedium)
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        item {
-            FilterChip(selected = state.followedSources.isEmpty(),
-                onClick = { onChange(state.copy(followedSources = emptyList())) }, label = { Text("All") })
-        }
-        items(follows.map { it.creator.source }.distinct(), key = { it.name }) { source ->
-            FilterChip(selected = source.name in state.followedSources,
-                onClick = { onChange(state.copy(followedSources = state.followedSources.toggled(source.name))) },
-                label = { Text(source.displayName()) })
+    FilterSection("Source") {
+        FilterChoiceChip("All", state.followedSources.isEmpty()) { onChange(state.copy(followedSources = emptyList())) }
+        follows.map { it.creator.source }.distinct().forEach { source ->
+            SourceFilterChip(source, source.name in state.followedSources) {
+                onChange(state.copy(followedSources = state.followedSources.toggled(source.name)))
+            }
         }
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,

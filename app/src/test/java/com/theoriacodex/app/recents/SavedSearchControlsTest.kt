@@ -1,5 +1,6 @@
 package com.theoriacodex.app.recents
 
+import com.theoriacodex.app.search.searchCardTestTag
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -9,6 +10,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
@@ -37,22 +39,37 @@ class SavedSearchControlsTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
-    fun `recent search long press names a pin`() {
+    fun `recent search long press saves the named search`() {
         val recent = search(RecentSearchKind.SOURCE)
-        val pins = mutableStateOf(emptyList<SavedSearchEntry>())
+        val savedSearches = mutableStateOf(emptyList<SavedSearchEntry>())
         compose.setContent { MaterialTheme {
             TestRecents(
                 searches = listOf(recent),
-                onSave = { name, entry -> pins.value = listOf(SavedSearchEntry("pin", name, entry, 100)) },
+                onSave = { name, entry -> savedSearches.value = listOf(SavedSearchEntry("pin", name, entry, 100)) },
             )
         } }
         compose.onNodeWithText("Searches").performClick()
         compose.onNodeWithTag("Recent search:${recent.queryHash}")
             .performSemanticsAction(SemanticsActions.OnLongClick) { it() }
         compose.onNode(hasSetTextAction()).performTextReplacement("Night recipe")
-        compose.onNodeWithText("Pin", substring = false).performClick()
-        assertEquals(recent, pins.value.single().search)
+        compose.onNodeWithText("Save", substring = false).performClick()
+        assertEquals(recent, savedSearches.value.single().search)
+        assertEquals("Night recipe", savedSearches.value.single().name)
 
+    }
+
+    @Test
+    fun `the visible save button saves the named search like the long press`() {
+        val recent = search(RecentSearchKind.SOURCE)
+        var saved: Pair<String, RecentSearchEntry>? = null
+        compose.setContent { MaterialTheme {
+            TestRecents(searches = listOf(recent), onSave = { name, entry -> saved = name to entry })
+        } }
+        compose.onNodeWithText("Searches").performClick()
+        compose.onNodeWithContentDescription("Save search").performClick()
+        compose.onNode(hasSetTextAction()).performTextReplacement("Morning recipe")
+        compose.onNodeWithText("Save", substring = false).performClick()
+        assertEquals("Morning recipe" to recent, saved)
     }
 
     @Test
@@ -75,8 +92,14 @@ class SavedSearchControlsTest {
         compose.onNodeWithTag("Recent search:${gelbooru.queryHash}").assertDoesNotExist()
         compose.onNodeWithTag("Recent search:${multi.queryHash}").performClick()
         assertEquals(multi, opened)
-        compose.onNodeWithText("FYP", substring = false).performClick()
         compose.onNodeWithTag("Recent search:${fyp.queryHash}").assertExists()
+        compose.onNodeWithText("Search", substring = false).performClick()
+        compose.onNodeWithTag("Recent search:${fyp.queryHash}").assertDoesNotExist()
+        compose.onNodeWithText("For You", substring = false).performClick()
+        compose.onNodeWithTag("Recent search:${fyp.queryHash}").assertExists()
+        compose.onNodeWithTag("Recent search:${pixiv.queryHash}").assertDoesNotExist()
+        // The first "All" is the Recents tab; the second is the Searches filter.
+        compose.onAllNodesWithText("All", substring = false)[1].performClick()
         compose.onNodeWithContentDescription("Filter Recents by source").performClick()
         compose.onNodeWithText("All sources").performClick()
         compose.onNodeWithText("Searches").performClick()
@@ -100,13 +123,13 @@ class SavedSearchControlsTest {
                 onOpenPost = { entries, index -> opened = entries to index },
             )
         } }
-        compose.onNodeWithText("All", substring = false).performClick()
         compose.onNodeWithContentDescription("Filter Recents by source").performClick()
         compose.onNodeWithText("Pixiv").performClick()
-        compose.onNodeWithText("Gelbooru post").assertDoesNotExist()
-        compose.onNodeWithText("Pixiv post").performClick()
+        compose.onNodeWithTag(searchCardTestTag(gelbooru.post.id)).assertDoesNotExist()
+        compose.onNodeWithTag(searchCardTestTag(pixiv.post.id)).performClick()
         assertEquals(listOf(pixiv) to 0, opened)
-        compose.onNodeWithContentDescription("Clear section").assertExists()
+        compose.onNodeWithContentDescription("Recents actions").performClick()
+        compose.onNodeWithText("Clear all Recents (all sources)").assertExists()
     }
 
     @Composable

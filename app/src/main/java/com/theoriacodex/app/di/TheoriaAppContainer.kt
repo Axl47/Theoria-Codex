@@ -229,9 +229,14 @@ internal class DefaultTheoriaAppContainer(
     )
     private val profileDeletion = ProfileDeletionService(settingsRepository, contentRepository,
         File(storageDirectory, "pending_profile_deletion.json"), profileWriteGuard)
-    private val statisticsRepository = DataStoreStatisticsRepository(
-        baseDirectory = storageDirectory,
+    private val statisticsStore = DataStoreStatisticsRepository(baseDirectory = storageDirectory, scope = durableStoreScope)
+    private val statisticsRepository = com.theoriacodex.app.statistics.ThumbnailStatisticsRepository(
+        delegate = statisticsStore,
         scope = durableStoreScope,
+        store = com.theoriacodex.data.repository.StatisticsThumbnailStore(File(appContext.filesDir, "statistics_thumbnails")),
+        fetch = { post, destination ->
+            com.theoriacodex.app.statistics.fetchStatisticsThumbnail(appContext, post, destination)
+        },
     )
     private val offlineAcquisition = OfflineMediaAcquisition(appContext, sourceRegistry, settingsRepository, pixivUgoiraClient)
     private val offlineMedia = OfflineMediaCoordinator(
@@ -367,7 +372,7 @@ internal class DefaultTheoriaAppContainer(
     /** Complete typed-store migration before any route can observe default placeholder state. */
     suspend fun awaitDurableStores() = coroutineScope {
         val settingsReady = async { settingsRepository.awaitReady() }
-        val statisticsReady = async { statisticsRepository.awaitReady() }
+        val statisticsReady = async { statisticsStore.awaitReady() }
         val uiRestoreReady = async { uiRestoreRepository.awaitReady() }
         val contentReady = async { awaitContentStore() }
         settingsReady.await()

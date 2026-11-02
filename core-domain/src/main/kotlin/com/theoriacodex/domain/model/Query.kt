@@ -51,6 +51,7 @@ data class Query(
     val excludeTerms: List<SearchTerm>,
     val sort: SortMode,
     val dateRange: DateRange?,
+    /** Retired filter kept so stored queries still decode and hash; sources ignore it. */
     val minScore: Int?,
 ) {
     // Cached projection is derived during construction and cannot be changed by copy independently.

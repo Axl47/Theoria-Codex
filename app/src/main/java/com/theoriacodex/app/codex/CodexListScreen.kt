@@ -1,5 +1,7 @@
 package com.theoriacodex.app.codex
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -7,7 +9,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -43,11 +44,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,9 +56,18 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.source.SourceIcon
 import com.theoriacodex.app.source.displayName
+import com.theoriacodex.app.ui.components.ActionMenuContentRow
 import com.theoriacodex.app.tags.TagSelectionSurface
+import com.theoriacodex.app.ui.components.ActionMenuDetailText
+import com.theoriacodex.app.ui.components.ActionMenuDivider
+import com.theoriacodex.app.ui.components.ActionMenuFollowUpRow
+import com.theoriacodex.app.ui.components.ActionMenuHeader
+import com.theoriacodex.app.ui.components.ActionMenuRow
+import com.theoriacodex.app.ui.components.ActionMenuSheet
 import com.theoriacodex.domain.model.Codex
+import androidx.compose.material.icons.filled.AutoAwesome
 import kotlin.math.roundToInt
 
 @Composable
@@ -114,7 +122,7 @@ private fun CodexListBody(
 ) {
     when {
         state.ordering.reorderMode -> CodexReorderList(presentation, state)
-        else -> CodexGrid(presentation, state, actions.openCodex)
+        else -> CodexGrid(presentation, state, actions.openCodex, actions.openSavedCollectionActions)
     }
 }
 
@@ -199,6 +207,7 @@ private fun CodexGrid(
     presentation: CodexListPresentation,
     state: CodexListUiState,
     onOpenCodex: (String) -> Unit,
+    onOpenSavedCollectionActions: (String) -> Unit,
 ) {
     com.theoriacodex.app.ui.components.AdaptiveMediaGrid(
         modifier = Modifier.fillMaxSize(),
@@ -208,7 +217,7 @@ private fun CodexGrid(
         val likesId = presentation.likesCodexId
         savedCodexLibraryEntries(presentation.codices, likesId).forEach { codex ->
             item(key = codex.codexId, span = { GridItemSpan(if (codex.codexId == SAVED_CODEX_ID) maxLineSpan else 1) }) {
-                CodexLibraryTile(codex, presentation, state, onOpenCodex)
+                CodexLibraryTile(codex, presentation, state, onOpenCodex, onOpenSavedCollectionActions)
             }
         }
     }
@@ -220,10 +229,11 @@ private fun CodexLibraryTile(
     presentation: CodexListPresentation,
     state: CodexListUiState,
     onOpenCodex: (String) -> Unit,
+    onOpenSavedCollectionActions: (String) -> Unit,
 ) {
     val saved = codex.codexId == SAVED_CODEX_ID
     if (saved) {
-        SavedCodexLibraryTile(presentation, onOpenCodex)
+        SavedCodexLibraryTile(presentation, onOpenCodex, onOpenSavedCollectionActions)
         return
     }
     val openActions = { state.actionTarget = codex }
@@ -267,6 +277,8 @@ internal fun CodexListOverlays(
         CodexActionSheet(actionCodex, presentation, state, actions)
     }
 
+    CodexAutoSaveOverlay(presentation, state, actions)
+
     val searchCodex = state.searchSourceTarget
     if (searchCodex != null) {
         CodexSourceSheet(
@@ -291,6 +303,27 @@ internal fun CodexListOverlays(
             },
         )
     }
+}
+
+@Composable
+private fun CodexAutoSaveOverlay(
+    presentation: CodexListPresentation,
+    state: CodexListUiState,
+    actions: CodexListActions,
+) {
+    val target = state.autoSaveTarget ?: return
+    // Rule edits arrive through the live list, so the sheet must not render the tapped snapshot.
+    val codex = presentation.codices.firstOrNull { it.codexId == target.codexId } ?: target
+    CodexAutoSaveSheet(
+        codexName = codex.name,
+        automaticTags = codex.automaticTags,
+        tagOptionsBySource = presentation.searchTagOptions[codex.codexId].orEmpty(),
+        loading = presentation.actionLoading,
+        failed = presentation.actionFailed,
+        onRetry = presentation.retryActionOptions,
+        onSetAutomaticTag = { tag, enabled -> actions.setAutomaticTag(codex.codexId, tag, enabled) },
+        onDismiss = { state.autoSaveTarget = null },
+    )
 }
 
 @Composable
@@ -349,7 +382,7 @@ private fun CodexDeleteConfirmation(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** Long-press and overflow menu; rule editing lives in [CodexAutoSaveSheet]. */
 @Composable
 private fun CodexActionSheet(
     codex: Codex,
@@ -358,74 +391,67 @@ private fun CodexActionSheet(
     actions: CodexListActions,
 ) {
     val isLikesCodex = codex.codexId == presentation.likesCodexId
-    ModalBottomSheet(onDismissRequest = { state.actionTarget = null }, dragHandle = null) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            CodexActionButtons(
-                codex = codex,
-                isLikesCodex = isLikesCodex,
-                searchEnabled = presentation.searchSourceOptions[codex.codexId].orEmpty().isNotEmpty(),
-                state = state,
-                actions = actions,
-            )
-            Text(
-                codex.name, style = MaterialTheme.typography.titleMedium, maxLines = 1,
-                overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            if (presentation.actionLoading) {
-                Text("Loading collection tags…")
-            } else if (presentation.actionFailed) {
-                TextButton(onClick = presentation.retryActionOptions) { Text("Could not load tags. Retry") }
-            } else CodexAutomaticTagContent(
-                isLikesCodex = isLikesCodex,
-                automaticTags = codex.automaticTags,
-                tagOptionsBySource = presentation.searchTagOptions[codex.codexId].orEmpty(),
-                onSetAutomaticTag = { tag, enabled -> actions.setAutomaticTag(codex.codexId, tag, enabled) },
-            )
-            TextButton(modifier = Modifier.fillMaxWidth(), onClick = { state.actionTarget = null }) {
-                Text("Cancel")
+    ActionMenuSheet(onDismiss = { state.actionTarget = null }) {
+        CodexActionHeader(codex, presentation)
+        // Likes already receives every liked post, so it has no rules to configure.
+        if (!isLikesCodex) {
+            ActionMenuFollowUpRow(Icons.Default.AutoAwesome, "Auto-save") {
+                state.autoSaveTarget = codex
+                state.actionTarget = null
             }
         }
+        CodexActionRows(
+            codex = codex,
+            isLikesCodex = isLikesCodex,
+            searchEnabled = presentation.searchSourceOptions[codex.codexId].orEmpty().isNotEmpty(),
+            state = state,
+            actions = actions,
+        )
     }
 }
 
 @Composable
-private fun CodexActionButtons(
+private fun CodexActionHeader(codex: Codex, presentation: CodexListPresentation) {
+    val itemCount = presentation.itemCounts[codex.codexId] ?: 0
+    ActionMenuHeader(
+        title = codex.name,
+        image = { modifier ->
+            CodexCoverImage(presentation.coverCandidates[codex.codexId].orEmpty(), codex.name, modifier) {
+                Icon(Icons.Default.Image, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+        details = { ActionMenuDetailText("$itemCount ${if (itemCount == 1) "post" else "posts"}") },
+    )
+}
+
+@Composable
+private fun CodexActionRows(
     codex: Codex,
     isLikesCodex: Boolean,
     searchEnabled: Boolean,
     state: CodexListUiState,
     actions: CodexListActions,
 ) {
-    FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        CodexActionIcon(Icons.Default.Download, "Download codex") {
-            state.actionTarget = null; actions.downloadCodex(codex.codexId)
-        }
-        CodexActionIcon(Icons.Default.Share, "Share codex") {
-            state.actionTarget = null; actions.shareCodex(codex.codexId)
-        }
-        CodexActionIcon(Icons.Default.Search, "Search from codex", searchEnabled) {
-            state.searchSourceTarget = codex; state.actionTarget = null
-        }
-        CodexActionIcon(Icons.Default.Edit, "Rename codex") {
-            state.renameTarget = codex; state.actionTarget = null
-        }
-        CodexActionIcon(Icons.Default.CleaningServices, "Clean Codex") {
-            state.actionTarget = null; state.cleaningTargetId = codex.codexId
-        }
-        actions.makeAvailableOffline?.let { makeOffline ->
-            CodexActionIcon(Icons.Default.OfflinePin, "Make available offline") {
-                state.actionTarget = null; makeOffline(codex.codexId)
-            }
-        }
-        val deleteLabel = if (isLikesCodex) "Clear likes" else "Delete codex"
-        CodexActionIcon(Icons.Default.Delete, deleteLabel) {
-            state.deleteTarget = codex; state.actionTarget = null
+    val close = { state.actionTarget = null }
+    ActionMenuRow(Icons.Default.Search, "Search with these tags", searchEnabled) {
+        state.searchSourceTarget = codex; close()
+    }
+    ActionMenuRow(Icons.Default.Share, "Share") { close(); actions.shareCodex(codex.codexId) }
+    ActionMenuDivider()
+    ActionMenuRow(Icons.Default.Download, "Download") { close(); actions.downloadCodex(codex.codexId) }
+    actions.makeAvailableOffline?.let { makeOffline ->
+        ActionMenuRow(Icons.Default.OfflinePin, "Make available offline") {
+            close(); makeOffline(codex.codexId)
         }
     }
+    ActionMenuDivider()
+    ActionMenuRow(Icons.Default.Edit, "Rename") { state.renameTarget = codex; close() }
+    ActionMenuRow(Icons.Default.CleaningServices, "Clean") { close(); state.cleaningTargetId = codex.codexId }
+    ActionMenuRow(
+        icon = Icons.Default.Delete,
+        label = if (isLikesCodex) "Clear likes" else "Delete Codex",
+        tint = MaterialTheme.colorScheme.error,
+    ) { state.deleteTarget = codex; close() }
 }
 
 @Composable
@@ -440,66 +466,27 @@ private fun CodexActionIcon(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CodexSourceSheet(
     codex: Codex,
     options: List<CodexSearchSourceOption>,
     state: CodexListUiState,
 ) {
-    ModalBottomSheet(onDismissRequest = { state.searchSourceTarget = null }, dragHandle = null) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                codex.name, style = MaterialTheme.typography.titleMedium, maxLines = 1,
-                overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Text(
-                "Search source", style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            CodexSourceOptions(codex, options, state)
-            TextButton(modifier = Modifier.fillMaxWidth(), onClick = { state.searchSourceTarget = null }) {
-                Text("Cancel")
-            }
-        }
-    }
-}
-
-@Composable
-private fun CodexSourceOptions(
-    codex: Codex,
-    options: List<CodexSearchSourceOption>,
-    state: CodexListUiState,
-) {
-    if (options.isEmpty()) {
+    ActionMenuSheet(onDismiss = { state.searchSourceTarget = null }) {
         Text(
-            "No searchable sources available", style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+            "Search ${codex.name} tags on", style = MaterialTheme.typography.titleMedium, maxLines = 1,
+            overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(bottom = 8.dp),
         )
-        return
-    }
-    options.forEach { option ->
-        TextButton(
-            modifier = Modifier.fillMaxWidth(),
-            onClick = {
+        if (options.isEmpty()) ActionMenuDetailText("No searchable sources available")
+        options.forEach { option ->
+            val label = if (option.postCount == 1) "post" else "posts"
+            ActionMenuContentRow(
+                label = option.source.displayName(),
+                leading = { SourceIcon(option.source) },
+                trailingText = "${option.postCount} $label",
+            ) {
                 state.searchSourceTarget = null
                 state.tagSelectionTarget = CodexSourceSelection(codex, option.source)
-            },
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(option.source.displayName())
-                val label = if (option.postCount == 1) "post" else "posts"
-                Text("${option.postCount} $label", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -533,6 +520,26 @@ private fun CodexSearchTagSelectionSheet(
         }
     }
 
+    CodexTagSelectionContent(
+        selection, tags, selectedTags, randomAmount, maxRandomAmount, onDismiss, onApply,
+        onSelectedTagsChanged = { selectedTags = it },
+        onRandomAmountChanged = { randomAmount = it },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CodexTagSelectionContent(
+    selection: CodexSourceSelection,
+    tags: List<CodexSearchTagOption>,
+    selectedTags: Set<String>,
+    randomAmount: Int,
+    maxRandomAmount: Int,
+    onDismiss: () -> Unit,
+    onApply: (List<String>) -> Unit,
+    onSelectedTagsChanged: (Set<String>) -> Unit,
+    onRandomAmountChanged: (Int) -> Unit,
+) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         dragHandle = null,
@@ -543,58 +550,9 @@ private fun CodexSearchTagSelectionSheet(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(
-                text = selection.codex.name,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center,
-            )
-            Text(
-                text = selection.source.displayName(),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            CodexTagSelectionHeader(selection)
 
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "Tag Amount: ${randomAmount.coerceAtLeast(0)}",
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                    TextButton(
-                        enabled = tags.isNotEmpty(),
-                        onClick = {
-                            selectedTags = tags
-                                .map { option -> option.tag }
-                                .shuffled()
-                                .take(randomAmount.coerceIn(0, tags.size))
-                                .toSet()
-                        },
-                    ) {
-                        Text("Randomize")
-                    }
-                }
-                Slider(
-                    value = randomAmount.coerceAtLeast(1).toFloat(),
-                    onValueChange = { value ->
-                        randomAmount = value.roundToInt().coerceIn(1, maxRandomAmount.coerceAtLeast(1))
-                    },
-                    enabled = maxRandomAmount > 1,
-                    valueRange = 1f..maxRandomAmount.coerceAtLeast(2).toFloat(),
-                    steps = if (maxRandomAmount > 1) maxRandomAmount - 2 else 0,
-                )
-            }
+            CodexRandomTagSelection(tags, randomAmount, maxRandomAmount, onSelectedTagsChanged, onRandomAmountChanged)
 
             CodexSearchApplyButton(
                 enabled = selectedTags.isNotEmpty(),
@@ -610,11 +568,7 @@ private fun CodexSearchTagSelectionSheet(
                 tags = tags,
                 selectedTags = selectedTags,
                 onToggleTag = { tag ->
-                    selectedTags = if (tag in selectedTags) {
-                        selectedTags - tag
-                    } else {
-                        selectedTags + tag
-                    }
+                    onSelectedTagsChanged(if (tag in selectedTags) selectedTags - tag else selectedTags + tag)
                 },
             )
 
@@ -626,6 +580,70 @@ private fun CodexSearchTagSelectionSheet(
             }
         }
     }
+}
+
+@Composable
+private fun CodexTagSelectionHeader(selection: CodexSourceSelection) {
+    Text(
+        text = selection.codex.name,
+        style = MaterialTheme.typography.titleMedium,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.fillMaxWidth(),
+        textAlign = TextAlign.Center,
+    )
+    Text(
+        text = selection.source.displayName(),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth(),
+    )
+
+}
+
+@Composable
+private fun CodexRandomTagSelection(
+    tags: List<CodexSearchTagOption>,
+    randomAmount: Int,
+    maxRandomAmount: Int,
+    onSelectedTagsChanged: (Set<String>) -> Unit,
+    onRandomAmountChanged: (Int) -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Tag Amount: ${randomAmount.coerceAtLeast(0)}",
+                style = MaterialTheme.typography.labelLarge,
+            )
+            TextButton(
+                enabled = tags.isNotEmpty(),
+                onClick = {
+                    onSelectedTagsChanged(tags.map { it.tag }.shuffled()
+                        .take(randomAmount.coerceIn(0, tags.size)).toSet())
+                },
+            ) {
+                Text("Randomize")
+            }
+        }
+        Slider(
+            value = randomAmount.coerceAtLeast(1).toFloat(),
+            onValueChange = { value ->
+                onRandomAmountChanged(value.roundToInt().coerceIn(1, maxRandomAmount.coerceAtLeast(1)))
+            },
+            enabled = maxRandomAmount > 1,
+            valueRange = 1f..maxRandomAmount.coerceAtLeast(2).toFloat(),
+            steps = if (maxRandomAmount > 1) maxRandomAmount - 2 else 0,
+        )
+    }
+
 }
 
 @Composable
@@ -665,7 +683,7 @@ private fun CodexSearchApplyButton(
 }
 
 @Composable
-private fun CodexSearchTagSelectionGrid(
+internal fun CodexSearchTagSelectionGrid(
     tags: List<CodexSearchTagOption>,
     selectedTags: Set<String>,
     onToggleTag: (String) -> Unit,

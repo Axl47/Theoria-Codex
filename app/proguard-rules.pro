@@ -40,6 +40,10 @@
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
+-keepclassmembers class com.theoriacodex.data.repository.DailyActivity {
+    <init>();
+    @com.google.gson.annotations.SerializedName <fields>;
+}
 -keepclassmembers class com.theoriacodex.data.repository.CodexStatistics {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;

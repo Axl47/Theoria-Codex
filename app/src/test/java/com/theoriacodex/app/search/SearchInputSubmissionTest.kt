@@ -48,7 +48,7 @@ class SearchInputSubmissionTest {
                 onRequestSaveToCodex = {}, onSaveToDevice = {},
             )
         } } }
-        compose.onNodeWithTag("Search query input").performClick()
+        compose.onNodeWithTag("Search bar").performClick()
         val undo = compose.onNodeWithText("Undo")
         undo.assertIsNotEnabled()
         compose.runOnIdle {
@@ -70,40 +70,8 @@ class SearchInputSubmissionTest {
         val submitted = mutableListOf<String>()
         val actions = mutableListOf<SearchAction>()
         val focusRefreshInputs = mutableListOf<String>()
-        compose.setContent {
-            MaterialTheme {
-                Box(Modifier.size(400.dp, 700.dp)) {
-                    SearchScreen(
-                        state = state.value,
-                        creatorBrowsingSources = emptySet(),
-                        onAction = { action ->
-                            actions += action
-                            when (action) {
-                                SearchAction.RefreshAutocomplete -> {
-                                    // Focus refresh reads the owner's current input, never a captured render value.
-                                    focusRefreshInputs += state.value.suggestions.input
-                                }
-                                is SearchAction.AutocompleteChanged -> state.value = state.value.copy(
-                                    suggestions = state.value.suggestions.copy(input = action.input, canCommitInput = false),
-                                )
-                                is SearchAction.CommitTagInput -> {
-                                    submitted += action.input
-                                    state.value = state.value.copy(suggestions = SearchSuggestionsUiState())
-                                }
-                                SearchAction.ClearAutocomplete -> state.value = state.value.copy(
-                                    suggestions = SearchSuggestionsUiState(),
-                                )
-                                else -> Unit
-                            }
-                        },
-                        resolvePostById = { null }, recoverPostMedia = { _, _ -> null },
-                        tagVideoCountProvider = { _, _ -> null }, fetchTagVideoCounts = { _, _ -> emptyMap() },
-                        onOpenCreatorProfile = {}, onOpenLegacyCreatorProfile = {},
-                        onRequestSaveToCodex = {}, onSaveToDevice = {},
-                    )
-                }
-            }
-        }
+        setSubmissionContent(state, submitted, actions, focusRefreshInputs)
+        compose.onNodeWithTag("Search bar").performClick()
         val input = compose.onNodeWithTag("Search query input")
         input.performClick()
         input.performImeAction()
@@ -143,4 +111,47 @@ class SearchInputSubmissionTest {
             assertTrue("Focus refresh must not resurrect submitted input: $focusRefreshInputs", focusRefreshInputs.all(String::isEmpty))
         }
     }
+
+    private fun setSubmissionContent(
+        state: androidx.compose.runtime.MutableState<SearchUiState>,
+        submitted: MutableList<String>,
+        actions: MutableList<SearchAction>,
+        focusRefreshInputs: MutableList<String>,
+    ) {
+        compose.setContent {
+            MaterialTheme {
+                Box(Modifier.size(400.dp, 700.dp)) {
+                    SearchScreen(
+                        state = state.value,
+                        creatorBrowsingSources = emptySet(),
+                        onAction = { action ->
+                            actions += action
+                            when (action) {
+                                SearchAction.RefreshAutocomplete -> {
+                                    // Focus refresh reads the owner's current input, never a captured render value.
+                                    focusRefreshInputs += state.value.suggestions.input
+                                }
+                                is SearchAction.AutocompleteChanged -> state.value = state.value.copy(
+                                    suggestions = state.value.suggestions.copy(input = action.input, canCommitInput = false),
+                                )
+                                is SearchAction.CommitTagInput -> {
+                                    submitted += action.input
+                                    state.value = state.value.copy(suggestions = SearchSuggestionsUiState())
+                                }
+                                SearchAction.ClearAutocomplete -> state.value = state.value.copy(
+                                    suggestions = SearchSuggestionsUiState(),
+                                )
+                                else -> Unit
+                            }
+                        },
+                        resolvePostById = { null }, recoverPostMedia = { _, _ -> null },
+                        tagVideoCountProvider = { _, _ -> null }, fetchTagVideoCounts = { _, _ -> emptyMap() },
+                        onOpenCreatorProfile = {}, onOpenLegacyCreatorProfile = {},
+                        onRequestSaveToCodex = {}, onSaveToDevice = {},
+                    )
+                }
+            }
+        }
+    }
+
 }

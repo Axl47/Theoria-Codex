@@ -10,6 +10,8 @@ Keep Detekt's own `parallel` setting disabled: concurrent Kotlin 2.4 FIR/PSI tra
 
 *Bounded validation:* Plan one focused validation batch. Avoid repeated snapshots, equivalent selector checks, duplicate browser setup, and full revalidation unless a later patch changed the relevant behavior.
 
+*Offline preflight:* Before a substantial offline Gradle batch, check that its required dependencies and generated artifacts are available; resolve missing prerequisites before running the batch.
+
 *Root-cause repair:* When validation fails, identify the common cause and group related fixes into one patch instead of repairing symptoms one at a time.
 
 *Stop after sufficient evidence:* Once the required validation passes, stop unless there is a reproducible defect, missing requirement, or explicit evidence gap. 

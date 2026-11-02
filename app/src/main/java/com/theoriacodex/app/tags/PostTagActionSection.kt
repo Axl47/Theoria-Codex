@@ -109,20 +109,31 @@ fun PostTagActionSection(
                     null
                 },
                 onIncludeTerm = { term ->
-                    val stored = selection.included(term)
-                    if (stored != null) onRemoveIncludeTerm(stored)
-                    else if (onAddIncludeTerm(term)) selection.excluded(term)?.let(onRemoveExcludeTerm)
+                    togglePostTagTerm(term, selection.included(term), onAddIncludeTerm, onRemoveIncludeTerm) {
+                        selection.excluded(term)?.let(onRemoveExcludeTerm)
+                    }
                 },
                 onExcludeTerm = { term ->
-                    val stored = selection.excluded(term)
-                    if (stored != null) onRemoveExcludeTerm(stored)
-                    else if (onAddExcludeTerm(term)) selection.included(term)?.let(onRemoveIncludeTerm)
+                    togglePostTagTerm(term, selection.excluded(term), onAddExcludeTerm, onRemoveExcludeTerm) {
+                        selection.included(term)?.let(onRemoveIncludeTerm)
+                    }
                 },
             )
         }
         item(key = "footer") { footer() }
     }
     }
+}
+
+private fun togglePostTagTerm(
+    term: SearchTerm,
+    stored: SearchTerm?,
+    onAdd: (SearchTerm) -> Boolean,
+    onRemove: (SearchTerm) -> Unit,
+    onRemoveOpposite: () -> Unit,
+) {
+    if (stored != null) onRemove(stored)
+    else if (onAdd(term)) onRemoveOpposite()
 }
 
 @Composable

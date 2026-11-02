@@ -13,6 +13,11 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.sourceTagKey
+import com.theoriacodex.data.repository.rankedStatisticsPosts
+import com.theoriacodex.data.repository.DailyActivity
+import com.theoriacodex.data.repository.retainedHistory
+import com.theoriacodex.data.repository.withDailyUsage
+import java.time.LocalDate
 import kotlin.math.roundToInt
 
 data class SourceStatistic(
@@ -45,9 +50,28 @@ data class CodexStatisticsSummary(
     val topImages: List<CodexPostStatistic>,
 )
 
-data class CodexPostStatistic(val key: String, val label: String, val value: Long, val percentage: Int)
+data class CodexPostStatistic(
+    val key: String,
+    val label: String,
+    val value: Long,
+    val percentage: Int,
+    val thumbnail: String? = null,
+)
+
+/** Local calendar activity, oldest first in the summary; inactive days may be omitted. */
+data class DailyStatistic(
+    val date: LocalDate,
+    val appOpenCount: Long = 0L,
+    val totalForegroundMs: Long = 0L,
+    val browsingMs: Long = 0L,
+    val watchingMs: Long = 0L,
+    val codexMs: Long = 0L,
+    val watchedPostCount: Long = 0L,
+    val searchCount: Long = 0L,
+)
 
 data class StatisticsSummary(
+    val history: List<DailyStatistic> = emptyList(),
     val codices: List<CodexStatisticsSummary> = emptyList(),
     val appOpenCount: Long = 0L,
     val totalForegroundMs: Long = 0L,
@@ -96,6 +120,7 @@ object StatisticsProjection {
             )
         }
         return StatisticsSummary(
+            history = dailyRows(lifetime.history.withDailyUsage(liveUsage.dailyUsage)),
             codices = codexStatistics(lifetime, savedContent.codices),
             appOpenCount = lifetime.appOpenCount,
             totalForegroundMs = lifetime.totalForegroundMs.saturatingAdd(liveUsage.totalMs),
@@ -169,6 +194,9 @@ object StatisticsProjection {
 
 /** Overlay live monotonic time without rebuilding content, source or tag statistics. */
 fun StatisticsSummary.withLiveUsage(usage: UsageDurationDelta): StatisticsSummary = copy(
+    history = dailyRows(history.associate { it.date to DailyActivity(it.appOpenCount, it.totalForegroundMs,
+        it.browsingMs, it.watchingMs, it.codexMs, it.watchedPostCount, it.searchCount) }
+        .withDailyUsage(usage.dailyUsage)),
     totalForegroundMs = totalForegroundMs.saturatingAdd(usage.totalMs),
     browsingMs = browsingMs.saturatingAdd(usage.browsingMs),
     watchingMs = watchingMs.saturatingAdd(usage.watchingMs),
@@ -214,24 +242,22 @@ fun codexStatistics(lifetime: LifetimeStatistics, codices: List<Codex>): List<Co
         CodexStatisticsSummary(
             codex.codexId, codex.name, lifetime.codexEntryCounts[codex.codexId] ?: 0L,
             stats.browsingMs, stats.watchingMs, stats.posts.values.sumOf { it.opens },
-            codexPostRows(stats.posts) { it.opens },
-            codexPostRows(stats.posts) { it.videoMs },
-            codexPostRows(stats.posts) { it.imageMs },
+            codexPostRows(stats.posts, lifetime.thumbnails) { it.opens },
+            codexPostRows(stats.posts, lifetime.thumbnails) { it.videoMs },
+            codexPostRows(stats.posts, lifetime.thumbnails) { it.imageMs },
         )
     }.sortedWith(compareByDescending<CodexStatisticsSummary> { it.watchingMs }
         .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }.thenBy { it.codexId })
 
 private fun codexPostRows(
     posts: Map<String, CodexPostStatistics>,
+    thumbnails: Map<String, String>,
     value: (CodexPostStatistics) -> Long,
 ): List<CodexPostStatistic> {
     val total = posts.values.sumOf(value)
-    return posts.entries.filter { value(it.value) > 0L }
-        .sortedWith(compareByDescending<Map.Entry<String, CodexPostStatistics>> {
-            value(it.value)
-        }.thenBy { it.key }).take(5).map { (key, post) ->
-            CodexPostStatistic(key, post.label.ifBlank { key }, value(post), percentage(value(post), total))
-        }
+    return rankedStatisticsPosts(posts, value).map { (key, post) ->
+        CodexPostStatistic(key, post.label.ifBlank { key }, value(post), percentage(value(post), total), thumbnails[key])
+    }
 }
 
 /** Only direct Codex launches carry collection attribution; Recents keeps its own launch identity. */
@@ -240,3 +266,9 @@ fun statisticsCodexId(context: ViewerLaunchContext?): String? =
         ?.queryHash?.takeIf { it.startsWith("codex:") }?.removePrefix("codex:")?.takeIf(String::isNotBlank)
 
 fun statisticsPostKey(id: PostId): String = "${id.source.name}:${id.sourcePostId}"
+
+private fun dailyRows(history: Map<LocalDate, DailyActivity>): List<DailyStatistic> =
+    history.retainedHistory(LocalDate.now()).map { (date, day) -> DailyStatistic(
+        date, day.appOpenCount, day.totalForegroundMs, day.browsingMs, day.watchingMs,
+        day.codexMs, day.watchedPostCount, day.searchCount,
+    ) }

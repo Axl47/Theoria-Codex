@@ -1,7 +1,6 @@
 package com.theoriacodex.app.search
 
 import com.theoriacodex.domain.model.Post
-import kotlin.math.abs
 
 internal fun buildEmptySearchMessage(
     sourceResults: List<Post>,
@@ -24,6 +23,7 @@ internal fun buildEmptySearchMessage(
 }
 
 private fun visibilityFilterMessage(filters: SearchVisibilityFilters): String? {
+    if (filters.dateRange != null) return "No posts with a known date in this range."
     if (!filters.hideLiked && !filters.hideSaved && !filters.hideWatched) {
         return if (filters.animatedOnly) "No animated media found for the current results." else null
     }
@@ -36,17 +36,5 @@ private fun visibilityFilterMessage(filters: SearchVisibilityFilters): String? {
         filters.hideLiked -> "No results remain after hiding liked posts."
         filters.hideSaved -> "No results remain after hiding saved posts."
         else -> "No results remain after applying the current visibility filters."
-    }
-}
-
-internal fun inferPreset(fromEpochMs: Long?, toEpochMs: Long?): DateRangePreset {
-    if (fromEpochMs == null || toEpochMs == null) return DateRangePreset.NONE
-    val spanMs = abs(toEpochMs - fromEpochMs)
-    val dayMs = 24L * 60L * 60L * 1000L
-    return when {
-        spanMs <= dayMs + (2L * 60L * 60L * 1000L) -> DateRangePreset.TODAY
-        spanMs <= 7L * dayMs + (2L * 60L * 60L * 1000L) -> DateRangePreset.LAST_7_DAYS
-        spanMs <= 30L * dayMs + (2L * 60L * 60L * 1000L) -> DateRangePreset.LAST_30_DAYS
-        else -> DateRangePreset.NONE
     }
 }

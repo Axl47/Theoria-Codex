@@ -9,43 +9,8 @@ import com.theoriacodex.data.repository.ScenarioPreset
 import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.domain.model.SourceKey
 
-enum class SettingsSectionKey {
-    RECOMMENDATION_PROFILES,
-    UNIFIED_MODE,
-    FOR_YOU_BLACKLIST,
-    STATS,
-    SOURCE_ACCOUNTS,
-    UPDATES,
-    STORAGE_AND_CACHING,
-    MEDIA,
-    PREFERENCES,
-    DEVELOPER_SCENARIOS,
-}
-
-data class SettingsSectionExpansionState(
-    val expandedBySection: Map<SettingsSectionKey, Boolean> = SettingsSectionKey.entries
-        .associateWith { false },
-) {
-    operator fun get(section: SettingsSectionKey): Boolean = expandedBySection[section] ?: false
-
-    fun updated(section: SettingsSectionKey, expanded: Boolean): SettingsSectionExpansionState {
-        return copy(expandedBySection = expandedBySection + (section to expanded))
-    }
-
-    fun toPersistenceMap(): Map<String, Boolean> = SettingsSectionKey.entries.associate { section ->
-        section.name to this[section]
-    }
-
-    companion object {
-        fun fromPersistenceMap(persisted: Map<String, Boolean>): SettingsSectionExpansionState {
-            return SettingsSectionExpansionState(
-                expandedBySection = SettingsSectionKey.entries.associateWith { section ->
-                    persisted[section.name] ?: false
-                },
-            )
-        }
-    }
-}
+/** Pages inside the Settings tab; held by the owner so Search can open Accounts directly. */
+enum class SettingsPage { HOME, ACCOUNTS, HIDDEN_TAGS, STORAGE, STATS }
 
 data class SettingsAccountUiState(
     val pixivStatusLabel: String = "Not connected",
@@ -75,7 +40,7 @@ data class SettingsUiState(
     val availableSources: List<SourceKey> = emptyList(),
     val cacheSnapshot: CacheSnapshot = CacheSnapshot(thumbnailCount = 0, fullImageCount = 0),
     val showDeveloperScenarios: Boolean = false,
-    val sectionExpansion: SettingsSectionExpansionState = SettingsSectionExpansionState(),
+    val page: SettingsPage = SettingsPage.HOME,
     val accounts: SettingsAccountUiState = SettingsAccountUiState(),
     val profileDeleteTargetId: String? = null,
     val showClearCacheOptions: Boolean = false,
@@ -84,7 +49,7 @@ data class SettingsUiState(
 )
 
 sealed interface SettingsAction {
-    data class SetSectionExpanded(val section: SettingsSectionKey, val expanded: Boolean) : SettingsAction
+    data class OpenPage(val page: SettingsPage) : SettingsAction
     data class SetActiveProfile(val profileId: String) : SettingsAction
     data class AddProfile(val name: String) : SettingsAction
     data class RequestRemoveProfile(val profileId: String) : SettingsAction

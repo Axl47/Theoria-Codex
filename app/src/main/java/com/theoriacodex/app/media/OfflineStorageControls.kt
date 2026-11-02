@@ -36,6 +36,7 @@ internal fun OfflineStorageSheet(
     onConfirmRemoval: () -> Unit,
     onDismissRemoval: () -> Unit,
     onClearDisposable: () -> Unit,
+    downloadBytes: Long,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         LazyColumn(
@@ -45,12 +46,12 @@ internal fun OfflineStorageSheet(
         ) {
             item {
                 Text("Storage", style = MaterialTheme.typography.titleLarge)
-                OfflineStorageSummary(state)
                 if (state.refreshing || state.working) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 state.message?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
             }
             item {
                 OfflineStorageBreakdown(state)
+                Text("Retained download history: ${Formatter.formatShortFileSize(LocalContext.current, downloadBytes)} (excluded from storage usage)")
             }
             item {
                 DisposableCacheControls(state, onClearDisposable)
@@ -86,6 +87,7 @@ private fun OfflineStorageBreakdown(state: OfflineStorageUiState) {
                 videoBytes = cache.videoBytes,
                 gifBytes = cache.gifBytes,
                 animationBytes = cache.animationBytes,
+                downloadBytes = 0L,
             ),
         )
     } ?: Text(
@@ -95,10 +97,18 @@ private fun OfflineStorageBreakdown(state: OfflineStorageUiState) {
 }
 
 @Composable
-internal fun OfflineStorageSummary(state: OfflineStorageUiState) {
-    val size = Formatter.formatShortFileSize(LocalContext.current, state.offline.bytes)
-    Text("Offline: $size · ${state.offline.postCount} posts · ${state.offline.mediaCount} media files")
+internal fun OfflineStorageSummary(state: OfflineStorageUiState, downloadBytes: Long) {
+    val context = LocalContext.current
+    fun size(bytes: Long) = Formatter.formatShortFileSize(context, bytes)
+    Text(
+        "Offline ${size(state.offline.bytes)} · Cache ${size(state.disposable?.totalBytes ?: 0L)} · " +
+            "Retained download history ${size(downloadBytes)} (excluded from storage usage)",
+    )
 }
+
+/** Managed offline copies and cache; download history does not measure files on disk. */
+internal fun OfflineStorageUiState.totalBytes(): Long =
+    offline.bytes + (disposable?.totalBytes ?: 0L)
 
 @Composable
 private fun DisposableCacheControls(state: OfflineStorageUiState, onClear: () -> Unit) {
