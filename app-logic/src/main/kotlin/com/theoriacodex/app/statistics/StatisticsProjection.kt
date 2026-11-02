@@ -13,6 +13,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.sourceTagKey
+import java.time.LocalDate
 import kotlin.math.roundToInt
 
 data class SourceStatistic(
@@ -45,9 +46,28 @@ data class CodexStatisticsSummary(
     val topImages: List<CodexPostStatistic>,
 )
 
-data class CodexPostStatistic(val key: String, val label: String, val value: Long, val percentage: Int)
+data class CodexPostStatistic(
+    val key: String,
+    val label: String,
+    val value: Long,
+    val percentage: Int,
+    val thumbnail: String? = null,
+)
+
+/** Local calendar activity, oldest first in the summary; inactive days may be omitted. */
+data class DailyStatistic(
+    val date: LocalDate,
+    val appOpenCount: Long = 0L,
+    val totalForegroundMs: Long = 0L,
+    val browsingMs: Long = 0L,
+    val watchingMs: Long = 0L,
+    val codexMs: Long = 0L,
+    val watchedPostCount: Long = 0L,
+    val searchCount: Long = 0L,
+)
 
 data class StatisticsSummary(
+    val history: List<DailyStatistic> = emptyList(),
     val codices: List<CodexStatisticsSummary> = emptyList(),
     val appOpenCount: Long = 0L,
     val totalForegroundMs: Long = 0L,
