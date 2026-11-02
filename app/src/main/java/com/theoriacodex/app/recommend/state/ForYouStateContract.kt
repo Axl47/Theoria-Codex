@@ -315,7 +315,7 @@ private fun ForYouUiState.selectSource(action: ForYouAction.SelectSource): ForYo
 }
 
 private fun ForYouUiState.selectSort(action: ForYouAction.SelectSort): ForYouTransition {
-    return if (isRefreshing || isPaging || action.sortMode == sortMode) {
+    return if (action.sortMode == sortMode) {
         unchanged()
     } else {
         copy(sortMode = action.sortMode)

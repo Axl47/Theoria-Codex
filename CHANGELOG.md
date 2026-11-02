@@ -6,6 +6,8 @@
 
 ### Fixed
 
+- Restore the previous For You sort when Undo is tapped before a filter reset finishes loading.
+
 - Keep Recents days distinct across years.
 - Clear the Auto-save alternative target when removing a tag group to avoid editing the wrong rule.
 

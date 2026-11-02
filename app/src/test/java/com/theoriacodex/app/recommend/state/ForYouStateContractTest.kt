@@ -23,6 +23,17 @@ import org.junit.Test
 
 class ForYouStateContractTest {
     @Test
+    fun `undo sort reset replaces the in flight refresh`() {
+        val original = loadedState().copy(sortMode = SortMode.TOP)
+        val cleared = original.reduce(ForYouAction.SelectSort(SortMode.NEWEST)).state
+        val restored = cleared.reduce(ForYouAction.SelectSort(SortMode.TOP))
+        assertEquals(SortMode.TOP, restored.state.sortMode)
+        assertTrue(restored.state.isRefreshing)
+        assertTrue(restored.state.activeRequest != cleared.activeRequest)
+        assertEquals(ForYouEffect.ChangeSort(requireNotNull(restored.state.activeRequest), SortMode.TOP), restored.effect)
+    }
+
+    @Test
     fun `refresh retains cards while replacing request and continuation`() {
         assertNull(ForYouUiState().emptyReason)
         val state = loadedState(listOf(testPost()), token = "next")
