@@ -85,40 +85,7 @@ class CodexLibraryScrollReturnTest {
         }
         try {
             val restoration = StateRestorationTester(compose)
-            restoration.setContent {
-                MaterialTheme {
-                    if (show.value) {
-                        val navigation = rememberNavController()
-                        NavHost(navigation, startDestination = "library") {
-                            composable("library") {
-                                CodexDestinationStateBoundary(data, graph.sources, 0) { state ->
-                                    CodexListScreen(
-                                        codices = state.visibleCodices,
-                                        itemCounts = state.itemCounts,
-                                        codexCoverCandidates = state.coverCandidates,
-                                        observeActionOptions = state.observeActionOptions,
-                                        likesCodexId = "system_likes_codex",
-                                        onOpenCodex = { navigation.navigate("detail") },
-                                        onImportCodex = {},
-                                        onDownloadCodex = {},
-                                        onShareCodex = {},
-                                        onSearchFromCodex = { _, _, _ -> },
-                                        onCommitReorder = {},
-                                        onCreateCodex = {},
-                                        onRenameCodex = { _, _ -> },
-                                        onSetAutomaticTag = { _, _, _ -> },
-                                        onDeleteCodex = {},
-                                        onCleanCodex = { _, _ -> },
-                                    )
-                                }
-                            }
-                            composable("detail") {
-                                TextButton(onClick = { navigation.popBackStack() }) { Text("Return to library") }
-                            }
-                        }
-                    }
-                }
-            }
+            setLibraryContent(restoration, show, data, graph)
             releaseLibraryData()
             compose.waitUntil(10_000) {
                 compose.onAllNodesWithText("Collection", substring = true).fetchSemanticsNodes().isNotEmpty()
@@ -149,4 +116,47 @@ class CodexLibraryScrollReturnTest {
             pendingLoads.close()
         }
     }
+    private fun setLibraryContent(
+        restoration: StateRestorationTester,
+        show: androidx.compose.runtime.State<Boolean>,
+        data: com.theoriacodex.app.di.DataDependencies,
+        graph: JourneyAppContainer,
+    ) {
+        restoration.setContent {
+            MaterialTheme {
+                if (show.value) {
+                    val navigation = rememberNavController()
+                    NavHost(navigation, startDestination = "library") {
+                        composable("library") {
+                            CodexDestinationStateBoundary(data, graph.sources, 0) { state ->
+                                CodexListScreen(
+                                    codices = state.visibleCodices,
+                                    itemCounts = state.itemCounts,
+                                    codexCoverCandidates = state.coverCandidates,
+                                    observeActionOptions = state.observeActionOptions,
+                                    likesCodexId = "system_likes_codex",
+                                    onOpenCodex = { navigation.navigate("detail") },
+                                    onImportCodex = {},
+                                    onDownloadCodex = {},
+                                    onShareCodex = {},
+                                    onSearchFromCodex = { _, _, _ -> },
+                                    onCommitReorder = {},
+                                    onCreateCodex = {},
+                                    onRenameCodex = { _, _ -> },
+                                    onSetAutomaticTag = { _, _, _ -> },
+                                    onDeleteCodex = {},
+                                    onCleanCodex = { _, _ -> },
+                                )
+                            }
+                        }
+                        composable("detail") {
+                            TextButton(onClick = { navigation.popBackStack() }) { Text("Return to library") }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
 }

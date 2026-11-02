@@ -64,11 +64,7 @@ class SavedSearchesCodexJourneyTest {
 
     @Test fun `Library opens merged saved searches and exclusion survives Viewer return and route reentry`() {
         val source = SourceKey.PIXIV
-        val posts = listOf("first", "second", "shared").map { id ->
-            val media = ImageRef(null, "/nonexistent/saved-$id.jpg", "image/jpeg")
-            testPost(source, id).copy(preview = media, full = media, media = listOf(media), width = 160, height = 120,
-                canonicalTags = if (id == "shared") listOf("a", "b") else listOf(if (id == "first") "a" else "b"))
-        }
+        val posts = savedSearchPosts(source)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val show = mutableStateOf(true)
         var owners: ViewModelStoreOwner? = null
@@ -88,24 +84,7 @@ class SavedSearchesCodexJourneyTest {
                 SideEffect { owners = owner }
                 if (show.value) TheoriaAppContent(graph, viewModel<ViewerSessionRetentionViewModel>(), viewModel<AppShellViewModel>())
             }
-            compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Codex").fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithContentDescription("Codex").performClick()
-            compose.waitUntil(10_000) { compose.onNodeWithText("Saved").isDisplayed() }
-            compose.onNodeWithText("Codex Library").assertIsDisplayed()
-            compose.onNodeWithText("Searches").assertIsDisplayed()
-            compose.onNodeWithText("2").assertIsDisplayed()
-            compose.onNodeWithText("Saved").performClick()
-            compose.waitUntil(10_000) { compose.onNodeWithText("Likes").isDisplayed() }
-            compose.onNodeWithText("Likes").performTouchInput { longClick() }
-            compose.waitUntil(10_000) { compose.onAllNodesWithText("Clear likes").fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithText("Auto-save").assertDoesNotExist()
-            compose.onNodeWithContentDescription("Close sheet").performSemanticsAction(SemanticsActions.OnClick)
-            compose.onNodeWithText("Followed").assertIsDisplayed()
-            compose.waitUntil(10_000) { compose.onAllNodesWithText("Searches").fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithText("Searches").performScrollTo().performTouchInput { longClick() }
-            compose.onNodeWithContentDescription("Include First search").assertExists()
-            compose.onNodeWithContentDescription("Close sheet").performSemanticsAction(SemanticsActions.OnClick)
-            compose.onNodeWithText("Searches").performClick()
+            openMergedSearches()
             val first = searchCardTestTag(posts[0].id)
             val second = searchCardTestTag(posts[1].id)
             compose.waitUntil(10_000) { compose.onAllNodesWithTag(first).fetchSemanticsNodes().isNotEmpty() &&
@@ -134,27 +113,7 @@ class SavedSearchesCodexJourneyTest {
             compose.waitUntil(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag(first).assertDoesNotExist()
             assertEquals(roots, graph.registry.requests.count { it.pageToken == null })
-            // Leaving Saved entirely must retain the same feed, too.
-            compose.onNodeWithContentDescription("Back").performClick()
-            compose.onNodeWithText("Saved").performClick()
-            compose.waitUntil(10_000) { compose.onAllNodesWithText("Searches").fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithText("Searches").performScrollTo()
-            compose.waitUntil(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
-            assertEquals(roots, graph.registry.requests.count { it.pageToken == null })
-            compose.onNodeWithTag(second).performClick()
-            compose.waitUntil(10_000) { compose.onNodeWithContentDescription("More actions").isDisplayed() }
-            compose.onNodeWithContentDescription("Back").performClick()
-            compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("More actions").fetchSemanticsNodes().isEmpty() }
-            compose.waitUntil(10_000) { compose.onAllNodesWithText("Searches").fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithText("Searches").performScrollTo().performClick()
-            compose.waitUntil(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
-            compose.onNode(hasText("Searches") and SemanticsMatcher.keyIsDefined(SemanticsActions.OnLongClick))
-                .performTouchInput { longClick() }
-            compose.onNodeWithContentDescription("Include First search").assertIsOff()
-            compose.onNodeWithText("Exclude all").performClick()
-            compose.onNodeWithContentDescription("Close sheet").performSemanticsAction(SemanticsActions.OnClick)
-            compose.waitUntil(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isEmpty() }
-            compose.onNodeWithText("Save a search from Recents or include a search in this feed").assertIsDisplayed()
+            verifySavedRouteReentry(graph, first, second, roots)
         } catch (failure: Throwable) {
             println(compose.onRoot().printToString())
             throw failure
@@ -164,4 +123,61 @@ class SavedSearchesCodexJourneyTest {
             scope.cancel()
         }
     }
+    private fun openMergedSearches(): Unit {
+        compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Codex").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Codex").performClick()
+        compose.waitUntil(10_000) { compose.onNodeWithText("Saved").isDisplayed() }
+        compose.onNodeWithText("Codex Library").assertIsDisplayed()
+        compose.onNodeWithText("Searches").assertIsDisplayed()
+        compose.onNodeWithText("2").assertIsDisplayed()
+        compose.onNodeWithText("Saved").performClick()
+        compose.waitUntil(10_000) { compose.onNodeWithText("Likes").isDisplayed() }
+        compose.onNodeWithText("Likes").performTouchInput { longClick() }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Clear likes").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Auto-save").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Close sheet").performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithText("Followed").assertIsDisplayed()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Searches").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Searches").performScrollTo().performTouchInput { longClick() }
+        compose.onNodeWithContentDescription("Include First search").assertExists()
+        compose.onNodeWithContentDescription("Close sheet").performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithText("Searches").performClick()
+    }
+
+
+    private fun verifySavedRouteReentry(graph: JourneyAppContainer, first: String, second: String, roots: Int): Unit {
+        // Leaving Saved entirely must retain the same feed, too.
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.onNodeWithText("Saved").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Searches").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Searches").performScrollTo()
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(roots, graph.registry.requests.count { it.pageToken == null })
+        compose.onNodeWithTag(second).performClick()
+        compose.waitUntil(10_000) { compose.onNodeWithContentDescription("More actions").isDisplayed() }
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("More actions").fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Searches").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Searches").performScrollTo().performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasText("Searches") and SemanticsMatcher.keyIsDefined(SemanticsActions.OnLongClick))
+            .performTouchInput { longClick() }
+        compose.onNodeWithContentDescription("Include First search").assertIsOff()
+        compose.onNodeWithText("Exclude all").performClick()
+        compose.onNodeWithContentDescription("Close sheet").performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithText("Save a search from Recents or include a search in this feed").assertIsDisplayed()
+    }
+
+
+
+    private fun savedSearchPosts(source: SourceKey): List<com.theoriacodex.domain.model.Post> {
+        return listOf("first", "second", "shared").map { id ->
+            val media = ImageRef(null, "/nonexistent/saved-$id.jpg", "image/jpeg")
+            testPost(source, id).copy(preview = media, full = media, media = listOf(media), width = 160, height = 120,
+                canonicalTags = if (id == "shared") listOf("a", "b") else listOf(if (id == "first") "a" else "b"))
+        }
+
+    }
+
 }

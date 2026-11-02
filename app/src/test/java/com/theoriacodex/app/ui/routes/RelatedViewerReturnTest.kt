@@ -73,34 +73,11 @@ class RelatedViewerReturnTest {
     fun `Gelbooru video shelf survives For You fullscreen return`() = verifyReturn(RecentSearchKind.FYP, SourceKey.GELBOORU, true)
 
     private fun verifyReturn(kind: RecentSearchKind, source: SourceKey = SourceKey.PIXIV, video: Boolean = false) {
-        val videoPath = if (video) {
-            val root = generateSequence(File(requireNotNull(System.getProperty("user.dir"))).absoluteFile) { it.parentFile }
-                .first { File(it, "settings.gradle.kts").isFile }
-            File(root, "app/src/benchmarkRelease/res/raw/benchmark_loop.mp4").absolutePath
-        } else null
-        val posts = (0..35).map { index ->
-            val media = ImageRef(null, "/nonexistent/related-$index.jpg", "image/jpeg")
-            val full = videoPath?.let { ImageRef(null, it, "video/mp4") } ?: media
-            testPost(source, "return-$index").copy(
-                preview = media, full = full, media = listOf(full), width = 160, height = 120,
-                canonicalTags = listOf(if (index >= 6) "seed" else "other"),
-            )
-        }
+        val posts = relatedPosts(source, video)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val showApp = mutableStateOf(true)
         var viewModelOwner: ViewModelStoreOwner? = null
-        val graph = runBlocking(Dispatchers.IO) {
-            JourneyAppContainer(ApplicationProvider.getApplicationContext(), temporary.newFolder(),
-                mapOf(source to posts), scope).also {
-                it.awaitReady()
-                it.data.recentsRepository.recordSearch(
-                    Query(if (kind == RecentSearchKind.FYP) QueryMode.Unified else QueryMode.Source(source),
-                        listOf("seed"), emptyList(), SortMode.NEWEST, null, null),
-                    "return-query", kind, listOf(source),
-                    if (kind == RecentSearchKind.FYP) mapOf(source to listOf("seed")) else emptyMap(),
-                )
-            }
-        }
+        val graph = relatedGraph(source, posts, scope, kind)
         try {
             val restoration = StateRestorationTester(compose)
             restoration.setContent {
@@ -156,6 +133,45 @@ class RelatedViewerReturnTest {
             scope.cancel()
         }
     }
+
+    private fun relatedPosts(source: SourceKey, video: Boolean): List<com.theoriacodex.domain.model.Post> {
+        val videoPath = if (video) {
+            val root = generateSequence(File(requireNotNull(System.getProperty("user.dir"))).absoluteFile) { it.parentFile }
+                .first { File(it, "settings.gradle.kts").isFile }
+            File(root, "app/src/benchmarkRelease/res/raw/benchmark_loop.mp4").absolutePath
+        } else null
+        return (0..35).map { index ->
+            val media = ImageRef(null, "/nonexistent/related-$index.jpg", "image/jpeg")
+            val full = videoPath?.let { ImageRef(null, it, "video/mp4") } ?: media
+            testPost(source, "return-$index").copy(
+                preview = media, full = full, media = listOf(full), width = 160, height = 120,
+                canonicalTags = listOf(if (index >= 6) "seed" else "other"),
+            )
+        }
+
+    }
+
+
+    private fun relatedGraph(
+        source: SourceKey,
+        posts: List<com.theoriacodex.domain.model.Post>,
+        scope: CoroutineScope,
+        kind: RecentSearchKind,
+    ): JourneyAppContainer {
+        return runBlocking(Dispatchers.IO) {
+            JourneyAppContainer(ApplicationProvider.getApplicationContext(), temporary.newFolder(),
+                mapOf(source to posts), scope).also {
+                it.awaitReady()
+                it.data.recentsRepository.recordSearch(
+                    Query(if (kind == RecentSearchKind.FYP) QueryMode.Unified else QueryMode.Source(source),
+                        listOf("seed"), emptyList(), SortMode.NEWEST, null, null),
+                    "return-query", kind, listOf(source),
+                    if (kind == RecentSearchKind.FYP) mapOf(source to listOf("seed")) else emptyMap(),
+                )
+            }
+        }
+    }
+
 }
 
 /** Keep the real application-owned video runtime while the test supplies its isolated fixture graph. */

@@ -106,40 +106,7 @@ internal class LiveSearchCoordinatorRouteTest : LiveSearchCoordinatorRouteTestFi
         cases.forEach { probeCase ->
             val run = executeSeededSearch(registry, probeCase, issues) ?: return@forEach
 
-            val autocompleteProbes = probeCase.autocompleteProbes.ifEmpty {
-                listOfNotNull(
-                    probeCase.autocompletePrefix
-                        ?.takeIf(String::isNotBlank)
-                        ?.let { prefix ->
-                            ProviderAutocompleteProbe(prefix = prefix)
-                        },
-                )
-            }
-            autocompleteProbes.forEach { autocompleteProbe ->
-                val scopedPrefix = autocompleteProbe.sourceNamespace
-                    ?.let { namespace -> "$namespace:${autocompleteProbe.prefix}" }
-                    ?: autocompleteProbe.prefix
-                val autocomplete = run.coordinator.fetchAutocomplete(
-                    query = run.query,
-                    sourceScope = run.sourceScope,
-                    selectedScope = FacetedSearchScope.All,
-                    input = scopedPrefix,
-                    trending = emptyList(),
-                )
-                if (autocomplete.autocomplete.isEmpty()) {
-                    issues += "${probeCase.source.name}: ${autocompleteProbe.checkName} returned no tags for prefix $scopedPrefix"
-                }
-                val expectedFacet = autocompleteProbe.facet
-                if (
-                    expectedFacet != null &&
-                    autocomplete.facetedAutocomplete.none { suggestion ->
-                        suggestion.facet == expectedFacet &&
-                            suggestion.sourceNamespace == autocompleteProbe.sourceNamespace
-                    }
-                ) {
-                    issues += "${probeCase.source.name}: ${autocompleteProbe.checkName} lost ${autocompleteProbe.sourceNamespace ?: expectedFacet.name.lowercase()} taxonomy"
-                }
-            }
+            checkAutocomplete(probeCase, run, issues)
 
             if (probeCase.trendingProbe) {
                 val trending = run.coordinator.fetchTrending(
@@ -154,6 +121,49 @@ internal class LiveSearchCoordinatorRouteTest : LiveSearchCoordinatorRouteTestFi
         }
 
         assertTrue(issues.joinToString(separator = "\n"), issues.isEmpty())
+    }
+
+
+    private suspend fun checkAutocomplete(
+        probeCase: ProviderProbeCase,
+        run: LiveSearchRun,
+        issues: MutableList<String>,
+    ) {
+        val autocompleteProbes = probeCase.autocompleteProbes.ifEmpty {
+            listOfNotNull(
+                probeCase.autocompletePrefix
+                    ?.takeIf(String::isNotBlank)
+                    ?.let { prefix ->
+                        ProviderAutocompleteProbe(prefix = prefix)
+                    },
+            )
+        }
+        autocompleteProbes.forEach { autocompleteProbe ->
+            val scopedPrefix = autocompleteProbe.sourceNamespace
+                ?.let { namespace -> "$namespace:${autocompleteProbe.prefix}" }
+                ?: autocompleteProbe.prefix
+            val autocomplete = run.coordinator.fetchAutocomplete(
+                query = run.query,
+                sourceScope = run.sourceScope,
+                selectedScope = FacetedSearchScope.All,
+                input = scopedPrefix,
+                trending = emptyList(),
+            )
+            if (autocomplete.autocomplete.isEmpty()) {
+                issues += "${probeCase.source.name}: ${autocompleteProbe.checkName} returned no tags for prefix $scopedPrefix"
+            }
+            val expectedFacet = autocompleteProbe.facet
+            if (
+                expectedFacet != null &&
+                autocomplete.facetedAutocomplete.none { suggestion ->
+                    suggestion.facet == expectedFacet &&
+                        suggestion.sourceNamespace == autocompleteProbe.sourceNamespace
+                }
+            ) {
+                issues += "${probeCase.source.name}: ${autocompleteProbe.checkName} lost ${autocompleteProbe.sourceNamespace ?: expectedFacet.name.lowercase()} taxonomy"
+            }
+        }
+
     }
 
 }

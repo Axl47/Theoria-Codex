@@ -57,6 +57,15 @@ internal class LiveSearchCoordinatorRouteTestHitomiTest : LiveSearchCoordinatorR
         val httpClient = liveHttpClient()
         val registry = realRegistry(setOf(SourceKey.HITOMI), httpClient)
 
+        checkBlankAndGlobalSearches(registry)
+        val typed = checkTypedSearch(registry)
+        checkSuggestions(registry)
+        checkAnimatedGallery(typed, registry, httpClient)
+        checkAnime(typed, httpClient)
+
+    }
+
+    private suspend fun checkBlankAndGlobalSearches(registry: RealAdapterRegistry): Unit {
         val newest = executeSourceSearch(
             registry,
             "hitomi-newest",
@@ -94,7 +103,10 @@ internal class LiveSearchCoordinatorRouteTestHitomiTest : LiveSearchCoordinatorR
             character.result.posts.size,
             character.result.posts.map { post -> post.id }.distinct().size,
         )
+    }
 
+
+    private suspend fun checkTypedSearch(registry: RealAdapterRegistry): LiveSearchRun {
         val typed = executeSourceSearch(
             registry,
             "hitomi-typed",
@@ -125,7 +137,11 @@ internal class LiveSearchCoordinatorRouteTestHitomiTest : LiveSearchCoordinatorR
                 }
             },
         )
+        return typed
+    }
 
+
+    private suspend fun checkSuggestions(registry: RealAdapterRegistry): Unit {
         val suggestions = searchCoordinator(registry, "hitomi-autocomplete")
         suggestions.initializeRoute()
         val suggestionQuery = sourceQuery(SourceKey.HITOMI)
@@ -165,7 +181,10 @@ internal class LiveSearchCoordinatorRouteTestHitomiTest : LiveSearchCoordinatorR
                 suggestion.facet == SearchFacet.ARTIST && suggestion.sourceNamespace == "artist"
             },
         )
+    }
 
+
+    private suspend fun checkAnimatedGallery(typed: LiveSearchRun, registry: RealAdapterRegistry, httpClient: SourceHttpClient): Unit {
         val animatedGallery = requireNotNull(
             typed.coordinator.resolvePostForSearch(
                 PostId(SourceKey.HITOMI, ANIMATED_GALLERY_ID),
@@ -215,7 +234,10 @@ internal class LiveSearchCoordinatorRouteTestHitomiTest : LiveSearchCoordinatorR
             "Hitomi Najar creator uploads returned another source",
             creatorPage.items.all { post -> post.id.source == SourceKey.HITOMI },
         )
+    }
 
+
+    private suspend fun checkAnime(typed: LiveSearchRun, httpClient: SourceHttpClient): Unit {
         val anime = requireNotNull(
             typed.coordinator.resolvePostForSearch(
                 PostId(SourceKey.HITOMI, ANIME_GALLERY_ID),
@@ -251,5 +273,6 @@ internal class LiveSearchCoordinatorRouteTestHitomiTest : LiveSearchCoordinatorR
         assertTrue("Hitomi anime MP4 range was empty", mp4Probe.body.isNotEmpty())
         assertTrue("Hitomi anime MP4 range omitted an ftyp box", mp4Probe.body.hasMp4FtypBox())
     }
+
 
 }
