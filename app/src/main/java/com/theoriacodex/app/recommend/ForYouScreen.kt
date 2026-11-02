@@ -30,6 +30,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -108,7 +109,13 @@ fun ForYouScreen(
     BackHandler(enabled = !state.home.visible) { onAction(ForYouAction.ShowHome) }
     val savedStates = rememberSaveableStateHolder()
     val gridState = rememberLazyStaggeredGridState()
-    LaunchedEffect(state.seedId) { gridState.scrollToItem(0) }
+    var positionedSeed by rememberSaveable { mutableStateOf(state.seedId) }
+    LaunchedEffect(state.seedId) {
+        if (positionedSeed != state.seedId) {
+            gridState.scrollToItem(0)
+            positionedSeed = state.seedId
+        }
+    }
     var showSortSheet by remember { mutableStateOf(false) }
     var showSourceMenu by remember { mutableStateOf(false) }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }

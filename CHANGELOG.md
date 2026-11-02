@@ -118,6 +118,8 @@
 
 ### Fixed
 
+- Preserve the For You feed position and related-post shelf after closing fullscreen, and defer hidden overview previews while replaying a search.
+
 - Prevent shuffled For You interests and Explore from failing with a comparison-contract error.
 
 - Restore thumbnails for downloaded videos and exported animations after reopening the app, using the saved files.

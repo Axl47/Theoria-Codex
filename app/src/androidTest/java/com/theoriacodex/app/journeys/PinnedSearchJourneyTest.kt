@@ -50,7 +50,7 @@ class PinnedSearchJourneyTest : AppJourneyFixture() {
         assertEquals(listOf(pinned), io { container.data.savedSearches.observeSavedSearches().first() })
         assertTrue(io { container.data.recentsRepository.observeSearches().first().isEmpty() })
         tab("Codex")
-        compose.onNodeWithText("Saved searches").performClick()
+        compose.onNodeWithText("Searches").performClick()
         compose.onNodeWithText("My landscapes").performClick()
         compose.waitUntil(10_000) { container.registry.requests.count { it.pageToken == null } >= 2 }
         val requests = container.registry.requests.filter { it.pageToken == null }

@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.update.ChangelogSection
 import com.theoriacodex.app.update.ReleaseChangelogEntry
 
 @Composable
@@ -136,47 +137,24 @@ private fun ReleaseChangelogEntryContent(
         Text(if (expanded) "−" else "+", color = MaterialTheme.colorScheme.primary)
     }
     if (!expanded) return
+    ReleaseChangelogSections(release)
+}
+
+@Composable
+private fun ReleaseChangelogSections(release: ReleaseChangelogEntry) {
     val sections = release.changelogSections.filter { it.bullets.isNotEmpty() }
     val (highlights, details) = sections.partition { it.title.trim().equals("Highlights", ignoreCase = true) }
     var detailsExpanded by rememberSaveable(release.versionCode) { mutableStateOf(false) }
     if (highlights.isNotEmpty()) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            ),
-        ) {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Highlights", style = MaterialTheme.typography.titleMedium)
-                highlights.flatMap { it.bullets }.forEach { bullet ->
-                    Text("• ${bullet.trim()}", style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-        }
+        ReleaseHighlights(highlights.flatMap { it.bullets })
         if (details.isNotEmpty()) {
-            TextButton(
-                onClick = { detailsExpanded = !detailsExpanded },
-                modifier = Modifier.semantics {
-                    stateDescription = if (detailsExpanded) "Expanded" else "Collapsed"
-                },
-            ) {
-                Text(if (detailsExpanded) "Full details −" else "Full details +")
-            }
+            ReleaseDetailsToggle(detailsExpanded) { detailsExpanded = !detailsExpanded }
         }
     }
     if (highlights.isNotEmpty() && !detailsExpanded) return
     if (sections.isNotEmpty()) {
         details.forEach { section ->
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    section.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-                HorizontalDivider()
-                section.bullets.forEach { ChangelogBulletText(it) }
-            }
+            ReleaseChangelogSection(section)
         }
     } else {
         Text(
@@ -184,6 +162,43 @@ private fun ReleaseChangelogEntryContent(
                 ?: "No changelog details were published for this build.",
             style = MaterialTheme.typography.bodySmall,
         )
+    }
+}
+
+@Composable
+private fun ReleaseDetailsToggle(expanded: Boolean, onClick: () -> Unit) {
+    TextButton(
+        onClick = onClick,
+        modifier = Modifier.semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" },
+    ) {
+        Text(if (expanded) "Full details −" else "Full details +")
+    }
+}
+
+@Composable
+private fun ReleaseHighlights(bullets: List<String>) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        ),
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Highlights", style = MaterialTheme.typography.titleMedium)
+            bullets.forEach { bullet ->
+                Text("• ${bullet.trim()}", style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReleaseChangelogSection(section: ChangelogSection) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(section.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        HorizontalDivider()
+        section.bullets.forEach { ChangelogBulletText(it) }
     }
 }
 

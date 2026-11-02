@@ -152,7 +152,6 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         org.junit.Assert.assertNotSame(previousDatabase, container.database)
         org.junit.Assert.assertNotSame(previousSettings, container.settings)
         compose.waitUntil(10_000) { compose.onNodeWithTag(cardTag).isDisplayed() }
-        compose.onNodeWithText("landscape").assertIsDisplayed()
         compose.onNodeWithTag(cardTag).assertIsDisplayed()
         assertEquals(offset, cardOffsetInViewport(cardTag), 2f)
         assertEquals(savedScroll, io { container.data.uiRestoreRepository.getSearchScrollState(queryHash) })
@@ -160,6 +159,9 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         val restoredRequest = container.registry.requests.single { it.pageToken == null }
         assertEquals(SourceKey.PIXIV, restoredRequest.source)
         assertEquals(applied, restoredRequest.query)
+        // The compact search bar hides individual terms until expanded.
+        activate(compose.onNodeWithTag("Search query input"))
+        compose.onNodeWithText("landscape").assertIsDisplayed()
     }
 
     @Test

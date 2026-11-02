@@ -47,6 +47,7 @@ internal class ForYouHomeController(
     private val dismissed = mutableMapOf<String, DismissedSection>()
 
     fun synchronize() {
+        if (!state().home.visible) return
         val next = request()?.let { ForYouHomeContext(it) } ?: return
         if (next == context) return
         val previous = context
@@ -68,7 +69,10 @@ internal class ForYouHomeController(
             retainCurrentFeed()
         }
         when (action) {
-            ForYouAction.ShowHome -> update(state().home.copy(visible = true))
+            ForYouAction.ShowHome -> {
+                update(state().home.copy(visible = true))
+                synchronize()
+            }
             ForYouAction.OpenMixedFeed -> state().home.mixedFeed?.let { feed ->
                 update(state().home.copy(visible = false, activeSection = null))
                 admit(feed)

@@ -170,6 +170,7 @@ internal class ForYouViewModel(
             else -> Unit
         }
         if (action is ForYouAction.ReplaySearch && !(environmentSynchronized && sourceAvailabilitySynchronized)) {
+            mutableState.value = mutableState.value.copy(home = mutableState.value.home.copy(visible = false))
             pendingReplaySearch = action
             return
         }
