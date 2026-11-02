@@ -1,6 +1,8 @@
 package com.theoriacodex.app.journeys
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
@@ -45,7 +47,8 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
     fun groupedSearchPagesReturnsFromViewerAndSurvivesActivityRecreation() {
         launch()
         activate(compose.onNodeWithTag("Search bar"))
-        activate(compose.onNode(hasContentDescription("Search source:", substring = true) and hasClickAction()))
+        activate(compose.onNode(hasContentDescription("Search source:", substring = true) and
+            hasAnyAncestor(hasTestTag("Search composer"))))
         activate(compose.onNodeWithContentDescription("Pixiv"))
         addSearchTag("landscape")
         addSearchTag("blue")
@@ -115,7 +118,8 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
     fun coldGraphRelaunchRestoresAppliedSourceQueryAndCanonicalScrollFromDisk() {
         launch()
         activate(compose.onNodeWithTag("Search bar"))
-        activate(compose.onNode(hasContentDescription("Search source:", substring = true) and hasClickAction()))
+        activate(compose.onNode(hasContentDescription("Search source:", substring = true) and
+            hasAnyAncestor(hasTestTag("Search composer"))))
         activate(compose.onNodeWithContentDescription("Pixiv"))
         addSearchTag("landscape")
         activate(compose.onNodeWithTag("Search composer apply"))
