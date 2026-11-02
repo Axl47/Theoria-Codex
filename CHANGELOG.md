@@ -18,6 +18,8 @@
 - Say Save and Saved instead of Pin across Recents and For You, with a bookmark icon.
 - Rerun a saved search in one tap from the Saved row in the search editor.
 - Hold Likes, Followed, or Searches in the Codex library to open their menus, as on the Saved screen.
+- Read your whole setup at a glance on a redesigned Settings screen, where each row shows its current value and opens a sheet or page.
+- See Stats on their own screen, with time split by activity, 7-day, 30-day, and yearly trends, jump chips, and a ranked list of Codices with their top posts.
 
 ### Removed
 

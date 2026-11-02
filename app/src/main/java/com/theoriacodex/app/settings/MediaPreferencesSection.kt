@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -13,13 +14,7 @@ import com.theoriacodex.domain.model.VideoQuality
 
 @Composable
 internal fun MediaPreferencesSection(state: SettingsUiState, onAction: (SettingsAction) -> Unit) {
-    SettingsSection(
-        title = "Playback & downloads",
-        summary = "Video quality and network preferences",
-        expanded = state.sectionExpansion[SettingsSectionKey.MEDIA],
-        onToggle = { onAction(SettingsAction.SetSectionExpanded(SettingsSectionKey.MEDIA,
-            !state.sectionExpansion[SettingsSectionKey.MEDIA])) },
-    ) {
+    Text("Playback & downloads", style = MaterialTheme.typography.titleMedium)
         QualityChoices("Default video quality", state.settings.viewer.videoQuality) {
             onAction(SettingsAction.SetVideoQuality(it))
         }
@@ -32,7 +27,6 @@ internal fun MediaPreferencesSection(state: SettingsUiState, onAction: (Settings
         NetworkChoice("Download while roaming", state.settings.cache.downloadsOverRoaming) {
             onAction(SettingsAction.SetDownloadsOverRoaming(it))
         }
-    }
 }
 
 @Composable

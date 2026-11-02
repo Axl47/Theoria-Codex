@@ -1,10 +1,6 @@
 package com.theoriacodex.app.settings
 
 import android.app.Application
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.test.performClick
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -29,24 +25,15 @@ class UnifiedSourceSettingsTest {
 
     @Test
     fun singleSourceShowsActivationHelpWithoutWeightControls() {
-        var expanded by mutableStateOf(true)
         composeRule.setContent {
             MaterialTheme {
-                UnifiedSourceSettings(
-                    setOf(SourceKey.PIXIV), SourceRuntimeSettings(),
-                    expanded = expanded, onToggle = { expanded = !expanded },
-                ) {
+                UnifiedSourceSettings(setOf(SourceKey.PIXIV), SourceRuntimeSettings()) {
                     error("Single-source settings must not write weights")
                 }
             }
         }
-        composeRule.onNodeWithText("Activate Unified by holding down sources in Search.").assertExists()
+        composeRule.onNodeWithText("Share of results in Unified mode. Hold sources in Search to choose them.").assertExists()
         composeRule.onNodeWithContentDescription("Pixiv weight").assertDoesNotExist()
-        composeRule.onNodeWithText("Select multiple sources to adjust their weights.").assertDoesNotExist()
-        composeRule.onNodeWithText("Unified Mode").performClick()
-        composeRule.onNodeWithText("Activate Unified by holding down sources in Search.").assertDoesNotExist()
-        composeRule.onNodeWithText("Unified Mode").performClick()
-        composeRule.onNodeWithText("Activate Unified by holding down sources in Search.").assertExists()
     }
 
     @Test

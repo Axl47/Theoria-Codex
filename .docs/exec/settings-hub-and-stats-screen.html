@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Settings hub and Stats screen</title>
+<style>body{font:15px/1.5 system-ui,sans-serif;max-width:860px;margin:2rem auto;padding:0 1rem}code{font-size:.92em}table{border-collapse:collapse;width:100%}td,th{border:1px solid #8884;padding:6px 8px;text-align:left;vertical-align:top}</style></head>
+<body>
+<h1>Settings hub and Stats screen</h1>
+<p><b>Status:</b> UI implemented on <code>feat/stats-settings-ui</code>; waiting on the data branch and on-device review. <b>Started:</b> 2026-11-02.</p>
+<p><b>Outcome:</b> Settings shows its current values at a glance instead of a stack of accordions, and Stats is a separate page with time split, trends, and ranked Codices.</p>
+<nav><a href="#purpose">Purpose</a> · <a href="#context">Context</a> · <a href="#work">Work</a> · <a href="#validation">Validation</a> · <a href="#log">Log</a> · <a href="#recovery">Recovery</a></nav>
+
+<h2 id="purpose">Purpose</h2>
+<p>A user can read their setup without expanding anything, change short options from a sheet, and see how their usage changes over time. This follows the For You and Recents redesigns.</p>
+
+<h2 id="context">Context</h2>
+<ul>
+<li><b>Hub:</b> the Settings home in <code>app/src/main/java/com/theoriacodex/app/settings/SettingsScreen.kt</code>. Rows use <code>SettingsComponents.kt</code>.</li>
+<li><b>Pages:</b> <code>SettingsPage</code> in <code>SettingsState.kt</code>, held by <code>SettingsViewModel</code> so Search's <code>OpenSourceAccounts</code> can open Accounts directly.</li>
+<li><b>Stats:</b> <code>StatsScreen.kt</code>, with trend bucketing in <code>StatsTrend.kt</code>.</li>
+<li><b>Data:</b> <code>StatisticsSummary.history</code> and <code>CodexPostStatistic.thumbnail</code> come from <code>feat/stats-history-data</code>, described in <code>.docs/exec/statistics-history-and-thumbnails.html</code>. History omits inactive days and keeps 400 local dates.</li>
+</ul>
+
+<h2 id="work">Work</h2>
+<table><tr><th>Before</th><th>After</th></tr>
+<tr><td>Recommendation Profiles section</td><td>Profile card; delete through its menu and the existing confirmation dialog</td></tr>
+<tr><td>Unified Mode, Playback, Preferences sections</td><td>Source mix, Playback, and Classic controls sheets; invert scroll stays inline</td></tr>
+<tr><td>For You Blacklist, Source Accounts, Storage sections</td><td>Hidden tags, Accounts, and Storage pages</td></tr>
+<tr><td>Stats section and Codex dropdown</td><td>Stats page with a tappable Codex list and detail</td></tr>
+<tr><td>Most/Least used and Top Sources in Codex</td><td>Removed: covered by the ranked list and the Saved source view</td></tr>
+</table>
+
+<h2 id="validation">Validation</h2>
+<p>Robolectric UI tests need JDK 21 or later, and this Mac's default is 19:</p>
+<pre>JAVA_HOME=/opt/homebrew/opt/openjdk@24/libexec/openjdk.jdk/Contents/Home ./gradlew :app:testDebugUnitTest --offline --tests 'com.theoriacodex.app.settings.*' :app:compileDebugAndroidTestKotlin</pre>
+<p>Expected: <code>BUILD SUCCESSFUL</code>. <code>./gradlew :app:detekt --offline</code> reports no findings in the files this plan changed; it fails on findings elsewhere in the module.</p>
+<p>Not yet verified: layout on a device, TalkBack, and trends and thumbnails with real data. Use an isolated package only, never <code>com.theoriacodex</code>.</p>
+
+<h2 id="log">Log</h2>
+<ul>
+<li><b>Decision:</b> pages live in Settings state rather than the app NavHost. They stay within the Settings tab, so bottom navigation and usage categories don't change.</li>
+<li><b>Decision:</b> "Other" is foreground time minus the three categories, because the tracker counts screens without a category, such as Settings, in the total.</li>
+<li><b>Decision:</b> the persisted <code>settingsSectionExpansion</code> field stays in storage, unused. Removing it is separate cleanup and has no user-visible effect.</li>
+<li><b>Surprise:</b> the default JDK fails every Robolectric test with "Android SDK 36 requires Java 21". This is an environment issue, not a code one.</li>
+</ul>
+
+<h2 id="recovery">Recovery</h2>
+<p>All edits are source-only with no data migration. Reverting the UI commit restores the accordions, because the persisted expansion field and all settings values remain in place.</p>
+</body></html>
