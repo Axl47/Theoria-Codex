@@ -3,7 +3,7 @@
 <style>body{font:15px/1.5 system-ui,sans-serif;max-width:860px;margin:2rem auto;padding:0 1rem}code{font-size:.92em}table{border-collapse:collapse;width:100%}td,th{border:1px solid #8884;padding:6px 8px;text-align:left;vertical-align:top}</style></head>
 <body>
 <h1>Settings hub and Stats screen</h1>
-<p><b>Status:</b> UI implemented on <code>feat/stats-settings-ui</code>; waiting on the data branch and on-device review. <b>Started:</b> 2026-11-02.</p>
+<p><b>Status:</b> UI, data, and cleanup combined on <code>feat/stats-settings-ui</code>; waiting on on-device review. <b>Started:</b> 2026-11-02.</p>
 <p><b>Outcome:</b> Settings shows its current values at a glance instead of a stack of accordions, and Stats is a separate page with time split, trends, and ranked Codices.</p>
 <nav><a href="#purpose">Purpose</a> · <a href="#context">Context</a> · <a href="#work">Work</a> · <a href="#validation">Validation</a> · <a href="#log">Log</a> · <a href="#recovery">Recovery</a></nav>
 
@@ -37,10 +37,11 @@
 <ul>
 <li><b>Decision:</b> pages live in Settings state rather than the app NavHost. They stay within the Settings tab, so bottom navigation and usage categories don't change.</li>
 <li><b>Decision:</b> "Other" is foreground time minus the three categories, because the tracker counts screens without a category, such as Settings, in the total.</li>
-<li><b>Decision:</b> the persisted <code>settingsSectionExpansion</code> field stays in storage, unused. Removing it is separate cleanup and has no user-visible effect.</li>
+<li><b>Update:</b> the persisted <code>settingsSectionExpansion</code> field was removed in <code>b294d3ea</code>. Old stored files still load; the next normal write drops the field.</li>
+<li><b>Surprise:</b> a post seen before the first statistics snapshot made the thumbnail owner reconcile against an empty top list and delete every retained thumbnail. Posts outside known top lists now skip disk work.</li>
 <li><b>Surprise:</b> the default JDK fails every Robolectric test with "Android SDK 36 requires Java 21". This is an environment issue, not a code one.</li>
 </ul>
 
 <h2 id="recovery">Recovery</h2>
-<p>All edits are source-only with no data migration. Reverting the UI commit restores the accordions, because the persisted expansion field and all settings values remain in place.</p>
+<p>All edits are source-only with no data migration. Reverting the UI commit restores the accordions, but expansion choices are no longer persisted after <code>b294d3ea</code>, so sections would start collapsed. Settings values remain in place.</p>
 </body></html>

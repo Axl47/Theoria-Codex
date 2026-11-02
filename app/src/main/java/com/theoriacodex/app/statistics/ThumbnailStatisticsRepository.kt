@@ -56,6 +56,9 @@ internal class ThumbnailStatisticsRepository(
                         setOf(key).intersect(promoted)
                     }
                 }
+                // A post outside the top lists needs no disk work, and promotions may not be known yet:
+                // reconciling before the first snapshot would delete every retained thumbnail.
+                if (event is ThumbnailEvent.Available && retry.isEmpty()) continue
                 runCatchingPreservingCancellation {
                     thumbnails.value = store.reconcile(promoted, retry.mapNotNull { key ->
                         available[key]?.let { post -> key to suspend { file: File ->

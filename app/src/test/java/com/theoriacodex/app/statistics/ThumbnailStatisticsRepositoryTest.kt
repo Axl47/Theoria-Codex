@@ -22,6 +22,19 @@ import org.junit.rules.TemporaryFolder
 class ThumbnailStatisticsRepositoryTest {
     @get:Rule val temporary = TemporaryFolder()
 
+    @Test fun `a post seen before the first snapshot keeps retained thumbnails`() = runTest {
+        val delegate = InMemoryStatisticsRepository()
+        delegate.recordCodexPostOpen("codex", "PIXIV:42", "Post")
+        val store = StatisticsThumbnailStore(temporary.newFolder())
+        store.reconcile(setOf("PIXIV:42"), mapOf("PIXIV:42" to { file -> file.writeText("image"); true }))
+        val repository = ThumbnailStatisticsRepository(delegate, backgroundScope, store) { _, _ -> false }
+
+        repository.recordPostAvailable(post("7"))
+        runCurrent()
+
+        assertTrue(repository.observeStatistics().first().thumbnails.containsKey("PIXIV:42"))
+    }
+
     @Test fun `fetch failure never blocks recording and only promotion or available post retries`() = runTest {
         val delegate = InMemoryStatisticsRepository()
         var requests = 0
@@ -34,9 +47,7 @@ class ThumbnailStatisticsRepositoryTest {
             true
         }
         runCurrent()
-        val post = Post(PostId(SourceKey.PIXIV, "42"), ImageRef("https://example.test/42", null, null),
-            null, pageUrl = null, width = null, height = null, canonicalTags = emptyList(),
-            rawTags = emptyList(), authorName = null, createdAtEpochMs = null)
+        val post = post("42")
         repository.recordPostAvailable(post)
         runCurrent()
         assertEquals(0, requests)
@@ -59,4 +70,8 @@ class ThumbnailStatisticsRepositoryTest {
         runCurrent()
         assertEquals(3, requests)
     }
+
+    private fun post(id: String) = Post(PostId(SourceKey.PIXIV, id), ImageRef("https://example.test/$id", null, null),
+        null, pageUrl = null, width = null, height = null, canonicalTags = emptyList(),
+        rawTags = emptyList(), authorName = null, createdAtEpochMs = null)
 }
