@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Slide Codex screens from left to right when going back, with the previous screen entering from the left.
 - Try another available video decoder when the preferred decoder cannot start, allowing feed previews and fullscreen playback to recover from hardware decoder resource exhaustion.
 
 ## [0.12.0] - 2026-11-01

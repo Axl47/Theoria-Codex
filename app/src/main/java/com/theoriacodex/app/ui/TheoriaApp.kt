@@ -3,6 +3,8 @@ package com.theoriacodex.app.ui
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import com.theoriacodex.app.viewer.LocalViewerReturnTransition
@@ -1085,8 +1087,11 @@ internal fun TheoriaAppContent(
                             else fadeOut(tween(700))
                         },
                         popEnterTransition = {
-                            if (initialState.destination.route == AppRoute.Viewer) EnterTransition.None
-                            else fadeIn(tween(700))
+                            when (initialState.destination.route) {
+                                AppRoute.Viewer -> EnterTransition.None
+                                AppRoute.CodexDetail -> slideInHorizontally(tween(300)) { -it }
+                                else -> fadeIn(tween(700))
+                            }
                         },
                         modifier = contentModifier,
                     ) {
@@ -1470,6 +1475,7 @@ internal fun TheoriaAppContent(
                         composable(
                             route = AppRoute.CodexDetail,
                             arguments = listOf(navArgument("codexId") { type = NavType.StringType }),
+                            popExitTransition = { slideOutHorizontally(tween(300)) { it } },
                         ) { entry ->
                             val codexId = requireNotNull(entry.arguments?.getString("codexId"))
                             LaunchedEffect(entry, codexId, dataDependencies.statisticsRepository) {
