@@ -3,7 +3,7 @@
 <style>body{font:15px/1.5 system-ui,sans-serif;max-width:860px;margin:2rem auto;padding:0 1rem}code{font-size:.92em}table{border-collapse:collapse;width:100%}td,th{border:1px solid #8884;padding:6px 8px;text-align:left;vertical-align:top}</style></head>
 <body>
 <h1>Settings hub and Stats screen</h1>
-<p><b>Status:</b> UI, data, and cleanup combined on <code>feat/stats-settings-ui</code>; waiting on on-device review. <b>Started:</b> 2026-11-02.</p>
+<p><b>Status:</b> complete. Merged to local <code>main</code>. On 2026-11-02 the owner reported that device checks passed and the v1.0.0 release notes are up to date. Feature and worktree branches were then removed. <b>Started:</b> 2026-11-02.</p>
 <p><b>Outcome:</b> Settings shows its current values at a glance instead of a stack of accordions, and Stats is a separate page with time split, trends, and ranked Codices.</p>
 <nav><a href="#purpose">Purpose</a> · <a href="#context">Context</a> · <a href="#work">Work</a> · <a href="#validation">Validation</a> · <a href="#log">Log</a> · <a href="#recovery">Recovery</a></nav>
 
@@ -31,7 +31,7 @@
 <p>Robolectric UI tests need JDK 21 or later, and this Mac's default is 19:</p>
 <pre>JAVA_HOME=/opt/homebrew/opt/openjdk@24/libexec/openjdk.jdk/Contents/Home ./gradlew :app:testDebugUnitTest --offline --tests 'com.theoriacodex.app.settings.*' :app:compileDebugAndroidTestKotlin</pre>
 <p>Expected: <code>BUILD SUCCESSFUL</code>. <code>./gradlew :app:detekt --offline</code> reports no findings in the files this plan changed; it fails on findings elsewhere in the module.</p>
-<p>Not yet verified: layout on a device, TalkBack, and trends and thumbnails with real data. Use an isolated package only, never <code>com.theoriacodex</code>.</p>
+<p>Device checks: reported as passing by the owner on their device on 2026-11-02. No device logs or measurements are retained in this plan.</p>
 
 <h2 id="log">Log</h2>
 <ul>
