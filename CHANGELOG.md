@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Show person-plus and person-check icons for artist follow actions.
+
 - Dismiss For You rows and undo dismissal without refreshing the other searches or their posts.
 - Center the For You source selector in the overview header and remove redundant source labels above search rows.
 - Re-seed the first For You feed when refreshing the overview.

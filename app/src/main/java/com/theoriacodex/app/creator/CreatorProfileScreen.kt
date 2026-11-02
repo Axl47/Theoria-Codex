@@ -233,9 +233,7 @@ fun CreatorProfileScreen(
                 subtitle = creator.source.displayName(),
                 onBack = { onAction(CreatorAction.Back) },
             ) {
-                androidx.compose.material3.TextButton(onClick = onToggleFollow, enabled = !state.isRefreshing) {
-                    Text(if (followed) "Following" else "Follow")
-                }
+                CreatorFollowButton(followed = followed, onClick = onToggleFollow, enabled = !state.isRefreshing)
                 creator.profileUrl?.takeIf { it.isNotBlank() }?.let { profileUrl ->
                     IconButton(onClick = { onOpenUrl(profileUrl) }) {
                         Icon(

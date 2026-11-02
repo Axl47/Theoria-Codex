@@ -21,7 +21,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -50,7 +49,7 @@ internal fun FollowedCreatorsSheet(owner: CreatorFollowsViewModel, onDismiss: ()
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (follows.isEmpty()) {
                 Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), tonalElevation = 1.dp) {
-                    Text("Open a creator page and tap Follow to save them here.",
+                    Text("Open a creator page and tap the person-plus icon to save them here.",
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp),
                         textAlign = TextAlign.Center)
                 }
@@ -89,7 +88,7 @@ private fun FollowedCreatorRow(
                 Text(follow.creator.source.displayName(), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            TextButton(onClick = { onUnfollow(follow.creator) }) { Text("Unfollow") }
+            CreatorFollowButton(followed = true, onClick = { onUnfollow(follow.creator) })
         }
     }
 }
