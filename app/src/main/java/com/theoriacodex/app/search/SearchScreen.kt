@@ -352,6 +352,10 @@ fun SearchScreen(
         ?.takeIf { restored -> restored.scrollState != null }
     SearchScrollRestorationEffect(
         state, feedProjection, gridState, onAction,
+        visibilityReady = !animatedDurationFilterActive || durationMetadata.isVisibilityResolved(
+            displayResults.getOrNull(scrollRestoration?.scrollState?.firstVisibleItemIndex ?: -1),
+            resolveInBackground = resolveUnknownAnimatedDurations,
+        ),
     )
     SearchScrollPersistenceEffect(
         queryHash, state.restoration, feedProjection, gridState, onAction,
