@@ -28,6 +28,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.update.ReleaseChangelogEntry
@@ -168,7 +169,12 @@ private fun ReleaseChangelogEntryContent(
     if (sections.isNotEmpty()) {
         details.forEach { section ->
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(section.title, style = MaterialTheme.typography.titleSmall)
+                Text(
+                    section.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                HorizontalDivider()
                 section.bullets.forEach { ChangelogBulletText(it) }
             }
         }

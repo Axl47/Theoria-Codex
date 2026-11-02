@@ -4,7 +4,7 @@
 
 ### Changed
 
-- Read a prominent Highlights summary first in each release, with detailed changes available under “Full details”.
+- Read a prominent Highlights summary first in each release, with detailed changes available under “Full details” and larger, bold section headings with separators.
 
 - Keep For You row actions collapsed behind a chevron until opened.
 
