@@ -44,7 +44,8 @@ Proceed only after the user approves the version and release-note wording.
 
 1. Update `versionName` and its matching calculated `versionCode` in `app/build.gradle.kts`.
 2. Add `release-notes/vX.Y.Z.md` using the approved user-facing text.
-3. Run the host validation batch:
+3. Before archiving root changelog entries, confirm every GitHub Actions workflow triggered for the exact pushed update commit completed successfully. Repair failures and push a new update commit until that commit is green. Then move the entries being released from `[Unreleased]` into a dated `[X.Y.Z]` section at the top of root `CHANGELOG.md`, directly below the now-empty `[Unreleased]` section. Preserve existing release history and entries outside this release. Include this changelog archive in the release-preparation diff and commit; do not wait until publication.
+4. Run the host validation batch:
 
    ```sh
    previous_release_tag="$(git describe --tags --abbrev=0 --match 'v[0-9]*')"
@@ -64,8 +65,8 @@ Proceed only after the user approves the version and release-note wording.
    Confirm the hotspot/Detekt debt gate and Detekt report no new issues before continuing.
    Confirm `app/build/outputs/apk/release/output-metadata.json` reports the same name and code. Also confirm the working tree contains only intended release changes and the new version is greater than the prior release.
 
-4. Show the final diff, the exact commit message, and the exact tag that would be created.
-5. Create the release-preparation commit only after the user explicitly approves that final diff.
+5. Show the final diff, the exact commit message, and the exact tag that would be created.
+6. Create the release-preparation commit only after the user explicitly approves that final diff.
 
 Use this commit message:
 
@@ -73,9 +74,9 @@ Use this commit message:
 chore(release): prepare vX.Y.Z
 ```
 
-6. After approval, commit and push `main`, then record the full release commit SHA. Do not create the release tag yet.
-7. Monitor every GitHub Actions workflow triggered for that exact SHA, including `Verify`, `Device Validation`, and `Dependency Submission`. Match by full `headSha`; never use an older green run as evidence.
-8. Wait until every triggered workflow completes successfully. If any workflow fails, is cancelled, or cannot run, stop before tagging, inspect the failing check, and prepare a new release commit after the repair. Do not treat host success as permission to bypass this gate.
+7. After approval, commit and push `main`, then record the full release commit SHA. Do not create the release tag yet.
+8. Monitor every GitHub Actions workflow triggered for that exact SHA, including `Verify`, `Device Validation`, and `Dependency Submission`. Match by full `headSha`; never use an older green run as evidence.
+9. Wait until every triggered workflow completes successfully. If any workflow fails, is cancelled, or cannot run, stop before tagging, inspect the failing check, and prepare a new release commit after the repair. Do not treat host success as permission to bypass this gate.
 
 ## Publish An Approved Release
 
@@ -99,6 +100,6 @@ Publish only when the user explicitly asks to publish the named version.
 5. Push only that exact tag; `main` must already be synchronized from the preparation phase.
 6. Monitor the tag-triggered `Main Prerelease` workflow to completion. If it fails, report the immutable release failure and prepare a newer patch version for any repair; never move or recreate the tag.
 7. Confirm the GitHub prerelease exists, is not a draft, uses the expected tag and notes, and contains the uploaded `theoria-codex-main.apk` asset before reporting publication complete.
-8. Only after publication is confirmed, move published entries from `[Unreleased]` into a dated `[X.Y.Z]` section in root `CHANGELOG.md` and commit as `docs(changelog): record vX.Y.Z release`. Preserve entries outside the published release and all existing release history. Do not move notes during preparation or after failed publication, alter the release tag, or push the cleanup commit without authorization.
+8. Confirm root `CHANGELOG.md` already records the release directly below a clean `[Unreleased]` section, as archived during preparation after the update commit passed CI. Do not create a separate post-publication changelog cleanup commit or alter the release tag.
 
 If any check fails, stop before tagging. Fix the release commit and prepare a newer version rather than altering a published tag.
