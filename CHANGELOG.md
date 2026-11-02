@@ -5,6 +5,7 @@
 ### Changed
 
 - Choose Codex actions from a labeled, grouped menu, with automatic tag rules moved into their own Auto-save sheet that shows source icons and reveals the tag list only while adding a tag.
+- Choose post actions from the same labeled long-press menu, led by saving, with search terms moved into their own sheet and Remove from Codex set apart at the end.
 
 ### Fixed
 

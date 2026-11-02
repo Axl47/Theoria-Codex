@@ -430,10 +430,8 @@ fun CreatorProfileScreen(
             onSaveToDevice = { onSaveToDevice(post) },
             onSaveToCodex = { onRequestSaveToCodex(post) },
             onPostUrlCopied = onPostUrlCopied,
-            tagContent = { header, footer ->
+            tagContent = {
                 PostTagActionSection(
-                    header = header,
-                    footer = footer,
                     post = post,
                     onAddIncludeTerm = { term -> onAddIncludeTerm(post, term) },
                     onAddExcludeTerm = { term -> onAddExcludeTerm(post, term) },

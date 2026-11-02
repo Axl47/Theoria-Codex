@@ -255,10 +255,8 @@ fun RecentsScreen(
                     selectedActionPost = null
                 }
             } else null,
-            tagContent = { header, footer ->
+            tagContent = {
                 PostTagActionSection(
-                    header = header,
-                    footer = footer,
                     post = post,
                     tagVideoCountProvider = tagVideoCountProvider,
                     fetchTagVideoCounts = fetchTagVideoCounts,

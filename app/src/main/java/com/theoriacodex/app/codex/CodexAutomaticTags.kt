@@ -16,18 +16,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,6 +41,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.source.SourceIcon
+import com.theoriacodex.app.ui.components.ExpandedBottomSheet
 import com.theoriacodex.app.source.SourcePresentationCatalog
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.domain.model.CodexAutomaticTag
@@ -151,7 +149,6 @@ internal fun filterAutomaticTagRows(
 }
 
 /** Dedicated editor for the rules that route newly liked posts into [codexName]. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun CodexAutoSaveSheet(
     codexName: String,
@@ -163,10 +160,7 @@ internal fun CodexAutoSaveSheet(
     onSetAutomaticTag: (CodexAutomaticTag, Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-    ) {
+    ExpandedBottomSheet(onDismiss) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

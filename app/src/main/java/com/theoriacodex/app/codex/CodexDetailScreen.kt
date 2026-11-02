@@ -294,16 +294,14 @@ fun CodexDetailScreen(
             onDismiss = { selectedActionPost = null },
             onSaveToDevice = { onSavePostToDevice(post) },
             onSaveToCodex = { onAddPostsToAnotherCodex(listOf(post)) },
-            saveToCodexContentDescription = "Add to another Codex",
+            saveToCodexLabel = "Add to another Codex",
             onRemoveFromCodex = if (customHeader == null) ({ onRemovePosts(listOf(post)) }) else null,
             onOpenCreatorProfile = onOpenCreatorProfile,
             onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
             onGoToSearch = onGoToSearch,
             onPostUrlCopied = onPostUrlCopied,
-            tagContent = { header, footer ->
+            tagContent = {
                 PostTagActionSection(
-                    header = header,
-                    footer = footer,
                     post = post,
                     tagVideoCountProvider = tagVideoCountProvider,
                     fetchTagVideoCounts = fetchTagVideoCounts,

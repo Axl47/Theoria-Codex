@@ -831,12 +831,10 @@ SearchSourcePicker(
             onOpenCreatorProfile = onOpenCreatorProfile,
             onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
             onPostUrlCopied = onPostUrlCopied,
-            tagContent = { header, footer ->
+            tagContent = {
                 PostTagActionSection(
                     draftQuery = state.query.draft,
                     loading = selectedActionPostResolving && !post.hasActionableTags(),
-                    header = header,
-                    footer = footer,
                     post = post,
                     tagVideoCountProvider = tagVideoCountProvider,
                     fetchTagVideoCounts = fetchTagVideoCounts,
