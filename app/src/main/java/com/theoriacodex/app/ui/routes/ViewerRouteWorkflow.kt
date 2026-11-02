@@ -26,6 +26,8 @@ import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
@@ -113,6 +115,20 @@ internal class ViewerRouteWorkflow(
         return recovered
     }
 
+    fun dismissRelatedPosts(source: ViewerStreamSource) = updateRelatedPosts(source, retry = false)
+
+    fun retryRelatedPosts(source: ViewerStreamSource) = updateRelatedPosts(source, retry = true)
+
+    private fun updateRelatedPosts(source: ViewerStreamSource, retry: Boolean) {
+        when (source) {
+            ViewerStreamSource.SEARCH -> searchOwner()?.dispatch(if (retry) SearchAction.RetryRelatedPosts else SearchAction.DismissRelatedPosts)
+            ViewerStreamSource.FOR_YOU -> forYouOwner()?.dispatch(if (retry) ForYouAction.RetryRelatedPosts else ForYouAction.DismissRelatedPosts)
+            ViewerStreamSource.CREATOR_PROFILE -> creatorOwner()?.dispatch(if (retry)
+                com.theoriacodex.app.creator.state.CreatorAction.RetryRelatedPosts else com.theoriacodex.app.creator.state.CreatorAction.DismissRelatedPosts)
+            else -> Unit
+        }
+    }
+
     fun loadMore(streamSource: ViewerStreamSource) {
         when (streamSource) {
             ViewerStreamSource.SEARCH -> searchOwner()?.dispatch(SearchAction.LoadNextPage)
@@ -132,9 +148,13 @@ internal class ViewerRouteWorkflow(
     ): List<Post> {
         val offlineIds = offlineMedia?.store?.snapshot?.value?.availablePostIds.orEmpty()
         val selected = context.startIndex.coerceIn(0, posts.lastIndex.coerceAtLeast(0))
-        val availablePosts = posts.mapIndexed { index, post ->
-            val portable = offlineMedia?.withoutOfflineLocations(post) ?: post
-            if (index in selected..selected + 1 && post.id in offlineIds) offlineMedia?.find(post.id) ?: portable else portable
+        // Normalizing every gallery can traverse thousands of media refs before navigation.
+        val availablePosts = withContext(providerDispatcher) {
+            posts.mapIndexed { index, post ->
+                currentCoroutineContext().ensureActive()
+                val portable = offlineMedia?.withoutOfflineLocations(post) ?: post
+                if (index in selected..selected + 1 && post.id in offlineIds) offlineMedia?.find(post.id) ?: portable else portable
+            }
         }
         return prepareViewerPostsForLaunch(availablePosts, context) { selectedPost ->
             runCatchingPreservingCancellation {

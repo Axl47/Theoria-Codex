@@ -22,11 +22,16 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.lerp
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import com.theoriacodex.domain.model.PostId
@@ -61,8 +66,36 @@ internal fun ViewerReturnLifetime(scope: AnimatedVisibilityScope) {
     ) { state -> if (state == EnterExitState.Visible) 0f else 1f }
 }
 
+/** Per-corner feed clipping in window pixels; captions leave the media's lower edge square. */
+internal data class ViewerReturnCorners(
+    val topLeft: CornerRadius = CornerRadius.Zero,
+    val topRight: CornerRadius = CornerRadius.Zero,
+    val bottomRight: CornerRadius = CornerRadius.Zero,
+    val bottomLeft: CornerRadius = CornerRadius.Zero,
+) {
+    fun roundRect(bounds: Rect, progress: Float): RoundRect {
+        val fraction = progress.coerceIn(0f, 1f)
+        fun scaled(corner: CornerRadius) = CornerRadius(corner.x * fraction, corner.y * fraction)
+        return RoundRect(bounds, scaled(topLeft), scaled(topRight), scaled(bottomRight), scaled(bottomLeft))
+    }
+}
+
+internal fun viewerReturnCorners(outline: Outline, titleFooter: Boolean): ViewerReturnCorners {
+    val rounded = (outline as? Outline.Rounded)?.roundRect ?: return ViewerReturnCorners()
+    return ViewerReturnCorners(rounded.topLeftCornerRadius, rounded.topRightCornerRadius,
+        if (titleFooter) CornerRadius.Zero else rounded.bottomRightCornerRadius,
+        if (titleFooter) CornerRadius.Zero else rounded.bottomLeftCornerRadius)
+}
+
 /** Transient geometry shared by the viewer and its originating feed. */
 internal class ViewerReturnTransition {
+    var retainedPostIds by mutableStateOf<Set<PostId>>(emptySet())
+        private set
+
+    fun retainPosts(postIds: Set<PostId>) {
+        retainedPostIds = postIds
+    }
+
     private var originGridId: String? = null
     private var originShelfId: ViewerReturnShelfId? = null
     var openingBounds by mutableStateOf<Rect?>(null)
@@ -71,15 +104,21 @@ internal class ViewerReturnTransition {
         private set
     var targetBounds by mutableStateOf<Rect?>(null)
         private set
+    var openingCorners by mutableStateOf(ViewerReturnCorners())
+        private set
+    var targetCorners by mutableStateOf(ViewerReturnCorners())
+        private set
+    private val mediaCorners = mutableMapOf<PostId, ViewerReturnCorners>()
     private var centered = false
     private var rowCentered = false
     private val mediaBounds = mutableMapOf<PostId, Rect>()
 
-    fun openedFrom(gridId: String?, bounds: Rect? = null, shelfId: ViewerReturnShelfId? = null) {
+    fun openedFrom(gridId: String?, bounds: Rect? = null, shelfId: ViewerReturnShelfId? = null, corners: ViewerReturnCorners = ViewerReturnCorners()) {
         clear()
         originGridId = gridId
         originShelfId = shelfId
         openingBounds = bounds?.takeUnless { it.isEmpty }
+        openingCorners = corners
     }
 
     fun finishOpening() {
@@ -95,26 +134,36 @@ internal class ViewerReturnTransition {
         mediaBounds.clear()
     }
 
-    fun recordBounds(gridId: String?, postId: PostId, bounds: Rect, shelfId: ViewerReturnShelfId? = null) {
+    fun recordBounds(gridId: String?, postId: PostId, bounds: Rect, shelfId: ViewerReturnShelfId? = null, corners: ViewerReturnCorners = ViewerReturnCorners()) {
         val pending = request ?: return
         if (gridId == null || gridId != pending.gridId || postId != pending.postId || shelfId != pending.shelfId || bounds.isEmpty) return
         mediaBounds[postId] = bounds
-        if (centered && rowCentered) targetBounds = bounds
+        mediaCorners[postId] = corners
+        if (centered && rowCentered) selectTarget(postId)
     }
 
     fun centered(gridId: String, postId: PostId) {
         if (request?.gridId != gridId || request?.postId != postId) return
         centered = true
-        if (rowCentered) targetBounds = mediaBounds[postId]
+        if (rowCentered) selectTarget(postId)
     }
 
     fun shelfCentered(gridId: String, postId: PostId, shelfId: ViewerReturnShelfId) {
         if (request != ViewerReturnRequest(gridId, postId, shelfId)) return
         rowCentered = true
-        if (centered) targetBounds = mediaBounds[postId]
+        if (centered) selectTarget(postId)
+    }
+
+    private fun selectTarget(postId: PostId) {
+        targetBounds = mediaBounds[postId]
+        targetCorners = mediaCorners[postId] ?: ViewerReturnCorners()
     }
 
     fun clear() {
+        retainedPostIds = emptySet()
+        openingCorners = ViewerReturnCorners()
+        targetCorners = ViewerReturnCorners()
+        mediaCorners.clear()
         request = null
         targetBounds = null
         originGridId = null
@@ -124,6 +173,13 @@ internal class ViewerReturnTransition {
         centered = false
         mediaBounds.clear()
     }
+}
+
+/** Hide policies resume only after ViewerRoute is disposed at the end of its exit animation. */
+@Composable
+internal fun retainPostsUntilViewerCloses(postIds: Set<PostId>): Set<PostId> {
+    val viewerPostIds = LocalViewerReturnTransition.current?.retainedPostIds.orEmpty()
+    return remember(postIds, viewerPostIds) { postIds + viewerPostIds }
 }
 
 /** Runs after the underlying destination returns to composition, including offscreen posts. */
@@ -225,7 +281,7 @@ internal fun rememberViewerReturnProgress(): Float {
         withTimeoutOrNull(VIEWER_RETURN_TARGET_WAIT_MS) {
             snapshotFlow { transition.targetBounds }.filterNotNull().first()
         }
-        progress.animateTo(1f, tween(VIEWER_RETURN_DURATION_MS))
+        progress.animateTo(1f, tween(if (transition.targetBounds == null) 180 else VIEWER_RETURN_DURATION_MS))
     }
     return progress.value
 }
@@ -241,17 +297,12 @@ internal fun Modifier.viewerReturnMedia(progress: Float, aspectRatio: Float?): M
         if (closing) transition.targetBounds else transition.openingBounds
     }
     val geometry = viewerReturnGeometry(windowBounds, target, aspectRatio, progress)
+    val corners = if (closing) transition.targetCorners else transition.openingCorners
     return onGloballyPositioned {
         if (windowBounds.isEmpty || progress == 0f) windowBounds = it.boundsInWindow(clipBounds = false)
     }
         .drawWithContent {
-            if (closing && progress >= 1f) return@drawWithContent
-            if (progress <= 0f) {
-                drawContent()
-                return@drawWithContent
-            }
-            val crop = geometry.crop
-            clipRect(crop.left, crop.top, crop.right, crop.bottom) { this@drawWithContent.drawContent() }
+            drawViewerReturnFrame(progress, closing, geometry.crop, corners)
         }
         .graphicsLayer {
             transformOrigin = TransformOrigin(0.5f, 0.5f)
@@ -262,14 +313,23 @@ internal fun Modifier.viewerReturnMedia(progress: Float, aspectRatio: Float?): M
         }
 }
 
+private fun ContentDrawScope.drawViewerReturnFrame(progress: Float, closing: Boolean, crop: Rect, corners: ViewerReturnCorners) {
+    if (closing && progress >= 1f) return
+    if (progress <= 0f) {
+        drawContent()
+        return
+    }
+    val path = Path().apply { addRoundRect(corners.roundRect(crop, progress)) }
+    clipPath(path) { this@drawViewerReturnFrame.drawContent() }
+}
+
 internal data class ViewerReturnGeometry(val crop: Rect, val scale: Float, val translationX: Float, val translationY: Float)
 
 internal fun viewerReturnGeometry(source: Rect, target: Rect?, aspectRatio: Float?, progress: Float): ViewerReturnGeometry {
     val local = Rect(0f, 0f, source.width, source.height)
     if (source.isEmpty || progress <= 0f) return ViewerReturnGeometry(local, 1f, 0f, 0f)
-    val destination = target?.translate(-source.topLeft) ?: Rect(
-        source.width * 0.35f, source.height * 0.35f, source.width * 0.65f, source.height * 0.65f,
-    )
+    if (target == null) return ViewerReturnGeometry(local, 1f, 0f, source.height * progress.coerceIn(0f, 1f))
+    val destination = target.translate(-source.topLeft)
     val ratio = aspectRatio?.takeIf { it.isFinite() && it > 0f } ?: (source.width / source.height)
     val fittedWidth = minOf(source.width, source.height * ratio)
     val fittedHeight = fittedWidth / ratio

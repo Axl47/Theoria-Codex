@@ -1,5 +1,7 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.viewer.ViewerReturnCorners
+import com.theoriacodex.app.viewer.viewerReturnCorners
 import com.theoriacodex.app.viewer.LocalViewerReturnTransition
 import com.theoriacodex.app.viewer.LocalViewerReturnGrid
 import com.theoriacodex.app.viewer.LocalViewerReturnShelf
@@ -50,6 +52,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import com.theoriacodex.app.viewer.retainPostsUntilViewerCloses
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -62,11 +65,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.toSize
+import androidx.compose.material3.CardDefaults
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -183,6 +192,7 @@ fun SearchScreen(
     onRemoveFavoriteTag: (SourceKey, String) -> Unit = { _, _ -> },
     fabRestoreState: FeedFabRestoreState = FeedFabRestoreState(),
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit = {},
+    oldSearchBar: Boolean = false,
 ) {
     val input = state.suggestions.input
     val animationRestoreState = fabRestoreState.searchAnimationFilter(state.query.draft.mode)
@@ -194,12 +204,15 @@ fun SearchScreen(
     val durationMaxBucket = animationRestoreState.durationMaxBucket
     var searchFieldFocused by remember { mutableStateOf(false) }
     var searchControlsDismissedByScroll by remember { mutableStateOf(false) }
+    var searchControlsRequested by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
     var showFavoriteTagSheet by remember { mutableStateOf(false) }
     var editingIncludeGroupIndex by remember { mutableStateOf<Int?>(null) }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var selectedActionPostResolving by remember { mutableStateOf(false) }
     val inputFocus = rememberSearchInputFocus()
+    val inputRequester = remember { FocusRequester() }
+    var requestInputFocus by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyStaggeredGridState()
     val queryHash = state.query.appliedQueryHash
@@ -265,9 +278,9 @@ fun SearchScreen(
     val durationMetadata = rememberDurationFilterMetadata(displayResults, durationStates, animatedDurationFilterActive)
     val acquiredDurations = durationMetadata.knownDurationMsByPostId
     val durationReadiness = durationMetadata.readiness
-    val retainedLikedPostIds = remember(state.relatedPosts, pendingLikePostIds) {
+    val retainedLikedPostIds = retainPostsUntilViewerCloses(remember(state.relatedPosts, pendingLikePostIds) {
         state.relatedPosts.retainedLikedPostIds + pendingLikePostIds
-    }
+    })
     val visibleResults = remember(
         displayResults,
         visibilityFilters,
@@ -381,6 +394,7 @@ fun SearchScreen(
             .collectLatest { scrolling ->
                 if (scrolling) {
                     searchControlsDismissedByScroll = true
+                    searchControlsRequested = false
                     inputFocus.clear()
                 }
             }
@@ -399,7 +413,7 @@ fun SearchScreen(
         visibleSourceStatusChipStatuses(state.content.statuses)
     }
     val clearFocusInteraction = remember { MutableInteractionSource() }
-    val showSearchControls = !searchControlsDismissedByScroll && (searchFieldFocused ||
+    val showSearchControls = !searchControlsDismissedByScroll && (searchControlsRequested || searchFieldFocused ||
         input.isNotBlank() ||
         autocompleteSuggestions.isNotEmpty() ||
         facetedAutocompleteSuggestions.isNotEmpty() ||
@@ -422,6 +436,34 @@ fun SearchScreen(
         onAction(SearchAction.ClearAutocomplete)
     }
 
+    val searchBarExpanded = showSearchControls || (!state.content.hasExecutedSearch && !searchControlsDismissedByScroll)
+    LaunchedEffect(searchBarExpanded, requestInputFocus) {
+        if (searchBarExpanded && requestInputFocus) {
+            withFrameNanos { }
+            inputRequester.requestFocus()
+            requestInputFocus = false
+        }
+    }
+    val sourcePicker: @Composable () -> Unit = {
+SearchSourcePicker(
+                            draftSourceScope = state.query.draftSourceScope,
+                            options = state.query.modeOptions,
+                            unifiedSourceCount = state.query.unifiedSources.size,
+                            unifiedSources = state.query.unifiedSources,
+                            onOpen = { inputFocus.clear() },
+                            onModeSelected = { mode ->
+                                searchControlsDismissedByScroll = false
+                                searchControlsRequested = true
+                                onAction(SearchAction.SelectMode(mode))
+                            },
+                            onTemporarySourceToggled = { source ->
+                                searchControlsDismissedByScroll = false
+                                searchControlsRequested = true
+                                onAction(SearchAction.ToggleTemporarySource(source))
+                            },
+                        )
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         floatingActionButton = {
@@ -436,17 +478,23 @@ fun SearchScreen(
             )
         }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .then(inputFocus.rootModifier)
-                .fillMaxSize()
-                .padding(padding)
-                .padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
+        CollapsingSearchChrome(
+            expanded = searchBarExpanded,
+            legacy = oldSearchBar,
+            onExpand = {
+                searchControlsDismissedByScroll = false
+                searchControlsRequested = true
+                requestInputFocus = true
+            },
+            sourcePicker = sourcePicker,
+            horizontalPadding = 16.dp,
+            modifier = Modifier.then(inputFocus.rootModifier).fillMaxSize().padding(padding)
+                .padding(top = if (oldSearchBar) 6.dp else 0.dp, bottom = 8.dp),
+            inputField = {
             OutlinedTextField(
                 modifier = Modifier
                     .testTag("Search query input")
+                    .focusRequester(inputRequester)
                     .fillMaxWidth()
                     .onFocusChanged { state ->
                         searchFieldFocused = state.isFocused
@@ -497,17 +545,7 @@ fun SearchScreen(
                         modifier = Modifier.padding(end = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        SearchSourcePicker(
-                            draftSourceScope = state.query.draftSourceScope,
-                            options = state.query.modeOptions,
-                            unifiedSourceCount = state.query.unifiedSources.size,
-                            unifiedSources = state.query.unifiedSources,
-                            onOpen = { inputFocus.clear() },
-                            onModeSelected = { mode -> onAction(SearchAction.SelectMode(mode)) },
-                            onTemporarySourceToggled = { source ->
-                                onAction(SearchAction.ToggleTemporarySource(source))
-                            },
-                        )
+                        if (oldSearchBar) sourcePicker()
                         if (showAddInputAction) {
                             TextButton(
                                 onClick = { commitTagInput() },
@@ -520,6 +558,8 @@ fun SearchScreen(
                 }
             )
 
+            },
+        ) {
             AnimatedVisibility(
                 visible = showSearchControls,
                 enter = slideInVertically(initialOffsetY = { fullHeight -> fullHeight / 4 }) + fadeIn(),
@@ -1037,6 +1077,10 @@ fun SearchResultCard(
         }
     }
 
+    var mediaCorners by remember { mutableStateOf(ViewerReturnCorners()) }
+    val cardShape = CardDefaults.elevatedShape
+    val layoutDirection = LocalLayoutDirection.current
+    val cardDensity = LocalDensity.current
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
@@ -1047,6 +1091,7 @@ fun SearchResultCard(
                         viewerReturnGrid,
                         viewerMediaCoordinates?.takeIf { it.isAttached }?.boundsInWindow(clipBounds = false),
                         shelfId = viewerReturnShelf,
+                        corners = mediaCorners,
                     )
                     onClick()
                 },
@@ -1167,7 +1212,9 @@ fun SearchResultCard(
                 .aspectRatio(ratio)
                 .onGloballyPositioned { coordinates ->
                     viewerMediaCoordinates = coordinates
-                    viewerReturn?.recordBounds(viewerReturnGrid, post.id, coordinates.boundsInWindow(clipBounds = false), viewerReturnShelf)
+                    mediaCorners = viewerReturnCorners(cardShape.createOutline(coordinates.size.toSize(), layoutDirection, cardDensity),
+                        showTitle && supportingContent.showTitleFooter)
+                    viewerReturn?.recordBounds(viewerReturnGrid, post.id, coordinates.boundsInWindow(clipBounds = false), viewerReturnShelf, mediaCorners)
                     val visible = coordinates.isAttached &&
                         isVisibleFeedBounds(coordinates.boundsInWindow(clipBounds = true))
                     if (isInViewport != visible) {
@@ -1280,9 +1327,9 @@ fun SearchResultCard(
                 }
             }
             if (mediaCount > 1) {
-                ImageCountBadge(
-                    count = mediaCount,
-                    viewedMediaNumber = cardViewedMediaNumber,
+                com.theoriacodex.app.ui.components.MediaCountBadge(
+                    text = imageCountBadgeLabel(mediaCount, cardViewedMediaNumber),
+                    description = if (cardViewedMediaNumber == null) "Image count" else "Watched media progress",
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(8.dp),
@@ -1409,40 +1456,6 @@ private fun PreviewMetadataLabel(label: String) {
     }
 }
 
-@Composable
-private fun ImageCountBadge(
-    count: Int,
-    viewedMediaNumber: Int?,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        modifier = modifier,
-        color = Color.Gray.copy(alpha = 0.65f),
-        shape = CircleShape,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = Icons.Default.Image,
-                contentDescription = if (viewedMediaNumber == null) {
-                    "Image count"
-                } else {
-                    "Watched media progress"
-                },
-                tint = Color.White,
-                modifier = Modifier.size(14.dp),
-            )
-            Text(
-                text = imageCountBadgeLabel(count, viewedMediaNumber),
-                color = Color.White,
-                style = MaterialTheme.typography.labelSmall,
-            )
-        }
-    }
-}
 
 internal fun imageCountBadgeLabel(count: Int, viewedMediaNumber: Int?): String {
     val progress = viewedMediaNumber?.coerceIn(1, count)

@@ -27,6 +27,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import com.theoriacodex.app.viewer.retainPostsUntilViewerCloses
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -136,9 +137,9 @@ fun CreatorProfileScreen(
     val unknownAnimatedDurationPolicy = durationFilter.unknownPolicy
     val acquiredDurations = durationFilter.knownDurationMsByPostId
     val durationReadiness = durationFilter.readiness
-    val retainedLikedPostIds = remember(state.relatedPosts, pendingLikePostIds) {
+    val retainedLikedPostIds = retainPostsUntilViewerCloses(remember(state.relatedPosts, pendingLikePostIds) {
         state.relatedPosts.retainedLikedPostIds + pendingLikePostIds
-    }
+    })
     val visibleResults = remember(
         state.results,
         visibilityFilters,

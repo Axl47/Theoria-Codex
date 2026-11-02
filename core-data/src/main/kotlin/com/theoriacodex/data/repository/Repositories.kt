@@ -405,6 +405,7 @@ data class ViewerSettings(
     val playbackMode: com.theoriacodex.domain.model.ViewerPlaybackMode = com.theoriacodex.domain.model.ViewerPlaybackMode.LOOP,
     val videoQuality: com.theoriacodex.domain.model.VideoQuality = com.theoriacodex.domain.model.VideoQuality.AUTO,
     val invertMultiImageScrollDirection: Boolean = false,
+    val instantSeek: Boolean = false,
     val automaticTextTranslationEnabled: Boolean = false,
     val enabledOcrLanguages: Set<ViewerOcrLanguage> = emptySet(),
 )
@@ -434,6 +435,7 @@ fun defaultRecommendationProfiles(): List<RecommendationProfile> {
 }
 
 data class AppSettings(
+    val oldSearchBar: Boolean = false,
     val followedCreators: List<FollowedCreator> = emptyList(),
     val runtime: SourceRuntimeSettings = SourceRuntimeSettings(),
     val cache: CacheSettings = CacheSettings(),

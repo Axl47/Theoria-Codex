@@ -18,6 +18,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -50,6 +53,35 @@ class ViewerReturnTransitionTest {
     @get:Rule val compose = createComposeRule()
     private val postId = PostId(SourceKey.GELBOORU, "return")
 
+    @Test fun `hide policies keep viewer posts until the return transition is released`() {
+        val transition = ViewerReturnTransition()
+        val post = com.theoriacodex.app.testing.testPost(sourcePostId = "return")
+        var visible: List<Post> = emptyList()
+        transition.openedFrom("origin")
+        transition.retainPosts(setOf(post.id))
+        compose.setContent {
+            CompositionLocalProvider(LocalViewerReturnTransition provides transition) {
+                val retained = retainPostsUntilViewerCloses(emptySet())
+                val filtered = com.theoriacodex.app.search.filterSearchResults(
+                    listOf(post), com.theoriacodex.app.search.SearchVisibilityFilters(
+                        hideLiked = true, hideSaved = true, hideWatched = true),
+                    likedPostIds = setOf(post.id), savedPostIds = setOf(post.id), watchedPostIds = setOf(post.id),
+                    retainedLikedPostIds = retained,
+                )
+                SideEffect { visible = filtered }
+            }
+        }
+        compose.runOnIdle {
+            assertEquals(listOf(post), visible)
+            transition.begin(post.id)
+        }
+        compose.runOnIdle {
+            assertEquals(listOf(post), visible)
+            transition.clear()
+        }
+        compose.runOnIdle { assertTrue(visible.isEmpty()) }
+    }
+
     @Test fun `only the originating grid and current post can supply a centered target`() {
         val transition = ViewerReturnTransition()
         val target = Rect(10f, 200f, 210f, 500f)
@@ -79,6 +111,34 @@ class ViewerReturnTransitionTest {
         assertEquals(-250f, end.translationY, 0.001f)
         assertEquals(-250f, viewerReturnCenterScroll(100, 300, 0, 1000), 0.001f)
         assertTrue(viewerReturnGeometry(source, null, null, 1f).scale.isFinite())
+    }
+
+    @Test fun `fallback keeps media size and slides it below the viewport`() {
+        val source = Rect(0f, 40f, 400f, 840f)
+        val halfway = viewerReturnGeometry(source, null, 0.5f, 0.5f)
+        assertEquals(1f, halfway.scale)
+        assertEquals(Rect(0f, 0f, 400f, 800f), halfway.crop)
+        assertEquals(0f, halfway.translationX)
+        assertEquals(400f, halfway.translationY)
+        assertEquals(800f, viewerReturnGeometry(source, null, 0.5f, 1f).translationY)
+    }
+
+    @Test fun `card corners interpolate with the crop and preserve square caption edges`() {
+        val bounds = Rect(0f, 0f, 200f, 300f)
+        val outline = Outline.Rounded(RoundRect(bounds, CornerRadius(12f)))
+        val fullCard = viewerReturnCorners(outline, false)
+        assertEquals(CornerRadius(6f), fullCard.roundRect(bounds, 0.5f).bottomLeftCornerRadius)
+        assertEquals(CornerRadius.Zero, fullCard.roundRect(bounds, 0f).topLeftCornerRadius)
+        val caption = viewerReturnCorners(outline, true)
+        assertEquals(CornerRadius(12f), caption.roundRect(bounds, 1f).topRightCornerRadius)
+        assertEquals(CornerRadius.Zero, caption.roundRect(bounds, 1f).bottomRightCornerRadius)
+        val transition = ViewerReturnTransition()
+        transition.openedFrom("feed", bounds, corners = fullCard)
+        assertEquals(fullCard, transition.openingCorners)
+        transition.begin(postId)
+        transition.recordBounds("feed", postId, bounds, corners = caption)
+        transition.centered("feed", postId)
+        assertEquals(caption, transition.targetCorners)
     }
 
     @Test fun `Recents and Codex grid centers the exited offscreen post`() = checkGridReturn(projected = false)

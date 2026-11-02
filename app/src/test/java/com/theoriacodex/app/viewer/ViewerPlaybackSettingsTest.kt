@@ -13,6 +13,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
 import com.theoriacodex.app.viewer.state.ViewerPlaybackMode
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -23,6 +25,31 @@ import org.robolectric.annotation.Config
 @Config(application = Application::class)
 class ViewerPlaybackSettingsTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun `menu stays open after selection and expires five seconds after the latest interaction`() {
+        compose.mainClock.autoAdvance = false
+        val expanded = mutableStateOf(true)
+        val mode = mutableStateOf(ViewerPlaybackMode.LOOP)
+        compose.setContent {
+            MaterialTheme {
+                PlaybackSettingsMenu(
+                    playbackRateEnabled = true, playbackMode = mode.value, onPlaybackModeSelected = { mode.value = it },
+                    quality = com.theoriacodex.domain.model.VideoQuality.AUTO, qualityHeight = null, videoVariants = emptyList(),
+                    onQualitySelected = { _, _ -> }, expanded = expanded.value, onExpandedChange = { expanded.value = it },
+                    playbackRate = ViewerPlaybackRate.Normal, onPlaybackRateSelected = {},
+                )
+            }
+        }
+        compose.mainClock.advanceTimeBy(250)
+        compose.onNodeWithText(ViewerPlaybackMode.ONCE.label).performSemanticsAction(SemanticsActions.OnClick)
+        compose.mainClock.advanceTimeBy(4_000)
+        compose.runOnIdle { assertTrue(expanded.value); assertEquals(ViewerPlaybackMode.ONCE, mode.value) }
+        compose.onNodeWithText("Loop").performSemanticsAction(SemanticsActions.OnClick)
+        compose.mainClock.advanceTimeBy(4_000)
+        compose.runOnIdle { assertTrue(expanded.value) }
+        compose.mainClock.advanceTimeBy(1_100)
+        compose.runOnIdle { assertFalse(expanded.value) }
+    }
 
     @Test fun `play mode selection and all five slider stops remain accessible`() {
         val mode = mutableStateOf(ViewerPlaybackMode.LOOP)

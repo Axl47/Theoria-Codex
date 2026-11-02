@@ -27,7 +27,7 @@ data class FavoriteTagSection(
     val tags: List<String>,
 )
 
-/** Likes also save into a Codex, so related-post retention defers both membership filters. */
+/** Keep recommendation seeds reachable until dismissal, including after viewing or automatic saving. */
 fun filterSearchResults(
     results: List<Post>,
     filters: SearchVisibilityFilters,
@@ -48,7 +48,7 @@ fun filterSearchResults(
             ) &&
             (!filters.hideLiked || post.id !in likedPostIds || post.id in retainedLikedPostIds) &&
             (!filters.hideSaved || post.id !in savedPostIds || post.id in retainedLikedPostIds) &&
-            (!filters.hideWatched || post.id !in watchedPostIds)
+            (!filters.hideWatched || post.id !in watchedPostIds || post.id in retainedLikedPostIds)
     }
 }
 

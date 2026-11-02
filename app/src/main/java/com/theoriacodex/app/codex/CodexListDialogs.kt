@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -32,7 +31,6 @@ import com.theoriacodex.domain.model.Codex
 @Composable
 internal fun CodexTileMetadata(
     codex: Codex,
-    itemCount: Int,
     onOpenActions: () -> Unit,
 ) {
     Row(
@@ -40,31 +38,17 @@ internal fun CodexTileMetadata(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(
+        Text(
+            text = codex.name,
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                text = codex.name,
-                style = MaterialTheme.typography.titleLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = when (codex.codexId) {
-                    FOLLOWED_CODEX_ID -> "$itemCount followed"
-                    SAVED_SEARCHES_CODEX_ID -> "$itemCount searches"
-                    else -> "$itemCount items"
-                },
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+            style = MaterialTheme.typography.titleLarge,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
         if (!isVirtualCodex(codex.codexId)) IconButton(onClick = onOpenActions) {
             Icon(
                 imageVector = Icons.Default.MoreVert,
                 contentDescription = "Actions for ${codex.name}",
-                modifier = Modifier.offset(x = 12.dp),
             )
         }
     }

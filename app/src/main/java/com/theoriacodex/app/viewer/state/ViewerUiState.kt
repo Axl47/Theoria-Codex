@@ -150,6 +150,15 @@ internal sealed interface ViewerMediaError {
     ) : ViewerMediaError
 }
 
+internal data class ViewerRelatedNavigation(val anchor: PostId, val postIds: List<PostId>)
+
+internal data class ViewerRelatedUiState(
+    val state: com.theoriacodex.app.related.RelatedPostsUiState = com.theoriacodex.app.related.RelatedPostsUiState.Idle,
+    val posts: List<Post> = emptyList(),
+    val navigation: ViewerRelatedNavigation? = null,
+    val extraPostIds: Set<PostId> = emptySet(),
+)
+
 internal data class ViewerUiState(
     val session: ViewerSessionIdentity? = null,
     val pages: List<ViewerPageState> = emptyList(),
@@ -158,6 +167,7 @@ internal data class ViewerUiState(
     val overview: ViewerOverviewState = ViewerOverviewState(),
     val prefetch: ViewerPrefetchState = ViewerPrefetchState(),
     val mediaError: ViewerMediaError? = null,
+    val related: ViewerRelatedUiState = ViewerRelatedUiState(),
 ) {
     val currentPage: ViewerPageState?
         get() = pages.getOrNull(currentPageIndex)

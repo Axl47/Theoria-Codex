@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 /** Disposable owners clear their own stores; pinned offline media is deliberately separate. */
+@OptIn(coil.annotation.ExperimentalCoilApi::class)
 class MediaCacheMaintenance(
     private val context: Context,
     private val cache: CacheRepository,

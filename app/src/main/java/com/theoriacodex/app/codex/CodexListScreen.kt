@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -206,7 +207,7 @@ private fun CodexGrid(
     ) {
         val likesId = presentation.likesCodexId
         savedCodexLibraryEntries(presentation.codices, likesId).forEach { codex ->
-            item(key = codex.codexId) {
+            item(key = codex.codexId, span = { GridItemSpan(if (codex.codexId == SAVED_CODEX_ID) maxLineSpan else 1) }) {
                 CodexLibraryTile(codex, presentation, state, onOpenCodex)
             }
         }
@@ -221,12 +222,12 @@ private fun CodexLibraryTile(
     onOpenCodex: (String) -> Unit,
 ) {
     val saved = codex.codexId == SAVED_CODEX_ID
-    val openActions = {
-        if (saved) onOpenCodex(codex.codexId) else state.actionTarget = codex
+    if (saved) {
+        SavedCodexLibraryTile(presentation, onOpenCodex)
+        return
     }
-    val covers = if (saved) savedCodexChildren(presentation.likesCodexId).flatMap {
-        presentation.coverCandidates[it.codexId].orEmpty()
-    } else presentation.coverCandidates[codex.codexId].orEmpty()
+    val openActions = { state.actionTarget = codex }
+    val covers = presentation.coverCandidates[codex.codexId].orEmpty()
     CodexGridTile(
         codex = codex,
         itemCount = presentation.itemCounts[codex.codexId] ?: 0,
@@ -234,7 +235,6 @@ private fun CodexLibraryTile(
         onOpen = { onOpenCodex(codex.codexId) },
         onOpenActions = openActions,
         onLongPress = openActions,
-        summary = if (saved) savedCodexSummary(presentation.likesCodexId, presentation.itemCounts) else null,
     )
 }
 
@@ -750,7 +750,6 @@ private fun CodexGridTile(
     onOpen: () -> Unit,
     onOpenActions: () -> Unit,
     onLongPress: () -> Unit,
-    summary: String? = null,
 ) {
     Column(
         modifier = Modifier
@@ -786,15 +785,11 @@ private fun CodexGridTile(
                     }
                 },
             )
-
+            com.theoriacodex.app.ui.components.MediaCountBadge(
+                itemCount.toString(), "Posts in ${codex.name}", Modifier.align(Alignment.TopEnd).padding(8.dp),
+            )
         }
 
-        if (summary != null) {
-            Text(codex.name, style = MaterialTheme.typography.titleMedium)
-            Text(summary, style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            CodexTileMetadata(codex = codex, itemCount = itemCount, onOpenActions = onOpenActions)
-        }
+        CodexTileMetadata(codex = codex, onOpenActions = onOpenActions)
     }
 }

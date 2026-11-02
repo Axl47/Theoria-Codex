@@ -34,6 +34,21 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class ViewerViewModelTest {
     @Test
+    fun `cold restoration keeps original order and resumes the anchor of transient recommendations`() = runTest {
+        val originals = listOf(post("seed"), post("next"))
+        val related = post("related")
+        val retained = session("branch", originals).withRelatedPosts(originals.first().id, listOf(related))
+        val handle = SavedStateHandle()
+        val owner = ViewerViewModel(handle, scopeOverride = this)
+        owner.replaceSession(retained)
+        owner.onAction(ViewerAction.SelectPage(2))
+        val restored = ViewerViewModel(handle, scopeOverride = this).restorationRequest
+        assertEquals(originals.map { it.id }, restored?.orderedPostIds)
+        assertEquals(originals.first().id, restored?.selectedPostId)
+        owner.clearSession()
+    }
+
+    @Test
     fun `new videos use the device play mode without persisting speed`() = runTest {
         var preference = com.theoriacodex.app.viewer.state.ViewerPlaybackMode.ONCE
         val owner = ViewerViewModel(SavedStateHandle(), scopeOverride = this, playbackModeProvider = { preference })

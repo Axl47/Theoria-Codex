@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -78,9 +79,22 @@ class MediaTimelineBarTest {
         assertCancelledWithoutSeek()
     }
 
-    private fun showTimeline() {
+    @Test fun `instant seek updates playback during a held drag without thumbnail previews`() {
+        showTimeline(instantSeek = true)
+        track().performTouchInput { down(Offset(width * 0.25f, centerY)) }
+        compose.onNodeWithTag("viewer-scrub-preview").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(25_000L, playbackPosition.value) }
+        track().performTouchInput { moveTo(Offset(width * 0.75f, centerY)) }
+        compose.onNodeWithTag("viewer-scrub-preview").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(75_000L, playbackPosition.value) }
+        track().performTouchInput { up() }
+        compose.runOnIdle { assertEquals(75_000L, seeks.last()); assertEquals(0, cancelled) }
+    }
+
+    private fun showTimeline(instantSeek: Boolean = false) {
         compose.setContent {
             MaterialTheme {
+                CompositionLocalProvider(LocalViewerInstantSeek provides instantSeek) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     if (visible.value) ViewerPlaybackFooter(Modifier.width(360.dp)) {
                         MediaTimelineBar(
@@ -91,6 +105,7 @@ class MediaTimelineBarTest {
                         preview = { Text("Frame $it") },
                         )
                     }
+                }
                 }
             }
         }

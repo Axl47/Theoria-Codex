@@ -73,6 +73,7 @@ internal fun SavedCodexRoute(
     onRenameSearch: (String, String) -> Unit,
     onRemoveSearch: (String) -> Unit,
     resolvePost: suspend (PostId) -> Post?,
+    onToggleLike: (Post) -> Unit = {},
 ) {
     val settings = remember(data.settingsRepository) { data.settingsRepository.observeSettings() }
         .collectAsStateWithLifecycle(initialValue = null).value ?: return
@@ -122,7 +123,7 @@ internal fun SavedCodexRoute(
                                     else -> onOpenCodexActions(child.codexId)
                                 }
                             },
-                            { posts, position -> onOpenViewer(child.codexId, posts, position) }, resolvePost)
+                            { posts, position -> onOpenViewer(child.codexId, posts, position) }, resolvePost, onToggleLike)
                     }
                 }
             }
@@ -144,6 +145,7 @@ private fun SavedCodexSection(
     onLongPress: () -> Unit,
     onOpenViewer: (List<Post>, Int) -> Unit,
     resolvePost: suspend (PostId) -> Post?,
+    onToggleLike: (Post) -> Unit,
 ) {
     val owner = viewModel<MediaDurationRouteViewModel>(key = "saved-duration:$id",
         factory = MediaDurationRouteViewModel.factory(durations, "saved:$id"))
@@ -170,7 +172,10 @@ private fun SavedCodexSection(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 itemsIndexed(posts, key = { _, post -> "${post.id.source.name}:${post.id.sourcePostId}" }) { index, post ->
                     Box(Modifier.width(cardWidth)) {
-                        SearchResultCard(post = post, pixivUgoiraClient = sources.pixivUgoiraClient,
+                        SearchResultCard(post = post,
+                            liked = post.id in state.likedPostIds,
+                            onToggleLike = if (state.followedOwner != null || state.savedSearchOwner != null) ({ onToggleLike(post) }) else null,
+                            pixivUgoiraClient = sources.pixivUgoiraClient,
                             mediaAspectRatio = POST_SHELF_MEDIA_ASPECT_RATIO,
                             showTitle = false,
                             acquiredDurationMs = observedMediaDurationMs(post, owner::observeState),

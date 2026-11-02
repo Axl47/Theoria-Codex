@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
@@ -127,7 +126,7 @@ class ViewerLevelGesturesTest {
         }
     }
 
-    @Test fun `centered indicator stays during a held gesture then expires after release`() {
+    @Test fun `compact top indicator stays during a held gesture then expires after release`() {
         showPage()
         compose.mainClock.autoAdvance = false
         compose.onNodeWithContentDescription("Media actions").performTouchInput {
@@ -136,6 +135,10 @@ class ViewerLevelGesturesTest {
         }
         compose.mainClock.advanceTimeBy(2_000L)
         compose.onNodeWithContentDescription("Brightness").assertIsDisplayed()
+        val indicator = compose.onNodeWithContentDescription("Brightness").fetchSemanticsNode().boundsInRoot
+        val media = compose.onNodeWithContentDescription("Media actions").fetchSemanticsNode().boundsInRoot
+        assertEquals(media.top + (media.height - media.width) / 2 + 8f, indicator.top, 1f)
+        org.junit.Assert.assertTrue(indicator.width < 150f)
         compose.runOnIdle { assertNotNull(levels.feedback) }
         compose.onNodeWithContentDescription("Media actions").performTouchInput { up() }
         compose.mainClock.advanceTimeByFrame()
@@ -170,7 +173,6 @@ class ViewerLevelGesturesTest {
                         positions, null, imageSession, null, {}, {}, { chromeToggles++ }, navigations::add, null,
                         levelControls = levels,
                     )
-                    ViewerLevelFeedbackOverlay(levels, Modifier.align(Alignment.Center))
                 }
             }
         }

@@ -2,7 +2,17 @@
 
 ## New
 
-- Swipe up or down on the left or right of fullscreen videos to adjust brightness or media volume, with a centered level indicator.
+- Open a collapsible “More like this” thumbnail stripe after liking in fullscreen, and jump to related posts without leaving the viewer.
+
+- Like posts directly from Searches and Followed feeds, including their previews in Saved.
+
+- Collapse Search into a compact strip attached to the top-right corner, with a rounded left edge and closer search and source buttons; restore the previous layout with Legacy “Old Search Bar”.
+
+- Use Legacy Instant Seek to seek continuously while dragging instead of previewing timeline thumbnails.
+
+- Jump between fullscreen posts with a centered seven-thumbnail strip below the seek bar, with evenly spaced thumbnails and matching screen-edge gaps.
+
+- Swipe up or down on the left or right of fullscreen videos to adjust brightness or media volume, with a compact level indicator at the top of the video.
 
 - Browse Likes, Followed, and Saved Searches together from the new Saved overview.
 - Combine selected Saved Searches into a live feed, with independent loading and Retry for each query.
@@ -19,6 +29,29 @@
 
 ## Improvements
 
+- Show brightness and volume indicators at half their previous size, just inside the top of the video.
+
+- Find fullscreen downloads in the post’s long-press menu.
+
+- Scroll the fullscreen thumbnail strip through the full post list, loading more posts as you reach the end.
+
+- Find Invert scroll direction in the new Preferences category.
+
+- Preserve the feed card’s rounded corners and crop while expanding media into fullscreen and returning it to the grid.
+
+- Show Codex post counts in cover badges, with compact titles and aligned overflow menus.
+
+- Give Saved a full-width library card with a larger title and separate, tappable Likes, Followed, and Searches counts.
+
+- Expand Search controls when changing sources.
+
+- Dismiss fullscreen media with a quick downward slide when its feed card is unavailable.
+
+- Keep playback settings open while adjusting options; close them on an outside tap or after five seconds without interaction.
+
+- Make fullscreen posts and gallery media follow your finger while swiping, including when cancelling a swipe.
+
+- Keep the app responsive while preparing large Codices for fullscreen viewing.
 - Focus support on Android 16 and Android 17; new builds require Android 16 or newer.
 - Use Android’s configured interaction sounds for Compose controls.
 
@@ -79,6 +112,10 @@
 - Remove repeated type labels from tag names in the post hold menu.
 
 ## Fixes
+- Wait until fullscreen finishes closing before Hide liked, Hide saved, and Hide watched remove its posts from the feed.
+- Keep fullscreen recommendations out of the bottom strip and preserve the original feed order, returning to its next post after the last recommendation.
+- Apply the app’s dark sheet theme to Followed Authors, matching Saved Searches.
+- Look beyond already-visible Pixiv recommendations before reporting “No new results”.
 - Reduce timing-related video playback failures.
 - Include navigation fixes for predictive-back races and transition clipping.
 - Return fullscreen Saved previews to their sub-Codex cards, scrolling the carousel to the exited post.
@@ -86,7 +123,7 @@
 - Show tag post counts supplied by nhentai and retain completed counts when further lookups time out.
 - Return fullscreen “More like this” posts to their shelf cards, including after swiping to an offscreen related post.
 
-- Keep liked posts visible until their “More like this” recommendations are dismissed, even with both Hide liked and Hide saved enabled and when liking from fullscreen.
+- Keep liked posts visible until their “More like this” recommendations are dismissed, including with Hide watched, Hide liked, and Hide saved enabled or when liking from fullscreen.
 - Resume autoplaying feed videos at the position where you left fullscreen playback.
 - Open nhentai page links at the linked gallery page, including when pages load after the cover.
 - Close Codex when using Go to Search, including from its Viewer.

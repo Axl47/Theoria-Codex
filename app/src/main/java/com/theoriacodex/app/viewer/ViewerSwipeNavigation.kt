@@ -1,5 +1,6 @@
 package com.theoriacodex.app.viewer
 
+import androidx.compose.foundation.pager.PagerState
 import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.app.viewer.state.ViewerResolutionStatus
 import com.theoriacodex.domain.model.SourceKey
@@ -67,4 +68,16 @@ internal fun viewerMediaPagerReverseLayout(
     invertMultiImageScrollDirection: Boolean,
 ): Boolean {
     return invertMultiImageScrollDirection && mediaCount > 1
+}
+
+/** Raw deltas expose finger progress without committing the selected post before settling. */
+internal fun PagerState.dragViewerPage(origin: Int, target: Int?, displacement: Float) {
+    val width = (layoutInfo.pageSize + layoutInfo.pageSpacing).toFloat()
+    if (width <= 0f) return
+    val desired = if (target == null) 0f else {
+        val distance = -displacement / width
+        if (target > origin) distance.coerceIn(0f, 0.95f) else distance.coerceIn(-0.95f, 0f)
+    }
+    val current = currentPage - origin + currentPageOffsetFraction
+    dispatchRawDelta((desired - current) * width)
 }

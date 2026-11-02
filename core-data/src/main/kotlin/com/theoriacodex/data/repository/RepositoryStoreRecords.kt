@@ -32,6 +32,8 @@ internal data class LegacySettingsStoreRecord(
     val resolveUnknownAnimatedDurations: Boolean = false,
     @field:SerializedName("invertMultiImageScrollDirection")
     val invertMultiImageScrollDirection: Boolean = false,
+    @field:SerializedName("oldSearchBar") val oldSearchBar: Boolean = false,
+    @field:SerializedName("instantSeek") val instantSeek: Boolean = false,
     @field:SerializedName("viewerAutomaticTextTranslationEnabled")
     val viewerAutomaticTextTranslationEnabled: Boolean = false,
     @field:SerializedName("viewerEnabledOcrLanguages")
@@ -83,6 +85,7 @@ internal data class LegacySettingsStoreRecord(
             ?: profiles.first().profileId
         return RepositoryPolicies.normalizeSettings(
             AppSettings(
+                oldSearchBar = oldSearchBar,
                 followedCreators = followedCreators.orEmpty().mapNotNull { it.toDomain() }.distinctBy { it.creator.followKey() }.take(MAX_FOLLOWED_CREATORS),
                 runtime = runtime,
                 cache = toCacheSettings(),
@@ -136,6 +139,7 @@ internal data class LegacySettingsStoreRecord(
             } ?: com.theoriacodex.domain.model.ViewerPlaybackMode.LOOP,
             videoQuality = decodeVideoQuality(videoQuality, com.theoriacodex.domain.model.VideoQuality.AUTO),
             invertMultiImageScrollDirection = invertMultiImageScrollDirection,
+            instantSeek = instantSeek,
             automaticTextTranslationEnabled = viewerAutomaticTextTranslationEnabled,
             enabledOcrLanguages = viewerEnabledOcrLanguages.mapNotNullTo(linkedSetOf()) { name ->
                 runCatching { ViewerOcrLanguage.valueOf(name) }.getOrNull()
@@ -160,6 +164,7 @@ internal data class LegacySettingsStoreRecord(
             return LegacySettingsStoreRecord(
                 followedCreators = settings.followedCreators.map(FollowedCreatorRecord::fromDomain),
                 sourceCatalogVersion = SHARED_SOURCE_CATALOG_VERSION,
+                oldSearchBar = settings.oldSearchBar,
                 enabledSources = settings.runtime.enabledSources.map { it.name },
                 sourceWeights = settings.runtime.sourceWeights.mapKeys { it.key.name },
                 sourceWeightsByConfiguration = settings.runtime.sourceWeightsByConfiguration.mapValues { (_, weights) ->
@@ -173,6 +178,7 @@ internal data class LegacySettingsStoreRecord(
                 downloadsOverRoaming = settings.cache.downloadsOverRoaming,
                 resolveUnknownAnimatedDurations = settings.contentFilters.resolveUnknownAnimatedDurations,
                 invertMultiImageScrollDirection = settings.viewer.invertMultiImageScrollDirection,
+                instantSeek = settings.viewer.instantSeek,
                 viewerAutomaticTextTranslationEnabled = settings.viewer.automaticTextTranslationEnabled,
                 viewerEnabledOcrLanguages = settings.viewer.enabledOcrLanguages
                     .sortedBy(ViewerOcrLanguage::ordinal)

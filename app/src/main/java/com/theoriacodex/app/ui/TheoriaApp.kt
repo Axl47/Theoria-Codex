@@ -884,13 +884,6 @@ internal fun TheoriaAppContent(
     val bottomBarHeight = bottomNavigationSizing.totalHeightDp.dp
     val bottomBarIconSize = bottomNavigationSizing.iconSizeDp.dp
 
-    if (showFollowedCreators) {
-        com.theoriacodex.app.creator.FollowedCreatorsSheet(
-            owner = followsOwner,
-            onDismiss = { showFollowedCreators = false },
-            onOpen = { creator -> showFollowedCreators = false; scope.launch { openCreatorProfile(creator) } },
-        )
-    }
     CollectRouteEffects(followsOwner.messages) { message ->
         Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
     }
@@ -1018,6 +1011,13 @@ internal fun TheoriaAppContent(
     com.theoriacodex.app.codex.SavedCodexSession {
     PostTagContextProvider(searchRouteOwner?.state, featureDependencies.search::fetchSearchTermCounts) {
         TheoriaNightTheme {
+            if (showFollowedCreators) {
+                com.theoriacodex.app.creator.FollowedCreatorsSheet(
+                    owner = followsOwner,
+                    onDismiss = { showFollowedCreators = false },
+                    onOpen = { creator -> showFollowedCreators = false; scope.launch { openCreatorProfile(creator) } },
+                )
+            }
             if (!navReady) {
                 val promptRemote = updateChoiceRemote
                 Column(
@@ -1134,6 +1134,8 @@ internal fun TheoriaAppContent(
                                                             liveSearchBinding = effect.liveSearchBinding,
                                                             searchVisibilityFilters = effect.visibilityFilters,
                                                             onToggleLike = likeAction,
+                                                            relatedBinding = com.theoriacodex.app.viewer.ViewerRelatedBinding(
+                                                                ViewerStreamSource.SEARCH, searchRouteOwner?.currentState()?.query?.appliedQueryHash.orEmpty()),
                                                             saveQuery = saveQuery,
                                                         )),
                                                     )
@@ -1202,6 +1204,8 @@ internal fun TheoriaAppContent(
                                                             liveSearchBinding = effect.liveSearchBinding,
                                                             searchVisibilityFilters = effect.visibilityFilters,
                                                             onToggleLike = likeAction,
+                                                            relatedBinding = com.theoriacodex.app.viewer.ViewerRelatedBinding(
+                                                                ViewerStreamSource.FOR_YOU, "for_you:${forYouRouteOwnerBinding.current?.state?.value?.seedId}"),
                                                         )),
                                                     )
                                                     if (effect.liveSearchBinding) {
@@ -1490,6 +1494,7 @@ internal fun TheoriaAppContent(
                                     onRenameSearch = savedSearchOwner::rename,
                                     onRemoveSearch = savedSearchOwner::remove,
                                     resolvePost = { viewerRouteWorkflow.resolvePost(it, ViewerStreamSource.CODEX) },
+                                    onToggleLike = { toggleLikeAndSyncCodex(it) },
                                 )
                                 return@composable
                             }
@@ -1530,6 +1535,8 @@ internal fun TheoriaAppContent(
                                 codexName = state.codex?.name,
                                 onTitleLongPress = { codexActionTargetId = codexId },
                                 customHeader = virtualUi?.header,
+                                likedPostIds = state.likedPostIds,
+                                onToggleLike = if (virtualUi != null) ({ post -> toggleLikeAndSyncCodex(post) }) else null,
                                 customFilters = virtualUi?.filters,
                                 customFiltersActive = virtualUi?.filtersActive == true,
                                 emptyMessage = virtualUi?.emptyMessage,
@@ -1639,6 +1646,8 @@ internal fun TheoriaAppContent(
                                                 liveSearchBinding = effect.liveSearchBinding,
                                                 searchVisibilityFilters = effect.visibilityFilters,
                                                 onToggleLike = likeAction,
+                                                relatedBinding = com.theoriacodex.app.viewer.ViewerRelatedBinding(
+                                                    ViewerStreamSource.CREATOR_PROFILE, creatorRouteOwnerBinding.current?.currentState()?.queryHash.orEmpty()),
                                             )),
                                         )
                                         navController.navigate(AppRoute.Viewer) {
@@ -1702,6 +1711,7 @@ internal fun TheoriaAppContent(
                                     fetchTagVideoCounts = featureDependencies.search::fetchTagVideoCounts,
                                     invertMultiImageScrollDirection =
                                         state.browsing.settings.viewer.invertMultiImageScrollDirection,
+                                    instantSeek = state.browsing.settings.viewer.instantSeek,
                                     likedPostIds = state.browsing.likedPostIds,
                                     creatorBrowsingSources = state.browsing.creatorBrowsingSources,
                                 ),
@@ -1710,6 +1720,7 @@ internal fun TheoriaAppContent(
                                         queryHash = state.search.query.appliedQueryHash
                                             .takeIf(String::isNotBlank),
                                         results = state.search.content.results,
+                                        relatedPosts = state.search.relatedPosts,
                                         retainedLikedPostIds = state.search.relatedPosts.retainedLikedPostIds +
                                             pendingLikePostIds[state.browsing.activeProfile.profileId].orEmpty(),
                                         canLoadMore = state.search.content.canLoadMore,
@@ -1717,6 +1728,7 @@ internal fun TheoriaAppContent(
                                     ),
                                     forYou = ViewerRouteLiveSourceSnapshot(
                                         queryHash = "for_you:${state.forYou.seedId}",
+                                        relatedPosts = state.forYou.relatedPosts,
                                         results = state.forYou.results,
                                         canLoadMore = state.forYou.canLoadMore,
                                         loadingMore = state.forYou.isPaging,
@@ -1724,6 +1736,7 @@ internal fun TheoriaAppContent(
                                     creatorProfile = ViewerRouteLiveSourceSnapshot(
                                         queryHash = state.creator.queryHash,
                                         results = state.creator.results,
+                                        relatedPosts = state.creator.relatedPosts,
                                         retainedLikedPostIds = state.creator.relatedPosts.retainedLikedPostIds +
                                             pendingLikePostIds[state.browsing.activeProfile.profileId].orEmpty(),
                                         canLoadMore = state.creator.canLoadMore,
@@ -1798,20 +1811,10 @@ internal fun TheoriaAppContent(
                                     },
                                 ),
                                 screenCallbacks = ViewerRouteScreenCallbacks(
-                                    onPlaybackModeSelected = { mode ->
-                                        scope.launch {
-                                            dataDependencies.settingsRepository.updateSettings { current ->
-                                                current.copy(viewer = current.viewer.copy(playbackMode = mode))
-                                            }
-                                        }
-                                    },
+                                    onDismissRelatedPosts = viewerRouteWorkflow::dismissRelatedPosts,
+                                    onRetryRelatedPosts = viewerRouteWorkflow::retryRelatedPosts,
+                                    onPlaybackModeSelected = { settingsOwner.onAction(SettingsAction.SetViewerPlaybackMode(it)) },
                                     onOwnerChanged = { owner -> activeViewerOwner = owner },
-                                    onInvertMultiImageScrollDirectionChange = { enabled ->
-                                        scope.launch {
-                                            dataDependencies.settingsRepository
-                                                .setInvertMultiImageScrollDirection(enabled)
-                                        }
-                                    },
                                     onVisiblePostChanged = { post, viewedMediaNumber, session ->
                                         viewerRouteWorkflow.recordVisiblePost(post, viewedMediaNumber, session)
                                     },

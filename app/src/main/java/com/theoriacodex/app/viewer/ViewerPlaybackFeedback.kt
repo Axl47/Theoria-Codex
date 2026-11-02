@@ -44,34 +44,24 @@ internal fun FittedSeekJumpFeedbackOverlay(
 ) {
     if (feedback == null) return
 
-    BoxWithConstraints(
-        modifier = modifier,
-        contentAlignment = Alignment.Center,
-    ) {
-        val fittedModifier = if (aspectRatio != null) {
-            val containerRatio = if (maxHeight > 0.dp) {
-                maxWidth / maxHeight
-            } else {
-                aspectRatio
-            }
-            if (containerRatio > aspectRatio) {
-                Modifier
-                    .fillMaxHeight()
-                    .aspectRatio(aspectRatio)
-            } else {
-                Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(aspectRatio)
-            }
-        } else {
-            Modifier.fillMaxSize()
-        }
+    FittedViewerMediaOverlay(aspectRatio, modifier) {
+        SeekJumpFeedbackOverlay(feedback, onExpired, Modifier.fillMaxSize().clipToBounds())
+    }
+}
 
-        SeekJumpFeedbackOverlay(
-            feedback = feedback,
-            onExpired = onExpired,
-            modifier = fittedModifier.clipToBounds(),
-        )
+/** Overlay coordinates follow the fitted media rather than the full screen's letterboxing. */
+@Composable
+internal fun FittedViewerMediaOverlay(
+    aspectRatio: Float?,
+    modifier: Modifier = Modifier,
+    content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit,
+) {
+    BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
+        val fitted = if (aspectRatio == null) Modifier.fillMaxSize()
+        else if (maxHeight > 0.dp && maxWidth / maxHeight > aspectRatio) {
+            Modifier.fillMaxHeight().aspectRatio(aspectRatio)
+        } else Modifier.fillMaxWidth().aspectRatio(aspectRatio)
+        Box(fitted, content = content)
     }
 }
 

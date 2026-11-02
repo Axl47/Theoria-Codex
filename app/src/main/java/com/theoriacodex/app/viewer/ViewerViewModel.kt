@@ -141,6 +141,7 @@ internal class ViewerViewModel(
     fun updateSession(transform: (ViewerSession) -> ViewerSession) {
         val current = mutableSession.value ?: return
         val updated = transform(current)
+        if (updated == current) return
         val currentIndex = state.value.currentPageIndex
         val currentMediaIndex = state.value.currentPage?.let { it.pendingMediaIndex ?: it.selectedMediaIndex } ?: 0
         val replacement = updated.copy(
@@ -254,7 +255,8 @@ internal class ViewerViewModel(
         if (postResolver == null) return
         val current = state.value
         val session = current.session ?: return
-        val next = current.pages.getOrNull(current.currentPageIndex + 1)
+        val navigation = viewerPostNavigation(current)
+        val next = navigation.pages.getOrNull(navigation.currentIndex + 1)
         val desired = setOfNotNull(current.currentPage?.post?.id, next?.post?.id)
         val obsolete = sessionJobs.keys.filterIsInstance<ViewerWorkKey.Resolution>().filter { it.postId !in desired }
         obsolete.forEach { key ->
@@ -371,7 +373,8 @@ internal class ViewerViewModel(
         sessionJobs.clear()
     }
 
-    private fun persist(current: ViewerUiState) {
+    private fun persist(rendered: ViewerUiState) {
+        val current = rendered.forOriginalNavigation(mutableSession.value)
         val session = current.session ?: run {
             clearSavedState()
             return
@@ -474,6 +477,8 @@ internal fun ViewerSession.toReplaceViewerSessionAction(
         posts = posts.toList(),
         initialPageIndex = context.startIndex,
         initialMediaIndices = initialMediaIndices,
+        relatedNavigation = relatedNavigation,
+        relatedPostIds = relatedPostIds,
         resolutionRequiredPostIds = posts
             .asSequence()
             .filter { post -> requiresResolution(post) || requiresViewerPostResolution(post, context.streamSource) }

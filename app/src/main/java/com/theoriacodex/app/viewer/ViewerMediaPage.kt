@@ -72,6 +72,8 @@ internal fun ViewerMediaPage(
     onRequestMediaRecovery: ((Post, ImageRef) -> Unit)?,
     levelControls: ViewerLevelControls? = null,
     returnProgress: Float = 0f,
+    onSwipeProgress: (Float) -> Unit = {},
+    onSwipeCancelled: () -> Unit = {},
 ) {
     val key = ViewerMediaKey(post.id, mediaIndex)
     val isVideo = isVideoMediaRef(media)
@@ -100,7 +102,12 @@ internal fun ViewerMediaPage(
         }
         ViewerMediaGestureLayer(key, mediaCount, isVideo || isGif || isUgoira, animated, interactions, controls,
             transform, onTransformChanged, layout, onAction, onInteraction, onToggleChrome, onNavigate,
-            levelControls.takeIf { isVideo })
+            levelControls.takeIf { isVideo }, onSwipeProgress, onSwipeCancelled)
+        if (controls.isActive && isVideo && !layout.pictureInPicture && levelControls != null) {
+            FittedViewerMediaOverlay(viewerAspectRatio(post), Modifier.matchParentSize()) {
+                ViewerLevelFeedbackOverlay(levelControls, Modifier.align(Alignment.TopCenter).padding(top = 8.dp))
+            }
+        }
         mediaError?.let { error ->
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 ViewerMediaErrorOverlay(error) { onAction(ViewerAction.RetryMedia) }
@@ -137,6 +144,8 @@ private fun ViewerMediaGestureLayer(
     layout: ViewerMediaLayout, onAction: (ViewerAction) -> Unit, onInteraction: () -> Unit,
     onToggleChrome: () -> Unit, onNavigate: (ViewerHorizontalSwipeDirection) -> Unit,
     levelControls: ViewerLevelControls?,
+    onSwipeProgress: (Float) -> Unit,
+    onSwipeCancelled: () -> Unit,
 ) {
     val transformState = rememberTransformableState { _, zoom, pan, _ ->
         onTransformChanged(transform.transform(zoom, pan.x, pan.y))
@@ -158,8 +167,10 @@ private fun ViewerMediaGestureLayer(
                 key, transform.isZoomed, mediaCount, layout.invertGalleryDirection, onNavigate,
                 enabled = controls.isActive && !layout.pictureInPicture && !layout.touchExploration,
                 levelControls = levelControls,
+                onSwipeProgress = onSwipeProgress,
+                onSwipeCancelled = onSwipeCancelled,
             )
             .transformable(transformState, canPan = { transform.isZoomed }).then(gestures))
-        if (controls.showControls && animated) Spacer(Modifier.fillMaxWidth().height(96.dp))
+        if (controls.showControls && animated) Spacer(Modifier.fillMaxWidth().height(96.dp + LocalViewerPostStripInset.current))
     }
 }

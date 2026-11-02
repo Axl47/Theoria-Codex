@@ -33,6 +33,8 @@ import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.search.filterSearchResults
+import com.theoriacodex.app.related.RelatedPostsUiState
+import com.theoriacodex.app.related.loadedPosts
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.ViewerMediaPrefetcher
 import com.theoriacodex.app.viewer.ViewerPostResolver
@@ -41,6 +43,8 @@ import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.ViewerRestorationRequest
 import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.mergeViewerPosts
+import com.theoriacodex.app.viewer.withRelatedPosts
+import com.theoriacodex.app.related.requestOrNull
 import com.theoriacodex.app.viewer.state.ViewerEffect
 import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.data.repository.ViewerStreamSource
@@ -77,6 +81,7 @@ internal data class ViewerRouteRenderConfig(
     val playbackMode: com.theoriacodex.domain.model.ViewerPlaybackMode = com.theoriacodex.domain.model.ViewerPlaybackMode.LOOP,
     val videoQuality: com.theoriacodex.domain.model.VideoQuality = com.theoriacodex.domain.model.VideoQuality.AUTO,
     val invertMultiImageScrollDirection: Boolean = false,
+    val instantSeek: Boolean = false,
     val likedPostIds: Set<PostId> = emptySet(),
     val creatorBrowsingSources: Set<SourceKey>,
 )
@@ -88,6 +93,7 @@ internal data class ViewerRouteLiveSourceSnapshot(
     val canLoadMore: Boolean = false,
     val loadingMore: Boolean = false,
     val retainedLikedPostIds: Set<PostId> = emptySet(),
+    val relatedPosts: RelatedPostsUiState = RelatedPostsUiState.Idle,
 )
 
 /**
@@ -115,6 +121,12 @@ internal data class ViewerRouteLiveSourceState(
         ViewerStreamSource.CODEX,
         ViewerStreamSource.RECENTS,
         -> null
+    }
+
+    fun relatedSourceFor(session: ViewerSession): ViewerRouteLiveSourceSnapshot? {
+        val source = session.relatedBinding?.source ?: session.context.streamSource
+        val query = session.relatedBinding?.queryHash ?: session.context.queryHash
+        return forSource(source)?.takeIf { it.queryHash == query }
     }
 
     fun visiblePostsFor(session: ViewerSession): List<Post>? {
@@ -160,7 +172,6 @@ internal data class ViewerRouteEffectCallbacks(
 internal data class ViewerRouteScreenCallbacks(
     val onOwnerChanged: (ViewerRouteOwnerHandle?) -> Unit = {},
     val onPlaybackModeSelected: (com.theoriacodex.domain.model.ViewerPlaybackMode) -> Unit = {},
-    val onInvertMultiImageScrollDirectionChange: (Boolean) -> Unit = {},
     val onVisiblePostChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
     val onVisibleMediaChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
     val onOpenInBrowser: (Post) -> Unit,
@@ -168,6 +179,8 @@ internal data class ViewerRouteScreenCallbacks(
     val onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
     val onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
     val onGoToSearch: () -> Unit,
+    val onDismissRelatedPosts: (ViewerStreamSource) -> Unit = {},
+    val onRetryRelatedPosts: (ViewerStreamSource) -> Unit = {},
     val onOpenCreatorFallback: ((Post) -> Unit)? = null,
 )
 
@@ -242,6 +255,8 @@ internal fun ViewerRoute(
     val ownerHandle = remember(viewerOwner) { ViewerRouteOwnerHandle(viewerOwner) }
     val viewerState by viewerOwner.state.collectAsStateWithLifecycle()
     val session by viewerOwner.session.collectAsStateWithLifecycle()
+    val retainedPostIds = remember(viewerState.pages) { viewerState.pages.mapTo(mutableSetOf()) { it.post.id } }
+    SideEffect { viewerReturn?.retainPosts(retainedPostIds) }
     val claimedSessionId = remember(viewerOwner) {
         dependencies.sessionRetentionOwner.session.value?.sessionId
     }
@@ -290,7 +305,9 @@ internal fun ViewerRoute(
         viewerOwner,
         session?.sessionId,
         session?.searchVisibilityFilters,
-        activeLiveSource,
+        activeLiveSource?.queryHash,
+        activeLiveSource?.results,
+        activeLiveSource?.retainedLikedPostIds,
         liveSourceState.likedPostIds,
         liveSourceState.savedPostIds,
         liveSourceState.watchedPostIds,
@@ -437,8 +454,24 @@ internal fun ViewerRoute(
             resolveInBackground = false,
         )
     }
+    val relatedSource = activeSession?.relatedBinding?.source ?: activeSession?.context?.streamSource
+    val relatedSnapshot = activeSession?.let(liveSourceState::relatedSourceFor)
+    val relatedState = relatedSnapshot?.relatedPosts ?: RelatedPostsUiState.Idle
+    val relatedPosts = activeSession?.let { active ->
+        filterSearchResults(
+            results = relatedState.loadedPosts, filters = active.searchVisibilityFilters,
+            likedPostIds = if (relatedSource == ViewerStreamSource.FOR_YOU) emptySet() else liveSourceState.likedPostIds,
+            savedPostIds = if (relatedSource == ViewerStreamSource.FOR_YOU) emptySet() else liveSourceState.savedPostIds,
+            watchedPostIds = if (relatedSource == ViewerStreamSource.FOR_YOU) emptySet() else liveSourceState.watchedPostIds,
+            retainedLikedPostIds = relatedSnapshot?.retainedLikedPostIds.orEmpty(),
+            unknownAnimatedDurationPolicy = liveSourceState.unknownAnimatedDurationPolicy,
+        )
+    }.orEmpty()
+    androidx.compose.runtime.CompositionLocalProvider(com.theoriacodex.app.viewer.LocalViewerInstantSeek provides renderConfig.instantSeek) {
     ViewerScreen(
-        uiState = viewerState,
+        uiState = viewerState.copy(related = com.theoriacodex.app.viewer.state.ViewerRelatedUiState(
+            relatedState, relatedPosts, activeSession?.relatedNavigation, activeSession?.relatedPostIds.orEmpty(),
+        )),
         saveToCodexQuery = activeSession?.saveQuery,
         creatorBrowsingSources = renderConfig.creatorBrowsingSources,
         onAction = { action ->
@@ -454,9 +487,14 @@ internal fun ViewerRoute(
         loadingMoreFromSource = matchingSourceState?.loadingMore == true,
         invertMultiImageScrollDirection = renderConfig.invertMultiImageScrollDirection,
         videoQuality = renderConfig.videoQuality,
-        onInvertMultiImageScrollDirectionChange =
-            screenCallbacks.onInvertMultiImageScrollDirectionChange,
         likedPostIds = renderConfig.likedPostIds,
+        onIncludeRelatedPosts = {
+            relatedState.requestOrNull?.seed?.id?.let { seedId ->
+                viewerOwner.updateSession { current -> current.withRelatedPosts(seedId, relatedPosts) }
+            }
+        },
+        onDismissRelatedPosts = { relatedSource?.let(screenCallbacks.onDismissRelatedPosts) },
+        onRetryRelatedPosts = { relatedSource?.let(screenCallbacks.onRetryRelatedPosts) },
         onRequestMediaRecovery = { post, failedMedia ->
             routeScope.launch {
                 if (viewerOwner.session.value == null) return@launch
@@ -493,6 +531,7 @@ internal fun ViewerRoute(
         },
         onOpenCreatorFallback = screenCallbacks.onOpenCreatorFallback,
     )
+    }
 }
 
 /** Prevents buffered or suspended effects from crossing a Viewer session replacement. */

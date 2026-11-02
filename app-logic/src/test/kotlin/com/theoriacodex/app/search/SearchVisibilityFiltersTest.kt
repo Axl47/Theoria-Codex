@@ -11,6 +11,20 @@ import org.junit.Test
 
 class SearchVisibilityFiltersTest {
     @Test
+    fun `watched liked seed stays visible until recommendations are dismissed`() {
+        val seed = samplePost(id = "seed", source = SourceKey.PIXIV)
+        val other = samplePost(id = "other", source = SourceKey.PIXIV)
+        fun visible(retained: Set<PostId>) = filterSearchResults(
+            results = listOf(seed, other),
+            filters = SearchVisibilityFilters(hideLiked = true, hideSaved = true, hideWatched = true),
+            likedPostIds = setOf(seed.id), savedPostIds = setOf(seed.id),
+            watchedPostIds = setOf(seed.id, other.id), retainedLikedPostIds = retained,
+        )
+        assertEquals(listOf(seed), visible(setOf(seed.id)))
+        assertEquals(emptyList<Post>(), visible(emptySet()))
+    }
+
+    @Test
     fun `pending like retains its automatic save without retaining unrelated saved posts`() {
         val pending = samplePost(id = "pending", source = SourceKey.PIXIV)
         val saved = samplePost(id = "saved", source = SourceKey.PIXIV)

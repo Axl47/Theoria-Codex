@@ -61,17 +61,17 @@ internal fun ViewerLevelFeedbackOverlay(controls: ViewerLevelControls, modifier:
         color = Color.Black.copy(alpha = 0.72f), contentColor = Color.White, shape = CircleShape,
     ) {
         Row(
-            Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically,
+            Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+            horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically,
         ) {
             ViewerLevelIcon(shown.control, shown.fraction)
             if (shown.available) {
                 LinearProgressIndicator(
-                    progress = { shown.fraction }, modifier = Modifier.width(144.dp).height(4.dp),
+                    progress = { shown.fraction }, modifier = Modifier.width(72.dp).height(2.dp),
                     color = Color.White, trackColor = Color.White.copy(alpha = 0.3f), drawStopIndicator = {},
                 )
             }
-            Text(shown.label, Modifier.widthIn(min = 36.dp), style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+            Text(shown.label, Modifier.widthIn(min = 18.dp), style = MaterialTheme.typography.bodyMedium.let { it.copy(fontSize = it.fontSize / 2, lineHeight = it.lineHeight / 2) }, maxLines = 1)
         }
     }
 }
@@ -79,8 +79,8 @@ internal fun ViewerLevelFeedbackOverlay(controls: ViewerLevelControls, modifier:
 /** Drawn from the actual level: a filling sun, or a speaker with up to three bars and a mute slash. */
 @Composable
 private fun ViewerLevelIcon(control: ViewerLevelControl, fraction: Float) {
-    Canvas(Modifier.size(26.dp)) {
-        val stroke = 1.8.dp.toPx()
+    Canvas(Modifier.size(13.dp)) {
+        val stroke = 0.9.dp.toPx()
         if (control == ViewerLevelControl.Brightness) {
             val radius = size.minDimension * 0.23f
             repeat(8) { ray ->

@@ -98,6 +98,7 @@ internal data class CodexDetailDestinationState(
     val followedOwner: com.theoriacodex.app.codex.FollowedCodexViewModel? = null,
     val follows: List<com.theoriacodex.data.repository.FollowedCreator> = emptyList(),
     val loading: Boolean = false,
+    val likedPostIds: Set<PostId> = emptySet(),
 )
 
 internal data class SaveToCodexDestinationState(
@@ -226,12 +227,17 @@ internal fun CodexDetailDestinationStateBoundary(
     fabRestoreState: com.theoriacodex.data.repository.FeedFabRestoreState,
     content: @Composable (CodexDetailDestinationState) -> Unit,
 ) {
+    val metadata = browsingMetadataOwner(data).state.collectAsStateWithLifecycle().value ?: return
+    val render: @Composable (CodexDetailDestinationState) -> Unit = { state ->
+        content(state.copy(likedPostIds = if (state.activeProfile.profileId == metadata.settings.activeProfileId)
+            metadata.likedPostIds else emptySet()))
+    }
     if (codexId == com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID) {
-        SavedSearchesCodexBoundary(data, sources, fabRestoreState, sortMode, content)
+        SavedSearchesCodexBoundary(data, sources, fabRestoreState, sortMode, render)
         return
     }
     if (codexId == com.theoriacodex.app.codex.FOLLOWED_CODEX_ID) {
-        FollowedCodexDestinationStateBoundary(data, sources, fabRestoreState, sortMode, content)
+        FollowedCodexDestinationStateBoundary(data, sources, fabRestoreState, sortMode, render)
         return
     }
     val codexState = remember(data.codexRepository, codexId) { data.codexRepository.observeCodex(codexId) }
@@ -245,7 +251,7 @@ internal fun CodexDetailDestinationStateBoundary(
     val settings = settingsState.value ?: return
     val availableState = sources.availableSources.collectAsStateWithLifecycle()
     DestinationStateBoundary(settingsState) {
-        content(
+        render(
             CodexDetailDestinationState(
                 codex = codexState.value,
                 items = itemsState.value,

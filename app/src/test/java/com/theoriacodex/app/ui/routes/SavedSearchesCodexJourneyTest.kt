@@ -89,10 +89,10 @@ class SavedSearchesCodexJourneyTest {
             }
             compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Codex").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithContentDescription("Codex").performClick()
-            compose.waitUntil(10_000) { compose.onNodeWithText("Likes: 0, Followed: 0, Search: 2").isDisplayed() }
+            compose.waitUntil(10_000) { compose.onNodeWithText("Saved").isDisplayed() }
             compose.onNodeWithText("Codex Library").assertIsDisplayed()
-            compose.onNodeWithText("Searches").assertDoesNotExist()
-            compose.onNodeWithText("Likes: 0, Followed: 0, Search: 2").assertIsDisplayed()
+            compose.onNodeWithText("Searches").assertIsDisplayed()
+            compose.onNodeWithText("2").assertIsDisplayed()
             compose.onNodeWithText("Saved").performClick()
             compose.waitUntil(10_000) { compose.onNodeWithText("Likes").isDisplayed() }
             compose.onNodeWithText("Likes").performTouchInput { longClick() }

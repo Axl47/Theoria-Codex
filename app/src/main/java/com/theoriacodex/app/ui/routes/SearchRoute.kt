@@ -346,6 +346,7 @@ private fun SearchRouteContent(
 ) {
     SearchScreen(
         state = state,
+        oldSearchBar = config.settings.oldSearchBar,
         creatorBrowsingSources = config.creatorBrowsingSources,
         onAction = owner::onAction,
         resolvePostById = { id -> coordinator.resolvePostForSearch(id, state.query.appliedQueryHash) },

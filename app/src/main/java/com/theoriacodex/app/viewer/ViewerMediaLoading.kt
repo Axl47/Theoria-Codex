@@ -30,7 +30,7 @@ internal fun ViewerPlaybackFooter(
     content: @Composable () -> Unit,
 ) {
     Surface(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().padding(bottom = LocalViewerPostStripInset.current),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
     ) {
         Box(
