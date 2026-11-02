@@ -43,55 +43,7 @@ class GitHubReleaseFeedClientTest {
 
     @Test
     fun `release parser picks newest prerelease with fixed asset`() {
-        val json =
-            """
-            [
-              {
-                "id": 1,
-                "tag_name": "main-vc12030-aaaaaaa",
-                "draft": false,
-                "prerelease": true,
-                "published_at": "2026-02-24T20:00:00Z",
-                "assets": [
-                  {
-                    "name": "theoria-codex-main.apk",
-                    "browser_download_url": "https://example.com/a.apk",
-                    "size": 123
-                  }
-                ]
-              },
-              {
-                "id": 2,
-                "name": "Main build vc12031 (bbbbbbb)",
-                "tag_name": "main-vc12031-bbbbbbb",
-                "draft": false,
-                "prerelease": true,
-                "published_at": "2026-02-25T20:00:00Z",
-                "body": "## Highlights\n- Improved startup updater prompt\n\n## Fixes\n- Fixed 404 release URL edge case",
-                "assets": [
-                  {
-                    "name": "theoria-codex-main.apk",
-                    "browser_download_url": "https://example.com/b.apk",
-                    "size": 456
-                  }
-                ]
-              },
-              {
-                "id": 3,
-                "tag_name": "main-vc12032-ccccccc",
-                "draft": false,
-                "prerelease": false,
-                "published_at": "2026-02-26T20:00:00Z",
-                "assets": [
-                  {
-                    "name": "theoria-codex-main.apk",
-                    "browser_download_url": "https://example.com/c.apk",
-                    "size": 789
-                  }
-                ]
-              }
-            ]
-            """.trimIndent()
+        val json = mixedReleaseJson()
 
         val remote = GitHubReleaseFeedClient.parseLatestMainPrerelease(
             jsonBody = json,
@@ -116,58 +68,7 @@ class GitHubReleaseFeedClientTest {
 
     @Test
     fun `release history parser returns sorted prerelease history`() {
-        val json =
-            """
-            [
-              {
-                "id": 10,
-                "name": "Main Build vc100...8",
-                "tag_name": "main-vc1008-aaaaaaa",
-                "draft": false,
-                "prerelease": true,
-                "published_at": "2026-02-20T20:00:00Z",
-                "body": "## Fixes\n- Older fix",
-                "assets": [
-                  {
-                    "name": "theoria-codex-main.apk",
-                    "browser_download_url": "https://example.com/10.apk",
-                    "size": 100
-                  }
-                ]
-              },
-              {
-                "id": 11,
-                "name": "Main Build vc100...9",
-                "tag_name": "main-vc1009-bbbbbbb",
-                "draft": false,
-                "prerelease": true,
-                "published_at": "2026-02-21T20:00:00Z",
-                "body": "## New\n- Added X",
-                "assets": [
-                  {
-                    "name": "theoria-codex-main.apk",
-                    "browser_download_url": "https://example.com/11.apk",
-                    "size": 101
-                  }
-                ]
-              },
-              {
-                "id": 12,
-                "name": "Main Build vc101...0",
-                "tag_name": "main-vc1010-ccccccc",
-                "draft": true,
-                "prerelease": true,
-                "published_at": "2026-02-22T20:00:00Z",
-                "assets": [
-                  {
-                    "name": "theoria-codex-main.apk",
-                    "browser_download_url": "https://example.com/12.apk",
-                    "size": 102
-                  }
-                ]
-              }
-            ]
-            """.trimIndent()
+        val json = releaseHistoryJson()
 
         val history = GitHubReleaseFeedClient.parseMainPrereleaseHistory(
             jsonBody = json,
@@ -278,4 +179,109 @@ class GitHubReleaseFeedClientTest {
         assertEquals("Fixes", sections.first().title)
         assertEquals("Fixed crash when retrying update", sections.first().bullets.first())
     }
+
+    private fun mixedReleaseJson(): String =
+        """
+        [
+          {
+            "id": 1,
+            "tag_name": "main-vc12030-aaaaaaa",
+            "draft": false,
+            "prerelease": true,
+            "published_at": "2026-02-24T20:00:00Z",
+            "assets": [
+              {
+                "name": "theoria-codex-main.apk",
+                "browser_download_url": "https://example.com/a.apk",
+                "size": 123
+              }
+            ]
+          },
+          {
+            "id": 2,
+            "name": "Main build vc12031 (bbbbbbb)",
+            "tag_name": "main-vc12031-bbbbbbb",
+            "draft": false,
+            "prerelease": true,
+            "published_at": "2026-02-25T20:00:00Z",
+            "body": "## Highlights\n- Improved startup updater prompt\n\n## Fixes\n- Fixed 404 release URL edge case",
+            "assets": [
+              {
+                "name": "theoria-codex-main.apk",
+                "browser_download_url": "https://example.com/b.apk",
+                "size": 456
+              }
+            ]
+          },
+          {
+            "id": 3,
+            "tag_name": "main-vc12032-ccccccc",
+            "draft": false,
+            "prerelease": false,
+            "published_at": "2026-02-26T20:00:00Z",
+            "assets": [
+              {
+                "name": "theoria-codex-main.apk",
+                "browser_download_url": "https://example.com/c.apk",
+                "size": 789
+              }
+            ]
+          }
+        ]
+        """.trimIndent()
+
+
+    private fun releaseHistoryJson(): String =
+        """
+        [
+          {
+            "id": 10,
+            "name": "Main Build vc100...8",
+            "tag_name": "main-vc1008-aaaaaaa",
+            "draft": false,
+            "prerelease": true,
+            "published_at": "2026-02-20T20:00:00Z",
+            "body": "## Fixes\n- Older fix",
+            "assets": [
+              {
+                "name": "theoria-codex-main.apk",
+                "browser_download_url": "https://example.com/10.apk",
+                "size": 100
+              }
+            ]
+          },
+          {
+            "id": 11,
+            "name": "Main Build vc100...9",
+            "tag_name": "main-vc1009-bbbbbbb",
+            "draft": false,
+            "prerelease": true,
+            "published_at": "2026-02-21T20:00:00Z",
+            "body": "## New\n- Added X",
+            "assets": [
+              {
+                "name": "theoria-codex-main.apk",
+                "browser_download_url": "https://example.com/11.apk",
+                "size": 101
+              }
+            ]
+          },
+          {
+            "id": 12,
+            "name": "Main Build vc101...0",
+            "tag_name": "main-vc1010-ccccccc",
+            "draft": true,
+            "prerelease": true,
+            "published_at": "2026-02-22T20:00:00Z",
+            "assets": [
+              {
+                "name": "theoria-codex-main.apk",
+                "browser_download_url": "https://example.com/12.apk",
+                "size": 102
+              }
+            ]
+          }
+        ]
+        """.trimIndent()
+
 }

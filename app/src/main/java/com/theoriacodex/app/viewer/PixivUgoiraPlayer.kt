@@ -397,68 +397,14 @@ class PixivUgoiraClient internal constructor(
         val codec = MediaCodec.createEncoderByType(UGOIRA_MP4_MIME_TYPE)
         val muxer = MediaMuxer(outputFileDescriptor, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
         val bufferInfo = MediaCodec.BufferInfo()
-        var muxerStarted = false
-        var trackIndex = -1
+        val output = UgoiraMuxerOutput(muxer)
 
         try {
             codec.configure(mediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
             codec.start()
 
-            var presentationTimeUs = 0L
-            playback.frames.forEach { frame ->
-                val sizedBitmap = if (frame.bitmap.width != width || frame.bitmap.height != height) {
-                    frame.bitmap.scale(width, height, filter = true)
-                } else {
-                    frame.bitmap
-                }
-                try {
-                    val repeats = delayToFrameRepeat(frame.delayMs)
-                    repeat(repeats) {
-                        val inputIndex = awaitInputBuffer(codec)
-                        val inputImage = codec.getInputImage(inputIndex)
-                            ?: throw IOException("Video encoder did not return input image")
-                        inputImage.use {
-                            writeBitmapToImage(
-                                bitmap = sizedBitmap,
-                                image = it,
-                                width = width,
-                                height = height,
-                            )
-                        }
-                        codec.queueInputBuffer(
-                            inputIndex,
-                            0,
-                            width * height * 3 / 2,
-                            presentationTimeUs,
-                            0,
-                        )
-
-                        drainEncoder(
-                            codec = codec,
-                            bufferInfo = bufferInfo,
-                            onFormatChanged = { outputFormat ->
-                                if (!muxerStarted) {
-                                    trackIndex = muxer.addTrack(outputFormat)
-                                    muxer.start()
-                                    muxerStarted = true
-                                }
-                            },
-                            onEncodedSample = { encodedData, info ->
-                                if (!muxerStarted || trackIndex < 0) return@drainEncoder
-                                if (info.size <= 0) return@drainEncoder
-                                encodedData.position(info.offset)
-                                encodedData.limit(info.offset + info.size)
-                                muxer.writeSampleData(trackIndex, encodedData, info)
-                            },
-                        )
-
-                        presentationTimeUs += frameDurationUs
-                    }
-                } finally {
-                    if (sizedBitmap !== frame.bitmap) {
-                        sizedBitmap.recycle()
-                    }
-                }
+            val presentationTimeUs = encodeFrames(playback, codec, width, height, frameDurationUs) {
+                drainEncoder(codec, bufferInfo, output::onFormatChanged, output::onEncodedSample)
             }
 
             val eosIndex = awaitInputBuffer(codec)
@@ -475,31 +421,69 @@ class PixivUgoiraClient internal constructor(
                 reachedEnd = drainEncoder(
                     codec = codec,
                     bufferInfo = bufferInfo,
-                    onFormatChanged = { outputFormat ->
-                        if (!muxerStarted) {
-                            trackIndex = muxer.addTrack(outputFormat)
-                            muxer.start()
-                            muxerStarted = true
-                        }
-                    },
-                    onEncodedSample = { encodedData, info ->
-                        if (!muxerStarted || trackIndex < 0) return@drainEncoder
-                        if (info.size <= 0) return@drainEncoder
-                        encodedData.position(info.offset)
-                        encodedData.limit(info.offset + info.size)
-                        muxer.writeSampleData(trackIndex, encodedData, info)
-                    },
+                    onFormatChanged = output::onFormatChanged,
+                    onEncodedSample = output::onEncodedSample,
                 )
             }
         } finally {
             runCatching { codec.stop() }
             codec.release()
 
-            if (muxerStarted) {
+            if (output.started) {
                 runCatching { muxer.stop() }
             }
             muxer.release()
         }
+    }
+
+    private fun encodeFrames(
+        playback: UgoiraPlayback,
+        codec: MediaCodec,
+        width: Int,
+        height: Int,
+        frameDurationUs: Long,
+        drain: () -> Unit,
+    ): Long {
+        var presentationTimeUs = 0L
+        playback.frames.forEach { frame ->
+            val sizedBitmap = if (frame.bitmap.width != width || frame.bitmap.height != height) {
+                frame.bitmap.scale(width, height, filter = true)
+            } else {
+                frame.bitmap
+            }
+            try {
+                val repeats = delayToFrameRepeat(frame.delayMs)
+                repeat(repeats) {
+                    val inputIndex = awaitInputBuffer(codec)
+                    val inputImage = codec.getInputImage(inputIndex)
+                        ?: throw IOException("Video encoder did not return input image")
+                    inputImage.use {
+                        writeBitmapToImage(
+                            bitmap = sizedBitmap,
+                            image = it,
+                            width = width,
+                            height = height,
+                        )
+                    }
+                    codec.queueInputBuffer(
+                        inputIndex,
+                        0,
+                        width * height * 3 / 2,
+                        presentationTimeUs,
+                        0,
+                    )
+
+                    drain()
+
+                    presentationTimeUs += frameDurationUs
+                }
+            } finally {
+                if (sizedBitmap !== frame.bitmap) {
+                    sizedBitmap.recycle()
+                }
+            }
+        }
+        return presentationTimeUs
     }
 
     private fun drainEncoder(
@@ -777,3 +761,25 @@ private const val UGOIRA_RETRY_BASE_DELAY_MS = 350L
 internal const val UGOIRA_DECODED_CACHE_MAX_BYTES = 96L * 1024L * 1024L
 internal const val UGOIRA_ARCHIVE_CACHE_MAX_BYTES = 512L * 1024L * 1024L
 private const val UGOIRA_ARCHIVE_MEMORY_ENTRY_LIMIT = 32
+
+private class UgoiraMuxerOutput(private val muxer: MediaMuxer) {
+    var started = false
+        private set
+    private var trackIndex = -1
+
+    fun onFormatChanged(outputFormat: MediaFormat) {
+        if (!started) {
+            trackIndex = muxer.addTrack(outputFormat)
+            muxer.start()
+            started = true
+        }
+    }
+
+    fun onEncodedSample(encodedData: java.nio.ByteBuffer, info: MediaCodec.BufferInfo) {
+        if (!started || trackIndex < 0) return
+        if (info.size <= 0) return
+        encodedData.position(info.offset)
+        encodedData.limit(info.offset + info.size)
+        muxer.writeSampleData(trackIndex, encodedData, info)
+    }
+}

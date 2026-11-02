@@ -165,16 +165,9 @@ private fun SearchComposerContent(
         awaitingNewGroup = mode == SearchAddMode.ANY_OF && target == null
         onAction(action)
     }
-    fun commitTyped() {
-        val action = composerTypedAction(mode, target, input)
-        if (action == null) {
-            focus.clear()
-        } else if (state.suggestions.canCommitInput) {
-            add(action)
-            if (action is SearchAction.AddIncludeAlternative) onAction(SearchAction.ClearAutocomplete)
-            if (input.trim().all(Char::isDigit)) onDigitsCommitted()
-        }
-    }
+    fun commitTyped() = commitComposerInput(
+        mode, target, input, state.suggestions.canCommitInput, focus::clear, ::add, onAction, onDigitsCommitted,
+    )
     fun selectMode(next: SearchAddMode) {
         mode = next
         awaitingNewGroup = false
@@ -189,6 +182,73 @@ private fun SearchComposerContent(
         inputRequester.requestFocus()
     }
 
+    ComposerEditorBody(
+        state, mode, targetIndex, groups, suggestions, liveSelection, fieldFocused, inputRequester,
+        sourcePicker, savedSearches, onOpenSavedSearch, onAction, onOpenSourceAccounts,
+        onUndo, onReset, onOpenFavorites, onApply, onDismiss,
+        onCommit = ::commitTyped, onModeChange = ::selectMode,
+        onFieldFocused = { focused ->
+            fieldFocused = focused
+            onAction(if (focused) SearchAction.RefreshAutocomplete else SearchAction.ClearAutocomplete)
+        },
+        onTargetSelected = { index -> targetTerm = groups.getOrNull(index)?.terms?.first() },
+        onAddSuggestion = { suggestion -> add(suggestion.add); onAction(SearchAction.ClearAutocomplete) },
+        onSelectionChanged = { selected -> selection = selected.takeUnless { it == liveSelection } },
+        onAddAlternative = ::addAlternativeTo,
+        onSelectedAction = { action -> onAction(action); selection = null },
+    )
+}
+
+private fun commitComposerInput(
+    mode: SearchAddMode,
+    target: IndexedTermGroup?,
+    input: String,
+    canCommit: Boolean,
+    clearFocus: () -> Unit,
+    add: (SearchAction) -> Unit,
+    onAction: (SearchAction) -> Unit,
+    onDigitsCommitted: () -> Unit,
+) {
+    val action = composerTypedAction(mode, target, input)
+    if (action == null) {
+        clearFocus()
+    } else if (canCommit) {
+        add(action)
+        if (action is SearchAction.AddIncludeAlternative) onAction(SearchAction.ClearAutocomplete)
+        if (input.trim().all(Char::isDigit)) onDigitsCommitted()
+    }
+}
+
+@Composable
+private fun ComposerEditorBody(
+    state: SearchUiState,
+    mode: SearchAddMode,
+    targetIndex: Int,
+    groups: List<SearchTermGroup>,
+    suggestions: List<ComposerSuggestion>,
+    liveSelection: SelectedTerm?,
+    fieldFocused: Boolean,
+    inputRequester: FocusRequester,
+    sourcePicker: @Composable () -> Unit,
+    savedSearches: List<SavedSearchEntry>,
+    onOpenSavedSearch: (SavedSearchEntry) -> Unit,
+    onAction: (SearchAction) -> Unit,
+    onOpenSourceAccounts: () -> Unit,
+    onUndo: () -> Unit,
+    onReset: () -> Unit,
+    onOpenFavorites: () -> Unit,
+    onApply: () -> Unit,
+    onDismiss: () -> Unit,
+    onCommit: () -> Unit,
+    onModeChange: (SearchAddMode) -> Unit,
+    onFieldFocused: (Boolean) -> Unit,
+    onTargetSelected: (Int) -> Unit,
+    onAddSuggestion: (ComposerSuggestion) -> Unit,
+    onSelectionChanged: (SelectedTerm) -> Unit,
+    onAddAlternative: (SearchTerm) -> Unit,
+    onSelectedAction: (SearchAction) -> Unit,
+) {
+    val input = state.suggestions.input
     Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
         ComposerField(
             input = input,
@@ -197,23 +257,20 @@ private fun SearchComposerContent(
             showAdd = input.isNotBlank(),
             inputRequester = inputRequester,
             sourcePicker = sourcePicker,
-            onFocusChanged = { focused ->
-                fieldFocused = focused
-                onAction(if (focused) SearchAction.RefreshAutocomplete else SearchAction.ClearAutocomplete)
-            },
+            onFocusChanged = onFieldFocused,
             onValueChange = { value ->
                 onAction(SearchAction.DismissValidation)
                 onAction(SearchAction.AutocompleteChanged(value))
             },
-            onCommit = ::commitTyped,
+            onCommit = onCommit,
             onDismiss = onDismiss,
         )
-        AddModeSelector(mode, ::selectMode)
+        AddModeSelector(mode, onModeChange)
         if (mode == SearchAddMode.ANY_OF) {
             AnyOfTargetRow(
                 groups = groups,
                 targetIndex = targetIndex,
-                onSelect = { index -> targetTerm = groups.getOrNull(index)?.terms?.first() },
+                onSelect = onTargetSelected,
             )
         }
         if (state.query.supportedScopes.isNotEmpty() && (fieldFocused || input.isNotBlank())) {
@@ -225,37 +282,41 @@ private fun SearchComposerContent(
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (suggestions.isNotEmpty()) {
-                ComposerSuggestionList(suggestions) { suggestion ->
-                    add(suggestion.add)
-                    onAction(SearchAction.ClearAutocomplete)
-                }
+                ComposerSuggestionList(suggestions, onAddSuggestion)
             } else {
                 ComposerTagList(
                     state = state,
                     savedSearches = savedSearches,
                     onOpenSavedSearch = onOpenSavedSearch,
                     selection = liveSelection,
-                    onSelect = { selected -> selection = selected.takeUnless { it == liveSelection } },
-                    onAddAlternative = ::addAlternativeTo,
+                    onSelect = onSelectionChanged,
+                    onAddAlternative = onAddAlternative,
                     onOpenSourceAccounts = onOpenSourceAccounts,
                     onAction = onAction,
                 )
             }
         }
-        liveSelection?.let { selected ->
-            SelectedTermActions(
-                selected = selected,
-                groupIndex = groups.indexOfFirst { selected.term in it.terms },
-                groupSize = groups.firstOrNull { selected.term in it.terms }?.terms?.size ?: 0,
-                onAddAlternative = { addAlternativeTo(selected.term) },
-                onAction = { action ->
-                    onAction(action)
-                    selection = null
-                },
-            )
-        }
+        ComposerSelectionActions(liveSelection, groups, onAddAlternative, onSelectedAction)
         HorizontalDivider()
         ComposerFooter(state.canUndoSearch, state.hasPendingChanges, onUndo, onReset, onOpenFavorites, onApply)
+    }
+}
+
+@Composable
+private fun ComposerSelectionActions(
+    selection: SelectedTerm?,
+    groups: List<SearchTermGroup>,
+    onAddAlternative: (SearchTerm) -> Unit,
+    onAction: (SearchAction) -> Unit,
+) {
+    selection?.let { selected ->
+        SelectedTermActions(
+            selected = selected,
+            groupIndex = groups.indexOfFirst { selected.term in it.terms },
+            groupSize = groups.firstOrNull { selected.term in it.terms }?.terms?.size ?: 0,
+            onAddAlternative = { onAddAlternative(selected.term) },
+            onAction = onAction,
+        )
     }
 }
 

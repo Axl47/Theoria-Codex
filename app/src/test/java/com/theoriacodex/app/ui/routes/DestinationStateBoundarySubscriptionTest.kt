@@ -20,16 +20,87 @@ class DestinationStateBoundarySubscriptionTest {
         val codexState = mutableStateOf("codex-0")
         val credentialState = mutableStateOf("credentials-0")
         var shellCompositions = 0
-        val destinationCompositions = linkedMapOf(
-            "settings" to 0,
-            "recents" to 0,
-            "codex" to 0,
-            "credentials" to 0,
-        )
+        val destinationCompositions = initialDestinationCompositions()
         val renderedValues = linkedMapOf<String, String>()
 
+        setBoundaryContent(settingsState, recentsState, codexState, credentialState,
+            destinationCompositions, renderedValues) { shellCompositions += 1 }
+        composeRule.waitForIdle()
+        val settledShellCompositions = shellCompositions
+        val settledDestinationCompositions = destinationCompositions.toMap()
+
+        composeRule.runOnIdle { settingsState.value = "settings-1" }
+        composeRule.waitForIdle()
+        assertDestinationsAdvanced(
+            initialShell = settledShellCompositions, currentShell = shellCompositions,
+            initial = settledDestinationCompositions,
+            current = destinationCompositions,
+            advanced = setOf("settings"),
+        )
+        assertEquals("settings-1", renderedValues["settings"])
+
+        composeRule.runOnIdle { recentsState.value = "recents-1" }
+        composeRule.waitForIdle()
+        assertDestinationsAdvanced(
+            initialShell = settledShellCompositions, currentShell = shellCompositions,
+            initial = settledDestinationCompositions,
+            current = destinationCompositions,
+            advanced = setOf("settings", "recents"),
+        )
+        composeRule.runOnIdle { codexState.value = "codex-1" }
+        composeRule.waitForIdle()
+        assertDestinationsAdvanced(
+            initialShell = settledShellCompositions, currentShell = shellCompositions,
+            initial = settledDestinationCompositions,
+            current = destinationCompositions,
+            advanced = setOf("settings", "recents", "codex"),
+        )
+        composeRule.runOnIdle { credentialState.value = "credentials-1" }
+        composeRule.waitForIdle()
+
+        assertDestinationsAdvanced(
+            initialShell = settledShellCompositions, currentShell = shellCompositions,
+            initial = settledDestinationCompositions,
+            current = destinationCompositions,
+            advanced = setOf("settings", "recents", "codex", "credentials"),
+        )
+    }
+
+    private fun assertDestinationsAdvanced(
+        initialShell: Int, currentShell: Int,
+        initial: Map<String, Int>,
+        current: Map<String, Int>,
+        advanced: Set<String>,
+    ) {
+        assertEquals(initialShell, currentShell)
+        assertEquals(
+            initial.mapValues { (name, count) -> count + if (name in advanced) 1 else 0 },
+            current,
+        )
+    }
+
+    private fun MutableMap<String, Int>.increment(name: String) {
+        this[name] = getValue(name) + 1
+    }
+
+    private fun initialDestinationCompositions() = linkedMapOf(
+        "settings" to 0,
+        "recents" to 0,
+        "codex" to 0,
+        "credentials" to 0,
+    )
+
+    private fun setBoundaryContent(
+        settingsState: androidx.compose.runtime.State<String>,
+        recentsState: androidx.compose.runtime.State<String>,
+        codexState: androidx.compose.runtime.State<String>,
+        credentialState: androidx.compose.runtime.State<String>,
+        destinationCompositions: MutableMap<String, Int>,
+        renderedValues: MutableMap<String, String>,
+        onShellComposition: () -> Unit,
+    ) {
         composeRule.setContent {
-            shellCompositions += 1
+            onShellComposition()
             DestinationStateBoundary(settingsState) { value ->
                 destinationCompositions.increment("settings")
                 renderedValues["settings"] = value
@@ -47,59 +118,7 @@ class DestinationStateBoundarySubscriptionTest {
                 renderedValues["credentials"] = value
             }
         }
-        composeRule.waitForIdle()
-        val settledShellCompositions = shellCompositions
-        val settledDestinationCompositions = destinationCompositions.toMap()
-
-        composeRule.runOnIdle { settingsState.value = "settings-1" }
-        composeRule.waitForIdle()
-        assertEquals(settledShellCompositions, shellCompositions)
-        assertDestinationsAdvanced(
-            initial = settledDestinationCompositions,
-            current = destinationCompositions,
-            advanced = setOf("settings"),
-        )
-        assertEquals("settings-1", renderedValues["settings"])
-
-        composeRule.runOnIdle { recentsState.value = "recents-1" }
-        composeRule.waitForIdle()
-        assertEquals(settledShellCompositions, shellCompositions)
-        assertDestinationsAdvanced(
-            initial = settledDestinationCompositions,
-            current = destinationCompositions,
-            advanced = setOf("settings", "recents"),
-        )
-        composeRule.runOnIdle { codexState.value = "codex-1" }
-        composeRule.waitForIdle()
-        assertEquals(settledShellCompositions, shellCompositions)
-        assertDestinationsAdvanced(
-            initial = settledDestinationCompositions,
-            current = destinationCompositions,
-            advanced = setOf("settings", "recents", "codex"),
-        )
-        composeRule.runOnIdle { credentialState.value = "credentials-1" }
-        composeRule.waitForIdle()
-
-        assertEquals(settledShellCompositions, shellCompositions)
-        assertDestinationsAdvanced(
-            initial = settledDestinationCompositions,
-            current = destinationCompositions,
-            advanced = setOf("settings", "recents", "codex", "credentials"),
-        )
     }
 
-    private fun assertDestinationsAdvanced(
-        initial: Map<String, Int>,
-        current: Map<String, Int>,
-        advanced: Set<String>,
-    ) {
-        assertEquals(
-            initial.mapValues { (name, count) -> count + if (name in advanced) 1 else 0 },
-            current,
-        )
-    }
 
-    private fun MutableMap<String, Int>.increment(name: String) {
-        this[name] = getValue(name) + 1
-    }
 }

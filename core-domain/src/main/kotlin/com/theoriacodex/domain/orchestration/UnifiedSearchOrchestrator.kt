@@ -82,44 +82,26 @@ class UnifiedSearchOrchestrator(
             .filterKeys { source -> source !in hardExcluded }
             .map { (source, adapter) ->
                 async {
-                    val sourceBaseQuery = (queryOverridesBySource[source] ?: portableQuery)
-                        .let { override ->
-                            if (query.mode == QueryMode.Unified) {
-                                override.normalizedForMode(QueryMode.Unified).query.copy(mode = override.mode)
-                            } else {
-                                override
-                            }
-                        }
-                    val sourceQuery = if (source in clientSideExcludeSources) {
-                        sourceBaseQuery.copy(excludeTerms = emptyList())
-                    } else {
-                        sourceBaseQuery
-                    }
+                    val sourceBaseQuery = sourceBaseQuery(query, portableQuery, queryOverridesBySource[source])
                     source to runCatchingPreservingCancellation {
-                        val page = withTimeoutOrNull(sourceTimeoutMs) {
-                            val prepared = prepareQuery(source, sourceQuery)
-                            preparedQueries[source] = if (source in clientSideExcludeSources) {
-                                prepared.copy(excludeTerms = sourceBaseQuery.excludeTerms)
-                            } else prepared
-                            val sourcePage = searchSource(adapter, prepared, pageTokens[source])
-                            if (source in clientSideExcludeSources) {
-                                val hydrated = listOf(sourcePage).withSearchMetadata(adapter).single()
-                                hydrated.copy(
-                                    items = applyClientSideExcludeFilter(
-                                        posts = hydrated.items,
-                                        excludeTags = sourceBaseQuery.excludeTags,
-                                    )
-                                )
-                            } else {
-                                sourcePage
-                            }
-                        } ?: throw SourceAdapterException(SourceFailureReason.NETWORK, "Source timed out")
-                        page
+                        searchPreparedSource(
+                            source, adapter, sourceBaseQuery, source in clientSideExcludeSources,
+                            pageTokens[source], prepareQuery, preparedQueries,
+                        )
                     }
                 }
             }
             .awaitAll()
 
+        combineResults(jobs, hardExcluded, weights, preparedQueries)
+    }
+
+    private fun combineResults(
+        jobs: List<Pair<SourceKey, Result<Page<Post>>>>,
+        hardExcluded: Map<SourceKey, Set<CapabilityExclusionReason>>,
+        weights: Map<SourceKey, Double>,
+        preparedQueries: Map<SourceKey, Query>,
+    ): UnifiedSearchResult {
         val succeededPages = mutableMapOf<SourceKey, Page<Post>>()
         val statuses = mutableListOf<SourceRunStatus>()
 
@@ -153,12 +135,44 @@ class UnifiedSearchOrchestrator(
             weightsBySource = weights,
         )
 
-        UnifiedSearchResult(
+        return UnifiedSearchResult(
             items = interleaved,
             nextPageTokens = succeededPages.mapValues { it.value.nextPageToken },
             statuses = statuses.sortedBy { it.source.name },
             queriesBySource = preparedQueries.toMap(),
         )
+    }
+
+    private fun sourceBaseQuery(query: Query, portableQuery: Query, override: Query?): Query {
+        val base = override ?: portableQuery
+        return if (query.mode == QueryMode.Unified) {
+            base.normalizedForMode(QueryMode.Unified).query.copy(mode = base.mode)
+        } else base
+    }
+
+    private suspend fun searchPreparedSource(
+        source: SourceKey,
+        adapter: SourceAdapter,
+        sourceBaseQuery: Query,
+        clientSideExclude: Boolean,
+        pageToken: String?,
+        prepareQuery: suspend (SourceKey, Query) -> Query,
+        preparedQueries: MutableMap<SourceKey, Query>,
+    ): Page<Post> {
+        val sourceQuery = if (clientSideExclude) {
+            sourceBaseQuery.copy(excludeTerms = emptyList())
+        } else sourceBaseQuery
+        return withTimeoutOrNull(sourceTimeoutMs) {
+            val prepared = prepareQuery(source, sourceQuery)
+            preparedQueries[source] = if (clientSideExclude) {
+                prepared.copy(excludeTerms = sourceBaseQuery.excludeTerms)
+            } else prepared
+            val page = searchSource(adapter, prepared, pageToken)
+            if (clientSideExclude) {
+                val hydrated = listOf(page).withSearchMetadata(adapter).single()
+                hydrated.copy(items = applyClientSideExcludeFilter(hydrated.items, sourceBaseQuery.excludeTags))
+            } else page
+        } ?: throw SourceAdapterException(SourceFailureReason.NETWORK, "Source timed out")
     }
 
     suspend fun searchSource(

@@ -54,10 +54,7 @@ class CreatorRelatedPostsScreenTest {
                         liked.value = true
                     },
                     onAction = { action ->
-                        actions += action
-                        if (action == CreatorAction.DismissRelatedPosts) {
-                            state.value = state.value.copy(relatedPosts = RelatedPostsUiState.Idle)
-                        }
+                        recordAction(state, actions, action)
                     },
                     onRequestSaveToCodex = {},
                     onSaveToDevice = {},
@@ -81,4 +78,16 @@ class CreatorRelatedPostsScreenTest {
         compose.onNodeWithText("No uploads match the current filters.").assertIsDisplayed()
         compose.runOnIdle { assertEquals(listOf(CreatorAction.DismissRelatedPosts), actions) }
     }
+
+    private fun recordAction(
+        state: androidx.compose.runtime.MutableState<CreatorUiState>,
+        actions: MutableList<CreatorAction>,
+        action: CreatorAction,
+    ) {
+        actions += action
+        if (action == CreatorAction.DismissRelatedPosts) {
+            state.value = state.value.copy(relatedPosts = RelatedPostsUiState.Idle)
+        }
+    }
+
 }

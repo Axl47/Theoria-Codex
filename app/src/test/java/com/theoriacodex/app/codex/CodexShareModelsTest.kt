@@ -113,51 +113,7 @@ class CodexShareModelsTest {
     @Test
     fun `malformed optional snapshot values are dropped without losing the v1 id`() {
         val parsed = parseCodexShareFile(
-            """
-                {
-                  "version": 2,
-                  "title": "Defensive",
-                  "posts": [
-                    {
-                      "source": " pixiv ",
-                      "sourcePostId": " 42 ",
-                      "snapshot": {
-                        "preview": {
-                          "url": " https://example.com/preview.webp ",
-                          "progressiveUrls": [null, " ", "https://example.com/preview-small.webp"]
-                        },
-                        "full": {"url": " ", "localPath": " "},
-                        "media": [
-                          null,
-                          {"url": " ", "localPath": " "},
-                          {"url": "https://example.com/page.webp", "isAnimated": true}
-                        ],
-                        "pageUrl": " ",
-                        "width": -1,
-                        "height": 0,
-                        "canonicalTags": [null, " general ", "general"],
-                        "taxonomy": [
-                          null,
-                          {"value": " ", "facet": "TAG"},
-                          {"value": "artist", "facet": "not-a-facet"},
-                          {"value": " general "}
-                        ],
-                        "authorName": " ",
-                        "createdAtEpochMs": -1,
-                        "title": " ",
-                        "creatorProfile": {"source": "PIXIV", "displayName": " "},
-                        "creatorProfiles": [
-                          null,
-                          {"source": "unknown", "displayName": " Dropped creator "},
-                          {"displayName": " Valid creator "}
-                        ],
-                        "durationMs": -1,
-                        "mediaCount": 0
-                      }
-                    }
-                  ]
-                }
-            """.trimIndent(),
+            malformedSnapshotJson(),
         )!!
         val entry = parsed.posts.orEmpty().single()
 
@@ -373,31 +329,7 @@ class CodexShareModelsTest {
             profileUrl = "https://example.com/artist/second",
             uploadsQuery = "artist:second-artist",
         )
-        val media = listOf(
-            ImageRef(
-                url = "https://example.com/page-1.jpg",
-                localPath = "/tmp/page-1.jpg",
-                mime = "image/jpeg",
-                progressiveUrls = listOf("https://example.com/page-1-small.jpg"),
-                isAnimated = false,
-            ),
-            ImageRef(
-                url = "https://example.com/page-2.webp",
-                localPath = null,
-                mime = "image/webp",
-                progressiveUrls = listOf(
-                    "https://example.com/page-2-small.webp",
-                    "https://example.com/page-2-medium.webp",
-                ),
-                isAnimated = true,
-            ),
-            ImageRef(
-                url = "https://example.com/video.mp4",
-                localPath = null,
-                mime = "video/mp4",
-                isAnimated = false,
-            ),
-        )
+        val media = detailedMedia()
         return Post(
             id = PostId(source = SourceKey.NHENTAI, sourcePostId = "123"),
             preview = ImageRef(
@@ -453,4 +385,79 @@ class CodexShareModelsTest {
             title = null,
         )
     }
+
+    private fun malformedSnapshotJson(): String =
+        """
+            {
+              "version": 2,
+              "title": "Defensive",
+              "posts": [
+                {
+                  "source": " pixiv ",
+                  "sourcePostId": " 42 ",
+                  "snapshot": {
+                    "preview": {
+                      "url": " https://example.com/preview.webp ",
+                      "progressiveUrls": [null, " ", "https://example.com/preview-small.webp"]
+                    },
+                    "full": {"url": " ", "localPath": " "},
+                    "media": [
+                      null,
+                      {"url": " ", "localPath": " "},
+                      {"url": "https://example.com/page.webp", "isAnimated": true}
+                    ],
+                    "pageUrl": " ",
+                    "width": -1,
+                    "height": 0,
+                    "canonicalTags": [null, " general ", "general"],
+                    "taxonomy": [
+                      null,
+                      {"value": " ", "facet": "TAG"},
+                      {"value": "artist", "facet": "not-a-facet"},
+                      {"value": " general "}
+                    ],
+                    "authorName": " ",
+                    "createdAtEpochMs": -1,
+                    "title": " ",
+                    "creatorProfile": {"source": "PIXIV", "displayName": " "},
+                    "creatorProfiles": [
+                      null,
+                      {"source": "unknown", "displayName": " Dropped creator "},
+                      {"displayName": " Valid creator "}
+                    ],
+                    "durationMs": -1,
+                    "mediaCount": 0
+                  }
+                }
+              ]
+            }
+        """.trimIndent()
+
+
+    private fun detailedMedia(): List<ImageRef> =
+        listOf(
+            ImageRef(
+                url = "https://example.com/page-1.jpg",
+                localPath = "/tmp/page-1.jpg",
+                mime = "image/jpeg",
+                progressiveUrls = listOf("https://example.com/page-1-small.jpg"),
+                isAnimated = false,
+            ),
+            ImageRef(
+                url = "https://example.com/page-2.webp",
+                localPath = null,
+                mime = "image/webp",
+                progressiveUrls = listOf(
+                    "https://example.com/page-2-small.webp",
+                    "https://example.com/page-2-medium.webp",
+                ),
+                isAnimated = true,
+            ),
+            ImageRef(
+                url = "https://example.com/video.mp4",
+                localPath = null,
+                mime = "video/mp4",
+                isAnimated = false,
+            ),
+        )
 }

@@ -114,10 +114,10 @@ fun RecentsScreen(
     var selectedSource by rememberSaveable { mutableStateOf<SourceKey?>(null) }
     var sourceMenuExpanded by remember { mutableStateOf(false) }
     val visibleWatchedPosts = remember(watchedPosts, selectedSource) {
-        watchedPosts.filter { selectedSource == null || it.post.id.source == selectedSource }
+        filterRecentPostsBySource(watchedPosts, selectedSource)
     }
     val visibleCodexPosts = remember(codexPosts, selectedSource) {
-        codexPosts.filter { selectedSource == null || it.post.id.source == selectedSource }
+        filterRecentPostsBySource(codexPosts, selectedSource)
     }
     val visibleSearches = remember(searches, selectedSource) { searches.filter { it.matchesSource(selectedSource) } }
     val visibleFypSearches = remember(fypSearches, selectedSource) { fypSearches.filter { it.matchesSource(selectedSource) } }
@@ -710,3 +710,6 @@ internal fun RecentSearchEntry.fypSeedBySource(): Map<SourceKey, List<String>> {
         sources.associateWith { query.includeTags }
     }
 }
+
+private fun filterRecentPostsBySource(posts: List<RecentPostEntry>, source: SourceKey?): List<RecentPostEntry> =
+    posts.filter { source == null || it.post.id.source == source }

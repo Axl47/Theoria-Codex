@@ -236,140 +236,29 @@ data class ForYouTransition(
 
 fun ForYouUiState.reduce(action: ForYouAction): ForYouTransition {
     return when (action) {
-        is ForYouAction.Refresh -> {
-            if (!canRefresh) unchanged() else beginRefresh { request ->
-                ForYouEffect.RefreshFeed(request = request, shuffle = action.shuffle)
-            }
-        }
+        is ForYouAction.Refresh -> refresh(action)
 
-        is ForYouAction.SelectProfile -> {
-            if (action.profileId == activeProfileId || profiles.none { it.profileId == action.profileId }) {
-                unchanged()
-            } else {
-                copy(activeProfileId = action.profileId, activeProfileLikesCount = 0)
-                    .beginRefresh { request ->
-                        ForYouEffect.ChangeProfile(request = request, profileId = action.profileId)
-                    }
-            }
-        }
+        is ForYouAction.SelectProfile -> selectProfile(action)
 
-        is ForYouAction.SelectSource -> {
-            val normalized = action.source?.takeIf { source -> source in availableSources }
-            if (isRefreshing || isPaging || normalized == selectedSource) {
-                unchanged()
-            } else {
-                copy(selectedSource = normalized)
-                    .beginRefresh { request ->
-                        ForYouEffect.ChangeSource(request = request, source = normalized)
-                    }
-            }
-        }
+        is ForYouAction.SelectSource -> selectSource(action)
 
-        is ForYouAction.SelectSort -> {
-            if (isRefreshing || isPaging || action.sortMode == sortMode) {
-                unchanged()
-            } else {
-                copy(sortMode = action.sortMode)
-                    .beginRefresh { request ->
-                        ForYouEffect.ChangeSort(request = request, sortMode = action.sortMode)
-                    }
-            }
-        }
+        is ForYouAction.SelectSort -> selectSort(action)
 
-        is ForYouAction.ReplaySearch -> {
-            if (action.seedBySource.isEmpty()) {
-                unchanged()
-            } else {
-                copy(
-                    selectedSource = action.seedBySource.keys.singleOrNull(),
-                    sortMode = action.sortMode,
-                    seedId = buildForYouSeedId(action.seedBySource),
-                    seedSummaryBySource = action.seedBySource.mapValues { (_, tags) -> tags.toList() },
-                ).beginRefresh { request ->
-                    ForYouEffect.ReplaySearch(
-                        request = request,
-                        seedBySource = action.seedBySource.mapValues { (_, tags) -> tags.toList() },
-                        sortMode = action.sortMode,
-                    )
-                }
-            }
-        }
+        is ForYouAction.ReplaySearch -> replaySearch(action)
 
-        ForYouAction.BlacklistCurrentSeed -> {
-            if (!canBlacklistCurrentSeed) {
-                unchanged()
-            } else {
-                beginRefresh { request ->
-                    ForYouEffect.BlacklistSeed(
-                        request = request,
-                        profileId = activeProfileId,
-                        seedSummaryBySource = seedSummaryBySource.mapValues { (_, tags) -> tags.toList() },
-                    )
-                }
-            }
-        }
+        ForYouAction.BlacklistCurrentSeed -> blacklistCurrentSeed()
 
-        is ForYouAction.UndoSeedBlacklist -> {
-            if (action.entries.isEmpty()) {
-                unchanged()
-            } else {
-                beginRefresh { request ->
-                    ForYouEffect.UndoSeedBlacklist(
-                        request = request,
-                        profileId = action.profileId,
-                        entries = action.entries.toList(),
-                    )
-                }
-            }
-        }
+        is ForYouAction.UndoSeedBlacklist -> undoSeedBlacklist(action)
 
         ForYouAction.LoadNextPage -> beginPage(pageableSources)
         is ForYouAction.RetrySource -> if (action.source in retryableSources) {
             beginPage(setOf(action.source))
         } else unchanged()
 
-        is ForYouAction.OpenResult -> {
-            val viewerResults = action.visibleResults ?: results
-            if (action.index !in viewerResults.indices) {
-                unchanged()
-            } else {
-                ForYouTransition(
-                    state = this,
-                    effect = ForYouEffect.OpenViewer(
-                        posts = viewerResults.toList(),
-                        context = ViewerLaunchContext(
-                            queryHash = "for_you:$seedId",
-                            startIndex = action.index,
-                            streamSource = ViewerStreamSource.FOR_YOU,
-                            scrollOffsetHint = action.scrollOffsetHint,
-                        ),
-                        visibilityFilters = action.visibilityFilters,
-                    ),
-                )
-            }
-        }
+        is ForYouAction.OpenResult -> openResult(action)
 
         ForYouAction.GoToSearch -> ForYouTransition(this, ForYouEffect.NavigateToSearch)
-        is ForYouAction.OpenRelatedResult -> {
-            if (action.index !in action.visibleResults.indices) {
-                unchanged()
-            } else {
-                val request = relatedPosts.requestOrNull ?: return unchanged()
-                ForYouTransition(
-                    state = this,
-                    effect = ForYouEffect.OpenViewer(
-                        posts = action.visibleResults.toList(),
-                        context = ViewerLaunchContext(
-                            queryHash = "related:${request.seed.id.source.name}:${request.seed.id.sourcePostId}",
-                            startIndex = action.index,
-                            streamSource = ViewerStreamSource.RELATED,
-                            scrollOffsetHint = 0,
-                        ),
-                        liveSearchBinding = false,
-                    ),
-                )
-            }
-        }
+        is ForYouAction.OpenRelatedResult -> openRelatedResult(action)
         ForYouAction.ShowHome,
         ForYouAction.OpenMixedFeed,
         is ForYouAction.OpenSection,
@@ -386,91 +275,229 @@ fun ForYouUiState.reduce(action: ForYouAction): ForYouTransition {
         ForYouAction.ShowPreviousRelatedPosts,
         ForYouAction.ShowNextRelatedPosts,
         -> unchanged()
-        is ForYouAction.RefreshCompleted -> {
-            if (!accepts(action.request, ForYouRequestKind.REFRESH)) {
-                unchanged()
-            } else {
-                val result = action.result
-                ForYouTransition(copy(
-                    results = mergeFeedPosts(emptyList(), result.page.items),
-                    statuses = result.page.statuses,
-                    seedId = result.seedId,
-                    seedSummaryBySource = result.seed,
-                    continuation = result.continuation,
-                    isRefreshing = false,
-                    isPaging = false,
-                    errorMessage = null,
-                    emptyReason = inferForYouEmptyReason(
-                        result.seedId, result.seed.isNotEmpty(), activeProfileLikesCount, result.page.items, false, null,
-                    ),
-                    activeRequest = null,
-                ))
-            }
-        }
+        is ForYouAction.RefreshCompleted -> refreshCompleted(action)
 
-        is ForYouAction.RefreshFailed -> {
-            if (!accepts(action.request, ForYouRequestKind.REFRESH)) {
-                unchanged()
-            } else {
-                ForYouTransition(
-                    copy(
-                        results = emptyList(),
-                        statuses = emptyList(),
-                        isRefreshing = false,
-                        isPaging = false,
-                        continuation = null,
-                        errorMessage = action.message,
-                        emptyReason = null,
-                        activeRequest = null,
-                    )
-                )
-            }
-        }
+        is ForYouAction.RefreshFailed -> refreshFailed(action)
 
-        is ForYouAction.PageLoaded -> {
-            if (!accepts(action.request, ForYouRequestKind.PAGE)) {
-                unchanged()
-            } else {
-                ForYouTransition(
-                    copy(
-                        results = mergeFeedPosts(results, action.page.items),
-                        statuses = mergeFeedStatuses(statuses, action.page.statuses),
-                        isPaging = false,
-                        continuation = continuation?.accept(action.page, action.sources),
-                        errorMessage = null,
-                        emptyReason = null,
-                        activeRequest = null,
-                    )
-                )
-            }
-        }
+        is ForYouAction.PageLoaded -> pageLoaded(action)
 
-        is ForYouAction.RequestCancelled -> {
-            if (activeRequest != action.request) {
-                unchanged()
-            } else {
-                val cancelled = copy(
-                    isRefreshing = false,
-                    isPaging = false,
-                    errorMessage = null,
-                    activeRequest = null,
-                )
-                ForYouTransition(
-                    cancelled.copy(
-                        emptyReason = inferForYouEmptyReason(
-                            seedId = cancelled.seedId,
-                            hasSeed = cancelled.seedSummaryBySource.isNotEmpty(),
-                            likesCount = cancelled.activeProfileLikesCount,
-                            results = cancelled.results,
-                            isRefreshing = false,
-                            errorMessage = null,
-                        )
-                    )
-                )
+        is ForYouAction.RequestCancelled -> requestCancelled(action)
+    }
+}
+
+private fun ForYouUiState.refresh(action: ForYouAction.Refresh): ForYouTransition {
+    return if (!canRefresh) unchanged() else beginRefresh { request ->
+        ForYouEffect.RefreshFeed(request = request, shuffle = action.shuffle)
+    }
+}
+
+private fun ForYouUiState.selectProfile(action: ForYouAction.SelectProfile): ForYouTransition {
+    return if (action.profileId == activeProfileId || profiles.none { it.profileId == action.profileId }) {
+        unchanged()
+    } else {
+        copy(activeProfileId = action.profileId, activeProfileLikesCount = 0)
+            .beginRefresh { request ->
+                ForYouEffect.ChangeProfile(request = request, profileId = action.profileId)
             }
+    }
+}
+
+private fun ForYouUiState.selectSource(action: ForYouAction.SelectSource): ForYouTransition {
+    val normalized = action.source?.takeIf { source -> source in availableSources }
+    return if (isRefreshing || isPaging || normalized == selectedSource) {
+        unchanged()
+    } else {
+        copy(selectedSource = normalized)
+            .beginRefresh { request ->
+                ForYouEffect.ChangeSource(request = request, source = normalized)
+            }
+    }
+}
+
+private fun ForYouUiState.selectSort(action: ForYouAction.SelectSort): ForYouTransition {
+    return if (isRefreshing || isPaging || action.sortMode == sortMode) {
+        unchanged()
+    } else {
+        copy(sortMode = action.sortMode)
+            .beginRefresh { request ->
+                ForYouEffect.ChangeSort(request = request, sortMode = action.sortMode)
+            }
+    }
+}
+
+private fun ForYouUiState.replaySearch(action: ForYouAction.ReplaySearch): ForYouTransition {
+    return if (action.seedBySource.isEmpty()) {
+        unchanged()
+    } else {
+        copy(
+            selectedSource = action.seedBySource.keys.singleOrNull(),
+            sortMode = action.sortMode,
+            seedId = buildForYouSeedId(action.seedBySource),
+            seedSummaryBySource = action.seedBySource.mapValues { (_, tags) -> tags.toList() },
+        ).beginRefresh { request ->
+            ForYouEffect.ReplaySearch(
+                request = request,
+                seedBySource = action.seedBySource.mapValues { (_, tags) -> tags.toList() },
+                sortMode = action.sortMode,
+            )
         }
     }
 }
+
+private fun ForYouUiState.blacklistCurrentSeed(): ForYouTransition {
+    return if (!canBlacklistCurrentSeed) {
+        unchanged()
+    } else {
+        beginRefresh { request ->
+            ForYouEffect.BlacklistSeed(
+                request = request,
+                profileId = activeProfileId,
+                seedSummaryBySource = seedSummaryBySource.mapValues { (_, tags) -> tags.toList() },
+            )
+        }
+    }
+}
+
+private fun ForYouUiState.undoSeedBlacklist(action: ForYouAction.UndoSeedBlacklist): ForYouTransition {
+    return if (action.entries.isEmpty()) {
+        unchanged()
+    } else {
+        beginRefresh { request ->
+            ForYouEffect.UndoSeedBlacklist(
+                request = request,
+                profileId = action.profileId,
+                entries = action.entries.toList(),
+            )
+        }
+    }
+}
+
+private fun ForYouUiState.openResult(action: ForYouAction.OpenResult): ForYouTransition {
+    val viewerResults = action.visibleResults ?: results
+    return if (action.index !in viewerResults.indices) {
+        unchanged()
+    } else {
+        ForYouTransition(
+            state = this,
+            effect = ForYouEffect.OpenViewer(
+                posts = viewerResults.toList(),
+                context = ViewerLaunchContext(
+                    queryHash = "for_you:$seedId",
+                    startIndex = action.index,
+                    streamSource = ViewerStreamSource.FOR_YOU,
+                    scrollOffsetHint = action.scrollOffsetHint,
+                ),
+                visibilityFilters = action.visibilityFilters,
+            ),
+        )
+    }
+}
+
+private fun ForYouUiState.openRelatedResult(action: ForYouAction.OpenRelatedResult): ForYouTransition {
+    return if (action.index !in action.visibleResults.indices) {
+        unchanged()
+    } else {
+        val request = relatedPosts.requestOrNull ?: return unchanged()
+        ForYouTransition(
+            state = this,
+            effect = ForYouEffect.OpenViewer(
+                posts = action.visibleResults.toList(),
+                context = ViewerLaunchContext(
+                    queryHash = "related:${request.seed.id.source.name}:${request.seed.id.sourcePostId}",
+                    startIndex = action.index,
+                    streamSource = ViewerStreamSource.RELATED,
+                    scrollOffsetHint = 0,
+                ),
+                liveSearchBinding = false,
+            ),
+        )
+    }
+}
+
+private fun ForYouUiState.refreshCompleted(action: ForYouAction.RefreshCompleted): ForYouTransition {
+    return if (!accepts(action.request, ForYouRequestKind.REFRESH)) {
+        unchanged()
+    } else {
+        val result = action.result
+        ForYouTransition(copy(
+            results = mergeFeedPosts(emptyList(), result.page.items),
+            statuses = result.page.statuses,
+            seedId = result.seedId,
+            seedSummaryBySource = result.seed,
+            continuation = result.continuation,
+            isRefreshing = false,
+            isPaging = false,
+            errorMessage = null,
+            emptyReason = inferForYouEmptyReason(
+                result.seedId, result.seed.isNotEmpty(), activeProfileLikesCount, result.page.items, false, null,
+            ),
+            activeRequest = null,
+        ))
+    }
+}
+
+private fun ForYouUiState.refreshFailed(action: ForYouAction.RefreshFailed): ForYouTransition {
+    return if (!accepts(action.request, ForYouRequestKind.REFRESH)) {
+        unchanged()
+    } else {
+        ForYouTransition(
+            copy(
+                results = emptyList(),
+                statuses = emptyList(),
+                isRefreshing = false,
+                isPaging = false,
+                continuation = null,
+                errorMessage = action.message,
+                emptyReason = null,
+                activeRequest = null,
+            )
+        )
+    }
+}
+
+private fun ForYouUiState.pageLoaded(action: ForYouAction.PageLoaded): ForYouTransition {
+    return if (!accepts(action.request, ForYouRequestKind.PAGE)) {
+        unchanged()
+    } else {
+        ForYouTransition(
+            copy(
+                results = mergeFeedPosts(results, action.page.items),
+                statuses = mergeFeedStatuses(statuses, action.page.statuses),
+                isPaging = false,
+                continuation = continuation?.accept(action.page, action.sources),
+                errorMessage = null,
+                emptyReason = null,
+                activeRequest = null,
+            )
+        )
+    }
+}
+
+private fun ForYouUiState.requestCancelled(action: ForYouAction.RequestCancelled): ForYouTransition {
+    return if (activeRequest != action.request) {
+        unchanged()
+    } else {
+        val cancelled = copy(
+            isRefreshing = false,
+            isPaging = false,
+            errorMessage = null,
+            activeRequest = null,
+        )
+        ForYouTransition(
+            cancelled.copy(
+                emptyReason = inferForYouEmptyReason(
+                    seedId = cancelled.seedId,
+                    hasSeed = cancelled.seedSummaryBySource.isNotEmpty(),
+                    likesCount = cancelled.activeProfileLikesCount,
+                    results = cancelled.results,
+                    isRefreshing = false,
+                    errorMessage = null,
+                )
+            )
+        )
+    }
+}
+
 
 private fun ForYouUiState.beginRefresh(
     effect: (ForYouRequestIdentity) -> ForYouEffect,

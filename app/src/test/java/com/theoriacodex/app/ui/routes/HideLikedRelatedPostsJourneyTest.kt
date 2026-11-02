@@ -77,19 +77,7 @@ class HideLikedRelatedPostsJourneyTest {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val showApp = mutableStateOf(true)
         var viewModelOwner: ViewModelStoreOwner? = null
-        val graph = runBlocking(Dispatchers.IO) {
-            JourneyAppContainer(ApplicationProvider.getApplicationContext(), temporary.newFolder(),
-                mapOf(SourceKey.PIXIV to posts), scope).also {
-                it.awaitReady()
-                it.data.uiRestoreRepository.setFeedFabRestoreState(
-                    SEARCH_FEED_FAB_CONTEXT, FeedFabRestoreState(hideLiked = true, hideSaved = true),
-                )
-                it.data.recentsRepository.recordSearch(
-                    Query(QueryMode.Source(SourceKey.PIXIV), listOf("seed"), emptyList(), SortMode.NEWEST, null, null),
-                    "likes-query", RecentSearchKind.SOURCE, listOf(SourceKey.PIXIV), emptyMap(),
-                )
-            }
-        }
+        val graph = createLikesGraph(posts, scope)
         try {
             compose.setContent {
                 val owner = LocalViewModelStoreOwner.current
@@ -108,34 +96,7 @@ class HideLikedRelatedPostsJourneyTest {
             val recommendation = posts[0]
             compose.waitUntil(10_000) { compose.onAllNodesWithTag(searchCardTestTag(seed.id)).fetchSemanticsNodes().isNotEmpty() }
             for (post in listOf(seed, recommendation)) {
-                val tag = searchCardTestTag(post.id)
-                compose.onNode(verticalGrid).performScrollToNode(hasTestTag(tag))
-                if (fullscreen) {
-                    compose.onNodeWithTag(tag).performClick()
-                    compose.waitUntil(10_000) { compose.onNodeWithContentDescription("More actions").isDisplayed() }
-                    compose.onNodeWithContentDescription("Like post").performClick()
-                } else {
-                    compose.onNode(hasContentDescription("Like post") and hasAnyAncestor(hasTestTag(tag)), useUnmergedTree = true)
-                        .performClick()
-                }
-                // A real like also adds this post to the system Likes Codex, activating Hide saved.
-                compose.waitUntil(10_000) {
-                    compose.waitForIdle()
-                    runBlocking(Dispatchers.IO) {
-                        post.id in graph.content.observeSavedPostIds(setOf(likesCodexIdForProfile("profile-main"))).first()
-                    }
-                }
-                if (fullscreen) {
-                    // Room persistence can complete before the separate liked-post flow reaches Viewer.
-                    compose.waitUntil(10_000) { compose.onNodeWithContentDescription("Unlike post").isDisplayed() }
-                    compose.onNodeWithContentDescription("Unlike post").assertIsDisplayed()
-                    compose.onNodeWithContentDescription("Back").performClick()
-                    compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("More actions").fetchSemanticsNodes().isEmpty() }
-                }
-                compose.waitUntil(10_000) { compose.onAllNodesWithText("More like this").fetchSemanticsNodes().isNotEmpty() }
-                compose.onNode(verticalGrid).performScrollToIndex(0)
-                compose.onNodeWithTag(searchCardTestTag(seed.id)).assertIsDisplayed()
-                compose.onNodeWithTag(tag).assertIsDisplayed()
+                likeAndVerifyRetained(post, seed, fullscreen, verticalGrid, graph)
             }
             compose.onNode(verticalGrid).performScrollToNode(hasText("Dismiss"))
             compose.onNodeWithText("Dismiss").performClick()
@@ -161,4 +122,62 @@ class HideLikedRelatedPostsJourneyTest {
             scope.cancel()
         }
     }
+    private fun likeAndVerifyRetained(
+        post: com.theoriacodex.domain.model.Post,
+        seed: com.theoriacodex.domain.model.Post,
+        fullscreen: Boolean,
+        verticalGrid: SemanticsMatcher,
+        graph: JourneyAppContainer,
+    ) {
+        val tag = searchCardTestTag(post.id)
+        compose.onNode(verticalGrid).performScrollToNode(hasTestTag(tag))
+        if (fullscreen) {
+            compose.onNodeWithTag(tag).performClick()
+            compose.waitUntil(10_000) { compose.onNodeWithContentDescription("More actions").isDisplayed() }
+            compose.onNodeWithContentDescription("Like post").performClick()
+        } else {
+            compose.onNode(hasContentDescription("Like post") and hasAnyAncestor(hasTestTag(tag)), useUnmergedTree = true)
+                .performClick()
+        }
+        // A real like also adds this post to the system Likes Codex, activating Hide saved.
+        compose.waitUntil(10_000) {
+            compose.waitForIdle()
+            runBlocking(Dispatchers.IO) {
+                post.id in graph.content.observeSavedPostIds(setOf(likesCodexIdForProfile("profile-main"))).first()
+            }
+        }
+        if (fullscreen) {
+            // Room persistence can complete before the separate liked-post flow reaches Viewer.
+            compose.waitUntil(10_000) { compose.onNodeWithContentDescription("Unlike post").isDisplayed() }
+            compose.onNodeWithContentDescription("Unlike post").assertIsDisplayed()
+            compose.onNodeWithContentDescription("Back").performClick()
+            compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("More actions").fetchSemanticsNodes().isEmpty() }
+        }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("More like this").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(verticalGrid).performScrollToIndex(0)
+        compose.onNodeWithTag(searchCardTestTag(seed.id)).assertIsDisplayed()
+        compose.onNodeWithTag(tag).assertIsDisplayed()
+    }
+
+
+
+    private fun createLikesGraph(
+        posts: List<com.theoriacodex.domain.model.Post>,
+        scope: CoroutineScope,
+    ): JourneyAppContainer {
+        return runBlocking(Dispatchers.IO) {
+            JourneyAppContainer(ApplicationProvider.getApplicationContext(), temporary.newFolder(),
+                mapOf(SourceKey.PIXIV to posts), scope).also {
+                it.awaitReady()
+                it.data.uiRestoreRepository.setFeedFabRestoreState(
+                    SEARCH_FEED_FAB_CONTEXT, FeedFabRestoreState(hideLiked = true, hideSaved = true),
+                )
+                it.data.recentsRepository.recordSearch(
+                    Query(QueryMode.Source(SourceKey.PIXIV), listOf("seed"), emptyList(), SortMode.NEWEST, null, null),
+                    "likes-query", RecentSearchKind.SOURCE, listOf(SourceKey.PIXIV), emptyMap(),
+                )
+            }
+        }
+    }
+
 }
