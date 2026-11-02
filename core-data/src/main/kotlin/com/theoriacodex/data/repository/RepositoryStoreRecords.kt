@@ -330,8 +330,6 @@ internal data class LegacyUiRestoreStoreRecord(
     val lastTab: String? = null,
     @field:SerializedName("searchScrollStates")
     val searchScrollStates: Map<String, LegacySearchScrollStateRecord> = emptyMap(),
-    @field:SerializedName("settingsSectionExpansion")
-    val settingsSectionExpansion: Map<String, Boolean> = emptyMap(),
     @field:SerializedName("feedFabRestoreStates")
     val feedFabRestoreStates: Map<String, FeedFabRestoreState> = emptyMap(),
     @field:SerializedName("viewerLaunchContext")
@@ -345,7 +343,6 @@ internal data class LegacyUiRestoreStoreRecord(
                     normalizedHash to record.toDomain()
                 }
             }.toMap(),
-            settingsSectionExpansion = settingsSectionExpansion,
             feedFabRestoreStates = feedFabRestoreStates,
             viewerLaunchContext = viewerLaunchContext?.toDomain(),
         )
@@ -355,7 +352,6 @@ internal data class LegacyUiRestoreStoreRecord(
         return linkedMapOf(
             "lastTab" to if (lastTab.isNullOrBlank()) 0 else 1,
             "searchScrollStates" to searchScrollStates.size,
-            "settingsSectionExpansion" to settingsSectionExpansion.size,
             "feedFabRestoreStates" to feedFabRestoreStates.size,
             "viewerLaunchContext" to if (viewerLaunchContext == null) 0 else 1,
         )
@@ -368,7 +364,6 @@ internal data class LegacyUiRestoreStoreRecord(
                 searchScrollStates = state.scrollStates.mapValues { (_, value) ->
                     LegacySearchScrollStateRecord.fromDomain(value)
                 },
-                settingsSectionExpansion = state.settingsSectionExpansion,
                 feedFabRestoreStates = state.feedFabRestoreStates,
                 viewerLaunchContext = state.viewerLaunchContext?.let(LegacyViewerLaunchContextRecord::fromDomain),
             )
@@ -379,7 +374,6 @@ internal data class LegacyUiRestoreStoreRecord(
 internal data class PersistedUiRestoreState(
     val lastTab: String?,
     val scrollStates: Map<String, SearchScrollState>,
-    val settingsSectionExpansion: Map<String, Boolean>,
     val feedFabRestoreStates: Map<String, FeedFabRestoreState>,
     val viewerLaunchContext: ViewerLaunchContext?,
 )

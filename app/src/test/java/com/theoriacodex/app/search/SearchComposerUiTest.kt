@@ -58,7 +58,7 @@ class SearchComposerUiTest {
         }
     }
 
-    @Test fun `tapping a saved search reruns it`() {
+    @Test fun `tapping a quick saved search dispatches that entry`() {
         val entry = SavedSearchEntry(
             "id", "My landscapes",
             RecentSearchEntry(emptySearchQuery(), "hash", 1L),

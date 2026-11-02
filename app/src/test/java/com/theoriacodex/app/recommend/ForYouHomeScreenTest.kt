@@ -2,6 +2,7 @@ package com.theoriacodex.app.recommend
 
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -27,7 +28,7 @@ import org.robolectric.annotation.Config
 class ForYouHomeScreenTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun `section title pin dismiss and shuffle expose the matching actions`() {
+    @Test fun `section title save dismiss new search and refresh expose the matching actions`() {
         val actions = mutableListOf<ForYouAction>()
         val section = emptySection()
         render(ForYouHomeState(visible = true, sections = listOf(section)), actions)
@@ -50,7 +51,7 @@ class ForYouHomeScreenTest {
         }
     }
 
-    @Test fun `pinned sections retain unpin and can be dismissed without deleting the saved search`() {
+    @Test fun `saved sections expose dismissal and dispatch removal from Saved`() {
         val section = emptySection().copy(savedSearchId = "pin")
         val actions = mutableListOf<ForYouAction>()
         render(ForYouHomeState(visible = true, sections = listOf(section)), actions)
@@ -73,14 +74,14 @@ class ForYouHomeScreenTest {
         compose.runOnIdle { assertEquals(listOf(ForYouAction.ReorderSections(listOf(second.id, first.id))), actions) }
     }
 
-    @Test fun `interest chips jump to their shelf and mark pinned and explore shelves`() {
+    @Test fun `interest chips jump to their shelf alongside mix and explore labels`() {
         val first = emptySection()
         val second = first.copy(id = "PIXIV:city", title = "city", discovery = true)
         render(ForYouHomeState(visible = true, sections = listOf(first, second)), mutableListOf())
         compose.onNodeWithText("Your mix").assertExists()
         compose.onNodeWithText("Explore").assertExists()
         compose.onAllNodesWithText("city")[0].performClick()
-        compose.onNodeWithContentDescription("Actions for city").assertExists()
+        compose.onNodeWithContentDescription("Actions for city").assertIsDisplayed()
     }
 
     @Test fun `source selector sits on the header center line without a redundant row source label`() {
