@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.data.repository.SavedSearchEntry
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.theoriacodex.app.media.animatedDurationRangeLabel
 import com.theoriacodex.app.ui.components.FilterChoiceChip
@@ -173,6 +174,8 @@ fun SearchScreen(
     fabRestoreState: FeedFabRestoreState = FeedFabRestoreState(),
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit = {},
     oldSearchBar: Boolean = false,
+    savedSearches: List<SavedSearchEntry> = emptyList(),
+    onOpenSavedSearch: (SavedSearchEntry) -> Unit = {},
 ) {
     val input = state.suggestions.input
     val animationRestoreState = fabRestoreState.searchAnimationFilter(state.query.draft.mode)
@@ -717,6 +720,11 @@ SearchSourcePicker(
             onOpenSourceAccounts = onOpenSourceAccounts,
             onDigitsCommitted = { scope.launch { resetScrollToTop() } },
             onDismiss = ::closeComposer,
+            savedSearches = savedSearches,
+            onOpenSavedSearch = { entry ->
+                closeComposer()
+                onOpenSavedSearch(entry)
+            },
         )
     }
 

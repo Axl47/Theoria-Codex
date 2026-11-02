@@ -38,7 +38,7 @@ class PinnedSearchJourneyTest : AppJourneyFixture() {
         compose.onNodeWithTag("Recent search:pin-journey")
             .performSemanticsAction(SemanticsActions.OnLongClick) { it() }
         compose.onNode(hasSetTextAction()).performTextReplacement("My landscapes")
-        compose.onNodeWithText("Pin", substring = false).performClick()
+        compose.onNodeWithText("Save", substring = false).performClick()
         compose.waitUntil(10_000) {
             io { container.data.savedSearches.observeSavedSearches().first().singleOrNull()?.name == "My landscapes" }
         }

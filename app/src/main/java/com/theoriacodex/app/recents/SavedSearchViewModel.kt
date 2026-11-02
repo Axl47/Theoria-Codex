@@ -18,7 +18,7 @@ internal class SavedSearchViewModel(private val repository: SavedSearchRepositor
     private val messages = Channel<String>(Channel.BUFFERED)
     val effects = messages.receiveAsFlow()
 
-    fun save(name: String, entry: RecentSearchEntry) = mutate("Search pinned.") {
+    fun save(name: String, entry: RecentSearchEntry) = mutate("Search saved.") {
         repository.save(name, entry)
     }
 

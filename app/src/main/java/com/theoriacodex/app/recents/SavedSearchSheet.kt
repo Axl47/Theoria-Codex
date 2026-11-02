@@ -63,7 +63,7 @@ internal fun SavedSearchSheet(
                         style = MaterialTheme.typography.bodySmall,
                     )
                     if (searches.isEmpty()) {
-                        Text("Long-press a recent Search or For You search to name and pin it.")
+                        Text("Long-press a recent Search or For You search to name and save it.")
                     }
                 }
             }
@@ -129,7 +129,7 @@ internal fun SavedSearchNameDialog(
     var name by rememberSaveable(initialName) { mutableStateOf(initialName) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (renaming) "Rename search" else "Pin search") },
+        title = { Text(if (renaming) "Rename search" else "Save search") },
         text = {
             OutlinedTextField(
                 value = name,
@@ -140,7 +140,7 @@ internal fun SavedSearchNameDialog(
         },
         confirmButton = {
             TextButton(onClick = { onConfirm(name.trim()) }, enabled = name.isNotBlank()) {
-                Text(if (renaming) "Save" else "Pin")
+                Text("Save")
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },

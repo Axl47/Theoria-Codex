@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.data.repository.SavedSearchEntry
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -38,6 +39,7 @@ import kotlinx.coroutines.flow.StateFlow
 internal data class SearchRouteConfig(
     val settings: AppSettings,
     val availableSources: Set<SourceKey>,
+    val savedSearches: List<SavedSearchEntry> = emptyList(),
     val creatorBrowsingSources: Set<SourceKey>,
     val likedPostIds: Set<PostId>,
     val pendingLikePostIds: Set<PostId> = emptySet(),
@@ -58,6 +60,7 @@ internal data class SearchRouteCallbacks(
     val onSaveToDevice: (Post) -> Unit,
     val onPostUrlCopied: (Post) -> Unit = {},
     val onOpenSourceAccounts: () -> Unit = {},
+    val onOpenSavedSearch: (SavedSearchEntry) -> Unit = {},
     val onAddFavoriteTag: (SourceKey, String) -> Unit,
     val onRemoveFavoriteTag: (SourceKey, String) -> Unit,
 )
@@ -347,6 +350,8 @@ private fun SearchRouteContent(
     SearchScreen(
         state = state,
         oldSearchBar = config.settings.oldSearchBar,
+        savedSearches = config.savedSearches,
+        onOpenSavedSearch = callbacks.onOpenSavedSearch,
         creatorBrowsingSources = config.creatorBrowsingSources,
         onAction = owner::onAction,
         resolvePostById = { id -> coordinator.resolvePostForSearch(id, state.query.appliedQueryHash) },

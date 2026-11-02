@@ -1,5 +1,6 @@
 package com.theoriacodex.app.codex
 
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.filled.Favorite
@@ -54,7 +55,11 @@ private fun savedCodexEmptyHint(codexId: String): String = when (codexId) {
 
 /** The library's Saved entry: each collection has its own cover and opens directly, Likes largest. */
 @Composable
-internal fun SavedCodexLibraryTile(presentation: CodexListPresentation, onOpen: (String) -> Unit) {
+internal fun SavedCodexLibraryTile(
+    presentation: CodexListPresentation,
+    onOpen: (String) -> Unit,
+    onOpenActions: (String) -> Unit,
+) {
     val (likes, followed, searches) = savedCodexChildren(presentation.likesCodexId)
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(
@@ -67,10 +72,10 @@ internal fun SavedCodexLibraryTile(presentation: CodexListPresentation, onOpen: 
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Open Saved", tint = MaterialTheme.colorScheme.primary)
         }
         Row(Modifier.fillMaxWidth().height(168.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SavedCollectionTile(likes, presentation, onOpen, Modifier.weight(1.25f).fillMaxHeight())
+            SavedCollectionTile(likes, presentation, onOpen, onOpenActions, Modifier.weight(1.25f).fillMaxHeight())
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SavedCollectionTile(followed, presentation, onOpen, Modifier.weight(1f).fillMaxWidth())
-                SavedCollectionTile(searches, presentation, onOpen, Modifier.weight(1f).fillMaxWidth())
+                SavedCollectionTile(followed, presentation, onOpen, onOpenActions, Modifier.weight(1f).fillMaxWidth())
+                SavedCollectionTile(searches, presentation, onOpen, onOpenActions, Modifier.weight(1f).fillMaxWidth())
             }
         }
     }
@@ -81,6 +86,7 @@ private fun SavedCollectionTile(
     collection: Codex,
     presentation: CodexListPresentation,
     onOpen: (String) -> Unit,
+    onOpenActions: (String) -> Unit,
     modifier: Modifier,
 ) {
     val count = presentation.itemCounts[collection.codexId] ?: 0
@@ -90,7 +96,11 @@ private fun SavedCollectionTile(
     Box(
         modifier.clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .clickable { onOpen(collection.codexId) },
+            .combinedClickable(
+                onClick = { onOpen(collection.codexId) },
+                onLongClick = { onOpenActions(collection.codexId) },
+                onLongClickLabel = "Actions for ${collection.name}",
+            ),
     ) {
         if (onCover) {
             CodexCoverImage(covers, null, Modifier.fillMaxSize()) {}

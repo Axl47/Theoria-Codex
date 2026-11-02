@@ -50,6 +50,7 @@ internal data class CodexListActions(
     val deleteCodex: (String) -> Unit,
     val cleanCodex: (String, Set<String>) -> Unit,
     val makeAvailableOffline: ((String) -> Unit)? = null,
+    val openSavedCollectionActions: (String) -> Unit = {},
 )
 
 internal data class CodexSourceSelection(val codex: Codex, val source: SourceKey)

@@ -38,7 +38,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -240,13 +240,13 @@ private fun ForYouInterestChips(sections: List<ForYouSection>, onJump: (Int) -> 
 }
 
 private fun ForYouSection.kindIcon(): ImageVector? = when {
-    pinned -> Icons.Default.PushPin
+    pinned -> Icons.Default.Bookmark
     discovery -> Icons.Default.AutoAwesome
     else -> null
 }
 
 private fun ForYouSection.kindLabel(): String? = when {
-    pinned -> "Pinned"
+    pinned -> "Saved"
     discovery -> "Explore"
     else -> null
 }
@@ -283,10 +283,10 @@ private fun ForYouSectionMenu(
             image = { modifier -> if (cover != null) PostThumbnail(cover, modifier) else Box(modifier) },
             details = { ActionMenuDetailText(section.kindLabel() ?: "Interest") },
         )
-        ActionMenuRow(Icons.Default.PushPin, if (section.pinned) "Unpin" else "Pin", enabled) {
+        ActionMenuRow(Icons.Default.Bookmark, if (section.pinned) "Remove from Saved" else "Save search", enabled) {
             act(ForYouAction.PinSection(section.id))
         }
-        ActionMenuRow(Icons.Default.BookmarkAdd, "Save to Codex", enabled) { act(ForYouAction.SaveSection(section.id)) }
+        ActionMenuRow(Icons.Default.BookmarkAdd, "Save and hide here", enabled) { act(ForYouAction.SaveSection(section.id)) }
         ActionMenuDivider()
         ActionMenuRow(Icons.Default.Close, "Dismiss", enabled, MaterialTheme.colorScheme.error) {
             act(ForYouAction.DismissSection(section.id))

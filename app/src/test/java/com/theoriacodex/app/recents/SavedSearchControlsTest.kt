@@ -51,7 +51,7 @@ class SavedSearchControlsTest {
         compose.onNodeWithTag("Recent search:${recent.queryHash}")
             .performSemanticsAction(SemanticsActions.OnLongClick) { it() }
         compose.onNode(hasSetTextAction()).performTextReplacement("Night recipe")
-        compose.onNodeWithText("Pin", substring = false).performClick()
+        compose.onNodeWithText("Save", substring = false).performClick()
         assertEquals(recent, pins.value.single().search)
 
     }
@@ -61,7 +61,7 @@ class SavedSearchControlsTest {
         val recent = search(RecentSearchKind.SOURCE)
         compose.setContent { MaterialTheme { TestRecents(searches = listOf(recent)) } }
         compose.onNodeWithText("Searches").performClick()
-        compose.onNodeWithContentDescription("Pin search").performClick()
+        compose.onNodeWithContentDescription("Save search").performClick()
         compose.onNode(hasSetTextAction()).assertExists()
     }
 

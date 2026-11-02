@@ -1,5 +1,9 @@
 package com.theoriacodex.app.search
 
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material3.AssistChip
+import com.theoriacodex.data.repository.SavedSearchEntry
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -93,6 +97,8 @@ internal fun SearchComposer(
     onOpenSourceAccounts: () -> Unit,
     onDigitsCommitted: () -> Unit,
     onDismiss: () -> Unit,
+    savedSearches: List<SavedSearchEntry> = emptyList(),
+    onOpenSavedSearch: (SavedSearchEntry) -> Unit = {},
 ) {
     Dialog(
         onDismissRequest = onDismiss,
@@ -102,6 +108,7 @@ internal fun SearchComposer(
             SearchComposerContent(
                 state, onAction, sourcePicker, onApply, onReset, onUndo,
                 onOpenFavorites, onOpenSourceAccounts, onDigitsCommitted, onDismiss,
+                savedSearches, onOpenSavedSearch,
             )
         }
     }
@@ -119,6 +126,8 @@ private fun SearchComposerContent(
     onOpenSourceAccounts: () -> Unit,
     onDigitsCommitted: () -> Unit,
     onDismiss: () -> Unit,
+    savedSearches: List<SavedSearchEntry>,
+    onOpenSavedSearch: (SavedSearchEntry) -> Unit,
 ) {
     val input = state.suggestions.input
     val draft = state.query.draft
@@ -223,6 +232,8 @@ private fun SearchComposerContent(
             } else {
                 ComposerTagList(
                     state = state,
+                    savedSearches = savedSearches,
+                    onOpenSavedSearch = onOpenSavedSearch,
                     selection = liveSelection,
                     onSelect = { selected -> selection = selected.takeUnless { it == liveSelection } },
                     onAddAlternative = ::addAlternativeTo,
@@ -438,6 +449,8 @@ private fun ComposerSuggestionList(
 @Composable
 private fun ComposerTagList(
     state: SearchUiState,
+    savedSearches: List<SavedSearchEntry>,
+    onOpenSavedSearch: (SavedSearchEntry) -> Unit,
     selection: SelectedTerm?,
     onSelect: (SelectedTerm) -> Unit,
     onAddAlternative: (SearchTerm) -> Unit,
@@ -452,6 +465,10 @@ private fun ComposerTagList(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        if (savedSearches.isNotEmpty()) {
+            ComposerSectionTitle("Saved")
+            SavedSearchChips(savedSearches, onOpenSavedSearch)
+        }
         sections.forEach { section ->
             ComposerSectionTitle(section.title)
             ComposerSectionTerms(section, typedSource, selection, onSelect, onAddAlternative)
@@ -482,6 +499,20 @@ private fun ComposerTagList(
             visibleSourceStatusChipStatuses(state.content.statuses).isNotEmpty()
         ) {
             SourceStatusActions(state, onAction, onOpenSourceAccounts)
+        }
+    }
+}
+
+/** One tap reruns a saved search, replacing the current draft. */
+@Composable
+private fun SavedSearchChips(searches: List<SavedSearchEntry>, onOpen: (SavedSearchEntry) -> Unit) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(searches, key = SavedSearchEntry::id) { entry ->
+            AssistChip(
+                onClick = { onOpen(entry) },
+                label = { Text(entry.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                leadingIcon = { Icon(Icons.Default.Bookmark, null, Modifier.size(16.dp)) },
+            )
         }
     }
 }

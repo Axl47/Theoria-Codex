@@ -9,6 +9,8 @@ import androidx.compose.ui.test.performClick
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.search.state.emptySearchQuery
+import com.theoriacodex.data.repository.RecentSearchEntry
+import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
@@ -30,7 +32,12 @@ class SearchComposerUiTest {
     private val actions = mutableListOf<SearchAction>()
     private val sketch = SearchTerm("sketch")
 
-    private fun open(source: SourceKey, scopes: List<FacetedSearchScope>) {
+    private fun open(
+        source: SourceKey,
+        scopes: List<FacetedSearchScope>,
+        saved: List<SavedSearchEntry> = emptyList(),
+        onOpenSaved: (SavedSearchEntry) -> Unit = {},
+    ) {
         val base = SearchUiState()
         val draft = emptySearchQuery(QueryMode.Source(source)).copy(
             includeTermGroups = listOf(
@@ -45,9 +52,23 @@ class SearchComposerUiTest {
                 SearchComposer(
                     state = state, onAction = { actions += it }, sourcePicker = {}, onApply = {}, onReset = {},
                     onUndo = {}, onOpenFavorites = {}, onOpenSourceAccounts = {}, onDigitsCommitted = {}, onDismiss = {},
+                    savedSearches = saved, onOpenSavedSearch = onOpenSaved,
                 )
             }
         }
+    }
+
+    @Test fun `tapping a saved search reruns it`() {
+        val entry = SavedSearchEntry(
+            "id", "My landscapes",
+            RecentSearchEntry(emptySearchQuery(), "hash", 1L),
+            1L,
+        )
+        var opened: SavedSearchEntry? = null
+        open(SourceKey.GELBOORU, emptyList(), listOf(entry)) { opened = it }
+        compose.onNodeWithText("Saved").assertExists()
+        compose.onNodeWithText("My landscapes").performClick()
+        compose.runOnIdle { assertEquals(entry, opened) }
     }
 
     @Test fun `source with types shows type headings and a visible group`() {

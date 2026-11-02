@@ -33,14 +33,14 @@ class ForYouHomeScreenTest {
         render(ForYouHomeState(visible = true, sections = listOf(section)), actions)
         // The first "forest" is the jump chip; the second is the shelf heading.
         compose.onAllNodesWithText("forest")[1].performClick()
-        compose.onNodeWithText("Pin").assertDoesNotExist()
+        compose.onNodeWithText("Save search").assertDoesNotExist()
         fun inMenu(label: String) {
             compose.onNodeWithContentDescription("Actions for forest").performClick()
             compose.onNodeWithText(label).performClick()
         }
-        inMenu("Pin")
+        inMenu("Save search")
         inMenu("Dismiss")
-        inMenu("Save to Codex")
+        inMenu("Save and hide here")
         compose.onNodeWithContentDescription("For You actions").performClick()
         compose.onNodeWithText("New search").performClick()
         compose.onNodeWithContentDescription("Refresh For You").performClick()
@@ -56,7 +56,7 @@ class ForYouHomeScreenTest {
         render(ForYouHomeState(visible = true, sections = listOf(section)), actions)
         compose.onNodeWithContentDescription("Actions for forest").performClick()
         compose.onNodeWithText("Dismiss").assertIsEnabled()
-        compose.onNodeWithText("Unpin").performClick()
+        compose.onNodeWithText("Remove from Saved").performClick()
         compose.runOnIdle { assertEquals(listOf(ForYouAction.PinSection(section.id)), actions) }
     }
 

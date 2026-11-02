@@ -5,7 +5,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.BookmarkBorder
 import com.theoriacodex.app.source.SourceIcon
 import com.theoriacodex.app.ui.components.ActionMenuRow
 import com.theoriacodex.app.ui.components.ActionMenuSheet
@@ -602,7 +602,7 @@ private fun RecentSearchRow(
         modifier = Modifier
             .testTag("Recent search:${entry.queryHash}")
             .fillMaxWidth()
-            .combinedClickable(onClick = onClick, onLongClickLabel = "Pin search", onLongClick = onPin),
+            .combinedClickable(onClick = onClick, onLongClickLabel = "Save search", onLongClick = onPin),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(start = 14.dp, top = 6.dp, bottom = 6.dp, end = 4.dp),
@@ -630,7 +630,7 @@ private fun RecentSearchRow(
                 )
             }
             onPin?.let { pin ->
-                IconButton(onClick = pin) { Icon(Icons.Default.PushPin, "Pin search", tint = MaterialTheme.colorScheme.primary) }
+                IconButton(onClick = pin) { Icon(Icons.Default.BookmarkBorder, "Save search", tint = MaterialTheme.colorScheme.primary) }
             }
         }
     }

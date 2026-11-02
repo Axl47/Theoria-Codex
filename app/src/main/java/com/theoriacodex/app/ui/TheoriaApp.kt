@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui
 
+import com.theoriacodex.data.repository.RecentSearchEntry
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -628,6 +629,15 @@ internal fun TheoriaAppContent(
     )
 
     var codexActionTargetId by remember { mutableStateOf<String?>(null) }
+    var showSavedSearchManagement by remember { mutableStateOf(false) }
+    // Saved's collections are virtual except Likes, so each opens the menu that manages it.
+    val openCollectionActions: (String) -> Unit = { id ->
+        when (id) {
+            com.theoriacodex.app.codex.FOLLOWED_CODEX_ID -> showFollowedCreators = true
+            com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID -> showSavedSearchManagement = true
+            else -> codexActionTargetId = id
+        }
+    }
     val codexLibrary: @Composable (String?) -> Unit = { actionId ->
         CodexDestinationStateBoundary(
             data = dataDependencies,
@@ -671,6 +681,7 @@ internal fun TheoriaAppContent(
                 onDeleteCodex = { id -> codexCommandOwner.delete(id, state.activeProfile.profileId) },
                 initialActionCodexId = actionId,
                 onActionsDismissed = { codexActionTargetId = null },
+                onOpenSavedCollectionActions = openCollectionActions,
                 likesCodexId = likesCodexIdForProfile(state.activeProfile.profileId),
             )
         }
@@ -1016,6 +1027,58 @@ internal fun TheoriaAppContent(
     com.theoriacodex.app.codex.SavedCodexSession {
     PostTagContextProvider(searchRouteOwner?.state, featureDependencies.search::fetchSearchTermCounts) {
         TheoriaNightTheme {
+            val openHistoricalSearch: (RecentSearchEntry) -> Unit = { entry ->
+                scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                    val historicalScope = when (entry.kind) {
+                        RecentSearchKind.MULTI_SEARCH -> SearchSourceScope.fromSources(entry.sources)
+                        RecentSearchKind.SOURCE,
+                        RecentSearchKind.UNIFIED,
+                        RecentSearchKind.FYP,
+                        -> SearchSourceScope.fromQuery(entry.query)
+                    }
+                    dispatchOrQueueSearchAction(
+                        SearchAction.ApplyHistoricalQuery(query = entry.query, sourceScope = historicalScope),
+                    )
+                    val targetIndex = TopLevelDestination.entries.indexOf(TopLevelDestination.Search)
+                    homeTabRoute = TopLevelDestination.Search.route
+                    pendingTopLevelRoute = TopLevelDestination.Search.route
+                    navController.navigate(AppRoute.Home) {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                    if (topLevelPagerState.currentPage != targetIndex) {
+                        topLevelPagerState.scrollToPage(targetIndex)
+                    }
+                }
+            }
+            val openHistoricalForYouSearch: (RecentSearchEntry) -> Unit = { entry ->
+                dispatchOrQueueForYouAction(
+                    ForYouAction.ReplaySearch(
+                        seedBySource = entry.fypSeedBySource(),
+                        sortMode = entry.query.sort,
+                    ),
+                )
+                val targetIndex = TopLevelDestination.entries.indexOf(TopLevelDestination.ForYou)
+                homeTabRoute = TopLevelDestination.ForYou.route
+                scope.launch {
+                    if (topLevelPagerState.currentPage != targetIndex) {
+                        topLevelPagerState.scrollToPage(targetIndex)
+                    }
+                }
+            }
+            if (showSavedSearchManagement) {
+                val context = codexFeedFabContext(com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID)
+                feedFabRestoreRegistry.state(context)?.let { restore ->
+                    com.theoriacodex.app.codex.SavedSearchesManagementSheet(
+                        savedSearches, restore, { feedFabRestoreRegistry.update(context, it) },
+                        savedSearchOwner::rename, savedSearchOwner::remove,
+                        onDismiss = { showSavedSearchManagement = false },
+                    )
+                }
+            }
             if (showFollowedCreators) {
                 com.theoriacodex.app.creator.FollowedCreatorsSheet(
                     owner = followsOwner,
@@ -1115,6 +1178,7 @@ internal fun TheoriaAppContent(
                                             mediaDurationCoordinator = featureDependencies.mediaDurationCoordinator,
                                             pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                                             config = SearchRouteConfig(
+                                                savedSearches = savedSearches,
                                                 pendingLikePostIds = pendingLikePostIds[state.activeProfile.profileId].orEmpty(),
                                                 settings = state.settings,
                                                 availableSources = state.availableSources,
@@ -1131,6 +1195,10 @@ internal fun TheoriaAppContent(
                                                 feedFabRestoreRegistry.update(SEARCH_FEED_FAB_CONTEXT, updated)
                                             },
                                             callbacks = SearchRouteCallbacks(
+                                                onOpenSavedSearch = { saved ->
+                                                    if (saved.search.kind == RecentSearchKind.FYP) openHistoricalForYouSearch(saved.search)
+                                                    else openHistoricalSearch(saved.search)
+                                                },
                                                 onOpenSourceAccounts = { settingsOwner.onAction(SettingsAction.OpenSourceAccounts) },
                                                 onOpenViewer = { effect ->
                                                     val likeAction = searchLikeAction()
@@ -1380,54 +1448,8 @@ internal fun TheoriaAppContent(
                                                 val index = entries.indexOfFirst { it.post.id == post.id }
                                                 if (index >= 0) openRecentSection(entries, index, section, startOver = true)
                                             },
-                                            onOpenSearch = { entry ->
-                                                scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                                    val historicalScope = when (entry.kind) {
-                                                        RecentSearchKind.MULTI_SEARCH -> {
-                                                            SearchSourceScope.fromSources(entry.sources)
-                                                        }
-                                                        RecentSearchKind.SOURCE,
-                                                        RecentSearchKind.UNIFIED,
-                                                        RecentSearchKind.FYP,
-                                                        -> SearchSourceScope.fromQuery(entry.query)
-                                                    }
-                                                    dispatchOrQueueSearchAction(
-                                                        SearchAction.ApplyHistoricalQuery(
-                                                            query = entry.query,
-                                                            sourceScope = historicalScope,
-                                                        ),
-                                                    )
-                                                    val targetIndex = TopLevelDestination.entries.indexOf(TopLevelDestination.Search)
-                                                    homeTabRoute = TopLevelDestination.Search.route
-                                                    pendingTopLevelRoute = TopLevelDestination.Search.route
-                                                    navController.navigate(AppRoute.Home) {
-                                                        popUpTo(navController.graph.findStartDestination().id) {
-                                                            saveState = true
-                                                        }
-                                                        launchSingleTop = true
-                                                        restoreState = true
-                                                    }
-                                                    if (topLevelPagerState.currentPage != targetIndex) {
-                                                        topLevelPagerState.scrollToPage(targetIndex)
-                                                    }
-                                                }
-                                            },
-                                            onOpenFypSearch = { entry ->
-                                                dispatchOrQueueForYouAction(
-                                                    ForYouAction.ReplaySearch(
-                                                        seedBySource = entry.fypSeedBySource(),
-                                                        sortMode = entry.query.sort,
-                                                    ),
-                                                )
-                                                val targetIndex = TopLevelDestination.entries
-                                                    .indexOf(TopLevelDestination.ForYou)
-                                                homeTabRoute = TopLevelDestination.ForYou.route
-                                                scope.launch {
-                                                    if (topLevelPagerState.currentPage != targetIndex) {
-                                                        topLevelPagerState.scrollToPage(targetIndex)
-                                                    }
-                                                }
-                                            },
+                                            onOpenSearch = openHistoricalSearch,
+                                            onOpenFypSearch = openHistoricalForYouSearch,
                                             onClear = { target ->
                                                 scope.launch {
                                                     recentsClearWorkflow.clear(
@@ -1495,10 +1517,7 @@ internal fun TheoriaAppContent(
                                     onBack = { navController.popBackStack() },
                                     onOpenCodex = { navController.navigate(AppRoute.codexDetail(it)) },
                                     onOpenViewer = openCodexViewer,
-                                    onOpenCodexActions = { codexActionTargetId = it },
-                                    onManageFollowed = { showFollowedCreators = true },
-                                    onRenameSearch = savedSearchOwner::rename,
-                                    onRemoveSearch = savedSearchOwner::remove,
+                                    onOpenCodexActions = openCollectionActions,
                                     resolvePost = { viewerRouteWorkflow.resolvePost(it, ViewerStreamSource.CODEX) },
                                     onToggleLike = { toggleLikeAndSyncCodex(it) },
                                 )

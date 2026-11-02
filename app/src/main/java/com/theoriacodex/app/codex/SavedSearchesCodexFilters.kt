@@ -42,7 +42,7 @@ internal fun SavedSearchesCodexFilters(
         TextButton(onClick = { onChange(state.copy(excludedSavedSearches = entries.map { it.id })) }) { Text("Exclude all") }
     }
     val matching = remember(entries, filter) { entries.filter { it.name.contains(filter.trim(), ignoreCase = true) } }
-    if (entries.isEmpty()) Text("Long-press a recent Search or For You search to name and pin it.")
+    if (entries.isEmpty()) Text("Long-press a recent Search or For You search to name and save it.")
     else if (matching.isEmpty()) Text("No matching saved searches")
     LazyColumn(Modifier.fillMaxWidth().height(280.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items(matching, key = SavedSearchEntry::id) { entry ->

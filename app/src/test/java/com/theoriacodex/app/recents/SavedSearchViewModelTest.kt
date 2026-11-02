@@ -61,7 +61,7 @@ class SavedSearchViewModelTest {
         advanceUntilIdle()
 
         assertEquals(search(), repository.observeSavedSearches().first().single().search)
-        assertEquals("Search pinned.", owner.effects.first())
+        assertEquals("Search saved.", owner.effects.first())
     }
 
     @Test

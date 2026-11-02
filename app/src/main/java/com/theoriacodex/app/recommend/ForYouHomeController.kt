@@ -102,7 +102,7 @@ internal class ForYouHomeController(
         }, activeSection = home.activeSection?.let {
             if (it.id == section.id) it.copy(savedSearchId = savedId) else it
         }))
-        emit(ForYouEffect.ShowMessage(if (savedId == null) "Section unpinned from Saved Searches" else "Section pinned in Saved Searches"))
+        emit(ForYouEffect.ShowMessage(if (savedId == null) "Search removed from Saved" else "Search saved"))
     }
 
     private fun remove(id: String, save: Boolean) = mutate(id) { section, isCurrent ->

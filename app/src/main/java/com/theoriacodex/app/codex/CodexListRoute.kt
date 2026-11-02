@@ -36,6 +36,7 @@ internal fun CodexListScreen(
     onMakeAvailableOffline: ((String) -> Unit)? = null,
     initialActionCodexId: String? = null,
     onActionsDismissed: () -> Unit = {},
+    onOpenSavedCollectionActions: (String) -> Unit = {},
 ) {
     val state = remember {
         CodexListUiState(codices).apply {
@@ -57,7 +58,7 @@ internal fun CodexListScreen(
     val actions = CodexListActions(
         onOpenCodex, onImportCodex, onDownloadCodex, onShareCodex, onSearchFromCodex,
         onCommitReorder, onCreateCodex, onRenameCodex, onSetAutomaticTag, onDeleteCodex,
-        onCleanCodex, onMakeAvailableOffline,
+        onCleanCodex, onMakeAvailableOffline, onOpenSavedCollectionActions,
     )
     LaunchedEffect(codices, state.ordering.reorderMode) { state.synchronizeCodices(codices) }
     if (initialActionCodexId == null) CodexListContent(presentation, state, actions)

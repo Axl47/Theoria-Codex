@@ -122,7 +122,7 @@ private fun CodexListBody(
 ) {
     when {
         state.ordering.reorderMode -> CodexReorderList(presentation, state)
-        else -> CodexGrid(presentation, state, actions.openCodex)
+        else -> CodexGrid(presentation, state, actions.openCodex, actions.openSavedCollectionActions)
     }
 }
 
@@ -207,6 +207,7 @@ private fun CodexGrid(
     presentation: CodexListPresentation,
     state: CodexListUiState,
     onOpenCodex: (String) -> Unit,
+    onOpenSavedCollectionActions: (String) -> Unit,
 ) {
     com.theoriacodex.app.ui.components.AdaptiveMediaGrid(
         modifier = Modifier.fillMaxSize(),
@@ -216,7 +217,7 @@ private fun CodexGrid(
         val likesId = presentation.likesCodexId
         savedCodexLibraryEntries(presentation.codices, likesId).forEach { codex ->
             item(key = codex.codexId, span = { GridItemSpan(if (codex.codexId == SAVED_CODEX_ID) maxLineSpan else 1) }) {
-                CodexLibraryTile(codex, presentation, state, onOpenCodex)
+                CodexLibraryTile(codex, presentation, state, onOpenCodex, onOpenSavedCollectionActions)
             }
         }
     }
@@ -228,10 +229,11 @@ private fun CodexLibraryTile(
     presentation: CodexListPresentation,
     state: CodexListUiState,
     onOpenCodex: (String) -> Unit,
+    onOpenSavedCollectionActions: (String) -> Unit,
 ) {
     val saved = codex.codexId == SAVED_CODEX_ID
     if (saved) {
-        SavedCodexLibraryTile(presentation, onOpenCodex)
+        SavedCodexLibraryTile(presentation, onOpenCodex, onOpenSavedCollectionActions)
         return
     }
     val openActions = { state.actionTarget = codex }

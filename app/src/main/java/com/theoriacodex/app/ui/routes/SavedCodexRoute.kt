@@ -68,9 +68,6 @@ internal fun SavedCodexRoute(
     onOpenCodex: (String) -> Unit,
     onOpenViewer: (String, List<Post>, Int) -> Unit,
     onOpenCodexActions: (String) -> Unit,
-    onManageFollowed: () -> Unit,
-    onRenameSearch: (String, String) -> Unit,
-    onRemoveSearch: (String) -> Unit,
     resolvePost: suspend (PostId) -> Post?,
     onToggleLike: (Post) -> Unit = {},
 ) {
@@ -83,17 +80,6 @@ internal fun SavedCodexRoute(
         data.likesRepository.observeLikes(settings.activeRecommendationProfile().profileId)
     }.collectAsStateWithLifecycle(initialValue = null).value?.size ?: return
     val counts = listOf(likesCount, settings.followedCreators.size, searches.size)
-    var showSearches by remember { mutableStateOf(false) }
-    if (showSearches) {
-        val id = com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID
-        val context = codexFeedFabContext(id)
-        restoreRegistry.state(context)?.let { restore ->
-            com.theoriacodex.app.codex.SavedSearchesManagementSheet(
-                searches, restore, { restoreRegistry.update(context, it) }, onRenameSearch, onRemoveSearch,
-                onDismiss = { showSearches = false },
-            )
-        }
-    }
     val scroll = rememberLazyListState()
     val children = remember(likesId) { savedCodexChildren(likesId) }
     val shelfIds = remember(children) { listOf(null) + children.map { ViewerReturnShelfId.Saved(it.codexId) } }
@@ -115,13 +101,7 @@ internal fun SavedCodexRoute(
                         SavedCodexSection(state, child.codexId, child.name, counts[index], restore,
                             durations, sources, { scroll.isScrollInProgress },
                             { onOpenCodex(child.codexId) },
-                            {
-                                when (child.codexId) {
-                                    com.theoriacodex.app.codex.FOLLOWED_CODEX_ID -> onManageFollowed()
-                                    com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID -> showSearches = true
-                                    else -> onOpenCodexActions(child.codexId)
-                                }
-                            },
+                            { onOpenCodexActions(child.codexId) },
                             { posts, position -> onOpenViewer(child.codexId, posts, position) }, resolvePost, onToggleLike)
                     }
                 }
