@@ -59,7 +59,7 @@ internal fun CodexListScreen(
         onCommitReorder, onCreateCodex, onRenameCodex, onSetAutomaticTag, onDeleteCodex,
         onCleanCodex, onMakeAvailableOffline,
     )
-    LaunchedEffect(codices, state.reorderMode) { state.synchronizeCodices(codices) }
+    LaunchedEffect(codices, state.ordering.reorderMode) { state.synchronizeCodices(codices) }
     if (initialActionCodexId == null) CodexListContent(presentation, state, actions)
     val hasOverlay = state.actionTarget != null || state.searchSourceTarget != null ||
         state.tagSelectionTarget != null || state.renameTarget != null ||

@@ -97,9 +97,9 @@ private fun CodexListHeader(
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             CodexActionIcon(Icons.Default.FileOpen, "Import Codex", onClick = actions.importCodex)
             CodexActionIcon(
-                icon = if (state.reorderMode) Icons.Default.Check else Icons.Default.Reorder,
-                description = if (state.reorderMode) "Done reordering Codices" else "Reorder Codices",
-                onClick = { state.toggleReorder(codices, actions.commitReorder) },
+                icon = if (state.ordering.reorderMode) Icons.Default.Check else Icons.Default.Reorder,
+                description = if (state.ordering.reorderMode) "Done reordering Codices" else "Reorder Codices",
+                onClick = { state.ordering.toggle(codices, actions.commitReorder) },
             )
             CodexActionIcon(Icons.Default.Add, "Create Codex") { state.showCreateDialog = true }
         }
@@ -113,7 +113,7 @@ private fun CodexListBody(
     actions: CodexListActions,
 ) {
     when {
-        state.reorderMode -> CodexReorderList(presentation, state)
+        state.ordering.reorderMode -> CodexReorderList(presentation, state)
         else -> CodexGrid(presentation, state, actions.openCodex)
     }
 }
@@ -122,10 +122,10 @@ private fun CodexListBody(
 private fun CodexReorderList(presentation: CodexListPresentation, state: CodexListUiState) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        userScrollEnabled = state.draggingCodexId == null,
+        userScrollEnabled = state.ordering.draggingId == null,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        itemsIndexed(state.reorderDraft, key = { _, codex -> codex.codexId }) { index, codex ->
+        itemsIndexed(state.ordering.reorderDraft, key = { _, codex -> codex.codexId }) { index, codex ->
             CodexReorderRow(codex, index, presentation, state)
         }
     }
@@ -138,15 +138,15 @@ private fun CodexReorderRow(
     presentation: CodexListPresentation,
     state: CodexListUiState,
 ) {
-    val isDragging = state.draggingCodexId == codex.codexId
+    val isDragging = state.ordering.draggingId == codex.codexId
     Surface(
         modifier = Modifier.fillMaxWidth().graphicsLayer {
             if (isDragging) {
-                translationY = state.dragOffsetY
+                translationY = state.ordering.dragOffsetY
                 shadowElevation = 14f
             }
         }.onSizeChanged { size ->
-            size.height.toFloat().takeIf { it > 1f }?.let { state.itemHeightPx = it }
+            size.height.toFloat().takeIf { it > 1f }?.let { state.ordering.itemHeightPx = it }
         }.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp))
             .padding(horizontal = 12.dp, vertical = 10.dp),
         shape = RoundedCornerShape(16.dp),

@@ -1,8 +1,6 @@
 package com.theoriacodex.app.codex
 
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.theoriacodex.domain.model.Codex
@@ -17,78 +15,13 @@ internal class CodexListUiState(initialCodices: List<Codex>) {
     var actionTarget by mutableStateOf<Codex?>(null)
     var searchSourceTarget by mutableStateOf<Codex?>(null)
     var tagSelectionTarget by mutableStateOf<CodexSourceSelection?>(null)
-    var reorderMode by mutableStateOf(false)
-    var reorderDraft by mutableStateOf(initialCodices)
-    var draggingCodexId by mutableStateOf<String?>(null)
-    var draggingIndex by mutableIntStateOf(-1)
-    var dragOffsetY by mutableFloatStateOf(0f)
-    var itemHeightPx by mutableFloatStateOf(1f)
+    val ordering = com.theoriacodex.app.ui.components.ReorderListState(initialCodices, Codex::codexId)
 
     fun synchronizeCodices(codices: List<Codex>) {
         if (codices.none { it.codexId == cleaningTargetId }) cleaningTargetId = null
-        if (!reorderMode) {
-            reorderDraft = codices
-            return
-        }
-        val current = reorderDraft.mapNotNull { draft ->
-            codices.firstOrNull { codex -> codex.codexId == draft.codexId }
-        }
-        reorderDraft = current + codices.filterNot { codex ->
-            current.any { existing -> existing.codexId == codex.codexId }
-        }
+        ordering.synchronize(codices)
     }
 
-    fun toggleReorder(codices: List<Codex>, onCommitReorder: (List<String>) -> Unit) {
-        if (!reorderMode) {
-            reorderDraft = codices
-            reorderMode = true
-            return
-        }
-        onCommitReorder(reorderDraft.map(Codex::codexId))
-        resetDrag()
-        reorderMode = false
-    }
-
-    fun startDrag(codexId: String, index: Int) {
-        draggingCodexId = codexId
-        draggingIndex = index
-        dragOffsetY = 0f
-    }
-
-    fun move(codexId: String, offset: Int): Boolean {
-        if (!reorderMode) return false
-        val fromIndex = reorderDraft.indexOfFirst { it.codexId == codexId }
-        val toIndex = fromIndex + offset
-        if (fromIndex !in reorderDraft.indices || toIndex !in reorderDraft.indices || offset == 0) return false
-        resetDrag()
-        reorderDraft = moveCodex(reorderDraft, fromIndex, toIndex)
-        return true
-    }
-
-    fun drag(codexId: String, fallbackIndex: Int, deltaY: Float) {
-        if (draggingCodexId != codexId) return
-        dragOffsetY += deltaY
-        val currentIndex = draggingIndex.takeIf { it >= 0 } ?: fallbackIndex
-        val threshold = itemHeightPx * 0.55f
-        when {
-            dragOffsetY >= threshold && currentIndex < reorderDraft.lastIndex -> {
-                reorderDraft = moveCodex(reorderDraft, currentIndex, currentIndex + 1)
-                draggingIndex = currentIndex + 1
-                dragOffsetY -= itemHeightPx
-            }
-            dragOffsetY <= -threshold && currentIndex > 0 -> {
-                reorderDraft = moveCodex(reorderDraft, currentIndex, currentIndex - 1)
-                draggingIndex = currentIndex - 1
-                dragOffsetY += itemHeightPx
-            }
-        }
-    }
-
-    fun resetDrag() {
-        draggingCodexId = null
-        draggingIndex = -1
-        dragOffsetY = 0f
-    }
 }
 
 internal data class CodexListPresentation(

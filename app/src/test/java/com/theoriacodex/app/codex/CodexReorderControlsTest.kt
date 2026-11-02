@@ -27,9 +27,9 @@ class CodexReorderControlsTest {
     @Test fun `move actions follow collection identity and commit the reordered draft`() {
         val codices = listOf(Codex("a", "A", 1), Codex("b", "B", 2), Codex("c", "C", 3))
         val state = CodexListUiState(codices)
-        state.toggleReorder(codices) {}
+        state.ordering.toggle(codices) {}
         compose.setContent { MaterialTheme { Column {
-            state.reorderDraft.forEachIndexed { index, codex -> CodexReorderHandle(codex, index, state) }
+            state.ordering.reorderDraft.forEachIndexed { index, codex -> CodexReorderHandle(codex, index, state) }
         } } }
         assertEquals(listOf("Move down"), actions("A").map { it.label })
         val moveDown = actions("A").single()
@@ -41,13 +41,13 @@ class CodexReorderControlsTest {
         compose.onNodeWithText("Move down").performClick()
         assertEquals(listOf("Move up"), actions("A").map { it.label })
         compose.runOnIdle {
-            assertEquals(listOf("b", "c", "a"), state.reorderDraft.map { it.codexId })
-            assertFalse(state.move("a", 1))
-            assertFalse(state.move("missing", 1))
+            assertEquals(listOf("b", "c", "a"), state.ordering.reorderDraft.map { it.codexId })
+            assertFalse(state.ordering.move("a", 1))
+            assertFalse(state.ordering.move("missing", 1))
             var committed = emptyList<String>()
-            state.toggleReorder(codices) { committed = it }
+            state.ordering.toggle(codices) { committed = it }
             assertEquals(listOf("b", "c", "a"), committed)
-            assertFalse(state.move("a", -1))
+            assertFalse(state.ordering.move("a", -1))
         }
     }
 

@@ -218,7 +218,7 @@ internal class ForYouViewModel(
         val blacklistChanged = previousSettings != null &&
             previousSettings.forYouBlacklistByProfile[settings.activeProfileId] !=
             settings.forYouBlacklistByProfile[settings.activeProfileId]
-        val ownBlacklistWrite = seedMutationRequest != null && seedMutationRequest == previous.activeRequest
+        val ownBlacklistWrite = ownsBlacklistWrite(previous.activeRequest)
         latestSettings = settings
         environmentSynchronized = true
         val available = engine.availableSources(settings)
@@ -254,6 +254,9 @@ internal class ForYouViewModel(
         }
         if (!ownBlacklistWrite) refreshForEnvironment(refreshRequired)
     }
+
+    private fun ownsBlacklistWrite(request: ForYouRequestIdentity?): Boolean =
+        home.isUpdatingBlacklist || (seedMutationRequest != null && seedMutationRequest == request)
 
     fun onSourceAvailabilityChanged() {
         sourceAvailabilitySynchronized = true

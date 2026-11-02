@@ -48,6 +48,21 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ForYouCoordinatorTest {
+    @Test fun `new search excludes existing rows before fetching exactly one additional page`() = runTest {
+        val adapter = FakeAdapter(SourceKey.GELBOORU, "post")
+        val likes = InMemoryLikesRepository()
+        val profile = AppSettings().activeProfileId
+        repeat(12) { likes.toggleLike(profile, PostId(SourceKey.GELBOORU, "liked-$it"), listOf("interest_$it")) }
+        val service = testForYouCoordinator(registryOf(adapter), likesRepository = likes)
+        val initial = service.loadSections(request(service))
+        val fetches = adapter.requestedPageTokens.size
+        val added = service.loadSections(request(service).copy(additionalSection = true, shuffle = true,
+            excludedSectionIds = initial.mapTo(mutableSetOf()) { it.id }))
+        assertEquals(1, added.size)
+        assertTrue(initial.none { it.id == added.single().id })
+        assertEquals(fetches + 1, adapter.requestedPageTokens.size)
+    }
+
     @Test fun `section pins reload native searches and dismissal survives generation`() = runTest {
         val adapter = FakeAdapter(SourceKey.GELBOORU, "section")
         val settings = InMemorySettingsRepository()
@@ -61,11 +76,12 @@ class ForYouCoordinatorTest {
         assertEquals(RecentSearchKind.FYP, saved.observeSavedSearches().first().single().search.kind)
         val reloaded = service.loadSections(request(service)).single()
         assertEquals(pinId, reloaded.savedSearchId)
-        service.pinSection(reloaded, false)
-        assertTrue(saved.observeSavedSearches().first().isEmpty())
         settings.addForYouBlacklistEntry(defaultRecommendationProfiles().first().profileId,
             SourceKey.GELBOORU, section.feed.seed.getValue(SourceKey.GELBOORU))
         assertTrue(service.loadSections(request(service, settings.observeSettings().first())).isEmpty())
+        assertEquals(pinId, saved.observeSavedSearches().first().single().id)
+        service.pinSection(reloaded, false)
+        assertTrue(saved.observeSavedSearches().first().isEmpty())
     }
 
     @Test fun `overview source selection constrains pins and generated sections without history writes`() = runTest {

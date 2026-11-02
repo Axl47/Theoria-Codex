@@ -19,6 +19,8 @@ data class ForYouFeedRequest(
     val shuffle: Boolean,
     val likesCount: Int,
     val historicalSeed: Map<SourceKey, List<String>>? = null,
+    val excludedSectionIds: Set<String> = emptySet(),
+    val additionalSection: Boolean = false,
 )
 
 data class ForYouContinuation(

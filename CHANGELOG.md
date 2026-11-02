@@ -4,11 +4,19 @@
 
 ### Changed
 
+- Dismiss For You rows and undo dismissal without refreshing the other searches or their posts.
+- Center the For You source selector in the overview header and remove redundant source labels above search rows.
+- Re-seed the first For You feed when refreshing the overview.
+
 - Skim the in-app changelog with collapsible, highlight-colored version titles; older versions start collapsed.
 
 - Gelbooru’s Animated filter now matches any of animated, animation, video, gif, or animated_gif.
 
 ### Added
+
+- Reorder For You searches with the same drag handles and accessible move controls as Codex.
+- Create an additional personalized search at the bottom of For You with New search.
+- Move a For You search into Saved Searches with Save to Codex, removing its row only after saving succeeds.
 
 - Browse personalized interest sections and an exploration section in For You, with previews that open the full feed or Viewer.
 - Pin For You sections in Saved Searches, dismiss unwanted interests, and shuffle suggestions while keeping pins.

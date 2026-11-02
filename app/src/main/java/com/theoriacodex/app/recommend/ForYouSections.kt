@@ -39,27 +39,11 @@ internal class ForYouSectionsLoader(
     suspend fun load(request: ForYouFeedRequest): List<ForYouSection> = withContext(Dispatchers.Default) {
         val sources = request.availableSources.filter { request.selectedSource == null || it == request.selectedSource }
         val liked = likes.observeLikes(request.settings.activeProfileId).first()
-        val pinned = savedSearches.observeSavedSearches().first().filter { entry ->
-            entry.search.kind == RecentSearchKind.FYP && entry.search.sourceTags.isNotEmpty() &&
-                sources.containsAll(entry.search.sourceTags.keys)
-        }.take(6).map { entry ->
-            SectionSeed(entry.search.sourceTags, entry.name, savedSearchId = entry.id)
-        }
         val blocked = request.settings.forYouBlacklistByProfile[request.settings.activeProfileId].orEmpty()
-        val interests = sources.mapConcurrent { source ->
-            val documents = liked.filter { it.postId.source == source }.map { it.tags }
-            val tags = documents.flatMap { RecommendationTagNormalization.normalizeDistinct(source, it, 40) }
-                .groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.take(48).map { it.key }
-            val providerCounts = if (tags.isEmpty()) emptyMap() else counts.fetch(source, tags, emptyMap())
-            ForYouInterests.generate(source, documents, providerCounts,
-                random = if (request.shuffle) Random.Default else null).map { interest ->
-                SectionSeed(mapOf(source to interest.tags), interest.tags.joinToString(" + "), discovery = interest.discovery)
-            }
-        }.flatten().filter { seed ->
-            seed.tags.none { (source, tags) -> blocked.any { it.source == source && seedKey(it.tags) == seedKey(tags) } }
-        }
-        val automatic = interests.filterNot { it.discovery }.roundRobinSources().take(4)
-        val discovery = interests.firstOrNull { it.discovery }
+        val pinned = pinnedSeeds(request, sources, blocked)
+        val interests = generatedSeeds(request, sources, liked, blocked)
+        val automatic = interests.filterNot { it.discovery }.roundRobinSources().take(if (request.additionalSection) 1 else 4)
+        val discovery = if (request.additionalSection) null else interests.firstOrNull { it.discovery }
         (pinned + automatic + listOfNotNull(discovery)).distinctBy { sectionSeedId(it.tags) }
             .mapConcurrent { seed ->
                 val feed = execute(request, seed.tags, liked.size)
@@ -68,6 +52,34 @@ internal class ForYouSectionsLoader(
                 ForYouSection(sectionSeedId(seed.tags), seed.title,
                     feed.copy(page = feed.page.copy(items = ranked)), seed.savedSearchId, seed.discovery)
             }
+    }
+
+    private suspend fun pinnedSeeds(request: ForYouFeedRequest, sources: List<SourceKey>,
+        blocked: List<com.theoriacodex.data.repository.ForYouBlacklistEntry>): List<SectionSeed> {
+        return savedSearches.observeSavedSearches().first().filter { entry ->
+            !request.additionalSection && entry.search.kind == RecentSearchKind.FYP && entry.search.sourceTags.isNotEmpty() &&
+                sources.containsAll(entry.search.sourceTags.keys) && allowedSection(entry.search.sourceTags, request, blocked)
+        }.take(6).map { entry ->
+            SectionSeed(entry.search.sourceTags, entry.name, savedSearchId = entry.id)
+        }
+    }
+
+    private suspend fun generatedSeeds(request: ForYouFeedRequest, sources: List<SourceKey>,
+        liked: List<com.theoriacodex.data.repository.LikedPost>,
+        blocked: List<com.theoriacodex.data.repository.ForYouBlacklistEntry>): List<SectionSeed> {
+        return sources.mapConcurrent { source ->
+            val documents = liked.filter { it.postId.source == source }.map { it.tags }
+            val tags = documents.flatMap { RecommendationTagNormalization.normalizeDistinct(source, it, 40) }
+                .groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.take(48).map { it.key }
+            val providerCounts = if (tags.isEmpty()) emptyMap() else counts.fetch(source, tags, emptyMap())
+            ForYouInterests.generate(source, documents, providerCounts,
+                random = if (request.shuffle) Random.Default else null,
+                maxInterests = if (request.additionalSection) 4 + request.excludedSectionIds.size else 4).map { interest ->
+                SectionSeed(mapOf(source to interest.tags), interest.tags.joinToString(" + "), discovery = interest.discovery)
+            }
+        }.flatten().filter { seed ->
+            allowedSection(seed.tags, request, blocked)
+        }
     }
 
     suspend fun pin(section: ForYouSection, pinned: Boolean): String? {
@@ -99,3 +111,9 @@ private fun seedKey(tags: List<String>) = tags.map(String::lowercase).sorted().j
 
 private fun sectionSeedId(tags: Map<SourceKey, List<String>>): String =
     buildForYouSeedId(tags.mapValues { (_, values) -> values.sorted() })
+
+private fun allowedSection(tags: Map<SourceKey, List<String>>, request: ForYouFeedRequest,
+    blocked: List<com.theoriacodex.data.repository.ForYouBlacklistEntry>): Boolean =
+    sectionSeedId(tags) !in request.excludedSectionIds && tags.none { (source, values) ->
+        blocked.any { it.source == source && seedKey(it.tags) == seedKey(values) }
+    }

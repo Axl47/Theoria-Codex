@@ -96,6 +96,9 @@ sealed interface ForYouAction {
         val visibleResults: List<Post>,
         val visibilityFilters: SearchVisibilityFilters = SearchVisibilityFilters(),
     ) : ForYouAction
+    data object NewSection : ForYouAction
+    data class ReorderSections(val ids: List<String>) : ForYouAction
+    data class SaveSection(val id: String) : ForYouAction
     data object RefreshSections : ForYouAction
     data class PinSection(val id: String) : ForYouAction
     data class DismissSection(val id: String) : ForYouAction
@@ -371,6 +374,9 @@ fun ForYouUiState.reduce(action: ForYouAction): ForYouTransition {
         ForYouAction.OpenMixedFeed,
         is ForYouAction.OpenSection,
         is ForYouAction.OpenSectionResult,
+        ForYouAction.NewSection,
+        is ForYouAction.ReorderSections,
+        is ForYouAction.SaveSection,
         ForYouAction.RefreshSections,
         is ForYouAction.PinSection,
         is ForYouAction.DismissSection,

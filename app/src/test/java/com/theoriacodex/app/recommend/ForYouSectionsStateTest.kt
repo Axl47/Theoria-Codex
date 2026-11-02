@@ -28,6 +28,86 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ForYouSectionsStateTest {
+    @Test fun `dismiss adopts live settings emissions without refreshing other rows and undo restores only that row`() = runTest {
+        val engine = SectionsEngine().apply { sectionLoader = { listOf(section("forest"), section("city")) } }
+        val owner = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)
+        engine.onSettings = { owner.synchronizeEnvironment(it, 3) }
+        owner.synchronizeEnvironment(AppSettings(), 3)
+        advanceUntilIdle()
+        val original = owner.state.value.home
+        val loads = engine.sectionLoads
+        val roots = engine.requests.size
+        owner.onAction(ForYouAction.DismissSection("PIXIV:forest"))
+        advanceUntilIdle()
+        assertEquals(listOf(original.sections.last()), owner.state.value.home.sections)
+        assertEquals(original.mixedFeed, owner.state.value.home.mixedFeed)
+        assertEquals(loads, engine.sectionLoads)
+        assertEquals(roots, engine.requests.size)
+        owner.onAction(ForYouAction.UndoSeedBlacklist(AppSettings().activeProfileId, engine.lastBlacklistEntries))
+        advanceUntilIdle()
+        assertEquals(original.sections, owner.state.value.home.sections)
+        assertEquals(loads, engine.sectionLoads)
+        assertEquals(roots, engine.requests.size)
+    }
+
+    @Test fun `save removes only its row after saving and retains the row on storage failure`() = runTest {
+        val engine = SectionsEngine().apply { sectionLoader = { listOf(section("forest"), section("city")) } }
+        val owner = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)
+        engine.onSettings = { owner.synchronizeEnvironment(it, 3) }
+        owner.synchronizeEnvironment(AppSettings(), 3)
+        advanceUntilIdle()
+        engine.failPin = true
+        owner.onAction(ForYouAction.SaveSection("PIXIV:forest"))
+        advanceUntilIdle()
+        assertEquals(2, owner.state.value.home.sections.size)
+        assertTrue(engine.lastBlacklistEntries.isEmpty())
+        engine.failPin = false
+        val roots = engine.requests.size
+        val loads = engine.sectionLoads
+        owner.onAction(ForYouAction.SaveSection("PIXIV:forest"))
+        advanceUntilIdle()
+        assertEquals("PIXIV:forest", engine.savedSection?.id)
+        assertEquals(listOf("city"), owner.state.value.home.sections.map { it.title })
+        assertEquals(loads, engine.sectionLoads)
+        assertEquals(roots, engine.requests.size)
+    }
+
+    @Test fun `new search appends one distinct row and reorder preserves cached pages without new requests`() = runTest {
+        val engine = SectionsEngine().apply {
+            sectionLoader = { request -> if (request.additionalSection) listOf(section("city")) else listOf(section("forest")) }
+        }
+        val owner = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)
+        owner.synchronizeEnvironment(AppSettings(), 3)
+        advanceUntilIdle()
+        val first = owner.state.value.home.sections.single()
+        val roots = engine.requests.size
+        owner.onAction(ForYouAction.NewSection)
+        advanceUntilIdle()
+        assertEquals(listOf(first.id, "PIXIV:city"), owner.state.value.home.sections.map { it.id })
+        assertEquals(setOf(first.id), engine.sectionRequests.last().excludedSectionIds)
+        assertEquals(roots, engine.requests.size)
+        owner.onAction(ForYouAction.ReorderSections(listOf("PIXIV:city", first.id)))
+        assertEquals(listOf("city", "forest"), owner.state.value.home.sections.map { it.title })
+        assertEquals(first.feed, owner.state.value.home.sections.last().feed)
+        assertEquals(2, engine.sectionLoads)
+    }
+
+    @Test fun `overview refresh reseeds mixed For You even while an interest is active`() = runTest {
+        val engine = SectionsEngine()
+        val owner = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)
+        owner.synchronizeEnvironment(AppSettings(), 3)
+        advanceUntilIdle()
+        owner.onAction(ForYouAction.OpenSection("PIXIV:forest"))
+        owner.onAction(ForYouAction.ShowHome)
+        owner.onAction(ForYouAction.RefreshSections)
+        advanceUntilIdle()
+        assertTrue(engine.requests.last().shuffle)
+        assertNull(engine.requests.last().historicalSeed)
+        assertEquals("forest", owner.state.value.home.activeSection?.title)
+        assertEquals(listOf("mixed"), owner.state.value.home.mixedFeed?.seed?.values?.flatten())
+        assertFalse(owner.state.value.home.mixedLoading)
+    }
+
     @Test fun `shuffle waits for pending pins so completed storage is reflected in the section`() = runTest {
         val gate = CompletableDeferred<Unit>()
         val engine = SectionsEngine().apply { pinGate = gate }
@@ -147,17 +227,24 @@ private class SectionsEngine : ForYouRouteEngine {
     val requests = mutableListOf<ForYouFeedRequest>()
     val pages = mutableListOf<ForYouContinuation>()
     var sectionLoads = 0
+    val sectionRequests = mutableListOf<ForYouFeedRequest>()
+    var savedSection: ForYouSection? = null
+    var onSettings: (AppSettings) -> Unit = {}
+    var lastBlacklistEntries: List<ForYouBlacklistEntry> = emptyList()
+    private var settings = AppSettings()
     var failPin = false
     var pinGate: CompletableDeferred<Unit>? = null
     var sectionLoader: suspend (ForYouFeedRequest) -> List<ForYouSection> = { listOf(section("forest")) }
     override fun availableSources(settings: AppSettings) = listOf(SourceKey.PIXIV, SourceKey.GELBOORU)
     override suspend fun loadSections(request: ForYouFeedRequest): List<ForYouSection> {
         sectionLoads++
+        sectionRequests += request
         return sectionLoader(request)
     }
     override suspend fun pinSection(section: ForYouSection, pinned: Boolean): String? {
         pinGate?.await()
         check(!failPin) { "Storage failed" }
+        if (pinned) savedSection = section
         return if (pinned) "saved-id" else null
     }
     override suspend fun execute(request: ForYouFeedRequest): ForYouFeedResult {
@@ -172,8 +259,12 @@ private class SectionsEngine : ForYouRouteEngine {
     }
     override suspend fun recordAccepted(result: ForYouFeedResult) = Unit
     override suspend fun resolvePost(postId: PostId): Post? = null
-    override suspend fun updateBlacklist(profileId: String, entries: List<ForYouBlacklistEntry>, hidden: Boolean) =
-        ForYouBlacklistChange(AppSettings(), entries)
+    override suspend fun updateBlacklist(profileId: String, entries: List<ForYouBlacklistEntry>, hidden: Boolean): ForYouBlacklistChange {
+        lastBlacklistEntries = entries
+        settings = settings.copy(forYouBlacklistByProfile = mapOf(profileId to if (hidden) entries else emptyList()))
+        onSettings(settings)
+        return ForYouBlacklistChange(settings, entries)
+    }
 }
 
 private fun section(tag: String) = ForYouSection("PIXIV:$tag", tag, feed(tag))

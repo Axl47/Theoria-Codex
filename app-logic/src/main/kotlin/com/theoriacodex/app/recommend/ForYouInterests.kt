@@ -17,6 +17,7 @@ object ForYouInterests {
         documents: List<List<String>>,
         providerCounts: Map<String, Int?> = emptyMap(),
         random: Random? = null,
+        maxInterests: Int = 4,
     ): List<ForYouInterest> {
         val normalized = documents.map { RecommendationTagNormalization.normalizeDistinct(source, it, 40) }
         val stats = TagAffinityBuilder.build(normalized, maxTagsPerDocument = 40)
@@ -43,7 +44,7 @@ object ForYouInterests {
             }
             if (partner == null && chosen.isNotEmpty() && stats.isBroadTag(anchor)) continue
             chosen += ForYouInterest(listOfNotNull(anchor, partner))
-            if (chosen.size == 4) break
+            if (chosen.size == maxInterests.coerceIn(1, 40)) break
         }
         // A less familiar liked tag is still grounded in the user's interests.
         val adjacent = anchors.asReversed().firstOrNull { tag ->
