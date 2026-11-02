@@ -15,18 +15,7 @@ fun parseRule34XxxCredentialInput(raw: String): Rule34XxxCredentials? {
     }.substringBefore('#')
 
     query.split('&').forEach { segment ->
-        val part = segment.trim()
-        if (part.isBlank()) return@forEach
-        val key = part.substringBefore("=", "").trim().lowercase()
-        if (key != "api_key" && key != "user_id") return@forEach
-        val rawValue = part.substringAfter("=", "").trim()
-        if (rawValue.isBlank()) return@forEach
-        val value = runCatching {
-            URLDecoder.decode(rawValue, StandardCharsets.UTF_8.name())
-        }.getOrDefault(rawValue).trim()
-        if (value.isNotBlank()) {
-            values[key] = value
-        }
+        parseCredentialParameter(segment)?.let { (key, value) -> values[key] = value }
     }
 
     val userId = values["user_id"].orEmpty().trim()
@@ -37,4 +26,17 @@ fun parseRule34XxxCredentialInput(raw: String): Rule34XxxCredentials? {
         userId = userId,
         apiKey = apiKey,
     )
+}
+
+private fun parseCredentialParameter(segment: String): Pair<String, String>? {
+    val part = segment.trim()
+    if (part.isBlank()) return null
+    val key = part.substringBefore("=", "").trim().lowercase()
+    if (key != "api_key" && key != "user_id") return null
+    val rawValue = part.substringAfter("=", "").trim()
+    if (rawValue.isBlank()) return null
+    val value = runCatching {
+        URLDecoder.decode(rawValue, StandardCharsets.UTF_8.name())
+    }.getOrDefault(rawValue).trim()
+    return value.takeIf(String::isNotBlank)?.let { key to it }
 }
