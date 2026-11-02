@@ -5,7 +5,7 @@ description: Prepare curated, user-facing Theoria Codex prereleases. Use when dr
 
 # Theoria Codex Release
 
-Prepare exactly one immutable prerelease from an intentional version bump. Keep the user in control of the release wording and of every external Git action. Treat the pushed release commit's GitHub checks as the authority that unlocks tagging.
+Prepare exactly one immutable prerelease from an intentional version bump. Keep the user in control of the release wording and of every external Git action. Prepare the release through a pull request; the merged release commit's GitHub checks are the authority that unlocks tagging.
 
 ## Release Contract
 
@@ -44,7 +44,7 @@ Proceed only after the user approves the version and release-note wording.
 
 1. Update `versionName` and its matching calculated `versionCode` in `app/build.gradle.kts`.
 2. Add `release-notes/vX.Y.Z.md` using the approved user-facing text.
-3. Before archiving root changelog entries, confirm every GitHub Actions workflow triggered for the exact pushed update commit completed successfully. Repair failures and push a new update commit until that commit is green. Then move the entries being released from `[Unreleased]` into a dated `[X.Y.Z]` section at the top of root `CHANGELOG.md`, directly below the now-empty `[Unreleased]` section. Preserve existing release history and entries outside this release. Include this changelog archive in the release-preparation diff and commit; do not wait until publication.
+3. Move the entries being released from `[Unreleased]` into a dated `[X.Y.Z]` section at the top of root `CHANGELOG.md`, directly below the now-empty `[Unreleased]` section. Preserve existing release history and entries outside this release. Include this changelog archive in the release-preparation diff and commit; do not wait until publication.
 4. Run the host validation batch:
 
    ```sh
@@ -60,13 +60,13 @@ Proceed only after the user approves the version and release-note wording.
      --stacktrace
    ```
 
-   If a supported API 35 target is already available and the packaged application IDs and signing lanes have been proven safe, also run `./gradlew :app:connectedDebugAndroidTest --stacktrace`. Otherwise report the local connected lane as unavailable; do not substitute another API level or personal device. The pushed commit's GitHub `Device Validation` workflow must pass before tagging, so local unit/build success never replaces instrumentation coverage.
+   If a supported API 36 or 37 target is already available and the packaged application IDs and signing lanes have been proven safe, also run `./gradlew :app:connectedDebugAndroidTest --stacktrace`. Otherwise report the local connected lane as unavailable; do not substitute another API level or personal device. The merged commit's GitHub `Device Validation` workflow must pass before tagging, so local unit/build success never replaces instrumentation coverage.
 
    Confirm the hotspot/Detekt debt gate and Detekt report no new issues before continuing.
    Confirm `app/build/outputs/apk/release/output-metadata.json` reports the same name and code. Also confirm the working tree contains only intended release changes and the new version is greater than the prior release.
 
 5. Show the final diff, the exact commit message, and the exact tag that would be created.
-6. Create the release-preparation commit only after the user explicitly approves that final diff.
+6. Create a release branch and the release-preparation commit only after the user explicitly approves that final diff.
 
 Use this commit message:
 
@@ -74,15 +74,15 @@ Use this commit message:
 chore(release): prepare vX.Y.Z
 ```
 
-7. After approval, commit and push `main`, then record the full release commit SHA. Do not create the release tag yet.
-8. Monitor every GitHub Actions workflow triggered for that exact SHA, including `Verify`, `Device Validation`, and `Dependency Submission`. Match by full `headSha`; never use an older green run as evidence.
-9. Wait until every triggered workflow completes successfully. If any workflow fails, is cancelled, or cannot run, stop before tagging, inspect the failing check, and prepare a new release commit after the repair. Do not treat host success as permission to bypass this gate.
+7. With explicit authorization for external Git actions, push the branch and open a PR targeting `main`; link it in T3 Code. Do not create the release tag yet.
+8. Watch the PR with T3 Code's `watch_pull_request` tool and end the turn while checks run. Verify `Verify` and `Device Validation` passed for the current PR revision and tested merge result; PR workflows may run on GitHub's synthetic merge commit rather than the branch head. Investigate missing, failed, or cancelled checks and push repairs; the existing watch persists across pushes. Dependency Submission runs on `main`, not on PRs.
+9. Merge only with explicit authorization. Record the actual merged commit SHA on `main`; a squash or merge commit can differ from the PR head. Confirm every workflow triggered for that exact merged SHA completed successfully, including `Verify`, `Device Validation`, and `Dependency Submission`. Match the full `headSha`, not an older PR or main run. If any is missing, fails, is cancelled, or cannot run, stop before tagging and repair through a new PR. Do not treat host or PR success as a substitute for this gate. Stop the PR watch when it is no longer needed.
 
 ## Publish An Approved Release
 
 Publish only when the user explicitly asks to publish the named version.
 
-1. Confirm all GitHub Actions workflows for the exact approved release commit completed successfully. If they are still running, keep monitoring. If any did not succeed, stop before tagging.
+1. Confirm all GitHub Actions workflows for the exact merged release commit completed successfully. If they are still running, keep monitoring. If any did not succeed, stop before tagging.
 2. Refetch `main` and tags. Confirm the checkout is clean, `HEAD` equals `origin/main`, the target commit is the approved release commit, and the version tag does not exist locally or remotely.
 3. Create an annotated tag whose message is the checked-in, approved changelog:
 
@@ -100,6 +100,6 @@ Publish only when the user explicitly asks to publish the named version.
 5. Push only that exact tag; `main` must already be synchronized from the preparation phase.
 6. Monitor the tag-triggered `Main Prerelease` workflow to completion. If it fails, report the immutable release failure and prepare a newer patch version for any repair; never move or recreate the tag.
 7. Confirm the GitHub prerelease exists, is not a draft, uses the expected tag and notes, and contains the uploaded `theoria-codex-main.apk` asset before reporting publication complete.
-8. Confirm root `CHANGELOG.md` already records the release directly below a clean `[Unreleased]` section, as archived during preparation after the update commit passed CI. Do not create a separate post-publication changelog cleanup commit or alter the release tag.
+8. Confirm root `CHANGELOG.md` already records the release directly below a clean `[Unreleased]` section, as archived in the release PR. Do not create a separate post-publication changelog cleanup commit or alter the release tag.
 
-If any check fails, stop before tagging. Fix the release commit and prepare a newer version rather than altering a published tag.
+If a pre-tag check fails, stop before tagging and repair the release through a new PR. After a tag has been pushed, prepare a newer version rather than altering the published tag.
