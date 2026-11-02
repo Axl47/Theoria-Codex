@@ -6,6 +6,9 @@
 
 ### Fixed
 
+- Keep Recents days distinct across years.
+- Clear the Auto-save alternative target when removing a tag group to avoid editing the wrong rule.
+
 - Restore language and Full color filters when undoing Clear filters.
 - Exclude retained download history from storage usage totals and label it separately.
 

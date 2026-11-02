@@ -216,7 +216,7 @@ private fun AutoSaveEditor(
         addTarget = addTarget,
         onAddTo = { groupIndex -> requestedGroupIndex = groupIndex },
         onRemove = { group, tag ->
-            if (group.rows.size == 1 && requestedGroupIndex == group.groupIndex) requestedGroupIndex = null
+            if (group.rows.size == 1) requestedGroupIndex = null
             onSetAutomaticTag(tag, false)
         },
     )

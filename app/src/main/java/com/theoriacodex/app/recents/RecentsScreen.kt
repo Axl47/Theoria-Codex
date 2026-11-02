@@ -400,7 +400,7 @@ private fun WatchedGrid(
         rows.forEach { row ->
             when (row) {
                 is RecentsGridRow.Day ->
-                    item(key = "day:${row.label}", span = StaggeredGridItemSpan.FullLine) { RecentsDayHeading(row.label) }
+                    item(key = "day:${row.date}", span = StaggeredGridItemSpan.FullLine) { RecentsDayHeading(row.label) }
                 is RecentsGridRow.Post -> {
                     val post = row.entry.post
                     item(key = "${post.id.source.name}:${post.id.sourcePostId}") {
@@ -492,10 +492,10 @@ private fun SearchHistoryList(
             EmptyRecentState(emptyMessage)
             return@Column
         }
-        val days = remember(searches, now) { searches.groupBy { recentsDayLabel(it.searchedAtEpochMs, now) } }
+        val days = remember(searches, now) { searches.groupBy { recentsDay(it.searchedAtEpochMs) } }
         LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             days.forEach { (day, entries) ->
-                item(key = "day:$day") { RecentsDayHeading(day) }
+                item(key = "day:$day") { RecentsDayHeading(recentsDayLabel(entries.first().searchedAtEpochMs, now)) }
                 items(entries, key = { entry -> "${entry.kind}:${entry.queryHash}" }) { entry ->
                     RecentSearchRow(entry, now, onClick = { onOpenSearch(entry) }, onPin = onPinSearch?.let { pin -> { pin(entry) } })
                 }
@@ -568,7 +568,7 @@ private fun ActivityList(
 }
 
 private fun timelineKey(index: Int, item: RecentsTimelineItem): String = when (item) {
-    is RecentsTimelineItem.Day -> "day:${item.label}"
+    is RecentsTimelineItem.Day -> "day:${item.date}"
     is RecentsTimelineItem.Posts -> "posts:$index:${item.entries.first().viewedAtEpochMs}"
     is RecentsTimelineItem.Search -> "search:${item.entry.queryHash}:${item.entry.searchedAtEpochMs}"
 }

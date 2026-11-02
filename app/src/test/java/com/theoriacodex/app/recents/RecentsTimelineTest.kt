@@ -32,9 +32,9 @@ class RecentsTimelineTest {
         )
         assertEquals(
             listOf(
-                RecentsTimelineItem.Day("Today"),
+                RecentsTimelineItem.Day(recentsDay(now, ZoneOffset.UTC), "Today"),
                 RecentsTimelineItem.Posts(listOf(first, second)),
-                RecentsTimelineItem.Day("Yesterday"),
+                RecentsTimelineItem.Day(recentsDay(now - day, ZoneOffset.UTC), "Yesterday"),
                 RecentsTimelineItem.Posts(listOf(older)),
             ),
             timeline,
@@ -45,6 +45,15 @@ class RecentsTimelineTest {
         val rows = recentsGridRows(listOf(post(now - 1), post(now - day)), now, ZoneOffset.UTC)
         assertEquals(listOf(0, 1), rows.filterIsInstance<RecentsGridRow.Post>().map { it.index })
         assertEquals(4, rows.size)
+    }
+
+    @Test fun `same month and day in different years have distinct identities`() {
+        val dates = listOf("2025-01-01T12:00:00Z", "2024-06-01T12:00:00Z", "2024-01-01T12:00:00Z")
+        val posts = dates.map { post(java.time.Instant.parse(it).toEpochMilli()) }
+        val headings = recentsTimeline(posts.map(RecentActivityEntry::Watched), now, ZoneOffset.UTC)
+            .filterIsInstance<RecentsTimelineItem.Day>()
+        assertEquals(3, headings.map { it.date }.distinct().size)
+        assertEquals(3, recentsGridRows(posts, now, ZoneOffset.UTC).filterIsInstance<RecentsGridRow.Day>().size)
     }
 
     @Test fun `search title shows alternatives and exclusions`() {

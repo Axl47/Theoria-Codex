@@ -4,6 +4,7 @@ import com.theoriacodex.data.repository.RecentActivityEntry
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.domain.model.Query
+import java.time.LocalDate
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -11,10 +12,13 @@ import java.util.Locale
 
 /** One row of the All tab: a day heading, a run of consecutive posts, or a search. */
 internal sealed interface RecentsTimelineItem {
-    data class Day(val label: String) : RecentsTimelineItem
+    data class Day(val date: LocalDate, val label: String) : RecentsTimelineItem
     data class Posts(val entries: List<RecentPostEntry>) : RecentsTimelineItem
     data class Search(val entry: RecentSearchEntry) : RecentsTimelineItem
 }
+
+internal fun recentsDay(epochMs: Long, zone: ZoneId = ZoneId.systemDefault()): LocalDate =
+    Instant.ofEpochMilli(epochMs).atZone(zone).toLocalDate()
 
 internal fun recentsDayLabel(epochMs: Long, now: Long, zone: ZoneId = ZoneId.systemDefault()): String {
     val day = Instant.ofEpochMilli(epochMs).atZone(zone).toLocalDate()
@@ -32,7 +36,7 @@ internal fun recentsTimeline(
     now: Long,
     zone: ZoneId = ZoneId.systemDefault(),
 ): List<RecentsTimelineItem> = buildList {
-    var day: String? = null
+    var day: LocalDate? = null
     var posts = mutableListOf<RecentPostEntry>()
     fun flushPosts() {
         if (posts.isNotEmpty()) add(RecentsTimelineItem.Posts(posts))
@@ -40,10 +44,11 @@ internal fun recentsTimeline(
     }
     activity.forEach { entry ->
         val label = recentsDayLabel(entry.occurredAtEpochMs, now, zone)
-        if (label != day) {
+        val date = recentsDay(entry.occurredAtEpochMs, zone)
+        if (date != day) {
             flushPosts()
-            add(RecentsTimelineItem.Day(label))
-            day = label
+            add(RecentsTimelineItem.Day(date, label))
+            day = date
         }
         when (entry) {
             is RecentActivityEntry.Watched -> posts += entry.entry
@@ -58,7 +63,7 @@ internal fun recentsTimeline(
 
 /** One cell of a post grid: a full-width day heading, or a post at its index in the visible list. */
 internal sealed interface RecentsGridRow {
-    data class Day(val label: String) : RecentsGridRow
+    data class Day(val date: LocalDate, val label: String) : RecentsGridRow
     data class Post(val index: Int, val entry: RecentPostEntry) : RecentsGridRow
 }
 
@@ -67,9 +72,9 @@ internal fun recentsGridRows(
     now: Long,
     zone: ZoneId = ZoneId.systemDefault(),
 ): List<RecentsGridRow> = posts.withIndex()
-    .groupBy { (_, entry) -> recentsDayLabel(entry.viewedAtEpochMs, now, zone) }
+    .groupBy { (_, entry) -> recentsDay(entry.viewedAtEpochMs, zone) }
     .flatMap { (day, entries) ->
-        listOf(RecentsGridRow.Day(day)) + entries.map { (index, entry) -> RecentsGridRow.Post(index, entry) }
+        listOf(RecentsGridRow.Day(day, recentsDayLabel(entries.first().value.viewedAtEpochMs, now, zone))) + entries.map { (index, entry) -> RecentsGridRow.Post(index, entry) }
     }
 
 /** A search's one-line name: its required tags, "or" alternatives, then exclusions. */
