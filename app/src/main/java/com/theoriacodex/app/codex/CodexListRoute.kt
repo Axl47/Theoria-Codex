@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.theoriacodex.data.repository.CodexLibrarySort
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.SourceKey
@@ -37,6 +38,8 @@ internal fun CodexListScreen(
     initialActionCodexId: String? = null,
     onActionsDismissed: () -> Unit = {},
     onOpenSavedCollectionActions: (String) -> Unit = {},
+    librarySort: CodexLibrarySort = CodexLibrarySort.MANUAL,
+    onLibrarySortChange: (CodexLibrarySort) -> Unit = {},
 ) {
     val state = remember {
         CodexListUiState(codices).apply {
@@ -54,11 +57,12 @@ internal fun CodexListScreen(
         actionLoading = options.loading,
         actionFailed = options.failed,
         retryActionOptions = { retry++ },
+        librarySort = librarySort,
     )
     val actions = CodexListActions(
         onOpenCodex, onImportCodex, onDownloadCodex, onShareCodex, onSearchFromCodex,
         onCommitReorder, onCreateCodex, onRenameCodex, onSetAutomaticTag, onDeleteCodex,
-        onCleanCodex, onMakeAvailableOffline, onOpenSavedCollectionActions,
+        onCleanCodex, onMakeAvailableOffline, onOpenSavedCollectionActions, onLibrarySortChange,
     )
     LaunchedEffect(codices, state.ordering.reorderMode) { state.synchronizeCodices(codices) }
     if (initialActionCodexId == null) CodexListContent(presentation, state, actions)

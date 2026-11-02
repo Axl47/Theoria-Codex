@@ -3,6 +3,7 @@ package com.theoriacodex.app.codex
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.theoriacodex.data.repository.CodexLibrarySort
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.SourceKey
@@ -35,6 +36,7 @@ internal data class CodexListPresentation(
     val actionLoading: Boolean = false,
     val actionFailed: Boolean = false,
     val retryActionOptions: () -> Unit = {},
+    val librarySort: CodexLibrarySort = CodexLibrarySort.MANUAL,
 )
 
 internal data class CodexListActions(
@@ -51,6 +53,7 @@ internal data class CodexListActions(
     val cleanCodex: (String, Set<String>) -> Unit,
     val makeAvailableOffline: ((String) -> Unit)? = null,
     val openSavedCollectionActions: (String) -> Unit = {},
+    val setLibrarySort: (CodexLibrarySort) -> Unit = {},
 )
 
 internal data class CodexSourceSelection(val codex: Codex, val source: SourceKey)

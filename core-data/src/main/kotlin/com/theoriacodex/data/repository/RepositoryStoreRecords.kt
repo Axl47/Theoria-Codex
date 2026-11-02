@@ -33,6 +33,7 @@ internal data class LegacySettingsStoreRecord(
     @field:SerializedName("invertMultiImageScrollDirection")
     val invertMultiImageScrollDirection: Boolean = false,
     @field:SerializedName("oldSearchBar") val oldSearchBar: Boolean = false,
+    @field:SerializedName("codexLibrarySort") val codexLibrarySort: String? = null,
     @field:SerializedName("instantSeek") val instantSeek: Boolean = false,
     @field:SerializedName("viewerAutomaticTextTranslationEnabled")
     val viewerAutomaticTextTranslationEnabled: Boolean = false,
@@ -86,6 +87,8 @@ internal data class LegacySettingsStoreRecord(
         return RepositoryPolicies.normalizeSettings(
             AppSettings(
                 oldSearchBar = oldSearchBar,
+                codexLibrarySort = CodexLibrarySort.entries.firstOrNull { it.name == codexLibrarySort }
+                    ?: CodexLibrarySort.MANUAL,
                 followedCreators = followedCreators.orEmpty().mapNotNull { it.toDomain() }.distinctBy { it.creator.followKey() }.take(MAX_FOLLOWED_CREATORS),
                 runtime = runtime,
                 cache = toCacheSettings(),
@@ -165,6 +168,7 @@ internal data class LegacySettingsStoreRecord(
                 followedCreators = settings.followedCreators.map(FollowedCreatorRecord::fromDomain),
                 sourceCatalogVersion = SHARED_SOURCE_CATALOG_VERSION,
                 oldSearchBar = settings.oldSearchBar,
+                codexLibrarySort = settings.codexLibrarySort.name,
                 enabledSources = settings.runtime.enabledSources.map { it.name },
                 sourceWeights = settings.runtime.sourceWeights.mapKeys { it.key.name },
                 sourceWeightsByConfiguration = settings.runtime.sourceWeightsByConfiguration.mapValues { (_, weights) ->

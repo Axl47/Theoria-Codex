@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- Sort the Codex Library by name, date added, or item count from Reorder mode; switching back to Manual restores your own arrangement.
+- Use the Codex Library sort as the non-suggested order in Add to Codex.
+
 ## [1.0.1] - 2026-11-02
 
 ### Fixed

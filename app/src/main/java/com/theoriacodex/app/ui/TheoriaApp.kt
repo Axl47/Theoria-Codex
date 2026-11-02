@@ -681,6 +681,12 @@ internal fun TheoriaAppContent(
                 onActionsDismissed = { codexActionTargetId = null },
                 onOpenSavedCollectionActions = openCollectionActions,
                 likesCodexId = likesCodexIdForProfile(state.activeProfile.profileId),
+                librarySort = state.librarySort,
+                onLibrarySortChange = { sort ->
+                    scope.launch {
+                        dataDependencies.settingsRepository.updateSettings { it.copy(codexLibrarySort = sort) }
+                    }
+                },
             )
         }
     }
@@ -1880,6 +1886,7 @@ internal fun TheoriaAppContent(
                     codexItemCounts = state.itemCounts,
                     codexCoverCandidates = state.coverCandidates,
                     relevanceScores = state.relevanceScores,
+                    librarySort = state.settings.codexLibrarySort,
                     containingCodexIds = state.containingCodexIds,
                     excludedCodexIds = excludedCodexIdsForSave,
                     onCreateCodex = { profileId, name ->

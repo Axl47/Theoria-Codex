@@ -66,6 +66,7 @@ import com.theoriacodex.app.ui.components.ActionMenuFollowUpRow
 import com.theoriacodex.app.ui.components.ActionMenuHeader
 import com.theoriacodex.app.ui.components.ActionMenuRow
 import com.theoriacodex.app.ui.components.ActionMenuSheet
+import com.theoriacodex.data.repository.CodexLibrarySort
 import com.theoriacodex.domain.model.Codex
 import androidx.compose.material.icons.filled.AutoAwesome
 import kotlin.math.roundToInt
@@ -121,20 +122,31 @@ private fun CodexListBody(
     actions: CodexListActions,
 ) {
     when {
-        state.ordering.reorderMode -> CodexReorderList(presentation, state)
+        state.ordering.reorderMode -> CodexReorderList(presentation, state, actions.setLibrarySort)
         else -> CodexGrid(presentation, state, actions.openCodex, actions.openSavedCollectionActions)
     }
 }
 
 @Composable
-private fun CodexReorderList(presentation: CodexListPresentation, state: CodexListUiState) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        userScrollEnabled = state.ordering.draggingId == null,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        itemsIndexed(state.ordering.reorderDraft, key = { _, codex -> codex.codexId }) { index, codex ->
-            CodexReorderRow(codex, index, presentation, state)
+private fun CodexReorderList(
+    presentation: CodexListPresentation,
+    state: CodexListUiState,
+    onSortChange: (CodexLibrarySort) -> Unit,
+) {
+    // The draft stays in manual order underneath an automatic sort, so Done can always commit it.
+    val rows = sortCodicesForLibrary(
+        state.ordering.reorderDraft, presentation.librarySort, presentation.itemCounts, presentation.likesCodexId,
+    )
+    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        CodexLibrarySortSelector(presentation.librarySort, onSortChange)
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            userScrollEnabled = state.ordering.draggingId == null,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            itemsIndexed(rows, key = { _, codex -> codex.codexId }) { index, codex ->
+                CodexReorderRow(codex, index, presentation, state)
+            }
         }
     }
 }
@@ -170,7 +182,7 @@ private fun CodexReorderRow(
                 if (codex.codexId == presentation.likesCodexId) codex.copy(name = "Saved") else codex,
                 presentation.itemCounts[codex.codexId] ?: 0, Modifier.weight(1f),
             )
-            CodexReorderHandle(codex, index, state)
+            if (presentation.librarySort == CodexLibrarySort.MANUAL) CodexReorderHandle(codex, index, state)
         }
     }
 }
@@ -209,13 +221,20 @@ private fun CodexGrid(
     onOpenCodex: (String) -> Unit,
     onOpenSavedCollectionActions: (String) -> Unit,
 ) {
+    // A first frame in manual order would move the restored scroll anchor to the wrong Codex.
+    val awaitingCounts = presentation.librarySort.usesItemCounts &&
+        presentation.codices.any { it.codexId !in presentation.itemCounts }
+    if (awaitingCounts) return
+    val sorted = sortCodicesForLibrary(
+        presentation.codices, presentation.librarySort, presentation.itemCounts, presentation.likesCodexId,
+    )
     com.theoriacodex.app.ui.components.AdaptiveMediaGrid(
         modifier = Modifier.fillMaxSize(),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         val likesId = presentation.likesCodexId
-        savedCodexLibraryEntries(presentation.codices, likesId).forEach { codex ->
+        savedCodexLibraryEntries(sorted, likesId).forEach { codex ->
             item(key = codex.codexId, span = { GridItemSpan(if (codex.codexId == SAVED_CODEX_ID) maxLineSpan else 1) }) {
                 CodexLibraryTile(codex, presentation, state, onOpenCodex, onOpenSavedCollectionActions)
             }
