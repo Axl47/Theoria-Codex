@@ -1,5 +1,7 @@
 package com.theoriacodex.app.codex
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -26,10 +28,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -42,6 +42,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.source.SourceIcon
 import com.theoriacodex.app.ui.components.ExpandedBottomSheet
+import com.theoriacodex.app.ui.components.TagGroupCard
+import com.theoriacodex.app.ui.components.TagGroupOrLabel
 import com.theoriacodex.app.source.SourcePresentationCatalog
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.domain.model.CodexAutomaticTag
@@ -288,12 +290,12 @@ private fun AutoSaveRule(
     )
     groups.forEachIndexed { index, group ->
         if (index > 0) AutoSaveAndLabel()
-        AutoSaveRequirement(
+        TagGroupCard(
             active = addTarget == group.groupIndex,
             content = {
                 group.rows.forEach { row ->
                     val tag = row.automaticTag
-                    if (row != group.rows.first()) AutoSaveOrLabel()
+                    if (row != group.rows.first()) TagGroupOrLabel()
                     InputChip(
                         selected = false,
                         onClick = { onRemove(group, tag) },
@@ -312,7 +314,7 @@ private fun AutoSaveRule(
     val draft = addTarget?.takeIf { target -> groups.none { group -> group.groupIndex == target } }
     if (draft != null) {
         if (groups.isNotEmpty()) AutoSaveAndLabel()
-        AutoSaveRequirement(active = true, hint = "Choose a tag below")
+        TagGroupCard(active = true, hint = "Choose a tag below")
     } else if (groups.isNotEmpty()) {
         TextButton(
             modifier = Modifier.fillMaxWidth(),
@@ -325,33 +327,6 @@ private fun AutoSaveRule(
 }
 
 @Composable
-private fun AutoSaveRequirement(
-    active: Boolean,
-    hint: String?,
-    content: @Composable () -> Unit = {},
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0f),
-        border = BorderStroke(
-            width = if (active) 2.dp else 1.dp,
-            color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-        ),
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                itemVerticalAlignment = Alignment.CenterVertically,
-            ) { content() }
-            hint?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-            }
-        }
-    }
-}
-
-@Composable
 private fun AutoSaveAndLabel() {
     Text(
         text = "AND",
@@ -359,15 +334,6 @@ private fun AutoSaveAndLabel() {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.fillMaxWidth(),
         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-    )
-}
-
-@Composable
-private fun AutoSaveOrLabel() {
-    Text(
-        text = "or",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
 

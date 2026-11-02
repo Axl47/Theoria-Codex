@@ -48,7 +48,7 @@ class SearchInputSubmissionTest {
                 onRequestSaveToCodex = {}, onSaveToDevice = {},
             )
         } } }
-        compose.onNodeWithTag("Search query input").performClick()
+        compose.onNodeWithTag("Search bar").performClick()
         val undo = compose.onNodeWithText("Undo")
         undo.assertIsNotEnabled()
         compose.runOnIdle {
@@ -104,6 +104,7 @@ class SearchInputSubmissionTest {
                 }
             }
         }
+        compose.onNodeWithTag("Search bar").performClick()
         val input = compose.onNodeWithTag("Search query input")
         input.performClick()
         input.performImeAction()

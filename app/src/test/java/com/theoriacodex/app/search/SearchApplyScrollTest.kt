@@ -101,16 +101,17 @@ class SearchApplyScrollTest {
                 draft = state.value.query.draft.copy(sort = SortMode.POPULAR),
             ))
         }
-        compose.onNodeWithText("Apply").assertIsDisplayed()
+        compose.onNodeWithText("Search").assertIsDisplayed()
         grid.performTouchInput { swipeUp() }
-        compose.onNodeWithText("Apply").assertDoesNotExist()
+        compose.onNodeWithText("Search").assertDoesNotExist()
         compose.runOnIdle { assertEquals(SortMode.POPULAR, state.value.query.draft.sort) }
-        compose.onNode(hasContentDescription("Expand Search") or hasTestTag("Search query input")).performClick()
-        compose.onNodeWithText("Apply").assertIsDisplayed()
+        compose.onNode(hasContentDescription("Expand Search")).performClick()
+        compose.onNodeWithTag("Search composer apply").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Close search editor").performClick()
         repeat(2) {
             grid.performScrollToIndex(20)
-            compose.onNode(hasContentDescription("Expand Search") or hasTestTag("Search query input")).performClick()
-            compose.onNodeWithText("Apply").performClick()
+            compose.onNode(hasContentDescription("Expand Search") or hasTestTag("Search bar")).performClick()
+            compose.onNodeWithTag("Search composer apply").performClick()
             compose.runOnIdle {
                 reduce(SearchStateChange.ReplaceResults(
                     requestId = request,

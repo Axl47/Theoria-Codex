@@ -15,9 +15,9 @@ class CollapsedSearchContextTest {
         val query = emptySearchQuery(QueryMode.Source(SourceKey.PIXIV)).withIncludeTermsAsRequired(listOf(SearchTerm("klee"), SearchTerm("landscape")))
 
         assertEquals(
-            "klee & landscape · 2 filters",
+            "klee, landscape · 2 filters",
             collapsedSearchContextSummary(
-                appliedQuery = query,
+                query = query,
                 activeFilterCount = 2,
             ),
         )
@@ -31,7 +31,7 @@ class CollapsedSearchContextTest {
             ))
 
         assertEquals(
-            "tag1 & (tag2 || tag3)",
+            "tag1, tag2 +1",
             collapsedSearchContextSummary(query, 0),
         )
     }
@@ -43,7 +43,7 @@ class CollapsedSearchContextTest {
         assertEquals(
             "-comic",
             collapsedSearchContextSummary(
-                appliedQuery = query,
+                query = query,
                 activeFilterCount = 0,
             ),
         )

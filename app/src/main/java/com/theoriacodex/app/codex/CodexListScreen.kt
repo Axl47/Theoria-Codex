@@ -1,5 +1,7 @@
 package com.theoriacodex.app.codex
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -42,11 +44,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,7 +56,9 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.source.SourceIcon
 import com.theoriacodex.app.source.displayName
+import com.theoriacodex.app.ui.components.ActionMenuContentRow
 import com.theoriacodex.app.tags.TagSelectionSurface
 import com.theoriacodex.app.ui.components.ActionMenuDetailText
 import com.theoriacodex.app.ui.components.ActionMenuDivider
@@ -462,66 +464,27 @@ private fun CodexActionIcon(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CodexSourceSheet(
     codex: Codex,
     options: List<CodexSearchSourceOption>,
     state: CodexListUiState,
 ) {
-    ModalBottomSheet(onDismissRequest = { state.searchSourceTarget = null }, dragHandle = null) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                codex.name, style = MaterialTheme.typography.titleMedium, maxLines = 1,
-                overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Text(
-                "Search source", style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            CodexSourceOptions(codex, options, state)
-            TextButton(modifier = Modifier.fillMaxWidth(), onClick = { state.searchSourceTarget = null }) {
-                Text("Cancel")
-            }
-        }
-    }
-}
-
-@Composable
-private fun CodexSourceOptions(
-    codex: Codex,
-    options: List<CodexSearchSourceOption>,
-    state: CodexListUiState,
-) {
-    if (options.isEmpty()) {
+    ActionMenuSheet(onDismiss = { state.searchSourceTarget = null }) {
         Text(
-            "No searchable sources available", style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+            "Search ${codex.name} tags on", style = MaterialTheme.typography.titleMedium, maxLines = 1,
+            overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(bottom = 8.dp),
         )
-        return
-    }
-    options.forEach { option ->
-        TextButton(
-            modifier = Modifier.fillMaxWidth(),
-            onClick = {
+        if (options.isEmpty()) ActionMenuDetailText("No searchable sources available")
+        options.forEach { option ->
+            val label = if (option.postCount == 1) "post" else "posts"
+            ActionMenuContentRow(
+                label = option.source.displayName(),
+                leading = { SourceIcon(option.source) },
+                trailingText = "${option.postCount} $label",
+            ) {
                 state.searchSourceTarget = null
                 state.tagSelectionTarget = CodexSourceSelection(codex, option.source)
-            },
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(option.source.displayName())
-                val label = if (option.postCount == 1) "post" else "posts"
-                Text("${option.postCount} $label", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

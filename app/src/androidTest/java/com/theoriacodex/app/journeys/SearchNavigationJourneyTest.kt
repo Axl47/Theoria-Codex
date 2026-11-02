@@ -43,39 +43,26 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
     @Test
     fun groupedSearchPagesReturnsFromViewerAndSurvivesActivityRecreation() {
         launch()
-        activate(compose.onNodeWithTag("Search query input"))
+        activate(compose.onNodeWithTag("Search bar"))
         activate(compose.onNodeWithContentDescription("Search source:", substring = true))
         activate(compose.onNodeWithContentDescription("Pixiv"))
         addSearchTag("landscape")
         addSearchTag("blue")
         activate(compose.onNodeWithText("blue"))
-        val alternativeInput = compose.onNodeWithText("Tag")
-        alternativeInput.performTextInput("green")
-        compose.waitUntil(conditionDescription = "OR alternative input is ready", timeoutMillis = 10_000) {
-            alternativeInput.fetchSemanticsNode().config[SemanticsProperties.EditableText].text == "green"
-        }
-        activate(compose.onNodeWithText("Add alternative"))
-        compose.waitUntil(conditionDescription = "Green alternative is committed to the group", timeoutMillis = 10_000) {
-            alternativeInput.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.isEmpty() &&
-                compose.onNodeWithText("green", substring = false).isDisplayed()
-        }
+        activate(compose.onNodeWithText("Add “or”"))
+        addSearchTag("green")
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-        compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.Dismiss), useUnmergedTree = true)
-            .performSemanticsAction(SemanticsActions.Dismiss)
-        compose.waitUntil(conditionDescription = "Include group sheet is fully dismissed", timeoutMillis = 10_000) {
-            compose.onAllNodesWithTag("Include group sheet").fetchSemanticsNodes().isEmpty()
-        }
         // This assertion concerns touch-driven focus dismissal, so Apply receives a real tap.
         var nativeTouchModeBeforeApply = false
         scenario.onActivity { nativeTouchModeBeforeApply = it.window.decorView.isInTouchMode }
-        compose.onNodeWithText("Apply").performClick()
+        compose.onNodeWithTag("Search composer apply").performClick()
         compose.waitUntil(conditionDescription = "Provider receives the grouped search", timeoutMillis = 10_000) {
             container.registry.requests.any { it.source == SourceKey.PIXIV && it.pageToken == null }
         }
         val root = container.registry.requests.single { it.source == SourceKey.PIXIV && it.pageToken == null }
         assertEquals(listOf(listOf("landscape"), listOf("blue", "green")),
             root.query.effectiveIncludeTermGroups.map { group -> group.terms.map { it.value } })
-        val summary = compose.onNodeWithText("landscape & (blue || green)")
+        val summary = compose.onNodeWithText("landscape, blue +1", useUnmergedTree = true)
         try {
             compose.waitUntil(conditionDescription = "Grouped query is applied and its field is collapsed", timeoutMillis = 10_000) {
                 summary.isDisplayed()
@@ -126,11 +113,11 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
     @Test
     fun coldGraphRelaunchRestoresAppliedSourceQueryAndCanonicalScrollFromDisk() {
         launch()
-        activate(compose.onNodeWithTag("Search query input"))
+        activate(compose.onNodeWithTag("Search bar"))
         activate(compose.onNodeWithContentDescription("Search source:", substring = true))
         activate(compose.onNodeWithContentDescription("Pixiv"))
         addSearchTag("landscape")
-        activate(compose.onNodeWithText("Apply"))
+        activate(compose.onNodeWithTag("Search composer apply"))
         waitForCard(0)
         val applied = container.registry.requests.single { it.source == SourceKey.PIXIV && it.pageToken == null }.query
         val queryHash = QueryHash.from(applied)
@@ -159,9 +146,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         val restoredRequest = container.registry.requests.single { it.pageToken == null }
         assertEquals(SourceKey.PIXIV, restoredRequest.source)
         assertEquals(applied, restoredRequest.query)
-        // The compact search bar hides individual terms until expanded.
-        activate(compose.onNodeWithContentDescription("Expand Search"))
-        compose.onNodeWithText("landscape").assertIsDisplayed()
+        compose.onNodeWithText("landscape", useUnmergedTree = true).assertIsDisplayed()
     }
 
     @Test

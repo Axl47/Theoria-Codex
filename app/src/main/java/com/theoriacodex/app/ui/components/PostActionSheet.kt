@@ -1,5 +1,7 @@
 package com.theoriacodex.app.ui.components
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
@@ -16,11 +18,9 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -97,15 +97,11 @@ fun PostActionSheet(
         if (creatorActions.isNotEmpty() || onStartOver != null || onGoToSearch != null) {
             ActionMenuDivider()
         }
-        creatorActions.forEach { action ->
-            ActionMenuRow(Icons.Default.Person, action.label) {
-                dismissThen {
-                    val profile = action.profile
-                    if (profile != null) onOpenCreatorProfile?.invoke(profile)
-                    else onOpenLegacyCreatorProfile?.invoke()
-                }
-            }
-        }
+        PostCreatorRows(post, creatorBrowsingSources, onOpenProfile = { profile ->
+            dismissThen { onOpenCreatorProfile?.invoke(profile) }
+        }, onOpenLegacyPost = {
+            dismissThen { onOpenLegacyCreatorProfile?.invoke() }
+        }, enabled = onOpenCreatorProfile != null)
         onStartOver?.let { startOver ->
             ActionMenuRow(Icons.Default.Replay, "Start over") { dismissThen(startOver) }
         }
@@ -134,9 +130,29 @@ fun PostActionSheet(
     }
 }
 
-/** Identifies the held post, since most posts have no provider title to show. */
+/** One labeled row per browsable creator of [post]. */
 @Composable
-private fun PostActionHeader(post: Post) {
+internal fun PostCreatorRows(
+    post: Post,
+    creatorBrowsingSources: Set<SourceKey>,
+    onOpenProfile: (CreatorProfile) -> Unit,
+    onOpenLegacyPost: () -> Unit,
+    enabled: Boolean = true,
+) {
+    if (!enabled) return
+    creatorProfileActions(post, creatorBrowsingSources).forEach { action ->
+        ActionMenuRow(Icons.Default.Person, action.label) {
+            action.profile?.let(onOpenProfile) ?: onOpenLegacyPost()
+        }
+    }
+}
+
+/**
+ * Identifies the post a menu acts on, since most posts have no provider title to show.
+ * [showPostId] adds the source's post ID for surfaces that present post details.
+ */
+@Composable
+internal fun PostActionHeader(post: Post, showPostId: Boolean = false) {
     val context = LocalContext.current
     val location = post.preview.localPath ?: post.preview.url
     val request = remember(context, location, post.id.source) {
@@ -157,6 +173,7 @@ private fun PostActionHeader(post: Post) {
             ) {
                 SourceIcon(post.id.source)
                 if (pageCount > 1) ActionMenuDetailText("$pageCount pages")
+                if (showPostId) ActionMenuDetailText(post.id.sourcePostId)
             }
         },
     )

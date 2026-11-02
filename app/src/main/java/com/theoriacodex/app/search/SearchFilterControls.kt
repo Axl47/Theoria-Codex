@@ -1,5 +1,7 @@
 package com.theoriacodex.app.search
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -17,16 +19,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import com.theoriacodex.app.ui.components.ExpandedBottomSheet
 import com.theoriacodex.app.source.SourceIcon
 import com.theoriacodex.app.source.SourceLetterIcon
 import com.theoriacodex.app.source.isRule34Family
@@ -42,7 +43,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -118,13 +118,13 @@ internal fun FavoriteTagSheet(
     onRemoveTag: (SourceKey, String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ExpandedBottomSheet(onDismiss) {
         Column(
             modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("Favorite Tags", style = MaterialTheme.typography.titleMedium)
+            Text("Favorite tags", style = MaterialTheme.typography.titleLarge)
             if (sections.isEmpty()) {
                 Text(emptyMessage, style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -136,7 +136,6 @@ internal fun FavoriteTagSheet(
                     if (index != sections.lastIndex) HorizontalDivider()
                 }
             }
-            TextButton(modifier = Modifier.fillMaxWidth(), onClick = onDismiss) { Text("Done") }
         }
     }
 }

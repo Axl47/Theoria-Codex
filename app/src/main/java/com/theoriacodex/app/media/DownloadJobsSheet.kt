@@ -1,5 +1,13 @@
 package com.theoriacodex.app.media
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.RemoveCircleOutline
+import com.theoriacodex.app.ui.components.ActionMenuRow
+import com.theoriacodex.app.ui.components.ActionMenuSheet
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,11 +39,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -151,23 +157,22 @@ private fun DownloadItemActions(
     onCancel: (Long) -> Unit, onRetryFailed: (Long) -> Unit,
     onRemove: (Set<Long>, Boolean) -> Unit, onDelete: (Set<Long>) -> Unit, onDismiss: () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = { onDismiss() },
-        title = { Text("Download actions") },
-        text = {
-            Column {
-                TextButton(onClick = { onDelete(setOf(actionItem.id)); onDismiss() }) { Text("Delete file") }
-                TextButton(onClick = { onRemove(setOf(actionItem.id), false); onDismiss() }) { Text("Remove from Downloads") }
-                if (actionItem.active && actionBatch != null) TextButton(onClick = { onCancel(actionBatch.id); onDismiss() }) {
-                    Text("Cancel batch")
-                }
-                if (actionItem.status == PostDownloadStatus.FAILED && actionBatch != null) TextButton(onClick = {
-                    onRetryFailed(actionBatch.id); onDismiss()
-                }) { Text("Retry failed") }
-            }
-        },
-        confirmButton = { TextButton(onClick = { onDismiss() }) { Text("Close") } },
-    )
+    ActionMenuSheet(onDismiss) {
+        if (actionItem.active && actionBatch != null) {
+            ActionMenuRow(Icons.Default.Cancel, "Cancel batch") { onCancel(actionBatch.id); onDismiss() }
+        }
+        if (actionItem.status == PostDownloadStatus.FAILED && actionBatch != null) {
+            ActionMenuRow(Icons.Default.Refresh, "Retry failed") { onRetryFailed(actionBatch.id); onDismiss() }
+        }
+        ActionMenuRow(Icons.Default.RemoveCircleOutline, "Remove from Downloads") {
+            onRemove(setOf(actionItem.id), false); onDismiss()
+        }
+        ActionMenuRow(
+            icon = Icons.Default.Delete,
+            label = "Delete file",
+            tint = MaterialTheme.colorScheme.error,
+        ) { onDelete(setOf(actionItem.id)); onDismiss() }
+    }
 }
 
 @Composable

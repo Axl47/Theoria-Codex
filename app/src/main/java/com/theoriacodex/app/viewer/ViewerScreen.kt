@@ -1,19 +1,18 @@
 package com.theoriacodex.app.viewer
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import android.content.res.Configuration
 import androidx.compose.animation.core.tween
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.grid.items
@@ -24,41 +23,34 @@ import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.app.creator.CreatorProfileActionButton
+import com.theoriacodex.app.ui.components.ActionMenuDivider
+import com.theoriacodex.app.ui.components.ActionMenuRow
+import com.theoriacodex.app.ui.components.PostActionHeader
+import com.theoriacodex.app.ui.components.PostCreatorRows
 import com.theoriacodex.app.media.isGifMediaRef
 import com.theoriacodex.app.media.isPixivUgoiraMedia
 import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.media.postMediaItems
-import com.theoriacodex.app.post.displayTitleOrNull
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.viewer.state.ViewerAction
@@ -666,81 +658,19 @@ internal fun ViewerScreen(
         AdaptiveViewerInfo(onDismiss = { setInfoSheetVisible(false) }) {
             PostTagActionSection(
                 header = {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text("Info", style = MaterialTheme.typography.titleMedium)
-                            Row {
-                                IconButton(enabled = canDownloadCurrentMedia, onClick = {
-                                    onAction(ViewerAction.Download)
-                                    setInfoSheetVisible(false)
-                                }) {
-                                    Icon(Icons.Default.Download, contentDescription = "Save to device")
-                                }
-                                IconButton(onClick = {
-                                    onAction(ViewerAction.Save)
-                                    setInfoSheetVisible(false)
-                                }) {
-                                    Icon(
-                                        imageVector = Icons.Default.BookmarkAdd,
-                                        contentDescription = "Save to Codex",
-                                    )
-                                }
-                                IconButton(onClick = {
-                                    setPlaybackEnabled(false)
-                                    onGoToSearch()
-                                    setInfoSheetVisible(false)
-                                }) {
-                                    Icon(
-                                        imageVector = Icons.Default.Search,
-                                        contentDescription = "Go to Search",
-                                    )
-                                }
-                                IconButton(onClick = {
-                                    onAction(ViewerAction.Share)
-                                    setInfoSheetVisible(false)
-                                }) {
-                                    Icon(
-                                        imageVector = Icons.Default.Share,
-                                        contentDescription = "Share",
-                                    )
-                                }
-                                if (!post.pageUrl.isNullOrBlank()) {
-                                    IconButton(onClick = {
-                                        onOpenInBrowser(post)
-                                        setInfoSheetVisible(false)
-                                    }) {
-                                        Icon(
-                                            imageVector = Icons.Default.OpenInBrowser,
-                                            contentDescription = "Open in browser",
-                                        )
-                                    }
-                                }
-                            }
+                    Column {
+                        PostActionHeader(post, showPostId = true)
+                        ActionMenuRow(Icons.Default.BookmarkAdd, "Save to Codex") {
+                            onAction(ViewerAction.Save)
+                            setInfoSheetVisible(false)
                         }
-
-                        post.displayTitleOrNull()?.let { title ->
-                            Text(
-                                text = title,
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Center,
-                            )
+                        ActionMenuRow(Icons.Default.Download, "Save to device", canDownloadCurrentMedia) {
+                            onAction(ViewerAction.Download)
+                            setInfoSheetVisible(false)
                         }
-                        Text(
-                            text = "${post.id.source.displayName()} • ${post.id.sourcePostId}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Center,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        ActionMenuDivider()
                         if (onOpenCreatorFallback != null) {
-                            CreatorProfileActionButton(
+                            PostCreatorRows(
                                 post = post,
                                 creatorBrowsingSources = creatorBrowsingSources,
                                 onOpenProfile = { profile ->
@@ -755,20 +685,22 @@ internal fun ViewerScreen(
                                 },
                             )
                         }
-
-                    }
-                },
-                footer = {
-
-                    TextButton(
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = {
+                        ActionMenuRow(Icons.Default.Search, "Go to Search") {
                             setPlaybackEnabled(false)
                             onGoToSearch()
                             setInfoSheetVisible(false)
-                        },
-                    ) {
-                        Text("Go to Search")
+                        }
+                        ActionMenuRow(Icons.Default.Share, "Share") {
+                            onAction(ViewerAction.Share)
+                            setInfoSheetVisible(false)
+                        }
+                        if (!post.pageUrl.isNullOrBlank()) {
+                            ActionMenuRow(Icons.Default.OpenInBrowser, "Open in browser") {
+                                onOpenInBrowser(post)
+                                setInfoSheetVisible(false)
+                            }
+                        }
+                        ActionMenuDivider()
                     }
                 },
                 post = post,

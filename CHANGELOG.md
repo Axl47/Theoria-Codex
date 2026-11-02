@@ -6,6 +6,9 @@
 
 - Choose Codex actions from a labeled, grouped menu, with automatic tag rules moved into their own Auto-save sheet that shows source icons and reveals the tag list only while adding a tag.
 - Choose post actions from the same labeled long-press menu, led by saving, with search terms moved into their own sheet and Remove from Codex set apart at the end.
+- Search from a one-line bar that opens a full-screen editor showing every tag, grouped by type on sources like Hitomi, with Must have, Any of, and Without always on screen.
+- Tap any search tag to choose what happens to it, instead of excluded tags being removed immediately.
+- Use labeled menus for viewer Info, download actions, and the Codex search source picker, and remove redundant Cancel and Done buttons from related sheets.
 
 ### Fixed
 

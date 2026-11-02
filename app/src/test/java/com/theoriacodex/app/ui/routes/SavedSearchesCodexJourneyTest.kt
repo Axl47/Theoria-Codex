@@ -104,7 +104,7 @@ class SavedSearchesCodexJourneyTest {
             compose.waitUntil(10_000) { compose.onAllNodesWithText("Searches").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("Searches").performScrollTo().performTouchInput { longClick() }
             compose.onNodeWithContentDescription("Include First search").assertExists()
-            compose.onNodeWithText("Done").performClick()
+            compose.onNodeWithContentDescription("Close sheet").performSemanticsAction(SemanticsActions.OnClick)
             compose.onNodeWithText("Searches").performClick()
             val first = searchCardTestTag(posts[0].id)
             val second = searchCardTestTag(posts[1].id)
@@ -114,7 +114,7 @@ class SavedSearchesCodexJourneyTest {
             compose.onNode(hasText("Searches") and SemanticsMatcher.keyIsDefined(SemanticsActions.OnLongClick))
                 .performTouchInput { longClick() }
             compose.onNodeWithContentDescription("Include First search").performClick()
-            compose.onNodeWithText("Done").performClick()
+            compose.onNodeWithContentDescription("Close sheet").performSemanticsAction(SemanticsActions.OnClick)
             compose.waitUntil(10_000) { compose.onAllNodesWithTag(first).fetchSemanticsNodes().isEmpty() &&
                 compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
             val verticalGrid = hasScrollToIndexAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange)
@@ -152,7 +152,7 @@ class SavedSearchesCodexJourneyTest {
                 .performTouchInput { longClick() }
             compose.onNodeWithContentDescription("Include First search").assertIsOff()
             compose.onNodeWithText("Exclude all").performClick()
-            compose.onNodeWithText("Done").performClick()
+            compose.onNodeWithContentDescription("Close sheet").performSemanticsAction(SemanticsActions.OnClick)
             compose.waitUntil(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isEmpty() }
             compose.onNodeWithText("Save a search from Recents or include a search in this feed").assertIsDisplayed()
         } catch (failure: Throwable) {
