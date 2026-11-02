@@ -12,6 +12,8 @@ Robolectric tests need Java 21 or newer because the Android SDK 36 sandbox refus
 
 *Bounded validation:* Plan one focused validation batch. Avoid repeated snapshots, equivalent selector checks, duplicate browser setup, and full revalidation unless a later patch changed the relevant behavior.
 
+*Report retention:* Regularly prune generated reports, performance traces, recordings, and duplicate captures under `build/reports/` once the related work is complete and the evidence is no longer needed. Keep complete iteration evidence required for active acceptance or release decisions; archive anything that must be retained before pruning.
+
 *Offline preflight:* Before a substantial offline Gradle batch, check that its required dependencies and generated artifacts are available; resolve missing prerequisites before running the batch.
 
 *Root-cause repair:* When validation fails, identify the common cause and group related fixes into one patch instead of repairing symptoms one at a time.
