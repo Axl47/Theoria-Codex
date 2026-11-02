@@ -1,5 +1,7 @@
 package com.theoriacodex.app.ui
 
+import androidx.activity.compose.BackHandler
+
 import com.theoriacodex.data.repository.RecentSearchEntry
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.fadeIn
@@ -1497,8 +1499,17 @@ internal fun TheoriaAppContent(
                         composable(
                             route = AppRoute.CodexDetail,
                             arguments = listOf(navArgument("codexId") { type = NavType.StringType }),
+                            popEnterTransition = {
+                                if (initialState.destination.route == AppRoute.CodexDetail) {
+                                    slideInHorizontally(tween(300)) { -it }
+                                } else {
+                                    EnterTransition.None
+                                }
+                            },
                             popExitTransition = { slideOutHorizontally(tween(300)) { it } },
                         ) { entry ->
+                            // Commit system Back through the same animated pop as the toolbar.
+                            BackHandler { navController.popBackStack() }
                             val codexId = requireNotNull(entry.arguments?.getString("codexId"))
                             LaunchedEffect(entry, codexId, dataDependencies.statisticsRepository) {
                                 runCatchingPreservingCancellation {
