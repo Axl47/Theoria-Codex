@@ -1004,6 +1004,7 @@ internal class SearchViewModel(
     )
 
     private fun clearSuggestionState() {
+        cancelAutocomplete()
         val current = mutableState.value
         mutableState.value = current.copy(
             suggestions = current.suggestions.copy(

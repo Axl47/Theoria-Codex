@@ -6,6 +6,8 @@
 
 ### Fixed
 
+- Keep committed search input cleared when autocomplete finishes late.
+
 - Restore the previous For You sort when Undo is tapped before a filter reset finishes loading.
 
 - Keep Recents days distinct across years.

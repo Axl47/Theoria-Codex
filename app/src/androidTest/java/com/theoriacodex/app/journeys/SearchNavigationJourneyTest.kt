@@ -53,7 +53,8 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         activate(compose.onNodeWithContentDescription("Pixiv"))
         addSearchTag("landscape")
         addSearchTag("blue")
-        activate(compose.onNodeWithText("blue"))
+        activate(compose.onNode(hasText("blue") and hasClickAction() and
+            hasAnyAncestor(hasTestTag("Search composer"))))
         activate(compose.onNodeWithText("Add “or”"))
         addSearchTag("green")
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
