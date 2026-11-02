@@ -197,10 +197,19 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
                 compose.onAllNodes(add).fetchSemanticsNodes().isNotEmpty()
         }
         activate(compose.onNode(add))
-        compose.waitUntil(10_000) {
-            input.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.isEmpty() &&
-                compose.onAllNodes(hasText(value, substring = false) and hasClickAction())
-                    .fetchSemanticsNodes().isNotEmpty()
+        try {
+            compose.waitUntil(10_000) {
+                input.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.isEmpty() &&
+                    compose.onAllNodes(hasText(value, substring = false) and hasClickAction())
+                        .fetchSemanticsNodes().isNotEmpty()
+            }
+        } catch (timeout: ComposeTimeoutException) {
+            throw AssertionError(
+                "Tag entry did not settle for $value; input=" +
+                    input.fetchSemanticsNode().config[SemanticsProperties.EditableText].text + "\n" +
+                    compose.onNodeWithTag("Search composer", useUnmergedTree = true).printToString(),
+                timeout,
+            )
         }
     }
 
