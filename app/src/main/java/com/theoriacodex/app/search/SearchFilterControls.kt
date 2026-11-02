@@ -27,7 +27,8 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import com.theoriacodex.app.source.SourceLogo
+import com.theoriacodex.app.source.SourceIcon
+import com.theoriacodex.app.source.SourceLetterIcon
 import com.theoriacodex.app.source.isRule34Family
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.domain.model.QueryMode
@@ -262,7 +263,7 @@ private fun SearchSourceMenuItems(
                 },
             contentAlignment = Alignment.Center,
         ) {
-            SearchLetterIcon("R34")
+            SourceLetterIcon("R34")
         }
     }
 }
@@ -273,7 +274,7 @@ private fun SearchSourceIndicator(draftSourceScope: SearchSourceScope, unifiedSo
     when (draftSourceScope) {
         is SearchSourceScope.Single -> {
             val source = draftSourceScope.source
-            SearchSourceIcon(source)
+            SourceIcon(source)
         }
         SearchSourceScope.GlobalUnified, is SearchSourceScope.Temporary -> {
             val count = when (draftSourceScope) {
@@ -281,7 +282,7 @@ private fun SearchSourceIndicator(draftSourceScope: SearchSourceScope, unifiedSo
                 else -> unifiedSourceCount
             }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                SearchLetterIcon("U")
+                SourceLetterIcon("U")
                 Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary) {
                     Text(
                         text = count.toString(),
@@ -342,29 +343,9 @@ private fun SourceMenuOption(
             Text(label)
         } else {
             Box(Modifier.clearAndSetSemantics {}) {
-                if (source == null) SearchLetterIcon("U") else SearchSourceIcon(source)
+                if (source == null) SourceLetterIcon("U") else SourceIcon(source)
             }
         }
-    }
-}
-
-/** Letter marks share the white, bold treatment of Hitomi's icon. */
-@Composable
-private fun SearchLetterIcon(label: String) {
-    Text(
-        text = label,
-        color = Color.White,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-    )
-}
-
-@Composable
-private fun SearchSourceIcon(source: SourceKey) {
-    when {
-        source == SourceKey.IWARA -> SearchLetterIcon("I")
-        source.isRule34Family() -> SearchLetterIcon("R34")
-        else -> SourceLogo(source, size = 18.dp)
     }
 }
 

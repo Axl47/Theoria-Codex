@@ -1,27 +1,33 @@
 package com.theoriacodex.app.codex
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,8 +35,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.source.SourceIcon
 import com.theoriacodex.app.source.SourcePresentationCatalog
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.domain.model.CodexAutomaticTag
@@ -105,6 +118,27 @@ internal fun representedAutomaticTagSources(
     .map { presentation -> presentation.source }
     .filter { source -> tagOptionsBySource[source].orEmpty().isNotEmpty() }
 
+/** Source tabs include sources with saved rules even after their posts leave the Codex. */
+internal fun automaticTagSourceTabs(
+    automaticTags: List<CodexAutomaticTag>,
+    tagOptionsBySource: Map<SourceKey, List<CodexSearchTagOption>>,
+): List<SourceKey> {
+    val ruleSources = automaticTags.mapTo(mutableSetOf(), CodexAutomaticTag::source)
+    return SourcePresentationCatalog.orderedPresentations()
+        .map { presentation -> presentation.source }
+        .filter { source -> source in ruleSources || tagOptionsBySource[source].orEmpty().isNotEmpty() }
+}
+
+/** The group a new requirement would occupy; indexes are never reused while a group exists. */
+internal fun nextAutomaticTagGroupIndex(groups: List<CodexAutomaticTagGroup>): Int =
+    (groups.maxOfOrNull(CodexAutomaticTagGroup::groupIndex) ?: -1) + 1
+
+/** The picker stays open for a source without rules, otherwise only while a group is being edited. */
+internal fun automaticTagAddTarget(
+    requestedGroupIndex: Int?,
+    groups: List<CodexAutomaticTagGroup>,
+): Int? = requestedGroupIndex ?: if (groups.isEmpty()) 0 else null
+
 internal fun filterAutomaticTagRows(
     rows: List<CodexAutomaticTagRow>,
     query: String,
@@ -116,223 +150,279 @@ internal fun filterAutomaticTagRows(
     }
 }
 
+/** Dedicated editor for the rules that route newly liked posts into [codexName]. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun CodexAutomaticTagContent(
-    isLikesCodex: Boolean,
+internal fun CodexAutoSaveSheet(
+    codexName: String,
     automaticTags: List<CodexAutomaticTag>,
     tagOptionsBySource: Map<SourceKey, List<CodexSearchTagOption>>,
+    loading: Boolean,
+    failed: Boolean,
+    onRetry: () -> Unit,
     onSetAutomaticTag: (CodexAutomaticTag, Boolean) -> Unit,
+    onDismiss: () -> Unit,
 ) {
-    if (isLikesCodex) {
-        Text(
-            text = "Every liked post is already added here automatically.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.fillMaxWidth(),
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-        )
-    } else {
-        CodexAutomaticTagSections(
-            automaticTags = automaticTags,
-            tagOptionsBySource = tagOptionsBySource,
-            onSetAutomaticTag = onSetAutomaticTag,
-        )
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .imePadding()
+                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = "Auto-save to $codexName",
+                style = MaterialTheme.typography.titleLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            when {
+                loading -> AutoSaveMessage("Loading collection tags…")
+                failed -> TextButton(onClick = onRetry) { Text("Could not load tags. Retry") }
+                else -> AutoSaveEditor(automaticTags, tagOptionsBySource, onSetAutomaticTag)
+            }
+        }
     }
 }
 
 @Composable
-internal fun CodexAutomaticTagSections(
+private fun AutoSaveEditor(
     automaticTags: List<CodexAutomaticTag>,
     tagOptionsBySource: Map<SourceKey, List<CodexSearchTagOption>>,
     onSetAutomaticTag: (CodexAutomaticTag, Boolean) -> Unit,
 ) {
     val presentation = codexAutomaticTagPresentation(automaticTags, tagOptionsBySource)
-    val representedSources = representedAutomaticTagSources(tagOptionsBySource)
+    val sources = automaticTagSourceTabs(automaticTags, tagOptionsBySource)
     var preferredSource by remember { mutableStateOf<SourceKey?>(null) }
-    var tagFilter by remember { mutableStateOf("") }
-    val selectedSource = preferredSource?.takeIf { source -> source in representedSources }
-        ?: representedSources.firstOrNull()
-    val selectedSection = presentation.availableSections.firstOrNull { section ->
-        section.source == selectedSource
+    var requestedGroupIndex by remember { mutableStateOf<Int?>(null) }
+    val selectedSource = preferredSource?.takeIf { source -> source in sources }
+        ?: automaticTags.firstOrNull()?.source
+        ?: sources.firstOrNull()
+    if (selectedSource == null) {
+        AutoSaveMessage("Save a post to this Codex to choose its tags.")
+        return
     }
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(280.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        automaticTagItems(presentation.automaticGroups, onSetAutomaticTag)
-        availableTagItems(
-            representedSources = representedSources,
-            selectedSource = selectedSource,
-            selectedRows = selectedSection?.rows?.let { rows -> filterAutomaticTagRows(rows, tagFilter) },
-            tagFilter = tagFilter,
-            automaticGroups = presentation.automaticGroups,
-            onSourceSelected = { source ->
-                preferredSource = source
-                tagFilter = ""
-            },
-            onTagFilterChanged = { value -> tagFilter = value },
-            onSetAutomaticTag = onSetAutomaticTag,
+    val groups = presentation.automaticGroups.filter { group -> group.source == selectedSource }
+    val addTarget = automaticTagAddTarget(requestedGroupIndex, groups)
+
+    AutoSaveSourceTabs(sources, selectedSource, automaticTags) { source ->
+        preferredSource = source
+        requestedGroupIndex = null
+    }
+    AutoSaveRule(
+        source = selectedSource,
+        groups = groups,
+        addTarget = addTarget,
+        onAddTo = { groupIndex -> requestedGroupIndex = groupIndex },
+        onRemove = { group, tag ->
+            if (group.rows.size == 1 && requestedGroupIndex == group.groupIndex) requestedGroupIndex = null
+            onSetAutomaticTag(tag, false)
+        },
+    )
+    if (addTarget != null) {
+        HorizontalDivider()
+        AutoSaveTagPicker(
+            source = selectedSource,
+            rows = presentation.availableSections.firstOrNull { it.source == selectedSource }?.rows.orEmpty(),
+            canClose = groups.isNotEmpty(),
+            onClose = { requestedGroupIndex = null },
+            onPick = { tag -> onSetAutomaticTag(tag.copy(groupIndex = addTarget), true) },
         )
     }
 }
 
-private fun LazyListScope.automaticTagItems(
-    groups: List<CodexAutomaticTagGroup>,
-    onSetAutomaticTag: (CodexAutomaticTag, Boolean) -> Unit,
+@Composable
+private fun AutoSaveSourceTabs(
+    sources: List<SourceKey>,
+    selected: SourceKey,
+    automaticTags: List<CodexAutomaticTag>,
+    onSelect: (SourceKey) -> Unit,
 ) {
-    automaticRuleIntroItems(groups.isEmpty())
-    if (groups.isNotEmpty()) automaticRuleGroupItems(groups, onSetAutomaticTag)
-}
-
-private fun LazyListScope.automaticRuleIntroItems(empty: Boolean) {
-    item {
-        Text(
-            text = "Automatic rules",
-            style = MaterialTheme.typography.titleSmall,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-    }
-    item {
-        Text(
-            text = "A liked post must match every group for its source. Tags inside a group are alternatives.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-    if (empty) {
-        item {
-            Text(
-                text = "No automatic tags",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 8.dp),
-            )
+    val ruleCounts = automaticTags.groupingBy(CodexAutomaticTag::source).eachCount()
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        sources.forEach { source ->
+            AutoSaveSourceTab(source, source == selected, ruleCounts[source] ?: 0) { onSelect(source) }
         }
     }
 }
 
-private fun LazyListScope.automaticRuleGroupItems(
+@Composable
+private fun AutoSaveSourceTab(source: SourceKey, active: Boolean, count: Int, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(999.dp),
+        color = if (active) colors.primary.copy(alpha = 0.18f) else colors.surfaceVariant.copy(alpha = 0.45f),
+        border = BorderStroke(1.dp, if (active) colors.primary else colors.outlineVariant),
+        modifier = Modifier.clearAndSetSemantics {
+            contentDescription = "${source.displayName()}, $count ${if (count == 1) "tag" else "tags"}"
+            role = Role.Tab
+            selected = active
+        },
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SourceIcon(source)
+            if (count > 0) Text(count.toString(), style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+@Composable
+private fun AutoSaveRule(
+    source: SourceKey,
     groups: List<CodexAutomaticTagGroup>,
-    onSetAutomaticTag: (CodexAutomaticTag, Boolean) -> Unit,
+    addTarget: Int?,
+    onAddTo: (Int) -> Unit,
+    onRemove: (CodexAutomaticTagGroup, CodexAutomaticTag) -> Unit,
 ) {
+    Text(
+        text = "Save a liked ${source.displayName()} post when it has",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
     groups.forEachIndexed { index, group ->
-        if (index > 0 && groups[index - 1].source == group.source) {
-            item(key = "and:${group.source}:${group.groupIndex}") {
-                Text(
-                    text = "AND",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(vertical = 2.dp),
-                )
+        if (index > 0) AutoSaveAndLabel()
+        AutoSaveRequirement(
+            active = addTarget == group.groupIndex,
+            content = {
+                group.rows.forEach { row ->
+                    val tag = row.automaticTag
+                    if (row != group.rows.first()) AutoSaveOrLabel()
+                    InputChip(
+                        selected = false,
+                        onClick = { onRemove(group, tag) },
+                        label = { Text(tag.tag, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        trailingIcon = { Icon(Icons.Default.Close, null, Modifier.size(16.dp)) },
+                        modifier = Modifier.semantics { contentDescription = "Remove ${tag.tag} from Auto-save" },
+                    )
+                }
+                if (addTarget != group.groupIndex) {
+                    TextButton(onClick = { onAddTo(group.groupIndex) }) { Text("+ or") }
+                }
+            },
+            hint = "Adding alternatives here".takeIf { addTarget == group.groupIndex },
+        )
+    }
+    val draft = addTarget?.takeIf { target -> groups.none { group -> group.groupIndex == target } }
+    if (draft != null) {
+        if (groups.isNotEmpty()) AutoSaveAndLabel()
+        AutoSaveRequirement(active = true, hint = "Choose a tag below")
+    } else if (groups.isNotEmpty()) {
+        TextButton(
+            modifier = Modifier.fillMaxWidth(),
+            onClick = { onAddTo(nextAutomaticTagGroupIndex(groups)) },
+        ) {
+            Icon(Icons.Default.Add, null, Modifier.size(18.dp))
+            Text("Add another requirement", Modifier.padding(start = 6.dp))
+        }
+    }
+}
+
+@Composable
+private fun AutoSaveRequirement(
+    active: Boolean,
+    hint: String?,
+    content: @Composable () -> Unit = {},
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0f),
+        border = BorderStroke(
+            width = if (active) 2.dp else 1.dp,
+            color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+        ),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) { content() }
+            hint?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
         }
-        item(key = "group:${group.source}:${group.groupIndex}") {
-            Text(
-                text = "${group.source.displayName()} · Group ${group.groupIndex + 1}",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
-        items(
-            items = group.rows,
-            key = { row ->
-                val tag = row.automaticTag
-                "automatic:${tag.source}:${tag.groupIndex}:${sourceTagKey(tag.source, tag.tag)}"
-            },
-        ) { row ->
-            CodexAutomaticTagRow(
-                row = row,
-                actionDescription = "Remove ${row.automaticTag.tag} from Automatic",
-                actionIcon = Icons.Default.Close,
-                prefix = if (row != group.rows.first()) "OR" else null,
-                onAction = { onSetAutomaticTag(row.automaticTag, false) },
-            )
-        }
     }
 }
 
-private fun LazyListScope.availableTagItems(
-    representedSources: List<SourceKey>,
-    selectedSource: SourceKey?,
-    selectedRows: List<CodexAutomaticTagRow>?,
-    tagFilter: String,
-    automaticGroups: List<CodexAutomaticTagGroup>,
-    onSourceSelected: (SourceKey) -> Unit,
-    onTagFilterChanged: (String) -> Unit,
-    onSetAutomaticTag: (CodexAutomaticTag, Boolean) -> Unit,
+@Composable
+private fun AutoSaveAndLabel() {
+    Text(
+        text = "AND",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.fillMaxWidth(),
+        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+    )
+}
+
+@Composable
+private fun AutoSaveOrLabel() {
+    Text(
+        text = "or",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+@Composable
+private fun AutoSaveTagPicker(
+    source: SourceKey,
+    rows: List<CodexAutomaticTagRow>,
+    canClose: Boolean,
+    onClose: () -> Unit,
+    onPick: (CodexAutomaticTag) -> Unit,
 ) {
-    item { HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp)) }
-    item {
-        AvailableTagSourceSelector(
-            sources = representedSources,
-            selectedSource = selectedSource,
-            onSourceSelected = onSourceSelected,
+    var filter by remember(source) { mutableStateOf("") }
+    val visibleRows = filterAutomaticTagRows(rows, filter)
+    val tags = visibleRows.map { row -> CodexSearchTagOption(row.automaticTag.tag, row.postCount) }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        AutomaticTagFilterField(filter, { filter = it }, Modifier.weight(1f))
+        if (canClose) TextButton(onClick = onClose) { Text("Done") }
+    }
+    when {
+        rows.isEmpty() -> AutoSaveMessage("No more ${source.displayName()} tags in this Codex")
+        visibleRows.isEmpty() -> AutoSaveMessage("No tags match \"${filter.trim()}\"")
+        else -> CodexSearchTagSelectionGrid(
+            tags = tags,
+            selectedTags = emptySet(),
+            onToggleTag = { tag -> onPick(CodexAutomaticTag(source, tag)) },
         )
     }
-    if (selectedSource != null) {
-        item {
-            AutomaticTagFilterField(
-                value = tagFilter,
-                onValueChange = onTagFilterChanged,
-            )
-        }
-    }
-    if (selectedSource == null) {
-        item {
-            Text(
-                text = "No tags in this Codex",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 8.dp),
-            )
-        }
-    } else if (selectedRows == null) {
-        item {
-            Text(
-                text = "All ${selectedSource.displayName()} tags are automatic",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 8.dp),
-            )
-        }
-    } else if (selectedRows.isEmpty()) {
-        item {
-            Text(
-                text = "No tags match \"${tagFilter.trim()}\"",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 8.dp),
-            )
-        }
-    } else {
-        items(
-            items = selectedRows,
-            key = { row ->
-                val tag = row.automaticTag
-                "available:${tag.source}:${sourceTagKey(tag.source, tag.tag)}"
-            },
-        ) { row ->
-            AvailableAutomaticTagRow(
-                row = row,
-                groups = automaticGroups.filter { group -> group.source == selectedSource },
-                onSetAutomaticTag = onSetAutomaticTag,
-            )
-        }
-    }
+}
+
+@Composable
+private fun AutoSaveMessage(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(vertical = 8.dp),
+    )
 }
 
 @Composable
 private fun AutomaticTagFilterField(
     value: String,
     onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier,
         label = { Text("Filter tags") },
         singleLine = true,
         leadingIcon = {
@@ -346,137 +436,6 @@ private fun AutomaticTagFilterField(
             }
         },
     )
-}
-
-@Composable
-private fun AvailableTagSourceSelector(
-    sources: List<SourceKey>,
-    selectedSource: SourceKey?,
-    onSourceSelected: (SourceKey) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(text = "Tags", style = MaterialTheme.typography.titleSmall)
-        selectedSource?.let { selected ->
-            Box {
-                TextButton(onClick = { expanded = true }) {
-                    Text("${selected.displayName()} ▾")
-                }
-                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                    sources.forEach { source ->
-                        DropdownMenuItem(
-                            text = { Text(source.displayName()) },
-                            onClick = {
-                                expanded = false
-                                onSourceSelected(source)
-                            },
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CodexAutomaticTagRow(
-    row: CodexAutomaticTagRow,
-    actionDescription: String,
-    actionIcon: ImageVector,
-    prefix: String? = null,
-    onAction: () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        prefix?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = row.automaticTag.tag, style = MaterialTheme.typography.bodyLarge)
-            Text(
-                text = buildString {
-                    append(row.automaticTag.source.displayName())
-                    append(" · ")
-                    append(row.postCount)
-                    append(if (row.postCount == 1) " post" else " posts")
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        IconButton(onClick = onAction) {
-            Icon(imageVector = actionIcon, contentDescription = actionDescription)
-        }
-    }
-}
-
-@Composable
-private fun AvailableAutomaticTagRow(
-    row: CodexAutomaticTagRow,
-    groups: List<CodexAutomaticTagGroup>,
-    onSetAutomaticTag: (CodexAutomaticTag, Boolean) -> Unit,
-) {
-    val nextGroupIndex = (groups.maxOfOrNull(CodexAutomaticTagGroup::groupIndex) ?: -1) + 1
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = row.automaticTag.tag, style = MaterialTheme.typography.bodyLarge)
-            Text(
-                text = "${row.postCount} ${if (row.postCount == 1) "post" else "posts"}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        if (groups.isNotEmpty()) {
-            AutomaticOrButton(row.automaticTag, groups, onSetAutomaticTag)
-        }
-        TextButton(onClick = {
-            onSetAutomaticTag(row.automaticTag.copy(groupIndex = nextGroupIndex), true)
-        }) { Text(if (groups.isEmpty()) "Add" else "AND") }
-    }
-}
-
-@Composable
-private fun AutomaticOrButton(
-    tag: CodexAutomaticTag,
-    groups: List<CodexAutomaticTagGroup>,
-    onSetAutomaticTag: (CodexAutomaticTag, Boolean) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        TextButton(onClick = {
-            if (groups.size == 1) {
-                onSetAutomaticTag(tag.copy(groupIndex = groups.single().groupIndex), true)
-            } else {
-                expanded = true
-            }
-        }) { Text("OR") }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            groups.forEach { group ->
-                DropdownMenuItem(
-                    text = { Text("Group ${group.groupIndex + 1}") },
-                    onClick = {
-                        expanded = false
-                        onSetAutomaticTag(tag.copy(groupIndex = group.groupIndex), true)
-                    },
-                )
-            }
-        }
-    }
 }
 
 private fun String.normalizedTagFilterText(): String = trim()

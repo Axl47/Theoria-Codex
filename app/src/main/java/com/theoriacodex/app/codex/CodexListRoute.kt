@@ -42,7 +42,7 @@ internal fun CodexListScreen(
             actionTarget = codices.firstOrNull { it.codexId == initialActionCodexId }
         }
     }
-    val targetId = state.actionTarget?.codexId ?: state.searchSourceTarget?.codexId
+    val targetId = state.actionTarget?.codexId ?: state.autoSaveTarget?.codexId ?: state.searchSourceTarget?.codexId
         ?: state.tagSelectionTarget?.codex?.codexId
     var retry by remember(targetId) { mutableIntStateOf(0) }
     val options = key(targetId, retry) { rememberCodexActionOptions(targetId, observeActionOptions) }
@@ -61,7 +61,7 @@ internal fun CodexListScreen(
     )
     LaunchedEffect(codices, state.ordering.reorderMode) { state.synchronizeCodices(codices) }
     if (initialActionCodexId == null) CodexListContent(presentation, state, actions)
-    val hasOverlay = state.actionTarget != null || state.searchSourceTarget != null ||
+    val hasOverlay = state.actionTarget != null || state.autoSaveTarget != null || state.searchSourceTarget != null ||
         state.tagSelectionTarget != null || state.renameTarget != null ||
         state.deleteTarget != null || state.cleaningTargetId != null
     LaunchedEffect(hasOverlay) {

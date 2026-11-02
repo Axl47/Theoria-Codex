@@ -32,7 +32,7 @@ class CodexCollectionJourneyTest : AppJourneyFixture() {
         activate(compose.onNodeWithText("Save"))
         compose.waitUntil(10_000) { io { container.content.observeCodices().first().any { it.name == "Second collection" } } }
         activate(compose.onNodeWithContentDescription("Actions for Journey collection"))
-        activate(compose.onNodeWithContentDescription("Rename codex"))
+        activate(compose.onNodeWithText("Rename"))
         compose.onNodeWithText("Name").performTextReplacement("Renamed collection")
         activate(compose.onNodeWithText("Save"))
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Renamed collection").fetchSemanticsNodes().isNotEmpty() }
@@ -49,7 +49,7 @@ class CodexCollectionJourneyTest : AppJourneyFixture() {
         assertEquals(original, io { container.content.observeCodexItems(collection.codexId).first() })
         activate(compose.onNodeWithContentDescription("Back"))
         activate(compose.onNodeWithContentDescription("Actions for Renamed collection"))
-        activate(compose.onNodeWithContentDescription("Delete codex"))
+        activate(compose.onNodeWithText("Delete Codex"))
         compose.onNodeWithText("Delete Codex?").assertIsDisplayed()
         activate(compose.onNodeWithText("Cancel"))
         assertTrue(io { container.content.observeCodex(collection.codexId).first() != null })

@@ -26,6 +26,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -96,9 +97,9 @@ class SavedSearchesCodexJourneyTest {
             compose.onNodeWithText("Saved").performClick()
             compose.waitUntil(10_000) { compose.onNodeWithText("Likes").isDisplayed() }
             compose.onNodeWithText("Likes").performTouchInput { longClick() }
-            compose.waitUntil(10_000) { compose.onNodeWithContentDescription("Clear likes").isDisplayed() }
-            compose.onNodeWithContentDescription("Clear likes").assertExists()
-            compose.onNodeWithText("Cancel").performClick()
+            compose.waitUntil(10_000) { compose.onAllNodesWithText("Clear likes").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText("Auto-save").assertDoesNotExist()
+            compose.onNodeWithContentDescription("Close sheet").performSemanticsAction(SemanticsActions.OnClick)
             compose.onNodeWithText("Followed").assertIsDisplayed()
             compose.waitUntil(10_000) { compose.onAllNodesWithText("Searches").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("Searches").performScrollTo().performTouchInput { longClick() }

@@ -73,4 +73,25 @@ class CodexAutomaticTagsTest {
             presentation.availableSections.last().rows.map { row -> row.automaticTag.tag },
         )
     }
+
+    @Test
+    fun `source tabs keep sources whose rules outlived their posts`() {
+        assertEquals(
+            listOf(SourceKey.GELBOORU, SourceKey.PIXIV),
+            automaticTagSourceTabs(
+                automaticTags = listOf(CodexAutomaticTag(SourceKey.PIXIV, "legacy")),
+                tagOptionsBySource = mapOf(SourceKey.GELBOORU to listOf(CodexSearchTagOption("landscape", 1))),
+            ),
+        )
+    }
+
+    @Test
+    fun `tag picker opens only for an empty rule or an explicit target`() {
+        val group = CodexAutomaticTagGroup(SourceKey.PIXIV, groupIndex = 2, rows = emptyList())
+
+        assertEquals(0, automaticTagAddTarget(requestedGroupIndex = null, groups = emptyList()))
+        assertEquals(null, automaticTagAddTarget(requestedGroupIndex = null, groups = listOf(group)))
+        assertEquals(2, automaticTagAddTarget(requestedGroupIndex = 2, groups = listOf(group)))
+        assertEquals(3, nextAutomaticTagGroupIndex(listOf(group)))
+    }
 }

@@ -7,7 +7,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -60,6 +59,14 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.tags.TagSelectionSurface
 import com.theoriacodex.domain.model.Codex
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import kotlin.math.roundToInt
 
 @Composable
@@ -267,6 +274,8 @@ internal fun CodexListOverlays(
         CodexActionSheet(actionCodex, presentation, state, actions)
     }
 
+    CodexAutoSaveOverlay(presentation, state, actions)
+
     val searchCodex = state.searchSourceTarget
     if (searchCodex != null) {
         CodexSourceSheet(
@@ -291,6 +300,27 @@ internal fun CodexListOverlays(
             },
         )
     }
+}
+
+@Composable
+private fun CodexAutoSaveOverlay(
+    presentation: CodexListPresentation,
+    state: CodexListUiState,
+    actions: CodexListActions,
+) {
+    val target = state.autoSaveTarget ?: return
+    // Rule edits arrive through the live list, so the sheet must not render the tapped snapshot.
+    val codex = presentation.codices.firstOrNull { it.codexId == target.codexId } ?: target
+    CodexAutoSaveSheet(
+        codexName = codex.name,
+        automaticTags = codex.automaticTags,
+        tagOptionsBySource = presentation.searchTagOptions[codex.codexId].orEmpty(),
+        loading = presentation.actionLoading,
+        failed = presentation.actionFailed,
+        onRetry = presentation.retryActionOptions,
+        onSetAutomaticTag = { tag, enabled -> actions.setAutomaticTag(codex.codexId, tag, enabled) },
+        onDismiss = { state.autoSaveTarget = null },
+    )
 }
 
 @Composable
@@ -349,6 +379,7 @@ private fun CodexDeleteConfirmation(
     )
 }
 
+/** Long-press and overflow menu; rule editing lives in [CodexAutoSaveSheet]. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CodexActionSheet(
@@ -358,73 +389,136 @@ private fun CodexActionSheet(
     actions: CodexListActions,
 ) {
     val isLikesCodex = codex.codexId == presentation.likesCodexId
-    ModalBottomSheet(onDismissRequest = { state.actionTarget = null }, dragHandle = null) {
+    ModalBottomSheet(
+        onDismissRequest = { state.actionTarget = null },
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
         ) {
-            CodexActionButtons(
+            CodexActionHeader(codex, presentation)
+            // Likes already receives every liked post, so it has no rules to configure.
+            if (!isLikesCodex) {
+                CodexAutoSaveRow {
+                    state.autoSaveTarget = codex
+                    state.actionTarget = null
+                }
+            }
+            CodexActionRows(
                 codex = codex,
                 isLikesCodex = isLikesCodex,
                 searchEnabled = presentation.searchSourceOptions[codex.codexId].orEmpty().isNotEmpty(),
                 state = state,
                 actions = actions,
             )
-            Text(
-                codex.name, style = MaterialTheme.typography.titleMedium, maxLines = 1,
-                overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            if (presentation.actionLoading) {
-                Text("Loading collection tags…")
-            } else if (presentation.actionFailed) {
-                TextButton(onClick = presentation.retryActionOptions) { Text("Could not load tags. Retry") }
-            } else CodexAutomaticTagContent(
-                isLikesCodex = isLikesCodex,
-                automaticTags = codex.automaticTags,
-                tagOptionsBySource = presentation.searchTagOptions[codex.codexId].orEmpty(),
-                onSetAutomaticTag = { tag, enabled -> actions.setAutomaticTag(codex.codexId, tag, enabled) },
-            )
-            TextButton(modifier = Modifier.fillMaxWidth(), onClick = { state.actionTarget = null }) {
-                Text("Cancel")
-            }
         }
     }
 }
 
 @Composable
-private fun CodexActionButtons(
+private fun CodexActionHeader(codex: Codex, presentation: CodexListPresentation) {
+    val itemCount = presentation.itemCounts[codex.codexId] ?: 0
+    Row(
+        modifier = Modifier.padding(bottom = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CodexCoverImage(
+            presentation.coverCandidates[codex.codexId].orEmpty(),
+            codex.name,
+            Modifier.size(48.dp).clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+        ) {
+            Icon(Icons.Default.Image, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Column {
+            Text(
+                codex.name, style = MaterialTheme.typography.titleMedium,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                "$itemCount ${if (itemCount == 1) "post" else "posts"}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CodexActionRows(
     codex: Codex,
     isLikesCodex: Boolean,
     searchEnabled: Boolean,
     state: CodexListUiState,
     actions: CodexListActions,
 ) {
-    FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        CodexActionIcon(Icons.Default.Download, "Download codex") {
-            state.actionTarget = null; actions.downloadCodex(codex.codexId)
+    val close = { state.actionTarget = null }
+    CodexActionRow(Icons.Default.Search, "Search with these tags", searchEnabled) {
+        state.searchSourceTarget = codex; close()
+    }
+    CodexActionRow(Icons.Default.Share, "Share") { close(); actions.shareCodex(codex.codexId) }
+    HorizontalDivider(Modifier.padding(vertical = 4.dp))
+    CodexActionRow(Icons.Default.Download, "Download") { close(); actions.downloadCodex(codex.codexId) }
+    actions.makeAvailableOffline?.let { makeOffline ->
+        CodexActionRow(Icons.Default.OfflinePin, "Make available offline") {
+            close(); makeOffline(codex.codexId)
         }
-        CodexActionIcon(Icons.Default.Share, "Share codex") {
-            state.actionTarget = null; actions.shareCodex(codex.codexId)
+    }
+    HorizontalDivider(Modifier.padding(vertical = 4.dp))
+    CodexActionRow(Icons.Default.Edit, "Rename") { state.renameTarget = codex; close() }
+    CodexActionRow(Icons.Default.CleaningServices, "Clean") { close(); state.cleaningTargetId = codex.codexId }
+    CodexActionRow(
+        icon = Icons.Default.Delete,
+        label = if (isLikesCodex) "Clear likes" else "Delete Codex",
+        tint = MaterialTheme.colorScheme.error,
+    ) { state.deleteTarget = codex; close() }
+}
+
+@Composable
+private fun CodexAutoSaveRow(onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+        contentColor = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Default.AutoAwesome, null)
+            Text("Auto-save", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null)
         }
-        CodexActionIcon(Icons.Default.Search, "Search from codex", searchEnabled) {
-            state.searchSourceTarget = codex; state.actionTarget = null
-        }
-        CodexActionIcon(Icons.Default.Edit, "Rename codex") {
-            state.renameTarget = codex; state.actionTarget = null
-        }
-        CodexActionIcon(Icons.Default.CleaningServices, "Clean Codex") {
-            state.actionTarget = null; state.cleaningTargetId = codex.codexId
-        }
-        actions.makeAvailableOffline?.let { makeOffline ->
-            CodexActionIcon(Icons.Default.OfflinePin, "Make available offline") {
-                state.actionTarget = null; makeOffline(codex.codexId)
-            }
-        }
-        val deleteLabel = if (isLikesCodex) "Clear likes" else "Delete codex"
-        CodexActionIcon(Icons.Default.Delete, deleteLabel) {
-            state.deleteTarget = codex; state.actionTarget = null
-        }
+    }
+}
+
+@Composable
+private fun CodexActionRow(
+    icon: ImageVector,
+    label: String,
+    enabled: Boolean = true,
+    tint: Color = MaterialTheme.colorScheme.onSurface,
+    onClick: () -> Unit,
+) {
+    val color = if (enabled) tint else tint.copy(alpha = 0.38f)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 13.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, tint = color)
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = color)
     }
 }
 
@@ -665,7 +759,7 @@ private fun CodexSearchApplyButton(
 }
 
 @Composable
-private fun CodexSearchTagSelectionGrid(
+internal fun CodexSearchTagSelectionGrid(
     tags: List<CodexSearchTagOption>,
     selectedTags: Set<String>,
     onToggleTag: (String) -> Unit,

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Choose Codex actions from a labeled, grouped menu, with automatic tag rules moved into their own Auto-save sheet that shows source icons and reveals the tag list only while adding a tag.
+
 ### Fixed
 
 - Slide Codex screens from left to right when going back, with the previous screen entering from the left.
