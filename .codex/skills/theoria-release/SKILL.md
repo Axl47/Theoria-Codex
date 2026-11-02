@@ -30,6 +30,14 @@ Start without changing files or Git state.
 
 Do not edit files, create a commit, create a tag, push, or publish during this draft phase.
 
+## Release-Note Writing Convention
+
+- Start with `## Highlights`: 2–4 short bullets summarizing the update's main user-visible outcomes and benefits. Prefer plain language over feature inventories or implementation detail. For a small patch, one useful highlight is enough.
+- Follow with `## New`, `## Improvements`, `## Fixes`, and `## Known Issues` only when relevant. These sections explain the specific behaviors, options, limitations, and fixes behind the summary; do not repeat highlight sentences verbatim.
+- Highlights is the concise overview, not an exhaustive list. Smaller changes may appear only in the detailed sections. Keep known issues explicit in their own section.
+- Use the exact heading `Highlights` so the app presents it as the prominent summary card. The app initially collapses the other sections under “Full details” when Highlights is present. Notes without Highlights remain readable as ordinary sections.
+- Apply this convention to new release notes; preserve published release wording.
+
 ## Prepare An Approved Release
 
 Proceed only after the user approves the version and release-note wording.

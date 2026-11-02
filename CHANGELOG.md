@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Read a prominent Highlights summary first in each release, with detailed changes available under “Full details”.
+
 - Keep For You row actions collapsed behind a chevron until opened.
 
 - Show person-plus and person-check icons for artist follow actions.

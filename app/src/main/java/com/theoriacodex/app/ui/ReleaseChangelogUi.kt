@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -135,8 +136,37 @@ private fun ReleaseChangelogEntryContent(
     }
     if (!expanded) return
     val sections = release.changelogSections.filter { it.bullets.isNotEmpty() }
+    val (highlights, details) = sections.partition { it.title.trim().equals("Highlights", ignoreCase = true) }
+    var detailsExpanded by rememberSaveable(release.versionCode) { mutableStateOf(false) }
+    if (highlights.isNotEmpty()) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            ),
+        ) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Highlights", style = MaterialTheme.typography.titleMedium)
+                highlights.flatMap { it.bullets }.forEach { bullet ->
+                    Text("• ${bullet.trim()}", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
+        if (details.isNotEmpty()) {
+            TextButton(
+                onClick = { detailsExpanded = !detailsExpanded },
+                modifier = Modifier.semantics {
+                    stateDescription = if (detailsExpanded) "Expanded" else "Collapsed"
+                },
+            ) {
+                Text(if (detailsExpanded) "Full details −" else "Full details +")
+            }
+        }
+    }
+    if (highlights.isNotEmpty() && !detailsExpanded) return
     if (sections.isNotEmpty()) {
-        sections.forEach { section ->
+        details.forEach { section ->
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(section.title, style = MaterialTheme.typography.titleSmall)
                 section.bullets.forEach { ChangelogBulletText(it) }
