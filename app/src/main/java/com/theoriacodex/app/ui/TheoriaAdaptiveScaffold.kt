@@ -1,5 +1,7 @@
 package com.theoriacodex.app.ui
 
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.graphics.Color
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
@@ -37,11 +39,13 @@ internal fun TheoriaAdaptiveScaffold(
     bottomBarWindowInsets: WindowInsets,
     snackbarHostState: SnackbarHostState,
     onDestinationSelected: (TopLevelDestination) -> Unit,
+    containerColor: Color = MaterialTheme.colorScheme.background,
     windowWidthDp: Float = LocalWindowInfo.current.containerSize.width / LocalDensity.current.density,
     content: @Composable (Modifier) -> Unit,
 ) {
     val rail = useNavigationRail(windowWidthDp)
     Scaffold(
+        containerColor = containerColor,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             if (navigationVisible && !rail) TheoriaBottomNavigation(

@@ -1144,6 +1144,8 @@ internal fun TheoriaAppContent(
                     bottomBarIconSize = bottomBarIconSize,
                     bottomBarWindowInsets = bottomBarWindowInsets,
                     snackbarHostState = snackbarHostState,
+                    // The status bar's inset shows this color, and the Viewer's letterboxing is black.
+                    containerColor = if (currentRoute == AppRoute.Viewer) Color.Black else MaterialTheme.colorScheme.background,
                     onDestinationSelected = { destination ->
                         val alreadyShowing = navController.currentBackStackEntry?.destination?.route == AppRoute.Home &&
                             TopLevelDestination.entries[topLevelPagerState.currentPage] == destination
