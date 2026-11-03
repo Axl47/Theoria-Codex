@@ -60,18 +60,31 @@ internal data class DurationFilterMetadata(
     val stateByPostId: Map<PostId, MediaDurationState>,
     val readiness: DurationFilterReadiness = DurationFilterReadiness(0, 0),
     val isPrepared: Boolean = true,
+    /** Revealed posts in stable order; null means a feed has nothing to hold back. */
+    val presentedPosts: List<Post>? = null,
+    val revealFrontier: Int = Int.MAX_VALUE,
 ) {
-    /** A hidden anchor is final once its duration is decided, or probing is disabled. */
-    fun isVisibilityResolved(post: Post?, resolveInBackground: Boolean): Boolean {
+    /** A hidden anchor is final once it is decided and revealed, or probing is disabled. */
+    fun isVisibilityResolved(post: Post?, resolveInBackground: Boolean, canonicalIndex: Int? = null): Boolean {
         if (!isPrepared) return false
         if (post == null || !resolveInBackground || !isAnimatedPost(post) || animatedDurationMs(post) != null) return true
         val state = stateByPostId[post.id]
-        return state != null && state != MediaDurationState.Pending
+        return state != null && state != MediaDurationState.Pending &&
+            (canonicalIndex == null || canonicalIndex < revealFrontier)
     }
+
+    /** New posts appended to this frame are being prepared, while its shown posts stay put. */
+    fun stillPreparing(): DurationFilterMetadata = copy(
+        isPrepared = false,
+        readiness = readiness.copy(pendingCount = readiness.pendingCount.coerceAtLeast(1)),
+    )
 
     companion object {
         val EMPTY = DurationFilterMetadata(emptyMap(), emptyMap())
-        val RESOLVING = DurationFilterMetadata(emptyMap(), emptyMap(), DurationFilterReadiness(1, 1), isPrepared = false)
+        val RESOLVING = DurationFilterMetadata(
+            emptyMap(), emptyMap(), DurationFilterReadiness(1, 1), isPrepared = false,
+            presentedPosts = emptyList(), revealFrontier = 0,
+        )
     }
 }
 

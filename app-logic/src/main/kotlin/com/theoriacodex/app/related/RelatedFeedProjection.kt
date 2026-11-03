@@ -28,9 +28,7 @@ data class RelatedFeedProjection(
             entry is RelatedFeedEntry.PostEntry && entry.canonicalIndex == canonicalIndex
         }.takeIf { index -> index >= 0 }?.let { return it }
 
-        val preceding = entries.indexOfLast { entry ->
-            entry is RelatedFeedEntry.PostEntry && entry.canonicalIndex <= canonicalIndex
-        }
+        val preceding = entries.nearestAtOrBefore(canonicalIndex)
         if (preceding >= 0) return preceding
         return entries.indexOfFirst { entry -> entry is RelatedFeedEntry.PostEntry }
             .takeIf { index -> index >= 0 }
@@ -54,6 +52,19 @@ data class RelatedFeedProjection(
     }
 }
 
+/**
+ * The position of the post closest to, and not after, a canonical index, or -1. Late duration
+ * arrivals sit below posts with higher canonical indices, so position order is not canonical order.
+ */
+private fun List<RelatedFeedEntry>.nearestAtOrBefore(canonicalIndex: Int): Int {
+    return indices
+        .filter { index ->
+            (this[index] as? RelatedFeedEntry.PostEntry)?.let { it.canonicalIndex <= canonicalIndex } == true
+        }
+        .maxByOrNull { index -> (this[index] as RelatedFeedEntry.PostEntry).canonicalIndex }
+        ?: -1
+}
+
 fun buildRelatedFeedProjection(
     canonicalPosts: List<Post>,
     visiblePosts: List<Post>,
@@ -66,9 +77,7 @@ fun buildRelatedFeedProjection(
         canonicalIndexById[post.id]?.let { index -> RelatedFeedEntry.PostEntry(post, index) }
     }
     val request = relatedState.requestOrNull ?: return RelatedFeedProjection(postEntries)
-    val insertionIndex = postEntries.indexOfLast { entry ->
-        entry.canonicalIndex <= request.anchorCanonicalIndex
-    }.let { preceding -> if (preceding < 0) 0 else preceding + 1 }
+    val insertionIndex = postEntries.nearestAtOrBefore(request.anchorCanonicalIndex) + 1
     val entries = postEntries.toMutableList<RelatedFeedEntry>().apply {
         add(
             index = insertionIndex.coerceIn(0, size),

@@ -16,6 +16,7 @@ internal data class SearchDurationFilterPresentation(
     val knownDurationMsByPostId: Map<PostId, Long>,
     val stateByPostId: Map<PostId, MediaDurationState>,
     val readiness: DurationFilterReadiness,
+    val presentedPosts: List<Post>?,
 )
 
 @Composable
@@ -24,6 +25,7 @@ internal fun rememberSearchDurationFilterPresentation(
     range: AnimatedDurationRange,
     durationStates: Map<MediaDurationKey, MediaDurationState>,
     resolveUnknownAnimatedDurations: Boolean,
+    retainKey: String,
 ): SearchDurationFilterPresentation {
     val active = !range.isFullRange
     val unknownPolicy = remember(resolveUnknownAnimatedDurations) {
@@ -33,7 +35,7 @@ internal fun rememberSearchDurationFilterPresentation(
             UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS
         }
     }
-    val metadata = rememberDurationFilterMetadata(posts, durationStates, active)
+    val metadata = rememberDurationFilterMetadata(posts, durationStates, active, retainKey)
     val readiness = metadata.readiness
     return SearchDurationFilterPresentation(
         active = active,
@@ -41,5 +43,6 @@ internal fun rememberSearchDurationFilterPresentation(
         knownDurationMsByPostId = metadata.knownDurationMsByPostId,
         stateByPostId = metadata.stateByPostId,
         readiness = readiness,
+        presentedPosts = metadata.presentedPosts,
     )
 }

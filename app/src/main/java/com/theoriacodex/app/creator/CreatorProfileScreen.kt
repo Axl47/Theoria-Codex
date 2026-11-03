@@ -228,13 +228,14 @@ private fun rememberCreatorFeed(
         )
     }
     val durationFilter = rememberSearchDurationFilterPresentation(
-        state.results, animatedDurationRange, durationStates, resolveUnknownAnimatedDurations,
+        state.results, animatedDurationRange, durationStates, resolveUnknownAnimatedDurations, retainKey = "creator",
     )
+    val presentedResults = durationFilter.presentedPosts ?: state.results
     val retainedLikedPostIds = retainPostsUntilViewerCloses(remember(state.relatedPosts, pendingLikePostIds) {
         state.relatedPosts.retainedLikedPostIds + pendingLikePostIds
     })
     val visibleResults = remember(
-        state.results,
+        presentedResults,
         visibilityFilters,
         likedPostIds,
         retainedLikedPostIds,
@@ -243,7 +244,7 @@ private fun rememberCreatorFeed(
         durationFilter.knownDurationMsByPostId,
     ) {
         filterSearchResults(
-            results = state.results,
+            results = presentedResults,
             filters = visibilityFilters,
             likedPostIds = likedPostIds,
             retainedLikedPostIds = retainedLikedPostIds,

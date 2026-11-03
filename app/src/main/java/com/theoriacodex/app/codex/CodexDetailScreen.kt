@@ -299,10 +299,11 @@ private fun rememberCodexDetailFeed(
         }
     }
     val durationFilterActive = !animatedDurationRange.isFullRange
-    val durationMetadata = rememberDurationFilterMetadata(posts, durationStates, durationFilterActive)
+    val durationMetadata = rememberDurationFilterMetadata(posts, durationStates, durationFilterActive, retainKey = "codex-detail")
     val acquiredDurations = durationMetadata.knownDurationMsByPostId
-    val visiblePosts = remember(posts, filters, unknownDurationPolicy, acquiredDurations) {
-        filterCodexCollectionPosts(posts, filters, unknownDurationPolicy, knownDurationMsByPostId = acquiredDurations)
+    val presentedPosts = durationMetadata.presentedPosts ?: posts
+    val visiblePosts = remember(presentedPosts, filters, unknownDurationPolicy, acquiredDurations) {
+        filterCodexCollectionPosts(presentedPosts, filters, unknownDurationPolicy, knownDurationMsByPostId = acquiredDurations)
     }
     val resolvingDurations = durationMetadata.readiness.isResolving
     return remember(visiblePosts, acquiredDurations, durationFilterActive, resolvingDurations) {

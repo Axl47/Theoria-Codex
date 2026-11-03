@@ -76,17 +76,18 @@ internal fun rememberSearchFeed(
     val displayResults = remember(state.content.results, state.content.displayVersion, state.query.appliedQueryHash) {
         state.content.results
     }
-    val durationMetadata = rememberDurationFilterMetadata(displayResults, durationStates, animatedDurationFilterActive)
+    val durationMetadata = rememberDurationFilterMetadata(displayResults, durationStates, animatedDurationFilterActive, retainKey = "search")
     val acquiredDurations = durationMetadata.knownDurationMsByPostId
+    val presentedResults = durationMetadata.presentedPosts ?: displayResults
     val retainedLikedPostIds = retainPostsUntilViewerCloses(remember(state.relatedPosts, pendingLikePostIds) {
         state.relatedPosts.retainedLikedPostIds + pendingLikePostIds
     })
     val visibleResults = remember(
-        displayResults, visibilityFilters, likedPostIds, retainedLikedPostIds, savedPostIds, watchedPostIds,
+        presentedResults, visibilityFilters, likedPostIds, retainedLikedPostIds, savedPostIds, watchedPostIds,
         unknownAnimatedDurationPolicy, acquiredDurations,
     ) {
         filterSearchResults(
-            displayResults, visibilityFilters, likedPostIds, savedPostIds, watchedPostIds, unknownAnimatedDurationPolicy,
+            presentedResults, visibilityFilters, likedPostIds, savedPostIds, watchedPostIds, unknownAnimatedDurationPolicy,
             acquiredDurations, retainedLikedPostIds,
         )
     }
@@ -127,6 +128,7 @@ internal fun rememberSearchScrollAndPaging(
         visibilityReady = !feed.animatedDurationFilterActive || feed.durationMetadata.isVisibilityResolved(
             feed.displayResults.getOrNull(scrollRestoration?.scrollState?.firstVisibleItemIndex ?: -1),
             resolveInBackground = resolveUnknownAnimatedDurations,
+            canonicalIndex = scrollRestoration?.scrollState?.firstVisibleItemIndex,
         ),
     )
     SearchScrollPersistenceEffect(queryHash, state.restoration, projection, gridState, onAction)

@@ -297,16 +297,18 @@ private fun rememberForYouFeed(
         state.home.sections.flatMap { it.feed.page.items } + state.home.mixedFeed?.page?.items.orEmpty()
     } else state.results
     val durationFilter = rememberSearchDurationFilterPresentation(
-        durationPosts, animatedDurationRange, durationStates, resolveUnknownAnimatedDurations,
+        durationPosts, animatedDurationRange, durationStates, resolveUnknownAnimatedDurations, retainKey = "for-you",
     )
+    // Home sections are shelves, so only the result grid takes the reveal order.
+    val presentedResults = durationFilter.presentedPosts.takeUnless { state.home.visible } ?: state.results
     val visibleResults = remember(
-        state.results,
+        presentedResults,
         visibilityFilters,
         durationFilter.unknownPolicy,
         durationFilter.knownDurationMsByPostId,
     ) {
         filterSearchResults(
-            results = state.results,
+            results = presentedResults,
             filters = visibilityFilters,
             likedPostIds = emptySet(),
             savedPostIds = emptySet(),
