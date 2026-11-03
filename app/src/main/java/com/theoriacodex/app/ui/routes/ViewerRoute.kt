@@ -446,11 +446,13 @@ internal fun ViewerRoute(
     }
     val canLoadMoreFromSource = activeSession?.liveSearchBinding == true &&
         matchingSourceState?.canLoadMore == true
+    // Remembered so an unchanged session keeps one list, which is how the owner recognizes no new work.
+    val durationPosts = remember(viewerState.pages) { viewerState.pages.map { page -> dependencies.canonicalizePost(page.post) } }
     SideEffect {
         if (activeSession == null) return@SideEffect
         durationOwner.synchronize(
             identity = activeSession.sessionId,
-            posts = viewerState.pages.map { page -> dependencies.canonicalizePost(page.post) },
+            posts = durationPosts,
             resolveInBackground = false,
         )
     }
