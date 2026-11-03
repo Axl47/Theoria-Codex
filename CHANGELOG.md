@@ -8,12 +8,17 @@
 - Use the Codex Library sort as the non-suggested order in Add to Codex.
 - Rename a recommendation profile from its Settings menu, keeping its likes, Codices, and hidden tags.
 
+- Pull down on the Viewer to close it; the media follows your finger, then lands back on its card.
+- Swipe up on the Viewer to open post information.
+
 ### Changed
 
 - Show every Codex in the Library as a cover tile with its name and count on the cover, matching the Saved collections; Codex actions now open by long press.
 - Separate Saved from the other Codices in the Library with a thin line.
 - Choose the source in For You and Recents from the same icon menu as Search.
 - Mark watched posts in Search and For You with an eye icon instead of a time label that looked like an upload date.
+- System back in the Viewer now follows your swipe, shrinking the media before it returns to its card.
+- On video, brightness and volume swipes use the outer columns of the screen, leaving the centre for closing and information.
 - Viewer swipes keep your finger's speed when they land, and swiping during a landing continues to the next post instead of being ignored.
 - A short, fast flick now changes post, a slow drag needs about 40% of the screen, and flicking back cancels the swipe.
 - Video keeps playing while you swipe.

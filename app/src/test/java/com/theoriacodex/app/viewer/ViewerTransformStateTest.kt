@@ -102,4 +102,12 @@ class ViewerTransformStateTest {
         assertTrue(far < 180f)
         assertEquals(-near, viewerEdgeStretch(-50f, 1000f), 0.001f)
     }
+
+    @Test
+    fun `a pull commits on distance or a downward fling and a flick back cancels it`() {
+        assertTrue(viewerDismissCommits(progress = 0.3f, velocityY = 0f, flingVelocity = 400f))
+        assertFalse(viewerDismissCommits(progress = 0.1f, velocityY = 0f, flingVelocity = 400f))
+        assertTrue(viewerDismissCommits(progress = 0.05f, velocityY = 900f, flingVelocity = 400f))
+        assertFalse(viewerDismissCommits(progress = 0.9f, velocityY = -900f, flingVelocity = 400f))
+    }
 }

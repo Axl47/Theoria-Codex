@@ -80,6 +80,7 @@ internal fun ViewerMediaPage(
     onRequestMediaRecovery: ((Post, ImageRef) -> Unit)?,
     levelControls: ViewerLevelControls? = null,
     returnProgress: Float = 0f,
+    dismissDrag: ViewerDismissDrag? = null,
 ) {
     val key = ViewerMediaKey(post.id, mediaIndex)
     val isVideo = isVideoMediaRef(media)
@@ -101,7 +102,8 @@ internal fun ViewerMediaPage(
     Box(Modifier.fillMaxSize().onSizeChanged { pageSize = it }) {
         Box(
             Modifier.fillMaxSize().padding(mediaPadding)
-                .viewerReturnMedia(returnProgress, viewerAspectRatio(post)),
+                .viewerReturnMedia(returnProgress, viewerAspectRatio(post))
+                .viewerDismissDrag(dismissDrag, returnProgress),
             contentAlignment = Alignment.Center,
         ) {
             ViewerMediaContent(

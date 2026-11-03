@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
@@ -13,7 +14,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import java.util.UUID
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -174,6 +177,73 @@ internal class ViewerReturnTransition {
         openingBounds = null
         centered = false
         mediaBounds.clear()
+    }
+}
+
+private const val DISMISS_DRAG_RANGE_FRACTION = 0.5f
+private const val DISMISS_COMMIT_PROGRESS = 0.25f
+private const val DISMISS_MIN_SCALE = 0.7f
+private const val DISMISS_BACK_RANGE_FRACTION = 0.5f
+
+/** A pull commits past a quarter of its range or on a downward fling; flicking back up cancels it. */
+internal fun viewerDismissCommits(progress: Float, velocityY: Float, flingVelocity: Float): Boolean = when {
+    velocityY <= -flingVelocity -> false
+    velocityY >= flingVelocity -> true
+    else -> progress >= DISMISS_COMMIT_PROGRESS
+}
+
+/**
+ * The finger's hold on the media before the Viewer closes. The feed is not composed behind the
+ * Viewer, so this only shrinks the media over its dimming background; once released, the return
+ * transition takes over from wherever the media was left.
+ */
+internal class ViewerDismissDrag {
+    var progress by mutableFloatStateOf(0f)
+        private set
+    var translationX by mutableFloatStateOf(0f)
+        private set
+    var translationY by mutableFloatStateOf(0f)
+        private set
+    val active by derivedStateOf { progress > 0f }
+    val scale: Float get() = 1f - (1f - DISMISS_MIN_SCALE) * progress
+    val pastCommit: Boolean get() = progress >= DISMISS_COMMIT_PROGRESS
+
+    fun followPull(x: Float, y: Float, height: Float) {
+        val pull = y.coerceAtLeast(0f)
+        progress = (pull / (height * DISMISS_DRAG_RANGE_FRACTION).coerceAtLeast(1f)).coerceIn(0f, 1f)
+        translationX = x
+        translationY = pull
+    }
+
+    /** System back reports its own progress and which edge it began from. */
+    fun followBack(backProgress: Float, fromLeftEdge: Boolean, backDistance: Float) {
+        progress = (backProgress * DISMISS_BACK_RANGE_FRACTION).coerceIn(0f, 1f)
+        translationX = backProgress * backDistance * if (fromLeftEdge) 1f else -1f
+        translationY = 0f
+    }
+
+    suspend fun recoil() {
+        val startProgress = progress
+        val startX = translationX
+        val startY = translationY
+        animate(1f, 0f, animationSpec = TheoriaMotion.settleFraction) { remaining, _ ->
+            progress = startProgress * remaining
+            translationX = startX * remaining
+            translationY = startY * remaining
+        }
+    }
+}
+
+/** Applies the held pose, handing off to the return transition as its progress advances. */
+internal fun Modifier.viewerDismissDrag(drag: ViewerDismissDrag?, returnProgress: Float): Modifier {
+    if (drag == null) return this
+    val remaining = 1f - returnProgress.coerceIn(0f, 1f)
+    return graphicsLayer {
+        val poseScale = 1f + (drag.scale - 1f) * remaining
+        scaleX = poseScale
+        scaleY = poseScale
+        translationX = drag.translationX * remaining
+        translationY = drag.translationY * remaining
     }
 }
 

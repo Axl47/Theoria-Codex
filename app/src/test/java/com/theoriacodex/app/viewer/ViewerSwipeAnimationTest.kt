@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeUp
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.state.createViewerUiState
 import com.theoriacodex.app.viewer.state.reduceViewerState
@@ -124,6 +125,46 @@ class ViewerSwipeAnimationTest {
         compose.mainClock.advanceTimeBy(600)
         compose.runOnIdle { assertEquals(2, state.value.currentPageIndex) }
         assertEquals(0, compose.onNodeWithContentDescription("Media actions").fetchSemanticsNode().positionInRoot.x.toInt())
+    }
+
+    @Test fun `a long pull closes the viewer and a short one returns`() {
+        val posts = slidePosts(gallery = false)
+        val actions = mutableListOf<com.theoriacodex.app.viewer.state.ViewerAction>()
+        val state = mutableStateOf(createViewerUiState(ViewerSessionIdentity("swipe"), posts, requiresResolution = { false }))
+        compose.setContent {
+            MaterialTheme {
+                ViewerScreen(
+                    uiState = state.value, creatorBrowsingSources = emptySet(),
+                    onAction = { actions += it; state.value = reduceViewerState(state.value, it).state },
+                    onOpenInBrowser = {}, onRemoveIncludeTerm = { _, _ -> }, onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
+                )
+            }
+        }
+        compose.waitForIdle()
+        val media = compose.onNodeWithContentDescription("Media actions")
+        fun pull(toFraction: Float) = media.performTouchInput {
+            down(Offset(centerX, height * 0.3f))
+            moveTo(Offset(centerX, height * toFraction))
+            advanceEventTime(200)
+            up()
+        }
+        pull(0.34f)
+        compose.waitForIdle()
+        assertTrue(actions.none { it == com.theoriacodex.app.viewer.state.ViewerAction.Dismiss })
+        assertEquals(0f, media.fetchSemanticsNode().positionInRoot.x, 1f)
+        pull(0.8f)
+        compose.waitForIdle()
+        assertTrue(actions.any { it == com.theoriacodex.app.viewer.state.ViewerAction.Dismiss })
+    }
+
+    @Test fun `swiping up opens post information`() {
+        val posts = slidePosts(gallery = false)
+        val state = mutableStateOf(createViewerUiState(ViewerSessionIdentity("swipe"), posts, requiresResolution = { false }))
+        setSlideContent(state, ViewerReturnTransition(), posts.first(), posts, related = false, inverted = false)
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Media actions").performTouchInput { swipeUp(startY = height * 0.7f, endY = height * 0.2f) }
+        compose.waitForIdle()
+        compose.runOnIdle { assertTrue(state.value.controls.metadataVisible) }
     }
 
     private fun checkSlide(gallery: Boolean, opening: Boolean = false, thumbnail: Boolean = false, heldDrag: Boolean = false, cancelled: Boolean = false, related: Boolean = false, inverted: Boolean = false) {

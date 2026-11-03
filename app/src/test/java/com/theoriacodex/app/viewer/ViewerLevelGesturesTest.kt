@@ -47,6 +47,8 @@ class ViewerLevelGesturesTest {
     private val controls = mutableStateOf(ViewerRendererControls(true, true, false, true, 1f, 0L, 0L))
     private val navigations = mutableListOf<ViewerHorizontalSwipeDirection>()
     private var chromeToggles = 0
+    private var dismissDrags = 0
+    private var infoSwipes = 0
 
     @Before fun setup() {
         activity = activityController.setup().get()
@@ -77,6 +79,24 @@ class ViewerLevelGesturesTest {
             assertEquals("0", levels.feedback?.label)
             assertEquals(0, chromeToggles)
             assertEquals(emptyList<ViewerHorizontalSwipeDirection>(), navigations)
+        }
+    }
+
+    @Test fun `the centre column of video closes and opens info while the outer columns stay levels`() {
+        showPage()
+        swipeSide(0.5f, up = false)
+        compose.runOnIdle {
+            assert(dismissDrags > 0)
+            assertEquals(0.5f, activity.window.attributes.screenBrightness, 0f)
+            assertNull(levels.feedback)
+        }
+        swipeSide(0.5f, up = true)
+        compose.runOnIdle { assertEquals(1, infoSwipes) }
+        val pulls = dismissDrags
+        swipeSide(0.2f, up = false)
+        compose.runOnIdle {
+            assertEquals(pulls, dismissDrags)
+            assertEquals(0f, activity.window.attributes.screenBrightness, 0.001f)
         }
     }
 
@@ -177,6 +197,9 @@ class ViewerLevelGesturesTest {
                         override fun onHorizontalRelease(displacement: Float, velocity: Float) {
                             viewerSwipeDecision(displacement, velocity, 1000f, 400f)?.let(navigations::add)
                         }
+                        override fun onDismissDrag(x: Float, y: Float, height: Float) { dismissDrags++ }
+                        override fun onDismissRelease(velocityY: Float) = Unit
+                        override fun onInfoSwipe() { infoSwipes++ }
                         override fun onGestureEnd() = Unit
                         override fun onLevelLimit() = Unit
                     },

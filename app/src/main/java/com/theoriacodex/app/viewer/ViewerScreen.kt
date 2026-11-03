@@ -4,7 +4,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import android.content.res.Configuration
 import androidx.compose.animation.core.tween
+import androidx.activity.BackEventCompat
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -41,6 +43,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
@@ -73,6 +76,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.app.media.isAuthoritativeDurationMedia
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -110,6 +114,7 @@ internal fun ViewerScreen(
     val returnProgress = rememberViewerReturnProgress()
     val returning = LocalViewerReturnTransition.current?.request != null
     val opening = !returning && returnProgress > 0f
+    val dismissDrag = remember { ViewerDismissDrag() }
     val activity = LocalContext.current.viewerActivity()
     val inPictureInPicture = activity?.viewerPictureInPictureActive == true
     var quality by remember(videoQuality) { mutableStateOf(videoQuality) }
@@ -173,7 +178,7 @@ internal fun ViewerScreen(
     val selectedMediaOverviewItems = remember(selectedPost) { viewerMediaOverviewItems(selectedPost) }
     val mediaOverviewAvailable = viewerMediaOverviewAvailable(selectedMediaOverviewItems)
     val touchExplorationEnabled = rememberViewerTouchExploration()
-    val chromeVisible = (uiState.controls.chromeVisible || touchExplorationEnabled) && !inPictureInPicture && !returning && !opening
+    val chromeVisible = (uiState.controls.chromeVisible || touchExplorationEnabled) && !inPictureInPicture && !returning && !opening && !dismissDrag.active
     val showInfoSheet = uiState.controls.metadataVisible && !inPictureInPicture
     val mediaPlaybackEnabled = uiState.controls.playback.playing
     val playbackRestartRequest = uiState.controls.playback.restartRequest
@@ -316,13 +321,20 @@ internal fun ViewerScreen(
         pendingDismiss = true
     }
 
-    BackHandler {
-        if (pendingDismiss || returning) return@BackHandler
-        if (mediaOverviewVisible) {
-            setOverviewVisible(false)
-            markInteraction()
-        } else {
+    // Nothing may pop the route underneath a return that is already moving.
+    BackHandler(enabled = pendingDismiss || returning) {}
+    BackHandler(enabled = !pendingDismiss && !returning && mediaOverviewVisible) {
+        setOverviewVisible(false)
+        markInteraction()
+    }
+    val backDistance = with(LocalDensity.current) { VIEWER_BACK_DISTANCE.toPx() }
+    PredictiveBackHandler(enabled = !pendingDismiss && !returning && !mediaOverviewVisible) { events ->
+        try {
+            events.collect { dismissDrag.followBack(it.progress, it.swipeEdge == BackEventCompat.EDGE_LEFT, backDistance) }
             requestDismissViewer()
+        } catch (cancelled: CancellationException) {
+            scope.launch { dismissDrag.recoil() }
+            throw cancelled
         }
     }
 
@@ -417,7 +429,9 @@ internal fun ViewerScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 1f - returnProgress))
+            .drawBehind {
+                drawRect(Color.Black.copy(alpha = (1f - returnProgress) * (1f - VIEWER_DISMISS_DIM * dismissDrag.progress)))
+            }
     ) {
         if (mediaOverviewVisible && mediaOverviewAvailable) {
             ViewerMediaOverviewGrid(
@@ -447,14 +461,24 @@ internal fun ViewerScreen(
                             levels = levelControls.takeIf { selectedCurrentMedia?.let(::isVideoMediaRef) == true },
                             reservedBottomPx = reservedBottom,
                         ),
-                        remember(swipe, haptics) {
-                            object : ViewerGestureHandler {
-                                override fun onPress() = swipe.press()
-                                override fun onHorizontalDrag(displacement: Float) = swipe.drag(displacement)
-                                override fun onHorizontalRelease(displacement: Float, velocity: Float) = swipe.release(displacement, velocity)
-                                override fun onGestureEnd() = swipe.cancel()
-                                override fun onLevelLimit() = haptics.performHapticFeedback(TheoriaHaptics.Limit)
+                        object : ViewerGestureHandler {
+                            override fun onPress() = swipe.press()
+                            override fun onHorizontalDrag(displacement: Float) = swipe.drag(displacement)
+                            override fun onHorizontalRelease(displacement: Float, velocity: Float) = swipe.release(displacement, velocity)
+                            override fun onDismissDrag(x: Float, y: Float, height: Float) {
+                                val wasPast = dismissDrag.pastCommit
+                                dismissDrag.followPull(x, y, height)
+                                if (dismissDrag.pastCommit && !wasPast) haptics.performHapticFeedback(TheoriaHaptics.Threshold)
                             }
+                            override fun onDismissRelease(velocityY: Float) {
+                                if (viewerDismissCommits(dismissDrag.progress, velocityY, flingVelocity)) requestDismissViewer()
+                            }
+                            override fun onInfoSwipe() { setInfoSheetVisible(true); markInteraction() }
+                            override fun onGestureEnd() {
+                                swipe.cancel()
+                                if (dismissDrag.active && !pendingDismiss) scope.launch { dismissDrag.recoil() }
+                            }
+                            override fun onLevelLimit() = haptics.performHapticFeedback(TheoriaHaptics.Limit)
                         },
                     )
                     .graphicsLayer { translationX = swipe.edgeOffset },
@@ -546,6 +570,7 @@ internal fun ViewerScreen(
                     post = post,
                     media = media,
                     returnProgress = if (active) returnProgress else 0f,
+                    dismissDrag = dismissDrag.takeIf { active },
                     mediaIndex = mediaPage,
                     controls = ViewerRendererControls(
                         isActive = active,
@@ -753,3 +778,6 @@ internal fun ViewerScreen(
     }
 
 }
+
+private val VIEWER_BACK_DISTANCE = 48.dp
+private const val VIEWER_DISMISS_DIM = 0.7f

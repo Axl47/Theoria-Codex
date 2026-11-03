@@ -18,6 +18,9 @@ internal object TheoriaMotion {
     /** Finishes a finger's motion in pixels, keeping its velocity without overshooting the target. */
     val settle: SpringSpec<Float> = spring(dampingRatio = 1f, stiffness = 550f, visibilityThreshold = 1f)
 
+    /** The same landing for values between zero and one. */
+    val settleFraction: SpringSpec<Float> = spring(dampingRatio = 1f, stiffness = 550f, visibilityThreshold = 0.001f)
+
     /** Returns something to rest after a cancelled or resisted drag, in pixels. */
     val recoil: SpringSpec<Float> = spring(dampingRatio = 0.8f, stiffness = 500f, visibilityThreshold = 1f)
 
