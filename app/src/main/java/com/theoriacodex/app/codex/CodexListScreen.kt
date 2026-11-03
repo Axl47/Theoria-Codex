@@ -4,8 +4,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +32,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -229,17 +228,40 @@ private fun CodexGrid(
     val sorted = sortCodicesForLibrary(
         presentation.codices, presentation.librarySort, presentation.itemCounts, presentation.likesCodexId,
     )
+    val entries = savedCodexLibraryEntries(sorted, presentation.likesCodexId)
     com.theoriacodex.app.ui.components.AdaptiveMediaGrid(
         modifier = Modifier.fillMaxSize(),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        val likesId = presentation.likesCodexId
-        savedCodexLibraryEntries(sorted, likesId).forEach { codex ->
-            item(key = codex.codexId, span = { GridItemSpan(if (codex.codexId == SAVED_CODEX_ID) maxLineSpan else 1) }) {
-                CodexLibraryTile(codex, presentation, state, onOpenCodex, onOpenSavedCollectionActions)
+        entries.forEachIndexed { index, codex ->
+            val saved = codex.codexId == SAVED_CODEX_ID
+            item(key = codex.codexId, span = { GridItemSpan(if (saved) maxLineSpan else 1) }) {
+                if (saved) {
+                    SavedLibrarySection(
+                        presentation, index > 0, index < entries.lastIndex, onOpenCodex, onOpenSavedCollectionActions,
+                    )
+                } else {
+                    CodexLibraryTile(codex, presentation, state, onOpenCodex)
+                }
             }
         }
+    }
+}
+
+/** Manual order can place Saved anywhere, so it is set apart on whichever sides have Codices. */
+@Composable
+private fun SavedLibrarySection(
+    presentation: CodexListPresentation,
+    dividerAbove: Boolean,
+    dividerBelow: Boolean,
+    onOpenCodex: (String) -> Unit,
+    onOpenSavedCollectionActions: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        if (dividerAbove) HorizontalDivider()
+        SavedCodexLibraryTile(presentation, onOpenCodex, onOpenSavedCollectionActions)
+        if (dividerBelow) HorizontalDivider()
     }
 }
 
@@ -249,22 +271,14 @@ private fun CodexLibraryTile(
     presentation: CodexListPresentation,
     state: CodexListUiState,
     onOpenCodex: (String) -> Unit,
-    onOpenSavedCollectionActions: (String) -> Unit,
 ) {
-    val saved = codex.codexId == SAVED_CODEX_ID
-    if (saved) {
-        SavedCodexLibraryTile(presentation, onOpenCodex, onOpenSavedCollectionActions)
-        return
-    }
-    val openActions = { state.actionTarget = codex }
-    val covers = presentation.coverCandidates[codex.codexId].orEmpty()
-    CodexGridTile(
-        codex = codex,
+    CodexCoverTile(
+        name = codex.name,
         itemCount = presentation.itemCounts[codex.codexId] ?: 0,
-        coverCandidates = covers,
+        covers = presentation.coverCandidates[codex.codexId].orEmpty(),
         onOpen = { onOpenCodex(codex.codexId) },
-        onOpenActions = openActions,
-        onLongPress = openActions,
+        onOpenActions = { state.actionTarget = codex },
+        modifier = Modifier.fillMaxWidth().height(168.dp),
     )
 }
 
@@ -778,56 +792,3 @@ private fun CodexSearchTagSelectionCell(
 
 private const val DEFAULT_CODEX_RANDOM_TAG_AMOUNT = 3
 private const val MAX_CODEX_RANDOM_TAG_AMOUNT = 10
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun CodexGridTile(
-    codex: Codex,
-    itemCount: Int,
-    coverCandidates: List<CodexCoverCandidate>,
-    onOpen: () -> Unit,
-    onOpenActions: () -> Unit,
-    onLongPress: () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = onOpen,
-                onLongClick = onLongPress,
-            ),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(164.dp)
-                .clip(RoundedCornerShape(22.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-        ) {
-            CodexCoverImage(
-                candidates = coverCandidates,
-                contentDescription = codex.name,
-                modifier = Modifier.fillMaxSize(),
-                fallback = {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Image,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(28.dp),
-                        )
-                    }
-                },
-            )
-            com.theoriacodex.app.ui.components.MediaCountBadge(
-                itemCount.toString(), "Posts in ${codex.name}", Modifier.align(Alignment.TopEnd).padding(8.dp),
-            )
-        }
-
-        CodexTileMetadata(codex = codex, onOpenActions = onOpenActions)
-    }
-}
