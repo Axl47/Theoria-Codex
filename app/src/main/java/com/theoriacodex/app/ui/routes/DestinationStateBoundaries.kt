@@ -332,12 +332,13 @@ internal fun SaveToCodexDestinationStateBoundary(
     searchQuery: com.theoriacodex.domain.model.Query? = null,
     content: @Composable (SaveToCodexDestinationState) -> Unit,
 ) {
-    val settingsState = remember(data.settingsRepository) { data.settingsRepository.observeSettings() }
-        .collectAsStateWithLifecycle(initialValue = AppSettings())
-    val codicesState = remember(data.codexRepository) { data.codexRepository.observeCodices() }
-        .collectAsStateWithLifecycle(initialValue = emptyList())
-    val codices = codicesState.value
-    val collection = rememberCodexCollectionState(data = data, codices = codices)
+    // Keeps what the last open loaded, instead of restarting from defaults and empty lists each time.
+    val settings = browsingMetadataOwner(data).state.collectAsStateWithLifecycle().value?.settings ?: return
+    val codices = rememberRetained("save-codices") { data.codexRepository.observeCodices() }.value ?: return
+    val collectionIds = remember(codices) { codices.mapTo(linkedSetOf(), Codex::codexId) }
+    val collection = rememberRetained("save-collection:$collectionIds") {
+        CodexCollectionSource(data.codexRepository, data.storageDirectory, data.cacheRepository).observe(collectionIds)
+    }.value ?: CodexCollectionPresentation()
     val containingCodexIds = remember(data.codexRepository, codices, posts) {
         CodexCollectionSource(data.codexRepository, data.storageDirectory, data.cacheRepository)
             .observeContainingCodexIds(codices.mapTo(linkedSetOf(), Codex::codexId), posts)
@@ -353,9 +354,8 @@ internal fun SaveToCodexDestinationStateBoundary(
                 .observeSaveRelevance(codices.mapTo(linkedSetOf(), Codex::codexId), posts, searchQuery)
         }.collectAsStateWithLifecycle(initialValue = emptyMap())
     }
-    DestinationStateBoundary(settingsState) { settings ->
-        val activeProfile = settings.activeRecommendationProfile()
-        content(
+    val activeProfile = settings.activeRecommendationProfile()
+    content(
             SaveToCodexDestinationState(
                 settings = settings,
                 activeProfile = activeProfile,
@@ -372,7 +372,6 @@ internal fun SaveToCodexDestinationStateBoundary(
                 containingCodexIds = containingCodexIds.value,
             ),
         )
-    }
 }
 
 @Composable
@@ -475,21 +474,6 @@ internal fun AppSettings.activeRecommendationProfile(): RecommendationProfile {
     return recommendationProfiles.firstOrNull { it.profileId == activeProfileId }
         ?: recommendationProfiles.firstOrNull()
         ?: RecommendationProfile(profileId = "profile-main", name = "Main")
-}
-
-@Composable
-private fun rememberCodexCollectionState(
-    data: DataDependencies,
-    codices: List<Codex>,
-    refreshKey: Any? = Unit,
-): CodexCollectionPresentation {
-    val ids = remember(codices) { codices.mapTo(linkedSetOf(), Codex::codexId) }
-    val summaries = remember(data.codexRepository, data.cacheRepository, ids, refreshKey) {
-        CodexCollectionSource(data.codexRepository, data.storageDirectory, data.cacheRepository).observe(ids)
-    }
-    return key(ids, refreshKey) {
-        summaries.collectAsStateWithLifecycle(initialValue = CodexCollectionPresentation()).value
-    }
 }
 
 @Composable

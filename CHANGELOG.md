@@ -44,6 +44,7 @@
 - Stop a Codex briefly saying it no longer exists, or that it is empty, while it opens.
 - Show a Codex and the Saved screen immediately when returning to them from the Viewer.
 - Open the Viewer and Codices without waiting for settings and likes to reload.
+- Open Add to Codex with your Codices already listed, instead of briefly empty.
 - Stop the whole app redrawing whenever a post opens, which stalled the opening animation.
 - Stop feed videos going blank behind the Viewer when you tap a post.
 - Open large Codices like Likes with their posts already showing, instead of an empty screen after the opening animation.
