@@ -24,25 +24,33 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
-private const val ACCENT_SAMPLE_SIZE = 24
+/** Large enough that small vivid details survive downscaling instead of averaging into their surroundings. */
+private const val ACCENT_SAMPLE_SIZE = 48
 private const val HUE_BUCKETS = 24
 private const val MIN_SATURATION = 0.25f
+
+/** Skin tones: warm and muted. They fill most character art, and would give nearly every post the same peach. */
+private const val SKIN_HUE_MIN = 10f
+private const val SKIN_HUE_MAX = 50f
+private const val SKIN_SATURATION_MAX = 0.7f
+private const val SKIN_WEIGHT = 0.15f
 private const val MIN_BRIGHTNESS = 0.2f
 
-/** Below this share of colorful weight the art counts as monochrome, such as manga, and keeps white. */
+/** Below this share of colorful pixels the art counts as monochrome, such as manga, and keeps white. */
 private const val MIN_COLORFUL_SHARE = 0.06f
 private const val ACCENT_SATURATION = 0.85f
 private const val ACCENT_LIGHTNESS = 0.72f
 
 /**
- * Picks the artwork's dominant hue, then fixes saturation and lightness so the accent always reads
- * over the dark scrims, however dark or pale the art is. Returns null for art without a clear color.
+ * Picks the artwork's most vivid prominent hue, then fixes saturation and lightness so the accent always
+ * reads over the dark scrims, however dark or pale the art is. Vividness counts for more than area, and
+ * skin counts for little, so hair, clothes and backgrounds set the color. Returns null for art without a clear color.
  */
 internal fun viewerAccentFromPixels(pixels: IntArray): Int? {
     if (pixels.isEmpty()) return null
     val weights = FloatArray(HUE_BUCKETS)
     val hueSums = FloatArray(HUE_BUCKETS)
-    var total = 0f
+    var colorful = 0
     for (pixel in pixels) {
         if (pixel ushr 24 < 128) continue
         val r = (pixel shr 16 and 0xFF) / 255f
@@ -57,12 +65,14 @@ internal fun viewerAccentFromPixels(pixels: IntArray): Int? {
             else -> (r - g) / range + 4f
         } * 60f
         val bucket = (hue / 360f * HUE_BUCKETS).toInt().coerceIn(0, HUE_BUCKETS - 1)
-        val weight = range / high * high
+        val saturation = range / high
+        val skin = hue in SKIN_HUE_MIN..SKIN_HUE_MAX && saturation < SKIN_SATURATION_MAX
+        val weight = saturation * saturation * high * if (skin) SKIN_WEIGHT else 1f
         weights[bucket] += weight
         hueSums[bucket] += hue * weight
-        total += weight
+        colorful++
     }
-    if (total / pixels.size < MIN_COLORFUL_SHARE) return null
+    if (colorful.toFloat() / pixels.size < MIN_COLORFUL_SHARE) return null
     val best = weights.indices.maxBy { weights[it] }
     return accentFromHue(hueSums[best] / weights[best])
 }
