@@ -167,23 +167,26 @@ sealed interface SearchRestorationUiState {
 
 /** User intent accepted by the future SearchViewModel. */
 sealed interface SearchAction {
+    /** Actions that only edit the draft query; none of them runs a search by itself. */
+    sealed interface DraftEdit : SearchAction
+
     data class SelectMode(val mode: QueryMode) : SearchAction
     data class ToggleTemporarySource(val source: SourceKey) : SearchAction
-    data class SelectSort(val sort: SortMode) : SearchAction
-    data class SetDateRange(val range: DateRange?) : SearchAction
-    data class SetDateRangePreset(val preset: DateRangePreset) : SearchAction
-    data class AddIncludeTerm(val term: SearchTerm) : SearchAction
-    data class AddExcludeTerm(val term: SearchTerm) : SearchAction
-    data class RemoveIncludeTerm(val term: SearchTerm) : SearchAction
-    data class RemoveExcludeTerm(val term: SearchTerm) : SearchAction
-    data class AddIncludeAlternative(val groupIndex: Int, val term: SearchTerm) : SearchAction
-    data class SplitIncludeAlternative(val groupIndex: Int, val term: SearchTerm) : SearchAction
-    data class RemoveIncludeGroup(val groupIndex: Int) : SearchAction
+    data class SelectSort(val sort: SortMode) : DraftEdit
+    data class SetDateRange(val range: DateRange?) : DraftEdit
+    data class SetDateRangePreset(val preset: DateRangePreset) : DraftEdit
+    data class AddIncludeTerm(val term: SearchTerm) : DraftEdit
+    data class AddExcludeTerm(val term: SearchTerm) : DraftEdit
+    data class RemoveIncludeTerm(val term: SearchTerm) : DraftEdit
+    data class RemoveExcludeTerm(val term: SearchTerm) : DraftEdit
+    data class AddIncludeAlternative(val groupIndex: Int, val term: SearchTerm) : DraftEdit
+    data class SplitIncludeAlternative(val groupIndex: Int, val term: SearchTerm) : DraftEdit
+    data class RemoveIncludeGroup(val groupIndex: Int) : DraftEdit
     data class SelectSuggestionScope(val scope: FacetedSearchScope) : SearchAction
     data class AutocompleteChanged(val input: String) : SearchAction
     data object RefreshAutocomplete : SearchAction
-    data class IncludeSuggestion(val suggestion: FacetedTagSuggestion) : SearchAction
-    data class ExcludeSuggestion(val suggestion: FacetedTagSuggestion) : SearchAction
+    data class IncludeSuggestion(val suggestion: FacetedTagSuggestion) : DraftEdit
+    data class ExcludeSuggestion(val suggestion: FacetedTagSuggestion) : DraftEdit
     data object ClearAutocomplete : SearchAction
     data object UndoSearch : SearchAction
     data object ApplyDraft : SearchAction
@@ -195,8 +198,8 @@ sealed interface SearchAction {
         val includeTags: List<String>,
         val mode: QueryMode = QueryMode.Unified,
     ) : SearchAction
-    data object ResetDraft : SearchAction
-    data object ClearDraft : SearchAction
+    data object ResetDraft : DraftEdit
+    data object ClearDraft : DraftEdit
     data class RetrySource(val source: SourceKey) : SearchAction
     data object Retry : SearchAction
     data object LoadNextPage : SearchAction
@@ -206,11 +209,11 @@ sealed interface SearchAction {
     data object Restore : SearchAction
     data object Resume : SearchAction
     data class CommitTagInput(val input: String) : SearchAction
-    data class AddPostIncludeTerm(val post: Post, val term: SearchTerm) : SearchAction
-    data class AddPostExcludeTerm(val post: Post, val term: SearchTerm) : SearchAction
-    data class SetNhentaiLanguage(val filter: NhentaiLanguageFilter) : SearchAction
-    data class SetNhentaiFullColor(val enabled: Boolean) : SearchAction
-    data object ResetFilters : SearchAction
+    data class AddPostIncludeTerm(val post: Post, val term: SearchTerm) : DraftEdit
+    data class AddPostExcludeTerm(val post: Post, val term: SearchTerm) : DraftEdit
+    data class SetNhentaiLanguage(val filter: NhentaiLanguageFilter) : DraftEdit
+    data class SetNhentaiFullColor(val enabled: Boolean) : DraftEdit
+    data object ResetFilters : DraftEdit
     data class RememberResolvedPost(val post: Post) : SearchAction
     data class RelatedLikeCommitted(
         val post: Post,

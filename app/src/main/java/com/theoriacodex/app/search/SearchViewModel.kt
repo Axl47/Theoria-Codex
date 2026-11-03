@@ -140,38 +140,13 @@ internal class SearchViewModel(
 
     override fun onAction(action: SearchAction) {
         when (action) {
-            is SearchAction.SelectSort,
-            is SearchAction.SetDateRange,
-            is SearchAction.SetDateRangePreset,
-            is SearchAction.AddIncludeTerm,
-            is SearchAction.AddExcludeTerm,
-            is SearchAction.RemoveIncludeTerm,
-            is SearchAction.RemoveExcludeTerm,
-            is SearchAction.AddIncludeAlternative,
-            is SearchAction.SplitIncludeAlternative,
-            is SearchAction.RemoveIncludeGroup,
-            is SearchAction.IncludeSuggestion,
-            is SearchAction.ExcludeSuggestion,
-            SearchAction.ResetDraft,
-            SearchAction.ClearDraft,
-            is SearchAction.AddPostIncludeTerm,
-            is SearchAction.AddPostExcludeTerm,
-            is SearchAction.SetNhentaiLanguage,
-            is SearchAction.SetNhentaiFullColor,
-            SearchAction.ResetFilters,
-            -> applyDraftAction(action)
+            is SearchAction.DraftEdit -> applyDraftAction(action)
 
             is SearchAction.SelectMode -> selectMode(action.mode)
 
             is SearchAction.ToggleTemporarySource -> toggleTemporarySource(action.source)
 
-            is SearchAction.SelectSuggestionScope -> {
-                val reduction = SearchDraftReducer.selectScope(mutableState.value, action.scope)
-                if (reduction.accepted) {
-                    mutableState.value = reduction.state
-                    refreshAutocomplete(mutableState.value.suggestions.input)
-                }
-            }
+            is SearchAction.SelectSuggestionScope -> selectSuggestionScope(action)
 
             is SearchAction.AutocompleteChanged -> refreshAutocomplete(action.input)
 
@@ -199,17 +174,9 @@ internal class SearchViewModel(
 
             SearchAction.CancelActiveRequest -> cancelActiveRequest()
 
-            SearchAction.DismissError -> {
-                mutableState.value = mutableState.value.copy(
-                    content = mutableState.value.content.copy(error = null),
-                )
-            }
+            SearchAction.DismissError -> dismissError()
 
-            SearchAction.DismissValidation -> {
-                mutableState.value = mutableState.value.copy(
-                    query = mutableState.value.query.copy(validationMessage = null),
-                )
-            }
+            SearchAction.DismissValidation -> dismissValidation()
 
             SearchAction.Restore -> restore()
 
@@ -250,7 +217,27 @@ internal class SearchViewModel(
         }
     }
 
-    private fun applyDraftAction(action: SearchAction) {
+    private fun selectSuggestionScope(action: SearchAction.SelectSuggestionScope) {
+        val reduction = SearchDraftReducer.selectScope(mutableState.value, action.scope)
+        if (reduction.accepted) {
+            mutableState.value = reduction.state
+            refreshAutocomplete(mutableState.value.suggestions.input)
+        }
+    }
+
+    private fun dismissError() {
+        mutableState.value = mutableState.value.copy(
+            content = mutableState.value.content.copy(error = null),
+        )
+    }
+
+    private fun dismissValidation() {
+        mutableState.value = mutableState.value.copy(
+            query = mutableState.value.query.copy(validationMessage = null),
+        )
+    }
+
+    private fun applyDraftAction(action: SearchAction.DraftEdit) {
         mutateDraft {
             when (action) {
                 is SearchAction.SelectSort -> SearchDraftReducer.mutateQuery(it) { query -> query.copy(sort = action.sort) }.state
@@ -291,7 +278,6 @@ internal class SearchViewModel(
                         query.copy(sort = com.theoriacodex.domain.model.SortMode.NEWEST, dateRange = null)
                     }.state
                 }
-                else -> error("Not a draft action: $action")
             }
         }
     }
