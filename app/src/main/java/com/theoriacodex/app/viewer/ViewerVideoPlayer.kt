@@ -58,6 +58,7 @@ internal fun ViewerVideoPlayer(
     modifier: Modifier = Modifier,
     terminalMessage: String? = null,
     mediaModifier: Modifier = Modifier,
+    aspectRatio: Float? = null,
     controls: ViewerRendererControls,
     events: ViewerRendererEvents,
     mediaKey: ViewerMediaKey,
@@ -99,7 +100,7 @@ internal fun ViewerVideoPlayer(
     ViewerVideoCommands(state, controls)
     ViewerVideoLifecycle(state, controls)
     ViewerVideoProgress(state, events)
-    ViewerVideoContent(state, postId, playbackDiagnosticsEnabled, controls, events, modifier, mediaModifier, loadingPreview)
+    ViewerVideoContent(state, postId, playbackDiagnosticsEnabled, controls, events, modifier, mediaModifier, aspectRatio, loadingPreview)
 }
 
 private class ViewerVideoState {
@@ -337,14 +338,16 @@ private fun ViewerVideoContent(
     events: ViewerRendererEvents,
     modifier: Modifier,
     mediaModifier: Modifier,
+    aspectRatio: Float?,
     loadingPreview: (@Composable () -> Unit)?,
 ) {
     val diagnostics = playbackDiagnosticsSemantics(diagnosticsEnabled, state.actuallyPlaying, "Viewer")
     Box(modifier.testTag(viewerVideoTestTag(postId)).then(diagnostics?.let {
         Modifier.semantics { stateDescription = it.stateDescription; contentDescription = it.contentDescription }
     } ?: Modifier), contentAlignment = Alignment.Center) {
+        // A player view with no video size yet fills its parent, so its parent is the media's own shape.
         AndroidView(
-            modifier = Modifier.fillMaxSize().then(mediaModifier),
+            modifier = Modifier.viewerFittedMedia(aspectRatio).then(mediaModifier),
             factory = { context -> createTexturePlayerView(context).apply { useController = false; player = state.player; state.view = this } },
             update = { view ->
                 state.view = view

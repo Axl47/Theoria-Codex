@@ -67,6 +67,7 @@ internal fun ViewerMediaContent(
             playbackDiagnosticsEnabled = videoOptions.diagnosticsEnabled,
             terminalMessage = videoOptions.terminalMessage,
             modifier = Modifier.fillMaxSize(), mediaModifier = transformModifier,
+            aspectRatio = viewerMediaAspectRatio(post, media),
             controls = controls, events = events,
             mediaKey = key, positions = videoPositions,
             loadingPreview = { ViewerLoadingPreview(post, media, transformModifier) },

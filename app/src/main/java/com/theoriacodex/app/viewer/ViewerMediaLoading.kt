@@ -134,6 +134,7 @@ private data class GifMovieLoadResult(val movie: Movie? = null, val failure: Str
 
 private data class GifBytesLoadResult(val bytes: ByteArray? = null, val failure: String? = null)
 
+/** No crossfade: the preview leaves as the image arrives, so fading in would dip through the background. */
 internal fun buildViewerImageRequest(
     context: Context,
     url: String,
@@ -143,7 +144,7 @@ internal fun buildViewerImageRequest(
     context = context,
     url = url,
     sourceKey = sourceKey,
-    crossfade = true,
+    crossfade = false,
     staticAnimatedWebPFrame = staticAnimatedWebPFrame,
 )
 
