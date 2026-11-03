@@ -18,11 +18,15 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
@@ -1150,22 +1154,36 @@ internal fun TheoriaAppContent(
                     },
                 ) { contentModifier ->
                     CompositionLocalProvider(LocalTabReselects provides tabReselects) {
+                    SharedTransitionLayout(contentModifier) {
                     NavHost(
                         navController = navController,
                         startDestination = AppRoute.Home,
-                        enterTransition = { pushEnterTransition() },
+                        enterTransition = {
+                            if (targetState.destination.route == AppRoute.CodexDetail) codexEnterTransition()
+                            else pushEnterTransition()
+                        },
                         exitTransition = {
-                            if (targetState.destination.route == AppRoute.Viewer) ExitTransition.None
-                            else pushExitTransition()
+                            when (targetState.destination.route) {
+                                AppRoute.Viewer -> ExitTransition.None
+                                AppRoute.CodexDetail -> codexExitTransition()
+                                else -> pushExitTransition()
+                            }
                         },
                         popEnterTransition = {
-                            if (initialState.destination.route == AppRoute.Viewer) EnterTransition.None
-                            else popEnterTransition()
+                            when (initialState.destination.route) {
+                                AppRoute.Viewer -> EnterTransition.None
+                                AppRoute.CodexDetail -> codexEnterTransition()
+                                else -> popEnterTransition()
+                            }
                         },
-                        popExitTransition = { popExitTransition() },
-                        modifier = contentModifier,
+                        popExitTransition = {
+                            if (initialState.destination.route == AppRoute.CodexDetail) codexExitTransition()
+                            else popExitTransition()
+                        },
+                        modifier = Modifier.fillMaxSize(),
                     ) {
                         composable(AppRoute.Home) {
+                            CompositionLocalProvider(LocalCodexMorph provides remember { CodexMorphScope(this@SharedTransitionLayout, this) }) {
                             HorizontalPager(
                                 state = topLevelPagerState,
                                 modifier = Modifier.fillMaxSize(),
@@ -1482,6 +1500,7 @@ internal fun TheoriaAppContent(
                                 }
                             }
                         }
+                        }
                         val openCodexViewer: (String, List<Post>, Int) -> Unit = { codexId, visiblePosts, index ->
                             val context = ViewerLaunchContext(
                                 queryHash = "codex:$codexId",
@@ -1509,6 +1528,9 @@ internal fun TheoriaAppContent(
                             BackHandler { navController.popBackStack() }
                             val codexId = requireNotNull(entry.arguments?.getString("codexId"))
                             RecordCodexEntryEffect(entry, codexId, dataDependencies.statisticsRepository)
+                            val codexMorph = remember { CodexMorphScope(this@SharedTransitionLayout, this) }
+                            // Opaque so the screen hides the tile it grows out of.
+                            Box(Modifier.fillMaxSize().codexMorph(codexId, codexMorph).background(MaterialTheme.colorScheme.background)) {
                             if (codexId == com.theoriacodex.app.codex.SAVED_CODEX_ID) {
                                 com.theoriacodex.app.ui.routes.SavedCodexRoute(
                                     data = dataDependencies,
@@ -1631,6 +1653,7 @@ internal fun TheoriaAppContent(
                                 },
                             )
                             }
+                                                    }
                         }
                         composable(AppRoute.CreatorProfile) {
                             BrowsingDestinationStateBoundary(dataDependencies, sourceDependencies) { state ->
@@ -1870,6 +1893,7 @@ internal fun TheoriaAppContent(
                             )
                             }
                         }
+                    }
                     }
                     }
                 }

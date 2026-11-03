@@ -291,6 +291,7 @@ private fun CodexLibraryTile(
     onOpenCodex: (String) -> Unit,
 ) {
     CodexCoverTile(
+        codexId = codex.codexId,
         name = codex.name,
         itemCount = presentation.itemCounts[codex.codexId] ?: 0,
         covers = presentation.coverCandidates[codex.codexId].orEmpty(),

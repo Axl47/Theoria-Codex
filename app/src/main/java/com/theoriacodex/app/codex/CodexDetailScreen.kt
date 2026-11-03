@@ -273,6 +273,7 @@ fun CodexDetailScreen(
                 onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
                 onOpenViewer = { index -> onOpenViewer(visiblePosts, index) },
                 onToggleSelection = { postId -> editSelection = editSelection.toggle(postId) },
+                onSelectionChange = { editSelection = it },
                 onOpenPostActions = { post -> selectedActionPost = post },
                 emptyMessage = emptyMessage,
             )
@@ -495,6 +496,7 @@ private fun CodexDetailGrid(
     onAuthoritativeDurationKnown: (Post, Long) -> Unit,
     onOpenViewer: (Int) -> Unit,
     onToggleSelection: (PostId) -> Unit,
+    onSelectionChange: (CodexEditSelection) -> Unit,
     onOpenPostActions: (Post) -> Unit,
     emptyMessage: String? = null,
 ) {
@@ -525,10 +527,11 @@ private fun CodexDetailGrid(
         }
         return
     }
+    val postIds = remember(posts) { posts.map(Post::id) }
     TwoColumnPostStaggeredGrid(
         posts = posts,
         state = gridState,
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().codexDragSelect(gridState, postIds, editSelection, onSelectionChange),
         footerMessage = if (resolvingDurations) "Resolving durations…" else null,
     ) { index, post ->
         val observedDurationMs = observedMediaDurationMs(post, durationStateForPost)
@@ -579,9 +582,8 @@ private fun CodexSelectablePostCard(
             onClick = {
                 if (editSelection.active) onToggleSelection(post.id) else onOpenViewer(index)
             },
-            onLongPress = {
-                if (editSelection.active) onToggleSelection(post.id) else onOpenPostActions(post)
-            },
+            // While selecting, the grid's drag-select owns long press.
+            onLongPress = { if (!editSelection.active) onOpenPostActions(post) },
             onViewportChanged = { visible -> onDurationPostVisibilityChanged(post, visible) },
             onAuthoritativeDurationKnown = { durationMs ->
                 onAuthoritativeDurationKnown(post, durationMs)

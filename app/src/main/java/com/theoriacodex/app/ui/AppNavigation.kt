@@ -1,7 +1,12 @@
 package com.theoriacodex.app.ui
 
+import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
@@ -10,7 +15,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.statistics.StatisticsUsageCategory
@@ -46,6 +53,31 @@ internal fun pushEnterTransition(): EnterTransition = slideInHorizontally(screen
 internal fun pushExitTransition(): ExitTransition = slideOutHorizontally(screenSlide) { -it }
 internal fun popEnterTransition(): EnterTransition = slideInHorizontally(screenSlide) { -it }
 internal fun popExitTransition(): ExitTransition = slideOutHorizontally(screenSlide) { it }
+
+private val screenFade = tween<Float>(TheoriaMotion.SCREEN_MS)
+
+/** A Codex opens by growing out of its tile, so the screens around it only fade. */
+internal fun codexEnterTransition(): EnterTransition = fadeIn(screenFade)
+internal fun codexExitTransition(): ExitTransition = fadeOut(screenFade)
+
+/** Lets a Codex tile and its detail screen morph into each other across navigation. */
+internal class CodexMorphScope(val shared: SharedTransitionScope, val visibility: AnimatedVisibilityScope)
+
+internal val LocalCodexMorph = staticCompositionLocalOf<CodexMorphScope?> { null }
+
+/** Marks a Codex tile or detail screen; a Codex opened from anywhere else simply fades in. */
+@Composable
+internal fun Modifier.codexMorph(codexId: String, morph: CodexMorphScope? = LocalCodexMorph.current): Modifier {
+    if (morph == null) return this
+    return with(morph.shared) {
+        this@codexMorph.sharedBounds(
+            sharedContentState = rememberSharedContentState("codex-$codexId"),
+            animatedVisibilityScope = morph.visibility,
+            boundsTransform = { _, _ -> tween(TheoriaMotion.SCREEN_MS) },
+            clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(16.dp)),
+        )
+    }
+}
 
 /** Tapping the tab that is already showing; each tab's scrolling content listens for its own. */
 internal val LocalTabReselects = staticCompositionLocalOf<SharedFlow<TopLevelDestination>> { MutableSharedFlow() }
