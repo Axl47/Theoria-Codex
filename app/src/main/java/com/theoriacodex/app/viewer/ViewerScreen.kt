@@ -80,7 +80,6 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.app.media.isAuthoritativeDurationMedia
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -333,12 +332,13 @@ internal fun ViewerScreen(
     }
     val backDistance = with(LocalDensity.current) { VIEWER_BACK_DISTANCE.toPx() }
     PredictiveBackHandler(enabled = !pendingDismiss && !returning && !mediaOverviewVisible) { events ->
+        var committed = false
         try {
             events.collect { dismissDrag.followBack(it.progress, it.swipeEdge == BackEventCompat.EDGE_LEFT, backDistance) }
-            requestDismissViewer()
-        } catch (cancelled: CancellationException) {
-            scope.launch { dismissDrag.recoil() }
-            throw cancelled
+            committed = true
+        } finally {
+            // Cancelling the back swipe cancels this collector, so it recoils in the screen's scope.
+            if (committed) requestDismissViewer() else scope.launch { dismissDrag.recoil() }
         }
     }
 

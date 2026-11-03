@@ -18,6 +18,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import kotlin.math.abs
@@ -175,60 +176,22 @@ private suspend fun AwaitPointerEventScope.readViewerGesture(
     handler: () -> ViewerGestureHandler,
 ): ViewerGestureEnd {
     val tracker = VelocityTracker().apply { addPosition(down.uptimeMillis, down.position) }
-    val column = viewerGestureColumn(down.position.x, size.width)
-    val control = if (column == ViewerGestureColumn.Leading) ViewerLevelControl.Brightness else ViewerLevelControl.Volume
-    val infoDistance = VIEWER_INFO_SWIPE_DISTANCE.toPx()
-    val flingVelocity = VIEWER_FLING_VELOCITY.toPx()
-    var mode = ViewerGestureMode.Pending
-    var x = 0f
-    var y = 0f
-    var atLimit = false
+    val gesture = ViewerGestureTracker(
+        column = viewerGestureColumn(down.position.x, size.width),
+        config = config,
+        handler = handler,
+        touchSlop = viewConfiguration.touchSlop,
+        levelRange = (size.height * 0.6f).coerceAtLeast(1f),
+        height = size.height.toFloat(),
+    )
     try {
         while (true) {
-            val event = awaitPointerEvent(pass = PointerEventPass.Initial)
-            val change = event.changes.singleOrNull()?.takeIf { it.id == down.id } ?: return ViewerGestureEnd.None
-            val delta = change.position - change.previousPosition
-            x += delta.x
-            y += delta.y
+            val change = awaitPointerEvent(PointerEventPass.Initial).changes.singleOrNull()
+                ?.takeIf { it.id == down.id } ?: return ViewerGestureEnd.None
             tracker.addPosition(change.uptimeMillis, change.position)
-            if (mode == ViewerGestureMode.Pending) {
-                val slop = viewConfiguration.touchSlop
-                mode = when {
-                    abs(x) > slop && abs(x) > abs(y) * 1.25f -> ViewerGestureMode.Horizontal
-                    abs(y) > slop && abs(y) > abs(x) * 1.25f -> viewerVerticalMode(column, y, config).also {
-                        if (it == ViewerGestureMode.Level) config.levels?.begin(control)
-                    }
-                    else -> ViewerGestureMode.Pending
-                }
-                if (mode == ViewerGestureMode.Level) {
-                    config.levels?.drag(-y / levelDragRange())
-                    atLimit = config.levels.isAtLimit()
-                    change.consume()
-                    if (!change.pressed) return ViewerGestureEnd.None
-                    continue
-                }
-            }
-            when (mode) {
-                ViewerGestureMode.Horizontal -> { handler().onHorizontalDrag(x); change.consume() }
-                ViewerGestureMode.Level -> {
-                    config.levels?.drag(-delta.y / levelDragRange())
-                    val limit = config.levels.isAtLimit()
-                    if (limit && !atLimit) handler().onLevelLimit()
-                    atLimit = limit
-                    change.consume()
-                }
-                ViewerGestureMode.Dismiss -> { handler().onDismissDrag(x, y, size.height.toFloat()); change.consume() }
-                ViewerGestureMode.Info -> change.consume()
-                ViewerGestureMode.Pending -> Unit
-            }
+            gesture.follow(change)
             if (!change.pressed) {
-                val velocity = tracker.calculateVelocity()
-                return when (mode) {
-                    ViewerGestureMode.Horizontal -> ViewerGestureEnd.Horizontal(x, velocity.x)
-                    ViewerGestureMode.Dismiss -> ViewerGestureEnd.Dismiss(velocity.y)
-                    ViewerGestureMode.Info -> if (y <= -infoDistance || velocity.y <= -flingVelocity) ViewerGestureEnd.Info else ViewerGestureEnd.None
-                    else -> ViewerGestureEnd.None
-                }
+                return gesture.end(tracker.calculateVelocity(), VIEWER_INFO_SWIPE_DISTANCE.toPx(), VIEWER_FLING_VELOCITY.toPx())
             }
         }
     } finally {
@@ -236,9 +199,61 @@ private suspend fun AwaitPointerEventScope.readViewerGesture(
     }
 }
 
+/** One gesture's direction lock and the handler calls that follow from it. */
+private class ViewerGestureTracker(
+    private val column: ViewerGestureColumn,
+    private val config: ViewerGestureConfig,
+    private val handler: () -> ViewerGestureHandler,
+    private val touchSlop: Float,
+    private val levelRange: Float,
+    private val height: Float,
+) {
+    private var mode = ViewerGestureMode.Pending
+    private var x = 0f
+    private var y = 0f
+    private var atLimit = false
+
+    fun follow(change: PointerInputChange) {
+        val delta = change.position - change.previousPosition
+        x += delta.x
+        y += delta.y
+        val locking = mode == ViewerGestureMode.Pending
+        if (locking) mode = lockedMode()
+        when (mode) {
+            ViewerGestureMode.Horizontal -> handler().onHorizontalDrag(x)
+            ViewerGestureMode.Level -> followLevel(if (locking) y else delta.y, begin = locking)
+            ViewerGestureMode.Dismiss -> handler().onDismissDrag(x, y, height)
+            ViewerGestureMode.Info -> Unit
+            ViewerGestureMode.Pending -> return
+        }
+        change.consume()
+    }
+
+    private fun lockedMode(): ViewerGestureMode = when {
+        abs(x) > touchSlop && abs(x) > abs(y) * 1.25f -> ViewerGestureMode.Horizontal
+        abs(y) > touchSlop && abs(y) > abs(x) * 1.25f -> viewerVerticalMode(column, y, config)
+        else -> ViewerGestureMode.Pending
+    }
+
+    private fun followLevel(deltaY: Float, begin: Boolean) {
+        val levels = config.levels ?: return
+        if (begin) levels.begin(if (column == ViewerGestureColumn.Leading) ViewerLevelControl.Brightness else ViewerLevelControl.Volume)
+        levels.drag(-deltaY / levelRange)
+        val limit = levels.isAtLimit()
+        if (limit && !atLimit && !begin) handler().onLevelLimit()
+        atLimit = limit
+    }
+
+    fun end(velocity: Velocity, infoDistance: Float, flingVelocity: Float): ViewerGestureEnd = when (mode) {
+        ViewerGestureMode.Horizontal -> ViewerGestureEnd.Horizontal(x, velocity.x)
+        ViewerGestureMode.Dismiss -> ViewerGestureEnd.Dismiss(velocity.y)
+        ViewerGestureMode.Info ->
+            if (y <= -infoDistance || velocity.y <= -flingVelocity) ViewerGestureEnd.Info else ViewerGestureEnd.None
+        ViewerGestureMode.Level, ViewerGestureMode.Pending -> ViewerGestureEnd.None
+    }
+}
+
 private val VIEWER_INFO_SWIPE_DISTANCE = 64.dp
 
-private fun AwaitPointerEventScope.levelDragRange(): Float = (size.height * 0.6f).coerceAtLeast(1f)
-
-private fun ViewerLevelControls?.isAtLimit(): Boolean =
-    this?.feedback?.takeIf { it.available }?.fraction?.let { it <= 0f || it >= 1f } == true
+private fun ViewerLevelControls.isAtLimit(): Boolean =
+    feedback?.takeIf { it.available }?.fraction?.let { it <= 0f || it >= 1f } == true

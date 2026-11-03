@@ -117,7 +117,7 @@ internal class ViewerSwipeController(
             ?.dragViewerPage(origin.mediaIndex, target?.takeIf { it.postIndex == origin.postIndex }?.mediaIndex, displacement)
         current.postPager.dragViewerPage(origin.postIndex, target?.takeIf { it.postIndex != origin.postIndex }?.postIndex, displacement)
         edgeOffset = if (target == null) viewerEdgeStretch(displacement * sign, current.postPager.viewerPageExtent()) else 0f
-        if (target == null && !limitReported && abs(displacement) > 0f) {
+        if (target == null && !limitReported) {
             limitReported = true
             current.onLimit()
         }
@@ -170,14 +170,12 @@ internal class ViewerSwipeController(
         if (crossesPosts) current.prepareDestination(target)
         recoilEdge()
         settleJob = scope.launch {
+            val postVelocity = if (crossesPosts) pagerVelocity else 0f
+            val mediaVelocity = if (crossesPosts) 0f else pagerVelocity
+            val mediaPage = if (crossesPosts) origin.mediaIndex else target.mediaIndex
             coroutineScope {
-                launch { current.postPager.settleViewerPage(target.postIndex, if (crossesPosts) pagerVelocity else 0f) }
-                launch {
-                    current.mediaPager(origin.postIndex)?.settleViewerPage(
-                        if (crossesPosts) origin.mediaIndex else target.mediaIndex,
-                        if (crossesPosts) 0f else pagerVelocity,
-                    )
-                }
+                launch { current.postPager.settleViewerPage(target.postIndex, postVelocity) }
+                launch { current.mediaPager(origin.postIndex)?.settleViewerPage(mediaPage, mediaVelocity) }
             }
             finishSettle()
         }
