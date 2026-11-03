@@ -66,6 +66,7 @@ import com.theoriacodex.app.ui.components.ActionMenuFollowUpRow
 import com.theoriacodex.app.ui.components.ActionMenuHeader
 import com.theoriacodex.app.ui.components.ActionMenuRow
 import com.theoriacodex.app.ui.components.ActionMenuSheet
+import com.theoriacodex.app.ui.components.NameEntryDialog
 import com.theoriacodex.data.repository.CodexLibrarySort
 import com.theoriacodex.domain.model.Codex
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -348,7 +349,7 @@ private fun CodexAutoSaveOverlay(
 @Composable
 private fun CodexNameOverlays(state: CodexListUiState, actions: CodexListActions) {
     if (state.showCreateDialog) {
-        CodexNameDialog(
+        NameEntryDialog(
             title = "Create Codex",
             initialName = "",
             onDismiss = { state.showCreateDialog = false },
@@ -359,7 +360,7 @@ private fun CodexNameOverlays(state: CodexListUiState, actions: CodexListActions
         )
     }
     state.renameTarget?.let { codex ->
-        CodexNameDialog(
+        NameEntryDialog(
             title = "Rename Codex",
             initialName = codex.name,
             onDismiss = { state.renameTarget = null },

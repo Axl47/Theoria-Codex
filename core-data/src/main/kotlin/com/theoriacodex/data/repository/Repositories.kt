@@ -491,6 +491,8 @@ interface SettingsRepository {
     suspend fun setLastTab(route: String)
     suspend fun setActiveProfile(profileId: String)
     suspend fun addRecommendationProfile(name: String): RecommendationProfile
+    /** A blank name or unknown profile changes nothing and returns false. */
+    suspend fun renameRecommendationProfile(profileId: String, name: String): Boolean
     suspend fun removeRecommendationProfile(profileId: String): Boolean
     suspend fun addForYouBlacklistEntry(profileId: String, source: SourceKey, tags: List<String>): Boolean
     suspend fun removeForYouBlacklistEntry(profileId: String, source: SourceKey, tags: List<String>): Boolean

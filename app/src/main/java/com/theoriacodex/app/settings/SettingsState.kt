@@ -52,6 +52,7 @@ sealed interface SettingsAction {
     data class OpenPage(val page: SettingsPage) : SettingsAction
     data class SetActiveProfile(val profileId: String) : SettingsAction
     data class AddProfile(val name: String) : SettingsAction
+    data class RenameProfile(val profileId: String, val name: String) : SettingsAction
     data class RequestRemoveProfile(val profileId: String) : SettingsAction
     data object DismissRemoveProfile : SettingsAction
     data object ConfirmRemoveProfile : SettingsAction

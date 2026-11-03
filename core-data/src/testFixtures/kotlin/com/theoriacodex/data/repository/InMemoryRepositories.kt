@@ -516,6 +516,12 @@ class InMemorySettingsRepository : SettingsRepository {
         }
     }
 
+    override suspend fun renameRecommendationProfile(profileId: String, name: String): Boolean {
+        return mutateSettings { current ->
+            RepositoryPolicies.renameRecommendationProfile(current, profileId, name)
+        }
+    }
+
     override suspend fun removeRecommendationProfile(profileId: String): Boolean {
         return mutateSettings { current ->
             RepositoryPolicies.removeRecommendationProfile(current, profileId)

@@ -246,6 +246,9 @@ internal class SettingsViewModel(
                 dependencies.settingsRepository.setActiveProfile(action.profileId)
             }
             is SettingsAction.AddProfile -> addProfile(action.name)
+            is SettingsAction.RenameProfile -> launchMutation {
+                dependencies.settingsRepository.renameRecommendationProfile(action.profileId, action.name)
+            }
             is SettingsAction.RequestRemoveProfile -> updateState { copy(profileDeleteTargetId = action.profileId) }
             SettingsAction.DismissRemoveProfile -> updateState { copy(profileDeleteTargetId = null) }
             SettingsAction.ConfirmRemoveProfile -> removeRequestedProfile()

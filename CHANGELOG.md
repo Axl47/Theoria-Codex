@@ -6,6 +6,7 @@
 
 - Sort the Codex Library by name, date added, or item count from Reorder mode; switching back to Manual restores your own arrangement.
 - Use the Codex Library sort as the non-suggested order in Add to Codex.
+- Rename a recommendation profile from its Settings menu, keeping its likes, Codices, and hidden tags.
 
 ## [1.0.1] - 2026-11-02
 

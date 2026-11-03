@@ -135,6 +135,25 @@ internal object RepositoryPolicies {
         return Result(state = updated, value = created)
     }
 
+    fun renameRecommendationProfile(
+        settings: AppSettings,
+        profileId: String,
+        requestedName: String,
+    ): Result<AppSettings, Boolean> {
+        val current = normalizeSettings(settings)
+        val normalizedProfileId = normalizeProfileId(profileId)
+        val name = requestedName.trim()
+        if (name.isBlank() || current.recommendationProfiles.none { it.profileId == normalizedProfileId }) {
+            return Result(current, false)
+        }
+        val updated = current.copy(
+            recommendationProfiles = current.recommendationProfiles.map { profile ->
+                if (profile.profileId == normalizedProfileId) profile.copy(name = name) else profile
+            },
+        )
+        return Result(normalizeSettings(updated), true)
+    }
+
     fun removeRecommendationProfile(
         settings: AppSettings,
         profileId: String,

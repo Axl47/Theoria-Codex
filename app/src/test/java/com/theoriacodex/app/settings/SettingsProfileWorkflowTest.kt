@@ -79,6 +79,22 @@ class SettingsProfileWorkflowTest {
     }
 
     @Test
+    fun `renaming a profile keeps it active and its likes attached`() = runTest {
+        val settings = InMemorySettingsRepository()
+        val second = settings.addRecommendationProfile("Sketching")
+        val transactions = InMemoryCodexLikesTransactions()
+        val sync = LikesCodexSyncService(transactions, transactions.codices)
+        sync.toggle(second, testPost(sourcePostId = "keep"), listOf("landscape"))
+        val owner = settingsOwner(settingsRepository = settings,
+            profileMutations = profileMutations(settings, transactions))
+        runCurrent()
+        owner.onAction(SettingsAction.RenameProfile(second.profileId, "Painting"))
+        runCurrent()
+        assertEquals(second.copy(name = "Painting"), owner.state.value.activeProfile)
+        assertEquals(1, transactions.likes.observeLikedPostIds(second.profileId).first().size)
+    }
+
+    @Test
     fun `dismissed deletion of a removable profile preserves its data`() = runTest {
         val settings = InMemorySettingsRepository()
         val second = settings.addRecommendationProfile("Sketching")
