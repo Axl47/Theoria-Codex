@@ -464,9 +464,10 @@ internal fun ActiveProfileCoordinationEffect(
     settingsRepository: SettingsRepository,
     onProfileChanged: suspend (RecommendationProfile) -> Unit,
 ) {
-    val settingsState = settingsRepository.observeSettings()
-        .collectAsStateWithLifecycle(initialValue = AppSettings())
-    val profile = settingsState.value.activeRecommendationProfile()
+    val settingsFlow = remember(settingsRepository) { settingsRepository.observeSettings() }
+    // Waits for real settings, so it never acts on the default profile while they load.
+    val settings = settingsFlow.collectAsStateWithLifecycle(initialValue = null).value ?: return
+    val profile = settings.activeRecommendationProfile()
     LaunchedEffect(profile.profileId, profile.name) { onProfileChanged(profile) }
 }
 
