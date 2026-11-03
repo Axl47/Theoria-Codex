@@ -184,6 +184,7 @@ internal fun ViewerScreen(
     val mediaOverviewAvailable = viewerMediaOverviewAvailable(selectedMediaOverviewItems)
     val touchExplorationEnabled = rememberViewerTouchExploration()
     val chromeVisible = (uiState.controls.chromeVisible || touchExplorationEnabled) && !inPictureInPicture && !returning && !opening && !dismissDrag.active
+    val chromeStage = rememberViewerChromeStage(chromeVisible)
     val showInfoSheet = uiState.controls.metadataVisible && !inPictureInPicture
     val mediaPlaybackEnabled = uiState.controls.playback.playing
     val playbackRestartRequest = uiState.controls.playback.restartRequest
@@ -586,7 +587,7 @@ internal fun ViewerScreen(
                         isActive = active,
                         isPlaying = mediaPlaybackEnabled,
                         isPreloading = swipeLoadTarget == ViewerHorizontalSwipeTarget(postPage, mediaPage),
-                        showControls = chromeVisible && active,
+                        showControls = chromeStage >= VIEWER_CHROME_STAGE_TIMELINE && active,
                         showPassiveProgress = !chromeVisible && active && !inPictureInPicture,
                         loopPlayback = uiState.controls.playbackMode == com.theoriacodex.app.viewer.state.ViewerPlaybackMode.LOOP,
                         playbackRate = playbackRate.speed,
@@ -625,7 +626,7 @@ internal fun ViewerScreen(
         // While scrubbing everything but the timeline steps back. Only its alpha changes, so the strip keeps its scroll position.
         val scrubFade by animateFloatAsState(if (timelineInteractionActive) 0f else 1f, tween(TheoriaMotion.SHORT_MS), label = "Viewer scrub fade")
         val fadesWhileScrubbing = Modifier.graphicsLayer { alpha = scrubFade }
-        ViewerChromeVisibility(chromeVisible && !mediaOverviewVisible, Modifier.align(Alignment.BottomCenter).then(fadesWhileScrubbing)) {
+        ViewerChromeVisibility(chromeStage >= VIEWER_CHROME_STAGE_STRIPS && !mediaOverviewVisible, Modifier.align(Alignment.BottomCenter).then(fadesWhileScrubbing)) {
             val stripIndex = navigation.originalPosts.indexOfFirst { it.id == posts.getOrNull(postPagerState.currentPage)?.id }
                 .takeIf { it >= 0 } ?: navigation.stripAnchorIndex
             ViewerBottomChrome(
@@ -639,7 +640,7 @@ internal fun ViewerScreen(
                     onLoadMore = { loadMoreFromStrip() }, onInteraction = { markInteraction() })
             }
         }
-        ViewerChromeVisibility(chromeVisible, Modifier.align(Alignment.TopCenter).then(fadesWhileScrubbing)) {
+        ViewerChromeVisibility(chromeStage >= VIEWER_CHROME_STAGE_TOP_BAR, Modifier.align(Alignment.TopCenter).then(fadesWhileScrubbing)) {
             ViewerChrome(
                 onPictureInPicture = viewerPictureInPictureAction(activity, selectedPost, selectedCurrentMedia, uiState.mediaError != null),
                 playbackMode = uiState.controls.playbackMode,
@@ -698,7 +699,7 @@ internal fun ViewerScreen(
                 },
             )
         }
-        ViewerChromeVisibility(chromeVisible && !mediaOverviewVisible, Modifier.align(Alignment.TopEnd).padding(top = 72.dp).then(fadesWhileScrubbing)) {
+        ViewerChromeVisibility(chromeStage >= VIEWER_CHROME_STAGE_STRIPS && !mediaOverviewVisible, Modifier.align(Alignment.TopEnd).padding(top = 72.dp).then(fadesWhileScrubbing)) {
             ViewerRelatedStrip(
                 state = relatedState, posts = relatedPosts, currentPostId = selectedPost.id,
                 onSelect = { post ->
@@ -806,6 +807,27 @@ internal fun ViewerChromeVisibility(visible: Boolean, modifier: Modifier, conten
         enter = fadeIn(tween(TheoriaMotion.SHORT_MS)),
         exit = fadeOut(tween(TheoriaMotion.SHORT_MS)),
     ) { content() }
+}
+
+internal const val VIEWER_CHROME_STAGE_TOP_BAR = 1
+internal const val VIEWER_CHROME_STAGE_TIMELINE = 2
+internal const val VIEWER_CHROME_STAGE_STRIPS = 3
+
+/**
+ * How much of the chrome may compose: parts arrive one frame apart, so showing it costs several
+ * short frames instead of one long one while video plays. Hiding is immediate.
+ */
+@Composable
+internal fun rememberViewerChromeStage(visible: Boolean): Int {
+    var stage by remember { mutableIntStateOf(if (visible) VIEWER_CHROME_STAGE_STRIPS else 0) }
+    LaunchedEffect(visible) {
+        if (!visible) stage = 0
+        while (visible && stage < VIEWER_CHROME_STAGE_STRIPS) {
+            withFrameNanos { }
+            stage += 1
+        }
+    }
+    return if (visible) stage else 0
 }
 
 private val restingReturnProgress = { 0f }
