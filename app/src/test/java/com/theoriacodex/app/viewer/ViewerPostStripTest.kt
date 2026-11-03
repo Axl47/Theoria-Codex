@@ -6,6 +6,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertContentDescriptionContains
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.performTouchInput
@@ -49,6 +52,16 @@ class ViewerPostStripTest {
             assertEquals(36, selected)
             org.junit.Assert.assertTrue(loadRequests > 0)
         }
+    }
+
+    @Test fun `only animated posts show the play icon`() {
+        val video = testPost(sourcePostId = "video").copy(preview = ImageRef(null, "/missing/clip.mp4", "video/mp4"))
+        val still = testPost(sourcePostId = "still").copy(preview = ImageRef(null, "/missing/still.jpg", "image/jpeg"))
+        compose.setContent {
+            MaterialTheme { ViewerPostStrip(listOf(video, still), 0, {}, Modifier.width(320.dp)) }
+        }
+        compose.onNodeWithContentDescription("Open post video").assertContentDescriptionContains("Animated")
+        compose.onNodeWithContentDescription("Open post still").assert(!hasContentDescription("Animated"))
     }
 
     private fun checkSpacing(width: Dp) {

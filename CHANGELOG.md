@@ -14,6 +14,7 @@
 - Pull down to refresh Search results and For You.
 - Long-press and drag across a Codex in edit mode to select a whole range of posts.
 - Tap the current tab again to scroll back to the top.
+- Show a Play icon on animated posts in the Viewer's thumbnail strip and recommendation drawer.
 
 ### Changed
 
