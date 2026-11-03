@@ -30,6 +30,7 @@ class DurationRouteAcquisitionTest {
             resolveProviderDuration = { DurationMetadataSourceResult.Unsupported },
             probeDuration = probe::probe,
             traceRecorder = NoOpMediaDurationTraceRecorder,
+            pacer = DurationRequestPacer(startIntervalMs = { 0L }),
         )
         val coordinator = MediaDurationCoordinator(engine, parentScope = backgroundScope, maxConcurrentWork = 1,
             traceRecorder = NoOpMediaDurationTraceRecorder)

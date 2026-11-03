@@ -94,6 +94,8 @@ enum class MediaDurationFailureReason {
     PROVIDER_FAILURE,
     TRANSPORT_FAILURE,
     TIMEOUT,
+    /** The host pushed back on our request rate, so the media itself may be fine. */
+    RATE_LIMITED,
 }
 
 enum class DurationDemandPriority {

@@ -3,6 +3,7 @@ package com.theoriacodex.app.media
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.http.SourceByteRange
 import com.theoriacodex.sources.http.SourceByteResponse
 import com.theoriacodex.sources.http.SourceHttpClient
@@ -39,6 +40,8 @@ internal class BoundedMediaDurationProbe(
             } ?: retryable(MediaDurationFailureReason.TIMEOUT)
         } catch (cancelled: CancellationException) {
             throw cancelled
+        } catch (_: DurationProbeThrottled) {
+            retryable(MediaDurationFailureReason.RATE_LIMITED)
         } catch (_: Exception) {
             retryable(MediaDurationFailureReason.TRANSPORT_FAILURE)
         }
@@ -105,7 +108,7 @@ internal class BoundedMediaDurationProbe(
             headers = post.id.source.requestHeaders(),
             range = range,
             maxBodyBytes = windowBytes,
-        ).toHeadWindow(range)
+        ).requireNotThrottled(post).toHeadWindow(range)
     }
 
     private suspend fun readRange(
@@ -121,7 +124,7 @@ internal class BoundedMediaDurationProbe(
             headers = post.id.source.requestHeaders(),
             range = range,
             maxBodyBytes = windowBytes,
-        ).toRangeWindow(range, totalBytes)
+        ).requireNotThrottled(post).toRangeWindow(range, totalBytes)
     }
 
     private fun transportFailure() = retryable(MediaDurationFailureReason.TRANSPORT_FAILURE)
@@ -132,6 +135,16 @@ internal class BoundedMediaDurationProbe(
             reason = reason,
         )
     }
+}
+
+private class DurationProbeThrottled : Exception()
+
+/** Gelbooru's media host answers an overloaded client with 404, even for files it can serve. */
+private fun SourceByteResponse.requireNotThrottled(post: Post): SourceByteResponse {
+    val throttled = statusCode == HTTP_TOO_MANY_REQUESTS || statusCode == HTTP_SERVICE_UNAVAILABLE ||
+        (statusCode == HTTP_NOT_FOUND && post.id.source == SourceKey.GELBOORU)
+    if (throttled) throw DurationProbeThrottled()
+    return this
 }
 
 private fun SourceByteResponse.toHeadWindow(requested: SourceByteRange): MediaByteWindow? {
@@ -260,4 +273,7 @@ internal const val DEFAULT_DURATION_PROBE_TIMEOUT_MS = 12_000L
 private const val DEFAULT_DURATION_PROBE_RETRY_MS = 5L * 60L * 1_000L
 private const val HTTP_OK = 200
 private const val HTTP_PARTIAL_CONTENT = 206
+private const val HTTP_NOT_FOUND = 404
+private const val HTTP_TOO_MANY_REQUESTS = 429
+private const val HTTP_SERVICE_UNAVAILABLE = 503
 private val CONTENT_RANGE_PATTERN = Regex("bytes\\s+(\\d+)-(\\d+)/(\\d+)", RegexOption.IGNORE_CASE)

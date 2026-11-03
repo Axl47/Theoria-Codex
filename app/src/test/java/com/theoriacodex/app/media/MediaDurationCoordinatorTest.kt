@@ -330,6 +330,31 @@ class MediaDurationCoordinatorTest {
     }
 
     @Test
+    fun `an answer that needs no work never queues`() = runTest {
+        var acquisitions = 0
+        val unsupported = MediaDurationState.Unsupported(MediaDurationUnsupportedReason.NO_AUTHORITATIVE_MEDIA)
+        val coordinator = coordinator(
+            scope = this,
+            acquirer = object : MediaDurationAcquirer {
+                override suspend fun acquire(post: Post): MediaDurationState {
+                    acquisitions += 1
+                    return known(1_000L)
+                }
+
+                override fun settleWithoutWork(post: Post) = unsupported
+            },
+        )
+        val post = post("gif")
+
+        val admission = coordinator.submit(post, demand("search", key(post), DurationDemandPriority.ACTIVE_FILTER))
+
+        assertEquals(DurationDemandAdmission.DECIDED, admission)
+        assertEquals(unsupported, coordinator.states.value[key(post)])
+        assertEquals(0, acquisitions)
+        coordinator.close()
+    }
+
+    @Test
     fun `a saturated source waits without holding up another source`() = runTest {
         val started = mutableListOf<String>()
         val release = CompletableDeferred<Unit>()

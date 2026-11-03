@@ -22,6 +22,9 @@ import kotlinx.coroutines.withContext
 
 fun interface MediaDurationAcquirer {
     suspend fun acquire(post: Post): MediaDurationState
+
+    /** An answer that costs no work, so the post can skip the queue entirely. */
+    fun settleWithoutWork(post: Post): MediaDurationState? = null
 }
 
 interface MediaDurationTraceRecorder {
@@ -174,6 +177,12 @@ class MediaDurationCoordinator(
 
         if (storedState != null) {
             putStateLocked(demand.key, storedState)
+            traceRecorder.publication()
+            return DurationDemandAdmission.DECIDED
+        }
+
+        acquirer.settleWithoutWork(post)?.let { settled ->
+            putStateLocked(demand.key, settled)
             traceRecorder.publication()
             return DurationDemandAdmission.DECIDED
         }

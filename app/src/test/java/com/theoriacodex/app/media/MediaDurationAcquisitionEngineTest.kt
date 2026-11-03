@@ -33,6 +33,65 @@ class MediaDurationAcquisitionEngineTest {
     }
 
     @Test
+    fun `a throttled lookup pauses its source and retries before giving up`() = runTest {
+        val results = ArrayDeque(listOf(rateLimited(), known(4_000L)))
+        var now = 1_000L
+        val startedAt = mutableListOf<Long>()
+        val pacer = DurationRequestPacer(clock = { now }, startIntervalMs = { 0L }, cooldownMs = 15_000L)
+        val engine = MediaDurationAcquisitionEngine(
+            hasProviderDurationResolver = { false },
+            resolveProviderDuration = { DurationMetadataSourceResult.Unsupported },
+            probeDuration = {
+                startedAt += testScheduler.currentTime
+                results.removeFirst()
+            },
+            clock = { now },
+            traceRecorder = NoOpMediaDurationTraceRecorder,
+            pacer = pacer,
+        )
+
+        assertEquals(known(4_000L), engine.acquire(post("busy")))
+        assertEquals(listOf(0L, 15_000L), startedAt)
+    }
+
+    @Test
+    fun `a host that keeps throttling ends in a retryable failure`() = runTest {
+        var attempts = 0
+        val engine = MediaDurationAcquisitionEngine(
+            hasProviderDurationResolver = { false },
+            resolveProviderDuration = { DurationMetadataSourceResult.Unsupported },
+            probeDuration = {
+                attempts += 1
+                rateLimited()
+            },
+            traceRecorder = NoOpMediaDurationTraceRecorder,
+            pacer = DurationRequestPacer(clock = { testScheduler.currentTime + 1L }, startIntervalMs = { 0L }, cooldownMs = 10L),
+        )
+
+        assertEquals(rateLimited(), engine.acquire(post("busy")))
+        assertEquals(3, attempts)
+    }
+
+    @Test
+    fun `media that needs no lookup settles without work`() {
+        val gif = post("gif").let { base ->
+            val ref = ImageRef(url = "https://example.test/gif.gif", localPath = null, mime = "image/gif")
+            base.copy(preview = ref, full = ref, media = listOf(ref))
+        }
+        val engine = engine(
+            hasProvider = { false },
+            resolveProvider = { error("Provider should not run") },
+            probe = { error("Probe should not run") },
+        )
+
+        assertEquals(
+            MediaDurationState.Unsupported(MediaDurationUnsupportedReason.NO_AUTHORITATIVE_MEDIA),
+            engine.settleWithoutWork(gif),
+        )
+        assertEquals(null, engine.settleWithoutWork(post("video")))
+    }
+
+    @Test
     fun `provider known metadata skips probe and retains provenance`() = runTest {
         var probes = 0
         val engine = engine(
@@ -143,4 +202,6 @@ class MediaDurationAcquisitionEngineTest {
             createdAtEpochMs = null,
         )
     }
+
+    private fun rateLimited() = MediaDurationState.RetryableFailure(1L, MediaDurationFailureReason.RATE_LIMITED)
 }

@@ -106,6 +106,20 @@ class BoundedMediaDurationProbeTest {
     }
 
     @Test
+    fun `gelbooru answering 404 reads as throttling while other sources stay a transport failure`() = runTest {
+        val notFound = StatusHttpClient(404)
+
+        assertEquals(
+            MediaDurationState.RetryableFailure(110L, MediaDurationFailureReason.RATE_LIMITED),
+            probe(notFound).probe(post("busy", SourceKey.GELBOORU)),
+        )
+        assertEquals(
+            MediaDurationState.RetryableFailure(110L, MediaDurationFailureReason.TRANSPORT_FAILURE),
+            probe(notFound).probe(post("gone", SourceKey.HITOMI)),
+        )
+    }
+
+    @Test
     fun `unsupported bounded container settles without another request`() = runTest {
         val http = FakeHttpClient("not-media".toByteArray(), ignoreRange = true)
 
@@ -144,14 +158,14 @@ class BoundedMediaDurationProbeTest {
         )
     }
 
-    private fun post(id: String): Post {
+    private fun post(id: String, source: SourceKey = SourceKey.HITOMI): Post {
         val full = ImageRef(
             url = "https://example.test/$id.mp4",
             localPath = null,
             mime = "video/mp4",
         )
         return Post(
-            id = PostId(SourceKey.HITOMI, id),
+            id = PostId(source, id),
             preview = full,
             full = full,
             media = listOf(full),
@@ -201,6 +215,28 @@ class BoundedMediaDurationProbeTest {
             }
             return SourceByteResponse(206, body, responseHeaders)
         }
+
+        override suspend fun get(
+            url: String,
+            query: Map<String, String>,
+            headers: Map<String, String>,
+        ): SourceHttpResponse = error("Text GET is not used")
+
+        override suspend fun postForm(
+            url: String,
+            form: Map<String, String>,
+            headers: Map<String, String>,
+        ): SourceHttpResponse = error("POST is not used")
+    }
+
+    private class StatusHttpClient(private val status: Int) : SourceHttpClient {
+        override suspend fun getBytes(
+            url: String,
+            query: Map<String, String>,
+            headers: Map<String, String>,
+            range: SourceByteRange?,
+            maxBodyBytes: Int,
+        ): SourceByteResponse = SourceByteResponse(status, "not found".toByteArray(), emptyMap())
 
         override suspend fun get(
             url: String,
