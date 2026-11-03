@@ -1,8 +1,16 @@
 package com.theoriacodex.app.ui.motion
 
+import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.unit.IntOffset
 
 /** The app's motion vocabulary: pick by what the motion answers, so screens stay consistent. */
 internal object TheoriaMotion {
@@ -26,6 +34,15 @@ internal object TheoriaMotion {
 
     /** A small celebratory overshoot for confirming an action, in scale units. */
     val pop: SpringSpec<Float> = spring(dampingRatio = 0.45f, stiffness = 600f, visibilityThreshold = 0.001f)
+}
+
+/** Moving one level deeper or back within a screen: a short slide in the travel direction plus a fade. */
+internal fun depthTransform(forward: Boolean): ContentTransform {
+    val slide = tween<IntOffset>(TheoriaMotion.MEDIUM_MS)
+    val fade = tween<Float>(TheoriaMotion.MEDIUM_MS)
+    val direction = if (forward) 1 else -1
+    return (slideInHorizontally(slide) { direction * it / 8 } + fadeIn(fade)) togetherWith
+        (slideOutHorizontally(slide) { -direction * it / 8 } + fadeOut(fade))
 }
 
 /** What each vibration means, so a gesture picks a meaning rather than a platform constant. */

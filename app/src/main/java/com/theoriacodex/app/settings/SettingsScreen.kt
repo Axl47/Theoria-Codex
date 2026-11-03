@@ -1,6 +1,8 @@
 package com.theoriacodex.app.settings
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import com.theoriacodex.app.ui.motion.depthTransform
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -65,12 +67,18 @@ fun SettingsScreen(
 ) {
     val openHome = { onAction(SettingsAction.OpenPage(SettingsPage.HOME)) }
     BackHandler(enabled = state.page != SettingsPage.HOME, onBack = openHome)
-    when (state.page) {
-        SettingsPage.HOME -> SettingsHome(state, onAction, searchSources, storageSummary)
-        SettingsPage.ACCOUNTS -> AccountsPage(state, onAction, openHome)
-        SettingsPage.HIDDEN_TAGS -> HiddenTagsPage(state, onAction, openHome)
-        SettingsPage.STORAGE -> StoragePage(state, onAction, storageTools, openHome)
-        SettingsPage.STATS -> StatsScreen(state.statistics, openHome)
+    AnimatedContent(
+        targetState = state.page,
+        transitionSpec = { depthTransform(forward = targetState != SettingsPage.HOME) },
+        label = "Settings page",
+    ) { page ->
+        when (page) {
+            SettingsPage.HOME -> SettingsHome(state, onAction, searchSources, storageSummary)
+            SettingsPage.ACCOUNTS -> AccountsPage(state, onAction, openHome)
+            SettingsPage.HIDDEN_TAGS -> HiddenTagsPage(state, onAction, openHome)
+            SettingsPage.STORAGE -> StoragePage(state, onAction, storageTools, openHome)
+            SettingsPage.STATS -> StatsScreen(state.statistics, openHome)
+        }
     }
     ProfileDeleteDialog(state, onAction)
 }

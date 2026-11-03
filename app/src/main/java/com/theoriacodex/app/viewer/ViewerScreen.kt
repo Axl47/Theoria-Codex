@@ -7,6 +7,9 @@ import androidx.compose.animation.core.tween
 import androidx.activity.BackEventCompat
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -64,6 +67,7 @@ import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
+import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.app.viewer.state.ViewerUiState
@@ -611,15 +615,15 @@ internal fun ViewerScreen(
             }
 
         }
-        if (chromeVisible && !mediaOverviewVisible) {
+        ViewerChromeVisibility(chromeVisible && !mediaOverviewVisible, Modifier.align(Alignment.BottomCenter)) {
             val stripIndex = navigation.originalPosts.indexOfFirst { it.id == posts.getOrNull(postPagerState.currentPage)?.id }
                 .takeIf { it >= 0 } ?: navigation.stripAnchorIndex
             ViewerPostStrip(navigation.originalPosts, stripIndex, { index ->
                 pendingPostId = navigation.originalPosts[index].id
-            }, Modifier.align(Alignment.BottomCenter).testTag("viewer-post-navigation-strip"),
+            }, Modifier.testTag("viewer-post-navigation-strip"),
                 onLoadMore = { loadMoreFromStrip() }, onInteraction = { markInteraction() })
         }
-        if (chromeVisible) {
+        ViewerChromeVisibility(chromeVisible, Modifier.align(Alignment.TopCenter)) {
             ViewerChrome(
                 onPictureInPicture = viewerPictureInPictureAction(activity, selectedPost, selectedCurrentMedia, uiState.mediaError != null),
                 playbackMode = uiState.controls.playbackMode,
@@ -628,7 +632,6 @@ internal fun ViewerScreen(
                 qualityHeight = qualityHeight,
                 videoVariants = uiState.currentMedia?.ref?.videoVariants.orEmpty(),
                 onQualitySelected = { selected, height -> quality = selected; qualityHeight = height },
-                modifier = Modifier.align(Alignment.TopCenter),
                 source = selectedPost.id.source.displayName(),
                 indexLabel = if (selectedPostMedia.size > 1) {
                     "${selectedMediaIndex + 1} / ${selectedPostMedia.size}"
@@ -679,7 +682,7 @@ internal fun ViewerScreen(
                 },
             )
         }
-        if (chromeVisible && !mediaOverviewVisible) {
+        ViewerChromeVisibility(chromeVisible && !mediaOverviewVisible, Modifier.align(Alignment.TopEnd).padding(top = 72.dp)) {
             ViewerRelatedStrip(
                 state = relatedState, posts = relatedPosts, currentPostId = selectedPost.id,
                 onSelect = { post ->
@@ -694,7 +697,6 @@ internal fun ViewerScreen(
                 enabled = !swipeInProgress && !dragInProgress,
                 onExpandedChange = { relatedStripExpanded = it },
                 onInteraction = { markInteraction() },
-                modifier = Modifier.align(Alignment.TopEnd).padding(top = 72.dp),
             )
         }
     }
@@ -777,6 +779,17 @@ internal fun ViewerScreen(
         }
     }
 
+}
+
+/** Viewer controls fade rather than popping over the media they share the screen with. */
+@Composable
+private fun ViewerChromeVisibility(visible: Boolean, modifier: Modifier, content: @Composable () -> Unit) {
+    AnimatedVisibility(
+        visible = visible,
+        modifier = modifier,
+        enter = fadeIn(tween(TheoriaMotion.SHORT_MS)),
+        exit = fadeOut(tween(TheoriaMotion.SHORT_MS)),
+    ) { content() }
 }
 
 private val VIEWER_BACK_DISTANCE = 48.dp

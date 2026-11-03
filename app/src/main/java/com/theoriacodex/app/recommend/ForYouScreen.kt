@@ -19,6 +19,8 @@ import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridS
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import com.theoriacodex.app.ui.motion.depthTransform
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
@@ -225,7 +227,12 @@ fun ForYouScreen(
         onLoadNextPage = { onAction(ForYouAction.LoadNextPage) },
     )
 
-    if (state.home.visible) {
+    AnimatedContent(
+        targetState = state.home.visible,
+        transitionSpec = { depthTransform(forward = !targetState) },
+        label = "For You view",
+    ) { homeVisible ->
+    if (homeVisible) {
         savedStates.SaveableStateProvider("overview") {
         ForYouHomeScreen(state, likedPostIds, pixivUgoiraClient,
             filterPosts = { posts -> filterSearchResults(posts, visibilityFilters, emptySet(), emptySet(),
@@ -447,6 +454,7 @@ fun ForYouScreen(
         }
     }
 
+    }
     }
 
     selectedActionPost?.let { post ->
