@@ -53,5 +53,5 @@ internal fun nextSeekJumpFeedback(
 internal fun formatSeekJumpFeedback(totalDeltaMs: Long): String {
     val sign = if (totalDeltaMs >= 0L) "+" else "-"
     val seconds = abs(totalDeltaMs) / 1_000L
-    return "$sign ${seconds}s"
+    return "$sign${seconds}s"
 }

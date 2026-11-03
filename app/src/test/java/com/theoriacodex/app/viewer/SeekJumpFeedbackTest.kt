@@ -7,12 +7,12 @@ import org.junit.Test
 class SeekJumpFeedbackTest {
     @Test
     fun `formatting includes forward sign and seconds`() {
-        assertEquals("+ 10s", formatSeekJumpFeedback(10_000L))
+        assertEquals("+10s", formatSeekJumpFeedback(10_000L))
     }
 
     @Test
     fun `formatting includes backward sign and seconds`() {
-        assertEquals("- 10s", formatSeekJumpFeedback(-10_000L))
+        assertEquals("-10s", formatSeekJumpFeedback(-10_000L))
     }
 
     @Test
@@ -37,7 +37,7 @@ class SeekJumpFeedbackTest {
         )
 
         assertEquals(30_000L, third?.totalDeltaMs)
-        assertEquals("+ 30s", formatSeekJumpFeedback(third?.totalDeltaMs ?: 0L))
+        assertEquals("+30s", formatSeekJumpFeedback(third?.totalDeltaMs ?: 0L))
     }
 
     @Test
@@ -57,7 +57,7 @@ class SeekJumpFeedbackTest {
 
         assertEquals(SeekJumpDirection.Backward, second?.direction)
         assertEquals(-10_000L, second?.totalDeltaMs)
-        assertEquals("- 10s", formatSeekJumpFeedback(second?.totalDeltaMs ?: 0L))
+        assertEquals("-10s", formatSeekJumpFeedback(second?.totalDeltaMs ?: 0L))
     }
 
     @Test
@@ -76,7 +76,7 @@ class SeekJumpFeedbackTest {
         )
 
         assertEquals(10_000L, second?.totalDeltaMs)
-        assertEquals("+ 10s", formatSeekJumpFeedback(second?.totalDeltaMs ?: 0L))
+        assertEquals("+10s", formatSeekJumpFeedback(second?.totalDeltaMs ?: 0L))
     }
 
     @Test
