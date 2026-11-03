@@ -37,6 +37,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridS
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Card
 import androidx.compose.material3.ElevatedCard
@@ -136,6 +137,7 @@ import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
@@ -869,8 +871,10 @@ fun SearchResultCard(
     val lastMediaNumber = lastPosition?.mediaNumber
     val watchedEntry = watchPresentation.watched[post.id].takeIf { showWatchHistory }
     val cardViewedMediaNumber = viewedMediaNumber ?: watchedEntry?.maxViewedMediaNumber
-    val cardMetadataLabel = metadataLabel ?: watchedEntry?.let {
-        relativeTimeLabel(System.currentTimeMillis(), lastPosition?.lastViewedAt ?: it.viewedAtEpochMs)
+    // A bare "2h ago" over a result reads as its upload date, so watch history gets its own mark.
+    val watchedDescription = watchedEntry?.takeIf { metadataLabel == null }?.let {
+        val watchedAt = relativeTimeLabel(System.currentTimeMillis(), lastPosition?.lastViewedAt ?: it.viewedAtEpochMs)
+        "Watched ${watchedAt.lowercase(Locale.US)}"
     }
     val effectivePost = resolvedPostOverride?.let { resolved ->
         mergeResolvedPostForPresentation(original = post, resolved = resolved)
@@ -956,7 +960,8 @@ fun SearchResultCard(
         val durationLabel = animatedDurationLabel(effectivePost, acquiredDurationMs)
         val supportingContent = searchCardSupportingContent(
             title = title,
-            metadataLabel = cardMetadataLabel,
+            metadataLabel = metadataLabel,
+            showWatchedBadge = watchedDescription != null,
             showSourceBadge = showSourceBadge,
         )
         val mediaContentDescription = title ?: effectivePost.id.sourcePostId
@@ -1252,8 +1257,11 @@ fun SearchResultCard(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (cardMetadataLabel != null) {
-                        PreviewMetadataLabel(cardMetadataLabel)
+                    if (metadataLabel != null) {
+                        PreviewMetadataLabel(metadataLabel)
+                    }
+                    if (watchedDescription != null) {
+                        PreviewWatchedBadge(watchedDescription)
                     }
                     if (showSourceBadge) {
                         SourceBadge(source = effectivePost.id.source)
@@ -1295,11 +1303,12 @@ internal data class SearchCardSupportingContent(
 internal fun searchCardSupportingContent(
     title: String?,
     metadataLabel: String?,
+    showWatchedBadge: Boolean,
     showSourceBadge: Boolean,
 ): SearchCardSupportingContent {
     return SearchCardSupportingContent(
         showTitleFooter = title != null,
-        showPreviewContext = metadataLabel != null || showSourceBadge,
+        showPreviewContext = metadataLabel != null || showWatchedBadge || showSourceBadge,
     )
 }
 
@@ -1322,6 +1331,21 @@ private fun PreviewMetadataLabel(label: String) {
     }
 }
 
+/** Marks a previously watched post; when it was watched is left to screen readers and Recents. */
+@Composable
+private fun PreviewWatchedBadge(description: String) {
+    Surface(
+        color = Color.Black.copy(alpha = 0.55f),
+        shape = RoundedCornerShape(6.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Default.Visibility,
+            contentDescription = description,
+            tint = Color.White,
+            modifier = Modifier.padding(4.dp).size(14.dp),
+        )
+    }
+}
 
 internal fun imageCountBadgeLabel(count: Int, viewedMediaNumber: Int?): String {
     val progress = viewedMediaNumber?.coerceIn(1, count)

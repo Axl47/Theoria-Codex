@@ -102,6 +102,7 @@ class SearchScreenMediaBehaviorTest {
             searchCardSupportingContent(
                 title = null,
                 metadataLabel = null,
+                showWatchedBadge = false,
                 showSourceBadge = false,
             ),
         )
@@ -113,6 +114,7 @@ class SearchScreenMediaBehaviorTest {
             searchCardSupportingContent(
                 title = null,
                 metadataLabel = "2h",
+                showWatchedBadge = false,
                 showSourceBadge = true,
             ),
         )
@@ -128,6 +130,7 @@ class SearchScreenMediaBehaviorTest {
             searchCardSupportingContent(
                 title = "A meaningful title",
                 metadataLabel = "2h",
+                showWatchedBadge = false,
                 showSourceBadge = true,
             ),
         )

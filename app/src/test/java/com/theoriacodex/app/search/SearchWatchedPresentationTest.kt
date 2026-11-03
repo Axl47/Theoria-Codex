@@ -8,6 +8,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.search.state.SearchContentUiState
@@ -74,6 +75,7 @@ class SearchWatchedPresentationTest {
             }
         }
         compose.onNodeWithText("9/12").assertIsDisplayed()
-        compose.onNodeWithText("Just now").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Watched just now").assertExists()
+        compose.onNodeWithText("Just now").assertDoesNotExist()
     }
 }

@@ -9,9 +9,11 @@
 - Rename a recommendation profile from its Settings menu, keeping its likes, Codices, and hidden tags.
 
 ### Changed
+
 - Show every Codex in the Library as a cover tile with its name and count on the cover, matching the Saved collections; Codex actions now open by long press.
 - Separate Saved from the other Codices in the Library with a thin line.
 - Choose the source in For You and Recents from the same icon menu as Search.
+- Mark watched posts in Search and For You with an eye icon instead of a time label that looked like an upload date.
 
 ## [1.0.1] - 2026-11-02
 
