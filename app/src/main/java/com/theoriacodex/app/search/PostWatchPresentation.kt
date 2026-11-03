@@ -1,5 +1,19 @@
 package com.theoriacodex.app.search
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.referentialEqualityPolicy
+import androidx.compose.runtime.remember
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import com.theoriacodex.data.repository.ReadingPositionRepository
+import com.theoriacodex.data.repository.RecentsRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.theoriacodex.data.repository.ReadingPosition
 import com.theoriacodex.data.repository.RecentPostEntry
@@ -14,7 +28,31 @@ internal data class PostWatchPresentation(
     val watched: Map<PostId, RecentPostEntry> = emptyMap(),
 )
 
-internal val LocalPostWatchPresentation = staticCompositionLocalOf { PostWatchPresentation() }
+/**
+ * A stable holder rather than the value: watch history changes every time a post opens, and a static
+ * local whose value changes recomposes everything beneath it, which here is the whole app.
+ */
+internal val LocalPostWatchPresentation = staticCompositionLocalOf<State<PostWatchPresentation>> {
+    mutableStateOf(PostWatchPresentation())
+}
+
+/** Watch history for every card, built off the main thread so opening a post cannot stall on it. */
+@Composable
+internal fun rememberPostWatchPresentation(
+    positions: ReadingPositionRepository,
+    recents: RecentsRepository,
+): State<PostWatchPresentation> {
+    val state = remember { mutableStateOf(PostWatchPresentation(), referentialEqualityPolicy()) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(positions, recents, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            combine(positions.observe(), recents.observeWatchedPosts(), ::postWatchPresentation)
+                .flowOn(Dispatchers.Default)
+                .collect { state.value = it }
+        }
+    }
+    return state
+}
 
 internal fun postWatchPresentation(
     positions: List<ReadingPosition>,

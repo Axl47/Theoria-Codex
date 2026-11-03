@@ -461,7 +461,7 @@ private fun RecentPostCard(
         showSourceBadge = true,
         metadataLabel = relativeTimeLabel(
             now,
-            com.theoriacodex.app.search.LocalPostWatchPresentation.current.positions[post.id]?.lastViewedAt
+            com.theoriacodex.app.search.LocalPostWatchPresentation.current.value.positions[post.id]?.lastViewedAt
                 ?: entry.viewedAtEpochMs,
         ),
         viewedMediaNumber = viewedMediaNumber,

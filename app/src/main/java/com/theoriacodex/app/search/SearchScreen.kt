@@ -877,7 +877,7 @@ fun SearchResultCard(
     var resolvedPostOverride by remember(post.id) { mutableStateOf<Post?>(null) }
     var resolutionAttempted by remember(post.id) { mutableStateOf(false) }
     val mediaRecoveryAttemptedUrls = remember(post.id) { mutableSetOf<String>() }
-    val watchPresentation = LocalPostWatchPresentation.current
+    val watchPresentation = LocalPostWatchPresentation.current.value
     val lastPosition = watchPresentation.positions[post.id]
     val lastMediaNumber = lastPosition?.mediaNumber
     val watchedEntry = watchPresentation.watched[post.id].takeIf { showWatchHistory }
