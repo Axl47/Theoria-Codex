@@ -74,42 +74,32 @@ class ViewerTransformStateTest {
     }
 
     @Test
-    fun `multi-image scroll inversion flips only multi-image swipe direction`() {
-        assertEquals(
-            ViewerHorizontalSwipeDirection.Previous,
-            viewerSwipeDirectionForSetting(
-                rawDirection = ViewerHorizontalSwipeDirection.Next,
-                currentMediaCount = 3,
-                invertMultiImageScrollDirection = true,
-            ),
-        )
-        assertEquals(
-            ViewerHorizontalSwipeDirection.Next,
-            viewerSwipeDirectionForSetting(
-                rawDirection = ViewerHorizontalSwipeDirection.Next,
-                currentMediaCount = 1,
-                invertMultiImageScrollDirection = true,
-            ),
-        )
-        assertEquals(
-            ViewerHorizontalSwipeDirection.Next,
-            viewerSwipeDirectionForSetting(
-                rawDirection = ViewerHorizontalSwipeDirection.Next,
-                currentMediaCount = 3,
-                invertMultiImageScrollDirection = false,
-            ),
-        )
-        assertTrue(
-            viewerMediaPagerReverseLayout(
-                mediaCount = 3,
-                invertMultiImageScrollDirection = true,
-            ),
-        )
-        assertFalse(
-            viewerMediaPagerReverseLayout(
-                mediaCount = 1,
-                invertMultiImageScrollDirection = true,
-            ),
-        )
+    fun `multi-image scroll inversion only reverses multi-image layouts`() {
+        assertTrue(viewerMediaPagerReverseLayout(mediaCount = 3, invertMultiImageScrollDirection = true))
+        assertFalse(viewerMediaPagerReverseLayout(mediaCount = 1, invertMultiImageScrollDirection = true))
+        assertFalse(viewerMediaPagerReverseLayout(mediaCount = 3, invertMultiImageScrollDirection = false))
+    }
+
+    @Test
+    fun `flings follow their direction and slow releases need distance`() {
+        fun decide(displacement: Float, velocity: Float) = viewerSwipeDecision(displacement, velocity, pageExtent = 1000f, flingVelocity = 400f)
+
+        // A short, fast flick commits; the same distance held still does not.
+        assertEquals(ViewerHorizontalSwipeDirection.Next, decide(-60f, -2000f))
+        assertEquals(null, decide(-60f, 0f))
+        // A slow drag commits only past 40% of the page.
+        assertEquals(null, decide(-300f, -100f))
+        assertEquals(ViewerHorizontalSwipeDirection.Previous, decide(500f, 0f))
+        // Flicking back against a long drag cancels it.
+        assertEquals(null, decide(-700f, 2000f))
+    }
+
+    @Test
+    fun `edge stretch resists more the further it is pulled and keeps its direction`() {
+        val near = viewerEdgeStretch(50f, 1000f)
+        val far = viewerEdgeStretch(500f, 1000f)
+        assertTrue(far > near)
+        assertTrue(far < 180f)
+        assertEquals(-near, viewerEdgeStretch(-50f, 1000f), 0.001f)
     }
 }

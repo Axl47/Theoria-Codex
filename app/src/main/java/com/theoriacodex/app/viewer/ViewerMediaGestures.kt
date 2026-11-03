@@ -10,8 +10,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.PointerId
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
@@ -97,113 +98,112 @@ private fun mediaAccessibilityActions(
     }
 }
 
-/** One direction lock keeps level adjustments, page navigation, taps, and pinch gestures separate. */
+/** What the Viewer's recognizer may do for the gesture that is starting. */
+internal data class ViewerGestureConfig(
+    val enabled: Boolean,
+    val levels: ViewerLevelControls? = null,
+    /** Height kept free at the bottom for the timeline, which handles its own drags. */
+    val reservedBottomPx: Float = 0f,
+)
+
+/** Receives one-finger gestures; pager and level ownership stay with the screen. */
+internal interface ViewerGestureHandler {
+    fun onPress()
+    fun onHorizontalDrag(displacement: Float)
+    fun onHorizontalRelease(displacement: Float, velocity: Float)
+    /** The gesture ended without a horizontal release: a tap, a vertical drag, or a second finger. */
+    fun onGestureEnd()
+    fun onLevelLimit()
+}
+
+/**
+ * The Viewer's single recognizer. It sits above the pagers so a finger keeps its gesture even when
+ * the page it landed on slides away, and one direction lock keeps level adjustments, navigation,
+ * taps, and pinches separate. It reads [config] per gesture, so selection changes cannot restart it.
+ */
 @Composable
-internal fun Modifier.viewerMediaSwipe(
-    key: ViewerMediaKey,
-    zoomed: Boolean,
-    mediaCount: Int,
-    invertMultiImageScrollDirection: Boolean,
-    onNavigate: (ViewerHorizontalSwipeDirection) -> Unit,
-    enabled: Boolean = true,
-    levelControls: ViewerLevelControls? = null,
-    onSwipeProgress: (Float) -> Unit = {},
-    onSwipeCancelled: () -> Unit = {},
-): Modifier {
-    val currentOnNavigate by rememberUpdatedState(onNavigate)
-    val currentProgress by rememberUpdatedState(onSwipeProgress)
-    val currentCancel by rememberUpdatedState(onSwipeCancelled)
-    return pointerInput(key, enabled, zoomed, mediaCount, invertMultiImageScrollDirection, levelControls) {
-        if (!enabled || zoomed) return@pointerInput
-        var navigating = false
-        try {
-            awaitEachGesture {
-                navigating = false
-                navigating = readViewerNavigationGesture(mediaCount, invertMultiImageScrollDirection, levelControls,
-                    { currentOnNavigate(it) }, { currentProgress(it) }, { currentCancel() })
-            }
-        } finally {
-            if (!navigating) currentCancel()
-            levelControls?.end()
+internal fun Modifier.viewerGestures(config: ViewerGestureConfig, handler: ViewerGestureHandler): Modifier {
+    val currentConfig by rememberUpdatedState(config)
+    val currentHandler by rememberUpdatedState(handler)
+    return pointerInput(Unit) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val gesture = currentConfig
+            if (!gesture.enabled || down.position.y > size.height - gesture.reservedBottomPx) return@awaitEachGesture
+            currentHandler.onPress()
+            val release = readViewerGesture(down, gesture) { currentHandler }
+            if (release != null) currentHandler.onHorizontalRelease(release.x, release.velocity)
+            else currentHandler.onGestureEnd()
         }
     }
 }
 
-private suspend fun AwaitPointerEventScope.readViewerNavigationGesture(
-    mediaCount: Int,
-    inverted: Boolean,
-    levels: ViewerLevelControls?,
-    onNavigate: (ViewerHorizontalSwipeDirection) -> Unit,
-    onProgress: (Float) -> Unit,
-    onCancel: () -> Unit,
-): Boolean {
-    val down = awaitFirstDown(requireUnconsumed = false)
-    val threshold = maxOf(48f, size.width * 0.12f)
+private class ViewerHorizontalRelease(val x: Float, val velocity: Float)
+
+private enum class ViewerGestureMode { Pending, Horizontal, Level, Ignored }
+
+private fun viewerVerticalMode(column: ViewerGestureColumn, config: ViewerGestureConfig): ViewerGestureMode =
+    if (config.levels != null) ViewerGestureMode.Level else ViewerGestureMode.Ignored
+
+/** Follows one finger until it lifts; returns the horizontal release, if that is what it was. */
+private suspend fun AwaitPointerEventScope.readViewerGesture(
+    down: PointerInputChange,
+    config: ViewerGestureConfig,
+    handler: () -> ViewerGestureHandler,
+): ViewerHorizontalRelease? {
+    val tracker = VelocityTracker().apply { addPosition(down.uptimeMillis, down.position) }
+    val column = viewerGestureColumn(down.position.x, size.width)
     val control = if (down.position.x < size.width / 2f) ViewerLevelControl.Brightness else ViewerLevelControl.Volume
-    val reversed = inverted && mediaCount > 1
-    val swipe = readViewerSwipe(down.id, threshold, levels, control) { onProgress(if (reversed) -it else it) }
-    levels?.end()
-    val direction = swipe.direction(threshold)
-    if (direction == null) {
-        onCancel()
-        return false
-    }
-    onNavigate(viewerSwipeDirectionForSetting(direction, mediaCount, inverted))
-    return true
-}
-
-private enum class ViewerSwipeAxis { Pending, Horizontal, Vertical }
-
-private class ViewerSwipeMotion {
+    var mode = ViewerGestureMode.Pending
     var x = 0f
     var y = 0f
-    var axis = ViewerSwipeAxis.Pending
-    var released = false
-
-    fun add(delta: Offset, threshold: Float, touchSlop: Float) {
-        x += delta.x
-        y += delta.y
-        if (axis != ViewerSwipeAxis.Pending) return
-        axis = when {
-            abs(x) > threshold * 0.35f && abs(x) > abs(y) * 1.25f -> ViewerSwipeAxis.Horizontal
-            abs(y) > touchSlop && abs(y) > abs(x) * 1.25f -> ViewerSwipeAxis.Vertical
-            else -> ViewerSwipeAxis.Pending
+    var atLimit = false
+    try {
+        while (true) {
+            val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+            val change = event.changes.singleOrNull()?.takeIf { it.id == down.id } ?: return null
+            val delta = change.position - change.previousPosition
+            x += delta.x
+            y += delta.y
+            tracker.addPosition(change.uptimeMillis, change.position)
+            if (mode == ViewerGestureMode.Pending) {
+                val slop = viewConfiguration.touchSlop
+                mode = when {
+                    abs(x) > slop && abs(x) > abs(y) * 1.25f -> ViewerGestureMode.Horizontal
+                    abs(y) > slop && abs(y) > abs(x) * 1.25f -> viewerVerticalMode(column, config).also {
+                        if (it == ViewerGestureMode.Level) config.levels?.begin(control)
+                    }
+                    else -> ViewerGestureMode.Pending
+                }
+                if (mode == ViewerGestureMode.Level) {
+                    config.levels?.drag(-y / levelDragRange())
+                    atLimit = config.levels.isAtLimit()
+                    change.consume()
+                    if (!change.pressed) return null
+                    continue
+                }
+            }
+            when (mode) {
+                ViewerGestureMode.Horizontal -> { handler().onHorizontalDrag(x); change.consume() }
+                ViewerGestureMode.Level -> {
+                    config.levels?.drag(-delta.y / levelDragRange())
+                    val limit = config.levels.isAtLimit()
+                    if (limit && !atLimit) handler().onLevelLimit()
+                    atLimit = limit
+                    change.consume()
+                }
+                ViewerGestureMode.Ignored, ViewerGestureMode.Pending -> Unit
+            }
+            if (!change.pressed) {
+                return if (mode == ViewerGestureMode.Horizontal) ViewerHorizontalRelease(x, tracker.calculateVelocity().x) else null
+            }
         }
-    }
-
-    fun direction(threshold: Float): ViewerHorizontalSwipeDirection? {
-        if (!released || axis != ViewerSwipeAxis.Horizontal || abs(x) < threshold) return null
-        return if (x < 0f) ViewerHorizontalSwipeDirection.Next else ViewerHorizontalSwipeDirection.Previous
+    } finally {
+        config.levels?.end()
     }
 }
 
-private suspend fun AwaitPointerEventScope.readViewerSwipe(
-    id: PointerId,
-    threshold: Float,
-    levels: ViewerLevelControls?,
-    control: ViewerLevelControl,
-    onHorizontalProgress: (Float) -> Unit,
-): ViewerSwipeMotion {
-    val swipe = ViewerSwipeMotion()
-    var adjusting = false
-    while (true) {
-        val event = awaitPointerEvent(pass = PointerEventPass.Initial)
-        val change = event.changes.singleOrNull()?.takeIf { it.id == id } ?: break
-        val delta = change.position - change.previousPosition
-        swipe.add(delta, threshold, viewConfiguration.touchSlop)
-        if (swipe.axis == ViewerSwipeAxis.Vertical && levels != null) {
-            if (!adjusting) levels.begin(control)
-            levels.drag(-(if (adjusting) delta.y else swipe.y) / (size.height * 0.6f).coerceAtLeast(1f))
-            adjusting = true
-            change.consume()
-        } else if (swipe.axis == ViewerSwipeAxis.Horizontal) {
-            onHorizontalProgress(swipe.x)
-            change.consume()
-        }
-        if (!change.pressed) {
-            swipe.released = true
-            break
-        }
-    }
-    return swipe
-}
+private fun AwaitPointerEventScope.levelDragRange(): Float = (size.height * 0.6f).coerceAtLeast(1f)
+
+private fun ViewerLevelControls?.isAtLimit(): Boolean =
+    this?.feedback?.takeIf { it.available }?.fraction?.let { it <= 0f || it >= 1f } == true

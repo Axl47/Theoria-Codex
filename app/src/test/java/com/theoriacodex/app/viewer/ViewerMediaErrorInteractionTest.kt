@@ -43,15 +43,15 @@ class ViewerMediaErrorInteractionTest {
             MaterialTheme {
                 Box(Modifier.size(360.dp, 500.dp)) {
                     ViewerMediaPage(
-                        post = post, media = video, mediaIndex = 0, mediaCount = 1,
+                        post = post, media = video, mediaIndex = 0,
                         controls = ViewerRendererControls(true, true, false, true, 1f, 0L, 0L),
                         events = events, transform = ViewerTransformState(), onTransformChanged = {},
-                        layout = ViewerMediaLayout(false, false, false, false),
+                        layout = ViewerMediaLayout(false, false, false),
                         // Avoid hardware playback while exercising the actual video-page gesture layers.
                         videoOptions = ViewerVideoOptions(VideoQuality.AUTO, null, "Unavailable", false),
                         videoPositions = positions, mediaError = error.value, imageSession = imageSession,
                         pixivUgoiraClient = null, onAction = { actions += it }, onInteraction = {},
-                        onToggleChrome = {}, onNavigate = {}, onRequestMediaRecovery = null,
+                        onToggleChrome = {}, onRequestMediaRecovery = null,
                     )
                 }
             }

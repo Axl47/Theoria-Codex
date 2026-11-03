@@ -131,9 +131,7 @@ class ViewerGalleryLoadingSwipeTest {
                 ViewerHorizontalSwipeDirection.Next, page.hasPendingGalleryMedia()))
             assertEquals(ViewerHorizontalSwipeTarget(0, 0), viewerHorizontalSwipeTarget(1, 0, page.media.size, 2, 1,
                 ViewerHorizontalSwipeDirection.Previous, page.hasPendingGalleryMedia()))
-            assertEquals(ViewerHorizontalSwipeDirection.Previous, viewerSwipeDirectionForSetting(
-                ViewerHorizontalSwipeDirection.Next, page.swipeMediaCount(), true,
-            ))
+            assertTrue(viewerMediaPagerReverseLayout(page.swipeMediaCount(), invertMultiImageScrollDirection = true))
         }
         state = reduceViewerState(state, ViewerAction.ResolutionCompleted(session,
             post.copy(media = listOf(image(1), image(2)), mediaCount = 2),

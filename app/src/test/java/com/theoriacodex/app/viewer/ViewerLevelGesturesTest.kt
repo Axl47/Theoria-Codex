@@ -42,7 +42,7 @@ class ViewerLevelGesturesTest {
     private lateinit var levels: ViewerLevelControls
     private lateinit var audio: AudioManager
     private lateinit var activity: Activity
-    private val layout = mutableStateOf(ViewerMediaLayout(false, false, false, false))
+    private val layout = mutableStateOf(ViewerMediaLayout(false, false, false))
     private val transform = mutableStateOf(ViewerTransformState())
     private val controls = mutableStateOf(ViewerRendererControls(true, true, false, true, 1f, 0L, 0L))
     private val navigations = mutableListOf<ViewerHorizontalSwipeDirection>()
@@ -166,11 +166,25 @@ class ViewerLevelGesturesTest {
         val imageSession = ViewerImageSession()
         compose.setContent {
             MaterialTheme {
-                Box(Modifier.size(360.dp, 500.dp)) {
+                Box(Modifier.size(360.dp, 500.dp).viewerGestures(
+                    ViewerGestureConfig(
+                        enabled = !transform.value.isZoomed && !layout.value.pictureInPicture && !layout.value.touchExploration,
+                        levels = levels.takeIf { video },
+                    ),
+                    object : ViewerGestureHandler {
+                        override fun onPress() = Unit
+                        override fun onHorizontalDrag(displacement: Float) = Unit
+                        override fun onHorizontalRelease(displacement: Float, velocity: Float) {
+                            viewerSwipeDecision(displacement, velocity, 1000f, 400f)?.let(navigations::add)
+                        }
+                        override fun onGestureEnd() = Unit
+                        override fun onLevelLimit() = Unit
+                    },
+                )) {
                     ViewerMediaPage(
-                        post, media, 0, 1, controls.value, events, transform.value, { transform.value = it },
+                        post, media, 0, controls.value, events, transform.value, { transform.value = it },
                         layout.value, ViewerVideoOptions(VideoQuality.AUTO, null, "Unavailable", false),
-                        positions, null, imageSession, null, {}, {}, { chromeToggles++ }, navigations::add, null,
+                        positions, null, imageSession, null, {}, {}, { chromeToggles++ }, null,
                         levelControls = levels,
                     )
                 }

@@ -49,7 +49,6 @@ internal data class ViewerMediaLayout(
     val landscape: Boolean,
     val pictureInPicture: Boolean,
     val touchExploration: Boolean,
-    val invertGalleryDirection: Boolean,
 )
 
 internal data class ViewerVideoOptions(
@@ -59,13 +58,12 @@ internal data class ViewerVideoOptions(
     val diagnosticsEnabled: Boolean,
 )
 
-/** Owns local gestures and selects a renderer; navigation and route state stay in ViewerScreen. */
+/** Owns taps and pinches and selects a renderer; swipes and route state stay in ViewerScreen. */
 @Composable
 internal fun ViewerMediaPage(
     post: Post,
     media: ImageRef,
     mediaIndex: Int,
-    mediaCount: Int,
     controls: ViewerRendererControls,
     events: ViewerRendererEvents,
     transform: ViewerTransformState,
@@ -79,19 +77,15 @@ internal fun ViewerMediaPage(
     onAction: (ViewerAction) -> Unit,
     onInteraction: () -> Unit,
     onToggleChrome: () -> Unit,
-    onNavigate: (ViewerHorizontalSwipeDirection) -> Unit,
     onRequestMediaRecovery: ((Post, ImageRef) -> Unit)?,
     levelControls: ViewerLevelControls? = null,
     returnProgress: Float = 0f,
-    onSwipeProgress: (Float) -> Unit = {},
-    onSwipeCancelled: () -> Unit = {},
 ) {
     val key = ViewerMediaKey(post.id, mediaIndex)
     val isVideo = isVideoMediaRef(media)
     val isGif = isGifMediaRef(media)
     val isUgoira = isPixivUgoiraMedia(post, media) && pixivUgoiraClient != null
-    val isWebP = post.id.source == SourceKey.HITOMI && isAnimatedImageMediaRef(media)
-    val animated = isVideo || isGif || isUgoira || isWebP
+    val animated = viewerMediaIsAnimated(post, media, pixivUgoiraClient != null)
     val interactions = remember(key) { ViewerMediaInteractions() }
     val transformModifier = Modifier.graphicsLayer {
         scaleX = transform.zoom
@@ -116,9 +110,8 @@ internal fun ViewerMediaPage(
             )
             FittedSeekJumpFeedbackOverlay(interactions.feedback, viewerAspectRatio(post), interactions::clearFeedback, Modifier.matchParentSize())
         }
-        ViewerMediaGestureLayer(key, mediaCount, isVideo || isGif || isUgoira, animated, interactions, controls,
-            transform, transformBounds, onTransformChanged, layout, onAction, onInteraction, onToggleChrome, onNavigate,
-            levelControls.takeIf { isVideo }, onSwipeProgress, onSwipeCancelled)
+        ViewerMediaGestureLayer(key, isVideo || isGif || isUgoira, animated, interactions, controls,
+            transform, transformBounds, onTransformChanged, layout, onAction, onInteraction, onToggleChrome)
         if (controls.isActive && isVideo && !layout.pictureInPicture && levelControls != null) {
             FittedViewerMediaOverlay(viewerAspectRatio(post), Modifier.matchParentSize()) {
                 ViewerLevelFeedbackOverlay(levelControls, Modifier.align(Alignment.TopCenter).padding(top = 8.dp))
@@ -147,6 +140,11 @@ private class ViewerMediaInteractions {
     fun clearFeedback(serial: Int) { if (feedback?.serial == serial) feedback = null }
 }
 
+/** Animated media carries a timeline, which reserves the bottom of the page for its own drags. */
+internal fun viewerMediaIsAnimated(post: Post, media: ImageRef, hasUgoiraClient: Boolean): Boolean =
+    isVideoMediaRef(media) || isGifMediaRef(media) || (isPixivUgoiraMedia(post, media) && hasUgoiraClient) ||
+        (post.id.source == SourceKey.HITOMI && isAnimatedImageMediaRef(media))
+
 private fun viewerAspectRatio(post: Post): Float? {
     val width = post.width?.takeIf { it > 0 } ?: return null
     val height = post.height?.takeIf { it > 0 } ?: return null
@@ -155,14 +153,11 @@ private fun viewerAspectRatio(post: Post): Float? {
 
 @Composable
 private fun ViewerMediaGestureLayer(
-    key: ViewerMediaKey, mediaCount: Int, seekable: Boolean, animated: Boolean,
+    key: ViewerMediaKey, seekable: Boolean, animated: Boolean,
     interactions: ViewerMediaInteractions, controls: ViewerRendererControls,
     transform: ViewerTransformState, bounds: ViewerTransformBounds, onTransformChanged: (ViewerTransformState) -> Unit,
     layout: ViewerMediaLayout, onAction: (ViewerAction) -> Unit, onInteraction: () -> Unit,
-    onToggleChrome: () -> Unit, onNavigate: (ViewerHorizontalSwipeDirection) -> Unit,
-    levelControls: ViewerLevelControls?,
-    onSwipeProgress: (Float) -> Unit,
-    onSwipeCancelled: () -> Unit,
+    onToggleChrome: () -> Unit,
 ) {
     val currentTransform by rememberUpdatedState(transform)
     val currentOnTransformChanged by rememberUpdatedState(onTransformChanged)
@@ -197,13 +192,6 @@ private fun ViewerMediaGestureLayer(
     )
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxWidth()
-            .viewerMediaSwipe(
-                key, transform.isZoomed, mediaCount, layout.invertGalleryDirection, onNavigate,
-                enabled = controls.isActive && !layout.pictureInPicture && !layout.touchExploration,
-                levelControls = levelControls,
-                onSwipeProgress = onSwipeProgress,
-                onSwipeCancelled = onSwipeCancelled,
-            )
             .transformable(transformState, canPan = { transform.isZoomed }).then(gestures))
         if (controls.showControls && animated) Spacer(Modifier.fillMaxWidth().height(96.dp + LocalViewerPostStripInset.current))
     }
