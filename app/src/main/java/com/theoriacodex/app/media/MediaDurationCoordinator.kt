@@ -3,6 +3,7 @@ package com.theoriacodex.app.media
 import android.os.Trace
 import com.theoriacodex.data.repository.MediaDurationRepository
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.SourceKey
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -92,6 +93,7 @@ class MediaDurationCoordinator(
     private val retryDelayMs: Long = DEFAULT_RETRY_DELAY_MS,
     private val maxQueuedKeys: Int = DEFAULT_MAX_QUEUED_KEYS,
     private val maxConcurrentWork: Int = DEFAULT_MAX_CONCURRENT_WORK,
+    private val maxConcurrentForSource: (SourceKey) -> Int = ::defaultDurationConcurrencyForSource,
     private val maxRetainedStates: Int = DEFAULT_MAX_RETAINED_STATES,
     private val traceRecorder: MediaDurationTraceRecorder = AndroidMediaDurationTraceRecorder,
 ) : AutoCloseable {
@@ -188,7 +190,7 @@ class MediaDurationCoordinator(
         deferredDemands.remove(demand.key).forEach(scheduler::submit)
         putStateLocked(demand.key, MediaDurationState.Pending)
         hadOutstandingWork = true
-        preemptBackgroundForLocked(demand.priority)
+        preemptBackgroundForLocked(demand.priority, demand.key.postId.source)
         pumpLocked()
         return DurationDemandAdmission.SCHEDULED
     }
@@ -293,19 +295,27 @@ class MediaDurationCoordinator(
         return true
     }
 
-    private fun preemptBackgroundForLocked(priority: DurationDemandPriority) {
-        if (priority > DurationDemandPriority.VISIBLE || active.size < maxConcurrentWork) return
+    private fun preemptBackgroundForLocked(priority: DurationDemandPriority, source: SourceKey) {
+        if (priority > DurationDemandPriority.VISIBLE) return
+        val full = active.size >= maxConcurrentWork
+        if (!full && !isSourceSaturatedLocked(source)) return
         val background = active.values
-            .filter { work -> work.priority == DurationDemandPriority.BACKGROUND_IDLE }
+            .filter { work ->
+                work.priority == DurationDemandPriority.BACKGROUND_IDLE && (full || work.key.postId.source == source)
+            }
             .minByOrNull(ActiveWork::sequence)
             ?: return
         cancelActiveLocked(background, requeue = true)
     }
 
+    private fun isSourceSaturatedLocked(source: SourceKey): Boolean {
+        return active.keys.count { key -> key.postId.source == source } >= maxConcurrentForSource(source)
+    }
+
     private fun pumpLocked() {
         while (active.size < maxConcurrentWork) {
             refillQueueLocked()
-            val next = scheduler.takeNext(gate) ?: break
+            val next = scheduler.takeNext(gate, ::isSourceSaturatedLocked) ?: break
             val post = posts[next.key]
             if (post == null) {
                 removeStateIfPendingLocked(next.key)
@@ -495,10 +505,16 @@ class MediaDurationCoordinator(
     private companion object {
         const val DEFAULT_RETRY_DELAY_MS = 5L * 60L * 1_000L
         const val DEFAULT_MAX_QUEUED_KEYS = 512
-        const val DEFAULT_MAX_CONCURRENT_WORK = 1
+        const val DEFAULT_MAX_CONCURRENT_WORK = 8
         const val DEFAULT_MAX_RETAINED_STATES = 2_048
         const val LEGACY_ENVIRONMENT_IDENTITY = "legacy-duration-environment"
     }
+}
+
+/** Per-source lanes keep one slow or rate-limited host from holding up the others. */
+private fun defaultDurationConcurrencyForSource(source: SourceKey): Int {
+    // Pixiv durations cost a rate-limited API call; the others are ranged reads from a media CDN.
+    return if (source == SourceKey.PIXIV) 2 else 4
 }
 
 internal const val TRACE_DURATION_DEMAND = "TheoriaDurationDemand"

@@ -1,5 +1,7 @@
 package com.theoriacodex.app.media
 
+import com.theoriacodex.domain.model.SourceKey
+
 data class DurationExecutionGate(
     val lifecycleStarted: Boolean,
     val scrollIdle: Boolean,
@@ -64,11 +66,14 @@ class DurationDemandScheduler(
     }
 
     /** A duration filter hides posts until decided, so only its demand runs during a scroll. */
-    fun takeNext(gate: DurationExecutionGate): ScheduledDurationWork? {
+    fun takeNext(
+        gate: DurationExecutionGate,
+        isSourceSaturated: (SourceKey) -> Boolean = { false },
+    ): ScheduledDurationWork? {
         if (!gate.lifecycleStarted) return null
         val next = entries.values
             .asSequence()
-            .filter { entry -> gate.allows(entry.effectivePriority()) }
+            .filter { entry -> gate.allows(entry.effectivePriority()) && !isSourceSaturated(entry.key.postId.source) }
             .minWithOrNull(ENTRY_COMPARATOR)
             ?: return null
         entries.remove(next.key)

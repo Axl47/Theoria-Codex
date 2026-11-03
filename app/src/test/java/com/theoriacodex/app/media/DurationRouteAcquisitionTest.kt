@@ -31,7 +31,7 @@ class DurationRouteAcquisitionTest {
             probeDuration = probe::probe,
             traceRecorder = NoOpMediaDurationTraceRecorder,
         )
-        val coordinator = MediaDurationCoordinator(engine, parentScope = backgroundScope,
+        val coordinator = MediaDurationCoordinator(engine, parentScope = backgroundScope, maxConcurrentWork = 1,
             traceRecorder = NoOpMediaDurationTraceRecorder)
         val route = MediaDurationRouteViewModel(coordinator, "search", backgroundScope)
         val posts = List(3) { animatedTestPost(sourcePostId = "range-$it") }

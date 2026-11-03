@@ -297,7 +297,7 @@ class MediaDurationCoordinatorTest {
     }
 
     @Test
-    fun `default coordinator executes at most one acquisition at a time`() = runTest {
+    fun `a one-slot coordinator executes at most one acquisition at a time`() = runTest {
         val releaseFirst = CompletableDeferred<Unit>()
         var active = 0
         var maximumActive = 0
@@ -326,6 +326,37 @@ class MediaDurationCoordinatorTest {
         runCurrent()
         assertEquals(1, maximumActive)
         assertEquals(3, completed)
+        coordinator.close()
+    }
+
+    @Test
+    fun `a saturated source waits without holding up another source`() = runTest {
+        val started = mutableListOf<String>()
+        val release = CompletableDeferred<Unit>()
+        val coordinator = MediaDurationCoordinator(
+            acquirer = MediaDurationAcquirer { post ->
+                started += post.id.sourcePostId
+                release.await()
+                known(1_000L)
+            },
+            parentScope = this,
+            maxConcurrentWork = 8,
+            maxConcurrentForSource = { source -> if (source == SourceKey.HITOMI) 1 else 2 },
+            traceRecorder = NoOpMediaDurationTraceRecorder,
+        )
+        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        val hitomi = listOf(post("slow-1"), post("slow-2"))
+        val gelbooru = post("fast").let { it.copy(id = PostId(SourceKey.GELBOORU, "fast")) }
+        (hitomi + gelbooru).forEach { candidate ->
+            coordinator.submit(candidate, demand("search", key(candidate), DurationDemandPriority.ACTIVE_FILTER))
+        }
+        runCurrent()
+
+        assertEquals(listOf("slow-1", "fast"), started)
+
+        release.complete(Unit)
+        runCurrent()
+        assertEquals(listOf("slow-1", "fast", "slow-2"), started)
         coordinator.close()
     }
 
@@ -425,6 +456,7 @@ class MediaDurationCoordinatorTest {
             acquirer = acquirer,
             durationRepository = durationRepository,
             parentScope = scope,
+            maxConcurrentWork = 1,
             traceRecorder = traceRecorder,
         )
     }
