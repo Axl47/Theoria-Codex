@@ -1,6 +1,7 @@
 package com.theoriacodex.app.ui.routes
 
 import androidx.compose.runtime.Composable
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -9,7 +10,10 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.core.net.toUri
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -30,6 +34,7 @@ import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsScreen
 import com.theoriacodex.app.settings.SettingsViewModel
 import com.theoriacodex.app.source.creatorBrowsingSources
+import com.theoriacodex.app.ui.findActivity
 import com.theoriacodex.app.sourceauth.CredentialStoreRecoveryState
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.CodexSortMode
@@ -167,8 +172,14 @@ internal fun RecentsDestinationStateBoundary(
     content(recentState)
 }
 
+/**
+ * Shared across the whole activity, not per navigation entry: a Viewer or Codex opened from a feed
+ * must not wait on its own fresh queries for state the app already has.
+ */
 @Composable
-private fun browsingMetadataOwner(data: DataDependencies): BrowsingMetadataViewModel = viewModel(
+internal fun browsingMetadataOwner(data: DataDependencies): BrowsingMetadataViewModel = viewModel(
+    viewModelStoreOwner = LocalContext.current.findActivity() as? ViewModelStoreOwner
+        ?: checkNotNull(LocalViewModelStoreOwner.current),
     key = "browsing-metadata",
     factory = remember(data) { viewModelFactory {
         initializer { BrowsingMetadataViewModel(data.settingsRepository, data.likesRepository,
@@ -183,28 +194,26 @@ internal fun CodexDestinationStateBoundary(
     thumbnailCacheGeneration: Int,
     content: @Composable (CodexDestinationState) -> Unit,
 ) {
-    val owner = viewModel<CodexLibraryViewModel>(
-        key = "codex-library",
-        factory = remember(data) { viewModelFactory { initializer { CodexLibraryViewModel(data) } } },
-    )
-    val settingsState = owner.settings.collectAsStateWithLifecycle()
+    val settingsState = rememberRetained("settings") { data.settingsRepository.observeSettings() }
     val settings = settingsState.value ?: return
-    val codicesState = owner.codices.collectAsStateWithLifecycle()
+    val codicesState = rememberRetained("codices") { data.codexRepository.observeCodices() }
     val availableSourcesState = sources.availableSources.collectAsStateWithLifecycle()
     // A placeholder grid with only virtual tiles would clamp or move the restored collection anchor.
     val codices = codicesState.value ?: return
-    val savedSearches = owner.savedSearches.collectAsStateWithLifecycle().value ?: return
+    val savedSearches = rememberRetained("saved-searches") { data.savedSearches.observeSavedSearches() }.value ?: return
     val availableSources = availableSourcesState.value
-    val source = owner.source
+    val source = remember(data.codexRepository, data.storageDirectory, data.cacheRepository) {
+        CodexCollectionSource(data.codexRepository, data.storageDirectory, data.cacheRepository)
+    }
     DestinationStateBoundary(settingsState) {
         val profile = settings.activeRecommendationProfile()
         val visible = remember(codices, profile.profileId) {
             codices.filter { codexBelongsToProfile(it.codexId, profile.profileId) }
         }
         val collectionIds = remember(visible) { visible.mapTo(linkedSetOf(), Codex::codexId) }
-        val collection by remember(owner, collectionIds, thumbnailCacheGeneration) {
-            owner.collection(collectionIds, thumbnailCacheGeneration)
-        }.collectAsStateWithLifecycle()
+        val collection = rememberRetained("collection:$collectionIds:$thumbnailCacheGeneration") {
+            source.observe(collectionIds)
+        }.value ?: CodexCollectionPresentation()
         val observeActions = remember(source, availableSources) {
             { id: String -> source.observeActionOptions(id, availableSources) }
         }
@@ -238,40 +247,46 @@ internal fun CodexDetailDestinationStateBoundary(
             metadata.likedPostIds else emptySet()))
     }
     if (codexId == com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID) {
-        SavedSearchesCodexBoundary(data, sources, fabRestoreState, sortMode, render)
+        SavedSearchesCodexBoundary(data, sources, metadata.settings, fabRestoreState, sortMode, render)
         return
     }
     if (codexId == com.theoriacodex.app.codex.FOLLOWED_CODEX_ID) {
-        FollowedCodexDestinationStateBoundary(data, sources, fabRestoreState, sortMode, render)
+        FollowedCodexDestinationStateBoundary(data, sources, metadata.settings, fabRestoreState, sortMode, render)
         return
     }
-    val codexState = remember(data.codexRepository, codexId) { data.codexRepository.observeCodex(codexId) }
-        .collectAsStateWithLifecycle(initialValue = null)
-    val itemsState = remember(data.codexRepository, codexId) { data.codexRepository.observeCodexItems(codexId) }
-        .collectAsStateWithLifecycle(initialValue = emptyList())
-    val postsState = remember(data.codexRepository, codexId, sortMode) { data.codexRepository.observeCodexPosts(codexId, sortMode)
-        .onEach { posts -> posts.forEach { data.statisticsRepository.recordPostAvailable(it) } } }
-        .collectAsStateWithLifecycle(initialValue = emptyList())
-    val settingsState = remember(data.settingsRepository) { data.settingsRepository.observeSettings() }
-        .collectAsStateWithLifecycle(initialValue = null)
-    val settings = settingsState.value ?: return
-    val availableState = sources.availableSources.collectAsStateWithLifecycle()
-    DestinationStateBoundary(settingsState) {
-        render(
-            CodexDetailDestinationState(
-                codex = codexState.value,
-                items = itemsState.value,
-                posts = postsState.value,
-                activeProfile = settings.activeRecommendationProfile(),
-                availableSources = availableState.value,
-                creatorBrowsingSources = remember(sources.registry, availableState.value) {
-                    sources.registry.creatorBrowsingSources().intersect(availableState.value)
-                },
-                resolveUnknownAnimatedDurations =
-                    settings.contentFilters.resolveUnknownAnimatedDurations,
-            ),
-        )
+    val lookup by rememberRetained("codex:$codexId") { data.codexRepository.observeCodex(codexId).map(::CodexLookup) }
+    val items by rememberRetained("items:$codexId") { data.codexRepository.observeCodexItems(codexId) }
+    val sortedPosts by rememberRetained("posts:$codexId:$sortMode") {
+        data.codexRepository.observeCodexPosts(codexId, sortMode)
+            .onEach { posts -> posts.forEach { data.statisticsRepository.recordPostAvailable(it) } }
     }
+    // Changing the sort keeps showing the previous order until the new one answers.
+    val shownPosts = remember(codexId) { ShownPosts() }
+    sortedPosts?.let { shownPosts.latest = it }
+    val posts = shownPosts.latest
+    val available by sources.availableSources.collectAsStateWithLifecycle()
+    val settings = metadata.settings
+    render(
+        CodexDetailDestinationState(
+            codex = lookup?.codex.takeIf { posts != null },
+            items = items.orEmpty(),
+            posts = posts.orEmpty(),
+            activeProfile = settings.activeRecommendationProfile(),
+            availableSources = available,
+            creatorBrowsingSources = remember(sources.registry, available) {
+                sources.registry.creatorBrowsingSources().intersect(available)
+            },
+            resolveUnknownAnimatedDurations = settings.contentFilters.resolveUnknownAnimatedDurations,
+            loading = lookup == null || posts == null,
+        ),
+    )
+}
+
+/** Tells "not answered yet" from "answered that no such Codex exists", which a bare null cannot. */
+private data class CodexLookup(val codex: Codex?)
+
+private class ShownPosts {
+    var latest: List<Post>? = null
 }
 
 @Composable
@@ -444,12 +459,11 @@ private fun rememberCodexCollectionState(
 private fun FollowedCodexDestinationStateBoundary(
     data: DataDependencies,
     sources: SourceDependencies,
+    settings: AppSettings,
     filters: com.theoriacodex.data.repository.FeedFabRestoreState,
     sort: CodexSortMode,
     content: @Composable (CodexDetailDestinationState) -> Unit,
 ) {
-    val settings = data.settingsRepository.observeSettings().collectAsStateWithLifecycle(initialValue = null).value
-        ?: return
     val available = sources.availableSources.collectAsStateWithLifecycle().value
     val owner = androidx.lifecycle.viewmodel.compose.viewModel<com.theoriacodex.app.codex.FollowedCodexViewModel>(
         viewModelStoreOwner = com.theoriacodex.app.codex.LocalSavedCodexSessionOwner.current

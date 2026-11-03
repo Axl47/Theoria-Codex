@@ -71,6 +71,21 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
 
+/** Not answered yet is not the same as gone; saying so would flash on every first open. */
+@Composable
+private fun CodexUnavailable(loading: Boolean, onBack: () -> Unit) {
+    if (loading) return
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("This codex no longer exists.", style = MaterialTheme.typography.titleMedium)
+        TextButton(onClick = onBack) { Text("Back to codex list") }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CodexDetailScreen(
@@ -185,15 +200,7 @@ fun CodexDetailScreen(
     DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
 
     if (codexName == null) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text("This codex no longer exists.", style = MaterialTheme.typography.titleMedium)
-            TextButton(onClick = onBack) { Text("Back to codex list") }
-        }
+        CodexUnavailable(loading, onBack)
         return
     }
 
