@@ -124,11 +124,13 @@ private fun <T> moveReorderItem(items: List<T>, from: Int, to: Int): List<T> =
     items.toMutableList().apply { add(to, removeAt(from)) }
 
 /** Neighbours glide around the dragged row, which instead follows the finger exactly. */
-internal fun LazyItemScope.reorderRowPlacement(dragging: Boolean): Modifier = Modifier.animateItem(
-    fadeInSpec = null,
-    fadeOutSpec = null,
-    placementSpec = if (dragging) null else spring<IntOffset>(dampingRatio = 1f, stiffness = 550f),
-)
+internal fun Modifier.reorderRowPlacement(scope: LazyItemScope, dragging: Boolean): Modifier = with(scope) {
+    animateItem(
+        fadeInSpec = null,
+        fadeOutSpec = null,
+        placementSpec = if (dragging) null else spring<IntOffset>(dampingRatio = 1f, stiffness = 550f),
+    )
+}
 
 private val REORDER_EDGE_ZONE = 72.dp
 private val REORDER_MAX_SCROLL_PER_FRAME = 14.dp

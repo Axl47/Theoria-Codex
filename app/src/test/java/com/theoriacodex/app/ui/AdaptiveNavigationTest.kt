@@ -2,6 +2,7 @@ package com.theoriacodex.app.ui
 
 import android.app.Application
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.height
@@ -35,7 +36,7 @@ class AdaptiveNavigationTest {
         val width = mutableStateOf(400f)
         val selected = mutableStateOf(0)
         var createdContent = 0
-        var firstVisible = 0
+        lateinit var scroll: LazyListState
         compose.setContent {
             MaterialTheme {
                 TheoriaAdaptiveScaffold(true, selected.value, 64.dp, 24.dp, WindowInsets(0),
@@ -44,8 +45,7 @@ class AdaptiveNavigationTest {
                     windowWidthDp = width.value,
                 ) { modifier ->
                     remember { createdContent++ }
-                    val scroll = rememberLazyListState()
-                    firstVisible = scroll.firstVisibleItemIndex
+                    scroll = rememberLazyListState()
                     LazyColumn(modifier.testTag("content"), state = scroll) {
                         items(100) { Text("Item $it", Modifier.height(64.dp)) }
                     }
@@ -60,12 +60,12 @@ class AdaptiveNavigationTest {
         assertEquals(contentBounds.bottom, railBounds.bottom, 1f)
         compose.onNodeWithText("Settings").performClick()
         compose.runOnIdle {
-            assertEquals(20, firstVisible)
+            assertEquals(20, scroll.firstVisibleItemIndex)
             assertEquals(1, createdContent)
             assertEquals(TopLevelDestination.entries.indexOf(TopLevelDestination.Settings), selected.value)
             width.value = 400f
         }
         compose.onNodeWithTag("navigation-rail").assertDoesNotExist()
-        compose.runOnIdle { assertEquals(20, firstVisible); assertEquals(1, createdContent) }
+        compose.runOnIdle { assertEquals(20, scroll.firstVisibleItemIndex); assertEquals(1, createdContent) }
     }
 }

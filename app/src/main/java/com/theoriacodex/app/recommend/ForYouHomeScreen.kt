@@ -322,7 +322,7 @@ private fun ForYouReorderList(
         item { ForYouHomeHeader(state, sourceMenu, onSourceMenuChange, onAction, true, onReorder) {} }
         itemsIndexed(ordering.reorderDraft, key = { _, section -> section.id }) { index, section ->
             val dragging = ordering.draggingId == section.id
-            Row(reorderRowPlacement(dragging).fillMaxWidth().zIndex(if (dragging) 1f else 0f)
+            Row(Modifier.reorderRowPlacement(this, dragging).fillMaxWidth().zIndex(if (dragging) 1f else 0f)
                 .graphicsLayer { if (dragging) translationY = ordering.dragOffsetY }
                 .onSizeChanged { ordering.itemHeightPx = it.height.toFloat().coerceAtLeast(1f) }
                 .padding(horizontal = 16.dp).heightIn(min = 64.dp), verticalAlignment = Alignment.CenterVertically,

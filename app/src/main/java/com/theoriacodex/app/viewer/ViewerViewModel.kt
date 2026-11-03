@@ -422,7 +422,6 @@ internal class ViewerViewModel(
             cancelSessionJobs()
             effectChannel.close()
         }
-        super.onCleared()
     }
 
     companion object {

@@ -26,7 +26,8 @@ internal fun recentsDayLabel(epochMs: Long, now: Long, zone: ZoneId = ZoneId.sys
     return when {
         day == today -> "Today"
         day == today.minusDays(1) -> "Yesterday"
-        else -> DAY_FORMAT.format(day)
+        // Built per call so a locale change while the app runs takes effect.
+        else -> DateTimeFormatter.ofPattern("MMM d", Locale.getDefault()).format(day)
     }
 }
 
@@ -83,4 +84,3 @@ internal fun recentSearchRowTitle(query: Query): String {
     return (required + query.excludeTags.map { "-$it" }).joinToString(", ").ifBlank { "No tags" }
 }
 
-private val DAY_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM d", Locale.getDefault())

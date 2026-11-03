@@ -213,7 +213,7 @@ private fun ViewerMediaGestureLayer(
             }
         }
     }
-    val gestures = viewerMediaGestureModifier(
+    val gestures = Modifier.viewerMediaGestures(
         mediaKey = key, active = controls.isActive && !layout.pictureInPicture, seekable = seekable,
         zoomed = transform.isZoomed, chromeVisible = controls.showControls, touchExplorationEnabled = layout.touchExploration,
         actions = ViewerMediaGestureActions(

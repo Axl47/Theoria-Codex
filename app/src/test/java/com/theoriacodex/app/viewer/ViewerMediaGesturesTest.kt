@@ -40,7 +40,7 @@ class ViewerMediaGesturesTest {
         val seekDeltas = mutableListOf<Long>()
         var infoOpened = 0
         compose.setContent {
-            Box(Modifier.size(200.dp).then(viewerMediaGestureModifier(
+            Box(Modifier.size(200.dp).viewerMediaGestures(
                 mediaKey = ViewerMediaKey(PostId(SourceKey.GELBOORU, "video"), 0),
                 active = active.value, seekable = seekable.value, zoomed = zoomed.value,
                 chromeVisible = chrome.value, touchExplorationEnabled = exploration.value,
@@ -48,7 +48,7 @@ class ViewerMediaGesturesTest {
                     seek = { seekDeltas += it }, zoom = { zoomed.value = !zoomed.value },
                     toggleControls = { chrome.value = !chrome.value }, showInfo = { infoOpened++ },
                 ),
-            )))
+            ))
         }
         performAction("Rewind 10 seconds")
         performAction("Forward 10 seconds")
@@ -82,12 +82,12 @@ class ViewerMediaGesturesTest {
         val zooms = mutableListOf<Offset?>()
         val seeks = mutableListOf<Long>()
         compose.setContent {
-            Box(Modifier.size(200.dp).then(viewerMediaGestureModifier(
+            Box(Modifier.size(200.dp).viewerMediaGestures(
                 mediaKey = ViewerMediaKey(PostId(SourceKey.GELBOORU, "still"), 0),
                 active = true, seekable = seekable.value, zoomed = zoomed.value,
                 chromeVisible = false, touchExplorationEnabled = false,
                 actions = ViewerMediaGestureActions({ seeks += it }, { zooms += it }, {}, {}),
-            )))
+            ))
         }
         fun doubleTapAt(x: Float) {
             compose.onNodeWithContentDescription("Media actions").performTouchInput {
@@ -111,11 +111,11 @@ class ViewerMediaGesturesTest {
         var info = 0
         val canHold = mutableStateOf(true)
         compose.setContent {
-            Box(Modifier.size(200.dp).then(viewerMediaGestureModifier(
+            Box(Modifier.size(200.dp).viewerMediaGestures(
                 mediaKey = ViewerMediaKey(PostId(SourceKey.GELBOORU, "video"), 0),
                 active = true, seekable = true, zoomed = false, chromeVisible = false, touchExplorationEnabled = false,
                 actions = ViewerMediaGestureActions({}, {}, {}, { info++ }, if (canHold.value) ({ holds += it }) else null),
-            )))
+            ))
         }
         val media = compose.onNodeWithContentDescription("Media actions")
         media.performTouchInput { longClick() }

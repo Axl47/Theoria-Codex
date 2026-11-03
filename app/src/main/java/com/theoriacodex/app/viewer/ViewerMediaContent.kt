@@ -29,7 +29,7 @@ internal fun ViewerMediaContent(
     videoPositions: ViewerVideoPositions,
     imageSession: ViewerImageSession,
     pixivUgoiraClient: PixivUgoiraClient?,
-    transformModifier: Modifier,
+    modifier: Modifier,
     onRequestMediaRecovery: ((Post, ImageRef) -> Unit)?,
 ) {
     when {
@@ -45,7 +45,7 @@ internal fun ViewerMediaContent(
                 onPlaybackCompleted = events.onPlaybackCompleted,
                 showProgressBar = controls.showControls,
                 showPassiveProgress = controls.showPassiveProgress,
-                mediaModifier = transformModifier,
+                mediaModifier = modifier,
                 isActive = controls.isActive,
                 isPreloading = controls.isPreloading,
                 isPlaying = controls.isPlaying,
@@ -66,25 +66,25 @@ internal fun ViewerMediaContent(
             quality = videoOptions.quality, qualityHeight = videoOptions.height,
             playbackDiagnosticsEnabled = videoOptions.diagnosticsEnabled,
             terminalMessage = videoOptions.terminalMessage,
-            modifier = Modifier.fillMaxSize(), mediaModifier = transformModifier,
+            modifier = Modifier.fillMaxSize(), mediaModifier = modifier,
             aspectRatio = viewerMediaAspectRatio(post, media),
             controls = controls, events = events,
             mediaKey = key, positions = videoPositions,
-            loadingPreview = { ViewerLoadingPreview(post, media, transformModifier) },
+            loadingPreview = { ViewerLoadingPreview(post, media, modifier) },
         )
         isGifMediaRef(media) -> {
             val locations = remember(post, media, controls.loadGeneration) { viewerGifLocations(post, media) }
             var ready by remember(key, controls.loadGeneration) { mutableStateOf(false) }
-            if (!ready) ViewerLoadingPreview(post, media, transformModifier)
+            if (!ready) ViewerLoadingPreview(post, media, modifier)
             ViewerGifPlayer(
                 sourceKey = post.id.source, locations = locations,
-                modifier = Modifier.fillMaxSize(), mediaModifier = transformModifier,
+                modifier = Modifier.fillMaxSize(), mediaModifier = modifier,
                 controls = controls, events = events.copy(onReady = { ready = true; events.onReady() }),
             )
         }
         else -> ViewerImageRenderer(
             post = post, media = media, key = key,
-            modifier = Modifier.fillMaxSize(), mediaModifier = transformModifier,
+            modifier = Modifier.fillMaxSize(), mediaModifier = modifier,
             controls = controls, events = events, imageSession = imageSession,
             onRequestMediaRecovery = onRequestMediaRecovery,
         )

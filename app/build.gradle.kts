@@ -255,7 +255,9 @@ android {
         getByName("benchmarkRelease").kotlin.directories.add("src/fixtures/java")
         getByName("benchmarkRelease").res.directories.add("src/fixtures/res")
         getByName("debug").kotlin.directories.add("src/developerCopy/java")
+        getByName("debug").res.directories.add("src/developerCopy/res")
         findByName("personalRelease")?.kotlin?.directories?.add("src/developerCopy/java")
+        findByName("personalRelease")?.res?.directories?.add("src/developerCopy/res")
     }
 }
 

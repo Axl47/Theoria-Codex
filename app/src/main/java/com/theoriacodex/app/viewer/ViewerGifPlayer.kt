@@ -96,7 +96,7 @@ private fun ViewerGifFallback(
 
 @Composable
 private fun ViewerGifFallbackImage(
-    state: ViewerGifState, source: SourceKey, location: String, mediaModifier: Modifier,
+    state: ViewerGifState, source: SourceKey, location: String, modifier: Modifier,
     controls: ViewerRendererControls, events: ViewerRendererEvents,
 ) {
     val context = LocalContext.current
@@ -108,7 +108,7 @@ private fun ViewerGifFallbackImage(
             .onAnimationEnd { if (!controls.loopPlayback) events.onPlaybackCompleted() }
             .setParameter("viewerRestart", controls.restartRequest).build(),
         contentDescription = null,
-        modifier = Modifier.fillMaxSize().then(mediaModifier), contentScale = ContentScale.Fit,
+        modifier = Modifier.fillMaxSize().then(modifier), contentScale = ContentScale.Fit,
         onSuccess = { drawable = it.result.drawable as? android.graphics.drawable.Animatable; events.onReady() },
         onError = {
             Log.w(GIF_LOG_TAG, "Coil GIF fallback failed for source=$source candidate=${state.fallbackIndex + 1}/${state.fallbackLocations.size} at ${gifLocationLabel(location)}", it.result.throwable)

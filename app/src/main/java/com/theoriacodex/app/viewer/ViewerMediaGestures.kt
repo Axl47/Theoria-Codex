@@ -35,7 +35,7 @@ internal data class ViewerMediaGestureActions(
 
 /** Pointer gestures and assistive actions dispatch to the same renderer commands. */
 @Composable
-internal fun viewerMediaGestureModifier(
+internal fun Modifier.viewerMediaGestures(
     mediaKey: ViewerMediaKey,
     active: Boolean,
     seekable: Boolean,
@@ -46,7 +46,7 @@ internal fun viewerMediaGestureModifier(
 ): Modifier {
     val currentActions by rememberUpdatedState(actions)
     val currentZoomed by rememberUpdatedState(zoomed)
-    val gestures = Modifier.pointerInput(mediaKey, seekable, touchExplorationEnabled) {
+    val gestures = pointerInput(mediaKey, seekable, touchExplorationEnabled) {
         detectTapGestures(
             onDoubleTap = { offset -> currentActions.doubleTap(offset, size.width, seekable, currentZoomed) },
             onTap = { if (!touchExplorationEnabled) currentActions.toggleControls() },

@@ -159,7 +159,7 @@ private fun CodexReorderList(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             itemsIndexed(rows, key = { _, codex -> codex.codexId }) { index, codex ->
-                CodexReorderRow(codex, index, presentation, state, reorderRowPlacement(state.ordering.draggingId == codex.codexId))
+                CodexReorderRow(codex, index, presentation, state, Modifier.reorderRowPlacement(this, state.ordering.draggingId == codex.codexId))
             }
         }
     }
@@ -171,11 +171,11 @@ private fun CodexReorderRow(
     index: Int,
     presentation: CodexListPresentation,
     state: CodexListUiState,
-    placement: Modifier,
+    modifier: Modifier,
 ) {
     val isDragging = state.ordering.draggingId == codex.codexId
     Surface(
-        modifier = placement.zIndex(if (isDragging) 1f else 0f).fillMaxWidth().graphicsLayer {
+        modifier = modifier.zIndex(if (isDragging) 1f else 0f).fillMaxWidth().graphicsLayer {
             if (isDragging) {
                 translationY = state.ordering.dragOffsetY
                 shadowElevation = 14f

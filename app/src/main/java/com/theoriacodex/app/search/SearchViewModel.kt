@@ -1040,7 +1040,6 @@ internal class SearchViewModel(
 
     override fun onCleared() {
         effectChannel.close()
-        super.onCleared()
     }
 
     companion object {
