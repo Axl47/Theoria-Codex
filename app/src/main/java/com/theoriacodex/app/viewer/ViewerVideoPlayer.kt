@@ -66,9 +66,9 @@ internal fun ViewerVideoPlayer(
     loadingPreview: (@Composable () -> Unit)? = null,
 ) {
     val context = LocalContext.current
-    val metered = context.isMediaNetworkMetered()
-    val location = remember(media, quality, qualityHeight, metered) {
-        resolveViewerVideoPlaybackLocation(media.withVideoQuality(quality, metered, qualityHeight))
+    // The metered check is a system call, so it runs when the page picks its stream, not on every recomposition.
+    val location = remember(media, quality, qualityHeight) {
+        resolveViewerVideoPlaybackLocation(media.withVideoQuality(quality, context.isMediaNetworkMetered(), qualityHeight))
     }
     if (!terminalMessage.isNullOrBlank()) {
         ViewerVideoMessage(terminalMessage, modifier)
