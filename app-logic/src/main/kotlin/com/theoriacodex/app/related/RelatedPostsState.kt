@@ -148,6 +148,18 @@ fun RelatedPostsUiState.complete(
     }
 }
 
+/**
+ * What a drawer that only grows should show: everything it has shown, then anything newly recommended.
+ * Liked seeds leave it, and a cleared shelf empties it.
+ */
+fun RelatedPostsUiState.accumulatedPosts(shown: List<Post>): List<Post> {
+    if (this == RelatedPostsUiState.Idle) return emptyList()
+    val seeds = retainedLikedPostIds
+    return (shown + availablePages.flatMap(RelatedPostsPage::posts))
+        .filterNot { post -> post.id in seeds }
+        .distinctBy(Post::id)
+}
+
 fun RelatedPostsUiState.selectPage(index: Int): RelatedPostsUiState {
     val pages = availablePages
     val page = pages.getOrNull(index) ?: return this

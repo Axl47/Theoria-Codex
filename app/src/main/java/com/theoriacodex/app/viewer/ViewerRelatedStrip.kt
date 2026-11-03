@@ -45,7 +45,7 @@ import com.theoriacodex.app.related.retainedLikedPostIds
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
-/** Collapsing is local; only explicit Dismiss clears the source shelf and its retained liked seeds. */
+/** Collapsing is local and survives new recommendations; only explicit Dismiss clears the source shelf and its retained liked seeds. */
 @Composable
 internal fun ViewerRelatedStrip(
     state: RelatedPostsUiState,
@@ -62,10 +62,11 @@ internal fun ViewerRelatedStrip(
     val latestExpandedChange by rememberUpdatedState(onExpandedChange)
     DisposableEffect(Unit) { onDispose { latestExpandedChange(false) } }
     val request = state.requestOrNull ?: return
-    var expanded by remember(request.seed.id, request.generation) { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(false) }
     var hidden by remember(request.seed.id, request.generation) { mutableStateOf(false) }
-    val scopeIds = remember(state) {
-        state.retainedLikedPostIds + state.availablePages.flatMap { page -> page.posts.map { it.id } }
+    // The drawer may hold posts from earlier recommendations, so opening one of those keeps it in scope.
+    val scopeIds = remember(state, posts) {
+        state.retainedLikedPostIds + state.availablePages.flatMap { page -> page.posts.map { it.id } } + posts.map { it.id }
     }
     LaunchedEffect(currentPostId, scopeIds) {
         if (currentPostId !in scopeIds) hidden = true

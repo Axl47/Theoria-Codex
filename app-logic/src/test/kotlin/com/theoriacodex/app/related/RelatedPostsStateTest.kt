@@ -12,6 +12,28 @@ import org.junit.Test
 
 class RelatedPostsStateTest {
     @Test
+    fun `accumulated posts add new recommendations instead of replacing them`() {
+        val first = post("first")
+        val second = post("second")
+        val loading = RelatedPostsUiState.Idle.begin(first, 0, 1)
+        val firstPage = loading.complete(loading.request, listOf(post("a"), post("b")), emptySet())
+        val shown = firstPage.accumulatedPosts(emptyList())
+        assertEquals(listOf("a", "b"), shown.map { it.id.sourcePostId })
+
+        val replacing = RelatedPostsUiState.Idle.begin(second, 1, 2)
+        assertEquals(shown, replacing.accumulatedPosts(shown))
+        val secondPage = replacing.complete(replacing.request, listOf(post("b"), post("c")), emptySet())
+        assertEquals(listOf("a", "b", "c"), secondPage.accumulatedPosts(shown).map { it.id.sourcePostId })
+    }
+
+    @Test
+    fun `accumulated posts drop liked seeds and clear with the shelf`() {
+        val shown = listOf(post("a"), post("seed"))
+        assertEquals(listOf("a"), RelatedPostsUiState.Idle.begin(post("seed"), 0, 1).accumulatedPosts(shown).map { it.id.sourcePostId })
+        assertEquals(emptyList<Post>(), RelatedPostsUiState.Idle.accumulatedPosts(shown))
+    }
+
+    @Test
     fun `hide liked retains shelf seeds through loading results empty and failure until dismissal`() {
         val seed = post("seed")
         val nextSeed = post("next")

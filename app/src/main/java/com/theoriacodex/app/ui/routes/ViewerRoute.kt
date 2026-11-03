@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.app.related.accumulatedPosts
 import com.theoriacodex.app.viewer.LocalViewerReturnTransition
 
 import com.theoriacodex.data.repository.CodexUsageTarget
@@ -34,7 +35,6 @@ import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.related.RelatedPostsUiState
-import com.theoriacodex.app.related.loadedPosts
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.ViewerMediaPrefetcher
 import com.theoriacodex.app.viewer.ViewerPostResolver
@@ -459,14 +459,18 @@ internal fun ViewerRoute(
     val relatedSource = activeSession?.relatedBinding?.source ?: activeSession?.context?.streamSource
     val relatedSnapshot = activeSession?.let(liveSourceState::relatedSourceFor)
     val relatedState = relatedSnapshot?.relatedPosts ?: RelatedPostsUiState.Idle
+    // New likes extend the drawer instead of replacing it, for as long as this Viewer session lasts.
+    var shownRelatedPosts by remember(activeSession?.sessionId) { mutableStateOf(emptyList<Post>()) }
+    val accumulatedRelatedPosts = remember(shownRelatedPosts, relatedState) { relatedState.accumulatedPosts(shownRelatedPosts) }
+    SideEffect { shownRelatedPosts = accumulatedRelatedPosts }
     val relatedPosts = remember(
-        activeSession?.searchVisibilityFilters, relatedState, relatedSource, liveSourceState.likedPostIds,
+        activeSession?.searchVisibilityFilters, accumulatedRelatedPosts, relatedSource, liveSourceState.likedPostIds,
         liveSourceState.savedPostIds, liveSourceState.watchedPostIds, relatedSnapshot?.retainedLikedPostIds,
         liveSourceState.unknownAnimatedDurationPolicy,
     ) {
         activeSession?.let { active ->
             filterSearchResults(
-                results = relatedState.loadedPosts, filters = active.searchVisibilityFilters,
+                results = accumulatedRelatedPosts, filters = active.searchVisibilityFilters,
                 likedPostIds = if (relatedSource == ViewerStreamSource.FOR_YOU) emptySet() else liveSourceState.likedPostIds,
                 savedPostIds = if (relatedSource == ViewerStreamSource.FOR_YOU) emptySet() else liveSourceState.savedPostIds,
                 watchedPostIds = if (relatedSource == ViewerStreamSource.FOR_YOU) emptySet() else liveSourceState.watchedPostIds,
