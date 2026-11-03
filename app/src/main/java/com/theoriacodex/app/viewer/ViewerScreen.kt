@@ -1,5 +1,6 @@
 package com.theoriacodex.app.viewer
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import android.content.res.Configuration
@@ -617,15 +618,24 @@ internal fun ViewerScreen(
             }
 
         }
-        ViewerChromeVisibility(chromeVisible && !mediaOverviewVisible, Modifier.align(Alignment.BottomCenter)) {
+        // While scrubbing everything but the timeline steps back. Only its alpha changes, so the strip keeps its scroll position.
+        val scrubFade by animateFloatAsState(if (timelineInteractionActive) 0f else 1f, tween(TheoriaMotion.SHORT_MS), label = "Viewer scrub fade")
+        val fadesWhileScrubbing = Modifier.graphicsLayer { alpha = scrubFade }
+        ViewerChromeVisibility(chromeVisible && !mediaOverviewVisible, Modifier.align(Alignment.BottomCenter).then(fadesWhileScrubbing)) {
             val stripIndex = navigation.originalPosts.indexOfFirst { it.id == posts.getOrNull(postPagerState.currentPage)?.id }
                 .takeIf { it >= 0 } ?: navigation.stripAnchorIndex
-            ViewerPostStrip(navigation.originalPosts, stripIndex, { index ->
-                pendingPostId = navigation.originalPosts[index].id
-            }, Modifier.testTag("viewer-post-navigation-strip"),
-                onLoadMore = { loadMoreFromStrip() }, onInteraction = { markInteraction() })
+            ViewerBottomChrome(
+                timelinePresent = selectedCurrentMedia?.let { viewerMediaIsAnimated(selectedPost, it, pixivUgoiraClient != null) } == true,
+                pageCount = selectedPostMedia.size,
+                pageIndex = selectedMediaIndex,
+            ) {
+                ViewerPostStrip(navigation.originalPosts, stripIndex, { index ->
+                    pendingPostId = navigation.originalPosts[index].id
+                }, Modifier.testTag("viewer-post-navigation-strip"),
+                    onLoadMore = { loadMoreFromStrip() }, onInteraction = { markInteraction() })
+            }
         }
-        ViewerChromeVisibility(chromeVisible, Modifier.align(Alignment.TopCenter)) {
+        ViewerChromeVisibility(chromeVisible, Modifier.align(Alignment.TopCenter).then(fadesWhileScrubbing)) {
             ViewerChrome(
                 onPictureInPicture = viewerPictureInPictureAction(activity, selectedPost, selectedCurrentMedia, uiState.mediaError != null),
                 playbackMode = uiState.controls.playbackMode,
@@ -684,7 +694,7 @@ internal fun ViewerScreen(
                 },
             )
         }
-        ViewerChromeVisibility(chromeVisible && !mediaOverviewVisible, Modifier.align(Alignment.TopEnd).padding(top = 72.dp)) {
+        ViewerChromeVisibility(chromeVisible && !mediaOverviewVisible, Modifier.align(Alignment.TopEnd).padding(top = 72.dp).then(fadesWhileScrubbing)) {
             ViewerRelatedStrip(
                 state = relatedState, posts = relatedPosts, currentPostId = selectedPost.id,
                 onSelect = { post ->

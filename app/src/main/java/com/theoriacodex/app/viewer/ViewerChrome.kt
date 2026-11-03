@@ -1,5 +1,23 @@
 package com.theoriacodex.app.viewer
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.Alignment
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Row
 import kotlinx.coroutines.launch
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
@@ -32,17 +50,14 @@ import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.delay
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import kotlin.math.abs
 
 internal enum class ViewerPlaybackRate(
@@ -89,12 +104,7 @@ internal fun ViewerChrome(
     videoVariants: List<com.theoriacodex.domain.model.VideoVariant> = emptyList(),
     onQualitySelected: (com.theoriacodex.domain.model.VideoQuality, Int?) -> Unit = { _, _ -> },
 ) {
-    SecondaryScreenAppBar(
-        modifier = modifier,
-        title = if (indexLabel != null) "$source • $indexLabel" else source,
-        onBack = onBack,
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-    ) {
+    ViewerTopBar(source, indexLabel, onBack, modifier) {
         ViewerLikeAction(
             liked = liked,
             onToggleLike = onToggleLike,
@@ -125,6 +135,44 @@ internal fun ViewerChrome(
     }
 }
 
+/** Floats over the media on a scrim, unlike the solid bars of secondary screens. */
+@Composable
+private fun ViewerTopBar(
+    source: String,
+    indexLabel: String?,
+    onBack: () -> Unit,
+    modifier: Modifier,
+    actions: @Composable RowScope.() -> Unit,
+) {
+    Box(modifier.fillMaxWidth()) {
+        Box(Modifier.fillMaxWidth().height(VIEWER_TOP_SCRIM_HEIGHT).background(ViewerVeil.TopScrim))
+        CompositionLocalProvider(LocalContentColor provides Color.White) {
+            Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
+                Text(
+                    text = buildAnnotatedString {
+                        append(source)
+                        if (indexLabel != null) {
+                            withStyle(SpanStyle(color = Color.White.copy(alpha = ViewerVeil.SECONDARY_TEXT_ALPHA), fontWeight = FontWeight.Normal, fontSize = 14.sp, fontFeatureSettings = "tnum")) {
+                                append("  $indexLabel")
+                            }
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                actions()
+            }
+        }
+    }
+}
+
+private val VIEWER_TOP_SCRIM_HEIGHT = 170.dp
+
 @Composable
 private fun ViewerLikeAction(
     liked: Boolean,
@@ -146,7 +194,7 @@ private fun ViewerLikeAction(
         Icon(
             imageVector = if (liked) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
             contentDescription = if (liked) "Unlike post" else "Like post",
-            tint = if (liked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            tint = if (liked) ViewerVeil.Liked else Color.White,
             modifier = Modifier.graphicsLayer {
                 scaleX = pop.value
                 scaleY = pop.value
@@ -170,11 +218,7 @@ private fun ViewerOverviewAction(
             } else {
                 "Open media overview"
             },
-            tint = if (mediaOverviewVisible) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurface
-            },
+            tint = if (mediaOverviewVisible) LocalViewerAccent.current else Color.White,
         )
     }
 }
