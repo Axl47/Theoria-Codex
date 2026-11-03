@@ -19,6 +19,7 @@
 - Separate Saved from the other Codices in the Library with a thin line.
 - Choose the source in For You and Recents from the same icon menu as Search.
 - Mark watched posts in Search and For You with an eye icon instead of a time label that looked like an upload date.
+- Opening a Codex or creator now slides in quickly and Back plays the exact reverse, replacing a slow crossfade.
 - System back in the Viewer now follows your swipe, shrinking the media before it returns to its card.
 - On video, brightness and volume swipes use the outer columns of the screen, leaving the centre for closing and information.
 - Viewer swipes keep your finger's speed when they land, and swiping during a landing continues to the next post instead of being ignored.

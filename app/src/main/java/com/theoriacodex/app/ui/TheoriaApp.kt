@@ -3,12 +3,7 @@ package com.theoriacodex.app.ui
 import androidx.activity.compose.BackHandler
 import com.theoriacodex.data.repository.RecentSearchEntry
 import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.tween
 import com.theoriacodex.app.viewer.LocalViewerReturnTransition
 import com.theoriacodex.app.viewer.ViewerReturnTransition
 import com.theoriacodex.app.viewer.ViewerReturnLifetime
@@ -1152,17 +1147,16 @@ internal fun TheoriaAppContent(
                     NavHost(
                         navController = navController,
                         startDestination = AppRoute.Home,
+                        enterTransition = { pushEnterTransition() },
                         exitTransition = {
                             if (targetState.destination.route == AppRoute.Viewer) ExitTransition.None
-                            else fadeOut(tween(700))
+                            else pushExitTransition()
                         },
                         popEnterTransition = {
-                            when (initialState.destination.route) {
-                                AppRoute.Viewer -> EnterTransition.None
-                                AppRoute.CodexDetail -> slideInHorizontally(tween(300)) { -it }
-                                else -> fadeIn(tween(700))
-                            }
+                            if (initialState.destination.route == AppRoute.Viewer) EnterTransition.None
+                            else popEnterTransition()
                         },
+                        popExitTransition = { popExitTransition() },
                         modifier = contentModifier,
                     ) {
                         composable(AppRoute.Home) {
@@ -1504,8 +1498,6 @@ internal fun TheoriaAppContent(
                         composable(
                             route = AppRoute.CodexDetail,
                             arguments = listOf(navArgument("codexId") { type = NavType.StringType }),
-                            popEnterTransition = { codexDetailPopEnterTransition() },
-                            popExitTransition = { slideOutHorizontally(tween(300)) { it } },
                         ) { entry ->
                             // Commit system Back through the same animated pop as the toolbar.
                             BackHandler { navController.popBackStack() }
