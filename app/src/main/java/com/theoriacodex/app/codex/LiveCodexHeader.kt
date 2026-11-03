@@ -26,7 +26,7 @@ internal fun LiveCodexHeader(
     visiblePosts: List<Post>,
     posts: List<Post>,
     filters: CodexCollectionFilters,
-    resolvingDurations: Boolean,
+    durationsBlockPaging: Boolean,
     gridState: LazyStaggeredGridState,
     onBack: () -> Unit,
     manageLabel: String,
@@ -48,7 +48,7 @@ internal fun LiveCodexHeader(
         input = FeedPageDemandInput(
             contextKey = contextKey, completedGeneration = state.generation,
             canonicalCount = posts.size, visibleCount = visiblePosts.size,
-            canLoadMore = state.canLoadMore, paging = state.loading, resolvingDurations = resolvingDurations,
+            canLoadMore = state.canLoadMore, paging = state.loading, durationsBlockPaging = durationsBlockPaging,
         ),
         filters = SearchVisibilityFilters(animatedOnly = filters.animatedOnly, animatedDurationRange = filters.animatedDurationRange),
         gridState = gridState,

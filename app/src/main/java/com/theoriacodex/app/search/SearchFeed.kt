@@ -143,7 +143,7 @@ internal fun rememberSearchScrollAndPaging(
             refreshing = state.loading,
             paging = state.loadingMore,
             failed = state.content.error != null,
-            resolvingDurations = feed.durationMetadata.readiness.isResolving,
+            durationsBlockPaging = feed.durationMetadata.blocksPaging,
             requiredCanonicalIndex = scrollRestoration?.scrollState?.firstVisibleItemIndex,
         ),
         filters = feed.visibilityFilters,

@@ -95,9 +95,9 @@ class FeedPageDemandTest {
         assertFalse(demand.update(hiddenPage.copy(ready = false)).loadNextPage)
         assertFalse(demand.update(hiddenPage.copy(refreshing = true)).loadNextPage)
         assertFalse(demand.update(hiddenPage.copy(paging = true)).loadNextPage)
-        assertFalse(demand.update(hiddenPage.copy(resolvingDurations = true)).loadNextPage)
+        assertFalse(demand.update(hiddenPage.copy(durationsBlockPaging = true)).loadNextPage)
         assertTrue(demand.update(hiddenPage).loadNextPage)
-        assertFalse(demand.update(hiddenPage.copy(completedGeneration = 2L, resolvingDurations = true)).showContinue)
+        assertFalse(demand.update(hiddenPage.copy(completedGeneration = 2L, durationsBlockPaging = true)).showContinue)
         assertTrue(demand.update(hiddenPage.copy(completedGeneration = 2L)).showContinue)
     }
 

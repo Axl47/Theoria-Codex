@@ -229,7 +229,7 @@ private fun CodexDetailBody(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (customHeader != null) {
-            customHeader(feed.visiblePosts, filters, feed.resolvingDurations, gridState)
+            customHeader(feed.visiblePosts, filters, feed.durationsBlockPaging, gridState)
         } else CodexEditableHeader(
             codexName, posts, feed.visiblePosts, filters.isActive || customFiltersActive, editSelection, isLikesCodex,
             onEditSelectionChange, onTitleLongPress, onBack, onAddPostsToAnotherCodex, onRemovePosts, onDeleteCodex,
@@ -276,6 +276,7 @@ private data class CodexDetailFeed(
     val acquiredDurations: Map<PostId, Long>,
     val durationFilterActive: Boolean,
     val resolvingDurations: Boolean,
+    val durationsBlockPaging: Boolean,
 )
 
 @Composable
@@ -306,8 +307,9 @@ private fun rememberCodexDetailFeed(
         filterCodexCollectionPosts(presentedPosts, filters, unknownDurationPolicy, knownDurationMsByPostId = acquiredDurations)
     }
     val resolvingDurations = durationMetadata.readiness.isResolving
-    return remember(visiblePosts, acquiredDurations, durationFilterActive, resolvingDurations) {
-        CodexDetailFeed(visiblePosts, acquiredDurations, durationFilterActive, resolvingDurations)
+    val durationsBlockPaging = durationMetadata.blocksPaging
+    return remember(visiblePosts, acquiredDurations, durationFilterActive, resolvingDurations, durationsBlockPaging) {
+        CodexDetailFeed(visiblePosts, acquiredDurations, durationFilterActive, resolvingDurations, durationsBlockPaging)
     }
 }
 

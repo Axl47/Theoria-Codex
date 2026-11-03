@@ -17,6 +17,7 @@ internal data class SearchDurationFilterPresentation(
     val stateByPostId: Map<PostId, MediaDurationState>,
     val readiness: DurationFilterReadiness,
     val presentedPosts: List<Post>?,
+    val blocksPaging: Boolean,
 )
 
 @Composable
@@ -44,5 +45,6 @@ internal fun rememberSearchDurationFilterPresentation(
         stateByPostId = metadata.stateByPostId,
         readiness = readiness,
         presentedPosts = metadata.presentedPosts,
+        blocksPaging = metadata.blocksPaging,
     )
 }

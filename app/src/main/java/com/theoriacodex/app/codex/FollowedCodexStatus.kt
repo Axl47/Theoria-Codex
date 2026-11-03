@@ -13,12 +13,12 @@ internal fun FollowedCodexHeader(
     visiblePosts: List<Post>,
     posts: List<Post>,
     filters: CodexCollectionFilters,
-    resolvingDurations: Boolean,
+    durationsBlockPaging: Boolean,
     gridState: LazyStaggeredGridState,
     onBack: () -> Unit,
     onManage: () -> Unit,
 ) {
     LiveCodexHeader("Followed", FOLLOWED_CODEX_ID, owner,
         follows.associate { it.membershipId to "${it.creator.displayName} · ${it.creator.source.displayName()}" },
-        visiblePosts, posts, filters, resolvingDurations, gridState, onBack, "Authors", onManage)
+        visiblePosts, posts, filters, durationsBlockPaging, gridState, onBack, "Authors", onManage)
 }

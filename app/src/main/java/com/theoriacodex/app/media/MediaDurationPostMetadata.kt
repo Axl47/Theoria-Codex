@@ -64,6 +64,9 @@ internal data class DurationFilterMetadata(
     val presentedPosts: List<Post>? = null,
     val revealFrontier: Int = Int.MAX_VALUE,
 ) {
+    val blocksPaging: Boolean
+        get() = !isPrepared || readiness.blocksPaging
+
     /** A hidden anchor is final once it is decided and revealed, or probing is disabled. */
     fun isVisibilityResolved(post: Post?, resolveInBackground: Boolean, canonicalIndex: Int? = null): Boolean {
         if (!isPrepared) return false

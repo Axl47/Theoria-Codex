@@ -350,7 +350,7 @@ private fun rememberForYouPageDemand(
         refreshing = state.isRefreshing,
         paging = state.isPaging,
         failed = state.errorMessage != null,
-        resolvingDurations = feed.durationFilter.readiness.isResolving,
+        durationsBlockPaging = feed.durationFilter.blocksPaging,
     ),
     filters = feed.visibilityFilters,
     gridState = gridState,
