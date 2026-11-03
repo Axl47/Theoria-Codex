@@ -56,9 +56,14 @@ internal fun popExitTransition(): ExitTransition = slideOutHorizontally(screenSl
 
 private val screenFade = tween<Float>(TheoriaMotion.SCREEN_MS)
 
-/** A Codex opens by growing out of its tile, so the screens around it only fade. */
+/**
+ * A Codex opens by growing out of its tile, so it only fades above the screen beneath it. That
+ * screen stays opaque throughout: fading both would let whatever is behind them show through.
+ */
 internal fun codexEnterTransition(): EnterTransition = fadeIn(screenFade)
 internal fun codexExitTransition(): ExitTransition = fadeOut(screenFade)
+internal fun codexUnderneathExit(): ExitTransition = ExitTransition.None
+internal fun codexUnderneathEnter(): EnterTransition = EnterTransition.None
 
 /** Lets a Codex tile and its detail screen morph into each other across navigation. */
 internal class CodexMorphScope(val shared: SharedTransitionScope, val visibility: AnimatedVisibilityScope)

@@ -183,26 +183,28 @@ internal fun CodexDestinationStateBoundary(
     thumbnailCacheGeneration: Int,
     content: @Composable (CodexDestinationState) -> Unit,
 ) {
-    val settingsState = remember(data.settingsRepository) { data.settingsRepository.observeSettings() }
-        .collectAsStateWithLifecycle(initialValue = null)
+    val owner = viewModel<CodexLibraryViewModel>(
+        key = "codex-library",
+        factory = remember(data) { viewModelFactory { initializer { CodexLibraryViewModel(data) } } },
+    )
+    val settingsState = owner.settings.collectAsStateWithLifecycle()
     val settings = settingsState.value ?: return
-    val codicesState = remember(data.codexRepository) { data.codexRepository.observeCodices() }
-        .collectAsStateWithLifecycle(initialValue = null)
+    val codicesState = owner.codices.collectAsStateWithLifecycle()
     val availableSourcesState = sources.availableSources.collectAsStateWithLifecycle()
     // A placeholder grid with only virtual tiles would clamp or move the restored collection anchor.
     val codices = codicesState.value ?: return
-    val savedSearches = remember(data.savedSearches) { data.savedSearches.observeSavedSearches() }
-        .collectAsStateWithLifecycle(initialValue = null).value ?: return
+    val savedSearches = owner.savedSearches.collectAsStateWithLifecycle().value ?: return
     val availableSources = availableSourcesState.value
-    val source = remember(data.codexRepository, data.storageDirectory, data.cacheRepository) {
-        CodexCollectionSource(data.codexRepository, data.storageDirectory, data.cacheRepository)
-    }
+    val source = owner.source
     DestinationStateBoundary(settingsState) {
         val profile = settings.activeRecommendationProfile()
         val visible = remember(codices, profile.profileId) {
             codices.filter { codexBelongsToProfile(it.codexId, profile.profileId) }
         }
-        val collection = rememberCodexCollectionState(data, visible, thumbnailCacheGeneration)
+        val collectionIds = remember(visible) { visible.mapTo(linkedSetOf(), Codex::codexId) }
+        val collection by remember(owner, collectionIds, thumbnailCacheGeneration) {
+            owner.collection(collectionIds, thumbnailCacheGeneration)
+        }.collectAsStateWithLifecycle()
         val observeActions = remember(source, availableSources) {
             { id: String -> source.observeActionOptions(id, availableSources) }
         }

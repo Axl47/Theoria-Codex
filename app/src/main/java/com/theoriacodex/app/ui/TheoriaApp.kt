@@ -1165,14 +1165,14 @@ internal fun TheoriaAppContent(
                         exitTransition = {
                             when (targetState.destination.route) {
                                 AppRoute.Viewer -> ExitTransition.None
-                                AppRoute.CodexDetail -> codexExitTransition()
+                                AppRoute.CodexDetail -> codexUnderneathExit()
                                 else -> pushExitTransition()
                             }
                         },
                         popEnterTransition = {
                             when (initialState.destination.route) {
                                 AppRoute.Viewer -> EnterTransition.None
-                                AppRoute.CodexDetail -> codexEnterTransition()
+                                AppRoute.CodexDetail -> codexUnderneathEnter()
                                 else -> popEnterTransition()
                             }
                         },

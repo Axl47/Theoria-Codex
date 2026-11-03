@@ -38,6 +38,7 @@
 
 - Double-tap to zoom a still image anywhere on screen, not only in its middle.
 - Keep zoomed media on screen instead of letting it be dragged out of view.
+- Show the Codex Library immediately when leaving a Codex, instead of a blank screen while it reloads.
 - Stop the Viewer dipping to black when the full image replaces its preview, on opening a post and while swiping.
 - Keep a loading thumbnail or video inside the media's own shape instead of briefly filling the screen.
 
