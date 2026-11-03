@@ -54,6 +54,9 @@ import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.noMediaDurationStateForPost
 import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.search.SearchResultCard
+import com.theoriacodex.app.viewer.ViewerReturnColumn
+import com.theoriacodex.app.viewer.ViewerReturnShelf
+import com.theoriacodex.app.viewer.ViewerReturnShelfId
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.ui.components.SourceSelector
@@ -536,11 +539,16 @@ private fun ActivityList(
     val timeline = remember(activity, now) { recentsTimeline(activity, now) }
     val list = rememberLazyListState()
     ScrollToTopOnTabReselect(TopLevelDestination.Recents) { list.animateScrollToItem(0) }
+    ViewerReturnColumn(list, timeline, { request -> timeline.indexOfFirst { it.holdsPost(request.postId) } }) {
     LazyColumn(modifier = Modifier.fillMaxSize(), state = list, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         itemsIndexed(timeline, key = { index, item -> timelineKey(index, item) }) { _, item ->
             when (item) {
                 is RecentsTimelineItem.Day -> RecentsDayHeading(item.label)
-                is RecentsTimelineItem.Posts -> LazyRow(
+                is RecentsTimelineItem.Posts -> {
+                val row = rememberLazyListState()
+                ViewerReturnShelf(ViewerReturnShelfId.RecentsTimeline, item.entries.map { it.post.id }, row) {
+                LazyRow(
+                    state = row,
                     // The same square frame as other shelves keeps every card in a row the same height.
                     modifier = Modifier.height(POST_SHELF_CARD_WIDTH / POST_SHELF_MEDIA_ASPECT_RATIO),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -561,6 +569,8 @@ private fun ActivityList(
                         }
                     }
                 }
+                }
+                }
                 is RecentsTimelineItem.Search -> RecentSearchRow(
                     entry = item.entry,
                     now = now,
@@ -572,7 +582,11 @@ private fun ActivityList(
             }
         }
     }
+    }
 }
+
+private fun RecentsTimelineItem.holdsPost(postId: PostId): Boolean =
+    this is RecentsTimelineItem.Posts && entries.any { it.post.id == postId }
 
 private fun timelineKey(index: Int, item: RecentsTimelineItem): String = when (item) {
     is RecentsTimelineItem.Day -> "day:${item.date}"

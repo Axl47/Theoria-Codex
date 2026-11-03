@@ -55,6 +55,8 @@ internal sealed interface ViewerReturnShelfId {
     data class Related(val seedId: PostId) : ViewerReturnShelfId
     data class Saved(val codexId: String) : ViewerReturnShelfId
     data class ForYou(val sectionId: String) : ViewerReturnShelfId
+    /** Every row of the Recents timeline, since viewing a post can regroup them; rows are found by post. */
+    data object RecentsTimeline : ViewerReturnShelfId
 }
 
 internal val LocalViewerReturnShelf = staticCompositionLocalOf<ViewerReturnShelfId?> { null }
@@ -297,13 +299,22 @@ internal fun ViewerReturnColumn(
     shelfIds: List<ViewerReturnShelfId?>,
     state: LazyListState,
     content: @Composable () -> Unit,
+) = ViewerReturnColumn(state, shelfIds, { request -> shelfIds.indexOf(request.shelfId) }, content)
+
+/** [rowOf] finds the column item holding a request; [rowsKey] changes whenever that answer could. */
+@Composable
+internal fun ViewerReturnColumn(
+    state: LazyListState,
+    rowsKey: Any,
+    rowOf: (ViewerReturnRequest) -> Int,
+    content: @Composable () -> Unit,
 ) {
     val gridId = rememberSaveable { UUID.randomUUID().toString() }
     val transition = LocalViewerReturnTransition.current
     val request = transition?.request
-    LaunchedEffect(request, gridId, shelfIds) {
+    LaunchedEffect(request, gridId, rowsKey) {
         if (request?.gridId != gridId || request.shelfId == null) return@LaunchedEffect
-        val index = shelfIds.indexOf(request.shelfId)
+        val index = rowOf(request)
         if (index < 0) return@LaunchedEffect
         state.centerViewerReturnItem(index)
         transition.centered(gridId, request.postId)

@@ -38,6 +38,7 @@
 
 - Double-tap to zoom a still image anywhere on screen, not only in its middle.
 - Keep zoomed media on screen instead of letting it be dragged out of view.
+- Return a post to its card in Recents' All view, instead of playing the fallback animation for posts on screen.
 - Show the Codex Library immediately when leaving a Codex, instead of a blank screen while it reloads.
 - Stop a Codex briefly saying it no longer exists, or that it is empty, while it opens.
 - Show a Codex and the Saved screen immediately when returning to them from the Viewer.
