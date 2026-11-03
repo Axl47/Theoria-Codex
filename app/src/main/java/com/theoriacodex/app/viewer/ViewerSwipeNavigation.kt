@@ -67,7 +67,7 @@ internal fun PagerState.viewerPageExtent(): Float = (layoutInfo.pageSize + layou
 /** A release this fast counts as a fling whatever distance it covered. */
 internal val VIEWER_FLING_VELOCITY = 400.dp
 
-private const val SWIPE_COMMIT_FRACTION = 0.18f
+private const val SWIPE_COMMIT_FRACTION = 0.1f
 private const val EDGE_STRETCH_FRACTION = 0.18f
 
 /**

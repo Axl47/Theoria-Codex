@@ -98,7 +98,7 @@ pre{background:#eef2f7;padding:10px;overflow:auto}
 <tr><td>Home tabs stay swipeable; no swipe rows on them.</td><td>Keeps fast tab switching.</td><td>2026-11-03 owner</td></tr>
 <tr><td>Video plays during swipes.</td><td>Continuity; the owner measures cost on the Samsung.</td><td>2026-11-03 owner</td></tr>
 <tr><td>Dismissal is phase 1: no live feed behind the drag.</td><td>The feed is not composed under the Viewer; showing it needs a larger navigation change.</td><td>2026-11-03 owner</td></tr>
-<tr><td>A slow drag commits at 18% of a page; flings use 400 dp/s.</td><td>The first guess of 40% cancelled too many swipes on the Samsung, so the owner set about 18%.</td><td>2026-11-03 owner</td></tr>
+<tr><td>A slow drag commits at 10% of a page; flings use 400 dp/s.</td><td>40% and then 18% still felt too long on the Samsung, so the owner set 10%.</td><td>2026-11-03 owner</td></tr>
 <tr><td>Catching a settle commits its destination immediately.</td><td>Two flicks then mean two pages. Known edge: an inverted gallery whose layout direction flips mid-catch can jump.</td><td>2026-11-03 Claude</td></tr>
 <tr><td>Hold for 2× covers video, GIF and ugoira, and does not change the saved rate.</td><td>All three already have rate control; other media keeps long press for info.</td><td>2026-11-03 Claude</td></tr>
 </table>
@@ -108,7 +108,7 @@ pre{background:#eef2f7;padding:10px;overflow:auto}
 <table>
 <tr><th>Owner check on the Samsung</th><th>Expected</th></tr>
 <tr><td>Flick quickly through several posts, including videos</td><td>Every flick lands; no dropped swipes or snapping; frames hold with video playing through</td></tr>
-<tr><td>Slow drag past and short of 18%, then flick back after a long drag</td><td>Commits only past the threshold; flicking back cancels</td></tr>
+<tr><td>Slow drag past and short of 10%, then flick back after a long drag</td><td>Commits only past the threshold; flicking back cancels</td></tr>
 <tr><td>Swipe past the first and last post</td><td>Soft stretch, one tick, springs back</td></tr>
 <tr><td>Pinch and double-tap at an image corner, then pan hard</td><td>Zoom stays under the fingers; media cannot leave the screen</td></tr>
 <tr><td>Pull down from the centre of a video and anywhere on an image; release short and long</td><td>Short returns; long lands on its feed card from where it was held</td></tr>

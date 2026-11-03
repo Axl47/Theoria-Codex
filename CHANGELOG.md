@@ -29,7 +29,7 @@
 - System back in the Viewer now follows your swipe, shrinking the media before it returns to its card.
 - On video, brightness and volume swipes use the outer columns of the screen, leaving the centre for closing and information.
 - Viewer swipes keep your finger's speed when they land, and swiping during a landing continues to the next post instead of being ignored.
-- A short, fast flick now changes post, a slow drag needs about 18% of the screen, and flicking back cancels the swipe.
+- A short, fast flick now changes post, a slow drag needs about 10% of the screen, and flicking back cancels the swipe.
 - Video keeps playing while you swipe.
 - Pages stretch and tick softly when there is nothing further to swipe to.
 - Double-tap zooms at the tapped point with a smooth animation, and pinching now zooms around your fingers.
