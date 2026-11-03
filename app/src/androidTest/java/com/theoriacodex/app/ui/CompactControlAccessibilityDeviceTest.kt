@@ -100,8 +100,6 @@ class CompactControlAccessibilityDeviceTest {
         selector.assertStateDescription("Collapsed; Pixiv selected")
         selector.assertTouchHeightIsEqualTo(48.dp)
         assertTrue(selector.fetchSemanticsNode().config.contains(SemanticsActions.Expand))
-        composeRule.onNodeWithTag("For You source icon", useUnmergedTree = true)
-            .assertWidthIsEqualTo(18.dp)
 
         selector.performClick()
 

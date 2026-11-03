@@ -513,7 +513,6 @@ internal fun ForYouSourceSelector(
         availableSources = availableSources,
         allSourcesLabel = "Unified",
         accessibilityLabel = "Select For You source",
-        iconTestTag = "For You source icon",
         enabled = enabled,
         expanded = expanded,
         onExpandedChange = onExpandedChange,

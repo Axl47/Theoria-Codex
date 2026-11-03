@@ -11,6 +11,7 @@
 ### Changed
 - Show every Codex in the Library as a cover tile with its name and count on the cover, matching the Saved collections; Codex actions now open by long press.
 - Separate Saved from the other Codices in the Library with a thin line.
+- Choose the source in For You and Recents from the same icon menu as Search.
 
 ## [1.0.1] - 2026-11-02
 
