@@ -356,22 +356,22 @@ internal fun SaveToCodexDestinationStateBoundary(
     }
     val activeProfile = settings.activeRecommendationProfile()
     content(
-            SaveToCodexDestinationState(
-                settings = settings,
-                activeProfile = activeProfile,
-                codicesByProfile = remember(codices, settings.recommendationProfiles) {
-                    settings.recommendationProfiles.associate { profile ->
-                        profile.profileId to codices.filter {
-                            codexBelongsToProfile(it.codexId, profile.profileId)
-                        }
+        SaveToCodexDestinationState(
+            settings = settings,
+            activeProfile = activeProfile,
+            codicesByProfile = remember(codices, settings.recommendationProfiles) {
+                settings.recommendationProfiles.associate { profile ->
+                    profile.profileId to codices.filter {
+                        codexBelongsToProfile(it.codexId, profile.profileId)
                     }
-                },
-                itemCounts = collection.itemCounts,
-                coverCandidates = collection.coverCandidates,
-                relevanceScores = relevance.value,
-                containingCodexIds = containingCodexIds.value,
-            ),
-        )
+                }
+            },
+            itemCounts = collection.itemCounts,
+            coverCandidates = collection.coverCandidates,
+            relevanceScores = relevance.value,
+            containingCodexIds = containingCodexIds.value,
+        ),
+    )
 }
 
 @Composable
