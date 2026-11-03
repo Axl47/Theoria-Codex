@@ -6,10 +6,14 @@ import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.search.SearchResultCard
+import com.theoriacodex.app.tags.PostBoundTagSection
 import com.theoriacodex.app.viewer.PixivUgoiraClient
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
 
 /** What every tile of one feed shares: its player, like state, and duration reporting. */
@@ -52,6 +56,7 @@ internal fun FeedPostCard(
     onLongPress: () -> Unit,
     showWatchHistory: Boolean = false,
     showSourceBadge: Boolean = false,
+    mediaAspectRatio: Float? = null,
     resolvePostById: (suspend (PostId) -> Post?)? = null,
     recoverPostMedia: (suspend (Post, ImageRef) -> Post?)? = null,
 ) {
@@ -62,6 +67,7 @@ internal fun FeedPostCard(
         pixivUgoiraClient = environment.pixivUgoiraClient,
         acquiredDurationMs = observedDurationMs ?: environment.acquiredDurations[post.id],
         showSourceBadge = showSourceBadge,
+        mediaAspectRatio = mediaAspectRatio,
         liked = post.id in environment.likedPostIds,
         onToggleLike = environment.onToggleLike?.let { toggle -> { toggle(post) } },
         resolvePostById = resolvePostById,
@@ -87,22 +93,60 @@ internal fun FeedRelatedPostsShelf(
     onNextPage: () -> Unit,
     recoverPostMedia: (suspend (Post, ImageRef) -> Post?)? = null,
 ) {
+    val shelfEnvironment = remember(environment, presentation.knownDurationMsByPostId) {
+        environment.copy(acquiredDurations = presentation.knownDurationMsByPostId)
+    }
     RelatedPostsShelf(
         state = state,
         posts = presentation.visiblePosts,
-        likedPostIds = environment.likedPostIds,
-        pixivUgoiraClient = environment.pixivUgoiraClient,
-        acquiredDurations = presentation.knownDurationMsByPostId,
-        durationStateForPost = environment.durationStateForPost,
+        environment = shelfEnvironment,
         recoverPostMedia = recoverPostMedia,
-        onToggleLike = { post -> environment.onToggleLike?.invoke(post) },
         onOpenPost = onOpenPost,
         onLongPress = onLongPress,
         onDismiss = onDismiss,
         onRetry = onRetry,
         onPreviousPage = onPreviousPage,
         onNextPage = onNextPage,
-        onViewportChanged = environment.onViewportChanged,
-        onAuthoritativeDurationKnown = environment.onAuthoritativeDurationKnown,
     )
+}
+
+/** A feed post's action sheet, with its tag section bound to that post. */
+@Composable
+internal fun FeedPostActionSheet(
+    post: Post,
+    creatorBrowsingSources: Set<SourceKey>,
+    onDismiss: () -> Unit,
+    onSaveToDevice: (Post) -> Unit,
+    onSaveToCodex: (Post) -> Unit,
+    onOpenCreatorProfile: (CreatorProfile) -> Unit,
+    onOpenLegacyCreatorProfile: (Post) -> Unit,
+    onGoToSearch: (() -> Unit)?,
+    onPostUrlCopied: (Post) -> Unit,
+    onAddIncludeTerm: (Post, SearchTerm) -> Boolean,
+    onAddExcludeTerm: (Post, SearchTerm) -> Boolean,
+    onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
+    onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
+    onFavoriteTagLongPress: ((SourceKey, String) -> Unit)?,
+    tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
+    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
+    saveToCodexLabel: String = "Save to Codex",
+    onRemoveFromCodex: (() -> Unit)? = null,
+    onStartOver: (() -> Unit)? = null,
+) {
+    PostActionSheet(
+        post, creatorBrowsingSources, onDismiss, { onSaveToDevice(post) },
+        onSaveToCodex = { onSaveToCodex(post) },
+        saveToCodexLabel = saveToCodexLabel,
+        onRemoveFromCodex = onRemoveFromCodex,
+        onOpenCreatorProfile = onOpenCreatorProfile,
+        onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
+        onGoToSearch = onGoToSearch,
+        onStartOver = onStartOver,
+        onPostUrlCopied = onPostUrlCopied,
+    ) {
+        PostBoundTagSection(
+            post, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm, onRemoveExcludeTerm,
+            onFavoriteTagLongPress, tagVideoCountProvider, fetchTagVideoCounts,
+        )
+    }
 }

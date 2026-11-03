@@ -18,6 +18,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import com.theoriacodex.app.media.noMediaDurationStateForPost
+import com.theoriacodex.app.ui.components.FeedCardEnvironment
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
@@ -41,9 +43,7 @@ class RelatedPostsShelfTest {
                     state = state.value,
                     // Filtered cards keep this navigation test independent of media loading.
                     posts = emptyList(),
-                    likedPostIds = emptySet(),
-                    pixivUgoiraClient = null,
-                    onToggleLike = {},
+                    environment = FeedCardEnvironment(null, emptySet(), emptyMap(), noMediaDurationStateForPost, {}, { _, _ -> }, { _, _ -> }),
                     onOpenPost = { _, _ -> },
                     onLongPress = {},
                     onDismiss = {},
@@ -52,8 +52,6 @@ class RelatedPostsShelfTest {
                         state.value = state.value.selectPage(state.value.currentPageIndex - 1)
                     },
                     onNextPage = {},
-                    onViewportChanged = { _, _ -> },
-                    onAuthoritativeDurationKnown = { _, _ -> },
                 )
             }
         }

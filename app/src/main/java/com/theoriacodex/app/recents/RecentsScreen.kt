@@ -58,9 +58,8 @@ import com.theoriacodex.app.viewer.ViewerReturnColumn
 import com.theoriacodex.app.viewer.ViewerReturnShelf
 import com.theoriacodex.app.viewer.ViewerReturnShelfId
 import com.theoriacodex.app.source.displayName
-import com.theoriacodex.app.tags.PostBoundTagSection
 import com.theoriacodex.app.ui.components.SourceSelector
-import com.theoriacodex.app.ui.components.PostActionSheet
+import com.theoriacodex.app.ui.components.FeedPostActionSheet
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.RecentActivityEntry
@@ -158,14 +157,14 @@ fun RecentsScreen(
     }
 
     selectedActionPost?.let { post ->
-        RecentsPostSheet(
+        FeedPostActionSheet(
             post, creatorBrowsingSources, { selectedActionPost = null }, onSaveToDevice, onRequestSaveToCodex, onOpenCreatorProfile,
-            onOpenLegacyCreatorProfile, onGoToSearch, onPostUrlCopied,
+            onOpenLegacyCreatorProfile, onGoToSearch, onPostUrlCopied, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm,
+            onRemoveExcludeTerm, onFavoriteTagLongPress, tagVideoCountProvider, fetchTagVideoCounts,
             onStartOver = {
                 onStartOver(post, selectedActionSection)
                 selectedActionPost = null
-            }, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress,
-            tagVideoCountProvider, fetchTagVideoCounts,
+            }.takeIf { maxOf(post.mediaCount ?: 1, post.media.size) > 1 },
         )
     }
 
@@ -174,42 +173,6 @@ fun RecentsScreen(
             onSaveSearch?.invoke(name, entry)
             searchToPin = null
         }
-    }
-}
-
-@Composable
-private fun RecentsPostSheet(
-    post: Post,
-    creatorBrowsingSources: Set<SourceKey>,
-    onDismiss: () -> Unit,
-    onSaveToDevice: (Post) -> Unit,
-    onRequestSaveToCodex: (Post) -> Unit,
-    onOpenCreatorProfile: (CreatorProfile) -> Unit,
-    onOpenLegacyCreatorProfile: (Post) -> Unit,
-    onGoToSearch: () -> Unit,
-    onPostUrlCopied: (Post) -> Unit,
-    onStartOver: () -> Unit,
-    onAddIncludeTerm: (Post, SearchTerm) -> Boolean,
-    onAddExcludeTerm: (Post, SearchTerm) -> Boolean,
-    onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
-    onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
-    onFavoriteTagLongPress: ((SourceKey, String) -> Unit)?,
-    tagVideoCountProvider: (SourceKey, String) -> Int?,
-    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?>,
-) {
-    PostActionSheet(
-        post, creatorBrowsingSources, onDismiss, { onSaveToDevice(post) },
-        onSaveToCodex = { onRequestSaveToCodex(post) },
-        onOpenCreatorProfile = onOpenCreatorProfile,
-        onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
-        onGoToSearch = onGoToSearch,
-        onPostUrlCopied = onPostUrlCopied,
-        onStartOver = onStartOver.takeIf { maxOf(post.mediaCount ?: 1, post.media.size) > 1 },
-    ) {
-        PostBoundTagSection(
-            post, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm, onRemoveExcludeTerm,
-            onFavoriteTagLongPress, tagVideoCountProvider, fetchTagVideoCounts,
-        )
     }
 }
 

@@ -46,6 +46,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import com.theoriacodex.app.media.noMediaDurationStateForPost
+import com.theoriacodex.app.ui.components.FeedCardEnvironment
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
@@ -287,10 +289,10 @@ class ViewerReturnTransitionTest {
                     },
                     shelfContent = {
                         RelatedPostsShelf(
-                            state = loaded, posts = related, likedPostIds = emptySet(), pixivUgoiraClient = null,
-                            onToggleLike = {}, onOpenPost = { _, _ -> }, onLongPress = {}, onDismiss = {},
-                            onRetry = {}, onPreviousPage = {}, onNextPage = {}, onViewportChanged = { _, _ -> },
-                            onAuthoritativeDurationKnown = { _, _ -> },
+                            state = loaded, posts = related,
+                            environment = FeedCardEnvironment(null, emptySet(), emptyMap(), noMediaDurationStateForPost, {}, { _, _ -> }, { _, _ -> }),
+                            onOpenPost = { _, _ -> }, onLongPress = {}, onDismiss = {},
+                            onRetry = {}, onPreviousPage = {}, onNextPage = {},
                         )
                     },
                 )

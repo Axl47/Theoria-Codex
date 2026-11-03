@@ -63,7 +63,6 @@ import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.search.rememberSearchDurationFilterPresentation
 import com.theoriacodex.app.source.displayName
-import com.theoriacodex.app.tags.PostBoundTagSection
 import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.FeedErrorTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
@@ -73,9 +72,9 @@ import com.theoriacodex.app.ui.components.FeedScrollSignal
 import com.theoriacodex.app.ui.components.FeedLoadingState
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.SourceSelector
-import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.ui.components.TwoColumnProjectedPostStaggeredGrid
 import com.theoriacodex.app.ui.components.FeedCardEnvironment
+import com.theoriacodex.app.ui.components.FeedPostActionSheet
 import com.theoriacodex.app.ui.components.FeedPostCard
 import com.theoriacodex.app.ui.components.FeedRelatedPostsShelf
 import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
@@ -167,7 +166,7 @@ fun ForYouScreen(
     }
 
     selectedActionPost?.let { post ->
-        ForYouPostSheet(
+        FeedPostActionSheet(
             post, creatorBrowsingSources, { selectedActionPost = null }, onSaveToDevice, onRequestSaveToCodex, onOpenCreatorProfile,
             onOpenLegacyCreatorProfile, onGoToSearch, onPostUrlCopied, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm,
             onRemoveExcludeTerm, onFavoriteTagLongPress,
@@ -179,35 +178,6 @@ fun ForYouScreen(
             state.sortMode, fabRestoreState, feed, onFabRestoreStateChange, onAction,
             onReset = { clearFilters() }, onDismiss = { showSortSheet = false },
         )
-    }
-}
-
-@Composable
-private fun ForYouPostSheet(
-    post: Post,
-    creatorBrowsingSources: Set<SourceKey>,
-    onDismiss: () -> Unit,
-    onSaveToDevice: (Post) -> Unit,
-    onRequestSaveToCodex: (Post) -> Unit,
-    onOpenCreatorProfile: (CreatorProfile) -> Unit,
-    onOpenLegacyCreatorProfile: (Post) -> Unit,
-    onGoToSearch: () -> Unit,
-    onPostUrlCopied: (Post) -> Unit,
-    onAddIncludeTerm: (Post, SearchTerm) -> Boolean,
-    onAddExcludeTerm: (Post, SearchTerm) -> Boolean,
-    onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
-    onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
-    onFavoriteTagLongPress: ((SourceKey, String) -> Unit)?,
-) {
-    PostActionSheet(
-        post, creatorBrowsingSources, onDismiss, { onSaveToDevice(post) },
-        onSaveToCodex = { onRequestSaveToCodex(post) },
-        onOpenCreatorProfile = onOpenCreatorProfile,
-        onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
-        onGoToSearch = onGoToSearch,
-        onPostUrlCopied = onPostUrlCopied,
-    ) {
-        PostBoundTagSection(post, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress)
     }
 }
 

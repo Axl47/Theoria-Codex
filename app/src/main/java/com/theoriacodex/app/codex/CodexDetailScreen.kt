@@ -55,13 +55,12 @@ import com.theoriacodex.app.search.AnimatedDurationRangeControl
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.source.displayName
-import com.theoriacodex.app.tags.PostBoundTagSection
 import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
 import com.theoriacodex.app.ui.components.FeedScrollSignal
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
-import com.theoriacodex.app.ui.components.PostActionSheet
+import com.theoriacodex.app.ui.components.FeedPostActionSheet
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
 import com.theoriacodex.app.viewer.PixivUgoiraClient
@@ -181,10 +180,12 @@ fun CodexDetailScreen(
         )
     }
     selectedActionPost?.let { post ->
-        CodexDetailPostSheet(
-            post, creatorBrowsingSources, canRemove = customHeader == null, onDismiss = { selectedActionPost = null }, onSavePostToDevice,
-            onAddPostsToAnotherCodex, onRemovePosts, onOpenCreatorProfile, onOpenLegacyCreatorProfile, onGoToSearch, onPostUrlCopied,
-            onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, tagVideoCountProvider, fetchTagVideoCounts,
+        FeedPostActionSheet(
+            post, creatorBrowsingSources, { selectedActionPost = null }, onSavePostToDevice, { onAddPostsToAnotherCodex(listOf(it)) },
+            onOpenCreatorProfile, onOpenLegacyCreatorProfile, onGoToSearch, onPostUrlCopied, onAddIncludeTerm, onAddExcludeTerm,
+            onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, tagVideoCountProvider, fetchTagVideoCounts,
+            saveToCodexLabel = "Add to another Codex",
+            onRemoveFromCodex = if (customHeader == null) ({ onRemovePosts(listOf(post)) }) else null,
         )
     }
     CodexDeleteConfirmationDialog(showDeleteConfirm, codexName, isLikesCodex, { showDeleteConfirm = false }) {
@@ -267,44 +268,6 @@ private fun CodexDetailFilterFab(
         },
         scrollSignal = filterScroll,
     )
-}
-
-@Composable
-private fun CodexDetailPostSheet(
-    post: Post,
-    creatorBrowsingSources: Set<SourceKey>,
-    canRemove: Boolean,
-    onDismiss: () -> Unit,
-    onSavePostToDevice: (Post) -> Unit,
-    onAddPostsToAnotherCodex: (List<Post>) -> Unit,
-    onRemovePosts: (List<Post>) -> Unit,
-    onOpenCreatorProfile: (CreatorProfile) -> Unit,
-    onOpenLegacyCreatorProfile: (Post) -> Unit,
-    onGoToSearch: (() -> Unit)?,
-    onPostUrlCopied: (Post) -> Unit,
-    onAddIncludeTerm: (Post, SearchTerm) -> Boolean,
-    onAddExcludeTerm: (Post, SearchTerm) -> Boolean,
-    onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
-    onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
-    onFavoriteTagLongPress: ((SourceKey, String) -> Unit)?,
-    tagVideoCountProvider: (SourceKey, String) -> Int?,
-    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?>,
-) {
-    PostActionSheet(
-        post, creatorBrowsingSources, onDismiss, { onSavePostToDevice(post) },
-        onSaveToCodex = { onAddPostsToAnotherCodex(listOf(post)) },
-        saveToCodexLabel = "Add to another Codex",
-        onRemoveFromCodex = if (canRemove) ({ onRemovePosts(listOf(post)) }) else null,
-        onOpenCreatorProfile = onOpenCreatorProfile,
-        onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
-        onGoToSearch = onGoToSearch,
-        onPostUrlCopied = onPostUrlCopied,
-    ) {
-        PostBoundTagSection(
-            post, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm, onRemoveExcludeTerm,
-            onFavoriteTagLongPress, tagVideoCountProvider, fetchTagVideoCounts,
-        )
-    }
 }
 
 /** What the collection grid shows once the saved filters and known durations are applied. */
