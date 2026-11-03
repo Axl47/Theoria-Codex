@@ -362,6 +362,28 @@ class MediaDurationCoordinatorTest {
         second.close()
     }
 
+    @Test
+    fun `stored no-media verdict is re-derived after a source gains a resolver`() = runTest {
+        val repository = InMemoryMediaDurationRepository()
+        val post = post("ugoira")
+        val key = key(post)
+        repository.put(
+            key.toStoredKey(),
+            MediaDurationState.Unsupported(MediaDurationUnsupportedReason.NO_AUTHORITATIVE_MEDIA).toStoredState()!!,
+        )
+        val coordinator = coordinator(
+            scope = this,
+            acquirer = MediaDurationAcquirer { known(2_000L) },
+            durationRepository = repository,
+        )
+        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        coordinator.submit(post, demand("search", key, DurationDemandPriority.ACTIVE_FILTER))
+        runCurrent()
+
+        assertEquals(known(2_000L), coordinator.states.value[key])
+        coordinator.close()
+    }
+
     private fun coordinator(
         scope: CoroutineScope,
         acquirer: MediaDurationAcquirer,

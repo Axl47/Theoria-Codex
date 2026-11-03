@@ -385,7 +385,10 @@ class MediaDurationCoordinator(
     private suspend fun loadStoredState(key: MediaDurationKey): MediaDurationState? {
         val repository = durationRepository ?: return null
         return try {
-            repository.get(key.toStoredKey())?.toMediaDurationState()
+            // "No media" costs nothing to re-derive, and a source may have gained a resolver since.
+            repository.get(key.toStoredKey())?.toMediaDurationState()?.takeUnless { state ->
+                state == MediaDurationState.Unsupported(MediaDurationUnsupportedReason.NO_AUTHORITATIVE_MEDIA)
+            }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
