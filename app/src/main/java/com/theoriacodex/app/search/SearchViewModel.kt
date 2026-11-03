@@ -114,7 +114,7 @@ internal class SearchViewModel(
     private var autocompleteJob: Job? = null
     private var trendingJob: Job? = null
     private var restorationJob: Job? = null
-    private var pendingHistoricalQuery: SearchAction.ApplyHistoricalQuery? = null
+    private var pendingRootSearch: (() -> Unit)? = null
     private var activeContinuation: SearchContinuation? = null
     private var pageRetrySource: SourceKey? = null
     private var latestEnvironmentSettings: AppSettings? = null
@@ -162,9 +162,11 @@ internal class SearchViewModel(
             }
             SearchAction.ApplyDraft -> applyDraft()
 
-            is SearchAction.ApplyHistoricalQuery -> acceptHistoricalQuery(action)
+            is SearchAction.ApplyHistoricalQuery -> runAfterRestoration {
+                applyHistoricalQuery(action.query, action.sourceScope)
+            }
 
-            is SearchAction.ApplyTagSearch -> applyTagSearch(action)
+            is SearchAction.ApplyTagSearch -> runAfterRestoration { applyTagSearch(action) }
 
             is SearchAction.RetrySource -> retrySource(action.source)
 
@@ -357,13 +359,17 @@ internal class SearchViewModel(
         )
     }
 
-    private fun acceptHistoricalQuery(action: SearchAction.ApplyHistoricalQuery) {
-        if (mutableState.value.restoration !is SearchRestorationUiState.Restored) {
-            pendingHistoricalQuery = action
-            restore()
+    /**
+     * Runs a search requested from outside Search, such as from Recents or a Codex. Before Search has
+     * restored, it waits (latest request wins), because restoration would replace its draft and request.
+     */
+    private fun runAfterRestoration(search: () -> Unit) {
+        if (mutableState.value.restoration is SearchRestorationUiState.Restored) {
+            search()
             return
         }
-        applyHistoricalQuery(action.query, action.sourceScope)
+        pendingRootSearch = search
+        restore()
     }
 
     private fun applyHistoricalQuery(query: Query, sourceScope: SearchSourceScope, undo: Boolean = false) {
@@ -906,9 +912,9 @@ internal class SearchViewModel(
                 savedStateHandle[SearchSavedStateKeys.RESTORATION_COMPLETED] = true
                 persistDraftQuery()
                 refreshTrending()
-                val historicalQuery = pendingHistoricalQuery.also { pendingHistoricalQuery = null }
-                if (historicalQuery != null) {
-                    applyHistoricalQuery(historicalQuery.query, historicalQuery.sourceScope)
+                val pendingSearch = pendingRootSearch.also { pendingRootSearch = null }
+                if (pendingSearch != null) {
+                    pendingSearch()
                 } else if (environmentChanged) {
                     val current = mutableState.value
                     launchRootSearch(

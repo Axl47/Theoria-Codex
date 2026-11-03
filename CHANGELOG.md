@@ -50,6 +50,7 @@
 
 ### Fixed
 
+- Searching with a Codex's tags now always updates Search's tags and runs that search, instead of sometimes repeating the previous one when Search had not opened yet.
 - Smooth the Viewer's closing animation by waiting to start feed videos until the media lands on its card.
 - Remove the navy band behind the status bar above the Viewer's black background.
 - Double-tap to zoom a still image anywhere on screen, not only in its middle.

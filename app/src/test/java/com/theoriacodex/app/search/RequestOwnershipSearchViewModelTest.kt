@@ -364,6 +364,40 @@ internal class RequestOwnershipSearchViewModelTest : SearchViewModelTestFixture(
         }
 
     @Test
+    fun `Codex tag search arriving before restoration replaces the restored search`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val adapter = ViewModelSearchAdapter()
+            val queries = InMemoryQueryRepository()
+            val restores = InMemoryUiRestoreRepository()
+            val previous = viewModel(adapter, queryRepository = queries, uiRestoreRepository = restores)
+            restore(previous)
+            previous.onAction(
+                SearchAction.ApplyHistoricalQuery(
+                    Query(
+                        mode = QueryMode.Source(SourceKey.PIXIV),
+                        includeTerms = listOf(SearchTerm("history")),
+                        excludeTerms = emptyList(),
+                        sort = SortMode.NEWEST,
+                        dateRange = null,
+                        minScore = null,
+                    ),
+                ),
+            )
+            advanceUntilIdle()
+
+            val viewModel = viewModel(adapter, queryRepository = queries, uiRestoreRepository = restores)
+            // The shell flushes queued actions when the owner is published, ahead of the route's Restore.
+            viewModel.onAction(SearchAction.ApplyTagSearch(listOf("codex"), QueryMode.Source(SourceKey.PIXIV)))
+            viewModel.onAction(SearchAction.Restore)
+            advanceUntilIdle()
+
+            val query = viewModel.state.value.query
+            assertEquals(listOf(SearchTerm("codex")), query.draft.includeTerms)
+            assertEquals(listOf(SearchTerm("codex")), query.applied.includeTerms)
+            assertEquals(listOf("codex-result"), resultIds(viewModel))
+        }
+
+    @Test
     fun `historical Multi-Search restores its explicit source scope`() =
         runTest(mainDispatcherRule.dispatcher) {
             val viewModel = viewModel(
