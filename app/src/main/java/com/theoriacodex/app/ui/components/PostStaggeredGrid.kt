@@ -110,6 +110,7 @@ internal fun AdaptivePostGrid(
 ) {
     val gridId = rememberSaveable { UUID.randomUUID().toString() }
     ViewerReturnGridEffect(gridId, postIds, state, shelfIds)
+    FeedLaneJumpLogger(gridId, state)
     CompositionLocalProvider(LocalViewerReturnGrid provides gridId) {
         BoxWithConstraints(modifier = modifier) {
             LazyVerticalStaggeredGrid(
