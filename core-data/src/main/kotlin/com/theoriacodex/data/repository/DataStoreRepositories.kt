@@ -261,29 +261,11 @@ class DataStoreSettingsRepository(
         return requireNotNull(result).value
     }
 
-    private fun recordReady(stored: SettingsDataStoreFile) {
-        mutableStorageStatus.update { current ->
-            current.copy(
-                phase = DurableStorePhase.READY,
-                imports = stored.legacyImports,
-                failureReason = null,
-            )
-        }
-    }
+    private fun recordReady(stored: SettingsDataStoreFile) = mutableStorageStatus.recordReady(stored.legacyImports)
 
-    private fun recordImports(imports: List<LegacyImportProof>) {
-        mutableStorageStatus.update { current -> current.copy(imports = imports) }
-    }
+    private fun recordImports(imports: List<LegacyImportProof>) = mutableStorageStatus.recordImports(imports)
 
-    private fun recordFailure(failure: Throwable) {
-        if (failure is CancellationException) throw failure
-        mutableStorageStatus.update { current ->
-            current.copy(
-                phase = DurableStorePhase.FAILED,
-                failureReason = failure.message ?: failure::class.simpleName,
-            )
-        }
-    }
+    private fun recordFailure(failure: Throwable) = mutableStorageStatus.recordFailure(failure)
 }
 
 class DataStoreUiRestoreRepository(
@@ -441,28 +423,25 @@ class DataStoreUiRestoreRepository(
         return updated.toMemoryState()
     }
 
-    private fun recordReady(stored: UiRestoreDataStoreFile) {
-        mutableStorageStatus.update { current ->
-            current.copy(
-                phase = DurableStorePhase.READY,
-                imports = stored.legacyImports,
-                failureReason = null,
-            )
-        }
-    }
+    private fun recordReady(stored: UiRestoreDataStoreFile) = mutableStorageStatus.recordReady(stored.legacyImports)
 
-    private fun recordImports(imports: List<LegacyImportProof>) {
-        mutableStorageStatus.update { current -> current.copy(imports = imports) }
-    }
+    private fun recordImports(imports: List<LegacyImportProof>) = mutableStorageStatus.recordImports(imports)
 
-    private fun recordFailure(failure: Throwable) {
-        if (failure is CancellationException) throw failure
-        mutableStorageStatus.update { current ->
-            current.copy(
-                phase = DurableStorePhase.FAILED,
-                failureReason = failure.message ?: failure::class.simpleName,
-            )
-        }
+    private fun recordFailure(failure: Throwable) = mutableStorageStatus.recordFailure(failure)
+}
+
+private fun MutableStateFlow<DurableStoreStatus>.recordReady(imports: List<LegacyImportProof>) = update { current ->
+    current.copy(phase = DurableStorePhase.READY, imports = imports, failureReason = null)
+}
+
+private fun MutableStateFlow<DurableStoreStatus>.recordImports(imports: List<LegacyImportProof>) = update { current ->
+    current.copy(imports = imports)
+}
+
+private fun MutableStateFlow<DurableStoreStatus>.recordFailure(failure: Throwable) {
+    if (failure is CancellationException) throw failure
+    update { current ->
+        current.copy(phase = DurableStorePhase.FAILED, failureReason = failure.message ?: failure::class.simpleName)
     }
 }
 
