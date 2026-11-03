@@ -89,7 +89,7 @@ internal fun ViewerMediaPage(
     onToggleChrome: () -> Unit,
     onRequestMediaRecovery: ((Post, ImageRef) -> Unit)?,
     levelControls: ViewerLevelControls? = null,
-    returnProgress: Float = 0f,
+    returnProgress: () -> Float = { 0f },
     dismissDrag: ViewerDismissDrag? = null,
 ) {
     val key = ViewerMediaKey(post.id, mediaIndex)

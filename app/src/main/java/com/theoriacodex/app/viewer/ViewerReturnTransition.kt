@@ -14,6 +14,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import java.util.UUID
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -237,10 +238,10 @@ internal class ViewerDismissDrag {
 }
 
 /** Applies the held pose, handing off to the return transition as its progress advances. */
-internal fun Modifier.viewerDismissDrag(drag: ViewerDismissDrag?, returnProgress: Float): Modifier {
+internal fun Modifier.viewerDismissDrag(drag: ViewerDismissDrag?, returnProgress: () -> Float): Modifier {
     if (drag == null) return this
-    val remaining = 1f - returnProgress.coerceIn(0f, 1f)
     return graphicsLayer {
+        val remaining = 1f - returnProgress().coerceIn(0f, 1f)
         val poseScale = 1f + (drag.scale - 1f) * remaining
         scaleX = poseScale
         scaleY = poseScale
@@ -346,9 +347,12 @@ private suspend fun LazyListState.centerViewerReturnItem(index: Int) {
 internal fun viewerReturnCenterScroll(itemTop: Int, itemHeight: Int, viewportStart: Int, viewportEnd: Int): Float =
     itemTop + itemHeight / 2f - (viewportStart + viewportEnd) / 2f
 
-/** One progress value describes both directions: zero is fullscreen and one is the feed card. */
+/**
+ * One progress value describes both directions: zero is fullscreen and one is the feed card. Read it
+ * only while drawing, because reading it in composition recomposes the whole Viewer on every frame.
+ */
 @Composable
-internal fun rememberViewerReturnProgress(): Float {
+internal fun rememberViewerReturnProgress(): State<Float> {
     val transition = LocalViewerReturnTransition.current
     val request = transition?.request
     val progress = remember { Animatable(if (transition?.openingBounds != null) 1f else 0f) }
@@ -366,33 +370,53 @@ internal fun rememberViewerReturnProgress(): Float {
         }
         progress.animateTo(1f, tween(if (transition.targetBounds == null) TheoriaMotion.MEDIUM_MS else VIEWER_RETURN_DURATION_MS))
     }
-    return progress.value
+    return progress.asState()
+}
+
+/** Chosen when the media starts moving, so a card that appears later cannot make it jump. */
+private class ViewerLandingTarget {
+    private var chosen = false
+    private var target: Rect? = null
+
+    fun resolve(moving: Boolean, current: Rect?): Rect? {
+        if (!moving) return current
+        if (!chosen) {
+            chosen = true
+            target = current
+        }
+        return target
+    }
 }
 
 /** Uniform scale plus an animated crop preserves media proportions when the card has a different aspect ratio. */
 @Composable
-internal fun Modifier.viewerReturnMedia(progress: Float, aspectRatio: Float?): Modifier {
+internal fun Modifier.viewerReturnMedia(progress: () -> Float, aspectRatio: Float?): Modifier {
     val transition = LocalViewerReturnTransition.current ?: return this
     if (transition.request == null && transition.openingBounds == null) return this
     var windowBounds by remember { mutableStateOf(Rect.Zero) }
     val closing = transition.request != null
-    val target = remember(transition.request, progress > 0f) {
-        if (closing) transition.targetBounds else transition.openingBounds
-    }
-    val geometry = viewerReturnGeometry(windowBounds, target, aspectRatio, progress)
-    val corners = if (closing) transition.targetCorners else transition.openingCorners
+    val landing = remember(transition.request) { ViewerLandingTarget() }
+    fun geometry(current: Float) = viewerReturnGeometry(
+        windowBounds,
+        landing.resolve(current > 0f, if (closing) transition.targetBounds else transition.openingBounds),
+        aspectRatio,
+        current,
+    )
     return onGloballyPositioned {
-        if (windowBounds.isEmpty || progress == 0f) windowBounds = it.boundsInWindow(clipBounds = false)
+        if (windowBounds.isEmpty || progress() == 0f) windowBounds = it.boundsInWindow(clipBounds = false)
     }
         .drawWithContent {
-            drawViewerReturnFrame(progress, closing, geometry.crop, corners)
+            val current = progress()
+            val corners = if (closing) transition.targetCorners else transition.openingCorners
+            drawViewerReturnFrame(current, closing, geometry(current).crop, corners)
         }
         .graphicsLayer {
+            val moved = geometry(progress())
             transformOrigin = TransformOrigin(0.5f, 0.5f)
-            scaleX = geometry.scale
-            scaleY = geometry.scale
-            translationX = geometry.translationX
-            translationY = geometry.translationY
+            scaleX = moved.scale
+            scaleY = moved.scale
+            translationX = moved.translationX
+            translationY = moved.translationY
         }
 }
 

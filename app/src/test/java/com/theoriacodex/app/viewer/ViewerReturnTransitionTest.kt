@@ -202,7 +202,7 @@ class ViewerReturnTransitionTest {
                     composable("feed") { Box(Modifier.fillMaxSize().testTag("source feed")) }
                     composable("viewer") {
                         ViewerReturnLifetime(this)
-                        val value = rememberViewerReturnProgress()
+                        val value = rememberViewerReturnProgress().value
                         SideEffect { progress = value }
                         Box(Modifier.fillMaxSize().testTag("returning media"))
                     }

@@ -33,6 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
@@ -115,8 +116,9 @@ internal fun ViewerScreen(
     val relatedState = uiState.related.state
     val relatedPosts = uiState.related.posts
     val returnProgress = rememberViewerReturnProgress()
+    val readReturnProgress = remember(returnProgress) { { returnProgress.value } }
     val returning = LocalViewerReturnTransition.current?.request != null
-    val opening = !returning && returnProgress > 0f
+    val opening by remember(returning, returnProgress) { derivedStateOf { !returning && returnProgress.value > 0f } }
     val dismissDrag = remember { ViewerDismissDrag() }
     val activity = LocalContext.current.viewerActivity()
     val inPictureInPicture = activity?.viewerPictureInPictureActive == true
@@ -434,7 +436,7 @@ internal fun ViewerScreen(
         modifier = Modifier
             .fillMaxSize()
             .drawBehind {
-                drawRect(Color.Black.copy(alpha = (1f - returnProgress) * (1f - VIEWER_DISMISS_DIM * dismissDrag.progress)))
+                drawRect(Color.Black.copy(alpha = (1f - returnProgress.value) * (1f - VIEWER_DISMISS_DIM * dismissDrag.progress)))
             }
     ) {
         if (mediaOverviewVisible && mediaOverviewAvailable) {
@@ -573,7 +575,7 @@ internal fun ViewerScreen(
                 ViewerMediaPage(
                     post = post,
                     media = media,
-                    returnProgress = if (active) returnProgress else 0f,
+                    returnProgress = if (active) readReturnProgress else restingReturnProgress,
                     dismissDrag = dismissDrag.takeIf { active },
                     mediaIndex = mediaPage,
                     controls = ViewerRendererControls(
@@ -792,5 +794,6 @@ private fun ViewerChromeVisibility(visible: Boolean, modifier: Modifier, content
     ) { content() }
 }
 
+private val restingReturnProgress = { 0f }
 private val VIEWER_BACK_DISTANCE = 48.dp
 private const val VIEWER_DISMISS_DIM = 0.7f
