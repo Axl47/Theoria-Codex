@@ -45,6 +45,7 @@
 - Show a Codex and the Saved screen immediately when returning to them from the Viewer.
 - Open the Viewer and Codices without waiting for settings and likes to reload.
 - Stop feed videos going blank behind the Viewer when you tap a post.
+- Open large Codices like Likes with their posts already showing, instead of an empty screen after the opening animation.
 - Stop rapid flicks in the Viewer being dropped when one lands while the previous post is still settling.
 - Stop the Viewer dipping to black when the full image replaces its preview, on opening a post and while swiping.
 - Keep a loading thumbnail or video inside the media's own shape instead of briefly filling the screen.

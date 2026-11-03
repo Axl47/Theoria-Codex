@@ -641,6 +641,11 @@ internal fun TheoriaAppContent(
             data = dataDependencies,
             sources = sourceDependencies,
             thumbnailCacheGeneration = thumbnailCacheGeneration,
+            savedSortFor = { codexId ->
+                feedFabRestoreRegistry.state(codexFeedFabContext(codexId))?.sortMode
+                    ?.let { saved -> CodexSortMode.entries.firstOrNull { it.name == saved } }
+                    ?: CodexSortMode.NEWEST_SAVED
+            },
         ) { state ->
             CodexListScreen(
                 codices = state.visibleCodices,

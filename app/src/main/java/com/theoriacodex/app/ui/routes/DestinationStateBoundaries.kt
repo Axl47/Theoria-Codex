@@ -1,7 +1,9 @@
 package com.theoriacodex.app.ui.routes
 
 import androidx.compose.runtime.Composable
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -192,6 +194,7 @@ internal fun CodexDestinationStateBoundary(
     data: DataDependencies,
     sources: SourceDependencies,
     thumbnailCacheGeneration: Int,
+    savedSortFor: (String) -> CodexSortMode = { CodexSortMode.NEWEST_SAVED },
     content: @Composable (CodexDestinationState) -> Unit,
 ) {
     val settingsState = rememberRetained("settings") { data.settingsRepository.observeSettings() }
@@ -217,6 +220,7 @@ internal fun CodexDestinationStateBoundary(
         val observeActions = remember(source, availableSources) {
             { id: String -> source.observeActionOptions(id, availableSources) }
         }
+        CodexContentWarmUp(data, collection.itemCounts, savedSortFor)
         content(
             CodexDestinationState(
                 allCodices = codices,
@@ -254,12 +258,10 @@ internal fun CodexDetailDestinationStateBoundary(
         FollowedCodexDestinationStateBoundary(data, sources, metadata.settings, fabRestoreState, sortMode, render)
         return
     }
-    val lookup by rememberRetained("codex:$codexId") { data.codexRepository.observeCodex(codexId).map(::CodexLookup) }
-    val items by rememberRetained("items:$codexId") { data.codexRepository.observeCodexItems(codexId) }
-    val sortedPosts by rememberRetained("posts:$codexId:$sortMode") {
-        data.codexRepository.observeCodexPosts(codexId, sortMode)
-            .onEach { posts -> posts.forEach { data.statisticsRepository.recordPostAvailable(it) } }
-    }
+    val content = rememberCodexContentFlows()
+    val lookup by rememberRetained(codexLookupKey(codexId), content) { codexLookupFlow(data, codexId) }
+    val items by rememberRetained(codexItemsKey(codexId), content) { data.codexRepository.observeCodexItems(codexId) }
+    val sortedPosts by rememberRetained(codexPostsKey(codexId, sortMode), content) { codexPostsFlow(data, codexId, sortMode) }
     // Changing the sort keeps showing the previous order until the new one answers.
     val shownPosts = remember(codexId) { ShownPosts() }
     sortedPosts?.let { shownPosts.latest = it }
@@ -280,6 +282,40 @@ internal fun CodexDetailDestinationStateBoundary(
             loading = lookup == null || posts == null,
         ),
     )
+}
+
+private fun codexLookupKey(codexId: String) = "codex:$codexId"
+private fun codexItemsKey(codexId: String) = "items:$codexId"
+private fun codexPostsKey(codexId: String, sort: CodexSortMode) = "posts:$codexId:$sort"
+private fun codexLookupFlow(data: DataDependencies, codexId: String) = data.codexRepository.observeCodex(codexId).map(::CodexLookup)
+private fun codexPostsFlow(data: DataDependencies, codexId: String, sort: CodexSortMode) =
+    data.codexRepository.observeCodexPosts(codexId, sort)
+        .onEach { posts -> posts.forEach { data.statisticsRepository.recordPostAvailable(it) } }
+
+private const val WARM_CODEX_MIN_ITEMS = 200
+private const val WARM_CODEX_LIMIT = 2
+
+/** Prepares the largest Codices while the Library shows, since only they outlast the opening animation. */
+@Composable
+private fun CodexContentWarmUp(data: DataDependencies, itemCounts: Map<String, Int>, savedSortFor: (String) -> CodexSortMode) {
+    val content = rememberCodexContentFlows()
+    val largest = remember(itemCounts) {
+        itemCounts.entries.filter { it.value >= WARM_CODEX_MIN_ITEMS }.sortedByDescending { it.value }
+            .take(WARM_CODEX_LIMIT).map { it.key }
+    }
+    val currentSavedSortFor by rememberUpdatedState(savedSortFor)
+    largest.forEach { codexId ->
+        key(codexId) {
+            LaunchedEffect(content) {
+                val sort = currentSavedSortFor(codexId)
+                merge(
+                    content.retain(codexLookupKey(codexId)) { codexLookupFlow(data, codexId) },
+                    content.retain(codexItemsKey(codexId)) { data.codexRepository.observeCodexItems(codexId) },
+                    content.retain(codexPostsKey(codexId, sort)) { codexPostsFlow(data, codexId, sort) },
+                ).collect()
+            }
+        }
+    }
 }
 
 /** Tells "not answered yet" from "answered that no such Codex exists", which a bare null cannot. */
