@@ -91,6 +91,7 @@ internal fun ViewerMediaPage(
     levelControls: ViewerLevelControls? = null,
     returnProgress: () -> Float = { 0f },
     dismissDrag: ViewerDismissDrag? = null,
+    onSeekInteraction: () -> Unit = {},
 ) {
     val key = ViewerMediaKey(post.id, mediaIndex)
     val isVideo = isVideoMediaRef(media)
@@ -130,7 +131,7 @@ internal fun ViewerMediaPage(
             FittedSeekJumpFeedbackOverlay(interactions.feedback, viewerAspectRatio(post), interactions::clearFeedback, Modifier.matchParentSize())
         }
         ViewerMediaGestureLayer(key, isVideo || isGif || isUgoira, animated, interactions, controls,
-            transform, transformBounds, onTransformChanged, layout, onAction, onInteraction, onToggleChrome)
+            transform, transformBounds, onTransformChanged, layout, onAction, onInteraction, onToggleChrome, onSeekInteraction)
         if (controls.isActive && isVideo && !layout.pictureInPicture && levelControls != null) {
             ViewerLevelFeedbackOverlay(levelControls, Modifier.matchParentSize())
         }
@@ -188,7 +189,7 @@ private fun ViewerMediaGestureLayer(
     interactions: ViewerMediaInteractions, controls: ViewerRendererControls,
     transform: ViewerTransformState, bounds: ViewerTransformBounds, onTransformChanged: (ViewerTransformState) -> Unit,
     layout: ViewerMediaLayout, onAction: (ViewerAction) -> Unit, onInteraction: () -> Unit,
-    onToggleChrome: () -> Unit,
+    onToggleChrome: () -> Unit, onSeekInteraction: () -> Unit,
 ) {
     val currentTransform by rememberUpdatedState(transform)
     val currentOnTransformChanged by rememberUpdatedState(onTransformChanged)
@@ -216,7 +217,7 @@ private fun ViewerMediaGestureLayer(
         mediaKey = key, active = controls.isActive && !layout.pictureInPicture, seekable = seekable,
         zoomed = transform.isZoomed, chromeVisible = controls.showControls, touchExplorationEnabled = layout.touchExploration,
         actions = ViewerMediaGestureActions(
-            seek = { interactions.seek(it); onInteraction() },
+            seek = { interactions.seek(it); onSeekInteraction() },
             zoom = { tap -> animateZoom(tap); onInteraction() },
             toggleControls = onToggleChrome,
             showInfo = { onAction(ViewerAction.ShowMetadata); onInteraction() },

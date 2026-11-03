@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performTouchInput
@@ -47,6 +48,8 @@ class ViewerLevelGesturesTest {
     private val controls = mutableStateOf(ViewerRendererControls(true, true, false, true, 1f, 0L, 0L))
     private val navigations = mutableListOf<ViewerHorizontalSwipeDirection>()
     private var chromeToggles = 0
+    private var interactions = 0
+    private var seekInteractions = 0
     private var dismissDrags = 0
     private var infoSwipes = 0
 
@@ -168,6 +171,16 @@ class ViewerLevelGesturesTest {
         compose.onNodeWithContentDescription("Brightness").assertDoesNotExist()
     }
 
+    @Test fun `double tap seeking does not open the controls`() {
+        showPage()
+        compose.onNodeWithContentDescription("Media actions").performTouchInput { doubleClick(Offset(width * 0.9f, centerY)) }
+        compose.runOnIdle {
+            assertEquals(1, seekInteractions)
+            assertEquals(0, interactions)
+            assertEquals(0, chromeToggles)
+        }
+    }
+
     private fun swipeSide(x: Float, up: Boolean) {
         compose.onNodeWithContentDescription("Media actions").performTouchInput {
             val low = Offset(width * x, height * 0.85f)
@@ -207,8 +220,9 @@ class ViewerLevelGesturesTest {
                     ViewerMediaPage(
                         post, media, 0, controls.value, events, transform.value, { transform.value = it },
                         layout.value, ViewerVideoOptions(VideoQuality.AUTO, null, "Unavailable", false),
-                        positions, null, imageSession, null, {}, {}, { chromeToggles++ }, null,
+                        positions, null, imageSession, null, {}, { interactions++ }, { chromeToggles++ }, null,
                         levelControls = levels,
+                        onSeekInteraction = { seekInteractions++ },
                     )
                 }
             }

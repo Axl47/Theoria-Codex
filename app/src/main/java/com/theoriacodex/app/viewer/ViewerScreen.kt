@@ -613,6 +613,8 @@ internal fun ViewerScreen(
                     pixivUgoiraClient = pixivUgoiraClient,
                     onAction = onAction,
                     onInteraction = { markInteraction() },
+                    // Seeking shows its own feedback: it keeps open controls alive but never opens them.
+                    onSeekInteraction = { interactionSerial += 1 },
                     onToggleChrome = { onAction(ViewerAction.ToggleChrome); interactionSerial += 1 },
                     imageSession = imageSession,
                     onRequestMediaRecovery = onRequestMediaRecovery,
