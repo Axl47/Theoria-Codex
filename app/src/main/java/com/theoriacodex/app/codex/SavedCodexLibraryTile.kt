@@ -89,17 +89,39 @@ private fun SavedCollectionTile(
     onOpenActions: (String) -> Unit,
     modifier: Modifier,
 ) {
-    val count = presentation.itemCounts[collection.codexId] ?: 0
-    val covers = presentation.coverCandidates[collection.codexId].orEmpty()
+    CodexCoverTile(
+        name = collection.name,
+        itemCount = presentation.itemCounts[collection.codexId] ?: 0,
+        covers = presentation.coverCandidates[collection.codexId].orEmpty(),
+        icon = savedCodexChildIcon(collection.codexId),
+        emptyHint = savedCodexEmptyHint(collection.codexId),
+        onOpen = { onOpen(collection.codexId) },
+        onOpenActions = { onOpenActions(collection.codexId) },
+        modifier = modifier,
+    )
+}
+
+/** Every Codex in the library: name and count over its cover, with actions on long press. */
+@Composable
+internal fun CodexCoverTile(
+    name: String,
+    itemCount: Int,
+    covers: List<CodexCoverCandidate>,
+    onOpen: () -> Unit,
+    onOpenActions: () -> Unit,
+    modifier: Modifier,
+    icon: ImageVector? = null,
+    emptyHint: String? = null,
+) {
     val onCover = covers.isNotEmpty()
     val textColor = if (onCover) Color.White else MaterialTheme.colorScheme.onSurface
     Box(
         modifier.clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .combinedClickable(
-                onClick = { onOpen(collection.codexId) },
-                onLongClick = { onOpenActions(collection.codexId) },
-                onLongClickLabel = "Actions for ${collection.name}",
+                onClick = onOpen,
+                onLongClick = onOpenActions,
+                onLongClickLabel = "Actions for $name",
             ),
     ) {
         if (onCover) {
@@ -113,16 +135,16 @@ private fun SavedCollectionTile(
         }
         Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(10.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(savedCodexChildIcon(collection.codexId), null, Modifier.size(16.dp), tint = textColor)
+                icon?.let { Icon(it, null, Modifier.size(16.dp), tint = textColor) }
                 Text(
-                    collection.name, Modifier.weight(1f), style = MaterialTheme.typography.labelLarge,
+                    name, Modifier.weight(1f), style = MaterialTheme.typography.labelLarge,
                     color = textColor, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
-                Text(count.toString(), style = MaterialTheme.typography.labelLarge, color = textColor)
+                Text(itemCount.toString(), style = MaterialTheme.typography.labelLarge, color = textColor)
             }
-            if (count == 0 && !onCover) {
+            if (emptyHint != null && itemCount == 0 && !onCover) {
                 Text(
-                    savedCodexEmptyHint(collection.codexId),
+                    emptyHint,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,

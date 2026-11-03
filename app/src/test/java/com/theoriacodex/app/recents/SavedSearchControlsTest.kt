@@ -6,6 +6,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.isPopup
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -86,7 +89,7 @@ class SavedSearchControlsTest {
             TestRecents(searches = listOf(pixiv, gelbooru, multi), fyp = listOf(fyp), onOpen = { opened = it })
         } }
         compose.onNodeWithContentDescription("Filter Recents by source").performClick()
-        compose.onNodeWithText("Pixiv").performClick()
+        compose.onNodeWithContentDescription("Pixiv").performClick()
         compose.onNodeWithText("Searches").performClick()
         compose.onNodeWithTag("Recent search:${pixiv.queryHash}").assertExists()
         compose.onNodeWithTag("Recent search:${gelbooru.queryHash}").assertDoesNotExist()
@@ -101,7 +104,7 @@ class SavedSearchControlsTest {
         // The first "All" is the Recents tab; the second is the Searches filter.
         compose.onAllNodesWithText("All", substring = false)[1].performClick()
         compose.onNodeWithContentDescription("Filter Recents by source").performClick()
-        compose.onNodeWithText("All sources").performClick()
+        compose.onNodeWithContentDescription("All sources").performClick()
         compose.onNodeWithText("Searches").performClick()
         compose.onNodeWithTag("Recent search:${gelbooru.queryHash}").assertExists()
     }
@@ -124,7 +127,7 @@ class SavedSearchControlsTest {
             )
         } }
         compose.onNodeWithContentDescription("Filter Recents by source").performClick()
-        compose.onNodeWithText("Pixiv").performClick()
+        compose.onNode(hasContentDescription("Pixiv") and hasAnyAncestor(isPopup())).performClick()
         compose.onNodeWithTag(searchCardTestTag(gelbooru.post.id)).assertDoesNotExist()
         compose.onNodeWithTag(searchCardTestTag(pixiv.post.id)).performClick()
         assertEquals(listOf(pixiv) to 0, opened)

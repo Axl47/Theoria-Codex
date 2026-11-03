@@ -147,7 +147,6 @@ fun RecentsScreen(
                     availableSources = SourceKey.entries,
                     allSourcesLabel = "All sources",
                     accessibilityLabel = "Filter Recents by source",
-                    iconTestTag = "Recents source icon",
                     enabled = true,
                     expanded = sourceMenuExpanded,
                     onExpandedChange = { sourceMenuExpanded = it },

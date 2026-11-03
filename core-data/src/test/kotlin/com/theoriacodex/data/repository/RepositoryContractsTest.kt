@@ -391,6 +391,20 @@ class RepositoryContractTest(
     }
 
     @Test
+    fun `renaming a recommendation profile keeps its identity and rejects unusable input`() = runTest {
+        val repository = createSettingsRepository()
+        val created = repository.addRecommendationProfile("Sketching")
+
+        assertTrue(repository.renameRecommendationProfile(created.profileId, "  Painting  "))
+        assertFalse(repository.renameRecommendationProfile(created.profileId, "   "))
+        assertFalse(repository.renameRecommendationProfile("missing", "Other"))
+
+        val settings = repository.observeSettings().first()
+        assertEquals(created.profileId, settings.activeProfileId)
+        assertEquals("Painting", settings.recommendationProfiles.single { it.profileId == created.profileId }.name)
+    }
+
+    @Test
     fun `recommendation profile mutation trims names and cleans profile-owned state`() = runTest {
         val repository = createSettingsRepository()
         val created = repository.addRecommendationProfile("  Sketching  ")

@@ -58,6 +58,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.components.SheetHeader
+import com.theoriacodex.data.repository.CodexLibrarySort
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.domain.model.Codex
 
@@ -70,6 +71,7 @@ internal fun SaveToCodexSheet(
     codexItemCounts: Map<String, Int>,
     codexCoverCandidates: Map<String, List<CodexCoverCandidate>>,
     relevanceScores: Map<String, Double> = emptyMap(),
+    librarySort: CodexLibrarySort = CodexLibrarySort.MANUAL,
     containingCodexIds: Set<String> = emptySet(),
     excludedCodexIds: Set<String> = emptySet(),
     onCreateCodex: (String, String) -> Unit,
@@ -111,6 +113,7 @@ internal fun SaveToCodexSheet(
         codexItemCounts = codexItemCounts,
         codexCoverCandidates = codexCoverCandidates,
         relevanceScores = relevanceScores,
+        librarySort = librarySort,
         containingCodexIds = containingCodexIds,
         onSelectCodex = onSelectCodex,
         onCycleProfile = {
@@ -145,6 +148,7 @@ private fun SaveToCodexSheetContent(
     codexItemCounts: Map<String, Int>,
     codexCoverCandidates: Map<String, List<CodexCoverCandidate>>,
     relevanceScores: Map<String, Double>,
+    librarySort: CodexLibrarySort,
     containingCodexIds: Set<String>,
     onSelectCodex: (String) -> Unit,
     onCycleProfile: () -> Unit,
@@ -155,8 +159,10 @@ private fun SaveToCodexSheetContent(
     var insideSaved by rememberSaveable(selectedProfile?.profileId) { mutableStateOf(false) }
     var sortByRelevance by rememberSaveable { mutableStateOf(true) }
     val likesId = selectedProfile?.profileId?.let(::likesCodexIdForProfile)
-    val rootCodices = remember(selectedCodices, likesId, insideSaved) {
-        savePickerCodices(selectedCodices, likesId, insideSaved)
+    val rootCodices = remember(selectedCodices, likesId, insideSaved, librarySort, codexItemCounts) {
+        savePickerCodices(
+            sortCodicesForLibrary(selectedCodices, librarySort, codexItemCounts, likesId), likesId, insideSaved,
+        )
     }
     BackHandler(enabled = insideSaved) { insideSaved = false; searchText = "" }
     val matchingCodices = remember(rootCodices, searchText, sortByRelevance, relevanceScores, likesId) {
@@ -225,8 +231,8 @@ private fun SaveCodexSortToggle(sortByRelevance: Boolean, onChange: (Boolean) ->
     IconToggleButton(checked = sortByRelevance, onCheckedChange = onChange) {
         Icon(
             if (sortByRelevance) Icons.Default.AutoAwesome else Icons.AutoMirrored.Filled.Sort,
-            contentDescription = if (sortByRelevance) "Sort: tag relevance. Switch to normal order"
-                else "Sort: normal order. Switch to tag relevance",
+            contentDescription = if (sortByRelevance) "Sort: tag relevance. Switch to library order"
+                else "Sort: library order. Switch to tag relevance",
         )
     }
 }

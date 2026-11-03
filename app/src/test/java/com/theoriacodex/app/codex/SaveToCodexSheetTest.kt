@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
+import com.theoriacodex.data.repository.CodexLibrarySort
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.domain.model.Codex
 import org.junit.Assert.assertEquals
@@ -59,7 +60,7 @@ class SaveToCodexSheetTest {
     }
 
     @Config(qualifiers = "w411dp-h1000dp")
-    @Test fun `tag relevance is default and toggle restores normal order while search stays active`() {
+    @Test fun `tag relevance is default and toggle restores library order while search stays active`() {
         compose.setContent {
             MaterialTheme {
                 SaveToCodexSheet(
@@ -81,10 +82,32 @@ class SaveToCodexSheetTest {
         assertBefore("Art relevant", "Art tied")
         assertBefore("Art tied", "Art first")
         compose.onNodeWithText("Search Codices").performTextReplacement("Art")
-        compose.onNodeWithContentDescription("Sort: tag relevance. Switch to normal order").performClick()
+        compose.onNodeWithContentDescription("Sort: tag relevance. Switch to library order").performClick()
         assertBefore("Art first", "Art relevant")
-        compose.onNodeWithContentDescription("Sort: normal order. Switch to tag relevance").performClick()
+        compose.onNodeWithContentDescription("Sort: library order. Switch to tag relevance").performClick()
         assertBefore("Art relevant", "Art first")
+    }
+
+    @Config(qualifiers = "w411dp-h1000dp")
+    @Test fun `library order applies the library sort and keeps it as the relevance tie break`() {
+        compose.setContent {
+            MaterialTheme {
+                SaveToCodexSheet(
+                    profiles = listOf(RecommendationProfile("main", "Main")), initialProfileId = "main",
+                    codicesByProfile = mapOf("main" to listOf(
+                        Codex("z", "Zoo", 0), Codex("a", "Art", 0), Codex("m", "Moss", 0),
+                    )),
+                    codexItemCounts = emptyMap(), codexCoverCandidates = emptyMap(),
+                    relevanceScores = mapOf("m" to 0.5),
+                    librarySort = CodexLibrarySort.NAME_ASCENDING,
+                    onCreateCodex = { _, _ -> }, onSelectCodex = {}, onDismiss = {},
+                )
+            }
+        }
+        fun top(name: String) = compose.onNodeWithText(name).fetchSemanticsNode().boundsInRoot.top
+        org.junit.Assert.assertTrue(top("Moss") < top("Art") && top("Art") < top("Zoo"))
+        compose.onNodeWithContentDescription("Sort: tag relevance. Switch to library order").performClick()
+        org.junit.Assert.assertTrue(top("Art") < top("Moss") && top("Moss") < top("Zoo"))
     }
 
     @Test fun `Saved drills down to Likes and preserves excluded targets across profiles`() {

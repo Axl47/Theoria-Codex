@@ -8,13 +8,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NewReleases
@@ -29,7 +28,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -41,13 +39,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.videoQualityLabel
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.statistics.StatisticsSummary
 import com.theoriacodex.app.ui.components.ActionMenuRow
+import com.theoriacodex.app.ui.components.NameEntryDialog
+import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.app.ui.components.ActionMenuSheet
 import com.theoriacodex.data.repository.ScenarioPreset
 import com.theoriacodex.data.repository.SourceWeightSettings
@@ -86,6 +84,7 @@ private fun SettingsHome(
 ) {
     var sheet by rememberSaveable { mutableStateOf<SettingsSheet?>(null) }
     var showAddProfile by remember { mutableStateOf(false) }
+    var renameTarget by remember { mutableStateOf<RecommendationProfile?>(null) }
     val open = { page: SettingsPage -> onAction(SettingsAction.OpenPage(page)) }
     SettingsPageColumn {
         SettingsHeader("Settings")
@@ -99,7 +98,9 @@ private fun SettingsHome(
         if (state.showDeveloperScenarios) DeveloperScenarios(state, onAction)
     }
     if (showAddProfile) {
-        RecommendationProfileNameDialog(
+        NameEntryDialog(
+            title = "Add Recommendation Profile",
+            initialName = "",
             onDismiss = { showAddProfile = false },
             onSave = { name ->
                 onAction(SettingsAction.AddProfile(name))
@@ -107,7 +108,20 @@ private fun SettingsHome(
             },
         )
     }
-    sheet?.let { SettingsHomeSheet(it, state, onAction, searchSources) { sheet = null } }
+    renameTarget?.let { profile ->
+        NameEntryDialog(
+            title = "Rename Recommendation Profile",
+            initialName = profile.name,
+            onDismiss = { renameTarget = null },
+            onSave = { name ->
+                onAction(SettingsAction.RenameProfile(profile.profileId, name))
+                renameTarget = null
+            },
+        )
+    }
+    sheet?.let {
+        SettingsHomeSheet(it, state, onAction, searchSources, { renameTarget = state.activeProfile }) { sheet = null }
+    }
 }
 
 @Composable
@@ -175,17 +189,24 @@ private fun SettingsHomeSheet(
     state: SettingsUiState,
     onAction: (SettingsAction) -> Unit,
     searchSources: Set<SourceKey>,
+    onRenameProfile: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     ActionMenuSheet(onDismiss) {
         when (sheet) {
-            SettingsSheet.PROFILE -> ActionMenuRow(
-                Icons.Default.Delete, "Delete ${state.activeProfile.name}",
-                enabled = state.settings.recommendationProfiles.size > 1,
-                tint = MaterialTheme.colorScheme.error,
-            ) {
-                onDismiss()
-                onAction(SettingsAction.RequestRemoveProfile(state.activeProfile.profileId))
+            SettingsSheet.PROFILE -> {
+                ActionMenuRow(Icons.Default.Edit, "Rename ${state.activeProfile.name}") {
+                    onDismiss()
+                    onRenameProfile()
+                }
+                ActionMenuRow(
+                    Icons.Default.Delete, "Delete ${state.activeProfile.name}",
+                    enabled = state.settings.recommendationProfiles.size > 1,
+                    tint = MaterialTheme.colorScheme.error,
+                ) {
+                    onDismiss()
+                    onAction(SettingsAction.RequestRemoveProfile(state.activeProfile.profileId))
+                }
             }
             SettingsSheet.SOURCE_MIX -> UnifiedSourceSettings(searchSources, state.settings.runtime) {
                 onAction(SettingsAction.SetSourceWeights(searchSources, it))
@@ -417,43 +438,6 @@ private fun ProfileDeleteDialog(state: SettingsUiState, onAction: (SettingsActio
         },
         confirmButton = {
             TextButton(onClick = { onAction(SettingsAction.ConfirmRemoveProfile) }) { Text("Delete") }
-        },
-    )
-}
-
-@Composable
-private fun RecommendationProfileNameDialog(
-    onDismiss: () -> Unit,
-    onSave: (String) -> Unit,
-) {
-    var value by remember { mutableStateOf("") }
-    fun saveIfValid() {
-        val trimmed = value.trim()
-        if (trimmed.isNotBlank()) onSave(trimmed)
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add Recommendation Profile") },
-        text = {
-            OutlinedTextField(
-                modifier = Modifier.fillMaxWidth(),
-                value = value,
-                onValueChange = { value = it.replace("\n", " ") },
-                label = { Text("Name") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Text,
-                    imeAction = ImeAction.Done,
-                ),
-                keyboardActions = KeyboardActions(onDone = { saveIfValid() }),
-            )
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        },
-        confirmButton = {
-            TextButton(onClick = { saveIfValid() }) { Text("Save") }
         },
     )
 }

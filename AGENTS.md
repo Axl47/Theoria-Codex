@@ -4,11 +4,15 @@
 
 Keep Detekt's own `parallel` setting disabled: concurrent Kotlin 2.4 FIR/PSI traversal can hang or report missing declarations. Android Debug analysis receives its module's public `JavaCompile.destinationDirectory` after AGP registers variant tasks, so generated BuildConfig and Room Java types resolve. Run lint after multi-variant coverage/code generation finishes; otherwise lint can read Room-generated Java files while another variant regenerates them. Offline lint retains source checks while avoiding dependency-version network lookups. If a reused daemon reports a Kotlin FIR/UAST internal resolver crash after other analysis/build work, finish code generation and retry lint alone with `./gradlew :app:lintDebug --offline --no-daemon`; the fresh-process lane retains every source check and passed the loading-remediation audit without suppressions.
 
+Robolectric tests need Java 21 or newer because the Android SDK 36 sandbox refuses older JVMs, failing at class setup with `UnsupportedOperationException`. Set `JAVA_HOME` to a compatible JDK before running them; on the Mac, the default JDK is 19 and Homebrew's works: `JAVA_HOME=/opt/homebrew/Cellar/openjdk/26.0.2.1/libexec/openjdk.jdk/Contents/Home`.
+
 *Smallest sufficient implementation:* Prefer the simplest design that satisfies the stated requirements. Do not expand architecture or scope without a concrete requirement.
 
 *First-pass convergence:* Before the initial patch, identify the required data flow, UI states, error paths, acceptance checks, and validation plan. Prefer one coherent implementation pass over speculative partial patches.
 
 *Bounded validation:* Plan one focused validation batch. Avoid repeated snapshots, equivalent selector checks, duplicate browser setup, and full revalidation unless a later patch changed the relevant behavior.
+
+*Report retention:* Regularly prune generated reports, performance traces, recordings, and duplicate captures under `build/reports/` once the related work is complete and the evidence is no longer needed. Keep complete iteration evidence required for active acceptance or release decisions; archive anything that must be retained before pruning.
 
 *Offline preflight:* Before a substantial offline Gradle batch, check that its required dependencies and generated artifacts are available; resolve missing prerequisites before running the batch.
 
@@ -50,7 +54,7 @@ Keep `AGENTS.md` limited to durable product intent, safety boundaries, and accep
 
 ## Personal-device Safety
 
-- The Windows development PC has a hardware-accelerated Android 17 (API 37) emulator available as AVD `Theoria_API_37` (Pixel 6 profile, 4 GB RAM, 6 GB data). Start it with the desktop **Theoria Android Emulator** shortcut or `%LOCALAPPDATA%\TheoriaAndroid\Start-TheoriaEmulator.ps1`; shell setup and local instructions are in the same directory. Discover its current ADB serial before use rather than assuming `emulator-5554`. Use isolated app packages and the checks below for emulator testing; emulator profiling does not satisfy physical-device performance acceptance.
+- The Android emulator on the Windows development PC is not available for now, so do not plan device or emulator testing around it.
 - Protect `com.theoriacodex` and its data. Before any device installation or test, verify every packaged APK’s application ID and signing lane; variant names are insufficient. New or changed device commands require a host-only task-graph/preflight check.
 - Automated device lanes must use isolated packages. Production changes require explicit authorization; destructive actions require authorization for the exact action after explaining possible data loss. Production installs use the signed release/update path.
 - Developer profile copying must remain read-only against production and excluded from public builds.

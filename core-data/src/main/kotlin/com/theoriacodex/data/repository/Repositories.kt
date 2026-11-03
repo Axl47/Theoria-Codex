@@ -440,8 +440,20 @@ fun defaultRecommendationProfiles(): List<RecommendationProfile> {
     return DEFAULT_RECOMMENDATION_PROFILES
 }
 
+/** Display order for the Codex Library; automatic sorts never overwrite the stored manual order. */
+enum class CodexLibrarySort {
+    MANUAL,
+    NAME_ASCENDING,
+    NAME_DESCENDING,
+    NEWEST,
+    OLDEST,
+    MOST_ITEMS,
+    FEWEST_ITEMS,
+}
+
 data class AppSettings(
     val oldSearchBar: Boolean = false,
+    val codexLibrarySort: CodexLibrarySort = CodexLibrarySort.MANUAL,
     val followedCreators: List<FollowedCreator> = emptyList(),
     val runtime: SourceRuntimeSettings = SourceRuntimeSettings(),
     val cache: CacheSettings = CacheSettings(),
@@ -479,6 +491,8 @@ interface SettingsRepository {
     suspend fun setLastTab(route: String)
     suspend fun setActiveProfile(profileId: String)
     suspend fun addRecommendationProfile(name: String): RecommendationProfile
+    /** A blank name or unknown profile changes nothing and returns false. */
+    suspend fun renameRecommendationProfile(profileId: String, name: String): Boolean
     suspend fun removeRecommendationProfile(profileId: String): Boolean
     suspend fun addForYouBlacklistEntry(profileId: String, source: SourceKey, tags: List<String>): Boolean
     suspend fun removeForYouBlacklistEntry(profileId: String, source: SourceKey, tags: List<String>): Boolean

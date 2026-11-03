@@ -4,8 +4,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +32,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -66,6 +65,8 @@ import com.theoriacodex.app.ui.components.ActionMenuFollowUpRow
 import com.theoriacodex.app.ui.components.ActionMenuHeader
 import com.theoriacodex.app.ui.components.ActionMenuRow
 import com.theoriacodex.app.ui.components.ActionMenuSheet
+import com.theoriacodex.app.ui.components.NameEntryDialog
+import com.theoriacodex.data.repository.CodexLibrarySort
 import com.theoriacodex.domain.model.Codex
 import androidx.compose.material.icons.filled.AutoAwesome
 import kotlin.math.roundToInt
@@ -121,20 +122,31 @@ private fun CodexListBody(
     actions: CodexListActions,
 ) {
     when {
-        state.ordering.reorderMode -> CodexReorderList(presentation, state)
+        state.ordering.reorderMode -> CodexReorderList(presentation, state, actions.setLibrarySort)
         else -> CodexGrid(presentation, state, actions.openCodex, actions.openSavedCollectionActions)
     }
 }
 
 @Composable
-private fun CodexReorderList(presentation: CodexListPresentation, state: CodexListUiState) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        userScrollEnabled = state.ordering.draggingId == null,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        itemsIndexed(state.ordering.reorderDraft, key = { _, codex -> codex.codexId }) { index, codex ->
-            CodexReorderRow(codex, index, presentation, state)
+private fun CodexReorderList(
+    presentation: CodexListPresentation,
+    state: CodexListUiState,
+    onSortChange: (CodexLibrarySort) -> Unit,
+) {
+    // The draft stays in manual order underneath an automatic sort, so Done can always commit it.
+    val rows = sortCodicesForLibrary(
+        state.ordering.reorderDraft, presentation.librarySort, presentation.itemCounts, presentation.likesCodexId,
+    )
+    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        CodexLibrarySortSelector(presentation.librarySort, onSortChange)
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            userScrollEnabled = state.ordering.draggingId == null,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            itemsIndexed(rows, key = { _, codex -> codex.codexId }) { index, codex ->
+                CodexReorderRow(codex, index, presentation, state)
+            }
         }
     }
 }
@@ -170,7 +182,7 @@ private fun CodexReorderRow(
                 if (codex.codexId == presentation.likesCodexId) codex.copy(name = "Saved") else codex,
                 presentation.itemCounts[codex.codexId] ?: 0, Modifier.weight(1f),
             )
-            CodexReorderHandle(codex, index, state)
+            if (presentation.librarySort == CodexLibrarySort.MANUAL) CodexReorderHandle(codex, index, state)
         }
     }
 }
@@ -209,17 +221,47 @@ private fun CodexGrid(
     onOpenCodex: (String) -> Unit,
     onOpenSavedCollectionActions: (String) -> Unit,
 ) {
+    // A first frame in manual order would move the restored scroll anchor to the wrong Codex.
+    val awaitingCounts = presentation.librarySort.usesItemCounts &&
+        presentation.codices.any { it.codexId !in presentation.itemCounts }
+    if (awaitingCounts) return
+    val sorted = sortCodicesForLibrary(
+        presentation.codices, presentation.librarySort, presentation.itemCounts, presentation.likesCodexId,
+    )
+    val entries = savedCodexLibraryEntries(sorted, presentation.likesCodexId)
     com.theoriacodex.app.ui.components.AdaptiveMediaGrid(
         modifier = Modifier.fillMaxSize(),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        val likesId = presentation.likesCodexId
-        savedCodexLibraryEntries(presentation.codices, likesId).forEach { codex ->
-            item(key = codex.codexId, span = { GridItemSpan(if (codex.codexId == SAVED_CODEX_ID) maxLineSpan else 1) }) {
-                CodexLibraryTile(codex, presentation, state, onOpenCodex, onOpenSavedCollectionActions)
+        entries.forEachIndexed { index, codex ->
+            val saved = codex.codexId == SAVED_CODEX_ID
+            item(key = codex.codexId, span = { GridItemSpan(if (saved) maxLineSpan else 1) }) {
+                if (saved) {
+                    SavedLibrarySection(
+                        presentation, index > 0, index < entries.lastIndex, onOpenCodex, onOpenSavedCollectionActions,
+                    )
+                } else {
+                    CodexLibraryTile(codex, presentation, state, onOpenCodex)
+                }
             }
         }
+    }
+}
+
+/** Manual order can place Saved anywhere, so it is set apart on whichever sides have Codices. */
+@Composable
+private fun SavedLibrarySection(
+    presentation: CodexListPresentation,
+    dividerAbove: Boolean,
+    dividerBelow: Boolean,
+    onOpenCodex: (String) -> Unit,
+    onOpenSavedCollectionActions: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        if (dividerAbove) HorizontalDivider()
+        SavedCodexLibraryTile(presentation, onOpenCodex, onOpenSavedCollectionActions)
+        if (dividerBelow) HorizontalDivider()
     }
 }
 
@@ -229,22 +271,14 @@ private fun CodexLibraryTile(
     presentation: CodexListPresentation,
     state: CodexListUiState,
     onOpenCodex: (String) -> Unit,
-    onOpenSavedCollectionActions: (String) -> Unit,
 ) {
-    val saved = codex.codexId == SAVED_CODEX_ID
-    if (saved) {
-        SavedCodexLibraryTile(presentation, onOpenCodex, onOpenSavedCollectionActions)
-        return
-    }
-    val openActions = { state.actionTarget = codex }
-    val covers = presentation.coverCandidates[codex.codexId].orEmpty()
-    CodexGridTile(
-        codex = codex,
+    CodexCoverTile(
+        name = codex.name,
         itemCount = presentation.itemCounts[codex.codexId] ?: 0,
-        coverCandidates = covers,
+        covers = presentation.coverCandidates[codex.codexId].orEmpty(),
         onOpen = { onOpenCodex(codex.codexId) },
-        onOpenActions = openActions,
-        onLongPress = openActions,
+        onOpenActions = { state.actionTarget = codex },
+        modifier = Modifier.fillMaxWidth().height(168.dp),
     )
 }
 
@@ -329,7 +363,7 @@ private fun CodexAutoSaveOverlay(
 @Composable
 private fun CodexNameOverlays(state: CodexListUiState, actions: CodexListActions) {
     if (state.showCreateDialog) {
-        CodexNameDialog(
+        NameEntryDialog(
             title = "Create Codex",
             initialName = "",
             onDismiss = { state.showCreateDialog = false },
@@ -340,7 +374,7 @@ private fun CodexNameOverlays(state: CodexListUiState, actions: CodexListActions
         )
     }
     state.renameTarget?.let { codex ->
-        CodexNameDialog(
+        NameEntryDialog(
             title = "Rename Codex",
             initialName = codex.name,
             onDismiss = { state.renameTarget = null },
@@ -758,56 +792,3 @@ private fun CodexSearchTagSelectionCell(
 
 private const val DEFAULT_CODEX_RANDOM_TAG_AMOUNT = 3
 private const val MAX_CODEX_RANDOM_TAG_AMOUNT = 10
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun CodexGridTile(
-    codex: Codex,
-    itemCount: Int,
-    coverCandidates: List<CodexCoverCandidate>,
-    onOpen: () -> Unit,
-    onOpenActions: () -> Unit,
-    onLongPress: () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = onOpen,
-                onLongClick = onLongPress,
-            ),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(164.dp)
-                .clip(RoundedCornerShape(22.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-        ) {
-            CodexCoverImage(
-                candidates = coverCandidates,
-                contentDescription = codex.name,
-                modifier = Modifier.fillMaxSize(),
-                fallback = {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Image,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(28.dp),
-                        )
-                    }
-                },
-            )
-            com.theoriacodex.app.ui.components.MediaCountBadge(
-                itemCount.toString(), "Posts in ${codex.name}", Modifier.align(Alignment.TopEnd).padding(8.dp),
-            )
-        }
-
-        CodexTileMetadata(codex = codex, onOpenActions = onOpenActions)
-    }
-}
