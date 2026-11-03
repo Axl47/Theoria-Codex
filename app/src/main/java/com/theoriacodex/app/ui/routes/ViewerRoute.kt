@@ -323,65 +323,88 @@ private fun ViewerRouteScreen(
     }
     val related = rememberViewerRelatedPosts(activeSession, liveSourceState)
     androidx.compose.runtime.CompositionLocalProvider(com.theoriacodex.app.viewer.LocalViewerInstantSeek provides renderConfig.instantSeek) {
-        ViewerScreen(
-            uiState = viewerState.copy(related = com.theoriacodex.app.viewer.state.ViewerRelatedUiState(
-                related.state, related.posts, activeSession?.relatedNavigation, activeSession?.relatedPostIds.orEmpty(),
-            )),
-            saveToCodexQuery = activeSession?.saveQuery,
-            creatorBrowsingSources = renderConfig.creatorBrowsingSources,
-            onAction = { action ->
-                viewerOwner.onAction(action)
-                if (action is com.theoriacodex.app.viewer.state.ViewerAction.SetPlaybackMode) {
-                    screenCallbacks.onPlaybackModeSelected(action.mode)
-                }
-            },
-            pixivUgoiraClient = renderConfig.pixivUgoiraClient,
-            tagVideoCountProvider = renderConfig.tagVideoCountProvider,
-            fetchTagVideoCounts = renderConfig.fetchTagVideoCounts,
-            canLoadMoreFromSource = canLoadMoreFromSource,
-            loadingMoreFromSource = matchingSourceState?.loadingMore == true,
-            invertMultiImageScrollDirection = renderConfig.invertMultiImageScrollDirection,
-            videoQuality = renderConfig.videoQuality,
-            likedPostIds = renderConfig.likedPostIds,
-            onIncludeRelatedPosts = {
-                related.state.requestOrNull?.seed?.id?.let { seedId ->
-                    viewerOwner.updateSession { current -> current.withRelatedPosts(seedId, related.posts) }
-                }
-            },
-            onDismissRelatedPosts = { related.source?.let(screenCallbacks.onDismissRelatedPosts) },
-            onRetryRelatedPosts = { related.source?.let(screenCallbacks.onRetryRelatedPosts) },
-            onRequestMediaRecovery = { post, failedMedia ->
-                routeScope.launch {
-                    if (viewerOwner.session.value == null) return@launch
-                    recoverAndApplyMedia(viewerOwner, post, failedMedia, latestEffectCallbacks.value)
-                }
-            },
-            onVisiblePostChanged = { post, viewedMediaNumber ->
-                viewerState.session?.let { identity ->
-                    viewerOwner.recordVisiblePost(
-                        identity, post, viewedMediaNumber,
-                        latestScreenCallbacks.value.onVisiblePostChanged,
-                    )
-                }
-            },
-            onVisibleMediaChanged = { post, viewedMediaNumber ->
-                viewerOwner.recordVisibleMedia(post, viewedMediaNumber, latestScreenCallbacks.value.onVisibleMediaChanged)
-            },
-            onAuthoritativeDurationKnown = { post, durationMs ->
-                durationOwner.publishPlayerDuration(latestDependencies.value.canonicalizePost(post), durationMs)
-            },
-            onOpenInBrowser = screenCallbacks.onOpenInBrowser,
-            onRemoveIncludeTerm = screenCallbacks.onRemoveIncludeTerm,
-            onRemoveExcludeTerm = screenCallbacks.onRemoveExcludeTerm,
-            onFavoriteTagLongPress = screenCallbacks.onFavoriteTagLongPress,
-            onGoToSearch = {
-                viewerOwner.clearSession(retainPresentation = true)
-                latestDependencies.value.sessionRetentionOwner.clear()
-                latestScreenCallbacks.value.onGoToSearch()
-            },
-            onOpenCreatorFallback = screenCallbacks.onOpenCreatorFallback,
+        ViewerRouteRenderer(
+            activeSession, viewerState, viewerOwner, durationOwner, renderConfig, related, screenCallbacks,
+            canLoadMoreFromSource, matchingSourceState?.loadingMore == true,
+            latestDependencies, latestEffectCallbacks, latestScreenCallbacks, routeScope,
         )
     }
+}
+
+@Composable
+private fun ViewerRouteRenderer(
+    activeSession: ViewerSession?,
+    viewerState: ViewerUiState,
+    viewerOwner: ViewerViewModel,
+    durationOwner: MediaDurationRouteViewModel,
+    renderConfig: ViewerRouteRenderConfig,
+    related: ViewerRelatedPosts,
+    screenCallbacks: ViewerRouteScreenCallbacks,
+    canLoadMoreFromSource: Boolean,
+    loadingMoreFromSource: Boolean,
+    latestDependencies: State<ViewerRouteDependencies>,
+    latestEffectCallbacks: State<ViewerRouteEffectCallbacks>,
+    latestScreenCallbacks: State<ViewerRouteScreenCallbacks>,
+    routeScope: CoroutineScope,
+) {
+    ViewerScreen(
+        uiState = viewerState.copy(related = com.theoriacodex.app.viewer.state.ViewerRelatedUiState(
+            related.state, related.posts, activeSession?.relatedNavigation, activeSession?.relatedPostIds.orEmpty(),
+        )),
+        saveToCodexQuery = activeSession?.saveQuery,
+        creatorBrowsingSources = renderConfig.creatorBrowsingSources,
+        onAction = { action ->
+            viewerOwner.onAction(action)
+            if (action is com.theoriacodex.app.viewer.state.ViewerAction.SetPlaybackMode) {
+                screenCallbacks.onPlaybackModeSelected(action.mode)
+            }
+        },
+        pixivUgoiraClient = renderConfig.pixivUgoiraClient,
+        tagVideoCountProvider = renderConfig.tagVideoCountProvider,
+        fetchTagVideoCounts = renderConfig.fetchTagVideoCounts,
+        canLoadMoreFromSource = canLoadMoreFromSource,
+        loadingMoreFromSource = loadingMoreFromSource,
+        invertMultiImageScrollDirection = renderConfig.invertMultiImageScrollDirection,
+        videoQuality = renderConfig.videoQuality,
+        likedPostIds = renderConfig.likedPostIds,
+        onIncludeRelatedPosts = {
+            related.state.requestOrNull?.seed?.id?.let { seedId ->
+                viewerOwner.updateSession { current -> current.withRelatedPosts(seedId, related.posts) }
+            }
+        },
+        onDismissRelatedPosts = { related.source?.let(screenCallbacks.onDismissRelatedPosts) },
+        onRetryRelatedPosts = { related.source?.let(screenCallbacks.onRetryRelatedPosts) },
+        onRequestMediaRecovery = { post, failedMedia ->
+            routeScope.launch {
+                if (viewerOwner.session.value == null) return@launch
+                recoverAndApplyMedia(viewerOwner, post, failedMedia, latestEffectCallbacks.value)
+            }
+        },
+        onVisiblePostChanged = { post, viewedMediaNumber ->
+            viewerState.session?.let { identity ->
+                viewerOwner.recordVisiblePost(
+                    identity, post, viewedMediaNumber,
+                    latestScreenCallbacks.value.onVisiblePostChanged,
+                )
+            }
+        },
+        onVisibleMediaChanged = { post, viewedMediaNumber ->
+            viewerOwner.recordVisibleMedia(post, viewedMediaNumber, latestScreenCallbacks.value.onVisibleMediaChanged)
+        },
+        onAuthoritativeDurationKnown = { post, durationMs ->
+            durationOwner.publishPlayerDuration(latestDependencies.value.canonicalizePost(post), durationMs)
+        },
+        onOpenInBrowser = screenCallbacks.onOpenInBrowser,
+        onRemoveIncludeTerm = screenCallbacks.onRemoveIncludeTerm,
+        onRemoveExcludeTerm = screenCallbacks.onRemoveExcludeTerm,
+        onFavoriteTagLongPress = screenCallbacks.onFavoriteTagLongPress,
+        onGoToSearch = {
+            viewerOwner.clearSession(retainPresentation = true)
+            latestDependencies.value.sessionRetentionOwner.clear()
+            latestScreenCallbacks.value.onGoToSearch()
+        },
+        onOpenCreatorFallback = screenCallbacks.onOpenCreatorFallback,
+    )
 }
 
 /** Claims the pending session once per owner, or rebuilds one from its compact saved identity. */

@@ -133,13 +133,7 @@ private fun UgoiraLoadedPlayer(
     onTimelineInteractionActiveChanged: (Boolean) -> Unit,
     onTogglePlayback: () -> Unit,
 ) {
-    val frameEndsMs = remember(playback.frameDelaysMs) {
-        var endMs = 0L
-        LongArray(playback.frameDelaysMs.size) { index ->
-            endMs += playback.frameDelaysMs[index].coerceAtLeast(16)
-            endMs
-        }
-    }
+    val frameEndsMs = remember(playback.frameDelaysMs) { ugoiraFrameEndsMs(playback.frameDelaysMs) }
     val totalDurationMs = frameEndsMs.last()
     val animation = remember(postId, client, sizeBucket, loadGeneration, frameEndsMs) {
         AnimationPlaybackState(totalDurationMs)
@@ -186,19 +180,20 @@ private fun UgoiraLoadedPlayer(
             ViewerTimelineVeil {
                 ViewerPlaybackFooter {
                     UgoiraTimeline(
-                        playback = playback,
-                        frameEndsMs = frameEndsMs,
-                        animation = animation,
-                        paused = paused,
-                        playbackRate = playbackRate,
-                        isScrubbing = isScrubbing,
-                        onSeek = { seekToPosition(it) },
-                        onInteractionActiveChanged = onTimelineInteractionActiveChanged,
-                        onTogglePlayback = onTogglePlayback,
+                        playback, frameEndsMs, animation, paused, playbackRate, isScrubbing, onSeek = { seekToPosition(it) },
+                        onInteractionActiveChanged = onTimelineInteractionActiveChanged, onTogglePlayback = onTogglePlayback,
                     )
                 }
             }
         }
+    }
+}
+
+private fun ugoiraFrameEndsMs(frameDelaysMs: List<Int>): LongArray {
+    var endMs = 0L
+    return LongArray(frameDelaysMs.size) { index ->
+        endMs += frameDelaysMs[index].coerceAtLeast(16)
+        endMs
     }
 }
 

@@ -59,6 +59,7 @@ import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.FeedErrorTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
+import com.theoriacodex.app.ui.components.FeedPageDemandControl
 import com.theoriacodex.app.ui.components.FeedLoadingState
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.PostActionSheet
@@ -116,29 +117,10 @@ fun CreatorProfileScreen(
     val feed = rememberCreatorFeed(state, pendingLikePostIds, likedPostIds, savedPostIds, fabRestoreState, durationStates, resolveUnknownAnimatedDurations)
     LaunchedEffect(feed.durationFilter.active) { onDurationFilterChanged(feed.durationFilter.active) }
     DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
-    val pageDemand = rememberFeedPageDemand(
-        input = FeedPageDemandInput(
-            contextKey = state.queryHash.orEmpty(),
-            completedGeneration = state.nextRequestGeneration,
-            canonicalCount = state.results.size,
-            visibleCount = feed.visibleResults.size,
-            canLoadMore = state.canLoadMore,
-            ready = state.creator != null && state.queryHash != null,
-            refreshing = state.isRefreshing,
-            paging = state.isPaging,
-            failed = state.errorMessage != null,
-            resolvingDurations = feed.durationFilter.readiness.isResolving,
-        ),
-        filters = feed.visibilityFilters,
-        gridState = gridState,
-        canonicalIndexForVisibleItems = feed.related.projection::greatestVisibleCanonicalIndex,
-        onLoadNextPage = { onAction(CreatorAction.LoadNextPage) },
-    )
+    val pageDemand = rememberCreatorPageDemand(state, feed, gridState, onAction)
     val creator = state.creator
     if (creator == null) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No creator selected")
-        }
+        CreatorNotSelected()
         return
     }
     val cards = rememberFeedCardEnvironment(
@@ -146,12 +128,6 @@ fun CreatorProfileScreen(
         onToggleLike, onDurationPostVisibilityChanged, onAuthoritativeDurationKnown,
     )
     val filterScroll = rememberFeedScrollSignal()
-    val filterLabels = listOfNotNull(
-        "Animated".takeIf { fabRestoreState.animatedOnly },
-        animatedDurationRangeLabel(feed.animatedDurationRange).takeIf { feed.durationFilter.active },
-        "Hide liked".takeIf { fabRestoreState.hideLiked },
-        "Hide saved".takeIf { fabRestoreState.hideSaved },
-    )
     val clearFilters: () -> () -> Unit = { clearCreatorFilters(fabRestoreState, onFabRestoreStateChange) }
     Scaffold(
         modifier = Modifier.nestedScroll(filterScroll.connection),
@@ -159,7 +135,7 @@ fun CreatorProfileScreen(
         floatingActionButton = {
             FeedFilterFab(
                 modifier = Modifier.padding(bottom = 8.dp),
-                labels = filterLabels,
+                labels = creatorFilterLabels(fabRestoreState, feed),
                 contentDescription = "Filter creator uploads",
                 onClick = { showFilterSheet = true },
                 onClear = clearFilters,
@@ -168,44 +144,53 @@ fun CreatorProfileScreen(
         },
     ) { padding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             CreatorAppBar(creator, followed, !state.isRefreshing, onToggleFollow, onOpenUrl, onBack = { onAction(CreatorAction.Back) })
-            if (state.errorMessage != null && state.canLoadMore) {
-                FeedErrorTile(
-                    message = state.errorMessage.orEmpty(),
-                    onRetry = { onAction(CreatorAction.RetryPage) },
-                )
-            }
-            FeedContinueLoading(pageDemand)
-            CreatorFeedBody(state, feed, cards, gridState, onAction, onLongPress = { selectedActionPost = it })
+            CreatorFeedBody(state, feed, cards, gridState, pageDemand, onAction, onLongPress = { selectedActionPost = it })
         }
     }
-
     if (showFilterSheet) {
         CreatorFilterSheet(
             fabRestoreState, feed.animatedDurationRange, onFabRestoreStateChange,
             onReset = { clearFilters() }, onDismiss = { showFilterSheet = false },
         )
     }
-
     selectedActionPost?.let { post ->
         PostActionSheet(
-            post = post,
-            onDismiss = { selectedActionPost = null },
-            onSaveToDevice = { onSaveToDevice(post) },
-            onSaveToCodex = { onRequestSaveToCodex(post) },
-            onPostUrlCopied = onPostUrlCopied,
-            tagContent = {
-                PostBoundTagSection(post, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm, onRemoveExcludeTerm)
-            },
-        )
+            post, onDismiss = { selectedActionPost = null }, onSaveToDevice = { onSaveToDevice(post) },
+            onSaveToCodex = { onRequestSaveToCodex(post) }, onPostUrlCopied = onPostUrlCopied,
+        ) {
+            PostBoundTagSection(post, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm, onRemoveExcludeTerm)
+        }
     }
 }
+
+@Composable
+private fun rememberCreatorPageDemand(
+    state: CreatorUiState,
+    feed: CreatorFeed,
+    gridState: LazyStaggeredGridState,
+    onAction: (CreatorAction) -> Unit,
+) = rememberFeedPageDemand(
+    input = FeedPageDemandInput(
+        contextKey = state.queryHash.orEmpty(),
+        completedGeneration = state.nextRequestGeneration,
+        canonicalCount = state.results.size,
+        visibleCount = feed.visibleResults.size,
+        canLoadMore = state.canLoadMore,
+        ready = state.creator != null && state.queryHash != null,
+        refreshing = state.isRefreshing,
+        paging = state.isPaging,
+        failed = state.errorMessage != null,
+        resolvingDurations = feed.durationFilter.readiness.isResolving,
+    ),
+    filters = feed.visibilityFilters,
+    gridState = gridState,
+    canonicalIndexForVisibleItems = feed.related.projection::greatestVisibleCanonicalIndex,
+    onLoadNextPage = { onAction(CreatorAction.LoadNextPage) },
+)
 
 /** What the creator's grid shows after its filters, durations, and related posts are applied. */
 private data class CreatorFeed(
@@ -284,6 +269,20 @@ private fun rememberCreatorFeed(
         CreatorFeed(animatedDurationRange, visibilityFilters, durationFilter, visibleResults, related)
     }
 }
+
+@Composable
+private fun CreatorNotSelected() {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text("No creator selected")
+    }
+}
+
+private fun creatorFilterLabels(fabRestoreState: FeedFabRestoreState, feed: CreatorFeed): List<String> = listOfNotNull(
+    "Animated".takeIf { fabRestoreState.animatedOnly },
+    animatedDurationRangeLabel(feed.animatedDurationRange).takeIf { feed.durationFilter.active },
+    "Hide liked".takeIf { fabRestoreState.hideLiked },
+    "Hide saved".takeIf { fabRestoreState.hideSaved },
+)
 
 /** Clears the feed's filters and returns how to put them back. */
 private fun clearCreatorFilters(
@@ -364,9 +363,14 @@ private fun CreatorFeedBody(
     feed: CreatorFeed,
     cards: FeedCardEnvironment,
     gridState: LazyStaggeredGridState,
+    pageDemand: FeedPageDemandControl,
     onAction: (CreatorAction) -> Unit,
     onLongPress: (Post) -> Unit,
 ) {
+    if (state.errorMessage != null && state.canLoadMore) {
+        FeedErrorTile(message = state.errorMessage.orEmpty(), onRetry = { onAction(CreatorAction.RetryPage) })
+    }
+    FeedContinueLoading(pageDemand)
     when {
         state.isRefreshing && feed.visibleResults.isEmpty() -> FeedLoadingState()
 

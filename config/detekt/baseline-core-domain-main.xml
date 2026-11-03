@@ -1,8 +1,5 @@
 <?xml version="1.0" ?>
 <SmellBaseline>
   <ManuallySuppressedIssues/>
-  <CurrentIssues>
-    <ID>CognitiveComplexMethod:UnifiedSearchOrchestrator.kt:UnifiedSearchOrchestrator$suspend fun search: UnifiedSearchResult</ID>
-    <ID>LongMethod:UnifiedSearchOrchestrator.kt:UnifiedSearchOrchestrator$suspend fun search: UnifiedSearchResult</ID>
-  </CurrentIssues>
+  <CurrentIssues/>
 </SmellBaseline>

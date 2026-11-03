@@ -68,6 +68,8 @@ import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.FeedErrorTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
+import com.theoriacodex.app.ui.components.FeedPageDemandControl
+import com.theoriacodex.app.ui.components.FeedScrollSignal
 import com.theoriacodex.app.ui.components.FeedLoadingState
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.SourceSelector
@@ -125,13 +127,7 @@ fun ForYouScreen(
     ScrollToTopOnTabReselect(TopLevelDestination.ForYou) {
         if (!state.home.visible) gridState.animateScrollToItem(0)
     }
-    var positionedSeed by rememberSaveable { mutableStateOf(state.seedId) }
-    LaunchedEffect(state.seedId) {
-        if (positionedSeed != state.seedId) {
-            gridState.scrollToItem(0)
-            positionedSeed = state.seedId
-        }
-    }
+    ForYouSeedPositionEffect(state.seedId, gridState)
     var showSortSheet by remember { mutableStateOf(false) }
     var showSourceMenu by remember { mutableStateOf(false) }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
@@ -139,11 +135,7 @@ fun ForYouScreen(
     LaunchedEffect(feed.durationFilter.active) { onDurationFilterChanged(feed.durationFilter.active) }
     DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
     val filterScroll = rememberFeedScrollSignal()
-    val filterLabels = listOfNotNull(
-        sortModeLabel(state.sortMode).takeIf { state.sortMode != SortMode.NEWEST },
-        "Animated".takeIf { feed.animatedOnly },
-        animatedDurationRangeLabel(feed.animatedDurationRange).takeIf { feed.durationFilter.active },
-    )
+    val filterLabels = forYouFilterLabels(state.sortMode, feed)
     val clearFilters: () -> () -> Unit = {
         clearForYouFilters(state.sortMode, fabRestoreState, onFabRestoreStateChange, onAction)
     }
@@ -160,111 +152,141 @@ fun ForYouScreen(
     ) { homeVisible ->
         if (homeVisible) {
             savedStates.SaveableStateProvider("overview") {
-                ForYouHomeScreen(state, likedPostIds, pixivUgoiraClient,
-                    filterPosts = { posts -> filterSearchResults(posts, feed.visibilityFilters, emptySet(), emptySet(),
-                        unknownAnimatedDurationPolicy = feed.durationFilter.unknownPolicy,
-                        knownDurationMsByPostId = feed.durationFilter.knownDurationMsByPostId) },
-                    durationStateForPost = durationStateForPost,
-                    onDurationPostVisibilityChanged = onDurationPostVisibilityChanged,
-                    onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
-                    onToggleLike = onToggleLike, onLongPress = { selectedActionPost = it },
-                    onAction = onAction, onShowFilters = { showSortSheet = true },
-                    filterLabels = filterLabels,
-                    onClearFilters = clearFilters,
-                    onOpenPreview = { id, posts, index ->
-                        onAction(ForYouAction.OpenSectionResult(id, index, posts, feed.visibilityFilters))
-                    })
+                ForYouHomeScreen(state, likedPostIds, pixivUgoiraClient, feed::filterHomePosts,
+                    durationStateForPost, onDurationPostVisibilityChanged, onAuthoritativeDurationKnown, onToggleLike,
+                    { selectedActionPost = it }, onAction, { showSortSheet = true }, filterLabels, clearFilters,
+                    onOpenPreview = { id, posts, index -> onAction(ForYouAction.OpenSectionResult(id, index, posts, feed.visibilityFilters)) })
             }
         } else {
-            Scaffold(
-                modifier = Modifier.nestedScroll(filterScroll.connection),
-                contentWindowInsets = WindowInsets(0),
-                floatingActionButton = {
-                    FeedFilterFab(
-                        modifier = Modifier.padding(bottom = 8.dp),
-                        labels = filterLabels,
-                        contentDescription = "Filter and sort recommendations",
-                        onClick = { showSortSheet = true },
-                        onClear = clearFilters,
-                        scrollSignal = filterScroll,
-                    )
-                },
-            ) { padding ->
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding)
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    ForYouResultsHeader(state, onAction)
-                    ForYouSourceSelector(
-                        selectedSource = state.selectedSource,
-                        availableSources = state.availableSources,
-                        enabled = !state.isRefreshing && !state.isPaging,
-                        expanded = showSourceMenu,
-                        onExpandedChange = { showSourceMenu = it },
-                        onSourceSelected = { source ->
-                            showSourceMenu = false
-                            onAction(ForYouAction.SelectSource(source))
-                        },
-                    )
-                    ForYouSeedSummary(state)
-                    com.theoriacodex.app.search.StatusRow(
-                        statuses = state.statuses.filter { it.source in state.retryableSources },
-                        retryEnabled = !state.isRefreshing && !state.isPaging,
-                        onRetrySource = { onAction(ForYouAction.RetrySource(it)) },
-                    )
-                    FeedContinueLoading(pageDemand)
-                    ForYouFeedBody(state, feed, cards, gridState, onAction, onLongPress = { selectedActionPost = it })
-                }
-            }
+            ForYouResults(
+                state, feed, cards, gridState, pageDemand, filterScroll, filterLabels, clearFilters, showSourceMenu,
+                onSourceMenuChange = { showSourceMenu = it }, onShowFilters = { showSortSheet = true },
+                onAction = onAction, onLongPress = { selectedActionPost = it },
+            )
         }
     }
 
     selectedActionPost?.let { post ->
-        PostActionSheet(
-            post = post,
-            creatorBrowsingSources = creatorBrowsingSources,
-            onDismiss = { selectedActionPost = null },
-            onSaveToDevice = { onSaveToDevice(post) },
-            onSaveToCodex = { onRequestSaveToCodex(post) },
-            onOpenCreatorProfile = onOpenCreatorProfile,
-            onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
-            onGoToSearch = onGoToSearch,
-            onPostUrlCopied = onPostUrlCopied,
-            tagContent = {
-                PostBoundTagSection(
-                    post, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm, onRemoveExcludeTerm,
-                    onFavoriteTagLongPress,
-                )
-            },
+        ForYouPostSheet(
+            post, creatorBrowsingSources, { selectedActionPost = null }, onSaveToDevice, onRequestSaveToCodex, onOpenCreatorProfile,
+            onOpenLegacyCreatorProfile, onGoToSearch, onPostUrlCopied, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm,
+            onRemoveExcludeTerm, onFavoriteTagLongPress,
         )
     }
 
     if (showSortSheet) {
         ForYouSortSheet(
-            selectedSort = state.sortMode,
-            animatedOnly = feed.animatedOnly,
-            animatedDurationRange = feed.animatedDurationRange,
-            onSelectSort = { sort ->
-                onFabRestoreStateChange(fabRestoreState.copy(sortMode = sort.name))
-                onAction(ForYouAction.SelectSort(sort))
-            },
-            onAnimatedOnlyChange = { enabled ->
-                onFabRestoreStateChange(fabRestoreState.copy(animatedOnly = enabled))
-            },
-            onAnimatedDurationRangeChange = { range ->
-                onFabRestoreStateChange(
-                    fabRestoreState.copy(
-                        durationMinBucket = range.normalizedMinBucket,
-                        durationMaxBucket = range.normalizedMaxBucket,
-                    ),
-                )
-            },
-            onReset = { clearFilters() },
-            onDismiss = { showSortSheet = false },
+            state.sortMode, fabRestoreState, feed, onFabRestoreStateChange, onAction,
+            onReset = { clearFilters() }, onDismiss = { showSortSheet = false },
         )
+    }
+}
+
+@Composable
+private fun ForYouPostSheet(
+    post: Post,
+    creatorBrowsingSources: Set<SourceKey>,
+    onDismiss: () -> Unit,
+    onSaveToDevice: (Post) -> Unit,
+    onRequestSaveToCodex: (Post) -> Unit,
+    onOpenCreatorProfile: (CreatorProfile) -> Unit,
+    onOpenLegacyCreatorProfile: (Post) -> Unit,
+    onGoToSearch: () -> Unit,
+    onPostUrlCopied: (Post) -> Unit,
+    onAddIncludeTerm: (Post, SearchTerm) -> Boolean,
+    onAddExcludeTerm: (Post, SearchTerm) -> Boolean,
+    onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
+    onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
+    onFavoriteTagLongPress: ((SourceKey, String) -> Unit)?,
+) {
+    PostActionSheet(
+        post, creatorBrowsingSources, onDismiss, { onSaveToDevice(post) },
+        onSaveToCodex = { onRequestSaveToCodex(post) },
+        onOpenCreatorProfile = onOpenCreatorProfile,
+        onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
+        onGoToSearch = onGoToSearch,
+        onPostUrlCopied = onPostUrlCopied,
+    ) {
+        PostBoundTagSection(post, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress)
+    }
+}
+
+/** A new seed starts from the top; the position saved with the current seed survives recreation. */
+@Composable
+private fun ForYouSeedPositionEffect(seedId: String, gridState: LazyStaggeredGridState) {
+    var positionedSeed by rememberSaveable { mutableStateOf(seedId) }
+    LaunchedEffect(seedId) {
+        if (positionedSeed != seedId) {
+            gridState.scrollToItem(0)
+            positionedSeed = seedId
+        }
+    }
+}
+
+private fun forYouFilterLabels(sortMode: SortMode, feed: ForYouFeed): List<String> = listOfNotNull(
+    sortModeLabel(sortMode).takeIf { sortMode != SortMode.NEWEST },
+    "Animated".takeIf { feed.animatedOnly },
+    animatedDurationRangeLabel(feed.animatedDurationRange).takeIf { feed.durationFilter.active },
+)
+
+@Composable
+private fun ForYouResults(
+    state: ForYouUiState,
+    feed: ForYouFeed,
+    cards: FeedCardEnvironment,
+    gridState: LazyStaggeredGridState,
+    pageDemand: FeedPageDemandControl,
+    filterScroll: FeedScrollSignal,
+    filterLabels: List<String>,
+    clearFilters: () -> () -> Unit,
+    showSourceMenu: Boolean,
+    onSourceMenuChange: (Boolean) -> Unit,
+    onShowFilters: () -> Unit,
+    onAction: (ForYouAction) -> Unit,
+    onLongPress: (Post) -> Unit,
+) {
+    Scaffold(
+        modifier = Modifier.nestedScroll(filterScroll.connection),
+        contentWindowInsets = WindowInsets(0),
+        floatingActionButton = {
+            FeedFilterFab(
+                modifier = Modifier.padding(bottom = 8.dp),
+                labels = filterLabels,
+                contentDescription = "Filter and sort recommendations",
+                onClick = onShowFilters,
+                onClear = clearFilters,
+                scrollSignal = filterScroll,
+            )
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            ForYouResultsHeader(state, onAction)
+            ForYouSourceSelector(
+                selectedSource = state.selectedSource,
+                availableSources = state.availableSources,
+                enabled = !state.isRefreshing && !state.isPaging,
+                expanded = showSourceMenu,
+                onExpandedChange = onSourceMenuChange,
+                onSourceSelected = { source ->
+                    onSourceMenuChange(false)
+                    onAction(ForYouAction.SelectSource(source))
+                },
+            )
+            ForYouSeedSummary(state)
+            com.theoriacodex.app.search.StatusRow(
+                statuses = state.statuses.filter { it.source in state.retryableSources },
+                retryEnabled = !state.isRefreshing && !state.isPaging,
+                onRetrySource = { onAction(ForYouAction.RetrySource(it)) },
+            )
+            FeedContinueLoading(pageDemand)
+            ForYouFeedBody(state, feed, cards, gridState, onAction, onLongPress)
+        }
     }
 }
 
@@ -276,7 +298,14 @@ private data class ForYouFeed(
     val durationFilter: SearchDurationFilterPresentation,
     val visibleResults: List<Post>,
     val related: RelatedFeedPresentation,
-)
+) {
+    /** Home sections ignore likes and saves, so they keep showing what trained them. */
+    fun filterHomePosts(posts: List<Post>): List<Post> = filterSearchResults(
+        posts, visibilityFilters, emptySet(), emptySet(),
+        unknownAnimatedDurationPolicy = durationFilter.unknownPolicy,
+        knownDurationMsByPostId = durationFilter.knownDurationMsByPostId,
+    )
+}
 
 @Composable
 private fun rememberForYouFeed(
@@ -565,24 +594,37 @@ internal fun ForYouSourceSelector(
 @Composable
 private fun ForYouSortSheet(
     selectedSort: SortMode,
-    animatedOnly: Boolean,
-    animatedDurationRange: AnimatedDurationRange,
-    onSelectSort: (SortMode) -> Unit,
-    onAnimatedOnlyChange: (Boolean) -> Unit,
-    onAnimatedDurationRangeChange: (AnimatedDurationRange) -> Unit,
+    fabRestoreState: FeedFabRestoreState,
+    feed: ForYouFeed,
+    onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
+    onAction: (ForYouAction) -> Unit,
     onReset: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     FeedFilterSheet(onDismiss = onDismiss, onReset = onReset) {
         FilterSection("Sort") {
             SortMode.entries.forEach { mode ->
-                FilterChoiceChip(sortModeLabel(mode), selectedSort == mode) { onSelectSort(mode) }
+                FilterChoiceChip(sortModeLabel(mode), selectedSort == mode) {
+                    onFabRestoreStateChange(fabRestoreState.copy(sortMode = mode.name))
+                    onAction(ForYouAction.SelectSort(mode))
+                }
             }
         }
         FilterSection("Show") {
-            FilterChoiceChip("Animated only", animatedOnly) { onAnimatedOnlyChange(!animatedOnly) }
+            FilterChoiceChip("Animated only", feed.animatedOnly) {
+                onFabRestoreStateChange(fabRestoreState.copy(animatedOnly = !feed.animatedOnly))
+            }
         }
-        AnimatedDurationRangeControl(range = animatedDurationRange, onRangeChange = onAnimatedDurationRangeChange)
+        AnimatedDurationRangeControl(
+            range = feed.animatedDurationRange,
+            onRangeChange = { range ->
+                onFabRestoreStateChange(
+                    fabRestoreState.copy(
+                        durationMinBucket = range.normalizedMinBucket,
+                        durationMaxBucket = range.normalizedMaxBucket,
+                    ),
+                )
+            },
+        )
     }
 }
-

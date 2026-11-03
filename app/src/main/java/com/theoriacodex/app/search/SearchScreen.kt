@@ -1,80 +1,54 @@
 package com.theoriacodex.app.search
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.app.R
-import com.theoriacodex.app.feed.FeedPageDemandInput
 import com.theoriacodex.app.media.AnimatedDurationRange
-import com.theoriacodex.app.media.DurationFilterMetadata
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.animatedDurationRangeLabel
 import com.theoriacodex.app.media.noMediaDurationStateForPost
-import com.theoriacodex.app.media.rememberDurationFilterMetadata
-import com.theoriacodex.app.related.retainedLikedPostIds
 import com.theoriacodex.app.search.state.SearchAction
-import com.theoriacodex.app.search.state.SearchRestorationUiState
-import com.theoriacodex.app.search.state.SearchSourceScope
+import com.theoriacodex.app.search.state.SearchQueryUiState
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
 import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
-import com.theoriacodex.app.ui.components.FeedContinueLoading
 import com.theoriacodex.app.ui.components.FeedFilterFab
-import com.theoriacodex.app.ui.components.FeedPageDemandControl
 import com.theoriacodex.app.ui.components.FeedFilterSheet
-import com.theoriacodex.app.ui.components.FeedLoadingState
-import com.theoriacodex.app.ui.components.FeedPostCard
-import com.theoriacodex.app.ui.components.FeedRelatedPostsShelf
+import com.theoriacodex.app.ui.components.FeedPageDemandControl
+import com.theoriacodex.app.ui.components.FeedScrollSignal
 import com.theoriacodex.app.ui.components.FilterChoiceChip
 import com.theoriacodex.app.ui.components.FilterSection
 import com.theoriacodex.app.ui.components.PostActionSheet
-import com.theoriacodex.app.ui.components.RelatedFeedPresentation
-import com.theoriacodex.app.ui.components.TwoColumnProjectedPostStaggeredGrid
 import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
-import com.theoriacodex.app.ui.components.rememberFeedPageDemand
 import com.theoriacodex.app.ui.components.rememberFeedScrollSignal
-import com.theoriacodex.app.ui.components.rememberRelatedFeedPresentation
 import com.theoriacodex.app.viewer.PixivUgoiraClient
-import com.theoriacodex.app.viewer.retainPostsUntilViewerCloses
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -131,330 +105,292 @@ fun SearchScreen(
     savedSearches: List<SavedSearchEntry> = emptyList(),
     onOpenSavedSearch: (SavedSearchEntry) -> Unit = {},
 ) {
-    var searchBarDismissedByScroll by remember { mutableStateOf(false) }
-    var composerOpen by rememberSaveable { mutableStateOf(false) }
-    var showFilterSheet by remember { mutableStateOf(false) }
-    var showFavoriteTagSheet by remember { mutableStateOf(false) }
+    val composerOpen = rememberSaveable { mutableStateOf(false) }
+    val chrome = remember(composerOpen) { SearchChromeState(composerOpen) }
     val actionPost = remember { SearchActionPostState() }
     val inputFocus = rememberSearchInputFocus()
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyStaggeredGridState()
     ScrollToTopOnTabReselect(TopLevelDestination.Search) { gridState.animateScrollToItem(0) }
     val feed = rememberSearchFeed(state, fabRestoreState, likedPostIds, pendingLikePostIds, savedPostIds, watchedPostIds, durationStates, resolveUnknownAnimatedDurations)
-    val serverFilters = SearchServerFilters(
-        state.query.draft.sort, state.query.draft.dateRange,
-        state.query.nhentaiFullColorFilter, state.query.nhentaiLanguageFilter,
-    )
+    val serverFilters = state.query.serverFilters()
     val filterScroll = rememberFeedScrollSignal()
     var filterSheetBaseline by remember { mutableStateOf(serverFilters) }
     LaunchedEffect(feed.animatedDurationFilterActive) { onDurationFilterChanged(feed.animatedDurationFilterActive) }
     DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
     val pageDemand = rememberSearchScrollAndPaging(state, feed, gridState, resolveUnknownAnimatedDurations, onAction)
-    LaunchedEffect(gridState) {
-        snapshotFlow { gridState.isScrollInProgress }
-            .collectLatest { scrolling ->
-                if (scrolling) {
-                    searchBarDismissedByScroll = true
-                    inputFocus.clear()
-                }
+    SearchScrollDismissEffect(gridState, chrome, inputFocus)
+    val applyDraft = { chrome.applyDraft(inputFocus, onAction) }
+    val filterActions = SearchFilterActions(state, fabRestoreState, rememberUpdatedState(serverFilters), onAction, onFabRestoreStateChange, applyDraft)
+    val sourcePicker: @Composable () -> Unit = { SearchScreenSourcePicker(state, chrome, inputFocus, onAction) }
+    Scaffold(
+        modifier = Modifier.nestedScroll(filterScroll.connection),
+        contentWindowInsets = WindowInsets(0),
+        floatingActionButton = {
+            SearchFilterFab(searchFilterLabels(serverFilters, feed, fabRestoreState), filterScroll, { filterActions.clearFilters(serverFilters) }) {
+                inputFocus.clear()
+                filterSheetBaseline = serverFilters
+                chrome.showFilterSheet = true
             }
+        }
+    ) { padding ->
+        SearchChromeLayout(
+            padding, state, feed, fabRestoreState, chrome, oldSearchBar, sourcePicker, applyDraft, gridState, pageDemand, inputFocus,
+            pixivUgoiraClient, likedPostIds, durationStateForPost, onToggleLike, onDurationPostVisibilityChanged,
+            onAuthoritativeDurationKnown, resolvePostById, recoverPostMedia, onAction,
+        ) { post ->
+            inputFocus.clear()
+            actionPost.open(post, state.content.results, scope, resolvePostById)
+        }
     }
-    val currentServerFilters by androidx.compose.runtime.rememberUpdatedState(serverFilters)
-    val applyDraft = {
+    actionPost.post?.let { post ->
+        SearchPostSheet(
+            post, actionPost, state, creatorBrowsingSources, tagVideoCountProvider, fetchTagVideoCounts, onAction, onSaveToDevice,
+            onRequestSaveToCodex, onOpenCreatorProfile, onOpenLegacyCreatorProfile, onPostUrlCopied, onAddFavoriteTag,
+        )
+    }
+    if (chrome.composerOpen) {
+        SearchComposerDialog(
+            state, feed, chrome, gridState, sourcePicker, applyDraft, onAction, onOpenSourceAccounts, savedSearches, onOpenSavedSearch,
+        )
+    }
+    if (chrome.showFavoriteTagSheet) {
+        SearchFavoriteTags(state, favoriteTags, tagVideoCountProvider, fetchTagVideoCounts, onAction, onRemoveFavoriteTag, onDismiss = { chrome.showFavoriteTagSheet = false })
+    }
+    if (chrome.showFilterSheet) {
+        SearchFilterSheet(state, feed, fabRestoreState, onAction, onFabRestoreStateChange, filterActions::resetFilterDraft) {
+            // Results change once, when the filters are settled, however many were adjusted.
+            chrome.showFilterSheet = false
+            if (serverFilters != filterSheetBaseline) applyDraft()
+        }
+    }
+}
+
+/** Scrolling results tucks the search bar away and gives the keyboard back. */
+@Composable
+private fun SearchScrollDismissEffect(gridState: LazyStaggeredGridState, chrome: SearchChromeState, inputFocus: SearchInputFocus) {
+    LaunchedEffect(gridState) {
+        snapshotFlow { gridState.isScrollInProgress }.collectLatest { scrolling ->
+            if (scrolling) {
+                chrome.searchBarDismissedByScroll = true
+                inputFocus.clear()
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchFilterFab(
+    labels: List<String>,
+    scrollSignal: FeedScrollSignal,
+    onClear: () -> () -> Unit,
+    onClick: () -> Unit,
+) {
+    FeedFilterFab(
+        modifier = Modifier.padding(bottom = 8.dp),
+        labels = labels,
+        contentDescription = "Filter and sort",
+        onClick = onClick,
+        onClear = onClear,
+        scrollSignal = scrollSignal,
+    )
+}
+
+@Composable
+private fun SearchChromeLayout(
+    padding: PaddingValues,
+    state: SearchUiState,
+    feed: SearchFeed,
+    fabRestoreState: FeedFabRestoreState,
+    chrome: SearchChromeState,
+    oldSearchBar: Boolean,
+    sourcePicker: @Composable () -> Unit,
+    applyDraft: () -> Unit,
+    gridState: LazyStaggeredGridState,
+    pageDemand: FeedPageDemandControl,
+    inputFocus: SearchInputFocus,
+    pixivUgoiraClient: PixivUgoiraClient?,
+    likedPostIds: Set<PostId>,
+    durationStateForPost: (Post) -> Flow<MediaDurationState?>,
+    onToggleLike: ((Post) -> Unit)?,
+    onDurationPostVisibilityChanged: (Post, Boolean) -> Unit,
+    onAuthoritativeDurationKnown: (Post, Long) -> Unit,
+    resolvePostById: suspend (PostId) -> Post?,
+    recoverPostMedia: suspend (Post, ImageRef) -> Post?,
+    onAction: (SearchAction) -> Unit,
+    openPostActions: (Post) -> Unit,
+) {
+    CollapsingSearchChrome(
+        expanded = !chrome.searchBarDismissedByScroll,
+        legacy = oldSearchBar,
+        onExpand = { chrome.composerOpen = true },
+        sourcePicker = sourcePicker,
+        horizontalPadding = 16.dp,
+        modifier = Modifier.then(inputFocus.rootModifier).fillMaxSize().padding(padding)
+            .padding(top = if (oldSearchBar) 6.dp else 0.dp, bottom = 8.dp),
+        inputField = { SearchChromeInput(state, feed, fabRestoreState, chrome, oldSearchBar, sourcePicker, applyDraft) },
+    ) {
+        val cards = rememberFeedCardEnvironment(
+            pixivUgoiraClient, likedPostIds, feed.durationMetadata.knownDurationMsByPostId, durationStateForPost,
+            onToggleLike, onDurationPostVisibilityChanged, onAuthoritativeDurationKnown,
+        )
+        SearchResultsBody(state, feed, cards, gridState, pageDemand, inputFocus, resolvePostById, recoverPostMedia, onAction, openPostActions)
+    }
+}
+
+/** Which of Search's surfaces are open. The composer's state survives recreation; the sheets' does not. */
+@Stable
+private class SearchChromeState(composerOpen: MutableState<Boolean>) {
+    var composerOpen by composerOpen
+    var searchBarDismissedByScroll by mutableStateOf(false)
+    var showFilterSheet by mutableStateOf(false)
+    var showFavoriteTagSheet by mutableStateOf(false)
+
+    fun closeComposer(onAction: (SearchAction) -> Unit) {
+        onAction(SearchAction.ClearAutocomplete)
+        composerOpen = false
+        searchBarDismissedByScroll = false
+    }
+
+    fun applyDraft(inputFocus: SearchInputFocus, onAction: (SearchAction) -> Unit) {
         inputFocus.clear(force = true)
         onAction(SearchAction.ApplyDraft)
         onAction(SearchAction.ClearAutocomplete)
         composerOpen = false
         searchBarDismissedByScroll = false
     }
-    val closeComposer = {
-        onAction(SearchAction.ClearAutocomplete)
-        composerOpen = false
-        searchBarDismissedByScroll = false
-    }
-    val filterActions = SearchFilterActions(state, fabRestoreState, { currentServerFilters }, onAction, onFabRestoreStateChange, applyDraft)
-    val sourcePicker: @Composable () -> Unit = {
-        SearchSourcePicker(
-            draftSourceScope = state.query.draftSourceScope,
-            options = state.query.modeOptions,
-            unifiedSourceCount = state.query.unifiedSources.size,
-            unifiedSources = state.query.unifiedSources,
-            onOpen = { inputFocus.clear() },
-            onModeSelected = { mode ->
-                searchBarDismissedByScroll = false
-                onAction(SearchAction.SelectMode(mode))
-            },
-            onTemporarySourceToggled = { source ->
-                searchBarDismissedByScroll = false
-                onAction(SearchAction.ToggleTemporarySource(source))
-            },
-        )
-    }
-    val openPostActions: (Post) -> Unit = { post ->
-        inputFocus.clear()
-        actionPost.open(post, state.content.results, scope, resolvePostById)
-    }
-    Scaffold(
-        modifier = Modifier.nestedScroll(filterScroll.connection),
-        contentWindowInsets = WindowInsets(0),
-        floatingActionButton = {
-            FeedFilterFab(
-                modifier = Modifier.padding(bottom = 8.dp),
-                labels = searchFilterLabels(serverFilters, feed, fabRestoreState),
-                contentDescription = "Filter and sort",
-                onClick = {
-                    inputFocus.clear()
-                    filterSheetBaseline = serverFilters
-                    showFilterSheet = true
-                },
-                onClear = { filterActions.clearFilters(serverFilters) },
-                scrollSignal = filterScroll,
-            )
-        }
-    ) { padding ->
-        CollapsingSearchChrome(
-            expanded = !searchBarDismissedByScroll,
-            legacy = oldSearchBar,
-            onExpand = { composerOpen = true },
-            sourcePicker = sourcePicker,
-            horizontalPadding = 16.dp,
-            modifier = Modifier.then(inputFocus.rootModifier).fillMaxSize().padding(padding)
-                .padding(top = if (oldSearchBar) 6.dp else 0.dp, bottom = 8.dp),
-            inputField = {
-                SearchSummaryBar(
-                    summary = collapsedSearchContextSummary(state.query.draft, activeSearchFilterCount(state, feed, fabRestoreState)),
-                    validationMessage = state.query.validationMessage,
-                    showSearchAction = state.hasPendingChanges && !composerOpen,
-                    onOpen = { composerOpen = true },
-                    onSearch = { applyDraft() },
-                    trailing = { if (oldSearchBar) sourcePicker() },
-                )
-            },
-        ) {
-            val cards = rememberFeedCardEnvironment(
-                pixivUgoiraClient, likedPostIds, feed.durationMetadata.knownDurationMsByPostId, durationStateForPost,
-                onToggleLike, onDurationPostVisibilityChanged, onAuthoritativeDurationKnown,
-            )
-            SearchResultsBody(state, feed, cards, gridState, pageDemand, inputFocus, resolvePostById, recoverPostMedia, onAction, openPostActions)
-        }
-    }
-
-    actionPost.post?.let { post ->
-        PostActionSheet(
-            post = post,
-            creatorBrowsingSources = creatorBrowsingSources,
-            onDismiss = actionPost::dismiss,
-            onSaveToDevice = { onSaveToDevice(post) },
-            onSaveToCodex = { onRequestSaveToCodex(post) },
-            saveToCodexQuery = state.query.applied,
-            onOpenCreatorProfile = onOpenCreatorProfile,
-            onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
-            onPostUrlCopied = onPostUrlCopied,
-            tagContent = {
-                PostTagActionSection(
-                    draftQuery = state.query.draft,
-                    loading = actionPost.resolving && !post.hasActionableTags(),
-                    post = post,
-                    tagVideoCountProvider = tagVideoCountProvider,
-                    fetchTagVideoCounts = fetchTagVideoCounts,
-                    onAddIncludeTerm = { term ->
-                        onAction(SearchAction.AddPostIncludeTerm(post, term))
-                        true
-                    },
-                    onAddExcludeTerm = { term ->
-                        onAction(SearchAction.AddPostExcludeTerm(post, term))
-                        true
-                    },
-                    onRemoveIncludeTerm = { term -> onAction(SearchAction.RemoveIncludeTerm(term)) },
-                    onRemoveExcludeTerm = { term -> onAction(SearchAction.RemoveExcludeTerm(term)) },
-                    onFavoriteTagLongPress = onAddFavoriteTag,
-                )
-            },
-        )
-    }
-
-    if (composerOpen) {
-        SearchComposer(
-            state = state,
-            onAction = onAction,
-            sourcePicker = sourcePicker,
-            onApply = applyDraft,
-            onReset = {
-                onAction(SearchAction.ClearDraft)
-                onAction(SearchAction.ClearAutocomplete)
-                showFilterSheet = false
-                scope.launch { resetSearchScroll(feed.visibleResults, gridState, onAction) }
-            },
-            onUndo = {
-                onAction(SearchAction.UndoSearch)
-                onAction(SearchAction.ClearAutocomplete)
-                showFilterSheet = false
-            },
-            onOpenFavorites = { showFavoriteTagSheet = true },
-            onOpenSourceAccounts = onOpenSourceAccounts,
-            onDigitsCommitted = { scope.launch { resetSearchScroll(feed.visibleResults, gridState, onAction) } },
-            onDismiss = closeComposer,
-            savedSearches = savedSearches,
-            onOpenSavedSearch = { entry ->
-                closeComposer()
-                onOpenSavedSearch(entry)
-            },
-        )
-    }
-
-    if (showFavoriteTagSheet) {
-        SearchFavoriteTags(state, favoriteTags, tagVideoCountProvider, fetchTagVideoCounts, onAction, onRemoveFavoriteTag,
-            onDismiss = { showFavoriteTagSheet = false })
-    }
-
-    if (showFilterSheet) {
-        SearchFilterSheet(state, feed, fabRestoreState, onAction, onFabRestoreStateChange,
-            onReset = filterActions::resetFilterDraft,
-            // Results change once, when the filters are settled, however many were adjusted.
-            onDismiss = {
-                showFilterSheet = false
-                if (serverFilters != filterSheetBaseline) applyDraft()
-            })
-    }
 }
 
-/** What the results grid shows after visibility filters, known durations, and related posts apply. */
-private class SearchFeed(
-    val animatedFilterActive: Boolean,
-    val animatedDurationRange: AnimatedDurationRange,
-    val animatedDurationFilterActive: Boolean,
-    val visibilityFilters: SearchVisibilityFilters,
-    val isNhentaiSourceMode: Boolean,
-    val displayResults: List<Post>,
-    val durationMetadata: DurationFilterMetadata,
-    val visibleResults: List<Post>,
-    val related: RelatedFeedPresentation,
-)
-
 @Composable
-private fun rememberSearchFeed(
-    state: SearchUiState,
-    fabRestoreState: FeedFabRestoreState,
-    likedPostIds: Set<PostId>,
-    pendingLikePostIds: Set<PostId>,
-    savedPostIds: Set<PostId>,
-    watchedPostIds: Set<PostId>,
-    durationStates: Map<MediaDurationKey, MediaDurationState>,
-    resolveUnknownAnimatedDurations: Boolean,
-): SearchFeed {
-    val animationRestoreState = fabRestoreState.searchAnimationFilter(state.query.draft.mode)
-    val hideLiked = fabRestoreState.hideLiked
-    val hideSaved = fabRestoreState.hideSaved
-    val hideWatched = fabRestoreState.hideWatched
-    val durationMinBucket = animationRestoreState.durationMinBucket
-    val durationMaxBucket = animationRestoreState.durationMaxBucket
-    val isNhentaiSourceMode = state.query.draft.mode == QueryMode.Source(SourceKey.NHENTAI)
-    val animatedFilterActive = animationRestoreState.animatedOnly && !isNhentaiSourceMode
-    val animatedDurationRange = remember(durationMinBucket, durationMaxBucket) {
-        AnimatedDurationRange(minBucket = durationMinBucket, maxBucket = durationMaxBucket)
-    }
-    val animatedDurationFilterActive = !animatedDurationRange.isFullRange && !isNhentaiSourceMode
-    val visibilityFilters = remember(
-        animatedFilterActive, hideLiked, hideSaved, hideWatched, animatedDurationRange, state.query.applied.dateRange,
-    ) {
-        SearchVisibilityFilters(
-            dateRange = state.query.applied.dateRange,
-            animatedOnly = animatedFilterActive,
-            hideLiked = hideLiked,
-            hideSaved = hideSaved,
-            hideWatched = hideWatched,
-            animatedDurationRange = animatedDurationRange,
-        )
-    }
-    val unknownAnimatedDurationPolicy = remember(resolveUnknownAnimatedDurations) {
-        if (resolveUnknownAnimatedDurations) {
-            UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
-        } else {
-            UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS
-        }
-    }
-    val displayResults = remember(state.content.results, state.content.displayVersion, state.query.appliedQueryHash) {
-        state.content.results
-    }
-    val durationMetadata = rememberDurationFilterMetadata(displayResults, durationStates, animatedDurationFilterActive)
-    val acquiredDurations = durationMetadata.knownDurationMsByPostId
-    val retainedLikedPostIds = retainPostsUntilViewerCloses(remember(state.relatedPosts, pendingLikePostIds) {
-        state.relatedPosts.retainedLikedPostIds + pendingLikePostIds
-    })
-    val visibleResults = remember(
-        displayResults, visibilityFilters, likedPostIds, retainedLikedPostIds, savedPostIds, watchedPostIds,
-        unknownAnimatedDurationPolicy, acquiredDurations,
-    ) {
-        filterSearchResults(
-            results = displayResults,
-            filters = visibilityFilters,
-            likedPostIds = likedPostIds,
-            retainedLikedPostIds = retainedLikedPostIds,
-            savedPostIds = savedPostIds,
-            watchedPostIds = watchedPostIds,
-            unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
-            knownDurationMsByPostId = acquiredDurations,
-        )
-    }
-    val related = rememberRelatedFeedPresentation(
-        pendingLikePostIds = pendingLikePostIds,
-        canonicalPosts = displayResults, visibleCanonicalPosts = visibleResults,
-        relatedState = state.relatedPosts, visibilityFilters = visibilityFilters,
-        likedPostIds = likedPostIds, savedPostIds = savedPostIds, watchedPostIds = watchedPostIds,
-        unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy, durationStates = durationStates,
-        durationFilterActive = animatedDurationFilterActive,
-    )
-    return remember(
-        animatedFilterActive, animatedDurationRange, animatedDurationFilterActive, visibilityFilters,
-        isNhentaiSourceMode, displayResults, durationMetadata, visibleResults, related,
-    ) {
-        SearchFeed(
-            animatedFilterActive, animatedDurationRange, animatedDurationFilterActive, visibilityFilters,
-            isNhentaiSourceMode, displayResults, durationMetadata, visibleResults, related,
-        )
-    }
-}
-
-/** Restores and persists the grid position, then returns the demand that loads further pages. */
-@Composable
-private fun rememberSearchScrollAndPaging(
+private fun SearchComposerDialog(
     state: SearchUiState,
     feed: SearchFeed,
+    chrome: SearchChromeState,
     gridState: LazyStaggeredGridState,
-    resolveUnknownAnimatedDurations: Boolean,
+    sourcePicker: @Composable () -> Unit,
+    applyDraft: () -> Unit,
     onAction: (SearchAction) -> Unit,
-): FeedPageDemandControl {
-    val queryHash = state.query.appliedQueryHash
-    val projection = feed.related.projection
-    val scrollRestoration = (state.restoration as? SearchRestorationUiState.Restored)
-        ?.takeIf { restored -> restored.scrollState != null }
-    SearchScrollRestorationEffect(
-        state, projection, gridState, onAction,
-        visibilityReady = !feed.animatedDurationFilterActive || feed.durationMetadata.isVisibilityResolved(
-            feed.displayResults.getOrNull(scrollRestoration?.scrollState?.firstVisibleItemIndex ?: -1),
-            resolveInBackground = resolveUnknownAnimatedDurations,
-        ),
+    onOpenSourceAccounts: () -> Unit,
+    savedSearches: List<SavedSearchEntry>,
+    onOpenSavedSearch: (SavedSearchEntry) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val resetScroll = { scope.launch { resetSearchScroll(feed.visibleResults, gridState, onAction) } }
+    SearchComposer(
+        state, onAction, sourcePicker, applyDraft,
+        onReset = {
+            onAction(SearchAction.ClearDraft)
+            onAction(SearchAction.ClearAutocomplete)
+            chrome.showFilterSheet = false
+            resetScroll()
+        },
+        onUndo = {
+            onAction(SearchAction.UndoSearch)
+            onAction(SearchAction.ClearAutocomplete)
+            chrome.showFilterSheet = false
+        },
+        onOpenFavorites = { chrome.showFavoriteTagSheet = true },
+        onOpenSourceAccounts = onOpenSourceAccounts,
+        onDigitsCommitted = { resetScroll() },
+        onDismiss = { chrome.closeComposer(onAction) },
+        savedSearches = savedSearches,
+        onOpenSavedSearch = { entry ->
+            chrome.closeComposer(onAction)
+            onOpenSavedSearch(entry)
+        },
     )
-    SearchScrollPersistenceEffect(queryHash, state.restoration, projection, gridState, onAction)
-    return rememberFeedPageDemand(
-        input = FeedPageDemandInput(
-            contextKey = queryHash,
-            completedGeneration = state.execution.lastCompletedRequestId ?: 0L,
-            canonicalCount = feed.displayResults.size,
-            visibleCount = feed.visibleResults.size,
-            canLoadMore = state.content.canLoadMore,
-            ready = state.content.hasExecutedSearch,
-            refreshing = state.loading,
-            paging = state.loadingMore,
-            failed = state.content.error != null,
-            resolvingDurations = feed.durationMetadata.readiness.isResolving,
-            requiredCanonicalIndex = scrollRestoration?.scrollState?.firstVisibleItemIndex,
-        ),
-        filters = feed.visibilityFilters,
-        gridState = gridState,
-        presentedItemCount = projection.entries.size,
-        canonicalIndexForVisibleItems = projection::greatestVisibleCanonicalIndex,
-        onLoadNextPage = { onAction(SearchAction.LoadNextPage) },
+}
+
+@Composable
+private fun SearchScreenSourcePicker(
+    state: SearchUiState,
+    chrome: SearchChromeState,
+    inputFocus: SearchInputFocus,
+    onAction: (SearchAction) -> Unit,
+) {
+    SearchSourcePicker(
+        draftSourceScope = state.query.draftSourceScope,
+        options = state.query.modeOptions,
+        unifiedSourceCount = state.query.unifiedSources.size,
+        unifiedSources = state.query.unifiedSources,
+        onOpen = { inputFocus.clear() },
+        onModeSelected = { mode ->
+            chrome.searchBarDismissedByScroll = false
+            onAction(SearchAction.SelectMode(mode))
+        },
+        onTemporarySourceToggled = { source ->
+            chrome.searchBarDismissedByScroll = false
+            onAction(SearchAction.ToggleTemporarySource(source))
+        },
+    )
+}
+
+@Composable
+private fun SearchChromeInput(
+    state: SearchUiState,
+    feed: SearchFeed,
+    fabRestoreState: FeedFabRestoreState,
+    chrome: SearchChromeState,
+    oldSearchBar: Boolean,
+    sourcePicker: @Composable () -> Unit,
+    applyDraft: () -> Unit,
+) {
+    SearchSummaryBar(
+        summary = collapsedSearchContextSummary(state.query.draft, activeSearchFilterCount(state, feed, fabRestoreState)),
+        validationMessage = state.query.validationMessage,
+        showSearchAction = state.hasPendingChanges && !chrome.composerOpen,
+        onOpen = { chrome.composerOpen = true },
+        onSearch = applyDraft,
+        trailing = { if (oldSearchBar) sourcePicker() },
+    )
+}
+
+@Composable
+private fun SearchPostSheet(
+    post: Post,
+    actionPost: SearchActionPostState,
+    state: SearchUiState,
+    creatorBrowsingSources: Set<SourceKey>,
+    tagVideoCountProvider: (SourceKey, String) -> Int?,
+    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?>,
+    onAction: (SearchAction) -> Unit,
+    onSaveToDevice: (Post) -> Unit,
+    onRequestSaveToCodex: (Post) -> Unit,
+    onOpenCreatorProfile: (CreatorProfile) -> Unit,
+    onOpenLegacyCreatorProfile: (Post) -> Unit,
+    onPostUrlCopied: (Post) -> Unit,
+    onAddFavoriteTag: (SourceKey, String) -> Unit,
+) {
+    PostActionSheet(
+        post = post,
+        creatorBrowsingSources = creatorBrowsingSources,
+        onDismiss = actionPost::dismiss,
+        onSaveToDevice = { onSaveToDevice(post) },
+        onSaveToCodex = { onRequestSaveToCodex(post) },
+        saveToCodexQuery = state.query.applied,
+        onOpenCreatorProfile = onOpenCreatorProfile,
+        onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
+        onPostUrlCopied = onPostUrlCopied,
+        tagContent = {
+            PostTagActionSection(
+                draftQuery = state.query.draft,
+                loading = actionPost.resolving && !post.hasActionableTags(),
+                post = post,
+                tagVideoCountProvider = tagVideoCountProvider,
+                fetchTagVideoCounts = fetchTagVideoCounts,
+                onAddIncludeTerm = { term ->
+                    onAction(SearchAction.AddPostIncludeTerm(post, term))
+                    true
+                },
+                onAddExcludeTerm = { term ->
+                    onAction(SearchAction.AddPostExcludeTerm(post, term))
+                    true
+                },
+                onRemoveIncludeTerm = { term -> onAction(SearchAction.RemoveIncludeTerm(term)) },
+                onRemoveExcludeTerm = { term -> onAction(SearchAction.RemoveExcludeTerm(term)) },
+                onFavoriteTagLongPress = onAddFavoriteTag,
+            )
+        },
     )
 }
 
@@ -496,7 +432,7 @@ private class SearchActionPostState {
 private class SearchFilterActions(
     private val state: SearchUiState,
     private val fabRestoreState: FeedFabRestoreState,
-    private val currentServerFilters: () -> SearchServerFilters,
+    private val currentServerFilters: State<SearchServerFilters>,
     private val onAction: (SearchAction) -> Unit,
     private val onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
     private val applyDraft: () -> Unit,
@@ -505,8 +441,8 @@ private class SearchFilterActions(
         onAction(SearchAction.SelectSort(filters.sort))
         onAction(SearchAction.SetDateRange(filters.dateRange))
         // These two rewrite the draft's nhentai terms, so only a real change may dispatch them.
-        if (filters.fullColor != currentServerFilters().fullColor) onAction(SearchAction.SetNhentaiFullColor(filters.fullColor))
-        if (filters.language != currentServerFilters().language) onAction(SearchAction.SetNhentaiLanguage(filters.language))
+        if (filters.fullColor != currentServerFilters.value.fullColor) onAction(SearchAction.SetNhentaiFullColor(filters.fullColor))
+        if (filters.language != currentServerFilters.value.language) onAction(SearchAction.SetNhentaiLanguage(filters.language))
     }
 
     fun resetFilterDraft() {
@@ -576,145 +512,6 @@ private suspend fun resetSearchScroll(
         }
     }
     onAction(SearchAction.ScrollChanged(0, 0))
-}
-
-@Composable
-private fun ColumnScope.SearchResultsBody(
-    state: SearchUiState,
-    feed: SearchFeed,
-    cards: com.theoriacodex.app.ui.components.FeedCardEnvironment,
-    gridState: LazyStaggeredGridState,
-    pageDemand: FeedPageDemandControl,
-    inputFocus: SearchInputFocus,
-    resolvePostById: suspend (PostId) -> Post?,
-    recoverPostMedia: suspend (Post, ImageRef) -> Post?,
-    onAction: (SearchAction) -> Unit,
-    openPostActions: (Post) -> Unit,
-) {
-    val clearFocusInteraction = remember { MutableInteractionSource() }
-    val tapToClearFocus = Modifier
-        .weight(1f)
-        .clickable(interactionSource = clearFocusInteraction, indication = null) { inputFocus.clear() }
-    val sourceAuthErrorMessage = remember(state.content.statuses) { buildSourceAuthErrorMessage(state.content.statuses) }
-    val retrySearch = { inputFocus.clear(); onAction(SearchAction.Retry) }
-    state.pageFailure?.let { SearchFailureSurface(it, retrySearch) }
-    // Results show the pull indicator instead; this keeps refreshes of an emptied feed visible.
-    if (state.retainsResultsWhileRefreshing && feed.related.projection.entries.isEmpty()) SearchRefreshProgress()
-    when {
-        state.loading && !state.retainsResultsWhileRefreshing -> FeedLoadingState(modifier = tapToClearFocus.fillMaxWidth())
-        state.content.error != null && state.pageFailure == null -> {
-            SearchFailureSurface(requireNotNull(state.content.error), retrySearch, tapToClearFocus)
-        }
-        feed.related.projection.entries.isEmpty() -> Box(modifier = tapToClearFocus) {
-            SearchEmptyResults(state, feed, pageDemand, sourceAuthErrorMessage, retrySearch)
-        }
-        else -> Column(modifier = tapToClearFocus, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            sourceAuthErrorMessage?.let { authMessage ->
-                ErrorBlock(title = "Source account required", message = authMessage)
-            }
-            PullToRefreshBox(
-                isRefreshing = state.retainsResultsWhileRefreshing,
-                onRefresh = retrySearch,
-                modifier = Modifier.weight(1f),
-            ) {
-                SearchResultsGrid(state, feed, cards, gridState, pageDemand, inputFocus, resolvePostById, recoverPostMedia, onAction, openPostActions)
-            }
-        }
-    }
-}
-
-@Composable
-private fun SearchEmptyResults(
-    state: SearchUiState,
-    feed: SearchFeed,
-    pageDemand: FeedPageDemandControl,
-    sourceAuthErrorMessage: String?,
-    onRetry: () -> Unit,
-) {
-    val sourceFailureMessage = remember(state.content.statuses) { buildSourceFailureMessage(state.content.statuses) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        FeedContinueLoading(pageDemand)
-        sourceAuthErrorMessage?.let { authMessage ->
-            ErrorBlock(title = "Source account required", message = authMessage)
-        }
-        sourceFailureMessage?.let { failureMessage -> ErrorBlock(message = failureMessage, onRetry = onRetry) }
-        if (feed.durationMetadata.readiness.isResolving) {
-            EmptyBlock(hasPendingChanges = false, messageOverride = "Resolving durations…")
-        } else if (!state.content.hasExecutedSearch && !feed.animatedFilterActive) {
-            SearchStartSplash(modifier = Modifier.fillMaxWidth())
-        } else {
-            EmptyBlock(
-                hasPendingChanges = state.hasPendingChanges,
-                messageOverride = buildEmptySearchMessage(
-                    sourceResults = state.content.results,
-                    visibilityFilters = feed.visibilityFilters,
-                    loadingMore = state.loadingMore,
-                    canLoadMore = state.content.canLoadMore,
-                ),
-            )
-        }
-    }
-}
-
-@Composable
-private fun SearchResultsGrid(
-    state: SearchUiState,
-    feed: SearchFeed,
-    cards: com.theoriacodex.app.ui.components.FeedCardEnvironment,
-    gridState: LazyStaggeredGridState,
-    pageDemand: FeedPageDemandControl,
-    inputFocus: SearchInputFocus,
-    resolvePostById: suspend (PostId) -> Post?,
-    recoverPostMedia: suspend (Post, ImageRef) -> Post?,
-    onAction: (SearchAction) -> Unit,
-    openPostActions: (Post) -> Unit,
-) {
-    TwoColumnProjectedPostStaggeredGrid(
-        projection = feed.related.projection,
-        state = gridState,
-        modifier = Modifier.fillMaxSize().testTag("Search results"),
-        showPagingTile = state.loadingMore,
-        footerContent = if (pageDemand.showContinue) {
-            { FeedContinueLoading(pageDemand) }
-        } else {
-            null
-        },
-        footerMessage = if (feed.durationMetadata.readiness.isResolving) "Resolving durations…" else null,
-        postContent = { _, post ->
-            FeedPostCard(
-                post = post,
-                environment = cards,
-                showWatchHistory = true,
-                showSourceBadge = state.query.appliedSourceScope !is SearchSourceScope.Single,
-                resolvePostById = resolvePostById,
-                recoverPostMedia = recoverPostMedia,
-                onClick = {
-                    inputFocus.clear()
-                    onAction(SearchAction.OpenResult(
-                        postId = post.id,
-                        visibleResults = feed.visibleResults,
-                        scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
-                        visibilityFilters = feed.visibilityFilters,
-                    ))
-                },
-                onLongPress = { openPostActions(post) },
-            )
-        },
-        shelfContent = {
-            FeedRelatedPostsShelf(
-                state = state.relatedPosts,
-                presentation = feed.related,
-                environment = cards,
-                recoverPostMedia = recoverPostMedia,
-                onOpenPost = { posts, index -> onAction(SearchAction.OpenRelatedResult(index, posts)) },
-                onLongPress = openPostActions,
-                onDismiss = { onAction(SearchAction.DismissRelatedPosts) },
-                onRetry = { onAction(SearchAction.RetryRelatedPosts) },
-                onPreviousPage = { onAction(SearchAction.ShowPreviousRelatedPosts) },
-                onNextPage = { onAction(SearchAction.ShowNextRelatedPosts) },
-            )
-        },
-    )
 }
 
 @Composable
@@ -796,33 +593,6 @@ private fun SearchFilterSheet(
 }
 
 @Composable
-private fun SearchStartSplash(
-    modifier: Modifier = Modifier,
-) {
-    Card(modifier = modifier) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Image(
-                painter = painterResource(id = R.drawable.theoria_splash_mark),
-                contentDescription = "Theoria splash",
-                modifier = Modifier.size(180.dp),
-            )
-            Text(
-                text = "Add tags and press Apply to start searching.",
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 24.dp),
-            )
-        }
-    }
-}
-
-@Composable
 private fun FilterSheet(
     query: Query,
     onAction: (SearchAction) -> Unit,
@@ -893,6 +663,9 @@ private data class SearchServerFilters(
     val fullColor: Boolean,
     val language: NhentaiLanguageFilter,
 )
+
+private fun SearchQueryUiState.serverFilters() =
+    SearchServerFilters(draft.sort, draft.dateRange, nhentaiFullColorFilter, nhentaiLanguageFilter)
 
 private val DEFAULT_SERVER_FILTERS = SearchServerFilters(SortMode.NEWEST, null, false, NhentaiLanguageFilter.ANY)
 

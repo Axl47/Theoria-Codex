@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -64,6 +65,7 @@ import coil.request.ErrorResult
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.theoriacodex.app.media.MediaDeliveryActivation
+import com.theoriacodex.app.media.MediaDeliveryCandidate
 import com.theoriacodex.app.media.animatedDurationLabel
 import com.theoriacodex.app.media.isAuthoritativeDurationMedia
 import com.theoriacodex.app.media.isHttpNotFound
@@ -231,6 +233,49 @@ private class SearchCardImageProgress {
     var preparedIndex by mutableIntStateOf(0)
     var hasVisibleImage by mutableStateOf(false)
     var posterMemoryCacheKey by mutableStateOf<MemoryCache.Key?>(null)
+
+    fun onImageShown(result: SuccessResult, activation: MediaDeliveryActivation?) {
+        hasVisibleImage = true
+        preparedIndex = displayedIndex
+        if (activation != MediaDeliveryActivation.ANIMATION_UPGRADE) posterMemoryCacheKey = result.memoryCacheKey
+    }
+}
+
+/** What the card's watch history changes: its preview, progress badge, and watched mark. */
+private class SearchCardWatch(
+    val watchedPost: Post?,
+    val viewedMediaNumber: Int?,
+    val watchedDescription: String?,
+    val previewPost: Post,
+)
+
+@Composable
+private fun rememberSearchCardWatch(
+    post: Post,
+    effectivePost: Post,
+    showWatchHistory: Boolean,
+    metadataLabel: String?,
+    viewedMediaNumber: Int?,
+): SearchCardWatch {
+    val watchPresentation = LocalPostWatchPresentation.current.value
+    val lastPosition = watchPresentation.positions[post.id]
+    val lastMediaNumber = lastPosition?.mediaNumber
+    val watchedEntry = watchPresentation.watched[post.id].takeIf { showWatchHistory }
+    // A bare "2h ago" over a result reads as its upload date, so watch history gets its own mark.
+    val watchedDescription = watchedEntry?.takeIf { metadataLabel == null }?.let {
+        val watchedAt = relativeTimeLabel(System.currentTimeMillis(), lastPosition?.lastViewedAt ?: it.viewedAtEpochMs)
+        "Watched ${watchedAt.lowercase(Locale.US)}"
+    }
+    val watchedPost = watchPresentation.watched[post.id]?.post
+    val previewPost = remember(effectivePost, watchedPost, lastMediaNumber) {
+        val previewSource = if (lastMediaNumber != null && lastMediaNumber > postMediaItems(effectivePost).size && watchedPost != null) {
+            mergeResolvedPostForPresentation(original = effectivePost, resolved = watchedPost)
+        } else {
+            effectivePost
+        }
+        postForCardPreview(previewSource, lastMediaNumber)
+    }
+    return SearchCardWatch(watchedPost, viewedMediaNumber ?: watchedEntry?.maxViewedMediaNumber, watchedDescription, previewPost)
 }
 
 @Composable
@@ -255,73 +300,36 @@ private fun SearchCardContent(
     onAuthoritativeDurationKnown: (Long) -> Unit,
     onMediaPositioned: (LayoutCoordinates, Boolean) -> Unit,
 ) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val watchPresentation = LocalPostWatchPresentation.current.value
-    val lastPosition = watchPresentation.positions[post.id]
-    val lastMediaNumber = lastPosition?.mediaNumber
-    val watchedEntry = watchPresentation.watched[post.id].takeIf { showWatchHistory }
-    val cardViewedMediaNumber = viewedMediaNumber ?: watchedEntry?.maxViewedMediaNumber
-    // A bare "2h ago" over a result reads as its upload date, so watch history gets its own mark.
-    val watchedDescription = watchedEntry?.takeIf { metadataLabel == null }?.let {
-        val watchedAt = relativeTimeLabel(System.currentTimeMillis(), lastPosition?.lastViewedAt ?: it.viewedAtEpochMs)
-        "Watched ${watchedAt.lowercase(Locale.US)}"
-    }
     val effectivePost = resolution.resolvedPost?.let { resolved ->
         mergeResolvedPostForPresentation(original = post, resolved = resolved)
     } ?: post
-    val watchedPost = watchPresentation.watched[post.id]?.post
-    val previewPost = remember(effectivePost, watchedPost, lastMediaNumber) {
-        val previewSource = if (lastMediaNumber != null && lastMediaNumber > postMediaItems(effectivePost).size && watchedPost != null) {
-            mergeResolvedPostForPresentation(original = effectivePost, resolved = watchedPost)
-        } else {
-            effectivePost
-        }
-        postForCardPreview(previewSource, lastMediaNumber)
-    }
+    val watch = rememberSearchCardWatch(post, effectivePost, showWatchHistory, metadataLabel, viewedMediaNumber)
     val title = effectivePost.displayTitleOrNull()
     val supportingContent = searchCardSupportingContent(
         title = title,
         metadataLabel = metadataLabel,
-        showWatchedBadge = watchedDescription != null,
+        showWatchedBadge = watch.watchedDescription != null,
         showSourceBadge = showSourceBadge,
     )
+    val previewPost = watch.previewPost
     val videoRef = remember(
-        effectivePost.id.source,
-        effectivePost.id.sourcePostId,
-        previewPost.media,
-        previewPost.full,
-        previewPost.preview,
+        effectivePost.id.source, effectivePost.id.sourcePostId, previewPost.media, previewPost.full, previewPost.preview,
     ) {
         if (allowsInlineAutoplayInSearch(previewPost)) resolveCardVideoRef(previewPost) else null
     }
     val imageDeliveryPlan = remember(previewPost) { previewMediaDeliveryPlan(previewPost) }
-    val imageCandidates = imageDeliveryPlan.candidates
     val progress = remember(effectivePost.id, imageDeliveryPlan) { SearchCardImageProgress() }
-    val previewCandidate = imageCandidates.getOrNull(progress.displayedIndex)
-    val previewUrl = previewCandidate?.location
+    val previewCandidate = imageDeliveryPlan.candidates.getOrNull(progress.displayedIndex)
     val ratio = remember(post.id, mediaAspectRatio) { mediaAspectRatio ?: previewAspectRatio(post) }
     val windowSize = LocalWindowInfo.current.containerSize
     val decodeSize = remember(windowSize.width, ratio) {
         feedPreviewDecodeSize(screenWidthPx = windowSize.width, aspectRatio = ratio)
     }
-    val imageModel = remember(context, previewUrl, effectivePost.id.source, decodeSize) {
-        previewUrl?.let {
-            buildFeedImageRequest(
-                context = context,
-                url = it,
-                sourceKey = effectivePost.id.source,
-                decodeSize = decodeSize,
-                // Animated drawables skip the memory cache, so keep the poster up while one decodes.
-                placeholderMemoryCacheKey = progress.posterMemoryCacheKey.takeIf {
-                    previewCandidate.activation == MediaDeliveryActivation.ANIMATION_UPGRADE
-                },
-            )
-        }
-    }
+    val imageModel = rememberSearchCardImageModel(previewCandidate, progress, effectivePost.id.source, decodeSize)
     SearchCardImageUpgradeEffect(
         imageDeliveryPlan, progress, decodeSize, effectivePost, playbackActive, resolution, recoverPostMedia,
     )
+    val scope = rememberCoroutineScope()
     LaunchedEffect(effectivePost.id, videoRef?.url, videoRef?.localPath, resolvePostById) {
         if (videoRef == null && resolution.resolvedPost == null) resolution.requestPreview(scope, resolvePostById)
     }
@@ -334,46 +342,91 @@ private fun SearchCardContent(
             .onGloballyPositioned { coordinates -> onMediaPositioned(coordinates, titleBelowMedia) },
     ) {
         SearchCardMedia(
-            effectivePost, watchedPost, pixivUgoiraClient, title ?: effectivePost.id.sourcePostId, playbackActive,
-            videoRef, imageModel, imageCandidates.lastIndex, previewCandidate?.ref, previewCandidate?.activation,
-            previewUrl, progress, resolution, resolvePostById, recoverPostMedia, refreshOnPreviewError,
-            playbackDiagnosticsEnabled, onAuthoritativeDurationKnown,
+            effectivePost, watch.watchedPost, pixivUgoiraClient, title ?: effectivePost.id.sourcePostId, playbackActive,
+            videoRef, imageModel, imageDeliveryPlan.candidates.lastIndex, previewCandidate, progress, resolution,
+            resolvePostById, recoverPostMedia, refreshOnPreviewError, playbackDiagnosticsEnabled, onAuthoritativeDurationKnown,
         )
-        val mediaCount = postMediaCount(effectivePost)
-        if (mediaCount > 1) {
-            com.theoriacodex.app.ui.components.MediaCountBadge(
-                text = imageCountBadgeLabel(mediaCount, cardViewedMediaNumber),
-                description = if (cardViewedMediaNumber == null) "Image count" else "Watched media progress",
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(8.dp),
+        SearchCardBadges(
+            effectivePost, watch, liked, onToggleLike, metadataLabel, showSourceBadge,
+            supportingContent.showPreviewContext, animatedDurationLabel(effectivePost, acquiredDurationMs),
+        )
+    }
+    if (titleBelowMedia) SearchCardTitle(requireNotNull(title))
+}
+
+@Composable
+private fun rememberSearchCardImageModel(
+    candidate: MediaDeliveryCandidate?,
+    progress: SearchCardImageProgress,
+    source: SourceKey,
+    decodeSize: FeedPreviewDecodeSize,
+): ImageRequest? {
+    val context = LocalContext.current
+    val url = candidate?.location
+    return remember(context, url, source, decodeSize) {
+        url?.let {
+            buildFeedImageRequest(
+                context = context,
+                url = it,
+                sourceKey = source,
+                decodeSize = decodeSize,
+                // Animated drawables skip the memory cache, so keep the poster up while one decodes.
+                placeholderMemoryCacheKey = progress.posterMemoryCacheKey.takeIf {
+                    candidate.activation == MediaDeliveryActivation.ANIMATION_UPGRADE
+                },
             )
-        }
-        if (onToggleLike != null) SearchCardLikeButton(liked, onToggleLike, Modifier.align(Alignment.TopStart))
-        if (supportingContent.showPreviewContext) {
-            SearchCardPreviewContext(
-                metadataLabel, watchedDescription, showSourceBadge, effectivePost.id.source,
-                Modifier.align(Alignment.BottomEnd),
-            )
-        }
-        animatedDurationLabel(effectivePost, acquiredDurationMs)?.let { durationLabel ->
-            Box(modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)) {
-                PreviewMetadataLabel(durationLabel)
-            }
         }
     }
-    if (titleBelowMedia) {
-        Column(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text(
-                text = requireNotNull(title),
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+}
+
+/** Everything over the media: count, like, watch and source context, and duration. */
+@Composable
+private fun BoxScope.SearchCardBadges(
+    post: Post,
+    watch: SearchCardWatch,
+    liked: Boolean,
+    onToggleLike: (() -> Unit)?,
+    metadataLabel: String?,
+    showSourceBadge: Boolean,
+    showPreviewContext: Boolean,
+    durationLabel: String?,
+) {
+    val mediaCount = postMediaCount(post)
+    if (mediaCount > 1) {
+        com.theoriacodex.app.ui.components.MediaCountBadge(
+            text = imageCountBadgeLabel(mediaCount, watch.viewedMediaNumber),
+            description = if (watch.viewedMediaNumber == null) "Image count" else "Watched media progress",
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(8.dp),
+        )
+    }
+    if (onToggleLike != null) SearchCardLikeButton(liked, onToggleLike, Modifier.align(Alignment.TopStart))
+    if (showPreviewContext) {
+        SearchCardPreviewContext(
+            metadataLabel, watch.watchedDescription, showSourceBadge, post.id.source,
+            Modifier.align(Alignment.BottomEnd),
+        )
+    }
+    if (durationLabel != null) {
+        Box(modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)) {
+            PreviewMetadataLabel(durationLabel)
         }
+    }
+}
+
+@Composable
+private fun SearchCardTitle(title: String) {
+    Column(
+        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -399,34 +452,48 @@ private fun SearchCardImageUpgradeEffect(
             return@LaunchedEffect
         }
         if (upgradesToAnimation) delay(FEED_PLAYER_ACTIVATION_DELAY_MS)
-        pendingUpgrades.forEach { nextIndex ->
-            val nextCandidate = plan.candidates[nextIndex]
-            val result = runCatchingPreservingCancellation {
-                context.imageLoader.execute(
-                    buildFeedImageRequest(
-                        context = context,
-                        url = nextCandidate.location,
-                        sourceKey = post.id.source,
-                        decodeSize = decodeSize,
-                    )
-                )
-            }.getOrNull()
-            if (result is SuccessResult) {
-                progress.preparedIndex = nextIndex
-                progress.displayedIndex = nextIndex
-                return@LaunchedEffect
-            }
-            if (
-                upgradesToAnimation &&
-                result is ErrorResult &&
-                resolution.canRecover(recoverPostMedia != null, result.throwable, nextCandidate.location) &&
-                resolution.recover(post, nextCandidate.ref.copy(url = nextCandidate.location), recoverPostMedia)
-            ) {
-                return@LaunchedEffect
-            }
+        for (nextIndex in pendingUpgrades) {
+            val done = tryImageUpgrade(context, plan, nextIndex, progress, decodeSize, post, upgradesToAnimation, resolution, recoverPostMedia)
+            if (done) return@LaunchedEffect
         }
     }
 }
+
+/** Returns whether this candidate settled the attempt, by loading or by replacing the post's media. */
+private suspend fun tryImageUpgrade(
+    context: android.content.Context,
+    plan: com.theoriacodex.app.media.MediaDeliveryPlan,
+    nextIndex: Int,
+    progress: SearchCardImageProgress,
+    decodeSize: FeedPreviewDecodeSize,
+    post: Post,
+    upgradesToAnimation: Boolean,
+    resolution: SearchCardResolution,
+    recoverPostMedia: (suspend (Post, ImageRef) -> Post?)?,
+): Boolean {
+    val candidate = plan.candidates[nextIndex]
+    val result = runCatchingPreservingCancellation {
+        context.imageLoader.execute(
+            buildFeedImageRequest(context = context, url = candidate.location, sourceKey = post.id.source, decodeSize = decodeSize)
+        )
+    }.getOrNull()
+    if (result is SuccessResult) {
+        progress.preparedIndex = nextIndex
+        progress.displayedIndex = nextIndex
+        return true
+    }
+    return upgradesToAnimation && recoverFailedUpgrade(result, candidate, post, resolution, recoverPostMedia)
+}
+
+private suspend fun recoverFailedUpgrade(
+    result: coil.request.ImageResult?,
+    candidate: MediaDeliveryCandidate,
+    post: Post,
+    resolution: SearchCardResolution,
+    recoverPostMedia: (suspend (Post, ImageRef) -> Post?)?,
+): Boolean = result is ErrorResult &&
+    resolution.canRecover(recoverPostMedia != null, result.throwable, candidate.location) &&
+    resolution.recover(post, candidate.ref.copy(url = candidate.location), recoverPostMedia)
 
 /** The card's single media slot: animation, inline video, image, or a placeholder, in that order. */
 @Composable
@@ -439,9 +506,7 @@ private fun SearchCardMedia(
     videoRef: ImageRef?,
     imageModel: ImageRequest?,
     lastCandidateIndex: Int,
-    previewRef: ImageRef?,
-    previewActivation: MediaDeliveryActivation?,
-    previewUrl: String?,
+    previewCandidate: MediaDeliveryCandidate?,
     progress: SearchCardImageProgress,
     resolution: SearchCardResolution,
     resolvePostById: (suspend (PostId) -> Post?)?,
@@ -464,24 +529,11 @@ private fun SearchCardMedia(
             sizeBucket = UgoiraSizeBucket.CARD,
             isActive = playbackActive,
             onDurationKnown = onAuthoritativeDurationKnown,
-            loadingPreview = {
-                FeedAsyncImage(
-                    model = imageModel,
-                    contentDescription = description,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                    isActive = false,
-                    onError = {
-                        if (progress.displayedIndex < lastCandidateIndex) progress.displayedIndex += 1
-                    },
-                )
-            },
+            loadingPreview = { SearchCardAnimationPoster(imageModel, description, progress, lastCandidateIndex) },
         )
         videoRef != null && !videoPlaybackFailed -> SearchVideoPreview(
             media = videoRef,
-            mediaIndex = postMediaItems(post).indexOf(videoRef).takeIf { it >= 0 }
-                ?: watchedPost?.let { postMediaItems(it).indexOf(videoRef).takeIf { index -> index >= 0 } }
-                ?: 0,
+            mediaIndex = searchCardVideoIndex(post, watchedPost, videoRef),
             postId = post.id,
             sourceKey = post.id.source,
             playbackDiagnosticsEnabled = playbackDiagnosticsEnabled,
@@ -490,9 +542,7 @@ private fun SearchCardMedia(
             modifier = Modifier.fillMaxSize(),
             onPlaybackError = {
                 videoPlaybackFailed = true
-                if (resolution.resolvedPost == null) {
-                    resolution.requestPreview(scope, resolvePostById, force = refreshOnPreviewError)
-                }
+                if (resolution.resolvedPost == null) resolution.requestPreview(scope, resolvePostById, force = refreshOnPreviewError)
             },
             onDurationKnown = { durationMs ->
                 if (isAuthoritativeDurationMedia(post, videoRef)) onAuthoritativeDurationKnown(durationMs)
@@ -504,27 +554,12 @@ private fun SearchCardMedia(
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize(),
             isActive = playbackActive,
-            onSuccess = { result ->
-                progress.hasVisibleImage = true
-                progress.preparedIndex = progress.displayedIndex
-                if (previewActivation != MediaDeliveryActivation.ANIMATION_UPGRADE) {
-                    progress.posterMemoryCacheKey = result.memoryCacheKey
-                }
-            },
+            onSuccess = { result -> progress.onImageShown(result, previewCandidate?.activation) },
             onError = { state ->
-                val canAdvance = !progress.hasVisibleImage && progress.displayedIndex < lastCandidateIndex
-                val failedRef = previewRef?.copy(url = previewUrl)
-                if (failedRef != null && resolution.canRecover(recoverPostMedia != null, state.result.throwable, previewUrl)) {
-                    scope.launch {
-                        if (!resolution.recover(post, failedRef, recoverPostMedia) && canAdvance) {
-                            progress.displayedIndex += 1
-                        }
-                    }
-                } else if (canAdvance) {
-                    progress.displayedIndex += 1
-                } else if (resolution.resolvedPost == null && refreshOnPreviewError) {
-                    resolution.requestPreview(scope, resolvePostById, force = true)
-                }
+                handleSearchCardImageError(
+                    state.result.throwable, post, previewCandidate, progress, lastCandidateIndex, resolution,
+                    resolvePostById, recoverPostMedia, refreshOnPreviewError, scope,
+                )
             },
         )
         else -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -534,16 +569,61 @@ private fun SearchCardMedia(
 }
 
 @Composable
+private fun SearchCardAnimationPoster(
+    imageModel: ImageRequest?,
+    description: String,
+    progress: SearchCardImageProgress,
+    lastCandidateIndex: Int,
+) {
+    FeedAsyncImage(
+        model = imageModel,
+        contentDescription = description,
+        contentScale = ContentScale.Crop,
+        modifier = Modifier.fillMaxSize(),
+        isActive = false,
+        onError = { if (progress.displayedIndex < lastCandidateIndex) progress.displayedIndex += 1 },
+    )
+}
+
+private fun searchCardVideoIndex(post: Post, watchedPost: Post?, videoRef: ImageRef): Int =
+    postMediaItems(post).indexOf(videoRef).takeIf { it >= 0 }
+        ?: watchedPost?.let { postMediaItems(it).indexOf(videoRef).takeIf { index -> index >= 0 } }
+        ?: 0
+
+/** Recovers dead media first, then tries the next candidate, then asks the provider once more. */
+private fun handleSearchCardImageError(
+    error: Throwable,
+    post: Post,
+    candidate: MediaDeliveryCandidate?,
+    progress: SearchCardImageProgress,
+    lastCandidateIndex: Int,
+    resolution: SearchCardResolution,
+    resolvePostById: (suspend (PostId) -> Post?)?,
+    recoverPostMedia: (suspend (Post, ImageRef) -> Post?)?,
+    refreshOnPreviewError: Boolean,
+    scope: CoroutineScope,
+) {
+    val canAdvance = !progress.hasVisibleImage && progress.displayedIndex < lastCandidateIndex
+    val previewUrl = candidate?.location
+    val failedRef = candidate?.ref?.copy(url = previewUrl)
+    if (failedRef != null && resolution.canRecover(recoverPostMedia != null, error, previewUrl)) {
+        scope.launch {
+            if (!resolution.recover(post, failedRef, recoverPostMedia) && canAdvance) progress.displayedIndex += 1
+        }
+    } else if (canAdvance) {
+        progress.displayedIndex += 1
+    } else if (resolution.resolvedPost == null && refreshOnPreviewError) {
+        resolution.requestPreview(scope, resolvePostById, force = true)
+    }
+}
+
+@Composable
 private fun SearchCardLikeButton(liked: Boolean, onToggleLike: () -> Unit, modifier: Modifier) {
     Box(
         modifier = modifier
             .padding(8.dp)
             .size(48.dp)
-            .semantics {
-                contentDescription = if (liked) "Unlike post" else "Like post"
-                selected = liked
-                stateDescription = if (liked) "Liked" else "Not liked"
-            }
+            .likeSemantics(liked)
             .clickable(role = Role.Checkbox, onClick = onToggleLike),
         contentAlignment = Alignment.TopStart,
     ) {
@@ -564,6 +644,12 @@ private fun SearchCardLikeButton(liked: Boolean, onToggleLike: () -> Unit, modif
             }
         }
     }
+}
+
+private fun Modifier.likeSemantics(liked: Boolean): Modifier = semantics {
+    contentDescription = if (liked) "Unlike post" else "Like post"
+    selected = liked
+    stateDescription = if (liked) "Liked" else "Not liked"
 }
 
 @Composable

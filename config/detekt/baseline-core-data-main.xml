@@ -1,8 +1,5 @@
 <?xml version="1.0" ?>
 <SmellBaseline>
   <ManuallySuppressedIssues/>
-  <CurrentIssues>
-    <ID>CognitiveComplexMethod:DataStoreMigrations.kt:UiRestoreLegacyDataMigration$override suspend fun migrate: UiRestoreDataStoreFile</ID>
-    <ID>LongMethod:RepositoryPolicies.kt:RepositoryPolicies$fun normalizeSettings: AppSettings</ID>
-  </CurrentIssues>
+  <CurrentIssues/>
 </SmellBaseline>
