@@ -82,16 +82,19 @@ class ViewerTransformStateTest {
 
     @Test
     fun `flings follow their direction and slow releases need distance`() {
-        fun decide(displacement: Float, velocity: Float) = viewerSwipeDecision(displacement, velocity, pageExtent = 1000f, flingVelocity = 400f)
+        fun decide(displacement: Float, velocity: Float, movement: Float = displacement) =
+            viewerSwipeDecision(displacement, movement, velocity, pageExtent = 1000f, flingVelocity = 400f)
 
         // A short, fast flick commits; the same distance held still does not.
         assertEquals(ViewerHorizontalSwipeDirection.Next, decide(-60f, -2000f))
         assertEquals(null, decide(-60f, 0f))
-        // A slow drag commits only past 10% of the page.
-        assertEquals(null, decide(-90f, -100f))
-        assertEquals(ViewerHorizontalSwipeDirection.Previous, decide(110f, 0f))
+        // A slow drag commits only past 16% of the page.
+        assertEquals(null, decide(-150f, -100f))
+        assertEquals(ViewerHorizontalSwipeDirection.Previous, decide(170f, 0f))
         // Flicking back against a long drag cancels it.
         assertEquals(null, decide(-700f, 2000f))
+        // Pages still settling from a caught swipe do not make a new flick look like flicking back.
+        assertEquals(ViewerHorizontalSwipeDirection.Next, decide(70f, -1900f, movement = -60f))
     }
 
     @Test

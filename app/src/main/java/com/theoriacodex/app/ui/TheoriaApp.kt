@@ -1187,6 +1187,7 @@ internal fun TheoriaAppContent(
                             HorizontalPager(
                                 state = topLevelPagerState,
                                 modifier = Modifier.fillMaxSize(),
+                                flingBehavior = topLevelPagerFling(topLevelPagerState),
                             ) { page ->
                                 when (TopLevelDestination.entries[page]) {
                                     TopLevelDestination.Search -> {

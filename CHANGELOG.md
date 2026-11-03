@@ -25,11 +25,12 @@
 - A Codex now grows out of its Library tile and shrinks back into it.
 - Reordering Codices and For You sections glides neighbouring rows, settles the dropped row, ticks at each position, and scrolls long lists at their edges.
 - Tapping a tab slides to it instead of jumping.
+- Slow swipes between the main tabs commit at about 16% of the screen, like the Viewer, instead of snapping back before half.
 - Viewer controls fade in and out, and Settings pages and For You views transition instead of cutting.
 - System back in the Viewer now follows your swipe, shrinking the media before it returns to its card.
 - On video, brightness and volume swipes use the outer columns of the screen, leaving the centre for closing and information.
 - Viewer swipes keep your finger's speed when they land, and swiping during a landing continues to the next post instead of being ignored.
-- A short, fast flick now changes post, a slow drag needs about 10% of the screen, and flicking back cancels the swipe.
+- A short, fast flick now changes post, a slow drag needs about 16% of the screen, and flicking back cancels the swipe.
 - Video keeps playing while you swipe.
 - Pages stretch and tick softly when there is nothing further to swipe to.
 - Double-tap zooms at the tapped point with a smooth animation, and pinching now zooms around your fingers.
@@ -43,6 +44,7 @@
 - Stop a Codex briefly saying it no longer exists, or that it is empty, while it opens.
 - Show a Codex and the Saved screen immediately when returning to them from the Viewer.
 - Open the Viewer and Codices without waiting for settings and likes to reload.
+- Stop rapid flicks in the Viewer being dropped when one lands while the previous post is still settling.
 - Stop the Viewer dipping to black when the full image replaces its preview, on opening a post and while swiping.
 - Keep a loading thumbnail or video inside the media's own shape instead of briefly filling the screen.
 

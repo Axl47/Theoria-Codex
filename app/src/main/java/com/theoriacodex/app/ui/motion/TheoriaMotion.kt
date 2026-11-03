@@ -23,6 +23,9 @@ internal object TheoriaMotion {
     /** A whole screen or media surface moving. */
     const val SCREEN_MS = 320
 
+    /** How far a slow drag must travel, as a fraction of a page, to change page in any horizontal pager. */
+    const val PAGE_COMMIT_FRACTION = 0.16f
+
     /** Finishes a finger's motion in pixels, keeping its velocity without overshooting the target. */
     val settle: SpringSpec<Float> = spring(dampingRatio = 1f, stiffness = 550f, visibilityThreshold = 1f)
 

@@ -67,22 +67,24 @@ internal fun PagerState.viewerPageExtent(): Float = (layoutInfo.pageSize + layou
 /** A release this fast counts as a fling whatever distance it covered. */
 internal val VIEWER_FLING_VELOCITY = 400.dp
 
-private const val SWIPE_COMMIT_FRACTION = 0.1f
 private const val EDGE_STRETCH_FRACTION = 0.18f
 
 /**
- * Decides a released swipe. A fling goes where it is moving, and one moving back against the drag
- * cancels it; a slow release commits only past [SWIPE_COMMIT_FRACTION] of a page.
+ * Decides a released swipe. A fling goes where it is moving, and one moving back against this
+ * gesture's own [movement] cancels it; a slow release commits only past
+ * [TheoriaMotion.PAGE_COMMIT_FRACTION] of a page. [displacement] also counts any offset left from a
+ * settle this gesture caught, so it says how far the pages are, not which way the finger went.
  */
 internal fun viewerSwipeDecision(
     displacement: Float,
+    movement: Float,
     velocity: Float,
     pageExtent: Float,
     flingVelocity: Float,
 ): ViewerHorizontalSwipeDirection? {
     val deciding = when {
-        abs(velocity) >= flingVelocity -> if (displacement * velocity < 0f) return null else velocity
-        abs(displacement) >= pageExtent * SWIPE_COMMIT_FRACTION -> displacement
+        abs(velocity) >= flingVelocity -> if (movement * velocity < 0f) return null else velocity
+        abs(displacement) >= pageExtent * TheoriaMotion.PAGE_COMMIT_FRACTION -> displacement
         else -> return null
     }
     return if (deciding < 0f) ViewerHorizontalSwipeDirection.Next else ViewerHorizontalSwipeDirection.Previous

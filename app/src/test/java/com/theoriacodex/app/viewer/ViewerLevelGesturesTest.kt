@@ -195,7 +195,7 @@ class ViewerLevelGesturesTest {
                         override fun onPress() = Unit
                         override fun onHorizontalDrag(displacement: Float) = Unit
                         override fun onHorizontalRelease(displacement: Float, velocity: Float) {
-                            viewerSwipeDecision(displacement, velocity, 1000f, 400f)?.let(navigations::add)
+                            viewerSwipeDecision(displacement, displacement, velocity, 1000f, 400f)?.let(navigations::add)
                         }
                         override fun onDismissDrag(x: Float, y: Float, height: Float) { dismissDrags++ }
                         override fun onDismissRelease(velocityY: Float) = Unit
