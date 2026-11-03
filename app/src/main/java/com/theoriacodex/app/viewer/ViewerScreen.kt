@@ -1,8 +1,8 @@
 package com.theoriacodex.app.viewer
 
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.animation.core.animateFloatAsState
 import android.content.res.Configuration
 import androidx.compose.animation.core.tween
 import androidx.activity.BackEventCompat
@@ -431,7 +431,11 @@ internal fun ViewerScreen(
         }
     }
 
-    CompositionLocalProvider(LocalViewerPostStripInset provides if (chromeVisible && !mediaOverviewVisible) 56.dp else 0.dp) {
+    val viewerAccent = rememberViewerAccent(selectedPost, enabled = !opening && !returning)
+    CompositionLocalProvider(
+        LocalViewerPostStripInset provides if (chromeVisible && !mediaOverviewVisible) 56.dp else 0.dp,
+        LocalViewerAccent provides viewerAccent,
+    ) {
     Box(
         modifier = Modifier
             .fillMaxSize()
