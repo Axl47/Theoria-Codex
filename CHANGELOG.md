@@ -7,7 +7,6 @@
 - Sort the Codex Library by name, date added, or item count from Reorder mode; switching back to Manual restores your own arrangement.
 - Use the Codex Library sort as the non-suggested order in Add to Codex.
 - Rename a recommendation profile from its Settings menu, keeping its likes, Codices, and hidden tags.
-
 - Pull down on the Viewer to close it; the media follows your finger, then lands back on its card.
 - Swipe up on the Viewer to open post information.
 - Hold a video, GIF, or ugoira to play it at 2× until you let go; long press still opens information on other media.

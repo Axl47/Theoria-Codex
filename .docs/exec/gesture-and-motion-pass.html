@@ -25,8 +25,8 @@ pre{background:#eef2f7;padding:10px;overflow:auto}
 <h1>Gesture and motion pass</h1>
 <p>Owner: Claude · Created 2026-11-03 · Make motion follow the finger instead of playing after it, using one shared motion vocabulary.</p>
 <div class="cards">
-<div class="card"><b>Status</b><br>In progress</div>
-<div class="card"><b>Next</b><br>See Progress</div>
+<div class="card"><b>Status</b><br>Implemented; host checks pass; owner device pass pending</div>
+<div class="card"><b>Next</b><br>Owner runs the manual checks under Outcomes on the Samsung</div>
 <div class="card"><b>Risk</b><br>Viewer gesture ownership moves; frame cost of play-through swipes is unmeasured until the owner tests on the Samsung</div>
 <div class="card"><b>Device use</b><br>None by the agent. The owner tests the Samsung manually.</div>
 </div>
@@ -77,14 +77,16 @@ pre{background:#eef2f7;padding:10px;overflow:auto}
 
 <section id="progress"><h2>Progress</h2>
 <ul>
-<li>[ ] Phase 1</li><li>[ ] Phase 2</li><li>[ ] Phase 3</li><li>[ ] Phase 4</li><li>[ ] Phase 5</li>
-<li>[ ] Phase 6</li><li>[ ] Phase 7</li><li>[ ] Phase 8</li><li>[ ] Phase 9</li><li>[ ] Phase 10</li>
-<li>[ ] Full host validation</li>
+<li>[x] 2026-11-03 Phases 1 to 10, one commit each, plus a behavior-preserving Viewer gesture refactor for Detekt.</li>
+<li>[x] 2026-11-03 Host validation: unit tests, Detekt, Android test compilation, and lint in a fresh process.</li>
+<li>[ ] Owner's physical-device pass on the Samsung.</li>
 </ul>
 </section>
 
 <section id="surprises"><h2>Surprises And Discoveries</h2>
-<ul><li>2026-11-03: Viewer page layers are disposed as they leave the viewport, which would kill a gesture caught mid-settle. The recognizer must live above the pagers.</li></ul>
+<ul><li>2026-11-03: Viewer page layers are disposed as they leave the viewport, which would kill a gesture caught mid-settle. The recognizer must live above the pagers.</li>
+<li>2026-11-03: <code>GsonWireContractTest</code> has two failures (stale <code>LegacySettingsStoreRecord</code> manifest) that also fail on <code>0ccd6e31</code>, before this work. Left alone as out of scope.</li>
+<li>2026-11-03: The Codex detail screen has no cover header, so the morph targets the whole screen rather than a header.</li></ul>
 </section>
 
 <section id="decisions"><h2>Decision Log</h2>
@@ -94,10 +96,29 @@ pre{background:#eef2f7;padding:10px;overflow:auto}
 <tr><td>Home tabs stay swipeable; no swipe rows on them.</td><td>Keeps fast tab switching.</td><td>2026-11-03 owner</td></tr>
 <tr><td>Video plays during swipes.</td><td>Continuity; the owner measures cost on the Samsung.</td><td>2026-11-03 owner</td></tr>
 <tr><td>Dismissal is phase 1: no live feed behind the drag.</td><td>The feed is not composed under the Viewer; showing it needs a larger navigation change.</td><td>2026-11-03 owner</td></tr>
+<tr><td>A slow drag commits at 40% of a page; flings use 400 dp/s.</td><td>Replaces the 12% commit that made slow drags irreversible early. Both values are first guesses for the owner to tune.</td><td>2026-11-03 Claude</td></tr>
+<tr><td>Catching a settle commits its destination immediately.</td><td>Two flicks then mean two pages. Known edge: an inverted gallery whose layout direction flips mid-catch can jump.</td><td>2026-11-03 Claude</td></tr>
+<tr><td>Hold for 2× covers video, GIF and ugoira, and does not change the saved rate.</td><td>All three already have rate control; other media keeps long press for info.</td><td>2026-11-03 Claude</td></tr>
 </table>
 </section>
 
-<section id="outcomes"><h2>Outcomes And Retrospective</h2><p>Pending.</p></section>
+<section id="outcomes"><h2>Outcomes And Retrospective</h2><p>All phases are implemented. Host validation establishes logic and wiring only. Nothing was installed on any device and no emulator is available, so feel, haptics, frame cost and predictive back are unverified.</p>
+<table>
+<tr><th>Owner check on the Samsung</th><th>Expected</th></tr>
+<tr><td>Flick quickly through several posts, including videos</td><td>Every flick lands; no dropped swipes or snapping; frames hold with video playing through</td></tr>
+<tr><td>Slow drag past and short of 40%, then flick back after a long drag</td><td>Commits only past the threshold; flicking back cancels</td></tr>
+<tr><td>Swipe past the first and last post</td><td>Soft stretch, one tick, springs back</td></tr>
+<tr><td>Pinch and double-tap at an image corner, then pan hard</td><td>Zoom stays under the fingers; media cannot leave the screen</td></tr>
+<tr><td>Pull down from the centre of a video and anywhere on an image; release short and long</td><td>Short returns; long lands on its feed card from where it was held</td></tr>
+<tr><td>Gesture back from each screen edge, then cancel midway</td><td>Media shrinks with the swipe; cancelling restores it</td></tr>
+<tr><td>Vertical swipes in the outer columns of a video</td><td>Brightness left, volume right, with a tick at each limit</td></tr>
+<tr><td>Hold a video; swipe up on an image and in a video's centre</td><td>2× until release with no saved-rate change; information opens</td></tr>
+<tr><td>Scrub the timeline with controls visible</td><td>Scrubbing works and never swipes the post</td></tr>
+<tr><td>Open and close a Codex from its Library tile</td><td>Tile grows into the screen and back, without flicker</td></tr>
+<tr><td>Reorder a long Codex list; drag-select across a Codex beyond one screen</td><td>Neighbours glide, the list scrolls at its edges, each step ticks</td></tr>
+<tr><td>Pull to refresh Search and For You; re-tap each tab; tap a distant tab</td><td>Refresh runs; content returns to top; the slide stays smooth with feeds autoplaying</td></tr>
+</table>
+<p>Not done by owner decision: hold-to-peek and the possible post-close tap dead zone. The dead zone is still worth watching for during the pass.</p></section>
 
 <section id="recovery"><h2>Idempotence And Recovery</h2>
 <p>Host Gradle commands are safe to rerun. Each phase is its own commit, so <code>git revert</code> removes one phase. No destructive operations, device installs or data migrations are expected. To resume, read Progress and <code>git log</code>.</p>
