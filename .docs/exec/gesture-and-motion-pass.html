@@ -110,6 +110,7 @@ pre{background:#eef2f7;padding:10px;overflow:auto}
 </section>
 
 <section id="outcomes"><h2>Outcomes And Retrospective</h2><p>All phases and audit findings A1-A9 are implemented. Tab commit points, feed cards on tap, Likes opening and the open animation were exercised on the Samsung with the debug package only; the production package was not touched. Debug builds run slower than release, so open-animation smoothness still needs a release-like measurement. Feel, haptics and predictive back remain for the owner.</p>
+<p>Follow-up open-cost measurement on the Samsung (debug build, warm opens of a nine-video Codex): tap to first Viewer frame is about 140ms, the first composition frame is 41-59ms, and two frames of roughly 75-145ms follow landing. The first tears down the screen underneath, including ExoPlayer blocking on each feed surface detach; the second composes chrome, timeline and strip together. Removing PlayerView's unused controller, deferring system media controls until landing, and moving reading-position writes off the main thread reduced the work inside the animation. The first composition and the two post-landing frames remain.</p>
 <table>
 <tr><th>Owner check on the Samsung</th><th>Expected</th></tr>
 <tr><td>Flick quickly through several posts, including videos</td><td>Every flick lands; no dropped swipes or snapping; frames hold with video playing through</td></tr>

@@ -17,6 +17,8 @@
 
 ### Changed
 
+- Posts with video open more smoothly, and video cards take much less work to appear in feeds.
+- With controls showing, swipes and taps just above a video's timeline now work, instead of that strip of the screen ignoring them.
 - Show every Codex in the Library as a cover tile with its name and count on the cover, matching the Saved collections; Codex actions now open by long press.
 - Separate Saved from the other Codices in the Library with a thin line.
 - Choose the source in For You and Recents from the same icon menu as Search.
