@@ -82,6 +82,19 @@ class ViewerReturnTransitionTest {
         compose.runOnIdle { assertTrue(visible.isEmpty()) }
     }
 
+    @Test fun `media counts as settling from the start of a close until it lands`() {
+        val transition = ViewerReturnTransition()
+        transition.openedFrom("origin")
+        assertTrue(!transition.mediaSettling)
+        transition.begin(postId)
+        assertTrue(transition.mediaSettling)
+        transition.finishLanding()
+        assertTrue(!transition.mediaSettling)
+        transition.begin(postId)
+        transition.clear()
+        assertTrue(!transition.mediaSettling)
+    }
+
     @Test fun `only the originating grid and current post can supply a centered target`() {
         val transition = ViewerReturnTransition()
         val target = Rect(10f, 200f, 210f, 500f)

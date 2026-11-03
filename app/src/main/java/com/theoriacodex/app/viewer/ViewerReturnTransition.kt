@@ -116,6 +116,10 @@ internal class ViewerReturnTransition {
         private set
     var targetCorners by mutableStateOf(ViewerReturnCorners())
         private set
+
+    /** True while closing media is still moving, so the returning feed can hold its heaviest startup work. */
+    var mediaSettling by mutableStateOf(false)
+        private set
     private val mediaCorners = mutableMapOf<PostId, ViewerReturnCorners>()
     private var centered = false
     private var rowCentered = false
@@ -136,10 +140,15 @@ internal class ViewerReturnTransition {
     fun begin(postId: PostId) {
         openingBounds = null
         request = ViewerReturnRequest(originGridId, postId, originShelfId)
+        mediaSettling = true
         targetBounds = null
         centered = false
         rowCentered = originShelfId == null
         mediaBounds.clear()
+    }
+
+    fun finishLanding() {
+        mediaSettling = false
     }
 
     fun recordBounds(gridId: String?, postId: PostId, bounds: Rect, shelfId: ViewerReturnShelfId? = null, corners: ViewerReturnCorners = ViewerReturnCorners()) {
@@ -168,6 +177,7 @@ internal class ViewerReturnTransition {
     }
 
     fun clear() {
+        mediaSettling = false
         retainedPostIds = emptySet()
         openingCorners = ViewerReturnCorners()
         targetCorners = ViewerReturnCorners()
@@ -369,6 +379,7 @@ internal fun rememberViewerReturnProgress(): State<Float> {
             snapshotFlow { transition.targetBounds }.filterNotNull().first()
         }
         progress.animateTo(1f, tween(if (transition.targetBounds == null) TheoriaMotion.MEDIUM_MS else VIEWER_RETURN_DURATION_MS))
+        transition.finishLanding()
     }
     return progress.asState()
 }

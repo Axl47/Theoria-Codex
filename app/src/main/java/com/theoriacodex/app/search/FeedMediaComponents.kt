@@ -2,6 +2,7 @@
 
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.viewer.LocalViewerReturnTransition
 import android.content.Context
 import android.graphics.drawable.Animatable
 import androidx.compose.foundation.layout.Box
@@ -71,13 +72,17 @@ internal fun SearchVideoPreview(
     }
 
     var shouldLeasePlayer by remember(location, sourceKey) { mutableStateOf(false) }
-    LaunchedEffect(location, sourceKey, isActive) {
+    val viewerClosing = LocalViewerReturnTransition.current?.mediaSettling == true
+    LaunchedEffect(location, sourceKey, isActive, viewerClosing) {
         if (!isActive) {
             // Releasing at once would blank the card behind an opening Viewer until its poster decodes.
             delay(FEED_PLAYER_RELEASE_GRACE_MS)
             shouldLeasePlayer = false
             return@LaunchedEffect
         }
+        // Binding a player and attaching its surface blocks the main thread, which would stutter the
+        // Viewer's closing animation. Cards show their posters, then all start together when it lands.
+        if (viewerClosing) return@LaunchedEffect
         delay(FEED_PLAYER_ACTIVATION_DELAY_MS)
         shouldLeasePlayer = shouldAcquireFeedPlayerLease(
             isActive = isActive,
