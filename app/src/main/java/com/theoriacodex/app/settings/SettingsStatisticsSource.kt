@@ -48,6 +48,7 @@ internal class SettingsStatisticsSource(
             )
         }.flowOn(computationDispatcher)
         return combine(settled, appUsageTracker.liveUsage) { summary, usage -> summary.withLiveUsage(usage) }
+            .flowOn(computationDispatcher)
     }
 
     private fun observeProfileContent(profileId: String): Flow<SettingsStatisticsContent> {
