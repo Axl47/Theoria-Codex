@@ -87,9 +87,9 @@ class ViewerTransformStateTest {
         // A short, fast flick commits; the same distance held still does not.
         assertEquals(ViewerHorizontalSwipeDirection.Next, decide(-60f, -2000f))
         assertEquals(null, decide(-60f, 0f))
-        // A slow drag commits only past 40% of the page.
-        assertEquals(null, decide(-300f, -100f))
-        assertEquals(ViewerHorizontalSwipeDirection.Previous, decide(500f, 0f))
+        // A slow drag commits only past 18% of the page.
+        assertEquals(null, decide(-150f, -100f))
+        assertEquals(ViewerHorizontalSwipeDirection.Previous, decide(200f, 0f))
         // Flicking back against a long drag cancels it.
         assertEquals(null, decide(-700f, 2000f))
     }
