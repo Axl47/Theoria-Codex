@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.foundation.Image
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -23,12 +24,12 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun PixivUgoiraPlayer(
-    loopPlayback: Boolean = true,
-    onPlaybackCompleted: () -> Unit = {},
     postId: String,
     client: PixivUgoiraClient,
-    modifier: Modifier = Modifier,
     contentDescription: String?,
+    modifier: Modifier = Modifier,
+    loopPlayback: Boolean = true,
+    onPlaybackCompleted: () -> Unit = {},
     contentScale: ContentScale = ContentScale.Fit,
     sizeBucket: UgoiraSizeBucket = UgoiraSizeBucket.VIEWER,
     showProgressBar: Boolean = false,
@@ -52,14 +53,13 @@ fun PixivUgoiraPlayer(
         mutableStateOf(client.cached(postId, sizeBucket))
     }
     var errorMessage by remember(postId, loadGeneration) { mutableStateOf<String?>(null) }
-    var isScrubbing by remember(postId, loadGeneration) { mutableStateOf(false) }
+    // Read only by effects and gestures, so scrubbing never recomposes the frame.
+    val isScrubbing = remember(postId, loadGeneration) { mutableStateOf(false) }
     var playbackPaused by remember(postId, loadGeneration) { mutableStateOf(false) }
-    val effectivePlaybackRate = playbackRate.coerceAtLeast(0.1f)
-    val effectivePlaybackPaused = isPlaying?.not() ?: playbackPaused
 
     val shouldLoad = isActive || isPreloading
     LaunchedEffect(postId, client, sizeBucket, shouldLoad, loadGeneration) {
-        isScrubbing = false
+        isScrubbing.value = false
         playbackPaused = false
         errorMessage = null
         playback = client.cached(postId, sizeBucket) ?: playback?.takeIf { it.isComplete }
@@ -79,11 +79,64 @@ fun PixivUgoiraPlayer(
         UgoiraLoadingState(errorMessage, modifier, loadingPreview)
         return
     }
+    UgoiraLoadedPlayer(
+        playback = activePlayback,
+        postId = postId,
+        client = client,
+        sizeBucket = sizeBucket,
+        loadGeneration = loadGeneration,
+        contentDescription = contentDescription,
+        contentScale = contentScale,
+        modifier = modifier,
+        mediaModifier = mediaModifier,
+        isActive = isActive,
+        paused = isPlaying?.not() ?: playbackPaused,
+        loop = loopPlayback,
+        showProgressBar = showProgressBar,
+        showPassiveProgress = showPassiveProgress,
+        playbackRate = playbackRate,
+        seekJumpSerial = seekJumpSerial,
+        seekJumpDeltaMs = seekJumpDeltaMs,
+        restartRequest = restartRequest,
+        isScrubbing = isScrubbing,
+        onPlaybackCompleted = onPlaybackCompleted,
+        onDurationKnown = onDurationKnown,
+        onTimelineInteractionActiveChanged = onTimelineInteractionActiveChanged,
+        onTogglePlayback = { if (onTogglePlayback != null) onTogglePlayback() else playbackPaused = !playbackPaused },
+    )
+}
 
-    val frameEndsMs = remember(activePlayback.frameDelaysMs) {
+/** Plays frames that are already available; loading and its failures stay with [PixivUgoiraPlayer]. */
+@Composable
+private fun UgoiraLoadedPlayer(
+    playback: UgoiraPlayback,
+    postId: String,
+    client: PixivUgoiraClient,
+    sizeBucket: UgoiraSizeBucket,
+    loadGeneration: Long,
+    contentDescription: String?,
+    contentScale: ContentScale,
+    modifier: Modifier,
+    mediaModifier: Modifier,
+    isActive: Boolean,
+    paused: Boolean,
+    loop: Boolean,
+    showProgressBar: Boolean,
+    showPassiveProgress: Boolean,
+    playbackRate: Float,
+    seekJumpSerial: Int,
+    seekJumpDeltaMs: Long,
+    restartRequest: Long,
+    isScrubbing: MutableState<Boolean>,
+    onPlaybackCompleted: () -> Unit,
+    onDurationKnown: (Long) -> Unit,
+    onTimelineInteractionActiveChanged: (Boolean) -> Unit,
+    onTogglePlayback: () -> Unit,
+) {
+    val frameEndsMs = remember(playback.frameDelaysMs) {
         var endMs = 0L
-        LongArray(activePlayback.frameDelaysMs.size) { index ->
-            endMs += activePlayback.frameDelaysMs[index].coerceAtLeast(16)
+        LongArray(playback.frameDelaysMs.size) { index ->
+            endMs += playback.frameDelaysMs[index].coerceAtLeast(16)
             endMs
         }
     }
@@ -96,29 +149,27 @@ fun PixivUgoiraPlayer(
     }
     LaunchedEffect(postId, totalDurationMs) { onDurationKnown(totalDurationMs) }
     val maxSeekablePositionMs = totalDurationMs - 1L
-
     fun seekToPosition(targetMs: Long) {
         animation.seekTo(targetMs.coerceIn(0L, maxSeekablePositionMs))
     }
-
     LaunchedEffect(restartRequest, animation, isActive) {
         if (restartRequest > 0L || !isActive) seekToPosition(0L)
     }
     LaunchedEffect(seekJumpSerial, seekJumpDeltaMs, maxSeekablePositionMs, isActive) {
-        if (seekJumpSerial > 0 && seekJumpDeltaMs != 0L && !isScrubbing && isActive) {
+        if (seekJumpSerial > 0 && seekJumpDeltaMs != 0L && !isScrubbing.value && isActive) {
             seekToPosition(animation.positionMs + seekJumpDeltaMs)
         }
     }
     AnimatePlayback(
         state = animation,
-        enabled = isActive && !effectivePlaybackPaused,
-        rate = effectivePlaybackRate,
-        loop = loopPlayback,
+        enabled = isActive && !paused,
+        rate = playbackRate.coerceAtLeast(0.1f),
+        loop = loop,
         onCompleted = onPlaybackCompleted,
-        availableUntilMs = frameEndsMs[activePlayback.frames.lastIndex],
+        availableUntilMs = frameEndsMs[playback.frames.lastIndex],
     )
 
-    val frame = activePlayback.frames[frameIndex.coerceAtMost(activePlayback.frames.lastIndex)]
+    val frame = playback.frames[frameIndex.coerceAtMost(playback.frames.lastIndex)]
     if (!showProgressBar && !showPassiveProgress) {
         Image(frame.bitmap.asImageBitmap(), contentDescription, modifier.then(mediaModifier), contentScale = contentScale)
         return
@@ -134,39 +185,65 @@ fun PixivUgoiraPlayer(
         ViewerChromeVisibility(showProgressBar, Modifier.align(Alignment.BottomCenter)) {
             ViewerTimelineVeil {
                 ViewerPlaybackFooter {
-                    MediaTimelineBar(
-                        positionMs = animation.positionMs,
-                        durationMs = totalDurationMs,
-                        onSeekStarted = { isScrubbing = true },
-                        onSeekCancelled = { isScrubbing = false },
-                        preview = { target ->
-                            val previewIndex = animationFrameIndexAt(target.coerceAtMost(maxSeekablePositionMs), frameEndsMs)
-                            val previewFrame = activePlayback.frames.getOrNull(previewIndex)
-                            if (previewFrame != null) Image(previewFrame.bitmap.asImageBitmap(), null,
-                                Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
-                            else Text("Preview buffering", color = androidx.compose.ui.graphics.Color.White)
-                        },
-                        onSeekFinished = { target ->
-                            seekToPosition(target)
-                            isScrubbing = false
-                        },
-                        onInteractionActiveChanged = onTimelineInteractionActiveChanged,
+                    UgoiraTimeline(
+                        playback = playback,
+                        frameEndsMs = frameEndsMs,
+                        animation = animation,
+                        paused = paused,
                         playbackRate = playbackRate,
-                        leading = {
-                            TimelinePlaybackButton(
-                                isPaused = effectivePlaybackPaused,
-                                onToggle = {
-                                    if (onTogglePlayback != null) onTogglePlayback() else playbackPaused = !playbackPaused
-                                    onTimelineInteractionActiveChanged(true)
-                                    onTimelineInteractionActiveChanged(false)
-                                },
-                            )
-                        },
+                        isScrubbing = isScrubbing,
+                        onSeek = { seekToPosition(it) },
+                        onInteractionActiveChanged = onTimelineInteractionActiveChanged,
+                        onTogglePlayback = onTogglePlayback,
                     )
                 }
             }
         }
     }
+}
+
+@Composable
+private fun UgoiraTimeline(
+    playback: UgoiraPlayback,
+    frameEndsMs: LongArray,
+    animation: AnimationPlaybackState,
+    paused: Boolean,
+    playbackRate: Float,
+    isScrubbing: MutableState<Boolean>,
+    onSeek: (Long) -> Unit,
+    onInteractionActiveChanged: (Boolean) -> Unit,
+    onTogglePlayback: () -> Unit,
+) {
+    val totalDurationMs = frameEndsMs.last()
+    MediaTimelineBar(
+        positionMs = animation.positionMs,
+        durationMs = totalDurationMs,
+        onSeekStarted = { isScrubbing.value = true },
+        onSeekCancelled = { isScrubbing.value = false },
+        preview = { target ->
+            val previewIndex = animationFrameIndexAt(target.coerceAtMost(totalDurationMs - 1L), frameEndsMs)
+            val previewFrame = playback.frames.getOrNull(previewIndex)
+            if (previewFrame != null) Image(previewFrame.bitmap.asImageBitmap(), null,
+                Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+            else Text("Preview buffering", color = androidx.compose.ui.graphics.Color.White)
+        },
+        onSeekFinished = { target ->
+            onSeek(target)
+            isScrubbing.value = false
+        },
+        onInteractionActiveChanged = onInteractionActiveChanged,
+        playbackRate = playbackRate,
+        leading = {
+            TimelinePlaybackButton(
+                isPaused = paused,
+                onToggle = {
+                    onTogglePlayback()
+                    onInteractionActiveChanged(true)
+                    onInteractionActiveChanged(false)
+                },
+            )
+        },
+    )
 }
 
 @Composable
