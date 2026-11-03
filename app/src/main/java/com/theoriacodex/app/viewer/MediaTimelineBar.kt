@@ -28,6 +28,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -81,27 +82,17 @@ fun MediaTimelineBar(
     val instantSeek = LocalViewerInstantSeek.current
     val safeDuration = durationMs.coerceAtLeast(1L)
     val clampedPosition = positionMs.coerceIn(0L, safeDuration)
-    val scrub = remember { TimelineScrubState() }
-    val latestStart by rememberUpdatedState(onSeekStarted)
-    val latestFinish by rememberUpdatedState(onSeekFinished)
-    val latestCancel by rememberUpdatedState(onSeekCancelled)
-    val latestInteraction by rememberUpdatedState(onInteractionActiveChanged)
+    val callbacks = rememberUpdatedState(
+        TimelineSeekCallbacks(onSeekStarted, onSeekFinished, onSeekCancelled, onInteractionActiveChanged),
+    )
+    val scrub = remember { TimelineScrubState(callbacks) }
     val latestPosition by rememberUpdatedState(clampedPosition)
 
-    DisposableEffect(Unit) {
-        onDispose {
-            if (scrub.active) { scrub.active = false; latestCancel() }
-            latestInteraction(false)
-        }
-    }
+    DisposableEffect(Unit) { onDispose(scrub::abandon) }
 
     val displayPosition = if (scrub.active) scrub.positionMs else clampedPosition
     val fraction = (displayPosition.toDouble() / safeDuration.toDouble()).coerceIn(0.0, 1.0).toFloat()
     val showingPreview = scrub.active && !instantSeek
-    fun moveTo(x: Float) {
-        scrub.positionMs = scrub.targetAt(x, safeDuration)
-        if (instantSeek) latestFinish(scrub.positionMs)
-    }
 
     ViewerTimelineLayout(displayPosition, safeDuration, playbackRate, showingPreview, modifier, leading) { trackModifier ->
         Box(
@@ -112,20 +103,11 @@ fun MediaTimelineBar(
                 .timelineScrubGestures(
                     safeDuration, instantSeek,
                     onBegin = { x ->
-                        scrub.startMs = latestPosition
-                        scrub.active = true
-                        latestInteraction(true)
-                        latestStart()
-                        moveTo(x)
+                        scrub.begin(latestPosition)
+                        scrub.moveTo(x, safeDuration, instantSeek)
                     },
-                    onMove = ::moveTo,
-                    onEnd = { released ->
-                        if (scrub.active) {
-                            scrub.active = false
-                            if (released) latestFinish(scrub.positionMs) else latestCancel()
-                        }
-                        latestInteraction(false)
-                    },
+                    onMove = { x -> scrub.moveTo(x, safeDuration, instantSeek) },
+                    onEnd = scrub::end,
                 ),
             contentAlignment = Alignment.Center,
         ) {
@@ -137,15 +119,47 @@ fun MediaTimelineBar(
     }
 }
 
+/** What the timeline tells its player about a drag. */
+private class TimelineSeekCallbacks(
+    val onStarted: () -> Unit,
+    val onFinished: (Long) -> Unit,
+    val onCancelled: () -> Unit,
+    val onInteractionActiveChanged: (Boolean) -> Unit,
+)
+
 /** A drag in progress: where it is now, where it began, and the track width that maps touches to time. */
-private class TimelineScrubState {
+private class TimelineScrubState(private val callbacks: State<TimelineSeekCallbacks>) {
     var active by mutableStateOf(false)
+        private set
     var positionMs by mutableLongStateOf(0L)
+        private set
     var startMs by mutableLongStateOf(0L)
+        private set
     var widthPx = 1f
 
-    fun targetAt(x: Float, durationMs: Long): Long =
-        ((x / widthPx).coerceIn(0f, 1f).toDouble() * durationMs).roundToLong().coerceIn(0L, durationMs)
+    fun begin(fromMs: Long) {
+        startMs = fromMs
+        active = true
+        callbacks.value.onInteractionActiveChanged(true)
+        callbacks.value.onStarted()
+    }
+
+    fun moveTo(x: Float, durationMs: Long, instantSeek: Boolean) {
+        positionMs = ((x / widthPx).coerceIn(0f, 1f).toDouble() * durationMs).roundToLong().coerceIn(0L, durationMs)
+        if (instantSeek) callbacks.value.onFinished(positionMs)
+    }
+
+    /** A released drag seeks; anything else leaves playback where it was. */
+    fun end(released: Boolean) {
+        if (active) {
+            active = false
+            if (released) callbacks.value.onFinished(positionMs) else callbacks.value.onCancelled()
+        }
+        callbacks.value.onInteractionActiveChanged(false)
+    }
+
+    /** The timeline left composition, so a held drag cannot complete. */
+    fun abandon() = end(released = false)
 }
 
 /** One finger scrubs the track; a second finger or a stolen pointer cancels instead of seeking. */
