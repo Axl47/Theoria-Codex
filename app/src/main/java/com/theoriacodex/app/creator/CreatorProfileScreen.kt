@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
@@ -46,15 +47,14 @@ import com.theoriacodex.app.ui.components.FeedContinueLoading
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.noMediaDurationStateForPost
-import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.media.copyTextToClipboard
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
-import com.theoriacodex.app.search.SearchResultCard
+import com.theoriacodex.app.search.SearchDurationFilterPresentation
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.search.rememberSearchDurationFilterPresentation
 import com.theoriacodex.app.source.displayName
-import com.theoriacodex.app.tags.PostTagActionSection
+import com.theoriacodex.app.tags.PostBoundTagSection
 import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.FeedErrorTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
@@ -64,12 +64,17 @@ import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.app.ui.components.TwoColumnProjectedPostStaggeredGrid
-import com.theoriacodex.app.ui.components.RelatedPostsShelf
+import com.theoriacodex.app.ui.components.FeedCardEnvironment
+import com.theoriacodex.app.ui.components.FeedPostCard
+import com.theoriacodex.app.ui.components.FeedRelatedPostsShelf
+import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
+import com.theoriacodex.app.ui.components.RelatedFeedPresentation
 import com.theoriacodex.app.related.retainedLikedPostIds
 import com.theoriacodex.app.ui.components.rememberRelatedFeedPresentation
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.FeedFabRestoreState
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchTerm
@@ -105,22 +110,129 @@ fun CreatorProfileScreen(
     fabRestoreState: FeedFabRestoreState = FeedFabRestoreState(),
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit = {},
 ) {
-    val creator = state.creator
-    val context = LocalContext.current
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
-    var showProfileShareMenu by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
+    val gridState = rememberLazyStaggeredGridState()
+    val feed = rememberCreatorFeed(state, pendingLikePostIds, likedPostIds, savedPostIds, fabRestoreState, durationStates, resolveUnknownAnimatedDurations)
+    LaunchedEffect(feed.durationFilter.active) { onDurationFilterChanged(feed.durationFilter.active) }
+    DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
+    val pageDemand = rememberFeedPageDemand(
+        input = FeedPageDemandInput(
+            contextKey = state.queryHash.orEmpty(),
+            completedGeneration = state.nextRequestGeneration,
+            canonicalCount = state.results.size,
+            visibleCount = feed.visibleResults.size,
+            canLoadMore = state.canLoadMore,
+            ready = state.creator != null && state.queryHash != null,
+            refreshing = state.isRefreshing,
+            paging = state.isPaging,
+            failed = state.errorMessage != null,
+            resolvingDurations = feed.durationFilter.readiness.isResolving,
+        ),
+        filters = feed.visibilityFilters,
+        gridState = gridState,
+        canonicalIndexForVisibleItems = feed.related.projection::greatestVisibleCanonicalIndex,
+        onLoadNextPage = { onAction(CreatorAction.LoadNextPage) },
+    )
+    val creator = state.creator
+    if (creator == null) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No creator selected")
+        }
+        return
+    }
+    val cards = rememberFeedCardEnvironment(
+        pixivUgoiraClient, likedPostIds, feed.durationFilter.knownDurationMsByPostId, durationStateForPost,
+        onToggleLike, onDurationPostVisibilityChanged, onAuthoritativeDurationKnown,
+    )
+    val filterScroll = rememberFeedScrollSignal()
+    val filterLabels = listOfNotNull(
+        "Animated".takeIf { fabRestoreState.animatedOnly },
+        animatedDurationRangeLabel(feed.animatedDurationRange).takeIf { feed.durationFilter.active },
+        "Hide liked".takeIf { fabRestoreState.hideLiked },
+        "Hide saved".takeIf { fabRestoreState.hideSaved },
+    )
+    val clearFilters: () -> () -> Unit = { clearCreatorFilters(fabRestoreState, onFabRestoreStateChange) }
+    Scaffold(
+        modifier = Modifier.nestedScroll(filterScroll.connection),
+        contentWindowInsets = WindowInsets(0),
+        floatingActionButton = {
+            FeedFilterFab(
+                modifier = Modifier.padding(bottom = 8.dp),
+                labels = filterLabels,
+                contentDescription = "Filter creator uploads",
+                onClick = { showFilterSheet = true },
+                onClear = clearFilters,
+                scrollSignal = filterScroll,
+            )
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            CreatorAppBar(creator, followed, !state.isRefreshing, onToggleFollow, onOpenUrl, onBack = { onAction(CreatorAction.Back) })
+            if (state.errorMessage != null && state.canLoadMore) {
+                FeedErrorTile(
+                    message = state.errorMessage.orEmpty(),
+                    onRetry = { onAction(CreatorAction.RetryPage) },
+                )
+            }
+            FeedContinueLoading(pageDemand)
+            CreatorFeedBody(state, feed, cards, gridState, onAction, onLongPress = { selectedActionPost = it })
+        }
+    }
+
+    if (showFilterSheet) {
+        CreatorFilterSheet(
+            fabRestoreState, feed.animatedDurationRange, onFabRestoreStateChange,
+            onReset = { clearFilters() }, onDismiss = { showFilterSheet = false },
+        )
+    }
+
+    selectedActionPost?.let { post ->
+        PostActionSheet(
+            post = post,
+            onDismiss = { selectedActionPost = null },
+            onSaveToDevice = { onSaveToDevice(post) },
+            onSaveToCodex = { onRequestSaveToCodex(post) },
+            onPostUrlCopied = onPostUrlCopied,
+            tagContent = {
+                PostBoundTagSection(post, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm, onRemoveExcludeTerm)
+            },
+        )
+    }
+}
+
+/** What the creator's grid shows after its filters, durations, and related posts are applied. */
+private data class CreatorFeed(
+    val animatedDurationRange: AnimatedDurationRange,
+    val visibilityFilters: SearchVisibilityFilters,
+    val durationFilter: SearchDurationFilterPresentation,
+    val visibleResults: List<Post>,
+    val related: RelatedFeedPresentation,
+)
+
+@Composable
+private fun rememberCreatorFeed(
+    state: CreatorUiState,
+    pendingLikePostIds: Set<PostId>,
+    likedPostIds: Set<PostId>,
+    savedPostIds: Set<PostId>,
+    fabRestoreState: FeedFabRestoreState,
+    durationStates: Map<MediaDurationKey, MediaDurationState>,
+    resolveUnknownAnimatedDurations: Boolean,
+): CreatorFeed {
     val animatedOnly = fabRestoreState.animatedOnly
     val hideLiked = fabRestoreState.hideLiked
     val hideSaved = fabRestoreState.hideSaved
     val durationMinBucket = fabRestoreState.durationMinBucket
     val durationMaxBucket = fabRestoreState.durationMaxBucket
-    val gridState = rememberLazyStaggeredGridState()
     val animatedDurationRange = remember(durationMinBucket, durationMaxBucket) {
-        AnimatedDurationRange(
-            minBucket = durationMinBucket,
-            maxBucket = durationMaxBucket,
-        )
+        AnimatedDurationRange(minBucket = durationMinBucket, maxBucket = durationMaxBucket)
     }
     val visibilityFilters = remember(animatedOnly, hideLiked, hideSaved, animatedDurationRange) {
         SearchVisibilityFilters(
@@ -133,10 +245,6 @@ fun CreatorProfileScreen(
     val durationFilter = rememberSearchDurationFilterPresentation(
         state.results, animatedDurationRange, durationStates, resolveUnknownAnimatedDurations,
     )
-    val animatedDurationFilterActive = durationFilter.active
-    val unknownAnimatedDurationPolicy = durationFilter.unknownPolicy
-    val acquiredDurations = durationFilter.knownDurationMsByPostId
-    val durationReadiness = durationFilter.readiness
     val retainedLikedPostIds = retainPostsUntilViewerCloses(remember(state.relatedPosts, pendingLikePostIds) {
         state.relatedPosts.retainedLikedPostIds + pendingLikePostIds
     })
@@ -146,8 +254,8 @@ fun CreatorProfileScreen(
         likedPostIds,
         retainedLikedPostIds,
         savedPostIds,
-        unknownAnimatedDurationPolicy,
-        acquiredDurations,
+        durationFilter.unknownPolicy,
+        durationFilter.knownDurationMsByPostId,
     ) {
         filterSearchResults(
             results = state.results,
@@ -155,16 +263,11 @@ fun CreatorProfileScreen(
             likedPostIds = likedPostIds,
             retainedLikedPostIds = retainedLikedPostIds,
             savedPostIds = savedPostIds,
-            unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
-            knownDurationMsByPostId = acquiredDurations,
+            unknownAnimatedDurationPolicy = durationFilter.unknownPolicy,
+            knownDurationMsByPostId = durationFilter.knownDurationMsByPostId,
         )
     }
-    LaunchedEffect(animatedDurationFilterActive) {
-        onDurationFilterChanged(animatedDurationFilterActive)
-    }
-    DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
-
-    val relatedPresentation = rememberRelatedFeedPresentation(
+    val related = rememberRelatedFeedPresentation(
         pendingLikePostIds = pendingLikePostIds,
         canonicalPosts = state.results,
         visibleCanonicalPosts = visibleResults,
@@ -173,271 +276,201 @@ fun CreatorProfileScreen(
         likedPostIds = likedPostIds,
         savedPostIds = savedPostIds,
         watchedPostIds = emptySet(),
-        unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
+        unknownAnimatedDurationPolicy = durationFilter.unknownPolicy,
         durationStates = durationStates,
-        durationFilterActive = animatedDurationFilterActive,
+        durationFilterActive = durationFilter.active,
     )
-    val feedProjection = relatedPresentation.projection
-    val visibleIndexById = remember(visibleResults) {
-        visibleResults.withIndex().associate { it.value.id to it.index }
+    return remember(animatedDurationRange, visibilityFilters, durationFilter, visibleResults, related) {
+        CreatorFeed(animatedDurationRange, visibilityFilters, durationFilter, visibleResults, related)
     }
-    val pageDemand = rememberFeedPageDemand(
-        input = FeedPageDemandInput(
-            contextKey = state.queryHash.orEmpty(),
-            completedGeneration = state.nextRequestGeneration,
-            canonicalCount = state.results.size,
-            visibleCount = visibleResults.size,
-            canLoadMore = state.canLoadMore,
-            ready = creator != null && state.queryHash != null,
-            refreshing = state.isRefreshing,
-            paging = state.isPaging,
-            failed = state.errorMessage != null,
-            resolvingDurations = durationReadiness.isResolving,
+}
+
+/** Clears the feed's filters and returns how to put them back. */
+private fun clearCreatorFilters(
+    previous: FeedFabRestoreState,
+    onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
+): () -> Unit {
+    onFabRestoreStateChange(
+        previous.copy(
+            animatedOnly = false,
+            hideLiked = false,
+            hideSaved = false,
+            durationMinBucket = AnimatedDurationRange.Full.normalizedMinBucket,
+            durationMaxBucket = AnimatedDurationRange.Full.normalizedMaxBucket,
         ),
-        filters = visibilityFilters,
-        gridState = gridState,
-        canonicalIndexForVisibleItems = feedProjection::greatestVisibleCanonicalIndex,
-        onLoadNextPage = { onAction(CreatorAction.LoadNextPage) },
     )
+    return { onFabRestoreStateChange(previous) }
+}
 
-    if (creator == null) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text("No creator selected")
-        }
-        return
-    }
-
-    val filterScroll = rememberFeedScrollSignal()
-    val filterLabels = listOfNotNull(
-        "Animated".takeIf { animatedOnly },
-        animatedDurationRangeLabel(animatedDurationRange).takeIf { animatedDurationFilterActive },
-        "Hide liked".takeIf { hideLiked },
-        "Hide saved".takeIf { hideSaved },
-    )
-    fun clearFilters(): () -> Unit {
-        val previous = fabRestoreState
-        onFabRestoreStateChange(
-            fabRestoreState.copy(
-                animatedOnly = false,
-                hideLiked = false,
-                hideSaved = false,
-                durationMinBucket = AnimatedDurationRange.Full.normalizedMinBucket,
-                durationMaxBucket = AnimatedDurationRange.Full.normalizedMaxBucket,
-            ),
-        )
-        return { onFabRestoreStateChange(previous) }
-    }
-    Scaffold(
-        modifier = Modifier.nestedScroll(filterScroll.connection),
-        contentWindowInsets = WindowInsets(0),
-        floatingActionButton = {
-            FeedFilterFab(
-                modifier = Modifier.padding(bottom = 8.dp),
-                labels = filterLabels,
-                contentDescription = "Filter creator uploads",
-                onClick = { showFilterSheet = true },
-                onClear = ::clearFilters,
-                scrollSignal = filterScroll,
-            )
-        },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            SecondaryScreenAppBar(
-                title = creator.displayName,
-                subtitle = creator.source.displayName(),
-                onBack = { onAction(CreatorAction.Back) },
-            ) {
-                CreatorFollowButton(followed = followed, onClick = onToggleFollow, enabled = !state.isRefreshing)
-                creator.profileUrl?.takeIf { it.isNotBlank() }?.let { profileUrl ->
-                    IconButton(onClick = { onOpenUrl(profileUrl) }) {
-                        Icon(
-                            imageVector = Icons.Default.OpenInBrowser,
-                            contentDescription = "Open creator profile in browser",
-                        )
-                    }
-                    Box {
-                        IconButton(onClick = { showProfileShareMenu = true }) {
-                            Icon(
-                                imageVector = Icons.Default.Share,
-                                contentDescription = "Share creator profile",
-                            )
-                        }
-                        DropdownMenu(
-                            expanded = showProfileShareMenu,
-                            onDismissRequest = { showProfileShareMenu = false },
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Share link") },
-                                leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
-                                onClick = {
-                                    showProfileShareMenu = false
-                                    shareCreatorProfile(context = context, profileUrl = profileUrl)
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Copy link") },
-                                leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null) },
-                                onClick = {
-                                    showProfileShareMenu = false
-                                    copyCreatorProfile(context = context, profileUrl = profileUrl)
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (state.errorMessage != null && state.canLoadMore) {
-                FeedErrorTile(
-                    message = state.errorMessage.orEmpty(),
-                    onRetry = { onAction(CreatorAction.RetryPage) },
+@Composable
+private fun CreatorAppBar(
+    creator: CreatorProfile,
+    followed: Boolean,
+    followEnabled: Boolean,
+    onToggleFollow: () -> Unit,
+    onOpenUrl: (String) -> Unit,
+    onBack: () -> Unit,
+) {
+    SecondaryScreenAppBar(
+        title = creator.displayName,
+        subtitle = creator.source.displayName(),
+        onBack = onBack,
+    ) {
+        CreatorFollowButton(followed = followed, onClick = onToggleFollow, enabled = followEnabled)
+        creator.profileUrl?.takeIf { it.isNotBlank() }?.let { profileUrl ->
+            IconButton(onClick = { onOpenUrl(profileUrl) }) {
+                Icon(
+                    imageVector = Icons.Default.OpenInBrowser,
+                    contentDescription = "Open creator profile in browser",
                 )
             }
-            FeedContinueLoading(pageDemand)
-            when {
-                state.isRefreshing && visibleResults.isEmpty() -> {
-                    FeedLoadingState()
-                }
-
-                state.errorMessage != null && !state.canLoadMore && visibleResults.isEmpty() -> {
-                    FeedErrorTile(
-                        message = state.errorMessage.orEmpty(),
-                        onRetry = { onAction(CreatorAction.Refresh) },
-                    )
-                }
-
-                visibleResults.isEmpty() && state.relatedPosts == RelatedPostsUiState.Idle -> {
-                    FeedEmptyTile(
-                        message = if (durationReadiness.isResolving) {
-                            "Resolving durations…"
-                        } else if (
-                                state.results.isNotEmpty() &&
-                                !visibilityFilters.animatedDurationRange.isFullRange
-                            ) {
-                                "No animated media found in the selected duration range."
-                            } else if (state.results.isNotEmpty()) {
-                                "No uploads match the current filters."
-                            } else {
-                                "No uploads found for this creator."
-                            },
-                    )
-                }
-
-                else -> {
-                    TwoColumnProjectedPostStaggeredGrid(
-                        projection = feedProjection,
-                        modifier = Modifier.fillMaxSize(),
-                        state = gridState,
-                        footerMessage = if (durationReadiness.isResolving) {
-                            "Resolving durations…"
-                        } else {
-                            null
-                        },
-                        postContent = { _, post ->
-                            val observedDurationMs = observedMediaDurationMs(post, durationStateForPost)
-                            SearchResultCard(
-                                post = post,
-                                pixivUgoiraClient = pixivUgoiraClient,
-                                acquiredDurationMs = observedDurationMs ?: acquiredDurations[post.id],
-                                liked = post.id in likedPostIds,
-                                onToggleLike = { onToggleLike(post) },
-                                onClick = {
-                                    onAction(
-                                        CreatorAction.OpenResult(
-                                            index = visibleIndexById.getValue(post.id),
-                                            scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
-                                            visibleResults = visibleResults,
-                                            visibilityFilters = visibilityFilters,
-                                        )
-                                    )
-                                },
-                                onLongPress = { selectedActionPost = post },
-                                onViewportChanged = { visible ->
-                                    onDurationPostVisibilityChanged(post, visible)
-                                },
-                                onAuthoritativeDurationKnown = { durationMs ->
-                                    onAuthoritativeDurationKnown(post, durationMs)
-                                },
-                            )
-                        },
-                        shelfContent = {
-                            RelatedPostsShelf(
-                                state = state.relatedPosts,
-                                posts = relatedPresentation.visiblePosts,
-                                likedPostIds = likedPostIds,
-                                pixivUgoiraClient = pixivUgoiraClient,
-                                acquiredDurations = relatedPresentation.knownDurationMsByPostId,
-                                durationStateForPost = durationStateForPost,
-                                onToggleLike = onToggleLike,
-                                onOpenPost = { posts, index ->
-                                    onAction(CreatorAction.OpenRelatedResult(index, posts))
-                                },
-                                onLongPress = { selectedActionPost = it },
-                                onDismiss = { onAction(CreatorAction.DismissRelatedPosts) },
-                                onRetry = { onAction(CreatorAction.RetryRelatedPosts) },
-                                onPreviousPage = { onAction(CreatorAction.ShowPreviousRelatedPosts) },
-                                onNextPage = { onAction(CreatorAction.ShowNextRelatedPosts) },
-                                onViewportChanged = onDurationPostVisibilityChanged,
-                                onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
-                            )
-                        },
-                    )
-                }
-            }
+            CreatorShareMenu(profileUrl)
         }
     }
+}
 
-    if (showFilterSheet) {
-        FeedFilterSheet(onDismiss = { showFilterSheet = false }, onReset = { clearFilters() }) {
-            FilterSection("Show") {
-                FilterChoiceChip("Animated only", animatedOnly) {
-                    onFabRestoreStateChange(fabRestoreState.copy(animatedOnly = !animatedOnly))
-                }
-                FilterChoiceChip("Hide liked", hideLiked) {
-                    onFabRestoreStateChange(fabRestoreState.copy(hideLiked = !hideLiked))
-                }
-                FilterChoiceChip("Hide saved", hideSaved) {
-                    onFabRestoreStateChange(fabRestoreState.copy(hideSaved = !hideSaved))
-                }
-            }
-            AnimatedDurationRangeControl(
-                range = animatedDurationRange,
-                onRangeChange = { range ->
-                    onFabRestoreStateChange(
-                        fabRestoreState.copy(
-                            durationMinBucket = range.normalizedMinBucket,
-                            durationMaxBucket = range.normalizedMaxBucket,
-                        ),
-                    )
+@Composable
+private fun CreatorShareMenu(profileUrl: String) {
+    val context = LocalContext.current
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { expanded = true }) {
+            Icon(imageVector = Icons.Default.Share, contentDescription = "Share creator profile")
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text("Share link") },
+                leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    shareCreatorProfile(context = context, profileUrl = profileUrl)
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Copy link") },
+                leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    copyCreatorProfile(context = context, profileUrl = profileUrl)
                 },
             )
         }
     }
+}
 
-    if (selectedActionPost != null) {
-        val post = requireNotNull(selectedActionPost)
-        PostActionSheet(
-            post = post,
-            onDismiss = { selectedActionPost = null },
-            onSaveToDevice = { onSaveToDevice(post) },
-            onSaveToCodex = { onRequestSaveToCodex(post) },
-            onPostUrlCopied = onPostUrlCopied,
-            tagContent = {
-                PostTagActionSection(
-                    post = post,
-                    onAddIncludeTerm = { term -> onAddIncludeTerm(post, term) },
-                    onAddExcludeTerm = { term -> onAddExcludeTerm(post, term) },
-                    onRemoveIncludeTerm = { term -> onRemoveIncludeTerm(post, term) },
-                    onRemoveExcludeTerm = { term -> onRemoveExcludeTerm(post, term) },
+@Composable
+private fun CreatorFeedBody(
+    state: CreatorUiState,
+    feed: CreatorFeed,
+    cards: FeedCardEnvironment,
+    gridState: LazyStaggeredGridState,
+    onAction: (CreatorAction) -> Unit,
+    onLongPress: (Post) -> Unit,
+) {
+    when {
+        state.isRefreshing && feed.visibleResults.isEmpty() -> FeedLoadingState()
+
+        state.errorMessage != null && !state.canLoadMore && feed.visibleResults.isEmpty() -> {
+            FeedErrorTile(
+                message = state.errorMessage.orEmpty(),
+                onRetry = { onAction(CreatorAction.Refresh) },
+            )
+        }
+
+        feed.visibleResults.isEmpty() && state.relatedPosts == RelatedPostsUiState.Idle -> {
+            FeedEmptyTile(message = creatorEmptyMessage(state, feed))
+        }
+
+        else -> CreatorGrid(state, feed, cards, gridState, onAction, onLongPress)
+    }
+}
+
+@Composable
+private fun CreatorGrid(
+    state: CreatorUiState,
+    feed: CreatorFeed,
+    cards: FeedCardEnvironment,
+    gridState: LazyStaggeredGridState,
+    onAction: (CreatorAction) -> Unit,
+    onLongPress: (Post) -> Unit,
+) {
+    val visibleIndexById = remember(feed.visibleResults) {
+        feed.visibleResults.withIndex().associate { it.value.id to it.index }
+    }
+    TwoColumnProjectedPostStaggeredGrid(
+        projection = feed.related.projection,
+        modifier = Modifier.fillMaxSize(),
+        state = gridState,
+        footerMessage = if (feed.durationFilter.readiness.isResolving) "Resolving durations…" else null,
+        postContent = { _, post ->
+            FeedPostCard(
+                post = post,
+                environment = cards,
+                onClick = {
+                    onAction(
+                        CreatorAction.OpenResult(
+                            index = visibleIndexById.getValue(post.id),
+                            scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
+                            visibleResults = feed.visibleResults,
+                            visibilityFilters = feed.visibilityFilters,
+                        )
+                    )
+                },
+                onLongPress = { onLongPress(post) },
+            )
+        },
+        shelfContent = {
+            FeedRelatedPostsShelf(
+                state = state.relatedPosts,
+                presentation = feed.related,
+                environment = cards,
+                onOpenPost = { posts, index -> onAction(CreatorAction.OpenRelatedResult(index, posts)) },
+                onLongPress = onLongPress,
+                onDismiss = { onAction(CreatorAction.DismissRelatedPosts) },
+                onRetry = { onAction(CreatorAction.RetryRelatedPosts) },
+                onPreviousPage = { onAction(CreatorAction.ShowPreviousRelatedPosts) },
+                onNextPage = { onAction(CreatorAction.ShowNextRelatedPosts) },
+            )
+        },
+    )
+}
+
+private fun creatorEmptyMessage(state: CreatorUiState, feed: CreatorFeed): String = when {
+    feed.durationFilter.readiness.isResolving -> "Resolving durations…"
+    state.results.isEmpty() -> "No uploads found for this creator."
+    !feed.visibilityFilters.animatedDurationRange.isFullRange ->
+        "No animated media found in the selected duration range."
+    else -> "No uploads match the current filters."
+}
+
+@Composable
+private fun CreatorFilterSheet(
+    fabRestoreState: FeedFabRestoreState,
+    animatedDurationRange: AnimatedDurationRange,
+    onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
+    onReset: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    FeedFilterSheet(onDismiss = onDismiss, onReset = onReset) {
+        FilterSection("Show") {
+            FilterChoiceChip("Animated only", fabRestoreState.animatedOnly) {
+                onFabRestoreStateChange(fabRestoreState.copy(animatedOnly = !fabRestoreState.animatedOnly))
+            }
+            FilterChoiceChip("Hide liked", fabRestoreState.hideLiked) {
+                onFabRestoreStateChange(fabRestoreState.copy(hideLiked = !fabRestoreState.hideLiked))
+            }
+            FilterChoiceChip("Hide saved", fabRestoreState.hideSaved) {
+                onFabRestoreStateChange(fabRestoreState.copy(hideSaved = !fabRestoreState.hideSaved))
+            }
+        }
+        AnimatedDurationRangeControl(
+            range = animatedDurationRange,
+            onRangeChange = { range ->
+                onFabRestoreStateChange(
+                    fabRestoreState.copy(
+                        durationMinBucket = range.normalizedMinBucket,
+                        durationMaxBucket = range.normalizedMaxBucket,
+                    ),
                 )
             },
         )

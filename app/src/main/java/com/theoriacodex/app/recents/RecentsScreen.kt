@@ -58,7 +58,7 @@ import com.theoriacodex.app.viewer.ViewerReturnColumn
 import com.theoriacodex.app.viewer.ViewerReturnShelf
 import com.theoriacodex.app.viewer.ViewerReturnShelfId
 import com.theoriacodex.app.source.displayName
-import com.theoriacodex.app.tags.PostTagActionSection
+import com.theoriacodex.app.tags.PostBoundTagSection
 import com.theoriacodex.app.ui.components.SourceSelector
 import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
@@ -118,7 +118,6 @@ fun RecentsScreen(
     var searchFilter by rememberSaveable { mutableStateOf(RecentSearchFilter.ALL) }
     var showMenu by remember { mutableStateOf(false) }
     var selectedSource by rememberSaveable { mutableStateOf<SourceKey?>(null) }
-    var sourceMenuExpanded by remember { mutableStateOf(false) }
     val visibleWatchedPosts = remember(watchedPosts, selectedSource) {
         filterRecentPostsBySource(watchedPosts, selectedSource)
     }
@@ -148,76 +147,31 @@ fun RecentsScreen(
         RecentsHeader(
             onOpenMenu = { showMenu = true },
             sourceSelector = {
-                SourceSelector(
-                    selectedSource = selectedSource,
-                    availableSources = SourceKey.entries,
-                    allSourcesLabel = "All sources",
-                    accessibilityLabel = "Filter Recents by source",
-                    enabled = true,
-                    expanded = sourceMenuExpanded,
-                    onExpandedChange = { sourceMenuExpanded = it },
-                    onSourceSelected = {
-                        selectedSource = it
-                        sourceMenuExpanded = false
-                    },
-                )
+                RecentsSourceSelector(selectedSource, onSelected = { selectedSource = it })
             },
         )
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            RecentsFilter.entries.forEach { option ->
-                FilterChip(
-                    selected = filter == option,
-                    onClick = { filter = option },
-                    label = { Text(option.label) },
-                )
-            }
-        }
+        RecentsFilterChips(filter, onSelected = { filter = it })
 
+        val cards = RecentsPostCards(
+            pixivUgoiraClient, likedPostIds, durationStateForPost, onDurationPostVisibilityChanged,
+            onDurationEnvironmentChanged, onAuthoritativeDurationKnown, onToggleLike,
+        )
+        val openPostActions: (Post, RecentPostSection) -> Unit = { post, section ->
+            selectedActionPost = post
+            selectedActionSection = section
+        }
         when (filter) {
-            RecentsFilter.WATCHED -> WatchedGrid(
-                watchedPosts = visibleWatchedPosts,
-                now = now,
-                pixivUgoiraClient = pixivUgoiraClient,
-                likedPostIds = likedPostIds,
-                durationStateForPost = durationStateForPost,
-                onDurationPostVisibilityChanged = onDurationPostVisibilityChanged,
-                onDurationEnvironmentChanged = onDurationEnvironmentChanged,
-                onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
-                onToggleLike = onToggleLike,
-                onOpenWatchedPost = openWatchedPost,
-                onLongPress = {
-                    selectedActionPost = it
-                    selectedActionSection = RecentPostSection.WATCHED
-                },
+            RecentsFilter.WATCHED -> RecentPostsGrid(
+                visibleWatchedPosts, now, cards, openWatchedPost, RecentPostSection.WATCHED, openPostActions,
                 showMediaProgress = true,
                 emptyMessage = sourceEmptyMessage ?: "Posts appear here after you open them in Viewer.",
             )
-
-            RecentsFilter.CODEX -> WatchedGrid(
-                watchedPosts = visibleCodexPosts,
-                now = now,
-                pixivUgoiraClient = pixivUgoiraClient,
-                likedPostIds = likedPostIds,
-                durationStateForPost = durationStateForPost,
-                onDurationPostVisibilityChanged = onDurationPostVisibilityChanged,
-                onDurationEnvironmentChanged = onDurationEnvironmentChanged,
-                onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
-                onToggleLike = onToggleLike,
-                onOpenWatchedPost = openCodexPost,
-                onLongPress = {
-                    selectedActionPost = it
-                    selectedActionSection = RecentPostSection.CODEX
-                },
+            RecentsFilter.CODEX -> RecentPostsGrid(
+                visibleCodexPosts, now, cards, openCodexPost, RecentPostSection.CODEX, openPostActions,
+                showMediaProgress = false,
                 emptyMessage = sourceEmptyMessage ?: "Posts appear here after you open them from Codex.",
             )
-
             RecentsFilter.SEARCHES -> SearchHistoryList(
                 searches = when (searchFilter) {
                     RecentSearchFilter.ALL -> (visibleSearches + visibleFypSearches).sortedByDescending { it.searchedAtEpochMs }
@@ -228,12 +182,9 @@ fun RecentsScreen(
                 onFilterSelected = { searchFilter = it },
                 emptyMessage = sourceEmptyMessage ?: "Searches appear here after you search or For You generates them.",
                 now = now,
-                onOpenSearch = { entry ->
-                    if (entry.kind == RecentSearchKind.FYP) onOpenFypSearch(entry) else onOpenSearch(entry)
-                },
+                onOpenSearch = { entry -> if (entry.kind == RecentSearchKind.FYP) onOpenFypSearch(entry) else onOpenSearch(entry) },
                 onPinSearch = onPinSearch,
             )
-
             RecentsFilter.ALL -> ActivityList(
                 activity = visibleActivity,
                 pixivUgoiraClient = pixivUgoiraClient,
@@ -242,10 +193,7 @@ fun RecentsScreen(
                 onDurationPostVisibilityChanged = onDurationPostVisibilityChanged,
                 onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
                 onToggleLike = onToggleLike,
-                onLongPress = { post, section ->
-                    selectedActionPost = post
-                    selectedActionSection = section
-                },
+                onLongPress = openPostActions,
                 emptyMessage = sourceEmptyMessage ?: "Recent posts and applied searches appear here.",
                 watchedPosts = visibleWatchedPosts,
                 codexPosts = visibleCodexPosts,
@@ -287,15 +235,9 @@ fun RecentsScreen(
                 }
             } else null,
             tagContent = {
-                PostTagActionSection(
-                    post = post,
-                    tagVideoCountProvider = tagVideoCountProvider,
-                    fetchTagVideoCounts = fetchTagVideoCounts,
-                    onAddIncludeTerm = { term -> onAddIncludeTerm(post, term) },
-                    onAddExcludeTerm = { term -> onAddExcludeTerm(post, term) },
-                    onRemoveIncludeTerm = { term -> onRemoveIncludeTerm(post, term) },
-                    onRemoveExcludeTerm = { term -> onRemoveExcludeTerm(post, term) },
-                    onFavoriteTagLongPress = onFavoriteTagLongPress,
+                PostBoundTagSection(
+                    post, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm, onRemoveExcludeTerm,
+                    onFavoriteTagLongPress, tagVideoCountProvider, fetchTagVideoCounts,
                 )
             },
         )
@@ -312,6 +254,82 @@ fun RecentsScreen(
             },
         )
     }
+}
+
+@Composable
+private fun RecentsSourceSelector(selectedSource: SourceKey?, onSelected: (SourceKey?) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    SourceSelector(
+        selectedSource = selectedSource,
+        availableSources = SourceKey.entries,
+        allSourcesLabel = "All sources",
+        accessibilityLabel = "Filter Recents by source",
+        enabled = true,
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        onSourceSelected = {
+            onSelected(it)
+            expanded = false
+        },
+    )
+}
+
+@Composable
+private fun RecentsFilterChips(filter: RecentsFilter, onSelected: (RecentsFilter) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RecentsFilter.entries.forEach { option ->
+            FilterChip(
+                selected = filter == option,
+                onClick = { onSelected(option) },
+                label = { Text(option.label) },
+            )
+        }
+    }
+}
+
+/** What each post tile in Recents shares, whichever tab shows it. */
+private class RecentsPostCards(
+    val pixivUgoiraClient: PixivUgoiraClient?,
+    val likedPostIds: Set<PostId>,
+    val durationStateForPost: (Post) -> Flow<MediaDurationState?>,
+    val onDurationPostVisibilityChanged: (Post, Boolean) -> Unit,
+    val onDurationEnvironmentChanged: (Boolean, Boolean) -> Unit,
+    val onAuthoritativeDurationKnown: (Post, Long) -> Unit,
+    val onToggleLike: ((Post) -> Unit)?,
+)
+
+@Composable
+private fun RecentPostsGrid(
+    posts: List<RecentPostEntry>,
+    now: Long,
+    cards: RecentsPostCards,
+    onOpen: (Int) -> Unit,
+    section: RecentPostSection,
+    onLongPress: (Post, RecentPostSection) -> Unit,
+    showMediaProgress: Boolean,
+    emptyMessage: String,
+) {
+    WatchedGrid(
+        watchedPosts = posts,
+        now = now,
+        pixivUgoiraClient = cards.pixivUgoiraClient,
+        likedPostIds = cards.likedPostIds,
+        durationStateForPost = cards.durationStateForPost,
+        onDurationPostVisibilityChanged = cards.onDurationPostVisibilityChanged,
+        onDurationEnvironmentChanged = cards.onDurationEnvironmentChanged,
+        onAuthoritativeDurationKnown = cards.onAuthoritativeDurationKnown,
+        onToggleLike = cards.onToggleLike,
+        onOpenWatchedPost = onOpen,
+        onLongPress = { onLongPress(it, section) },
+        showMediaProgress = showMediaProgress,
+        emptyMessage = emptyMessage,
+    )
 }
 
 @Composable

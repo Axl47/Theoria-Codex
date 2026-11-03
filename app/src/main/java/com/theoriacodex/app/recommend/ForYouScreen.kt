@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -53,17 +54,16 @@ import com.theoriacodex.app.ui.components.FeedContinueLoading
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.noMediaDurationStateForPost
-import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.recommend.state.ForYouEmptyReason
 import com.theoriacodex.app.recommend.state.ForYouUiState
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
-import com.theoriacodex.app.search.SearchResultCard
+import com.theoriacodex.app.search.SearchDurationFilterPresentation
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.search.rememberSearchDurationFilterPresentation
 import com.theoriacodex.app.source.displayName
-import com.theoriacodex.app.tags.PostTagActionSection
+import com.theoriacodex.app.tags.PostBoundTagSection
 import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.FeedErrorTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
@@ -73,7 +73,11 @@ import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.SourceSelector
 import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.ui.components.TwoColumnProjectedPostStaggeredGrid
-import com.theoriacodex.app.ui.components.RelatedPostsShelf
+import com.theoriacodex.app.ui.components.FeedCardEnvironment
+import com.theoriacodex.app.ui.components.FeedPostCard
+import com.theoriacodex.app.ui.components.FeedRelatedPostsShelf
+import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
+import com.theoriacodex.app.ui.components.RelatedFeedPresentation
 import com.theoriacodex.app.ui.components.rememberRelatedFeedPresentation
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.FeedFabRestoreState
@@ -131,106 +135,22 @@ fun ForYouScreen(
     var showSortSheet by remember { mutableStateOf(false) }
     var showSourceMenu by remember { mutableStateOf(false) }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
-    val animatedOnly = fabRestoreState.animatedOnly
-    val durationMinBucket = fabRestoreState.durationMinBucket
-    val durationMaxBucket = fabRestoreState.durationMaxBucket
-    val animatedDurationRange = remember(durationMinBucket, durationMaxBucket) {
-        AnimatedDurationRange(
-            minBucket = durationMinBucket,
-            maxBucket = durationMaxBucket,
-        )
-    }
-    val visibilityFilters = remember(animatedOnly, animatedDurationRange) {
-        SearchVisibilityFilters(
-            animatedOnly = animatedOnly,
-            animatedDurationRange = animatedDurationRange,
-        )
-    }
-    val durationPosts = if (state.home.visible) {
-        state.home.sections.flatMap { it.feed.page.items } + state.home.mixedFeed?.page?.items.orEmpty()
-    } else state.results
-    val durationFilter = rememberSearchDurationFilterPresentation(
-        durationPosts, animatedDurationRange, durationStates, resolveUnknownAnimatedDurations,
-    )
-    val animatedDurationFilterActive = durationFilter.active
-    val unknownAnimatedDurationPolicy = durationFilter.unknownPolicy
-    val acquiredDurations = durationFilter.knownDurationMsByPostId
-    val durationReadiness = durationFilter.readiness
-    val visibleResults = remember(
-        state.results,
-        visibilityFilters,
-        unknownAnimatedDurationPolicy,
-        acquiredDurations,
-    ) {
-        filterSearchResults(
-            results = state.results,
-            filters = visibilityFilters,
-            likedPostIds = emptySet(),
-            savedPostIds = emptySet(),
-            unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
-            knownDurationMsByPostId = acquiredDurations,
-        )
-    }
-    val relatedPresentation = rememberRelatedFeedPresentation(
-        canonicalPosts = state.results,
-        visibleCanonicalPosts = visibleResults,
-        relatedState = state.relatedPosts,
-        visibilityFilters = visibilityFilters,
-        likedPostIds = emptySet(),
-        savedPostIds = emptySet(),
-        watchedPostIds = emptySet(),
-        unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
-        durationStates = durationStates,
-        durationFilterActive = animatedDurationFilterActive,
-    )
-    val feedProjection = relatedPresentation.projection
-    LaunchedEffect(animatedDurationFilterActive) {
-        onDurationFilterChanged(animatedDurationFilterActive)
-    }
+    val feed = rememberForYouFeed(state, fabRestoreState, durationStates, resolveUnknownAnimatedDurations)
+    LaunchedEffect(feed.durationFilter.active) { onDurationFilterChanged(feed.durationFilter.active) }
     DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
-
     val filterScroll = rememberFeedScrollSignal()
     val filterLabels = listOfNotNull(
         sortModeLabel(state.sortMode).takeIf { state.sortMode != SortMode.NEWEST },
-        "Animated".takeIf { animatedOnly },
-        animatedDurationRangeLabel(animatedDurationRange).takeIf { animatedDurationFilterActive },
+        "Animated".takeIf { feed.animatedOnly },
+        animatedDurationRangeLabel(feed.animatedDurationRange).takeIf { feed.durationFilter.active },
     )
-    fun clearFilters(): () -> Unit {
-        val previous = fabRestoreState
-        val previousSort = state.sortMode
-        onFabRestoreStateChange(
-            fabRestoreState.copy(
-                sortMode = SortMode.NEWEST.name,
-                animatedOnly = false,
-                durationMinBucket = AnimatedDurationRange.Full.normalizedMinBucket,
-                durationMaxBucket = AnimatedDurationRange.Full.normalizedMaxBucket,
-            ),
-        )
-        onAction(ForYouAction.SelectSort(SortMode.NEWEST))
-        return {
-            onFabRestoreStateChange(previous)
-            onAction(ForYouAction.SelectSort(previousSort))
-        }
+    val clearFilters: () -> () -> Unit = {
+        clearForYouFilters(state.sortMode, fabRestoreState, onFabRestoreStateChange, onAction)
     }
-
-    val pageDemand = rememberFeedPageDemand(
-        input = FeedPageDemandInput(
-            contextKey = "${state.activeProfileId}:${state.selectedSource}:${state.sortMode}:${state.seedId}",
-            completedGeneration = state.nextRequestGeneration,
-            canonicalCount = state.results.size,
-            visibleCount = visibleResults.size,
-            canLoadMore = state.canLoadMore,
-            ready = !state.home.visible && state.seedSummaryBySource.isNotEmpty(),
-            refreshing = state.isRefreshing,
-            paging = state.isPaging,
-            failed = state.errorMessage != null,
-            resolvingDurations = durationReadiness.isResolving,
-        ),
-        filters = visibilityFilters,
-        gridState = gridState,
-        presentedItemCount = feedProjection.entries.size,
-        canonicalIndexForVisibleItems = feedProjection::greatestVisibleCanonicalIndex,
-        onLoadNextPage = { onAction(ForYouAction.LoadNextPage) },
+    val pageDemand = rememberForYouPageDemand(state, feed, gridState, onAction)
+    val cards = rememberFeedCardEnvironment(
+        pixivUgoiraClient, likedPostIds, feed.durationFilter.knownDurationMsByPostId, durationStateForPost,
+        onToggleLike, onDurationPostVisibilityChanged, onAuthoritativeDurationKnown,
     )
 
     AnimatedContent(
@@ -238,235 +158,68 @@ fun ForYouScreen(
         transitionSpec = { depthTransform(forward = !targetState) },
         label = "For You view",
     ) { homeVisible ->
-    if (homeVisible) {
-        savedStates.SaveableStateProvider("overview") {
-        ForYouHomeScreen(state, likedPostIds, pixivUgoiraClient,
-            filterPosts = { posts -> filterSearchResults(posts, visibilityFilters, emptySet(), emptySet(),
-                unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
-                knownDurationMsByPostId = acquiredDurations) },
-            durationStateForPost = durationStateForPost,
-            onDurationPostVisibilityChanged = onDurationPostVisibilityChanged,
-            onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
-            onToggleLike = onToggleLike, onLongPress = { selectedActionPost = it },
-            onAction = onAction, onShowFilters = { showSortSheet = true },
-            filterLabels = filterLabels,
-            onClearFilters = ::clearFilters,
-            onOpenPreview = { id, posts, index ->
-                onAction(ForYouAction.OpenSectionResult(id, index, posts, visibilityFilters))
-            })
-        }
-    } else {
-    Scaffold(
-        modifier = Modifier.nestedScroll(filterScroll.connection),
-        contentWindowInsets = WindowInsets(0),
-        floatingActionButton = {
-            FeedFilterFab(
-                modifier = Modifier.padding(bottom = 8.dp),
-                labels = filterLabels,
-                contentDescription = "Filter and sort recommendations",
-                onClick = { showSortSheet = true },
-                onClear = ::clearFilters,
-                scrollSignal = filterScroll,
-            )
-        },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { onAction(ForYouAction.ShowHome) }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to interests")
-                }
-                Text(state.home.activeSection?.title ?: "For You", style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.weight(1f), maxLines = 2)
+        if (homeVisible) {
+            savedStates.SaveableStateProvider("overview") {
+                ForYouHomeScreen(state, likedPostIds, pixivUgoiraClient,
+                    filterPosts = { posts -> filterSearchResults(posts, feed.visibilityFilters, emptySet(), emptySet(),
+                        unknownAnimatedDurationPolicy = feed.durationFilter.unknownPolicy,
+                        knownDurationMsByPostId = feed.durationFilter.knownDurationMsByPostId) },
+                    durationStateForPost = durationStateForPost,
+                    onDurationPostVisibilityChanged = onDurationPostVisibilityChanged,
+                    onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
+                    onToggleLike = onToggleLike, onLongPress = { selectedActionPost = it },
+                    onAction = onAction, onShowFilters = { showSortSheet = true },
+                    filterLabels = filterLabels,
+                    onClearFilters = clearFilters,
+                    onOpenPreview = { id, posts, index ->
+                        onAction(ForYouAction.OpenSectionResult(id, index, posts, feed.visibilityFilters))
+                    })
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                IconButton(
-                    enabled = state.canBlacklistCurrentSeed,
-                    onClick = { onAction(ForYouAction.BlacklistCurrentSeed) },
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Blacklist current recommendation tags",
+        } else {
+            Scaffold(
+                modifier = Modifier.nestedScroll(filterScroll.connection),
+                contentWindowInsets = WindowInsets(0),
+                floatingActionButton = {
+                    FeedFilterFab(
+                        modifier = Modifier.padding(bottom = 8.dp),
+                        labels = filterLabels,
+                        contentDescription = "Filter and sort recommendations",
+                        onClick = { showSortSheet = true },
+                        onClear = clearFilters,
+                        scrollSignal = filterScroll,
                     )
-                }
-                IconButton(
-                    enabled = state.canRefresh,
-                    onClick = { onAction(ForYouAction.Refresh(shuffle = true)) },
+                },
+            ) { padding ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = if (state.home.activeSection == null) "Shuffle recommendations" else "Refresh this interest",
-                    )
-                }
-            }
-        }
-
-        ForYouSourceSelector(
-            selectedSource = state.selectedSource,
-            availableSources = state.availableSources,
-            enabled = !state.isRefreshing && !state.isPaging,
-            expanded = showSourceMenu,
-            onExpandedChange = { showSourceMenu = it },
-            onSourceSelected = { source ->
-                showSourceMenu = false
-                onAction(ForYouAction.SelectSource(source))
-            },
-        )
-
-        if (state.seedSummaryBySource.isNotEmpty()) {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(state.seedSummaryBySource.entries.toList()) { (source, tags) ->
-                    Card {
-                        Text(
-                            text = "${source.displayName()}: ${tags.joinToString(" + ")}",
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            style = MaterialTheme.typography.labelMedium,
-                        )
-                    }
-                }
-            }
-        }
-
-        com.theoriacodex.app.search.StatusRow(
-            statuses = state.statuses.filter { it.source in state.retryableSources },
-            retryEnabled = !state.isRefreshing && !state.isPaging,
-            onRetrySource = { onAction(ForYouAction.RetrySource(it)) },
-        )
-        FeedContinueLoading(pageDemand)
-        when {
-            state.emptyReason == ForYouEmptyReason.NO_LIKES -> {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text(
-                            text = "Heart posts in Search to train For You.",
-                            textAlign = TextAlign.Center,
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                        TextButton(onClick = { onAction(ForYouAction.GoToSearch) }) {
-                            Text("Go to Search")
-                        }
-                    }
-                }
-            }
-
-            state.isRefreshing && visibleResults.isEmpty() -> {
-                FeedLoadingState()
-            }
-
-            state.errorMessage != null && visibleResults.isEmpty() -> {
-                FeedErrorTile(
-                    message = state.errorMessage.orEmpty(),
-                    onRetry = { onAction(ForYouAction.Refresh(shuffle = true)) },
-                )
-            }
-
-            feedProjection.entries.isEmpty() -> {
-                FeedEmptyTile(
-                    message = if (durationReadiness.isResolving) {
-                            "Resolving durations…"
-                        } else if ((animatedOnly || animatedDurationFilterActive) && state.results.isNotEmpty()) {
-                            if (!visibilityFilters.animatedDurationRange.isFullRange) {
-                                "No animated media found in the selected duration range."
-                            } else {
-                                "No animated media found for this feed yet."
-                            }
-                        } else {
-                            "No recommendations yet. Tap Refresh to try a broader seed."
+                    ForYouResultsHeader(state, onAction)
+                    ForYouSourceSelector(
+                        selectedSource = state.selectedSource,
+                        availableSources = state.availableSources,
+                        enabled = !state.isRefreshing && !state.isPaging,
+                        expanded = showSourceMenu,
+                        onExpandedChange = { showSourceMenu = it },
+                        onSourceSelected = { source ->
+                            showSourceMenu = false
+                            onAction(ForYouAction.SelectSource(source))
                         },
-                )
-            }
-
-            else -> {
-                PullToRefreshBox(
-                    isRefreshing = state.isRefreshing,
-                    onRefresh = { onAction(ForYouAction.Refresh(shuffle = false)) },
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                TwoColumnProjectedPostStaggeredGrid(
-                    projection = feedProjection,
-                    state = gridState,
-                    modifier = Modifier.fillMaxSize(),
-                    showPagingTile = state.isPaging,
-                    footerMessage = if (durationReadiness.isResolving) {
-                        "Resolving durations…"
-                    } else {
-                        null
-                    },
-                    postContent = { _, post ->
-                        val observedDurationMs = observedMediaDurationMs(post, durationStateForPost)
-                        SearchResultCard(
-                            post = post,
-                            showWatchHistory = true,
-                            pixivUgoiraClient = pixivUgoiraClient,
-                            acquiredDurationMs = observedDurationMs ?: acquiredDurations[post.id],
-                            showSourceBadge = true,
-                            liked = post.id in likedPostIds,
-                            onToggleLike = { onToggleLike(post) },
-                            onClick = {
-                                val visibleIndex = visibleResults.indexOfFirst { candidate -> candidate.id == post.id }
-                                onAction(
-                                    ForYouAction.OpenResult(
-                                        index = visibleIndex,
-                                        scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
-                                        visibleResults = visibleResults,
-                                        visibilityFilters = visibilityFilters,
-                                    )
-                                )
-                            },
-                            onLongPress = { selectedActionPost = post },
-                            onViewportChanged = { visible ->
-                                onDurationPostVisibilityChanged(post, visible)
-                            },
-                            onAuthoritativeDurationKnown = { durationMs ->
-                                onAuthoritativeDurationKnown(post, durationMs)
-                            },
-                        )
-                    },
-                    shelfContent = {
-                        RelatedPostsShelf(
-                            state = state.relatedPosts,
-                            posts = relatedPresentation.visiblePosts,
-                            likedPostIds = likedPostIds,
-                            pixivUgoiraClient = pixivUgoiraClient,
-                            acquiredDurations = relatedPresentation.knownDurationMsByPostId,
-                            durationStateForPost = durationStateForPost,
-                            onToggleLike = onToggleLike,
-                            onOpenPost = { posts, index ->
-                                onAction(ForYouAction.OpenRelatedResult(index, posts))
-                            },
-                            onLongPress = { post -> selectedActionPost = post },
-                            onDismiss = { onAction(ForYouAction.DismissRelatedPosts) },
-                            onRetry = { onAction(ForYouAction.RetryRelatedPosts) },
-                            onPreviousPage = { onAction(ForYouAction.ShowPreviousRelatedPosts) },
-                            onNextPage = { onAction(ForYouAction.ShowNextRelatedPosts) },
-                            onViewportChanged = onDurationPostVisibilityChanged,
-                            onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
-                        )
-                    },
-                )
+                    )
+                    ForYouSeedSummary(state)
+                    com.theoriacodex.app.search.StatusRow(
+                        statuses = state.statuses.filter { it.source in state.retryableSources },
+                        retryEnabled = !state.isRefreshing && !state.isPaging,
+                        onRetrySource = { onAction(ForYouAction.RetrySource(it)) },
+                    )
+                    FeedContinueLoading(pageDemand)
+                    ForYouFeedBody(state, feed, cards, gridState, onAction, onLongPress = { selectedActionPost = it })
                 }
             }
         }
-        }
-    }
-
-    }
     }
 
     selectedActionPost?.let { post ->
@@ -481,13 +234,9 @@ fun ForYouScreen(
             onGoToSearch = onGoToSearch,
             onPostUrlCopied = onPostUrlCopied,
             tagContent = {
-                PostTagActionSection(
-                    post = post,
-                    onAddIncludeTerm = { term -> onAddIncludeTerm(post, term) },
-                    onAddExcludeTerm = { term -> onAddExcludeTerm(post, term) },
-                    onRemoveIncludeTerm = { term -> onRemoveIncludeTerm(post, term) },
-                    onRemoveExcludeTerm = { term -> onRemoveExcludeTerm(post, term) },
-                    onFavoriteTagLongPress = onFavoriteTagLongPress,
+                PostBoundTagSection(
+                    post, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm, onRemoveExcludeTerm,
+                    onFavoriteTagLongPress,
                 )
             },
         )
@@ -496,8 +245,8 @@ fun ForYouScreen(
     if (showSortSheet) {
         ForYouSortSheet(
             selectedSort = state.sortMode,
-            animatedOnly = animatedOnly,
-            animatedDurationRange = animatedDurationRange,
+            animatedOnly = feed.animatedOnly,
+            animatedDurationRange = feed.animatedDurationRange,
             onSelectSort = { sort ->
                 onFabRestoreStateChange(fabRestoreState.copy(sortMode = sort.name))
                 onAction(ForYouAction.SelectSort(sort))
@@ -517,6 +266,275 @@ fun ForYouScreen(
             onDismiss = { showSortSheet = false },
         )
     }
+}
+
+/** What the For You grid shows after its filters, durations, and related posts are applied. */
+private data class ForYouFeed(
+    val animatedOnly: Boolean,
+    val animatedDurationRange: AnimatedDurationRange,
+    val visibilityFilters: SearchVisibilityFilters,
+    val durationFilter: SearchDurationFilterPresentation,
+    val visibleResults: List<Post>,
+    val related: RelatedFeedPresentation,
+)
+
+@Composable
+private fun rememberForYouFeed(
+    state: ForYouUiState,
+    fabRestoreState: FeedFabRestoreState,
+    durationStates: Map<MediaDurationKey, MediaDurationState>,
+    resolveUnknownAnimatedDurations: Boolean,
+): ForYouFeed {
+    val animatedOnly = fabRestoreState.animatedOnly
+    val durationMinBucket = fabRestoreState.durationMinBucket
+    val durationMaxBucket = fabRestoreState.durationMaxBucket
+    val animatedDurationRange = remember(durationMinBucket, durationMaxBucket) {
+        AnimatedDurationRange(minBucket = durationMinBucket, maxBucket = durationMaxBucket)
+    }
+    val visibilityFilters = remember(animatedOnly, animatedDurationRange) {
+        SearchVisibilityFilters(animatedOnly = animatedOnly, animatedDurationRange = animatedDurationRange)
+    }
+    val durationPosts = if (state.home.visible) {
+        state.home.sections.flatMap { it.feed.page.items } + state.home.mixedFeed?.page?.items.orEmpty()
+    } else state.results
+    val durationFilter = rememberSearchDurationFilterPresentation(
+        durationPosts, animatedDurationRange, durationStates, resolveUnknownAnimatedDurations,
+    )
+    val visibleResults = remember(
+        state.results,
+        visibilityFilters,
+        durationFilter.unknownPolicy,
+        durationFilter.knownDurationMsByPostId,
+    ) {
+        filterSearchResults(
+            results = state.results,
+            filters = visibilityFilters,
+            likedPostIds = emptySet(),
+            savedPostIds = emptySet(),
+            unknownAnimatedDurationPolicy = durationFilter.unknownPolicy,
+            knownDurationMsByPostId = durationFilter.knownDurationMsByPostId,
+        )
+    }
+    val related = rememberRelatedFeedPresentation(
+        canonicalPosts = state.results,
+        visibleCanonicalPosts = visibleResults,
+        relatedState = state.relatedPosts,
+        visibilityFilters = visibilityFilters,
+        likedPostIds = emptySet(),
+        savedPostIds = emptySet(),
+        watchedPostIds = emptySet(),
+        unknownAnimatedDurationPolicy = durationFilter.unknownPolicy,
+        durationStates = durationStates,
+        durationFilterActive = durationFilter.active,
+    )
+    return remember(animatedOnly, animatedDurationRange, visibilityFilters, durationFilter, visibleResults, related) {
+        ForYouFeed(animatedOnly, animatedDurationRange, visibilityFilters, durationFilter, visibleResults, related)
+    }
+}
+
+@Composable
+private fun rememberForYouPageDemand(
+    state: ForYouUiState,
+    feed: ForYouFeed,
+    gridState: LazyStaggeredGridState,
+    onAction: (ForYouAction) -> Unit,
+) = rememberFeedPageDemand(
+    input = FeedPageDemandInput(
+        contextKey = "${state.activeProfileId}:${state.selectedSource}:${state.sortMode}:${state.seedId}",
+        completedGeneration = state.nextRequestGeneration,
+        canonicalCount = state.results.size,
+        visibleCount = feed.visibleResults.size,
+        canLoadMore = state.canLoadMore,
+        ready = !state.home.visible && state.seedSummaryBySource.isNotEmpty(),
+        refreshing = state.isRefreshing,
+        paging = state.isPaging,
+        failed = state.errorMessage != null,
+        resolvingDurations = feed.durationFilter.readiness.isResolving,
+    ),
+    filters = feed.visibilityFilters,
+    gridState = gridState,
+    presentedItemCount = feed.related.projection.entries.size,
+    canonicalIndexForVisibleItems = feed.related.projection::greatestVisibleCanonicalIndex,
+    onLoadNextPage = { onAction(ForYouAction.LoadNextPage) },
+)
+
+/** Clears the feed's filters and returns how to put them back. */
+private fun clearForYouFilters(
+    previousSort: SortMode,
+    previous: FeedFabRestoreState,
+    onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
+    onAction: (ForYouAction) -> Unit,
+): () -> Unit {
+    onFabRestoreStateChange(
+        previous.copy(
+            sortMode = SortMode.NEWEST.name,
+            animatedOnly = false,
+            durationMinBucket = AnimatedDurationRange.Full.normalizedMinBucket,
+            durationMaxBucket = AnimatedDurationRange.Full.normalizedMaxBucket,
+        ),
+    )
+    onAction(ForYouAction.SelectSort(SortMode.NEWEST))
+    return {
+        onFabRestoreStateChange(previous)
+        onAction(ForYouAction.SelectSort(previousSort))
+    }
+}
+
+@Composable
+private fun ForYouResultsHeader(state: ForYouUiState, onAction: (ForYouAction) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { onAction(ForYouAction.ShowHome) }) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to interests")
+            }
+            Text(state.home.activeSection?.title ?: "For You", style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.weight(1f), maxLines = 2)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            IconButton(
+                enabled = state.canBlacklistCurrentSeed,
+                onClick = { onAction(ForYouAction.BlacklistCurrentSeed) },
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Blacklist current recommendation tags",
+                )
+            }
+            IconButton(
+                enabled = state.canRefresh,
+                onClick = { onAction(ForYouAction.Refresh(shuffle = true)) },
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = if (state.home.activeSection == null) "Shuffle recommendations" else "Refresh this interest",
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ForYouSeedSummary(state: ForYouUiState) {
+    if (state.seedSummaryBySource.isEmpty()) return
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(state.seedSummaryBySource.entries.toList()) { (source, tags) ->
+            Card {
+                Text(
+                    text = "${source.displayName()}: ${tags.joinToString(" + ")}",
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ForYouFeedBody(
+    state: ForYouUiState,
+    feed: ForYouFeed,
+    cards: FeedCardEnvironment,
+    gridState: LazyStaggeredGridState,
+    onAction: (ForYouAction) -> Unit,
+    onLongPress: (Post) -> Unit,
+) {
+    when {
+        state.emptyReason == ForYouEmptyReason.NO_LIKES -> ForYouNoLikes(onAction)
+
+        state.isRefreshing && feed.visibleResults.isEmpty() -> FeedLoadingState()
+
+        state.errorMessage != null && feed.visibleResults.isEmpty() -> {
+            FeedErrorTile(
+                message = state.errorMessage.orEmpty(),
+                onRetry = { onAction(ForYouAction.Refresh(shuffle = true)) },
+            )
+        }
+
+        feed.related.projection.entries.isEmpty() -> FeedEmptyTile(message = forYouEmptyMessage(state, feed))
+
+        else -> {
+            PullToRefreshBox(
+                isRefreshing = state.isRefreshing,
+                onRefresh = { onAction(ForYouAction.Refresh(shuffle = false)) },
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                TwoColumnProjectedPostStaggeredGrid(
+                    projection = feed.related.projection,
+                    state = gridState,
+                    modifier = Modifier.fillMaxSize(),
+                    showPagingTile = state.isPaging,
+                    footerMessage = if (feed.durationFilter.readiness.isResolving) "Resolving durations…" else null,
+                    postContent = { _, post ->
+                        FeedPostCard(
+                            post = post,
+                            environment = cards,
+                            showWatchHistory = true,
+                            showSourceBadge = true,
+                            onClick = {
+                                onAction(
+                                    ForYouAction.OpenResult(
+                                        index = feed.visibleResults.indexOfFirst { candidate -> candidate.id == post.id },
+                                        scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
+                                        visibleResults = feed.visibleResults,
+                                        visibilityFilters = feed.visibilityFilters,
+                                    )
+                                )
+                            },
+                            onLongPress = { onLongPress(post) },
+                        )
+                    },
+                    shelfContent = {
+                        FeedRelatedPostsShelf(
+                            state = state.relatedPosts,
+                            presentation = feed.related,
+                            environment = cards,
+                            onOpenPost = { posts, index -> onAction(ForYouAction.OpenRelatedResult(index, posts)) },
+                            onLongPress = onLongPress,
+                            onDismiss = { onAction(ForYouAction.DismissRelatedPosts) },
+                            onRetry = { onAction(ForYouAction.RetryRelatedPosts) },
+                            onPreviousPage = { onAction(ForYouAction.ShowPreviousRelatedPosts) },
+                            onNextPage = { onAction(ForYouAction.ShowNextRelatedPosts) },
+                        )
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ForYouNoLikes(onAction: (ForYouAction) -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "Heart posts in Search to train For You.",
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            TextButton(onClick = { onAction(ForYouAction.GoToSearch) }) {
+                Text("Go to Search")
+            }
+        }
+    }
+}
+
+private fun forYouEmptyMessage(state: ForYouUiState, feed: ForYouFeed): String = when {
+    feed.durationFilter.readiness.isResolving -> "Resolving durations…"
+    !(feed.animatedOnly || feed.durationFilter.active) || state.results.isEmpty() ->
+        "No recommendations yet. Tap Refresh to try a broader seed."
+    !feed.visibilityFilters.animatedDurationRange.isFullRange ->
+        "No animated media found in the selected duration range."
+    else -> "No animated media found for this feed yet."
 }
 
 @Composable
