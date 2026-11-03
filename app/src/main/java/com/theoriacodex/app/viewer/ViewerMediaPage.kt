@@ -1,6 +1,8 @@
 package com.theoriacodex.app.viewer
 
 import android.os.SystemClock
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Box
@@ -18,15 +20,24 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import com.theoriacodex.app.media.isAnimatedImageMediaRef
 import com.theoriacodex.app.media.isGifMediaRef
 import com.theoriacodex.app.media.isPixivUgoiraMedia
 import com.theoriacodex.app.media.isVideoMediaRef
+import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerMediaError
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
@@ -88,9 +99,14 @@ internal fun ViewerMediaPage(
         translationX = transform.panX
         translationY = transform.panY
     }
-    Box(Modifier.fillMaxSize()) {
+    val mediaPadding = if (layout.landscape || animated) 0.dp else 16.dp
+    var pageSize by remember { mutableStateOf(IntSize.Zero) }
+    val transformBounds = with(LocalDensity.current) {
+        viewerTransformBounds(pageSize.width.toFloat(), pageSize.height.toFloat(), mediaPadding.toPx(), viewerAspectRatio(post))
+    }
+    Box(Modifier.fillMaxSize().onSizeChanged { pageSize = it }) {
         Box(
-            Modifier.fillMaxSize().padding(if (layout.landscape || animated) 0.dp else 16.dp)
+            Modifier.fillMaxSize().padding(mediaPadding)
                 .viewerReturnMedia(returnProgress, viewerAspectRatio(post)),
             contentAlignment = Alignment.Center,
         ) {
@@ -101,7 +117,7 @@ internal fun ViewerMediaPage(
             FittedSeekJumpFeedbackOverlay(interactions.feedback, viewerAspectRatio(post), interactions::clearFeedback, Modifier.matchParentSize())
         }
         ViewerMediaGestureLayer(key, mediaCount, isVideo || isGif || isUgoira, animated, interactions, controls,
-            transform, onTransformChanged, layout, onAction, onInteraction, onToggleChrome, onNavigate,
+            transform, transformBounds, onTransformChanged, layout, onAction, onInteraction, onToggleChrome, onNavigate,
             levelControls.takeIf { isVideo }, onSwipeProgress, onSwipeCancelled)
         if (controls.isActive && isVideo && !layout.pictureInPicture && levelControls != null) {
             FittedViewerMediaOverlay(viewerAspectRatio(post), Modifier.matchParentSize()) {
@@ -120,6 +136,7 @@ private class ViewerMediaInteractions {
     var seekSerial by mutableIntStateOf(0)
     var seekDelta by mutableLongStateOf(0L)
     var feedback by mutableStateOf<SeekJumpFeedback?>(null)
+    var zoomAnimation: Job? = null
 
     fun seek(delta: Long) {
         seekDelta = delta
@@ -140,23 +157,40 @@ private fun viewerAspectRatio(post: Post): Float? {
 private fun ViewerMediaGestureLayer(
     key: ViewerMediaKey, mediaCount: Int, seekable: Boolean, animated: Boolean,
     interactions: ViewerMediaInteractions, controls: ViewerRendererControls,
-    transform: ViewerTransformState, onTransformChanged: (ViewerTransformState) -> Unit,
+    transform: ViewerTransformState, bounds: ViewerTransformBounds, onTransformChanged: (ViewerTransformState) -> Unit,
     layout: ViewerMediaLayout, onAction: (ViewerAction) -> Unit, onInteraction: () -> Unit,
     onToggleChrome: () -> Unit, onNavigate: (ViewerHorizontalSwipeDirection) -> Unit,
     levelControls: ViewerLevelControls?,
     onSwipeProgress: (Float) -> Unit,
     onSwipeCancelled: () -> Unit,
 ) {
-    val transformState = rememberTransformableState { _, zoom, pan, _ ->
-        onTransformChanged(transform.transform(zoom, pan.x, pan.y))
+    val currentTransform by rememberUpdatedState(transform)
+    val currentOnTransformChanged by rememberUpdatedState(onTransformChanged)
+    val scope = rememberCoroutineScope()
+    fun centerOffset(point: Offset) = Offset(point.x - bounds.viewportWidth / 2f, point.y - bounds.viewportHeight / 2f)
+    val transformState = rememberTransformableState { centroid, zoom, pan, _ ->
+        interactions.zoomAnimation?.cancel()
+        val focus = centerOffset(centroid)
+        onTransformChanged(transform.transform(zoom, pan.x, pan.y, focus.x, focus.y, bounds))
         onInteraction()
+    }
+    fun animateZoom(tap: Offset?) {
+        val start = currentTransform
+        val focus = tap?.let(::centerOffset) ?: Offset.Zero
+        val target = start.doubleTap(focus.x, focus.y, bounds)
+        interactions.zoomAnimation?.cancel()
+        interactions.zoomAnimation = scope.launch {
+            animate(0f, 1f, animationSpec = tween(TheoriaMotion.MEDIUM_MS)) { fraction, _ ->
+                currentOnTransformChanged(start.lerpTo(target, fraction))
+            }
+        }
     }
     val gestures = viewerMediaGestureModifier(
         mediaKey = key, active = controls.isActive && !layout.pictureInPicture, seekable = seekable,
         zoomed = transform.isZoomed, chromeVisible = controls.showControls, touchExplorationEnabled = layout.touchExploration,
         actions = ViewerMediaGestureActions(
             seek = { interactions.seek(it); onInteraction() },
-            zoom = { onTransformChanged(transform.doubleTap()); onInteraction() },
+            zoom = { tap -> animateZoom(tap); onInteraction() },
             toggleControls = onToggleChrome,
             showInfo = { onAction(ViewerAction.ShowMetadata); onInteraction() },
         ),

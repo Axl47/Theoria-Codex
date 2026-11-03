@@ -43,6 +43,37 @@ class ViewerTransformStateTest {
     }
 
     @Test
+    fun `double tap keeps the tapped point in place and pinching keeps the focus in place`() {
+        val tapped = ViewerTransformState().doubleTap(focusX = 100f, focusY = -50f)
+        assertEquals(-100f, tapped.panX, 0.0001f)
+        assertEquals(50f, tapped.panY, 0.0001f)
+
+        // A content point under the focus before the pinch must still be under it afterwards.
+        val before = ViewerTransformState(zoom = 2f, panX = 30f, panY = 0f)
+        val after = before.transform(1.5f, 0f, 0f, focusX = 60f, focusY = 0f)
+        val contentPoint = (60f - before.panX) / before.zoom
+        assertEquals(60f, after.panX + contentPoint * after.zoom, 0.001f)
+    }
+
+    @Test
+    fun `pan cannot move zoomed media past its edges and fitted axes stay centred`() {
+        val bounds = viewerTransformBounds(width = 400f, height = 800f, padding = 0f, aspectRatio = 1f)
+        assertEquals(400f, bounds.contentHeight, 0.0001f)
+        val zoomed = ViewerTransformState().doubleTap(bounds = bounds)
+            .transform(1f, panChangeX = 10_000f, panChangeY = 10_000f, bounds = bounds)
+
+        // 2x makes 800 square media: 200 of width overflows per side and height just fits.
+        assertEquals(200f, zoomed.panX, 0.0001f)
+        assertEquals(0f, zoomed.panY, 0.0001f)
+    }
+
+    @Test
+    fun `animating between transforms interpolates zoom and pan`() {
+        val halfway = ViewerTransformState().lerpTo(ViewerTransformState(zoom = 3f, panX = 40f, panY = -20f), 0.5f)
+        assertEquals(ViewerTransformState(zoom = 2f, panX = 20f, panY = -10f), halfway)
+    }
+
+    @Test
     fun `multi-image scroll inversion flips only multi-image swipe direction`() {
         assertEquals(
             ViewerHorizontalSwipeDirection.Previous,

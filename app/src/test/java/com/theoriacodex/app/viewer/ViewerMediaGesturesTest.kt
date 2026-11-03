@@ -75,6 +75,36 @@ class ViewerMediaGesturesTest {
         compose.onNodeWithContentDescription("Media actions").assertDoesNotExist()
     }
 
+    @Test fun `double tap zooms anywhere on stills and seeks at the edges of seekable media`() {
+        val seekable = mutableStateOf(false)
+        val zoomed = mutableStateOf(false)
+        val zooms = mutableListOf<Offset?>()
+        val seeks = mutableListOf<Long>()
+        compose.setContent {
+            Box(Modifier.size(200.dp).then(viewerMediaGestureModifier(
+                mediaKey = ViewerMediaKey(PostId(SourceKey.GELBOORU, "still"), 0),
+                active = true, seekable = seekable.value, zoomed = zoomed.value,
+                chromeVisible = false, touchExplorationEnabled = false,
+                actions = ViewerMediaGestureActions({ seeks += it }, { zooms += it }, {}, {}),
+            )))
+        }
+        fun doubleTapAt(x: Float) {
+            compose.onNodeWithContentDescription("Media actions").performTouchInput {
+                doubleClick(Offset(width * x, height * 0.5f))
+            }
+            compose.mainClock.advanceTimeBy(500)
+            compose.waitForIdle()
+        }
+        doubleTapAt(0.1f)
+        doubleTapAt(0.9f)
+        compose.runOnIdle { assertEquals(2, zooms.size); assertEquals(emptyList<Long>(), seeks); seekable.value = true }
+        doubleTapAt(0.1f)
+        doubleTapAt(0.5f)
+        compose.runOnIdle { assertEquals(3, zooms.size); assertEquals(listOf(-10_000L), seeks); zoomed.value = true }
+        doubleTapAt(0.9f)
+        compose.runOnIdle { assertEquals(4, zooms.size); assertEquals(1, seeks.size) }
+    }
+
     private fun performAction(label: String) {
         val action = compose.onNodeWithContentDescription("Media actions").fetchSemanticsNode()
             .config[SemanticsActions.CustomActions].single { it.label == label }

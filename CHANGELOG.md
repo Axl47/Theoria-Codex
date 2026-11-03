@@ -14,6 +14,12 @@
 - Separate Saved from the other Codices in the Library with a thin line.
 - Choose the source in For You and Recents from the same icon menu as Search.
 - Mark watched posts in Search and For You with an eye icon instead of a time label that looked like an upload date.
+- Double-tap zooms at the tapped point with a smooth animation, and pinching now zooms around your fingers.
+
+### Fixed
+
+- Double-tap to zoom a still image anywhere on screen, not only in its middle.
+- Keep zoomed media on screen instead of letting it be dragged out of view.
 
 ## [1.0.1] - 2026-11-02
 
