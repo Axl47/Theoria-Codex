@@ -160,7 +160,7 @@ internal fun ViewerScreen(
     var lastViewerPaginationRequestSize by remember(navigation.originalPosts.size) { mutableIntStateOf(-1) }
     var pendingDismiss by remember { mutableStateOf(false) }
     val pendingMediaJumpByPost = remember { mutableStateMapOf<PostId, Int>() }
-    SideEffect { videoPositions.retainAround(posts.map { it.id }, currentPostIndex) }
+    LaunchedEffect(posts, currentPostIndex, videoPositions) { videoPositions.retainAround(posts.map { it.id }, currentPostIndex) }
     val selectedPost = posts[currentPostIndex]
     val selectedPostLiked = selectedPost.id in likedPostIds
     val selectedPostMedia = remember(selectedPost) { postMediaItems(selectedPost) }
