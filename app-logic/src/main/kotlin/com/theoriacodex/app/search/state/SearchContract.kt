@@ -158,6 +158,8 @@ sealed interface SearchRestorationUiState {
         val scrollState: SearchScrollState? = null,
         val scrollRequestId: Long = 0L,
         val resetToTop: Boolean = false,
+        /** A resuming route only restores a grid that lost its place; a live grid is already right. */
+        val keepLiveGrid: Boolean = false,
     ) : SearchRestorationUiState
 
     data class Failed(

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -7,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
-import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -110,7 +110,7 @@ fun SearchScreen(
     val actionPost = remember { SearchActionPostState() }
     val inputFocus = rememberSearchInputFocus()
     val scope = rememberCoroutineScope()
-    val gridState = rememberLazyStaggeredGridState()
+    val gridState = rememberRetainedFeedGridState("search")
     ScrollToTopOnTabReselect(TopLevelDestination.Search) { gridState.animateScrollToItem(0) }
     val feed = rememberSearchFeed(state, fabRestoreState, likedPostIds, pendingLikePostIds, savedPostIds, watchedPostIds, durationStates, resolveUnknownAnimatedDurations)
     val serverFilters = state.query.serverFilters()

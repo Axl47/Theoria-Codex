@@ -42,7 +42,9 @@ internal fun SearchScrollRestorationEffect(
         val restored = request.scrollState ?: return@LaunchedEffect
         if (!canRestore) return@LaunchedEffect
         val activeProjection = currentProjection
-        if (activeProjection.entries.isNotEmpty()) {
+        // Jumping lines up every column at the target, which later forces the grid to reshuffle.
+        val gridIsLive = request.keepLiveGrid && gridState.layoutInfo.visibleItemsInfo.isNotEmpty()
+        if (activeProjection.entries.isNotEmpty() && !gridIsLive) {
             gridState.scrollToItem(
                 index = activeProjection.gridIndexForCanonicalIndex(restored.firstVisibleItemIndex),
                 scrollOffset = restored.firstVisibleItemOffsetPx.coerceAtLeast(0),

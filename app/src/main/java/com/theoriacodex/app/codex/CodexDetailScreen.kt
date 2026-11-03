@@ -1,5 +1,6 @@
 package com.theoriacodex.app.codex
 
+import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.theoriacodex.app.media.animatedDurationRangeLabel
 import com.theoriacodex.app.ui.components.FilterChoiceChip
@@ -17,7 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
-import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkAdd
@@ -138,7 +138,7 @@ fun CodexDetailScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
     var editSelection by remember { mutableStateOf(CodexEditSelection()) }
-    val gridState = rememberLazyStaggeredGridState()
+    val gridState = rememberRetainedFeedGridState("codex-detail")
     val sourceOptions = remember(posts, availableSources) { codexSearchSourceOptions(posts, availableSources).map(CodexSearchSourceOption::source) }
     val supportsLanguage = remember(sourceOptions) { supportsCodexLanguageFilter(sourceOptions.toSet()) }
     val supportsFullColor = remember(sourceOptions) { supportsCodexFullColorFilter(sourceOptions.toSet()) }

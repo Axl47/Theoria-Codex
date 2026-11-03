@@ -1,5 +1,6 @@
 package com.theoriacodex.app.recents
 
+import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
 import androidx.compose.foundation.layout.height
 import com.theoriacodex.app.ui.components.POST_SHELF_CARD_WIDTH
 import com.theoriacodex.app.ui.components.POST_SHELF_MEDIA_ASPECT_RATIO
@@ -29,7 +30,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
 import com.theoriacodex.app.ui.TopLevelDestination
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
@@ -417,7 +417,7 @@ private fun WatchedGrid(
         EmptyRecentState(emptyMessage)
         return
     }
-    val gridState = rememberLazyStaggeredGridState()
+    val gridState = rememberRetainedFeedGridState("recents")
     ScrollToTopOnTabReselect(TopLevelDestination.Recents) { gridState.animateScrollToItem(0) }
     DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
     val rows = remember(watchedPosts, now) { recentsGridRows(watchedPosts, now) }

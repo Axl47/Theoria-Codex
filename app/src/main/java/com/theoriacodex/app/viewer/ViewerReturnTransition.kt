@@ -278,7 +278,7 @@ internal fun ViewerReturnGridEffect(
         if (request?.gridId != gridId) return@LaunchedEffect
         val index = request.shelfId?.let(shelfIds::indexOf) ?: postIds.indexOf(request.postId)
         if (index < 0) return@LaunchedEffect
-        state.scrollToItem(index)
+        state.scrollWithinColumnsTo(index)
         val item = snapshotFlow { state.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } }
             .filterNotNull().first()
         val layout = state.layoutInfo
@@ -288,6 +288,24 @@ internal fun ViewerReturnGridEffect(
         transition.centered(gridId, request.postId)
     }
 }
+
+/**
+ * Reaches an offscreen card through relative scrolls, including one the Viewer swiped to. Jumping
+ * with scrollToItem lines every column up at the target, which later forces a reshuffle.
+ */
+private suspend fun LazyStaggeredGridState.scrollWithinColumnsTo(index: Int) {
+    repeat(MAX_VIEWER_RETURN_SCROLL_STEPS) {
+        val visible = layoutInfo.visibleItemsInfo
+        if (visible.isEmpty() || visible.any { it.index == index }) return
+        val viewport = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).toFloat()
+        val direction = if (index < visible.minOf { it.index }) -1f else 1f
+        if (scrollBy(direction * viewport) == 0f) return scrollToItem(index)
+    }
+    if (layoutInfo.visibleItemsInfo.none { it.index == index }) scrollToItem(index)
+}
+
+/** A far target falls back to a jump instead of composing an unbounded number of cards. */
+private const val MAX_VIEWER_RETURN_SCROLL_STEPS = 48
 
 /** Carousel media needs both its vertical shelf and horizontal card positioned before landing. */
 @Composable

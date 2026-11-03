@@ -978,7 +978,7 @@ internal class SearchViewModel(
     private fun requestRouteEntryScrollRestoration() {
         if (mutableState.value.restoration !is SearchRestorationUiState.Restored) return
         val scrollState = savedStateHandle.savedSearchScrollState() ?: return
-        reduce(SearchStateChange.RouteEntryScrollRestorationRequested(scrollState))
+        reduce(SearchStateChange.RouteEntryScrollRestorationRequested(scrollState, keepLiveGrid = true))
     }
 
     private fun persistDraftQuery() {

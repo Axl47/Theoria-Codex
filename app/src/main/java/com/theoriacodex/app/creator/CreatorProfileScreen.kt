@@ -1,5 +1,6 @@
 package com.theoriacodex.app.creator
 
+import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.theoriacodex.app.media.animatedDurationRangeLabel
 import com.theoriacodex.app.ui.components.FilterChoiceChip
@@ -15,7 +16,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
-import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.OpenInBrowser
@@ -113,7 +113,7 @@ fun CreatorProfileScreen(
 ) {
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var showFilterSheet by remember { mutableStateOf(false) }
-    val gridState = rememberLazyStaggeredGridState()
+    val gridState = rememberRetainedFeedGridState("creator")
     val feed = rememberCreatorFeed(state, pendingLikePostIds, likedPostIds, savedPostIds, fabRestoreState, durationStates, resolveUnknownAnimatedDurations)
     LaunchedEffect(feed.durationFilter.active) { onDurationFilterChanged(feed.durationFilter.active) }
     DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)

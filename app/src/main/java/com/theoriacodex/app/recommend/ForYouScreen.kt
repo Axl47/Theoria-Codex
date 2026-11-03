@@ -1,5 +1,6 @@
 package com.theoriacodex.app.recommend
 
+import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.theoriacodex.app.media.animatedDurationRangeLabel
 import com.theoriacodex.app.search.sortModeLabel
@@ -16,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
-import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.activity.compose.BackHandler
@@ -122,7 +122,7 @@ fun ForYouScreen(
 ) {
     BackHandler(enabled = !state.home.visible) { onAction(ForYouAction.ShowHome) }
     val savedStates = rememberSaveableStateHolder()
-    val gridState = rememberLazyStaggeredGridState()
+    val gridState = rememberRetainedFeedGridState("for-you")
     ScrollToTopOnTabReselect(TopLevelDestination.ForYou) {
         if (!state.home.visible) gridState.animateScrollToItem(0)
     }

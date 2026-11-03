@@ -58,6 +58,7 @@ sealed interface SearchStateChange {
 
     data class RouteEntryScrollRestorationRequested(
         val scrollState: SearchScrollState,
+        val keepLiveGrid: Boolean = false,
     ) : SearchStateChange
 
     data object ScrollResetRequested : SearchStateChange
@@ -153,7 +154,7 @@ object SearchStateReducer {
             )
 
             is SearchStateChange.RouteEntryScrollRestorationRequested ->
-                requestScrollPosition(state, change.scrollState)
+                requestScrollPosition(state, change.scrollState, keepLiveGrid = change.keepLiveGrid)
 
             SearchStateChange.ScrollResetRequested ->
                 requestScrollPosition(state, SearchScrollState(0, 0), resetToTop = true)
@@ -173,6 +174,7 @@ object SearchStateReducer {
         state: SearchUiState,
         scrollState: SearchScrollState,
         resetToTop: Boolean = false,
+        keepLiveGrid: Boolean = false,
     ): SearchReduction {
         val restored = state.restoration as? SearchRestorationUiState.Restored
             ?: return SearchReduction(state)
@@ -182,6 +184,7 @@ object SearchStateReducer {
                     scrollState = scrollState,
                     scrollRequestId = restored.scrollRequestId + 1L,
                     resetToTop = resetToTop,
+                    keepLiveGrid = keepLiveGrid,
                 ),
             ),
         )
@@ -196,7 +199,7 @@ object SearchStateReducer {
         if (restored.scrollRequestId != change.requestId) return SearchReduction(state)
         return SearchReduction(
             state = state.copy(
-                restoration = restored.copy(scrollState = null, resetToTop = false),
+                restoration = restored.copy(scrollState = null, resetToTop = false, keepLiveGrid = false),
             ),
         )
     }
