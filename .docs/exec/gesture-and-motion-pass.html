@@ -25,8 +25,8 @@ pre{background:#eef2f7;padding:10px;overflow:auto}
 <h1>Gesture and motion pass</h1>
 <p>Owner: Claude · Created 2026-11-03 · Make motion follow the finger instead of playing after it, using one shared motion vocabulary.</p>
 <div class="cards">
-<div class="card"><b>Status</b><br>Implemented; host checks pass; owner device pass pending</div>
-<div class="card"><b>Next</b><br>Owner runs the manual checks under Outcomes on the Samsung</div>
+<div class="card"><b>Status</b><br>Implemented and exercised on the Samsung debug build; owner feel check pending</div>
+<div class="card"><b>Next</b><br>Owner judges feel; measure the open animation on a release-like build</div>
 <div class="card"><b>Risk</b><br>Viewer gesture ownership moves; frame cost of play-through swipes is unmeasured until the owner tests on the Samsung</div>
 <div class="card"><b>Device use</b><br>None by the agent. The owner tests the Samsung manually.</div>
 </div>
@@ -90,6 +90,9 @@ pre{background:#eef2f7;padding:10px;overflow:auto}
 <li>2026-11-03: Owner reported a blank frame leaving a Codex. <code>CodexDestinationStateBoundary</code> resubscribed with null initial values each time the Library re-entered composition and drew nothing until the database answered, leaving the morph no tile to land on. <code>CodexLibraryViewModel</code> keeps the last values on the Home entry; only a cold start still waits, which preserves the scroll-anchor guard. Fading both screens also showed the backdrop, so the screen underneath now stays opaque.</li>
 <li>2026-11-03: Owner reported the fallback return on on-screen Recents posts. The default All view is a column of rows that never joined the return system, so its cards reported a null grid and <code>recordBounds</code> rejected them. It now finds the row by post, because viewing a post can regroup its rows.</li>
 <li>2026-11-03: Codex detail could not tell "not answered" from "deleted", and <code>browsingMetadataOwner</code> was created per navigation entry, so every Viewer and Codex waited on fresh queries. The owner is now activity-scoped and <code>rememberRetained</code> keeps each entry's last values, replacing <code>CodexLibraryViewModel</code>.</li>
+<li>2026-11-03: Device evidence corrected three wrong host-side theories. Slow-swipe cancels were on the main tabs, whose pager kept its 50% default; Viewer swipes committed in real-finger logs. The blank frame on tapping a post was feed video cards releasing their players, recorded as empty tiles for about 7 frames. Likes took 290-460 ms to answer against 110 ms for a 125-post Codex, outlasting the 320 ms fade.</li>
+<li>2026-11-03: <code>LocalPostWatchPresentation</code> was a static composition local holding a value that changes on every post open, recomposing the whole app mid-animation. A main-thread stack sampler showed idle in 12 of 276 samples during the tap, and 99 or more after the fix.</li>
+<li>2026-11-03: Real-finger logs showed rapid flicks dropped when a caught settle's leftover offset made them look like flicking back.</li>
 <li>2026-11-03: The Codex detail screen has no cover header, so the morph targets the whole screen rather than a header.</li></ul>
 </section>
 
@@ -106,7 +109,7 @@ pre{background:#eef2f7;padding:10px;overflow:auto}
 </table>
 </section>
 
-<section id="outcomes"><h2>Outcomes And Retrospective</h2><p>All phases are implemented. Host validation establishes logic and wiring only. Nothing was installed on any device and no emulator is available, so feel, haptics, frame cost and predictive back are unverified.</p>
+<section id="outcomes"><h2>Outcomes And Retrospective</h2><p>All phases and audit findings A1-A9 are implemented. Tab commit points, feed cards on tap, Likes opening and the open animation were exercised on the Samsung with the debug package only; the production package was not touched. Debug builds run slower than release, so open-animation smoothness still needs a release-like measurement. Feel, haptics and predictive back remain for the owner.</p>
 <table>
 <tr><th>Owner check on the Samsung</th><th>Expected</th></tr>
 <tr><td>Flick quickly through several posts, including videos</td><td>Every flick lands; no dropped swipes or snapping; frames hold with video playing through</td></tr>
