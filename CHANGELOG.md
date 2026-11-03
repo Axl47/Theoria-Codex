@@ -18,11 +18,13 @@
 ### Changed
 
 - Redesign the full-screen Viewer around the artwork: controls now float on soft shadows instead of solid bars, on images, animated media, and video alike.
-- Tint the seek bar and selected thumbnail with a color taken from the current artwork, falling back to white for monochrome art.
+- Tint the seek bar and selected thumbnail with a vivid color from the current artwork, such as hair, clothes or background, falling back to white for monochrome art.
 - Give the seek bar the full screen width in portrait for finer scrubbing; it thickens and shows a handle while you drag.
 - Show sharp scrub previews in the video's real shape, with a large time and how far you have moved, while other controls fade away.
 - Show brightness and volume on a readable rail on the side you are swiping, instead of a tiny label at the top.
 - Show double-tap seeking with a soft edge shadow and chevrons pointing the way you jumped.
+- Double-tap seeking no longer opens the Viewer controls.
+- New recommendations now add to the Viewer's recommendation drawer instead of replacing what was there.
 - Show the page position of multi-page image posts as a segmented bar above the thumbnails.
 - Animated WebP now uses the same progress bar as other media, including the thin line while controls are hidden.
 - Show the playback speed beside the time when it is not 1×.
@@ -48,6 +50,7 @@
 
 ### Fixed
 
+- Smooth the Viewer's closing animation by waiting to start feed videos until the media lands on its card.
 - Remove the navy band behind the status bar above the Viewer's black background.
 - Double-tap to zoom a still image anywhere on screen, not only in its middle.
 - Keep zoomed media on screen instead of letting it be dragged out of view.

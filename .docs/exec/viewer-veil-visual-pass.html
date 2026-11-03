@@ -47,6 +47,7 @@ code{background:#1a1d23;padding:1px 4px;border-radius:4px;font-size:13px}pre{bac
 <tr><td>2026-11-03</td><td>Done</td><td>All phases implemented; host tests pass</td></tr>
 <tr><td>2026-11-03</td><td>Done</td><td>Debug build installed on the S24; one video seen rendering in the new design</td></tr>
 <tr><td>2026-11-03</td><td>Done</td><td>Real scrub on the S24 with controls up: drag moved a 2:42 video from the start to 1:59 on the same post; no crashes logged. <code>com.theoriacodex</code> install time unchanged</td></tr>
+<tr><td>2026-11-03</td><td>Done (host only)</td><td>Owner follow-ups: closing animation, growing recommendation drawer, double-tap seek keeps controls closed, vivid tint. Device testing stopped at the owner's request because the phone was in use</td></tr>
 <tr><td>2026-11-03</td><td>Remaining</td><td>Owner's hands-on check of feel, thumb occlusion and sharpness on real media</td></tr></table></section>
 <section id="surprises"><h2>Surprises And Discoveries</h2><ul>
 <li>A scrim cannot live in the screen overlay, because the timeline is drawn beneath that overlay inside each player.</li>
@@ -54,6 +55,7 @@ code{background:#1a1d23;padding:1px 4px;border-radius:4px;font-size:13px}pre{bac
 <li>Default Roboto digits are already tabular, so the jitter finding applies only to device fonts with variable digits. <code>tnum</code> is kept as a guard.</li>
 <li>The navy status-bar band came from the root Scaffold's default background, not from the Viewer.</li>
 <li>Detekt still reports <code>MediaTimelineBar</code> over the cognitive-complexity limit (19, reduced by this pass). Module-wide Detekt was already failing on other screens.</li>
+<li>The first tint picked the most prominent hue and discarded pale colors, so skin tones won on nearly all character art and every post looked peach. It now weighs vividness above area and discounts skin.</li>
 </ul></section>
 <section id="decisions"><h2>Decision Log</h2><table><tr><th>Decision</th><th>Rationale</th><th>Date / author</th></tr>
 <tr><td>Veil over Island</td><td>Owner's choice; keeps the art continuous and covers less of it</td><td>2026-11-03, owner</td></tr>
@@ -61,6 +63,8 @@ code{background:#1a1d23;padding:1px 4px;border-radius:4px;font-size:13px}pre{bac
 <tr><td>Hand-written hue sampling over the Palette library</td><td>About 30 testable lines, no new dependency, and the fixed lightness is what guarantees contrast anyway</td><td>2026-11-03, agent</td></tr>
 <tr><td>No backdrop blur</td><td>Live blur behind video adds rendering cost and a dependency for little visual gain</td><td>2026-11-03, agent</td></tr>
 <tr><td>Replace the top-centre level pill</td><td>Moves feedback to the gesture's side, the visible change the owner approved; its test was rewritten accordingly</td><td>2026-11-03, agent</td></tr>
+<tr><td>Feed cards wait for the closing media to land before binding players</td><td>Player binding and surface attach block the main thread. Cards show posters for at most the close, then all start together, so simultaneous autoplay holds for presented cards. Not yet measured on a device</td><td>2026-11-03, agent</td></tr>
+<tr><td>The drawer grows on the Viewer side only</td><td>Search and For You shelves keep their paged behavior; the request was about the drawer</td><td>2026-11-03, agent</td></tr>
 </table></section>
 <section id="outcomes"><h2>Outcomes And Retrospective</h2><p>The Viewer now has one visual system and one progress bar across media types. Host tests prove structure and behavior; they do not prove feel. The library used for device checks holds explicit media, so visual review beyond one frame was done on placeholder art rendered on the host, and final visual acceptance belongs to the owner.</p></section>
 <section id="recovery"><h2>Idempotence And Recovery</h2><p>All Gradle commands are safe to rerun. Each phase is its own commit, so <code>git revert</code> removes one. There are no data migrations. Reinstalling the debug APK with <code>adb install -r</code> keeps its data and does not touch <code>com.theoriacodex</code>.</p></section>
