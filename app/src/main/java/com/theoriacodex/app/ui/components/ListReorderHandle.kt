@@ -13,9 +13,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
@@ -29,17 +31,19 @@ internal fun <T> ListReorderHandle(id: String, title: String, index: Int, state:
         if (index > 0) add("Move up" to -1)
         if (index < state.reorderDraft.lastIndex) add("Move down" to 1)
     }
+    val scope = rememberCoroutineScope()
+    val haptics = LocalHapticFeedback.current
     Box {
         IconButton(
             modifier = Modifier.pointerInput(id, state.itemHeightPx) {
                 detectDragGestures(
                     onDragStart = { menuExpanded = false; state.startDrag(id, index) },
-                    onDragCancel = state::resetDrag,
-                    onDragEnd = state::resetDrag,
+                    onDragCancel = { state.drop(scope) },
+                    onDragEnd = { state.drop(scope) },
                     onDrag = { change, dragAmount ->
                         if (state.draggingId != id) return@detectDragGestures
                         change.consume()
-                        state.drag(id, index, dragAmount.y)
+                        state.dragBy(id, dragAmount.y, haptics)
                     },
                 )
             }.semantics {

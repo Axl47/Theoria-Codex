@@ -70,6 +70,12 @@ import com.theoriacodex.data.repository.CodexLibrarySort
 import com.theoriacodex.domain.model.Codex
 import androidx.compose.material.icons.filled.AutoAwesome
 import kotlin.math.roundToInt
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.zIndex
+import com.theoriacodex.app.ui.components.ReorderAutoScrollEffect
+import com.theoriacodex.app.ui.components.reorderRowPlacement
 
 @Composable
 internal fun CodexListContent(
@@ -137,15 +143,20 @@ private fun CodexReorderList(
     val rows = sortCodicesForLibrary(
         state.ordering.reorderDraft, presentation.librarySort, presentation.itemCounts, presentation.likesCodexId,
     )
+    val list = rememberLazyListState()
+    val rowSpacing = with(LocalDensity.current) { 8.dp.toPx() }
+    SideEffect { state.ordering.itemSpacingPx = rowSpacing }
+    ReorderAutoScrollEffect(state.ordering, list)
     Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         CodexLibrarySortSelector(presentation.librarySort, onSortChange)
         LazyColumn(
+            state = list,
             modifier = Modifier.fillMaxWidth().weight(1f),
             userScrollEnabled = state.ordering.draggingId == null,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             itemsIndexed(rows, key = { _, codex -> codex.codexId }) { index, codex ->
-                CodexReorderRow(codex, index, presentation, state)
+                CodexReorderRow(codex, index, presentation, state, reorderRowPlacement(state.ordering.draggingId == codex.codexId))
             }
         }
     }
@@ -157,10 +168,11 @@ private fun CodexReorderRow(
     index: Int,
     presentation: CodexListPresentation,
     state: CodexListUiState,
+    placement: Modifier,
 ) {
     val isDragging = state.ordering.draggingId == codex.codexId
     Surface(
-        modifier = Modifier.fillMaxWidth().graphicsLayer {
+        modifier = placement.zIndex(if (isDragging) 1f else 0f).fillMaxWidth().graphicsLayer {
             if (isDragging) {
                 translationY = state.ordering.dragOffsetY
                 shadowElevation = 14f
