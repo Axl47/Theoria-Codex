@@ -113,6 +113,37 @@ class MediaDurationCoordinatorTest {
     }
 
     @Test
+    fun `scroll start leaves active filter work running`() = runTest {
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var attempts = 0
+        val coordinator = coordinator(
+            scope = this,
+            acquirer = MediaDurationAcquirer {
+                attempts += 1
+                started.complete(Unit)
+                release.await()
+                known(4_000L)
+            },
+        )
+        val post = post("filter-scroll")
+        val key = key(post)
+        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        coordinator.submit(post, demand("search", key, DurationDemandPriority.ACTIVE_FILTER))
+        runCurrent()
+        started.await()
+
+        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = false)
+        runCurrent()
+        release.complete(Unit)
+        runCurrent()
+
+        assertEquals(1, attempts)
+        assertEquals(known(4_000L), coordinator.states.value[key])
+        coordinator.close()
+    }
+
+    @Test
     fun `same fingerprint shares one job and one remaining consumer keeps it alive`() = runTest {
         val started = CompletableDeferred<Unit>()
         val finish = CompletableDeferred<MediaDurationState>()

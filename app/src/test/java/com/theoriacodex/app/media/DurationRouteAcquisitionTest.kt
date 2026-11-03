@@ -21,7 +21,7 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class DurationRouteAcquisitionTest {
     @Test
-    fun `scrolling cancels real range acquisition and idle resumes without rewriting feed posts`() = runTest {
+    fun `scrolling cancels real background acquisition and idle resumes without rewriting feed posts`() = runTest {
         val bytes = bundledMp4()
         val transport = RangeFixture(bytes)
         val probe = BoundedMediaDurationProbe(transport)
@@ -38,7 +38,6 @@ class DurationRouteAcquisitionTest {
         val originalFirst = posts.first()
         route.onEnvironmentChanged(lifecycleStarted = true, scrollIdle = false)
         route.synchronize("query", posts, resolveInBackground = true)
-        route.onFilterChanged(true)
         route.onPostVisibilityChanged(originalFirst, true)
         runCurrent()
         assertEquals(0, transport.calls)
@@ -55,6 +54,7 @@ class DurationRouteAcquisitionTest {
         assertEquals(1, transport.calls)
         assertTrue(coordinator.states.value.values.none { it is MediaDurationState.Known })
 
+        route.onFilterChanged(true)
         route.onEnvironmentChanged(lifecycleStarted = true, scrollIdle = true)
         advanceTimeBy(2_000)
         runCurrent()

@@ -84,7 +84,21 @@ class DurationDemandSchedulerTest {
     }
 
     @Test
-    fun `lifecycle and active scrolling pause all acquisition work`() {
+    fun `requeued work keeps its place ahead of later demand`() {
+        val scheduler = DurationDemandScheduler()
+        val idle = DurationExecutionGate(lifecycleStarted = true, scrollIdle = true)
+        val first = demand("filter", "first", DurationDemandPriority.ACTIVE_FILTER)
+        scheduler.submit(first)
+        scheduler.submit(demand("filter", "second", DurationDemandPriority.ACTIVE_FILTER))
+        val taken = requireNotNull(scheduler.takeNext(idle))
+
+        scheduler.submit(first, taken.sequence)
+
+        assertEquals(key("first"), scheduler.takeNext(idle)?.key)
+    }
+
+    @Test
+    fun `active scrolling pauses everything except an active filter`() {
         val scheduler = DurationDemandScheduler()
         scheduler.submit(demand("background", "background", DurationDemandPriority.BACKGROUND_IDLE))
         assertNull(
@@ -94,14 +108,17 @@ class DurationDemandSchedulerTest {
             scheduler.takeNext(DurationExecutionGate(lifecycleStarted = true, scrollIdle = false)),
         )
         scheduler.submit(demand("visible", "visible", DurationDemandPriority.VISIBLE))
-        scheduler.submit(demand("filter", "filter", DurationDemandPriority.ACTIVE_FILTER))
         assertNull(
             scheduler.takeNext(DurationExecutionGate(lifecycleStarted = true, scrollIdle = false)),
+        )
+        scheduler.submit(demand("filter", "filter", DurationDemandPriority.ACTIVE_FILTER))
+        assertNull(
+            scheduler.takeNext(DurationExecutionGate(lifecycleStarted = false, scrollIdle = false)),
         )
         assertEquals(
             key("filter"),
             scheduler.takeNext(
-                DurationExecutionGate(lifecycleStarted = true, scrollIdle = true),
+                DurationExecutionGate(lifecycleStarted = true, scrollIdle = false),
             )?.key,
         )
         assertTrue(scheduler.contains(key("visible")))

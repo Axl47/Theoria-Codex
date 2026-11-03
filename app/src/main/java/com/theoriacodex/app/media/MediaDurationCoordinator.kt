@@ -231,8 +231,7 @@ class MediaDurationCoordinator(
             )
             gate = aggregateExecutionGate()
             active.values.toList().forEach { work ->
-                val mustPause = !gate.lifecycleStarted || !gate.scrollIdle
-                if (mustPause) cancelActiveLocked(work, requeue = true)
+                if (!gate.allows(work.priority)) cancelActiveLocked(work, requeue = true)
             }
             pumpLocked()
         }
@@ -349,6 +348,7 @@ class MediaDurationCoordinator(
             priority = scheduled.priority,
             demands = scheduled.demands.associateByTo(linkedMapOf(), DurationDemand::identity),
             sequence = sequence,
+            queueSequence = scheduled.sequence,
             traceCookie = cookie,
             job = job,
         )
@@ -414,7 +414,7 @@ class MediaDurationCoordinator(
         if (requeue) {
             var retained = false
             work.demands.values.forEach { demand ->
-                when (val submission = scheduler.submit(demand)) {
+                when (val submission = scheduler.submit(demand, work.queueSequence)) {
                     is DurationDemandSubmission.Accepted -> {
                         retained = true
                         deferEvictedDemandsLocked(submission)
@@ -487,6 +487,7 @@ class MediaDurationCoordinator(
         var priority: DurationDemandPriority,
         val demands: LinkedHashMap<String, DurationDemand>,
         val sequence: Long,
+        val queueSequence: Long,
         val traceCookie: Int,
         val job: Job,
     )
