@@ -34,13 +34,14 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.max
 
-internal const val VIEWER_RETURN_DURATION_MS = 320
+internal const val VIEWER_RETURN_DURATION_MS = TheoriaMotion.SCREEN_MS
 internal const val VIEWER_RETURN_HOLD_MS = 700
 private const val VIEWER_RETURN_TARGET_WAIT_MS = 300L
 
@@ -282,7 +283,7 @@ internal fun rememberViewerReturnProgress(): Float {
         withTimeoutOrNull(VIEWER_RETURN_TARGET_WAIT_MS) {
             snapshotFlow { transition.targetBounds }.filterNotNull().first()
         }
-        progress.animateTo(1f, tween(if (transition.targetBounds == null) 180 else VIEWER_RETURN_DURATION_MS))
+        progress.animateTo(1f, tween(if (transition.targetBounds == null) TheoriaMotion.MEDIUM_MS else VIEWER_RETURN_DURATION_MS))
     }
     return progress.value
 }

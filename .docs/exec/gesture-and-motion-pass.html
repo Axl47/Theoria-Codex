@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gesture and motion pass</title>
+<style>
+body{font:16px/1.55 system-ui,sans-serif;margin:0;color:#1b2430;background:#fbfcfe}
+nav{position:sticky;top:0;background:#101826;padding:8px 16px}
+nav a{color:#bcdcff;margin-right:12px;font-size:14px;text-decoration:none}
+main{max-width:940px;margin:auto;padding:16px}
+h1{margin-bottom:4px}
+table{border-collapse:collapse;width:100%;font-size:14px;margin:8px 0}
+td,th{border:1px solid #cfd7e3;padding:6px 8px;text-align:left;vertical-align:top}
+code{font:13px ui-monospace,monospace;background:#eef2f7;padding:1px 3px}
+pre{background:#eef2f7;padding:10px;overflow:auto}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px}
+.card{border:1px solid #cfd7e3;border-radius:8px;padding:8px 10px;background:#fff;font-size:14px}
+.risk{border-left:4px solid #d9822b;padding:4px 10px;background:#fff6ec}
+</style>
+</head>
+<body>
+<nav><a href="#purpose">Purpose</a><a href="#context">Context</a><a href="#phases">Phases</a><a href="#validation">Validation</a><a href="#progress">Progress</a><a href="#surprises">Surprises</a><a href="#decisions">Decisions</a><a href="#outcomes">Outcomes</a><a href="#recovery">Recovery</a></nav>
+<main>
+<h1>Gesture and motion pass</h1>
+<p>Owner: Claude · Created 2026-11-03 · Make motion follow the finger instead of playing after it, using one shared motion vocabulary.</p>
+<div class="cards">
+<div class="card"><b>Status</b><br>In progress</div>
+<div class="card"><b>Next</b><br>See Progress</div>
+<div class="card"><b>Risk</b><br>Viewer gesture ownership moves; frame cost of play-through swipes is unmeasured until the owner tests on the Samsung</div>
+<div class="card"><b>Device use</b><br>None by the agent. The owner tests the Samsung manually.</div>
+</div>
+
+<section id="purpose"><h2>Purpose / Big Picture</h2>
+<p>After this work the Viewer responds to fast flicks, keeps video playing through swipes, zooms where your fingers are, and closes with a pull-down or a back swipe that tracks the finger. Reordering, screen changes and Viewer controls animate instead of cutting. New gestures: hold for 2× speed, swipe up for info, pull-to-refresh, tab re-tap to top and drag-to-select.</p>
+</section>
+
+<section id="context"><h2>Context And Orientation</h2>
+<table>
+<tr><th>Path under <code>app/src/main/java/com/theoriacodex/app/</code></th><th>Role</th></tr>
+<tr><td><code>viewer/ViewerScreen.kt</code></td><td>Fullscreen route. Owns a post pager containing one media pager per post. Both have user scrolling disabled and are driven by hand.</td></tr>
+<tr><td><code>viewer/ViewerMediaGestures.kt</code></td><td>Tap, double-tap and swipe recognition.</td></tr>
+<tr><td><code>viewer/ViewerMediaPage.kt</code>, <code>viewer/ViewerTransformState.kt</code></td><td>One media page, its pinch handling and zoom math.</td></tr>
+<tr><td><code>viewer/ViewerReturnTransition.kt</code></td><td>Card-to-fullscreen geometry driven by one progress float (0 is fullscreen, 1 is the card).</td></tr>
+<tr><td><code>ui/motion/</code> (new)</td><td>Shared motion and haptic vocabulary.</td></tr>
+<tr><td><code>ui/components/ReorderListState.kt</code>, <code>ui/components/ListReorderHandle.kt</code></td><td>Shared reorder drafts used by the Codex Library and For You.</td></tr>
+<tr><td><code>ui/TheoriaApp.kt</code>, <code>ui/AppNavigation.kt</code></td><td>NavHost transitions and the swipeable Home tab pager.</td></tr>
+</table>
+<p>Constraints from <code>AGENTS.md</code>: every visible animated card autoplays simultaneously; likes stay local; no installs on <code>com.theoriacodex</code>. The feed behind the Viewer is not composed until the Viewer pops, which is why dismissal is phase 1 only.</p>
+<p>Terms: <b>settle</b> is the animation after release. <b>Catch</b> is a finger landing during a settle. <b>Commit</b> is writing the selected post or media into Viewer state.</p>
+</section>
+
+<section id="phases"><h2>Phases And Work Plan</h2>
+<table>
+<tr><th>#</th><th>Phase</th><th>Observable outcome</th></tr>
+<tr><td>1</td><td>Shared motion and haptics module</td><td>Durations and springs come from <code>TheoriaMotion</code>; haptic meanings from <code>TheoriaHaptics</code>.</td></tr>
+<tr><td>2</td><td>Zoom fixes</td><td>Double-tap zooms anywhere on stills, at the tapped point, animated. Pinch follows the fingers. Pan stays on the image.</td></tr>
+<tr><td>3</td><td>Viewer gesture engine</td><td>One recognizer above the pagers. Velocity-aware commit, spring settle, catch-and-continue, edge stretch, video plays through.</td></tr>
+<tr><td>4</td><td>Gesture columns and dismissal</td><td>35/30/35 columns. Pull-down and predictive back shrink the media, then hand off to the card return. Swipe up opens info.</td></tr>
+<tr><td>5</td><td>Hold for 2×, like pop, haptics</td><td>Holding video plays at 2× until release. Long-press info stays on other media.</td></tr>
+<tr><td>6</td><td>Navigation transitions</td><td>Codex and creator screens no longer use the 700 ms default crossfade.</td></tr>
+<tr><td>7</td><td>Reorder remake</td><td>Neighbours glide, drops settle, lists scroll at their edges, each step ticks.</td></tr>
+<tr><td>8</td><td>Hard cuts</td><td>Viewer controls, Settings pages and For You views transition.</td></tr>
+<tr><td>9</td><td>Pull-to-refresh and tab bar</td><td>Search and For You refresh by pull. Re-tap scrolls to top. Tab taps slide.</td></tr>
+<tr><td>10</td><td>Drag-to-select and Codex morph</td><td>Paint selection in Codex edit. Library tile grows into its Codex.</td></tr>
+</table>
+<p>Each phase is one Conventional Commit with its <code>CHANGELOG.md</code> entry. Out of scope by owner decision: hold-to-peek, and the possible post-close tap dead zone, which still needs a device check.</p>
+</section>
+
+<section id="validation"><h2>Validation And Acceptance</h2>
+<p>Run from the repository root. Robolectric needs Java 21 or newer.</p>
+<pre><code>JAVA_HOME=/opt/homebrew/Cellar/openjdk/26.0.2.1/libexec/openjdk.jdk/Contents/Home ./gradlew :app:testDebugUnitTest --offline
+./gradlew :app:detektDebug --offline
+./gradlew :app:lintDebug --offline --no-daemon</code></pre>
+<p class="risk">Host tests cannot establish feel, frame times, haptics or predictive back. Acceptance for those is the owner's manual pass on the Samsung, listed under Outcomes.</p>
+</section>
+
+<section id="progress"><h2>Progress</h2>
+<ul>
+<li>[ ] Phase 1</li><li>[ ] Phase 2</li><li>[ ] Phase 3</li><li>[ ] Phase 4</li><li>[ ] Phase 5</li>
+<li>[ ] Phase 6</li><li>[ ] Phase 7</li><li>[ ] Phase 8</li><li>[ ] Phase 9</li><li>[ ] Phase 10</li>
+<li>[ ] Full host validation</li>
+</ul>
+</section>
+
+<section id="surprises"><h2>Surprises And Discoveries</h2>
+<ul><li>2026-11-03: Viewer page layers are disposed as they leave the viewport, which would kill a gesture caught mid-settle. The recognizer must live above the pagers.</li></ul>
+</section>
+
+<section id="decisions"><h2>Decision Log</h2>
+<table>
+<tr><th>Decision</th><th>Rationale</th><th>Date / author</th></tr>
+<tr><td>Vertical gestures use the 35/30/35 double-tap columns.</td><td>One spatial model frees the centre for closing, at the cost of narrower level zones.</td><td>2026-11-03 owner</td></tr>
+<tr><td>Home tabs stay swipeable; no swipe rows on them.</td><td>Keeps fast tab switching.</td><td>2026-11-03 owner</td></tr>
+<tr><td>Video plays during swipes.</td><td>Continuity; the owner measures cost on the Samsung.</td><td>2026-11-03 owner</td></tr>
+<tr><td>Dismissal is phase 1: no live feed behind the drag.</td><td>The feed is not composed under the Viewer; showing it needs a larger navigation change.</td><td>2026-11-03 owner</td></tr>
+</table>
+</section>
+
+<section id="outcomes"><h2>Outcomes And Retrospective</h2><p>Pending.</p></section>
+
+<section id="recovery"><h2>Idempotence And Recovery</h2>
+<p>Host Gradle commands are safe to rerun. Each phase is its own commit, so <code>git revert</code> removes one phase. No destructive operations, device installs or data migrations are expected. To resume, read Progress and <code>git log</code>.</p>
+</section>
+</main>
+</body>
+</html>

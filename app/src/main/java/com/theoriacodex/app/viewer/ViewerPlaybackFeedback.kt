@@ -31,6 +31,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.viewer.state.ViewerMediaError
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -86,19 +87,19 @@ private fun SeekJumpFeedbackOverlay(
         launch {
             alpha.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(durationMillis = 90),
+                animationSpec = tween(TheoriaMotion.SHORT_MS),
             )
         }
         launch {
             scale.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(durationMillis = 140),
+                animationSpec = tween(TheoriaMotion.SHORT_MS),
             )
         }
         delay(750L)
         alpha.animateTo(
             targetValue = 0f,
-            animationSpec = tween(durationMillis = 180),
+            animationSpec = tween(TheoriaMotion.MEDIUM_MS),
         )
         onExpired(feedback.serial)
     }
