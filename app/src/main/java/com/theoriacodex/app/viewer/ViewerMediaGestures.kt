@@ -110,7 +110,7 @@ private fun mediaAccessibilityActions(
 internal data class ViewerGestureConfig(
     val enabled: Boolean,
     val levels: ViewerLevelControls? = null,
-    /** Height kept free at the bottom for the timeline, which handles its own drags. */
+    /** Height kept free at the bottom for the timeline and post strip, which handle their own drags. */
     val reservedBottomPx: Float = 0f,
 )
 

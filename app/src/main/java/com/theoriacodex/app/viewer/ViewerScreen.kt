@@ -455,7 +455,7 @@ internal fun ViewerScreen(
             val reservedBottom = if (chromeVisible && selectedCurrentMedia?.let {
                     viewerMediaIsAnimated(selectedPost, it, pixivUgoiraClient != null)
                 } == true) {
-                with(LocalDensity.current) { (96.dp + LocalViewerPostStripInset.current).toPx() }
+                with(LocalDensity.current) { (VIEWER_TIMELINE_HEIGHT + LocalViewerPostStripInset.current).toPx() }
             } else 0f
             Box(
                 Modifier.fillMaxSize()

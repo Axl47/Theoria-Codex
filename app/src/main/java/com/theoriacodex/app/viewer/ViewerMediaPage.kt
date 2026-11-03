@@ -229,6 +229,6 @@ private fun ViewerMediaGestureLayer(
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxWidth()
             .transformable(transformState, canPan = { transform.isZoomed }).then(gestures))
-        if (controls.showControls && animated) Spacer(Modifier.fillMaxWidth().height(96.dp + LocalViewerPostStripInset.current))
+        if (controls.showControls && animated) Spacer(Modifier.fillMaxWidth().height(VIEWER_TIMELINE_HEIGHT + LocalViewerPostStripInset.current))
     }
 }

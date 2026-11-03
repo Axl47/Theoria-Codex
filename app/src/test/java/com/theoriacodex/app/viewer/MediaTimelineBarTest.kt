@@ -11,7 +11,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -61,6 +63,12 @@ class MediaTimelineBarTest {
         }
     }
 
+    @Test fun `the reserved gesture height covers the whole timeline footer`() {
+        showTimeline()
+        val bounds = compose.onNodeWithTag("footer").getUnclippedBoundsInRoot()
+        assertTrue("footer is ${bounds.bottom - bounds.top}", bounds.bottom - bounds.top <= VIEWER_TIMELINE_HEIGHT)
+    }
+
     @Test fun `pointer cancellation discards preview and preserves playback position`() {
         showTimeline()
         track().performTouchInput { down(center); moveTo(Offset(width * 0.9f, centerY)) }
@@ -96,7 +104,7 @@ class MediaTimelineBarTest {
             MaterialTheme {
                 CompositionLocalProvider(LocalViewerInstantSeek provides instantSeek) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    if (visible.value) ViewerPlaybackFooter(Modifier.width(360.dp)) {
+                    if (visible.value) ViewerPlaybackFooter(Modifier.width(360.dp).testTag("footer")) {
                         MediaTimelineBar(
                         positionMs = playbackPosition.value, durationMs = 100_000L,
                         onSeekStarted = { dragging = true },
