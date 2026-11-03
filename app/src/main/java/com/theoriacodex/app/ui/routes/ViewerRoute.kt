@@ -459,16 +459,22 @@ internal fun ViewerRoute(
     val relatedSource = activeSession?.relatedBinding?.source ?: activeSession?.context?.streamSource
     val relatedSnapshot = activeSession?.let(liveSourceState::relatedSourceFor)
     val relatedState = relatedSnapshot?.relatedPosts ?: RelatedPostsUiState.Idle
-    val relatedPosts = activeSession?.let { active ->
-        filterSearchResults(
-            results = relatedState.loadedPosts, filters = active.searchVisibilityFilters,
-            likedPostIds = if (relatedSource == ViewerStreamSource.FOR_YOU) emptySet() else liveSourceState.likedPostIds,
-            savedPostIds = if (relatedSource == ViewerStreamSource.FOR_YOU) emptySet() else liveSourceState.savedPostIds,
-            watchedPostIds = if (relatedSource == ViewerStreamSource.FOR_YOU) emptySet() else liveSourceState.watchedPostIds,
-            retainedLikedPostIds = relatedSnapshot?.retainedLikedPostIds.orEmpty(),
-            unknownAnimatedDurationPolicy = liveSourceState.unknownAnimatedDurationPolicy,
-        )
-    }.orEmpty()
+    val relatedPosts = remember(
+        activeSession?.searchVisibilityFilters, relatedState, relatedSource, liveSourceState.likedPostIds,
+        liveSourceState.savedPostIds, liveSourceState.watchedPostIds, relatedSnapshot?.retainedLikedPostIds,
+        liveSourceState.unknownAnimatedDurationPolicy,
+    ) {
+        activeSession?.let { active ->
+            filterSearchResults(
+                results = relatedState.loadedPosts, filters = active.searchVisibilityFilters,
+                likedPostIds = if (relatedSource == ViewerStreamSource.FOR_YOU) emptySet() else liveSourceState.likedPostIds,
+                savedPostIds = if (relatedSource == ViewerStreamSource.FOR_YOU) emptySet() else liveSourceState.savedPostIds,
+                watchedPostIds = if (relatedSource == ViewerStreamSource.FOR_YOU) emptySet() else liveSourceState.watchedPostIds,
+                retainedLikedPostIds = relatedSnapshot?.retainedLikedPostIds.orEmpty(),
+                unknownAnimatedDurationPolicy = liveSourceState.unknownAnimatedDurationPolicy,
+            )
+        }.orEmpty()
+    }
     androidx.compose.runtime.CompositionLocalProvider(com.theoriacodex.app.viewer.LocalViewerInstantSeek provides renderConfig.instantSeek) {
     ViewerScreen(
         uiState = viewerState.copy(related = com.theoriacodex.app.viewer.state.ViewerRelatedUiState(
