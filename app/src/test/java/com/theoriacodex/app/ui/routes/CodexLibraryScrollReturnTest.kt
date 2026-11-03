@@ -76,6 +76,9 @@ class CodexLibraryScrollReturnTest {
         fun releaseLibraryData() {
             var pending: CompletableDeferred<Unit>? = null
             compose.waitUntil(conditionDescription = "library subscribes to delayed collection data", timeoutMillis = 10_000) {
+                // This condition never reads the Compose tree, so nothing else would drain the main
+                // looper and let settings that answer after the first idle recompose the destination.
+                compose.waitForIdle()
                 pending = pendingLoads.tryReceive().getOrNull()
                 pending != null
             }
