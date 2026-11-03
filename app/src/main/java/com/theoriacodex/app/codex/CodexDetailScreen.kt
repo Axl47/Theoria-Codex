@@ -304,7 +304,10 @@ private fun rememberCodexDetailFeed(
     val visiblePosts = remember(posts, filters, unknownDurationPolicy, acquiredDurations) {
         filterCodexCollectionPosts(posts, filters, unknownDurationPolicy, knownDurationMsByPostId = acquiredDurations)
     }
-    return CodexDetailFeed(visiblePosts, acquiredDurations, durationFilterActive, durationMetadata.readiness.isResolving)
+    val resolvingDurations = durationMetadata.readiness.isResolving
+    return remember(visiblePosts, acquiredDurations, durationFilterActive, resolvingDurations) {
+        CodexDetailFeed(visiblePosts, acquiredDurations, durationFilterActive, resolvingDurations)
+    }
 }
 
 private fun FeedFabRestoreState.withCollectionFilters(updated: CodexCollectionFilters) = copy(

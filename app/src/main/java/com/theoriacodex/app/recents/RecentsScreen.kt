@@ -287,13 +287,15 @@ private fun rememberVisibleRecents(
     fypSearches: List<RecentSearchEntry>,
     activity: List<RecentActivityEntry>,
     source: SourceKey?,
-): VisibleRecents = VisibleRecents(
-    remember(watchedPosts, source) { filterRecentPostsBySource(watchedPosts, source) },
-    remember(codexPosts, source) { filterRecentPostsBySource(codexPosts, source) },
-    remember(searches, source) { searches.filter { it.matchesSource(source) } },
-    remember(fypSearches, source) { fypSearches.filter { it.matchesSource(source) } },
-    remember(activity, source) { activity.filter { it.matchesSource(source) } },
-)
+): VisibleRecents = remember(watchedPosts, codexPosts, searches, fypSearches, activity, source) {
+    VisibleRecents(
+        filterRecentPostsBySource(watchedPosts, source),
+        filterRecentPostsBySource(codexPosts, source),
+        searches.filter { it.matchesSource(source) },
+        fypSearches.filter { it.matchesSource(source) },
+        activity.filter { it.matchesSource(source) },
+    )
+}
 
 /** What each post tile in Recents shares, whichever tab shows it. */
 private class RecentsPostCards(
