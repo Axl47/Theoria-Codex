@@ -146,7 +146,7 @@ class ViewerLevelGesturesTest {
         }
     }
 
-    @Test fun `compact top indicator stays during a held gesture then expires after release`() {
+    @Test fun `level rail stays on its gesture's side during a held drag then expires after release`() {
         showPage()
         compose.mainClock.autoAdvance = false
         compose.onNodeWithContentDescription("Media actions").performTouchInput {
@@ -157,8 +157,8 @@ class ViewerLevelGesturesTest {
         compose.onNodeWithContentDescription("Brightness").assertIsDisplayed()
         val indicator = compose.onNodeWithContentDescription("Brightness").fetchSemanticsNode().boundsInRoot
         val media = compose.onNodeWithContentDescription("Media actions").fetchSemanticsNode().boundsInRoot
-        assertEquals(media.top + (media.height - media.width) / 2 + 8f, indicator.top, 1f)
-        org.junit.Assert.assertTrue(indicator.width < 150f)
+        org.junit.Assert.assertTrue("rail should hug the leading edge", indicator.right < media.center.x)
+        assertEquals(media.center.y, indicator.center.y, 40f)
         compose.runOnIdle { assertNotNull(levels.feedback) }
         compose.onNodeWithContentDescription("Media actions").performTouchInput { up() }
         compose.mainClock.advanceTimeByFrame()
