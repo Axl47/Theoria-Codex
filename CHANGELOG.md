@@ -17,6 +17,15 @@
 
 ### Changed
 
+- Redesign the full-screen Viewer around the artwork: controls now float on soft shadows instead of solid bars, on images, animated media, and video alike.
+- Tint the seek bar and selected thumbnail with a color taken from the current artwork, falling back to white for monochrome art.
+- Give the seek bar the full screen width in portrait for finer scrubbing; it thickens and shows a handle while you drag.
+- Show sharp scrub previews in the video's real shape, with a large time and how far you have moved, while other controls fade away.
+- Show brightness and volume on a readable rail on the side you are swiping, instead of a tiny label at the top.
+- Show double-tap seeking with a soft edge shadow and chevrons pointing the way you jumped.
+- Show the page position of multi-page image posts as a segmented bar above the thumbnails.
+- Animated WebP now uses the same progress bar as other media, including the thin line while controls are hidden.
+- Show the playback speed beside the time when it is not 1×.
 - Posts with video open more smoothly, and video cards take much less work to appear in feeds.
 - With controls showing, swipes and taps just above a video's timeline now work, instead of that strip of the screen ignoring them.
 - Show every Codex in the Library as a cover tile with its name and count on the cover, matching the Saved collections; Codex actions now open by long press.
@@ -39,6 +48,7 @@
 
 ### Fixed
 
+- Remove the navy band behind the status bar above the Viewer's black background.
 - Double-tap to zoom a still image anywhere on screen, not only in its middle.
 - Keep zoomed media on screen instead of letting it be dragged out of view.
 - Return a post to its card in Recents' All view, instead of playing the fallback animation for posts on screen.
