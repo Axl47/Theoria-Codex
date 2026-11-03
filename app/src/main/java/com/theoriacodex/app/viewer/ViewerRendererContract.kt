@@ -18,6 +18,8 @@ internal data class ViewerRendererControls(
     val isPreloading: Boolean = false,
     val seekJumpSerial: Int = 0,
     val seekJumpDeltaMs: Long = 0L,
+    /** False while the Viewer opens: system media controls wait for it to land, since connecting them costs frames. */
+    val systemControlsReady: Boolean = true,
 )
 
 internal data class ViewerRendererEvents(

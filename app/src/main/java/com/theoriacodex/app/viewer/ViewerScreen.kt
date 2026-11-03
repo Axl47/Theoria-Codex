@@ -587,6 +587,7 @@ internal fun ViewerScreen(
                         playbackRate = playbackRate.speed,
                         restartRequest = playbackRestartRequest,
                         loadGeneration = loadGeneration,
+                        systemControlsReady = !opening,
                     ),
                     events = viewerRendererEvents(
                         session = uiState.session, key = key, generation = loadGeneration,
