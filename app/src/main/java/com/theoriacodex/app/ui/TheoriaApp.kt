@@ -183,6 +183,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 
 /** Renderable app-shell boundary with dependencies supplied by the application owner. */
@@ -871,6 +872,7 @@ internal fun TheoriaAppContent(
     val density = LocalDensity.current
     val windowHeightDp = LocalWindowInfo.current.containerSize.height / density.density
     val bottomBarWindowInsets = NavigationBarDefaults.windowInsets
+    val tabReselects = remember { MutableSharedFlow<TopLevelDestination>(extraBufferCapacity = 1) }
     val bottomSystemInsetDp = with(density) {
         bottomBarWindowInsets.getBottom(this).toDp().value
     }
@@ -1140,10 +1142,14 @@ internal fun TheoriaAppContent(
                     bottomBarWindowInsets = bottomBarWindowInsets,
                     snackbarHostState = snackbarHostState,
                     onDestinationSelected = { destination ->
+                        val alreadyShowing = navController.currentBackStackEntry?.destination?.route == AppRoute.Home &&
+                            TopLevelDestination.entries[topLevelPagerState.currentPage] == destination
                         homeTabRoute = destination.route
-                        scope.launch { navigateTopLevelDestination(navController, topLevelPagerState, destination) }
+                        if (alreadyShowing) tabReselects.tryEmit(destination)
+                        else scope.launch { navigateTopLevelDestination(navController, topLevelPagerState, destination) }
                     },
                 ) { contentModifier ->
+                    CompositionLocalProvider(LocalTabReselects provides tabReselects) {
                     NavHost(
                         navController = navController,
                         startDestination = AppRoute.Home,
@@ -1864,6 +1870,7 @@ internal fun TheoriaAppContent(
                             )
                             }
                         }
+                    }
                     }
                 }
             }

@@ -34,6 +34,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
+import com.theoriacodex.app.ui.TopLevelDestination
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Image
@@ -198,6 +201,7 @@ fun SearchScreen(
     val inputFocus = rememberSearchInputFocus()
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyStaggeredGridState()
+    ScrollToTopOnTabReselect(TopLevelDestination.Search) { gridState.animateScrollToItem(0) }
     val queryHash = state.query.appliedQueryHash
     val isNhentaiSourceMode = state.query.draft.mode == QueryMode.Source(SourceKey.NHENTAI)
     val animatedFilterActive = animatedOnly && !isNhentaiSourceMode
@@ -516,7 +520,8 @@ SearchSourcePicker(
         ) {
             val retrySearch = { inputFocus.clear(); onAction(SearchAction.Retry) }
             state.pageFailure?.let { SearchFailureSurface(it, retrySearch) }
-            if (state.retainsResultsWhileRefreshing) SearchRefreshProgress()
+            // Results show the pull indicator instead; this keeps refreshes of an emptied feed visible.
+            if (state.retainsResultsWhileRefreshing && feedProjection.entries.isEmpty()) SearchRefreshProgress()
             when {
                 state.loading && !state.retainsResultsWhileRefreshing -> {
                     FeedLoadingState(
@@ -600,10 +605,15 @@ SearchSourcePicker(
                                 message = authMessage,
                             )
                         }
+                        PullToRefreshBox(
+                            isRefreshing = state.retainsResultsWhileRefreshing,
+                            onRefresh = { inputFocus.clear(); onAction(SearchAction.Retry) },
+                            modifier = Modifier.weight(1f),
+                        ) {
                         TwoColumnProjectedPostStaggeredGrid(
                             projection = feedProjection,
                             state = gridState,
-                            modifier = Modifier.weight(1f).testTag("Search results"),
+                            modifier = Modifier.fillMaxSize().testTag("Search results"),
                             showPagingTile = state.loadingMore,
                             footerContent = if (pageDemand.showContinue) {
                                 { FeedContinueLoading(pageDemand) }
@@ -665,6 +675,7 @@ SearchSourcePicker(
                                 )
                             },
                         )
+                        }
                     }
                 }
             }

@@ -25,6 +25,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
+import com.theoriacodex.app.ui.TopLevelDestination
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
@@ -390,6 +393,7 @@ private fun WatchedGrid(
         return
     }
     val gridState = rememberLazyStaggeredGridState()
+    ScrollToTopOnTabReselect(TopLevelDestination.Recents) { gridState.animateScrollToItem(0) }
     DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
     val rows = remember(watchedPosts, now) { recentsGridRows(watchedPosts, now) }
     // Headings hold a null so Viewer return still finds each post by its grid position.
@@ -492,7 +496,9 @@ private fun SearchHistoryList(
             return@Column
         }
         val days = remember(searches, now) { searches.groupBy { recentsDay(it.searchedAtEpochMs) } }
-        LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        val list = rememberLazyListState()
+        ScrollToTopOnTabReselect(TopLevelDestination.Recents) { list.animateScrollToItem(0) }
+        LazyColumn(Modifier.fillMaxSize(), state = list, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             days.forEach { (day, entries) ->
                 item(key = "day:$day") { RecentsDayHeading(recentsDayLabel(entries.first().searchedAtEpochMs, now)) }
                 items(entries, key = { entry -> "${entry.kind}:${entry.queryHash}" }) { entry ->
@@ -528,7 +534,9 @@ private fun ActivityList(
         return
     }
     val timeline = remember(activity, now) { recentsTimeline(activity, now) }
-    LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val list = rememberLazyListState()
+    ScrollToTopOnTabReselect(TopLevelDestination.Recents) { list.animateScrollToItem(0) }
+    LazyColumn(modifier = Modifier.fillMaxSize(), state = list, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         itemsIndexed(timeline, key = { index, item -> timelineKey(index, item) }) { _, item ->
             when (item) {
                 is RecentsTimelineItem.Day -> RecentsDayHeading(item.label)

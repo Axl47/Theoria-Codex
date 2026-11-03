@@ -73,7 +73,10 @@ import kotlin.math.roundToInt
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.SideEffect
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.ui.zIndex
+import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
+import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.app.ui.components.ReorderAutoScrollEffect
 import com.theoriacodex.app.ui.components.reorderRowPlacement
 
@@ -241,8 +244,11 @@ private fun CodexGrid(
         presentation.codices, presentation.librarySort, presentation.itemCounts, presentation.likesCodexId,
     )
     val entries = savedCodexLibraryEntries(sorted, presentation.likesCodexId)
+    val gridState = rememberLazyGridState()
+    ScrollToTopOnTabReselect(TopLevelDestination.Codex) { gridState.animateScrollToItem(0) }
     com.theoriacodex.app.ui.components.AdaptiveMediaGrid(
         modifier = Modifier.fillMaxSize(),
+        state = gridState,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {

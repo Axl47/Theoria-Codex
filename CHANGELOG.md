@@ -12,6 +12,8 @@
 - Swipe up on the Viewer to open post information.
 - Hold a video, GIF, or ugoira to play it at 2× until you let go; long press still opens information on other media.
 - Liking a post in the Viewer gives a small heart pop and a haptic tick.
+- Pull down to refresh Search results and For You.
+- Tap the current tab again to scroll back to the top.
 
 ### Changed
 
@@ -21,6 +23,7 @@
 - Mark watched posts in Search and For You with an eye icon instead of a time label that looked like an upload date.
 - Opening a Codex or creator now slides in quickly and Back plays the exact reverse, replacing a slow crossfade.
 - Reordering Codices and For You sections glides neighbouring rows, settles the dropped row, ticks at each position, and scrolls long lists at their edges.
+- Tapping a tab slides to it instead of jumping.
 - Viewer controls fade in and out, and Settings pages and For You views transition instead of cutting.
 - System back in the Viewer now follows your swipe, shrinking the media before it returns to its card.
 - On video, brightness and volume swipes use the outer columns of the screen, leaving the centre for closing and information.

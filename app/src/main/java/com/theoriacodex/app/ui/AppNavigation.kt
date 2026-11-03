@@ -7,12 +7,18 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.unit.IntOffset
 import androidx.navigation.NavBackStackEntry
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.statistics.StatisticsUsageCategory
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.filter
 
 enum class TopLevelDestination(val route: String, val label: String) {
     Search("search", "Search"),
@@ -40,6 +46,19 @@ internal fun pushEnterTransition(): EnterTransition = slideInHorizontally(screen
 internal fun pushExitTransition(): ExitTransition = slideOutHorizontally(screenSlide) { -it }
 internal fun popEnterTransition(): EnterTransition = slideInHorizontally(screenSlide) { -it }
 internal fun popExitTransition(): ExitTransition = slideOutHorizontally(screenSlide) { it }
+
+/** Tapping the tab that is already showing; each tab's scrolling content listens for its own. */
+internal val LocalTabReselects = staticCompositionLocalOf<SharedFlow<TopLevelDestination>> { MutableSharedFlow() }
+
+/** Returns [destination]'s content to its top when its tab is tapped again. */
+@Composable
+internal fun ScrollToTopOnTabReselect(destination: TopLevelDestination, scrollToTop: suspend () -> Unit) {
+    val reselects = LocalTabReselects.current
+    val currentScrollToTop by rememberUpdatedState(scrollToTop)
+    LaunchedEffect(reselects, destination) {
+        reselects.filter { it == destination }.collect { currentScrollToTop() }
+    }
+}
 
 /** Counts one Codex entry per back stack entry; a statistics failure never affects navigation. */
 @Composable

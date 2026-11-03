@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.NavigationRail
+import com.theoriacodex.app.ui.motion.TheoriaMotion
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -82,5 +84,7 @@ internal suspend fun navigateTopLevelDestination(
             restoreState = true
         }
         pager.scrollToPage(target)
-    } else if (pager.currentPage != target) pager.scrollToPage(target)
+    } else if (pager.currentPage != target) {
+        pager.animateScrollToPage(target, animationSpec = tween(TheoriaMotion.SCREEN_MS))
+    }
 }

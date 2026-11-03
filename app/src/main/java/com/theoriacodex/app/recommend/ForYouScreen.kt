@@ -20,6 +20,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
+import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.app.ui.motion.depthTransform
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
@@ -115,6 +118,9 @@ fun ForYouScreen(
     BackHandler(enabled = !state.home.visible) { onAction(ForYouAction.ShowHome) }
     val savedStates = rememberSaveableStateHolder()
     val gridState = rememberLazyStaggeredGridState()
+    ScrollToTopOnTabReselect(TopLevelDestination.ForYou) {
+        if (!state.home.visible) gridState.animateScrollToItem(0)
+    }
     var positionedSeed by rememberSaveable { mutableStateOf(state.seedId) }
     LaunchedEffect(state.seedId) {
         if (positionedSeed != state.seedId) {
@@ -387,6 +393,11 @@ fun ForYouScreen(
             }
 
             else -> {
+                PullToRefreshBox(
+                    isRefreshing = state.isRefreshing,
+                    onRefresh = { onAction(ForYouAction.Refresh(shuffle = false)) },
+                    modifier = Modifier.fillMaxSize(),
+                ) {
                 TwoColumnProjectedPostStaggeredGrid(
                     projection = feedProjection,
                     state = gridState,
@@ -449,6 +460,7 @@ fun ForYouScreen(
                         )
                     },
                 )
+                }
             }
         }
         }

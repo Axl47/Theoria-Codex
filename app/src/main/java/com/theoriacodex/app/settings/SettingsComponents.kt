@@ -25,6 +25,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
+import com.theoriacodex.app.ui.TopLevelDestination
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -45,12 +47,14 @@ internal fun SettingsHeader(title: String, onBack: (() -> Unit)? = null, action:
 /** Centered scrolling column used by every Settings page except the lazy Stats list. */
 @Composable
 internal fun SettingsPageColumn(content: @Composable ColumnScope.() -> Unit) {
+    val scroll = rememberScrollState()
+    ScrollToTopOnTabReselect(TopLevelDestination.Settings) { scroll.animateScrollTo(0) }
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(
             modifier = Modifier
                 .widthIn(max = 800.dp)
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scroll)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             content = content,

@@ -59,6 +59,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
+import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.app.ui.components.ReorderAutoScrollEffect
 import com.theoriacodex.app.ui.components.reorderRowPlacement
 import androidx.compose.ui.layout.onSizeChanged
@@ -103,6 +106,9 @@ internal fun ForYouHomeScreen(
     onOpenPreview: (String?, List<Post>, Int) -> Unit,
 ) {
     val scroll = rememberLazyListState()
+    ScrollToTopOnTabReselect(TopLevelDestination.ForYou) {
+        if (state.home.visible) scroll.animateScrollToItem(0)
+    }
     var sourceMenu by remember { mutableStateOf(false) }
     val ordering = remember { ReorderListState(state.home.sections, ForYouSection::id) }
     LaunchedEffect(state.home.sections) { ordering.synchronize(state.home.sections) }
@@ -126,7 +132,12 @@ internal fun ForYouHomeScreen(
             ForYouReorderList(state, ordering, sourceMenu, { sourceMenu = it }, onAction, onReorder,
                 Modifier.padding(padding))
         } else {
-            ForYouOverview(state, scroll, Modifier.padding(padding), filterPosts, onAction,
+            PullToRefreshBox(
+                isRefreshing = state.home.loading,
+                onRefresh = { onAction(ForYouAction.RefreshSections) },
+                modifier = Modifier.padding(padding),
+            ) {
+            ForYouOverview(state, scroll, Modifier, filterPosts, onAction,
                 onSectionMenu = { sectionMenuId = it },
                 header = { ForYouHomeHeader(state, sourceMenu, { sourceMenu = it }, onAction, false, onReorder) { homeMenu = true } },
                 preview = { id, posts ->
@@ -135,6 +146,7 @@ internal fun ForYouHomeScreen(
                         onOpenPreview(id, posts, index)
                     }
                 })
+            }
         }
     }
 }
