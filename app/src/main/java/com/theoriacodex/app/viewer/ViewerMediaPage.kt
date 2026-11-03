@@ -1,7 +1,14 @@
 package com.theoriacodex.app.viewer
 
 import android.os.SystemClock
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animate
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
@@ -26,9 +33,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
@@ -37,6 +46,7 @@ import com.theoriacodex.app.media.isAnimatedImageMediaRef
 import com.theoriacodex.app.media.isGifMediaRef
 import com.theoriacodex.app.media.isPixivUgoiraMedia
 import com.theoriacodex.app.media.isVideoMediaRef
+import com.theoriacodex.app.ui.motion.TheoriaHaptics
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerMediaError
@@ -107,7 +117,12 @@ internal fun ViewerMediaPage(
             contentAlignment = Alignment.Center,
         ) {
             ViewerMediaContent(
-                post, media, key, controls.copy(seekJumpSerial = interactions.seekSerial, seekJumpDeltaMs = interactions.seekDelta),
+                post, media, key,
+                controls.copy(
+                    seekJumpSerial = interactions.seekSerial,
+                    seekJumpDeltaMs = interactions.seekDelta,
+                    playbackRate = if (interactions.holdingSpeed) VIEWER_HOLD_PLAYBACK_RATE else controls.playbackRate,
+                ),
                 events, videoOptions, videoPositions, imageSession, pixivUgoiraClient, transformModifier, onRequestMediaRecovery,
             )
             FittedSeekJumpFeedbackOverlay(interactions.feedback, viewerAspectRatio(post), interactions::clearFeedback, Modifier.matchParentSize())
@@ -119,6 +134,7 @@ internal fun ViewerMediaPage(
                 ViewerLevelFeedbackOverlay(levelControls, Modifier.align(Alignment.TopCenter).padding(top = 8.dp))
             }
         }
+        ViewerHoldSpeedLabel(interactions.holdingSpeed, Modifier.align(Alignment.TopCenter))
         mediaError?.let { error ->
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 ViewerMediaErrorOverlay(error) { onAction(ViewerAction.RetryMedia) }
@@ -132,6 +148,7 @@ private class ViewerMediaInteractions {
     var seekDelta by mutableLongStateOf(0L)
     var feedback by mutableStateOf<SeekJumpFeedback?>(null)
     var zoomAnimation: Job? = null
+    var holdingSpeed by mutableStateOf(false)
 
     fun seek(delta: Long) {
         seekDelta = delta
@@ -140,6 +157,18 @@ private class ViewerMediaInteractions {
     }
 
     fun clearFeedback(serial: Int) { if (feedback?.serial == serial) feedback = null }
+}
+
+private const val VIEWER_HOLD_PLAYBACK_RATE = 2f
+
+@Composable
+private fun ViewerHoldSpeedLabel(visible: Boolean, modifier: Modifier) {
+    AnimatedVisibility(visible, modifier.padding(top = 56.dp), enter = fadeIn(tween(TheoriaMotion.SHORT_MS)), exit = fadeOut(tween(TheoriaMotion.SHORT_MS))) {
+        Text(
+            "2×", color = Color.White, style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(16.dp)).padding(horizontal = 12.dp, vertical = 6.dp),
+        )
+    }
 }
 
 /** Animated media carries a timeline, which reserves the bottom of the page for its own drags. */
@@ -164,6 +193,7 @@ private fun ViewerMediaGestureLayer(
     val currentTransform by rememberUpdatedState(transform)
     val currentOnTransformChanged by rememberUpdatedState(onTransformChanged)
     val scope = rememberCoroutineScope()
+    val haptics = LocalHapticFeedback.current
     fun centerOffset(point: Offset) = Offset(point.x - bounds.viewportWidth / 2f, point.y - bounds.viewportHeight / 2f)
     val transformState = rememberTransformableState { centroid, zoom, pan, _ ->
         interactions.zoomAnimation?.cancel()
@@ -190,6 +220,10 @@ private fun ViewerMediaGestureLayer(
             zoom = { tap -> animateZoom(tap); onInteraction() },
             toggleControls = onToggleChrome,
             showInfo = { onAction(ViewerAction.ShowMetadata); onInteraction() },
+            hold = if (seekable) { holding ->
+                if (holding && !interactions.holdingSpeed) haptics.performHapticFeedback(TheoriaHaptics.Hold)
+                interactions.holdingSpeed = holding
+            } else null,
         ),
     )
     Column(Modifier.fillMaxSize()) {

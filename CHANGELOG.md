@@ -10,6 +10,8 @@
 
 - Pull down on the Viewer to close it; the media follows your finger, then lands back on its card.
 - Swipe up on the Viewer to open post information.
+- Hold a video, GIF, or ugoira to play it at 2× until you let go; long press still opens information on other media.
+- Liking a post in the Viewer gives a small heart pop and a haptic tick.
 
 ### Changed
 

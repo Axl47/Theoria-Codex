@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.doubleClick
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.domain.model.PostId
@@ -103,6 +104,28 @@ class ViewerMediaGesturesTest {
         compose.runOnIdle { assertEquals(3, zooms.size); assertEquals(listOf(-10_000L), seeks); zoomed.value = true }
         doubleTapAt(0.9f)
         compose.runOnIdle { assertEquals(4, zooms.size); assertEquals(1, seeks.size) }
+    }
+
+    @Test fun `long press holds until release when media can hold and otherwise opens information`() {
+        val holds = mutableListOf<Boolean>()
+        var info = 0
+        val canHold = mutableStateOf(true)
+        compose.setContent {
+            Box(Modifier.size(200.dp).then(viewerMediaGestureModifier(
+                mediaKey = ViewerMediaKey(PostId(SourceKey.GELBOORU, "video"), 0),
+                active = true, seekable = true, zoomed = false, chromeVisible = false, touchExplorationEnabled = false,
+                actions = ViewerMediaGestureActions({}, {}, {}, { info++ }, if (canHold.value) ({ holds += it }) else null),
+            )))
+        }
+        val media = compose.onNodeWithContentDescription("Media actions")
+        media.performTouchInput { longClick() }
+        compose.runOnIdle {
+            assertEquals(listOf(true, false), holds)
+            assertEquals(0, info)
+            canHold.value = false
+        }
+        media.performTouchInput { longClick() }
+        compose.runOnIdle { assertEquals(1, info) }
     }
 
     private fun performAction(label: String) {

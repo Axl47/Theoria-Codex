@@ -28,6 +28,8 @@ internal data class ViewerMediaGestureActions(
     val zoom: (Offset?) -> Unit,
     val toggleControls: () -> Unit,
     val showInfo: () -> Unit,
+    /** When present, a long press holds this until release instead of opening information. */
+    val hold: ((Boolean) -> Unit)? = null,
 )
 
 /** Pointer gestures and assistive actions dispatch to the same renderer commands. */
@@ -47,7 +49,11 @@ internal fun viewerMediaGestureModifier(
         detectTapGestures(
             onDoubleTap = { offset -> currentActions.doubleTap(offset, size.width, seekable, currentZoomed) },
             onTap = { if (!touchExplorationEnabled) currentActions.toggleControls() },
-            onLongPress = { currentActions.showInfo() },
+            onLongPress = { currentActions.hold?.invoke(true) ?: currentActions.showInfo() },
+            onPress = {
+                tryAwaitRelease()
+                currentActions.hold?.invoke(false)
+            },
         )
     }
     if (!active) return gestures
