@@ -76,7 +76,7 @@ internal fun SavedCodexRoute(
     val searches = rememberRetained("saved-searches") { data.savedSearches.observeSavedSearches() }.value ?: return
     val profileId = settings.activeRecommendationProfile().profileId
     val likesId = likesCodexIdForProfile(profileId)
-    val likesCount = rememberRetained("likes:$profileId") { data.likesRepository.observeLikes(profileId) }.value?.size ?: return
+    val likesCount = rememberRetained("likes:$profileId") { data.likesRepository.observeLikedPostIds(profileId) }.value?.size ?: return
     val counts = listOf(likesCount, settings.followedCreators.size, searches.size)
     val scroll = rememberLazyListState()
     val children = remember(likesId) { savedCodexChildren(likesId) }
