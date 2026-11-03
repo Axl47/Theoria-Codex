@@ -785,7 +785,7 @@ internal fun ViewerScreen(
 
 /** Viewer controls fade rather than popping over the media they share the screen with. */
 @Composable
-private fun ViewerChromeVisibility(visible: Boolean, modifier: Modifier, content: @Composable () -> Unit) {
+internal fun ViewerChromeVisibility(visible: Boolean, modifier: Modifier, content: @Composable () -> Unit) {
     AnimatedVisibility(
         visible = visible,
         modifier = modifier,

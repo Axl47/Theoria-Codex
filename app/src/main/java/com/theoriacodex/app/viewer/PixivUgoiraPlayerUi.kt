@@ -1,20 +1,16 @@
 package com.theoriacodex.app.viewer
 
-import androidx.compose.foundation.layout.padding
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.Image
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -22,7 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.search.FEED_PLAYER_ACTIVATION_DELAY_MS
 import kotlinx.coroutines.delay
 
@@ -135,40 +130,41 @@ fun PixivUgoiraPlayer(
             modifier = Modifier.fillMaxSize().then(mediaModifier),
             contentScale = contentScale,
         )
-        if (!showProgressBar) {
-            ViewerPassiveProgressBar(animation.positionMs, totalDurationMs, Modifier.align(Alignment.BottomCenter))
-        } else Row(
-            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(bottom = LocalViewerPostStripInset.current),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TimelinePlaybackButton(
-                isPaused = effectivePlaybackPaused,
-                onToggle = {
-                    if (onTogglePlayback != null) onTogglePlayback() else playbackPaused = !playbackPaused
-                    onTimelineInteractionActiveChanged(true)
-                    onTimelineInteractionActiveChanged(false)
-                },
-            )
-            MediaTimelineBar(
-                positionMs = animation.positionMs,
-                durationMs = totalDurationMs,
-                onSeekStarted = { isScrubbing = true },
-                onSeekCancelled = { isScrubbing = false },
-                preview = { target ->
-                    val previewIndex = animationFrameIndexAt(target.coerceAtMost(maxSeekablePositionMs), frameEndsMs)
-                    val previewFrame = activePlayback.frames.getOrNull(previewIndex)
-                    if (previewFrame != null) Image(previewFrame.bitmap.asImageBitmap(), null,
-                        Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
-                    else Text("Preview buffering", color = androidx.compose.ui.graphics.Color.White)
-                },
-                onSeekFinished = { target ->
-                    seekToPosition(target)
-                    isScrubbing = false
-                },
-                onInteractionActiveChanged = onTimelineInteractionActiveChanged,
-                modifier = Modifier.weight(1f),
-            )
+        if (!showProgressBar) ViewerPassiveProgressBar(animation.positionMs, totalDurationMs, Modifier.align(Alignment.BottomCenter))
+        ViewerChromeVisibility(showProgressBar, Modifier.align(Alignment.BottomCenter)) {
+            ViewerTimelineVeil {
+                ViewerPlaybackFooter {
+                    MediaTimelineBar(
+                        positionMs = animation.positionMs,
+                        durationMs = totalDurationMs,
+                        onSeekStarted = { isScrubbing = true },
+                        onSeekCancelled = { isScrubbing = false },
+                        preview = { target ->
+                            val previewIndex = animationFrameIndexAt(target.coerceAtMost(maxSeekablePositionMs), frameEndsMs)
+                            val previewFrame = activePlayback.frames.getOrNull(previewIndex)
+                            if (previewFrame != null) Image(previewFrame.bitmap.asImageBitmap(), null,
+                                Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                            else Text("Preview buffering", color = androidx.compose.ui.graphics.Color.White)
+                        },
+                        onSeekFinished = { target ->
+                            seekToPosition(target)
+                            isScrubbing = false
+                        },
+                        onInteractionActiveChanged = onTimelineInteractionActiveChanged,
+                        playbackRate = playbackRate,
+                        leading = {
+                            TimelinePlaybackButton(
+                                isPaused = effectivePlaybackPaused,
+                                onToggle = {
+                                    if (onTogglePlayback != null) onTogglePlayback() else playbackPaused = !playbackPaused
+                                    onTimelineInteractionActiveChanged(true)
+                                    onTimelineInteractionActiveChanged(false)
+                                },
+                            )
+                        },
+                    )
+                }
+            }
         }
     }
 }

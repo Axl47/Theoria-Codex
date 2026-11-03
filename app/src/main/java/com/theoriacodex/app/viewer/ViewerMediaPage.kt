@@ -1,5 +1,6 @@
 package com.theoriacodex.app.viewer
 
+import androidx.compose.runtime.CompositionLocalProvider
 import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animate
@@ -116,15 +117,17 @@ internal fun ViewerMediaPage(
                 .viewerDismissDrag(dismissDrag, returnProgress),
             contentAlignment = Alignment.Center,
         ) {
-            ViewerMediaContent(
-                post, media, key,
-                controls.copy(
-                    seekJumpSerial = interactions.seekSerial,
-                    seekJumpDeltaMs = interactions.seekDelta,
-                    playbackRate = if (interactions.holdingSpeed) VIEWER_HOLD_PLAYBACK_RATE else controls.playbackRate,
-                ),
-                events, videoOptions, videoPositions, imageSession, pixivUgoiraClient, transformModifier, onRequestMediaRecovery,
-            )
+            CompositionLocalProvider(LocalViewerMediaAspectRatio provides viewerAspectRatio(post)) {
+                ViewerMediaContent(
+                    post, media, key,
+                    controls.copy(
+                        seekJumpSerial = interactions.seekSerial,
+                        seekJumpDeltaMs = interactions.seekDelta,
+                        playbackRate = if (interactions.holdingSpeed) VIEWER_HOLD_PLAYBACK_RATE else controls.playbackRate,
+                    ),
+                    events, videoOptions, videoPositions, imageSession, pixivUgoiraClient, transformModifier, onRequestMediaRecovery,
+                )
+            }
             FittedSeekJumpFeedbackOverlay(interactions.feedback, viewerAspectRatio(post), interactions::clearFeedback, Modifier.matchParentSize())
         }
         ViewerMediaGestureLayer(key, isVideo || isGif || isUgoira, animated, interactions, controls,

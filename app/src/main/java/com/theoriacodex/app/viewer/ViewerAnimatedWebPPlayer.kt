@@ -1,6 +1,11 @@
 package com.theoriacodex.app.viewer
 
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,19 +14,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -73,8 +74,11 @@ internal fun ViewerAnimatedWebPPlayer(
             },
             onError = { onError(it.result.throwable) },
         )
-        if (controls.showControls && state.drawable != null) {
-            ViewerWebPFooter(state, controls, events, Modifier.align(Alignment.BottomCenter))
+        ViewerChromeVisibility(controls.showControls && state.drawable != null, Modifier.align(Alignment.BottomCenter)) {
+            ViewerTimelineVeil { ViewerWebPFooter(state, controls, events) }
+        }
+        if (controls.showPassiveProgress && state.frameCount > 1) {
+            ViewerPassiveProgressBar(state.frameIndex.toLong(), state.frameCount - 1L, Modifier.align(Alignment.BottomCenter))
         }
     }
 }
@@ -134,23 +138,27 @@ private fun ViewerWebPProgress(state: ViewerWebPState, controls: ViewerRendererC
 }
 
 @Composable
-private fun ViewerWebPFooter(state: ViewerWebPState, controls: ViewerRendererControls, events: ViewerRendererEvents, modifier: Modifier) {
-    ViewerPlaybackFooter(modifier) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            TimelinePlaybackButton(isPaused = !controls.isPlaying, onToggle = events.onTogglePlayback)
-            IconButton(onClick = {
-                events.onRestartPlayback()
-                state.drawable?.reset()
-                if (controls.isActive) state.drawable?.start()
-                state.frameIndex = 0
-            }) { Icon(Icons.Default.Replay, contentDescription = "Restart animation") }
-            LinearProgressIndicator(
-                progress = { if (state.frameCount <= 1) 0f else state.frameIndex.coerceIn(0, state.frameCount - 1).toFloat() / (state.frameCount - 1) },
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                text = if (state.frameCount > 0) "${state.frameIndex.coerceIn(0, state.frameCount - 1) + 1}/${state.frameCount}" else "—",
-                style = MaterialTheme.typography.labelSmall,
+private fun ViewerWebPFooter(state: ViewerWebPState, controls: ViewerRendererControls, events: ViewerRendererEvents) {
+    ViewerPlaybackFooter {
+        Column(Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth().height(VIEWER_TIMELINE_ROW_HEIGHT), verticalAlignment = Alignment.CenterVertically) {
+                TimelinePlaybackButton(isPaused = !controls.isPlaying, onToggle = events.onTogglePlayback)
+                IconButton(modifier = Modifier.size(VIEWER_TIMELINE_ROW_HEIGHT), onClick = {
+                    events.onRestartPlayback()
+                    state.drawable?.reset()
+                    if (controls.isActive) state.drawable?.start()
+                    state.frameIndex = 0
+                }) { Icon(Icons.Default.Replay, contentDescription = "Restart animation") }
+                Text(
+                    text = if (state.frameCount > 0) "${state.frameIndex.coerceIn(0, state.frameCount - 1) + 1}/${state.frameCount}" else "—",
+                    modifier = Modifier.padding(start = 4.dp),
+                    style = ViewerVeil.Time,
+                )
+            }
+            ViewerTimelineTrack(
+                fraction = if (state.frameCount <= 1) 0f else state.frameIndex.coerceIn(0, state.frameCount - 1).toFloat() / (state.frameCount - 1),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp).height(VIEWER_TIMELINE_TRACK_HEIGHT),
+                showHandle = false,
             )
         }
     }

@@ -1,13 +1,14 @@
 package com.theoriacodex.app.viewer
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.runtime.CompositionLocalProvider
 import android.content.Context
 import android.graphics.Movie
 import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,12 +33,9 @@ internal fun ViewerPlaybackFooter(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    Surface(
-        modifier = modifier.fillMaxWidth().padding(bottom = LocalViewerPostStripInset.current),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-    ) {
+    CompositionLocalProvider(LocalContentColor provides Color.White) {
         Box(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+            modifier = modifier.fillMaxWidth().padding(bottom = LocalViewerPostStripInset.current).padding(horizontal = 8.dp),
             contentAlignment = Alignment.Center,
         ) {
             content()

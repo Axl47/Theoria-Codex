@@ -1,24 +1,20 @@
 package com.theoriacodex.app.viewer
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
@@ -32,7 +28,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -369,8 +364,10 @@ private fun ViewerVideoTimelineOverlay(
     events: ViewerRendererEvents, modifier: Modifier,
 ) {
     if (!controls.isActive || state.failed || state.duration <= 0L || state.player == null) return
-    if (controls.showControls) ViewerVideoTimeline(state, source, controls, events, modifier)
-    else if (controls.showPassiveProgress) ViewerPassiveProgressBar(state.position, state.duration, modifier)
+    ViewerChromeVisibility(controls.showControls, modifier) {
+        ViewerTimelineVeil { ViewerVideoTimeline(state, source, controls, events) }
+    }
+    if (controls.showPassiveProgress) ViewerPassiveProgressBar(state.position, state.duration, modifier)
 }
 
 @Composable
@@ -379,29 +376,29 @@ private fun ViewerVideoTimeline(
     source: SourceKey,
     controls: ViewerRendererControls,
     events: ViewerRendererEvents,
-    modifier: Modifier,
 ) {
-    ViewerPlaybackFooter(modifier) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            TimelinePlaybackButton(isPaused = !controls.isPlaying, onToggle = {
-                events.onTogglePlayback()
-                state.setPlaying(!controls.isPlaying && controls.isActive)
-                events.onTimelineInteractionActiveChanged(true)
-                events.onTimelineInteractionActiveChanged(false)
-            })
-            MediaTimelineBar(
-                positionMs = state.position, durationMs = state.duration,
-                onSeekStarted = { state.scrubbing = true },
-                onSeekFinished = state::seek,
-                onSeekCancelled = { state.scrubbing = false },
-                preview = { target ->
-                    state.player?.currentMediaItem?.localConfiguration?.uri?.toString()?.let { location ->
-                        ViewerVideoScrubPreview(location, source, target)
-                    }
-                },
-                onInteractionActiveChanged = events.onTimelineInteractionActiveChanged, modifier = Modifier.weight(1f),
-            )
-        }
+    ViewerPlaybackFooter {
+        MediaTimelineBar(
+            positionMs = state.position, durationMs = state.duration,
+            onSeekStarted = { state.scrubbing = true },
+            onSeekFinished = state::seek,
+            onSeekCancelled = { state.scrubbing = false },
+            preview = { target ->
+                state.player?.currentMediaItem?.localConfiguration?.uri?.toString()?.let { location ->
+                    ViewerVideoScrubPreview(location, source, target)
+                }
+            },
+            onInteractionActiveChanged = events.onTimelineInteractionActiveChanged,
+            playbackRate = controls.playbackRate,
+            leading = {
+                TimelinePlaybackButton(isPaused = !controls.isPlaying, onToggle = {
+                    events.onTogglePlayback()
+                    state.setPlaying(!controls.isPlaying && controls.isActive)
+                    events.onTimelineInteractionActiveChanged(true)
+                    events.onTimelineInteractionActiveChanged(false)
+                })
+            },
+        )
     }
 }
 
