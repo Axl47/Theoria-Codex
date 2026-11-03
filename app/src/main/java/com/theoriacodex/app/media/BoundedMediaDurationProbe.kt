@@ -13,11 +13,13 @@ internal class BoundedMediaDurationProbe(
     private val httpClient: SourceHttpClient,
     private val clock: () -> Long = System::currentTimeMillis,
     private val byteWindowLimit: Int = DEFAULT_DURATION_PROBE_WINDOW_BYTES,
+    private val initialWindowBytes: Int = DEFAULT_DURATION_PROBE_INITIAL_BYTES,
     private val operationTimeoutMs: Long = DEFAULT_DURATION_PROBE_TIMEOUT_MS,
     private val retryDelayMs: Long = DEFAULT_DURATION_PROBE_RETRY_MS,
 ) {
     init {
         require(byteWindowLimit > 0) { "Duration probe byte window must be positive" }
+        require(initialWindowBytes > 0) { "Duration probe initial window must be positive" }
         require(operationTimeoutMs > 0L) { "Duration probe timeout must be positive" }
         require(retryDelayMs > 0L) { "Duration probe retry delay must be positive" }
     }
@@ -42,39 +44,87 @@ internal class BoundedMediaDurationProbe(
         }
     }
 
+    /**
+     * Most media names its duration in the first bytes, so a small read settles it. MP4 box sizes
+     * then point at a later `moov`; anything else falls back to full-size head and tail windows.
+     */
     private suspend fun probeWithinBudget(
         post: Post,
         ref: ImageRef,
         location: String,
     ): MediaDurationState {
-        val headRange = SourceByteRange(0L, byteWindowLimit.toLong() - 1L)
-        val headResponse = httpClient.getBytes(
-            url = location,
-            headers = post.id.source.requestHeaders(),
-            range = headRange,
-            maxBodyBytes = byteWindowLimit,
-        )
-        val head = headResponse.toHeadWindow(headRange) ?: return retryable(
-            MediaDurationFailureReason.TRANSPORT_FAILURE,
-        )
+        val smallWindow = minOf(initialWindowBytes, byteWindowLimit)
+        val smallHead = readHead(post, location, smallWindow) ?: return transportFailure()
+        val smallResult = parseDuration(ref, listOf(smallHead))
+        settledHeadState(smallResult, smallHead)?.let { return it }
+        seekMovieBox(post, location, smallHead, smallWindow)?.let { return it }
+
+        val head = if (smallWindow < byteWindowLimit) {
+            readHead(post, location, byteWindowLimit) ?: return transportFailure()
+        } else {
+            smallHead
+        }
         val headResult = parseDuration(ref, listOf(head))
-        if (headResult is ContainerDurationParseResult.Known) return headResult.toKnownState()
-        if (head.totalBytes <= head.bytes.size) return headResult.toTerminalState()
-        if (headResult.isDefinitivelyInvalid()) return headResult.toTerminalState()
+        settledHeadState(headResult, head)?.let { return it }
 
         val tailStart = (head.totalBytes - byteWindowLimit).coerceAtLeast(0L)
-        val tailRange = SourceByteRange(tailStart, head.totalBytes - 1L)
-        val tailResponse = httpClient.getBytes(
-            url = location,
-            headers = post.id.source.requestHeaders(),
-            range = tailRange,
-            maxBodyBytes = byteWindowLimit,
-        )
-        val tail = tailResponse.toTailWindow(tailRange, head.totalBytes) ?: return retryable(
-            MediaDurationFailureReason.TRANSPORT_FAILURE,
-        )
+        val tail = readRange(post, location, tailStart, byteWindowLimit, head.totalBytes)
+            ?: return transportFailure()
         return parseDuration(ref, listOf(head, tail)).toTerminalState()
     }
+
+    private fun settledHeadState(result: ContainerDurationParseResult, head: MediaByteWindow): MediaDurationState? {
+        return when {
+            result is ContainerDurationParseResult.Known -> result.toKnownState()
+            head.totalBytes <= head.bytes.size || result.isDefinitivelyInvalid() -> result.toTerminalState()
+            else -> null
+        }
+    }
+
+    /** Follows top-level MP4 boxes to `moov`. Null hands over to the fallback windows. */
+    private suspend fun seekMovieBox(
+        post: Post,
+        location: String,
+        head: MediaByteWindow,
+        windowBytes: Int,
+    ): MediaDurationState? {
+        var offset = nextMp4TopLevelBoxOffset(head) ?: return null
+        repeat(MAX_DURATION_PROBE_BOX_SEEKS) {
+            val window = readRange(post, location, offset, windowBytes, head.totalBytes) ?: return null
+            val result = parseMp4Duration(listOf(window))
+            if (result is ContainerDurationParseResult.Known) return result.toKnownState()
+            offset = nextMp4TopLevelBoxOffset(window)?.takeIf { next -> next > offset } ?: return null
+        }
+        return null
+    }
+
+    private suspend fun readHead(post: Post, location: String, windowBytes: Int): MediaByteWindow? {
+        val range = SourceByteRange(0L, windowBytes.toLong() - 1L)
+        return httpClient.getBytes(
+            url = location,
+            headers = post.id.source.requestHeaders(),
+            range = range,
+            maxBodyBytes = windowBytes,
+        ).toHeadWindow(range)
+    }
+
+    private suspend fun readRange(
+        post: Post,
+        location: String,
+        start: Long,
+        windowBytes: Int,
+        totalBytes: Long,
+    ): MediaByteWindow? {
+        val range = SourceByteRange(start, minOf(start + windowBytes, totalBytes) - 1L)
+        return httpClient.getBytes(
+            url = location,
+            headers = post.id.source.requestHeaders(),
+            range = range,
+            maxBodyBytes = windowBytes,
+        ).toRangeWindow(range, totalBytes)
+    }
+
+    private fun transportFailure() = retryable(MediaDurationFailureReason.TRANSPORT_FAILURE)
 
     private fun retryable(reason: MediaDurationFailureReason): MediaDurationState.RetryableFailure {
         return MediaDurationState.RetryableFailure(
@@ -110,7 +160,7 @@ private fun SourceByteResponse.toHeadWindow(requested: SourceByteRange): MediaBy
     }
 }
 
-private fun SourceByteResponse.toTailWindow(
+private fun SourceByteResponse.toRangeWindow(
     requested: SourceByteRange,
     expectedTotalBytes: Long,
 ): MediaByteWindow? {
@@ -204,6 +254,8 @@ private data class ParsedContentRange(
 }
 
 internal const val DEFAULT_DURATION_PROBE_WINDOW_BYTES = 256 * 1024
+internal const val DEFAULT_DURATION_PROBE_INITIAL_BYTES = 16 * 1024
+private const val MAX_DURATION_PROBE_BOX_SEEKS = 4
 internal const val DEFAULT_DURATION_PROBE_TIMEOUT_MS = 12_000L
 private const val DEFAULT_DURATION_PROBE_RETRY_MS = 5L * 60L * 1_000L
 private const val HTTP_OK = 200

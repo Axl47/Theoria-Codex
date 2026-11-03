@@ -38,7 +38,7 @@ class BoundedMediaDurationProbeTest {
     }
 
     @Test
-    fun `tail metadata uses two exact bounded ranges`() = runTest {
+    fun `metadata past the media data is read directly from its box offset`() = runTest {
         val media = mp4WithTailDuration(durationMs = 8_000)
         val http = FakeHttpClient(media)
         val result = probe(http).probe(post("tail"))
@@ -49,11 +49,40 @@ class BoundedMediaDurationProbeTest {
         )
         assertEquals(2, http.requests.size)
         assertEquals(SourceByteRange(0L, TEST_WINDOW_BYTES - 1L), http.requests[0].range)
-        assertEquals(
-            SourceByteRange(media.size - TEST_WINDOW_BYTES.toLong(), media.size - 1L),
-            http.requests[1].range,
-        )
+        assertEquals(SourceByteRange(176L, media.size - 1L), http.requests[1].range)
         assertTrue(http.requests.all { request -> request.maxBodyBytes == TEST_WINDOW_BYTES })
+    }
+
+    @Test
+    fun `metadata in the first bytes needs only the small window`() = runTest {
+        val http = FakeHttpClient(mp4File(durationMs = 5_000) + ByteArray(4_096))
+        val probe = BoundedMediaDurationProbe(
+            http, clock = { 100L }, byteWindowLimit = 1_024, initialWindowBytes = 64,
+        )
+
+        assertEquals(
+            MediaDurationState.Known(5_000L, MediaDurationProvenance.CONTAINER_PROBE),
+            probe.probe(post("small")),
+        )
+        assertEquals(listOf(SourceByteRange(0L, 63L)), http.requests.map(Request::range))
+    }
+
+    @Test
+    fun `metadata the small window cannot reach falls back to the full window`() = runTest {
+        val moov = box("moov", box("free", ByteArray(200)) + box("mvhd", movieHeader(7_000)))
+        val http = FakeHttpClient(box("ftyp", byteArrayOf()) + moov + ByteArray(4_096))
+        val probe = BoundedMediaDurationProbe(
+            http, clock = { 100L }, byteWindowLimit = 1_024, initialWindowBytes = 64,
+        )
+
+        assertEquals(
+            MediaDurationState.Known(7_000L, MediaDurationProvenance.CONTAINER_PROBE),
+            probe.probe(post("wide")),
+        )
+        assertEquals(
+            listOf(SourceByteRange(0L, 63L), SourceByteRange(0L, 1_023L)),
+            http.requests.map(Request::range),
+        )
     }
 
     @Test

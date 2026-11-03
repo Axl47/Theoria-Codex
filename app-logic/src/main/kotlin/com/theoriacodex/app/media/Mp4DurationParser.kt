@@ -37,6 +37,23 @@ fun parseMp4Duration(windows: List<MediaByteWindow>): ContainerDurationParseResu
     }
 }
 
+/**
+ * Where to read next for an MP4 whose `moov` lies past [window], which must start at a top-level box.
+ * Box sizes name the exact offset, so long videos need no fixed-size guess at the file's tail.
+ * Null means this is not an MP4, `moov` is already in the window, or the structure ended.
+ */
+fun nextMp4TopLevelBoxOffset(window: MediaByteWindow): Long? {
+    if (window.absoluteStart == 0L && !window.hasTypeAt(4, TYPE_FTYP)) return null
+    var offset = 0L
+    while (offset < window.bytes.size) {
+        val header = readBoxHeader(window, offset.toInt())
+            ?: return (window.absoluteStart + offset).takeIf { offset > 0L && it < window.totalBytes }
+        if (header.type == TYPE_MOOV) return null
+        offset += header.size
+    }
+    return (window.absoluteStart + offset).takeIf { it < window.totalBytes }
+}
+
 private fun moovCandidateOffsets(window: MediaByteWindow): Set<Int> {
     val candidates = linkedSetOf<Int>()
     if (window.absoluteStart == 0L) {
@@ -168,9 +185,10 @@ private fun readUnsignedInt(bytes: ByteArray, offset: Int): Long {
         (bytes[offset + 3].toLong() and 0xFFL)
 }
 
+/** Runs at every scanned byte offset, so it compares in place instead of allocating. */
 private fun MediaByteWindow.hasTypeAt(offset: Int, type: String): Boolean {
     return offset >= 0 && offset <= bytes.size - 4 &&
-        bytes.copyOfRange(offset, offset + 4).toString(Charsets.US_ASCII) == type
+        type.indices.all { index -> bytes[offset + index].toInt() == type[index].code }
 }
 
 private data class BoxHeader(

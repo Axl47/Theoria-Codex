@@ -63,7 +63,7 @@ class DurationRouteAcquisitionTest {
         assertTrue(route.states.value.values.all {
             it == MediaDurationState.Known(2_000L, MediaDurationProvenance.CONTAINER_PROBE)
         })
-        assertEquals(bytes.size * 3L, transport.returnedBytes)
+        assertEquals(DEFAULT_DURATION_PROBE_INITIAL_BYTES * 3L, transport.returnedBytes)
         assertSame(originalFirst, posts.first())
         assertTrue(posts.all { it.durationMs == null })
         val settledCalls = transport.calls
