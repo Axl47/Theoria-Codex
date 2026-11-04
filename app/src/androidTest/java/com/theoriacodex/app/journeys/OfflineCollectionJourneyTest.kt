@@ -3,6 +3,7 @@ package com.theoriacodex.app.journeys
 import android.graphics.Color
 import android.graphics.BitmapFactory
 import android.view.View
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.longClick
@@ -74,6 +75,7 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
         }
         storage.performScrollToNode(hasText("Clear disposable cache"))
         activate(compose.onNodeWithText("Clear disposable cache"))
+        storage.performScrollToIndex(0)
         compose.waitUntil(10_000) {
             compose.onAllNodesWithText("Disposable cache cleared. Offline copies are still available.")
                 .fetchSemanticsNodes().isNotEmpty()
