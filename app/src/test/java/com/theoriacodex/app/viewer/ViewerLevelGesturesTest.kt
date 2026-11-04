@@ -222,7 +222,7 @@ class ViewerLevelGesturesTest {
                         layout.value, ViewerVideoOptions(VideoQuality.AUTO, null, "Unavailable", false),
                         positions, null, imageSession, null, {}, { interactions++ }, { chromeToggles++ }, null,
                         levelControls = levels,
-                        onSeekInteraction = { seekInteractions++ },
+                        onPassiveInteraction = { seekInteractions++ },
                     )
                 }
             }

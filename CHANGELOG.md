@@ -5,6 +5,7 @@
 ### Fixed
 
 - Moving to another post or image in the Viewer no longer brings back the header and footer; they stay hidden until you tap.
+- Zooming in the Viewer, by pinching or double-tapping, no longer brings back the header and footer.
 
 ## [1.1.0] - 2026-11-03
 

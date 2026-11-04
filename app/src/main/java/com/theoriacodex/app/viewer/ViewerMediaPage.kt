@@ -91,7 +91,7 @@ internal fun ViewerMediaPage(
     levelControls: ViewerLevelControls? = null,
     returnProgress: () -> Float = { 0f },
     dismissDrag: ViewerDismissDrag? = null,
-    onSeekInteraction: () -> Unit = {},
+    onPassiveInteraction: () -> Unit = {},
 ) {
     val key = ViewerMediaKey(post.id, mediaIndex)
     val isVideo = isVideoMediaRef(media)
@@ -131,7 +131,7 @@ internal fun ViewerMediaPage(
             FittedSeekJumpFeedbackOverlay(interactions.feedback, viewerAspectRatio(post), interactions::clearFeedback, Modifier.matchParentSize())
         }
         ViewerMediaGestureLayer(key, isVideo || isGif || isUgoira, animated, interactions, controls,
-            transform, transformBounds, onTransformChanged, layout, onAction, onInteraction, onToggleChrome, onSeekInteraction)
+            transform, transformBounds, onTransformChanged, layout, onAction, onInteraction, onToggleChrome, onPassiveInteraction)
         if (controls.isActive && isVideo && !layout.pictureInPicture && levelControls != null) {
             ViewerLevelFeedbackOverlay(levelControls, Modifier.matchParentSize())
         }
@@ -189,7 +189,7 @@ private fun ViewerMediaGestureLayer(
     interactions: ViewerMediaInteractions, controls: ViewerRendererControls,
     transform: ViewerTransformState, bounds: ViewerTransformBounds, onTransformChanged: (ViewerTransformState) -> Unit,
     layout: ViewerMediaLayout, onAction: (ViewerAction) -> Unit, onInteraction: () -> Unit,
-    onToggleChrome: () -> Unit, onSeekInteraction: () -> Unit,
+    onToggleChrome: () -> Unit, onPassiveInteraction: () -> Unit,
 ) {
     val currentTransform by rememberUpdatedState(transform)
     val currentOnTransformChanged by rememberUpdatedState(onTransformChanged)
@@ -200,7 +200,7 @@ private fun ViewerMediaGestureLayer(
         interactions.zoomAnimation?.cancel()
         val focus = centerOffset(centroid)
         onTransformChanged(transform.transform(zoom, pan.x, pan.y, focus.x, focus.y, bounds))
-        onInteraction()
+        onPassiveInteraction()
     }
     fun animateZoom(tap: Offset?) {
         val start = currentTransform
@@ -217,8 +217,8 @@ private fun ViewerMediaGestureLayer(
         mediaKey = key, active = controls.isActive && !layout.pictureInPicture, seekable = seekable,
         zoomed = transform.isZoomed, chromeVisible = controls.showControls, touchExplorationEnabled = layout.touchExploration,
         actions = ViewerMediaGestureActions(
-            seek = { interactions.seek(it); onSeekInteraction() },
-            zoom = { tap -> animateZoom(tap); onInteraction() },
+            seek = { interactions.seek(it); onPassiveInteraction() },
+            zoom = { tap -> animateZoom(tap); onPassiveInteraction() },
             toggleControls = onToggleChrome,
             showInfo = { onAction(ViewerAction.ShowMetadata); onInteraction() },
             hold = if (seekable) { holding ->

@@ -195,7 +195,7 @@ private fun ViewerPostPage(
             pixivUgoiraClient = pixivUgoiraClient,
             onAction = onAction,
             onInteraction = { controls.markInteraction() },
-            onSeekInteraction = { controls.markPassiveInteraction() },
+            onPassiveInteraction = { controls.markPassiveInteraction() },
             onToggleChrome = { controls.toggleChrome() },
             imageSession = screen.imageSession,
             onRequestMediaRecovery = onRequestMediaRecovery,
