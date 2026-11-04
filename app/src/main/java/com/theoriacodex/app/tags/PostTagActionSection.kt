@@ -152,7 +152,7 @@ private fun rememberPostTagCounts(
 private class PendingSourceSwitch(val term: SearchTerm, val excluded: Boolean, val lost: List<SearchTerm>) {
     fun message(source: SourceKey): String {
         val removed = lost.joinToString(", ") { searchTermChipLabel(it, excluded = false) }
-        return "Adding ${term.value} switches Search to ${source.displayName()} and removes $removed."
+        return "${if (excluded) "Excluding" else "Adding"} ${term.value} switches Search to ${source.displayName()} and removes $removed."
     }
 
     fun confirmation(source: SourceKey, editor: PostTagEditor, onClose: () -> Unit) = TrayConfirmation(
@@ -180,25 +180,26 @@ private class PostTagEditor(
     val onAddAlternative: (Int, SearchTerm) -> Boolean,
     val onConfirmSwitch: (PendingSourceSwitch) -> Unit,
 ) {
-    fun commit(term: SearchTerm, excluded: Boolean) {
+    fun commit(term: SearchTerm, excluded: Boolean): Boolean =
         if (excluded) onAddExclude(term) else onAddInclude(term)
-    }
 
-    private fun add(term: SearchTerm, excluded: Boolean) {
+    /**
+     * Every addition passes here, so none can drop terms unasked. [onAccepted] removes an opposing
+     * entry only once the draft takes the new one; a confirmed switch has already dropped it.
+     */
+    private fun add(term: SearchTerm, excluded: Boolean, onAccepted: () -> Unit = {}) {
         val lost = draft?.let { SearchDraftReducer.termsLostToPostTerm(it, post.id.source, term) }.orEmpty()
-        if (lost.isEmpty()) commit(term, excluded) else onConfirmSwitch(PendingSourceSwitch(term, excluded, lost))
-    }
-
-    /** The opposing entry goes only after the draft accepts the new one, and it keeps its stored form. */
-    private fun switchToExcluded(stored: SearchTerm) {
-        if (onAddExclude(stored)) onRemoveInclude(stored)
+        when {
+            lost.isNotEmpty() -> onConfirmSwitch(PendingSourceSwitch(term, excluded, lost))
+            commit(term, excluded) -> onAccepted()
+        }
     }
 
     fun tap(term: SearchTerm) {
         when (val effect = tagTapEffect(term, selection, targetGroup)) {
             TagTapEffect.AddRequired -> add(term, excluded = false)
             is TagTapEffect.AddAlternative -> onAddAlternative(effect.groupIndex, term)
-            is TagTapEffect.SwitchToExcluded -> switchToExcluded(effect.stored)
+            is TagTapEffect.SwitchToExcluded -> add(effect.stored, excluded = true) { onRemoveInclude(effect.stored) }
             is TagTapEffect.Clear -> onRemoveExclude(effect.stored)
         }
     }
@@ -216,7 +217,7 @@ private class PostTagEditor(
             )
             TagChipState.EXCLUDED -> listOf(
                 TagChipAction("Include $name in Search") {
-                    selection.excluded(term)?.let { stored -> if (onAddInclude(stored)) onRemoveExclude(stored) }
+                    selection.excluded(term)?.let { stored -> add(stored, excluded = false) { onRemoveExclude(stored) } }
                 },
             )
         }
