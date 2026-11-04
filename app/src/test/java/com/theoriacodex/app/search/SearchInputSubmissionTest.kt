@@ -11,6 +11,7 @@ import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -36,7 +37,7 @@ class SearchInputSubmissionTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
-    fun `Undo is left of Reset and dispatches only when history is available and idle`() {
+    fun `Undo last search dispatches only when history is available and idle`() {
         val state = mutableStateOf(SearchUiState())
         val actions = mutableListOf<SearchAction>()
         compose.setContent { MaterialTheme { Box(Modifier.size(400.dp, 700.dp)) {
@@ -49,14 +50,14 @@ class SearchInputSubmissionTest {
             )
         } } }
         compose.onNodeWithTag("Search bar").performClick()
-        val undo = compose.onNodeWithText("Undo")
+        compose.onNodeWithContentDescription("More search actions").performClick()
+        val undo = compose.onNodeWithText("Undo last search")
         undo.assertIsNotEnabled()
         compose.runOnIdle {
             val query = state.value.query.applied
             state.value = state.value.copy(searchHistory = listOf(SearchHistoryEntry(query, state.value.query.appliedSourceScope)))
         }
         undo.assertIsEnabled()
-        assertTrue(undo.fetchSemanticsNode().boundsInRoot.right <= compose.onNodeWithText("Reset").fetchSemanticsNode().boundsInRoot.left)
         compose.runOnIdle { state.value = state.value.copy(execution = state.value.execution.copy(activeRequestId = 10)) }
         undo.assertIsNotEnabled()
         compose.runOnIdle { state.value = state.value.copy(execution = state.value.execution.copy(activeRequestId = null)) }

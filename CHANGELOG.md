@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### Changed
+
+- The search editor now shows your tags as one readable query, in the order you added them, with "or" groups inline and excluded tags below.
+- Add an alternative right on its "or" group; the mode and target rows are gone, and the button beside the field shows how the next tag joins.
+- Tapping a tag opens its actions right next to it.
+- The tag field sits just above the keyboard, and your query stays visible above the suggestions while you type.
+- Search is now at the top of the editor, with Favorites, Undo last search, and Reset in its overflow menu.
+
+### Added
+
+- Removing a tag from the search editor offers a brief Undo.
+
+### Fixed
+
+- The search bar over results now reads "mountain or snow" for an "or" group instead of listing the tags as if both were required.
+- When an "or" group's tag type rules out suggestions, the editor now says so instead of showing nothing.
+
 ## [1.1.0] - 2026-11-03
 
 ### Added

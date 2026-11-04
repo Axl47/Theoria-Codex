@@ -16,6 +16,7 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunStatus
@@ -184,6 +185,11 @@ sealed interface SearchAction {
     data class AddIncludeAlternative(val groupIndex: Int, val term: SearchTerm) : DraftEdit
     data class SplitIncludeAlternative(val groupIndex: Int, val term: SearchTerm) : DraftEdit
     data class RemoveIncludeGroup(val groupIndex: Int) : DraftEdit
+    /** Puts the draft's tags back exactly as they were, for undoing a removal. */
+    data class RestoreDraftTerms(
+        val includeTermGroups: List<SearchTermGroup>,
+        val excludeTerms: List<SearchTerm>,
+    ) : DraftEdit
     data class SelectSuggestionScope(val scope: FacetedSearchScope) : SearchAction
     data class AutocompleteChanged(val input: String) : SearchAction
     data object RefreshAutocomplete : SearchAction

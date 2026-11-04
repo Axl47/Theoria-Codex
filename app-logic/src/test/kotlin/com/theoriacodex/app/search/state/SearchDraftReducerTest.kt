@@ -45,6 +45,22 @@ class SearchDraftReducerTest {
     }
 
     @Test
+    fun `restoring terms undoes a removal exactly, keeping group order and exclusions`() {
+        val groups = listOf(
+            SearchTermGroup(listOf(SearchTerm("rin"), SearchTerm("aoi"))),
+            SearchTermGroup.single(SearchTerm("mika")),
+        )
+        val excluded = listOf(SearchTerm("sketch"))
+        val draft = query(QueryMode.Source(SourceKey.PIXIV), emptyList()).withIncludeTermGroups(groups).copy(excludeTerms = excluded)
+        val removed = SearchDraftReducer.removeIncludeGroup(state(draft), 0).state
+
+        val restored = SearchDraftReducer.restoreTerms(removed, groups, excluded).state.query.draft
+
+        assertEquals(groups, restored.effectiveIncludeTermGroups)
+        assertEquals(excluded, restored.excludeTerms)
+    }
+
+    @Test
     fun `mode selection restores per-mode query and rejects unavailable source`() {
         val restored = query(QueryMode.Source(SourceKey.PIXIV), listOf(SearchTerm("saved")))
         val withHistory = SearchDraftContext(setOf(SourceKey.PIXIV), mapOf(modeKey(restored.mode) to restored))

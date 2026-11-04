@@ -52,10 +52,13 @@ internal fun searchFacetLabel(facet: SearchFacet, sourceNamespace: String?): Str
     }
 }
 
+/** The type a tag shows beside its value; general tags need none. */
+internal fun searchTermTypeLabel(term: SearchTerm): String? =
+    if (term.isPortableGeneralTag) null else searchFacetLabel(term.facet, term.sourceNamespace)
+
 internal fun searchTermChipLabel(term: SearchTerm, excluded: Boolean): String {
     val polarity = if (excluded) "− " else ""
-    if (term.isPortableGeneralTag) return "$polarity${term.value}"
-    return "$polarity${searchFacetLabel(term.facet, term.sourceNamespace)} · ${term.value}"
+    return polarity + listOfNotNull(searchTermTypeLabel(term), term.value).joinToString(" · ")
 }
 
 internal fun facetedSuggestionMetaLabel(suggestion: FacetedTagSuggestion): String {
