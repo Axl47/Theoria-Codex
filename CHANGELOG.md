@@ -55,6 +55,8 @@
 
 ### Fixed
 
+- Zoomed gallery pages can now pan to their edges when they are a different shape from the first page.
+- Browsing many Codices no longer keeps growing memory use.
 - Feeds no longer reshuffle into different columns after closing the Viewer or when scrolling back up.
 - Gelbooru videos no longer disappear from a duration filter for five minutes when the host is briefly overloaded.
 - Searching with a Codex's tags now always updates Search's tags and runs that search, instead of sometimes repeating the previous one when Search had not opened yet.
