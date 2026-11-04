@@ -108,7 +108,7 @@ internal fun ViewerMediaPage(
     val mediaPadding = if (layout.landscape || animated) 0.dp else 16.dp
     var pageSize by remember { mutableStateOf(IntSize.Zero) }
     val transformBounds = with(LocalDensity.current) {
-        viewerTransformBounds(pageSize.width.toFloat(), pageSize.height.toFloat(), mediaPadding.toPx(), viewerAspectRatio(post))
+        viewerTransformBounds(pageSize.width.toFloat(), pageSize.height.toFloat(), mediaPadding.toPx(), viewerMediaAspectRatio(post, media))
     }
     Box(Modifier.fillMaxSize().onSizeChanged { pageSize = it }) {
         Box(
