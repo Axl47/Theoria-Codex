@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ExecPlan: Post and Codex Tag Picker</title>
+<style>body{font:15px/1.55 system-ui,sans-serif;max-width:960px;margin:0 auto;padding:24px}section{margin:24px 0}code{font-family:ui-monospace,monospace;font-size:.92em}table{width:100%;border-collapse:collapse}td,th{padding:6px 8px;border-bottom:1px solid #8884;text-align:left;vertical-align:top}</style></head>
+<body>
+<header><h1>ExecPlan: Post and Codex Tag Picker</h1>
+<p><strong>Status:</strong> implemented; validation evidence below. <strong>Companion:</strong> the Search editor redesign, <code>search-query-editor.html</code>, on its own branch.</p></header>
+<section id="purpose"><h2>Purpose</h2>
+<p>Post info and a Codex's "Search with these tags" each offered a list of tags and fed a search, but neither showed that search, and each drew tags differently. Both now use one interaction: a list of tags to pick from, and a tray showing the query being built. Query storage, matching, and execution do not change.</p></section>
+<section id="context"><h2>Context</h2>
+<p>The "draft" is Search's editable <code>Query</code>; results change only when it is applied. A "typed" tag has a type such as artist, and belongs to one source. "Portable" general tags have no namespace and can follow the draft between sources.</p>
+<table><tr><th>Path</th><th>Role</th></tr>
+<tr><td><code>app/.../tags/TagPickerModel.kt</code></td><td>Pure rules: the tap cycle, short counts, local query edits</td></tr>
+<tr><td><code>app/.../tags/TagPicker.kt</code></td><td><code>TagPickerChip</code>, <code>QueryTray</code></td></tr>
+<tr><td><code>app/.../tags/PostTagActionSection.kt</code></td><td>Post info: edits the live draft through route callbacks and <code>LocalPostTagSearchActions</code></td></tr>
+<tr><td><code>app/.../codex/CodexTagSearchSheet.kt</code></td><td>Codex search: edits a local <code>Query</code> until Search replaces the current search</td></tr>
+<tr><td><code>app-logic/.../SearchDraftReducer.kt</code></td><td><code>postTermForGroup</code>, <code>addPostIncludeAlternative</code>, <code>termsLostToPostTerm</code>, typed <code>prepareTagSearch</code></td></tr></table></section>
+<section id="phases"><h2>Phases and work plan</h2>
+<ol><li>Reducer: post tags can join groups; report what a source switch would drop; tag searches carry typed groups and exclusions.</li>
+<li>Shared chip and tray, then post info and the Viewer's compact row.</li>
+<li>One Codex sheet replaces the source sheet and the slider sheet; Auto-save's picker uses the shared chip.</li></ol></section>
+<section id="validation"><h2>Validation and acceptance</h2>
+<p>Host, with Java 21 or newer: <code>./gradlew :app-logic:test :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin :app:detektDebug :app-logic:detektMain</code>, then <code>./gradlew :app:lintDebug --offline --no-daemon</code> and <code>python3 scripts/check_hotspots.py</code>.</p>
+<p>Device: a temporary real-touch journey on the isolated API 36 emulator, using fixture data with a plain color as media. It ran both surfaces and asserted the queries sent to the source.</p></section>
+<section id="living-log"><h2>Living log</h2>
+<h3>Progress</h3><ul><li>[x] 2026-11-04 - Reducer, shared UI, post info, Viewer row, Codex sheet, Auto-save picker, tests.</li><li>[x] 2026-11-04 - Emulator journey passed on the final code: a Codex search sent <code>[[pixiv_artist], [landscape, snow]]</code>, the Search route's sheet sent <code>traditional_media</code> as excluded, and the Viewer's tray ran <code>landscape, waves</code>.</li>
+<li>[x] 2026-11-04 - Independent review, 2 rounds, approved.</li></ul>
+<h3>Surprises and discoveries</h3><ul>
+<li>Observation: <code>addPostTerm</code> silently removed typed terms when a typed tag came from another source. Evidence: its filter on <code>isPortableGeneralTag</code>. It now asks first.</li>
+<li>Observation: <code>addIncludeAlternative</code> would reject post tags on Gelbooru, because it validates typed input against suggestions. Post tags take their own path.</li>
+<li>Observation: Review found the tap cycle could still reach the source switch when a typed tag from another source was already in the draft. Every addition now passes the same check, with a test for each path.</li>
+<li>Observation: Draw left the filter's keyboard open, hiding most of the list. Evidence: emulator screenshot. Draw now clears focus.</li></ul>
+<h3>Decision log</h3><ul>
+<li>Decision: Tag list first, with Draw as a secondary control. Rationale: the mock's layout; the owner was asked which they use more and did not answer, so this is easy to revisit. Date/Author: 2026-11-04 / Claude.</li>
+<li>Decision: Keep type headings here though the Search editor drops them. Rationale: a query has logic to show, while a post's tags are a description whose natural structure is type. Date/Author: 2026-11-04 / Claude.</li>
+<li>Decision: Chips always reserve the count slot. Rationale: late counts must not reflow chips; sources without counts show slightly wider chips. Date/Author: 2026-11-04 / Claude.</li>
+<li>Decision: The tray's terms are read-only; editing them stays in the Search editor. Date/Author: 2026-11-04 / Claude.</li></ul>
+<h3>Outcomes and retrospective</h3><p>Both surfaces shipped as designed. Not established: live provider behavior, TalkBack with a real screen reader (semantics are tested), and feel of the tap cycle, which only the owner can judge.</p></section>
+<section id="recovery"><h2>Idempotence and recovery</h2><p>No migrations or destructive operations. Device runs reinstall only the isolated debug package and can be repeated.</p></section>
+</body></html>

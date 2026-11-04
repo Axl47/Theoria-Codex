@@ -5,12 +5,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -41,6 +44,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.source.SourceIcon
+import com.theoriacodex.app.tags.TagChipRow
+import com.theoriacodex.app.tags.TagPickerChip
+import com.theoriacodex.app.tags.compactTagCount
+import com.theoriacodex.app.tags.tagChipChunks
 import com.theoriacodex.app.ui.components.ExpandedBottomSheet
 import com.theoriacodex.app.ui.components.TagGroupCard
 import com.theoriacodex.app.ui.components.TagGroupOrLabel
@@ -240,18 +247,31 @@ private fun AutoSaveSourceTabs(
     onSelect: (SourceKey) -> Unit,
 ) {
     val ruleCounts = automaticTags.groupingBy(CodexAutomaticTag::source).eachCount()
+    CodexSourceTabs(sources, selected, ruleCounts, "tag", onSelect)
+}
+
+/** One tab per source, each showing how many of [noun] it holds. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun CodexSourceTabs(
+    sources: List<SourceKey>,
+    selected: SourceKey,
+    counts: Map<SourceKey, Int>,
+    noun: String,
+    onSelect: (SourceKey) -> Unit,
+) {
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         sources.forEach { source ->
-            AutoSaveSourceTab(source, source == selected, ruleCounts[source] ?: 0) { onSelect(source) }
+            CodexSourceTab(source, source == selected, counts[source] ?: 0, noun) { onSelect(source) }
         }
     }
 }
 
 @Composable
-private fun AutoSaveSourceTab(source: SourceKey, active: Boolean, count: Int, onClick: () -> Unit) {
+private fun CodexSourceTab(source: SourceKey, active: Boolean, count: Int, noun: String, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Surface(
         onClick = onClick,
@@ -259,7 +279,7 @@ private fun AutoSaveSourceTab(source: SourceKey, active: Boolean, count: Int, on
         color = if (active) colors.primary.copy(alpha = 0.18f) else colors.surfaceVariant.copy(alpha = 0.45f),
         border = BorderStroke(1.dp, if (active) colors.primary else colors.outlineVariant),
         modifier = Modifier.clearAndSetSemantics {
-            contentDescription = "${source.displayName()}, $count ${if (count == 1) "tag" else "tags"}"
+            contentDescription = "${source.displayName()}, $count ${if (count == 1) noun else "${noun}s"}"
             role = Role.Tab
             selected = active
         },
@@ -292,6 +312,7 @@ private fun AutoSaveRule(
         if (index > 0) AutoSaveAndLabel()
         TagGroupCard(
             active = addTarget == group.groupIndex,
+            modifier = Modifier.fillMaxWidth(),
             content = {
                 group.rows.forEach { row ->
                     val tag = row.automaticTag
@@ -314,7 +335,7 @@ private fun AutoSaveRule(
     val draft = addTarget?.takeIf { target -> groups.none { group -> group.groupIndex == target } }
     if (draft != null) {
         if (groups.isNotEmpty()) AutoSaveAndLabel()
-        TagGroupCard(active = true, hint = "Choose a tag below")
+        TagGroupCard(active = true, modifier = Modifier.fillMaxWidth(), hint = "Choose a tag below")
     } else if (groups.isNotEmpty()) {
         TextButton(
             modifier = Modifier.fillMaxWidth(),
@@ -347,7 +368,6 @@ private fun AutoSaveTagPicker(
 ) {
     var filter by remember(source) { mutableStateOf("") }
     val visibleRows = filterAutomaticTagRows(rows, filter)
-    val tags = visibleRows.map { row -> CodexSearchTagOption(row.automaticTag.tag, row.postCount) }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         AutomaticTagFilterField(filter, { filter = it }, Modifier.weight(1f))
         if (canClose) TextButton(onClick = onClose) { Text("Done") }
@@ -355,11 +375,28 @@ private fun AutoSaveTagPicker(
     when {
         rows.isEmpty() -> AutoSaveMessage("No more ${source.displayName()} tags in this Codex")
         visibleRows.isEmpty() -> AutoSaveMessage("No tags match \"${filter.trim()}\"")
-        else -> CodexSearchTagSelectionGrid(
-            tags = tags,
-            selectedTags = emptySet(),
-            onToggleTag = { tag -> onPick(CodexAutomaticTag(source, tag)) },
-        )
+        else -> AutoSaveTagList(visibleRows.tagChipChunks()) { row ->
+            val tag = row.automaticTag.tag
+            TagPickerChip(
+                label = tag,
+                count = compactTagCount(row.postCount),
+                tapLabel = "Add $tag to Auto-save",
+                onTap = { onPick(CodexAutomaticTag(source, tag)) },
+            )
+        }
+    }
+}
+
+/** A bounded lazy list, since a large Codex can offer thousands of tags inside this scrolling sheet. */
+@Composable
+private fun AutoSaveTagList(
+    rows: List<List<CodexAutomaticTagRow>>,
+    chip: @Composable (CodexAutomaticTagRow) -> Unit,
+) {
+    LazyColumn(Modifier.fillMaxWidth().height(AUTO_SAVE_TAG_LIST_HEIGHT)) {
+        items(rows.size) { rowIndex ->
+            TagChipRow { rows[rowIndex].forEach { row -> chip(row) } }
+        }
     }
 }
 
@@ -374,7 +411,7 @@ private fun AutoSaveMessage(text: String) {
 }
 
 @Composable
-private fun AutomaticTagFilterField(
+internal fun AutomaticTagFilterField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -398,9 +435,10 @@ private fun AutomaticTagFilterField(
     )
 }
 
-private fun String.normalizedTagFilterText(): String = trim()
+internal fun String.normalizedTagFilterText(): String = trim()
     .lowercase()
     .replace('_', ' ')
     .replace(TAG_FILTER_WHITESPACE, " ")
 
 private val TAG_FILTER_WHITESPACE = Regex("\\s+")
+private val AUTO_SAVE_TAG_LIST_HEIGHT = 320.dp

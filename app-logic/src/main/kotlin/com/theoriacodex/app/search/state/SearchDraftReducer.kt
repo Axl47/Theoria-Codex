@@ -264,6 +264,14 @@ object SearchDraftReducer {
         }.copy(accepted = true)
     }
 
+    fun restoreTerms(
+        state: SearchUiState,
+        includeTermGroups: List<SearchTermGroup>,
+        excludeTerms: List<SearchTerm>,
+    ): SearchDraftReduction = mutateQuery(state) { query ->
+        query.withIncludeTermGroups(includeTermGroups).copy(excludeTerms = excludeTerms)
+    }
+
     fun addPostTerm(
         state: SearchUiState,
         post: Post,
@@ -307,6 +315,52 @@ object SearchDraftReducer {
             }
         }
         return addTerm(prepared, normalized, excluded)
+    }
+
+    /**
+     * What [addPostTerm] would discard: a typed tag moves the draft to the post's [source], and the
+     * typed terms of any other source cannot come along.
+     */
+    fun termsLostToPostTerm(query: Query, source: SourceKey, term: SearchTerm): List<SearchTerm> {
+        val normalized = term.normalizedOrNull() ?: return emptyList()
+        if (normalized.isPortableGeneralTag || query.mode == QueryMode.Source(source)) return emptyList()
+        return (query.includeTerms + query.excludeTerms).filterNot(SearchTerm::isPortableGeneralTag)
+    }
+
+    /**
+     * The form a post's [term] takes to join group [groupIndex], or null when it cannot join.
+     * A source's general tags may carry a "tag" namespace, so they adopt the group's own.
+     */
+    fun postTermForGroup(query: Query, source: SourceKey, groupIndex: Int, term: SearchTerm): SearchTerm? {
+        val normalized = term.normalizedOrNull() ?: return null
+        val group = query.effectiveIncludeTermGroups.getOrNull(groupIndex) ?: return null
+        val anchor = group.terms.first()
+        val sameType = normalized.facet == anchor.facet && (
+            normalized.sourceNamespace.equals(anchor.sourceNamespace, ignoreCase = true) ||
+                (normalized.isGeneralTag && anchor.isGeneralTag)
+            )
+        if (!sameType || group.terms.size >= MAX_GROUP_ALTERNATIVES) return null
+        val joined = normalized.copy(sourceNamespace = anchor.sourceNamespace)
+        val wrongSource = !joined.isPortableGeneralTag && query.mode != QueryMode.Source(source)
+        return joined.takeUnless { wrongSource || it in query.includeTerms }
+    }
+
+    /** Post tags come from the source itself, so they skip the check that typed Gelbooru input needs. */
+    fun addPostIncludeAlternative(
+        state: SearchUiState,
+        post: Post,
+        groupIndex: Int,
+        term: SearchTerm,
+    ): SearchDraftReduction {
+        val joined = postTermForGroup(state.query.draft, post.id.source, groupIndex, term)
+            ?: return SearchDraftReduction(state, changed = false, accepted = false)
+        return mutateQuery(state) { query ->
+            query.withIncludeTermGroups(
+                query.effectiveIncludeTermGroups.mapIndexed { index, group ->
+                    if (index == groupIndex) SearchTermGroup(group.terms + joined) else group
+                },
+            )
+        }
     }
 
     fun selectScope(state: SearchUiState, scope: FacetedSearchScope): SearchDraftReduction {
@@ -381,23 +435,22 @@ object SearchDraftReducer {
 
     fun prepareTagSearch(
         state: SearchUiState,
-        includeTags: List<String>,
-        excludeTags: List<String>,
+        includeTermGroups: List<SearchTermGroup>,
+        excludeTerms: List<SearchTerm>,
         mode: QueryMode,
         availableSources: Set<SourceKey>,
         supportedScopes: (QueryMode) -> List<FacetedSearchScope>,
     ): SearchDraftReduction {
-        val includes = includeTags.map(String::trim).filter(String::isNotBlank).distinct()
-        val excludes = excludeTags.map(String::trim).filter(String::isNotBlank)
-            .filterNot { it in includes }.distinct()
+        val includes = includeTermGroups.map { group -> group.terms.mapNotNull(SearchTerm::normalizedOrNull).distinct() }
+            .filter(List<SearchTerm>::isNotEmpty)
+            .distinctBy(List<SearchTerm>::toSet)
+        val excludes = excludeTerms.mapNotNull(SearchTerm::normalizedOrNull).distinct()
+            .filterNot { excluded -> includes.any { excluded in it } }
         if ((includes.isEmpty() && excludes.isEmpty()) || !mode.isAvailable(availableSources)) {
             return SearchDraftReduction(state, changed = false, accepted = false)
         }
-        val query = emptySearchQuery(mode).withIncludeTermsAsRequired(
-            includes.map(::SearchTerm),
-        ).copy(
-            excludeTerms = excludes.map(::SearchTerm),
-        )
+        val query = emptySearchQuery(mode).withIncludeTermGroups(includes.map(::SearchTermGroup))
+            .copy(excludeTerms = excludes)
         val scopes = supportedScopes(mode)
         val reset = resetInputState(state, query)
         return SearchDraftReduction(
@@ -552,6 +605,9 @@ private fun SearchTerm.normalizedOrNull(): SearchTerm? {
     val value = value.trim().takeIf(String::isNotBlank) ?: return null
     return copy(value = value, sourceNamespace = sourceNamespace?.trim()?.takeIf(String::isNotBlank))
 }
+
+private val SearchTerm.isGeneralTag: Boolean
+    get() = facet == SearchFacet.TAG && (sourceNamespace == null || sourceNamespace.equals("tag", ignoreCase = true))
 
 private const val MAX_GROUP_ALTERNATIVES = 8
 

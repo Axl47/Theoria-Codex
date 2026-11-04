@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import com.theoriacodex.data.repository.CodexLibrarySort
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
+import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 
 internal class CodexListUiState(initialCodices: List<Codex>) {
@@ -15,8 +16,7 @@ internal class CodexListUiState(initialCodices: List<Codex>) {
     var deleteTarget by mutableStateOf<Codex?>(null)
     var actionTarget by mutableStateOf<Codex?>(null)
     var autoSaveTarget by mutableStateOf<Codex?>(null)
-    var searchSourceTarget by mutableStateOf<Codex?>(null)
-    var tagSelectionTarget by mutableStateOf<CodexSourceSelection?>(null)
+    var searchTarget by mutableStateOf<Codex?>(null)
     val ordering = com.theoriacodex.app.ui.components.ReorderListState(initialCodices, Codex::codexId)
 
     fun synchronizeCodices(codices: List<Codex>) {
@@ -39,6 +39,7 @@ internal data class CodexListPresentation(
     val librarySort: CodexLibrarySort = CodexLibrarySort.MANUAL,
     /** Null until statistics first answer, or while no sort needs them. */
     val libraryUsage: Map<String, CodexLibraryUsage>? = null,
+    val searchTerms: Map<SourceKey, CodexSearchTerms> = emptyMap(),
 )
 
 internal data class CodexListActions(
@@ -46,7 +47,7 @@ internal data class CodexListActions(
     val importCodex: () -> Unit,
     val downloadCodex: (String) -> Unit,
     val shareCodex: (String) -> Unit,
-    val searchFromCodex: (String, SourceKey, List<String>) -> Unit,
+    val searchFromCodex: (String, SourceKey, Query) -> Unit,
     val commitReorder: (List<String>) -> Unit,
     val createCodex: (String) -> Unit,
     val renameCodex: (String, String) -> Unit,
@@ -57,8 +58,6 @@ internal data class CodexListActions(
     val openSavedCollectionActions: (String) -> Unit = {},
     val setLibrarySort: (CodexLibrarySort) -> Unit = {},
 )
-
-internal data class CodexSourceSelection(val codex: Codex, val source: SourceKey)
 
 internal fun moveCodex(codices: List<Codex>, fromIndex: Int, toIndex: Int): List<Codex> {
     if (fromIndex == toIndex || fromIndex !in codices.indices || toIndex !in codices.indices) return codices

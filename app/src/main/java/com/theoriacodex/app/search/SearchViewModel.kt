@@ -245,6 +245,7 @@ internal class SearchViewModel(
                 is SearchAction.AddIncludeAlternative -> SearchDraftReducer.addIncludeAlternative(it, action.groupIndex, action.term).state
                 is SearchAction.SplitIncludeAlternative -> SearchDraftReducer.splitIncludeAlternative(it, action.groupIndex, action.term).state
                 is SearchAction.RemoveIncludeGroup -> SearchDraftReducer.removeIncludeGroup(it, action.groupIndex).state
+                is SearchAction.RestoreDraftTerms -> SearchDraftReducer.restoreTerms(it, action.includeTermGroups, action.excludeTerms).state
                 is SearchAction.IncludeSuggestion -> SearchDraftReducer.addTerm(it, action.suggestion.toSearchTerm(), excluded = false).state
                 is SearchAction.ExcludeSuggestion -> SearchDraftReducer.addTerm(it, action.suggestion.toSearchTerm(), excluded = true).state
                 SearchAction.ResetDraft -> SearchDraftReducer.resetDraft(it).state
@@ -263,6 +264,8 @@ internal class SearchViewModel(
                         supportedScopes = coordinator::supportedSearchScopes,
                     ).state
                 }
+                is SearchAction.AddPostIncludeAlternative ->
+                    SearchDraftReducer.addPostIncludeAlternative(it, action.post, action.groupIndex, action.term).state
                 is SearchAction.SetNhentaiLanguage -> SearchDraftReducer.setNhentaiLanguage(it, action.filter).state
                 is SearchAction.SetNhentaiFullColor -> SearchDraftReducer.setNhentaiFullColor(it, action.enabled).state
                 SearchAction.ResetFilters -> {
@@ -328,8 +331,8 @@ internal class SearchViewModel(
     private fun applyTagSearch(action: SearchAction.ApplyTagSearch) {
         val reduction = SearchDraftReducer.prepareTagSearch(
             state = mutableState.value,
-            includeTags = action.includeTags,
-            excludeTags = emptyList(),
+            includeTermGroups = action.includeTermGroups,
+            excludeTerms = action.excludeTerms,
             mode = action.mode,
             availableSources = mutableState.value.query.availableSources.toSet(),
             supportedScopes = coordinator::supportedSearchScopes,

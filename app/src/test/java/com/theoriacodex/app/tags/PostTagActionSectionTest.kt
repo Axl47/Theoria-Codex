@@ -31,7 +31,7 @@ class PostTagActionSectionTest {
 
         assertEquals(listOf(tag, artist, language, female), postActionTerms(post))
         assertEquals(
-            listOf("Tags", "Female tags", "Artists", "Languages"),
+            listOf("Artists", "Tags", "Female tags", "Languages"),
             postActionTermGroups(post).map(PostActionTermGroup::label),
         )
     }

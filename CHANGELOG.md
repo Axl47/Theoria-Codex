@@ -5,15 +5,34 @@
 ### Added
 
 - Sort the Codex Library and the library order in Add to Codex by Most watched or Most opened, using the time and open counts shown in Stats.
+- Removing a tag from the search editor offers a brief Undo.
+- Post info now shows your search under the tags and can run it from there, so you no longer have to go to Search first.
+- Add a post's tag to an "or" group from post info with "+ or"; tags of another type dim while a group is the target.
+- Exclude tags and build "or" groups in a Codex's "Search with these tags".
+- Filter a Codex's tags while building a search, and switch source in place without an extra menu.
 
 ### Changed
 
 - Recents sections (All, Watched, Codex, Searches) moved from a row of chips into a dropdown beside the source selector, leaving more of the screen for your history.
+- The search editor now shows your tags as one readable query, in the order you added them, with "or" groups inline and excluded tags below.
+- Add an alternative right on its "or" group; the mode and target rows are gone, and the button beside the field shows how the next tag joins.
+- Tapping a tag opens its actions right next to it.
+- The tag field sits just above the keyboard, and your query stays visible above the suggestions while you type.
+- Search is now at the top of the editor, with Favorites, Undo last search, and Reset in its overflow menu.
+- Post info tags now wrap with their full names instead of being cut off in columns. Tap a tag to add it, again to exclude it, and once more to clear it.
+- Artists, series, and characters now come before general tags in post info, and very long tag groups collapse behind "+N more".
+- Tag counts are shortened, such as 84k or 1.2m.
+- The Viewer's post info uses a compact action row, so tags start near the top. Go to Search and Open in browser are under More.
+- Randomize in a Codex's search is now Draw, which takes up to five tags from one saved post so they are known to appear together.
+- A Codex's search now keeps each tag's type, so an artist is searched as an artist.
 
 ### Fixed
 
 - Moving to another post or image in the Viewer no longer brings back the header and footer; they stay hidden until you tap.
 - Zooming in the Viewer, by pinching or double-tapping, no longer brings back the header and footer.
+- The search bar over results now reads "mountain or snow" for an "or" group instead of listing the tags as if both were required.
+- When an "or" group's tag type rules out suggestions, the editor now says so instead of showing nothing.
+- Adding a typed tag from another source's post now warns you before it switches Search to that source and removes your other typed tags.
 
 ## [1.1.0] - 2026-11-03
 

@@ -146,7 +146,7 @@ fun SearchScreen(
     actionPost.post?.let { post ->
         SearchPostSheet(
             post, actionPost, state, creatorBrowsingSources, tagVideoCountProvider, fetchTagVideoCounts, onAction, onSaveToDevice,
-            onRequestSaveToCodex, onOpenCreatorProfile, onOpenLegacyCreatorProfile, onPostUrlCopied, onAddFavoriteTag,
+            onRequestSaveToCodex, onOpenCreatorProfile, onOpenLegacyCreatorProfile, onPostUrlCopied, onAddFavoriteTag, applyDraft,
         )
     }
     if (chrome.composerOpen) {
@@ -360,6 +360,7 @@ private fun SearchPostSheet(
     onOpenLegacyCreatorProfile: (Post) -> Unit,
     onPostUrlCopied: (Post) -> Unit,
     onAddFavoriteTag: (SourceKey, String) -> Unit,
+    applyDraft: () -> Unit,
 ) {
     PostActionSheet(
         post = post,
@@ -389,6 +390,10 @@ private fun SearchPostSheet(
                 onRemoveIncludeTerm = { term -> onAction(SearchAction.RemoveIncludeTerm(term)) },
                 onRemoveExcludeTerm = { term -> onAction(SearchAction.RemoveExcludeTerm(term)) },
                 onFavoriteTagLongPress = onAddFavoriteTag,
+                onSearch = {
+                    actionPost.dismiss()
+                    applyDraft()
+                },
             )
         },
     )

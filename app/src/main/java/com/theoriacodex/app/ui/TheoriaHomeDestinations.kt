@@ -332,9 +332,7 @@ internal fun CodexLibraryDestination(shell: TheoriaShell, actionCodexId: String?
             onShareCodex = { codexId ->
                 shell.scope.launch(start = CoroutineStart.UNDISPATCHED) { shell.shareCodex(codexId) }
             },
-            onSearchFromCodex = { _, source, includeTags ->
-                shell.scope.launch(start = CoroutineStart.UNDISPATCHED) { shell.searchFromCodex(source, includeTags) }
-            },
+            onSearchFromCodex = { _, source, query -> shell.searchFromCodex(source, query) },
             onCleanCodex = { targetId, comparisonIds -> commands.clean(state.activeProfile.profileId, targetId, comparisonIds) },
             onCommitReorder = commands::reorder,
             onCreateCodex = { name -> commands.create(state.activeProfile.profileId, name) },

@@ -99,7 +99,11 @@ internal fun TheoriaAppContent(
         LocalViewerReturnTransition provides viewerReturnTransition,
     ) {
         com.theoriacodex.app.codex.SavedCodexSession {
-            PostTagContextProvider(shell.routes.searchOwner?.state, shell.features.search::fetchSearchTermCounts) {
+            PostTagContextProvider(
+                shell.routes.searchOwner?.state,
+                shell.features.search::fetchSearchTermCounts,
+                shell.routes.postTagSearchActions,
+            ) {
                 TheoriaNightTheme {
                     ShellOverlaySheets(shell)
                     if (shell.navReady) {

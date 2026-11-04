@@ -45,6 +45,22 @@ class SearchDraftReducerTest {
     }
 
     @Test
+    fun `restoring terms undoes a removal exactly, keeping group order and exclusions`() {
+        val groups = listOf(
+            SearchTermGroup(listOf(SearchTerm("rin"), SearchTerm("aoi"))),
+            SearchTermGroup.single(SearchTerm("mika")),
+        )
+        val excluded = listOf(SearchTerm("sketch"))
+        val draft = query(QueryMode.Source(SourceKey.PIXIV), emptyList()).withIncludeTermGroups(groups).copy(excludeTerms = excluded)
+        val removed = SearchDraftReducer.removeIncludeGroup(state(draft), 0).state
+
+        val restored = SearchDraftReducer.restoreTerms(removed, groups, excluded).state.query.draft
+
+        assertEquals(groups, restored.effectiveIncludeTermGroups)
+        assertEquals(excluded, restored.excludeTerms)
+    }
+
+    @Test
     fun `mode selection restores per-mode query and rejects unavailable source`() {
         val restored = query(QueryMode.Source(SourceKey.PIXIV), listOf(SearchTerm("saved")))
         val withHistory = SearchDraftContext(setOf(SourceKey.PIXIV), mapOf(modeKey(restored.mode) to restored))
@@ -105,8 +121,11 @@ class SearchDraftReducerTest {
         )
         val prepared = SearchDraftReducer.prepareTagSearch(
             dirty,
-            includeTags = listOf(" fresh ", "fresh"),
-            excludeTags = listOf("blocked", "fresh"),
+            includeTermGroups = listOf(
+                SearchTermGroup.single(SearchTerm(" fresh ")),
+                SearchTermGroup.single(SearchTerm("fresh")),
+            ),
+            excludeTerms = listOf(SearchTerm("blocked"), SearchTerm("fresh")),
             mode = QueryMode.Source(SourceKey.PIXIV),
             availableSources = available,
             supportedScopes = ::noScopes,
@@ -118,7 +137,51 @@ class SearchDraftReducerTest {
         assertEquals(SortMode.NEWEST, prepared.state.query.draft.sort)
         assertTrue(prepared.state.content.results.isEmpty())
         assertFalse(SearchDraftReducer.prepareTagSearch(state(), emptyList(), emptyList(), QueryMode.Unified, available, ::noScopes).accepted)
-        assertFalse(SearchDraftReducer.prepareTagSearch(state(), listOf("x"), emptyList(), QueryMode.Source(SourceKey.GELBOORU), setOf(SourceKey.PIXIV), ::noScopes).accepted)
+        assertFalse(SearchDraftReducer.prepareTagSearch(state(), listOf(SearchTermGroup.single(SearchTerm("x"))), emptyList(), QueryMode.Source(SourceKey.GELBOORU), setOf(SourceKey.PIXIV), ::noScopes).accepted)
+    }
+
+    @Test
+    fun `tag search keeps typed terms and or groups`() {
+        val artist = SearchTerm("mika", SearchFacet.ARTIST)
+        val either = SearchTermGroup(listOf(SearchTerm("sea"), SearchTerm("snow")))
+        val prepared = SearchDraftReducer.prepareTagSearch(
+            state(), listOf(SearchTermGroup.single(artist), either), emptyList(),
+            QueryMode.Source(SourceKey.PIXIV), available, ::noScopes,
+        )
+        assertEquals(listOf(SearchTermGroup.single(artist), either), prepared.state.query.draft.effectiveIncludeTermGroups)
+    }
+
+    @Test
+    fun `only a typed tag from another source reports what the switch would drop`() {
+        val artist = SearchTerm("mika", SearchFacet.ARTIST)
+        val hidden = SearchTerm("rin", SearchFacet.CHARACTER)
+        val draft = query(QueryMode.Source(SourceKey.PIXIV), listOf(artist, SearchTerm("sea")))
+            .copy(excludeTerms = listOf(hidden, SearchTerm("rain")))
+        val typed = SearchTerm("aoi", SearchFacet.ARTIST)
+
+        assertEquals(listOf(artist, hidden), SearchDraftReducer.termsLostToPostTerm(draft, SourceKey.GELBOORU, typed))
+        assertEquals(emptyList<SearchTerm>(), SearchDraftReducer.termsLostToPostTerm(draft, SourceKey.PIXIV, typed))
+        assertEquals(emptyList<SearchTerm>(), SearchDraftReducer.termsLostToPostTerm(draft, SourceKey.GELBOORU, SearchTerm("sky")))
+        // The report matches what adding the tag really removes.
+        val added = SearchDraftReducer.addPostTerm(
+            state(draft), post(SourceKey.GELBOORU), typed, excluded = false, setOf(SourceKey.PIXIV, SourceKey.GELBOORU), ::noScopes,
+        ).state.query.draft
+        assertFalse(artist in added.includeTerms)
+        assertFalse(hidden in added.excludeTerms)
+    }
+
+    @Test
+    fun `post tags join a group of their type, even on sources that validate typed input`() {
+        val draft = query(QueryMode.Source(SourceKey.GELBOORU), listOf(SearchTerm("sea"), SearchTerm("mika", SearchFacet.ARTIST)))
+        val post = post(SourceKey.GELBOORU)
+
+        val joined = SearchDraftReducer.addPostIncludeAlternative(state(draft), post, 0, SearchTerm("snow", SearchFacet.TAG, "tag"))
+        assertTrue(joined.accepted)
+        assertEquals(listOf(SearchTerm("sea"), SearchTerm("snow")), joined.state.query.draft.effectiveIncludeTermGroups[0].terms)
+
+        assertEquals(null, SearchDraftReducer.postTermForGroup(draft, SourceKey.GELBOORU, 0, SearchTerm("aoi", SearchFacet.ARTIST)))
+        assertEquals(null, SearchDraftReducer.postTermForGroup(draft, SourceKey.PIXIV, 1, SearchTerm("aoi", SearchFacet.ARTIST)))
+        assertEquals(null, SearchDraftReducer.postTermForGroup(draft, SourceKey.GELBOORU, 0, SearchTerm("sea")))
     }
 
     @Test

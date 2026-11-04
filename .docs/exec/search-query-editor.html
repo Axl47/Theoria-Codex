@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Search query editor ExecPlan</title>
+<style>body{font:15px/1.5 system-ui,sans-serif;max-width:860px;margin:2rem auto;padding:0 1rem}table{border-collapse:collapse}td,th{border:1px solid #bbb;padding:.3rem .6rem;text-align:left}code{font-size:.92em}</style></head>
+<body>
+<h1>Search query editor ExecPlan</h1>
+<p><strong>Status:</strong> implemented and verified on an emulator; physical-phone and TalkBack checks remain open. <strong>Follows:</strong> <a href="search-composer.html">search-composer.html</a>.</p>
+
+<section id="purpose"><h2>Purpose</h2>
+<p>A search is "all of these groups, none of those tags", and a required tag is simply a group of one. The editor hid that structure behind type headings, a three-way add mode, a target row repeating tags already on screen, and actions at the bottom of the screen. It now shows the query as one readable expression and edits tags where they sit. Query storage, matching, and execution do not change.</p></section>
+
+<section id="context"><h2>Context</h2>
+<p>Paths are under <code>app/src/main/java/com/theoriacodex/app/search/</code>. The "draft" is the editable <code>Query</code>; results change only on <code>SearchAction.ApplyDraft</code>. <code>SearchComposerModel.kt</code> holds pure rules, <code>SearchComposerQuery.kt</code> renders the query and each tag's menu, and <code>SearchComposer.kt</code> owns screen layout and add-target state. Preserved reducer rules: a group's alternatives share its type, and Gelbooru tags must match a suggestion.</p></section>
+
+<section id="work"><h2>Work</h2>
+<table><tr><th>Change</th><th>Where</th></tr>
+<tr><td>Query in draft order, "or" groups as inline capsules, excluded tags below, type as a quiet chip prefix</td><td><code>SearchComposerQuery.kt</code>, <code>SearchFacetUi.kt</code></td></tr>
+<tr><td><code>ComposerAddTarget</code> (required, excluded, or a chosen group) replaces the add mode and target row; the group itself shows it is the target</td><td><code>SearchComposerModel.kt</code>, <code>SearchComposer.kt</code></td></tr>
+<tr><td>Tag actions in a menu anchored to the tag</td><td><code>SearchComposerQuery.kt</code></td></tr>
+<tr><td>Field above the keyboard; query capped but visible above suggestions; Search at the top with the rest in overflow</td><td><code>SearchComposer.kt</code></td></tr>
+<tr><td>Undo for removals through a new <code>RestoreDraftTerms</code> draft edit</td><td><code>SearchComposer.kt</code>, <code>SearchDraftReducer.kt</code></td></tr>
+<tr><td>Suggestions ruled out by a group's type are counted and explained</td><td><code>SearchComposerModel.kt</code></td></tr>
+<tr><td>Bar over results reads "a or b" for a group</td><td><code>CollapsedSearchContext.kt</code></td></tr></table></section>
+
+<section id="validation"><h2>Validation</h2>
+<p>Host: <code>./gradlew :app-logic:test :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin :app:detektDebug :app-logic:detektMain</code>, then <code>./gradlew :app:lintDebug --offline --no-daemon</code> and <code>python3 scripts/check_hotspots.py</code>. Robolectric needs Java 21 or newer.</p>
+<p>Device: on an isolated package, run <code>DEVICE_TEST_CLASS=com.theoriacodex.app.journeys.SearchNavigationJourneyTest scripts/verify_debug_device.sh app</code>. Connected tests uninstall <code>com.theoriacodex.debug</code> when they finish, so on a phone whose Debug install holds data, use an emulator.</p></section>
+
+<section id="log"><h2>Living log</h2>
+<h3>Decisions</h3><ul>
+<li>Type headings go away: with draft order and a small type prefix, the logic stays together. Long artist and character searches are where this could prove wrong.</li>
+<li>Excluding stays selected until changed, matching the earlier decision about the add mode, but now sits beside the field.</li>
+<li>Undo restores a snapshot, so it is withdrawn as soon as another edit or a source change lands, rather than overwrite that edit or put tags into a source that cannot search them.</li>
+<li>Favorites, Undo last search, and Reset move to overflow. Favorites may deserve a visible spot later.</li>
+<li>The scope row shows only once there is text, because it only matters for what is being typed.</li></ul>
+<h3>Surprises</h3><p>The tag menu's popup takes window focus and hides the keyboard while open; the keyboard returns after "Add an alternative". Connected tests would have uninstalled a Debug install holding data on the attached phone, so proof ran on an emulator.</p>
+<h3>Outcome</h3><p>Host checks, lint, and Detekt pass. On an API 36 emulator, <code>SearchNavigationJourneyTest</code> passes, and a temporary real-touch, real-keyboard journey covered the menu, in-place alternatives, excluding, removal undo, a long query, overflow, and search. The real Debug APK was driven through the menu and in-place alternatives. Not yet exercised: a physical phone, TalkBack, and long real artist or character searches.</p></section>
+
+<section id="recovery"><h2>Recovery</h2><p>Host checks are safe to rerun. If the reused daemon reports a Kotlin resolver crash in lint, rerun lint alone with <code>--no-daemon</code>.</p></section>
+</body></html>

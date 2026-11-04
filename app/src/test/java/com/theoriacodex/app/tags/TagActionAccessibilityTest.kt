@@ -10,8 +10,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
-import androidx.compose.ui.test.assertHeightIsEqualTo
-import androidx.compose.ui.test.assertWidthIsAtLeast
+import androidx.compose.ui.test.assertTouchHeightIsEqualTo
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performSemanticsAction
@@ -32,7 +31,7 @@ import org.robolectric.annotation.Config
 class TagActionAccessibilityTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun `narrow tag actions expose contextual names selected state button role and compact height`() {
+    @Test fun `a tag chip states its role, its state, what a tap does, and a direct action, at touch size`() {
         val removed = mutableListOf<SearchTerm>()
         val tag = SearchTerm("portrait")
         compose.setContent {
@@ -43,12 +42,15 @@ class TagActionAccessibilityTest {
                     onRemoveIncludeTerm = { removed += it }, onRemoveExcludeTerm = {})
             } }
         }
-        val action = compose.onNodeWithContentDescription("Include portrait in Search")
-        action.assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
-        action.assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, true))
-        action.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Selected"))
-        action.assertWidthIsAtLeast(48.dp).assertHeightIsEqualTo(24.dp)
-        action.performSemanticsAction(SemanticsActions.OnClick) { it() }
+        val chip = compose.tagChip("portrait")
+        chip.assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+        chip.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Required"))
+        assertEquals(
+            "Exclude portrait from Search",
+            chip.fetchSemanticsNode().config[SemanticsActions.OnClick].label,
+        )
+        chip.assertTouchHeightIsEqualTo(48.dp)
+        chip.performCustomAction("Remove portrait from Search")
         assertEquals(listOf(tag), removed)
     }
 
