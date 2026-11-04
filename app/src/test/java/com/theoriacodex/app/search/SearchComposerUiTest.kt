@@ -50,6 +50,7 @@ class SearchComposerUiTest {
         onOpenSaved: (SavedSearchEntry) -> Unit = {},
         suggestions: SearchSuggestionsUiState = SearchUiState().suggestions,
         onOpenFavorites: () -> Unit = {},
+        savedTags: List<String> = emptyList(),
     ) {
         val base = SearchUiState()
         val draft = emptySearchQuery(QueryMode.Source(source)).copy(
@@ -62,7 +63,7 @@ class SearchComposerUiTest {
                 SearchComposer(
                     state = state, onAction = { actions += it }, sourcePicker = {}, onApply = {}, onReset = {},
                     onUndo = {}, onOpenFavorites = onOpenFavorites, onOpenSourceAccounts = {}, onDigitsCommitted = {}, onDismiss = {},
-                    savedSearches = saved, onOpenSavedSearch = onOpenSaved,
+                    savedSearches = saved, onOpenSavedSearch = onOpenSaved, savedTags = savedTags,
                 )
             }
         }
@@ -79,6 +80,13 @@ class SearchComposerUiTest {
         compose.onNodeWithText("Saved").assertExists()
         compose.onNodeWithText("My landscapes").performClick()
         compose.runOnIdle { assertEquals(entry, opened) }
+    }
+
+    @Test fun `tapping a saved tag adds it to the draft`() {
+        open(SourceKey.GELBOORU, emptyList(), savedTags = listOf("blue_hair"))
+        compose.onNodeWithText("Saved").assertExists()
+        compose.onNodeWithText("blue_hair").performClick()
+        compose.runOnIdle { assertEquals(SearchAction.AddIncludeTerm(SearchTerm("blue_hair")), actions.last()) }
     }
 
     @Test fun `the query keeps draft order with type labels and a visible group`() {

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Your favorite tags now appear in the search editor's Saved section with a star, so one tap adds them to your search.
+
 ## [1.2.0] - 2026-11-04
 
 ### Added

@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -60,6 +61,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -103,6 +105,7 @@ internal fun SearchComposer(
     onDismiss: () -> Unit,
     savedSearches: List<SavedSearchEntry> = emptyList(),
     onOpenSavedSearch: (SavedSearchEntry) -> Unit = {},
+    savedTags: List<String> = emptyList(),
 ) {
     Dialog(
         onDismissRequest = onDismiss,
@@ -112,7 +115,7 @@ internal fun SearchComposer(
             SearchComposerContent(
                 state, onAction, sourcePicker, onApply, onReset, onUndo,
                 onOpenFavorites, onOpenSourceAccounts, onDigitsCommitted, onDismiss,
-                savedSearches, onOpenSavedSearch,
+                savedSearches, onOpenSavedSearch, savedTags,
             )
         }
     }
@@ -132,6 +135,7 @@ private fun SearchComposerContent(
     onDismiss: () -> Unit,
     savedSearches: List<SavedSearchEntry>,
     onOpenSavedSearch: (SavedSearchEntry) -> Unit,
+    savedTags: List<String>,
 ) {
     val input = state.suggestions.input
     val draft = state.query.draft
@@ -188,7 +192,7 @@ private fun SearchComposerContent(
 
     ComposerEditorBody(
         state, target, targetIndex, terms, suggestions, liveSelection, inputRequester, snackbars,
-        sourcePicker, savedSearches, onOpenSavedSearch, queryActions, onAction, onOpenSourceAccounts,
+        sourcePicker, savedSearches, onOpenSavedSearch, savedTags, queryActions, onAction, onOpenSourceAccounts,
         onUndo, onReset, onOpenFavorites, onApply, onDismiss,
         onCommit = ::commitTyped,
         onToggleTarget = {
@@ -254,6 +258,7 @@ private fun ComposerEditorBody(
     sourcePicker: @Composable () -> Unit,
     savedSearches: List<SavedSearchEntry>,
     onOpenSavedSearch: (SavedSearchEntry) -> Unit,
+    savedTags: List<String>,
     queryActions: ComposerQueryActions,
     onAction: (SearchAction) -> Unit,
     onOpenSourceAccounts: () -> Unit,
@@ -270,7 +275,7 @@ private fun ComposerEditorBody(
     val queryScroll = rememberScrollState()
     @Composable
     fun query(compact: Boolean, modifier: Modifier) = ComposerTagList(
-        state, terms, targetIndex, liveSelection, compact, queryScroll, savedSearches, onOpenSavedSearch,
+        state, terms, targetIndex, liveSelection, compact, queryScroll, savedSearches, onOpenSavedSearch, savedTags,
         queryActions, onOpenSourceAccounts, onAction, modifier,
     )
     Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
@@ -546,6 +551,7 @@ private fun ComposerTagList(
     scroll: ScrollState,
     savedSearches: List<SavedSearchEntry>,
     onOpenSavedSearch: (SavedSearchEntry) -> Unit,
+    savedTags: List<String>,
     queryActions: ComposerQueryActions,
     onOpenSourceAccounts: () -> Unit,
     onAction: (SearchAction) -> Unit,
@@ -566,9 +572,8 @@ private fun ComposerTagList(
                 modifier = Modifier.padding(vertical = 8.dp),
             )
         }
-        if (savedSearches.isNotEmpty()) {
-            ComposerSectionTitle("Saved")
-            SavedSearchChips(savedSearches, onOpenSavedSearch)
+        ComposerSavedSection(savedSearches, onOpenSavedSearch, savedTags) { tag ->
+            queryActions.onEdit(SearchAction.AddIncludeTerm(SearchTerm(tag)))
         }
         if (
             state.query.appliedSourceScope !is SearchSourceScope.Single &&
@@ -579,16 +584,45 @@ private fun ComposerTagList(
     }
 }
 
+/** Saved searches and saved tags share one section, each keeping its own row and icon. */
+@Composable
+private fun ComposerSavedSection(
+    savedSearches: List<SavedSearchEntry>,
+    onOpenSavedSearch: (SavedSearchEntry) -> Unit,
+    savedTags: List<String>,
+    onAddSavedTag: (String) -> Unit,
+) {
+    if (savedSearches.isEmpty() && savedTags.isEmpty()) return
+    ComposerSectionTitle("Saved")
+    if (savedSearches.isNotEmpty()) SavedSearchChips(savedSearches, onOpenSavedSearch)
+    if (savedTags.isNotEmpty()) SavedTagChips(savedTags, onAddSavedTag)
+}
+
 /** One tap reruns a saved search, replacing the current draft. */
 @Composable
 private fun SavedSearchChips(searches: List<SavedSearchEntry>, onOpen: (SavedSearchEntry) -> Unit) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         items(searches, key = SavedSearchEntry::id) { entry ->
-            AssistChip(
-                onClick = { onOpen(entry) },
-                label = { Text(entry.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                leadingIcon = { Icon(Icons.Default.Bookmark, null, Modifier.size(16.dp)) },
-            )
+            SavedChip(entry.name, Icons.Default.Bookmark) { onOpen(entry) }
         }
     }
+}
+
+/** One tap adds a saved tag to the draft, keeping the rest of the query. */
+@Composable
+private fun SavedTagChips(tags: List<String>, onAdd: (String) -> Unit) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(tags, key = { it }) { tag ->
+            SavedChip(tag, Icons.Default.Star) { onAdd(tag) }
+        }
+    }
+}
+
+@Composable
+private fun SavedChip(label: String, icon: ImageVector, onClick: () -> Unit) {
+    AssistChip(
+        onClick = onClick,
+        label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        leadingIcon = { Icon(icon, null, Modifier.size(16.dp)) },
+    )
 }

@@ -151,7 +151,7 @@ fun SearchScreen(
     }
     if (chrome.composerOpen) {
         SearchComposerDialog(
-            state, feed, chrome, gridState, sourcePicker, applyDraft, onAction, onOpenSourceAccounts, savedSearches, onOpenSavedSearch,
+            state, feed, chrome, gridState, sourcePicker, applyDraft, onAction, onOpenSourceAccounts, savedSearches, onOpenSavedSearch, favoriteTags,
         )
     }
     if (chrome.showFavoriteTagSheet) {
@@ -273,8 +273,10 @@ private fun SearchComposerDialog(
     onOpenSourceAccounts: () -> Unit,
     savedSearches: List<SavedSearchEntry>,
     onOpenSavedSearch: (SavedSearchEntry) -> Unit,
+    favoriteTags: Map<SourceKey, List<String>>,
 ) {
     val scope = rememberCoroutineScope()
+    val favoriteSections = rememberFavoriteTagSections(state, favoriteTags)
     val resetScroll = { scope.launch { resetSearchScroll(feed.visibleResults, gridState, onAction) } }
     SearchComposer(
         state, onAction, sourcePicker, applyDraft,
@@ -298,6 +300,8 @@ private fun SearchComposerDialog(
             chrome.closeComposer(onAction)
             onOpenSavedSearch(entry)
         },
+        // The same tag can be a favorite on several sources, but it reads as one chip here.
+        savedTags = favoriteSections.flatMap(FavoriteTagSection::tags).distinct(),
     )
 }
 
@@ -519,6 +523,24 @@ private suspend fun resetSearchScroll(
     onAction(SearchAction.ScrollChanged(0, 0))
 }
 
+/** The favorite tags that apply to the draft's source, grouped per source when searching all of them. */
+@Composable
+private fun rememberFavoriteTagSections(
+    state: SearchUiState,
+    favoriteTags: Map<SourceKey, List<String>>,
+): List<FavoriteTagSection> {
+    val sourceDisplayOrder = remember(state.query.modeOptions) {
+        state.query.modeOptions.mapNotNull { mode -> (mode as? QueryMode.Source)?.source }
+    }
+    return remember(state.query.draft.mode, favoriteTags, sourceDisplayOrder) {
+        favoriteTagSections(
+            mode = state.query.draft.mode,
+            favoriteTags = favoriteTags,
+            sourceDisplayOrder = sourceDisplayOrder,
+        )
+    }
+}
+
 @Composable
 private fun SearchFavoriteTags(
     state: SearchUiState,
@@ -529,16 +551,7 @@ private fun SearchFavoriteTags(
     onRemoveFavoriteTag: (SourceKey, String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val sourceDisplayOrder = remember(state.query.modeOptions) {
-        state.query.modeOptions.mapNotNull { mode -> (mode as? QueryMode.Source)?.source }
-    }
-    val sections = remember(state.query.draft.mode, favoriteTags, sourceDisplayOrder) {
-        favoriteTagSections(
-            mode = state.query.draft.mode,
-            favoriteTags = favoriteTags,
-            sourceDisplayOrder = sourceDisplayOrder,
-        )
-    }
+    val sections = rememberFavoriteTagSections(state, favoriteTags)
     val emptyMessage = remember(state.query.draft.mode) {
         when (val mode = state.query.draft.mode) {
             is QueryMode.Source -> "No favorite tags saved for ${mode.source.displayName()} yet."
