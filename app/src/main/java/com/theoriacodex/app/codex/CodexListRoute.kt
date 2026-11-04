@@ -11,6 +11,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.data.repository.CodexLibrarySort
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
+import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -26,7 +27,7 @@ internal fun CodexListScreen(
     onImportCodex: () -> Unit,
     onDownloadCodex: (String) -> Unit,
     onShareCodex: (String) -> Unit,
-    onSearchFromCodex: (String, SourceKey, List<String>) -> Unit,
+    onSearchFromCodex: (String, SourceKey, Query) -> Unit,
     onCommitReorder: (List<String>) -> Unit,
     onCreateCodex: (String) -> Unit,
     onRenameCodex: (String, String) -> Unit,
@@ -46,8 +47,7 @@ internal fun CodexListScreen(
             actionTarget = codices.firstOrNull { it.codexId == initialActionCodexId }
         }
     }
-    val targetId = state.actionTarget?.codexId ?: state.autoSaveTarget?.codexId ?: state.searchSourceTarget?.codexId
-        ?: state.tagSelectionTarget?.codex?.codexId
+    val targetId = state.actionTarget?.codexId ?: state.autoSaveTarget?.codexId ?: state.searchTarget?.codexId
     var retry by remember(targetId) { mutableIntStateOf(0) }
     val options = key(targetId, retry) { rememberCodexActionOptions(targetId, observeActionOptions) }
     val presentation = CodexListPresentation(
@@ -58,6 +58,7 @@ internal fun CodexListScreen(
         actionFailed = options.failed,
         retryActionOptions = { retry++ },
         librarySort = librarySort,
+        searchTerms = options.options.searchTerms,
     )
     val actions = CodexListActions(
         onOpenCodex, onImportCodex, onDownloadCodex, onShareCodex, onSearchFromCodex,
@@ -66,8 +67,8 @@ internal fun CodexListScreen(
     )
     LaunchedEffect(codices, state.ordering.reorderMode) { state.synchronizeCodices(codices) }
     if (initialActionCodexId == null) CodexListContent(presentation, state, actions)
-    val hasOverlay = state.actionTarget != null || state.autoSaveTarget != null || state.searchSourceTarget != null ||
-        state.tagSelectionTarget != null || state.renameTarget != null ||
+    val hasOverlay = state.actionTarget != null || state.autoSaveTarget != null || state.searchTarget != null ||
+        state.renameTarget != null ||
         state.deleteTarget != null || state.cleaningTargetId != null
     LaunchedEffect(hasOverlay) {
         if (initialActionCodexId != null && !hasOverlay) onActionsDismissed()

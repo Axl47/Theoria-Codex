@@ -9,10 +9,8 @@ import com.theoriacodex.app.search.state.emptySearchQuery
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollToNode
@@ -72,7 +70,10 @@ class PostTagActionLazyLayoutTest {
                             draft.value = draft.value.withIncludeTermsAsRequired(draft.value.includeTerms + it)
                             true
                         },
-                        onAddExcludeTerm = { true },
+                        onAddExcludeTerm = {
+                            selections += "exclude:${it.value}"
+                            true
+                        },
                         onRemoveIncludeTerm = {
                             selections += "remove:${it.value}"
                             draft.value = draft.value.withIncludeTermsAsRequired(draft.value.includeTerms.filterNot { term -> term == it })
@@ -84,15 +85,18 @@ class PostTagActionLazyLayoutTest {
         }
         compose.onNodeWithText("Actions").assertIsDisplayed()
         compose.onNodeWithText("tag_299").assertDoesNotExist()
-        compose.onAllNodesWithText("+")[0].performClick()
-        compose.onNode(hasScrollAction()).performScrollToNode(hasText("tag_299"))
+        compose.tagChip("tag_0").performClick()
+        compose.tagList().performScrollToNode(hasText("+288 more"))
+        compose.onNodeWithText("+288 more").performClick()
+        compose.tagList().performScrollToNode(hasText("tag_299"))
         compose.onNodeWithText("tag_299").assertIsDisplayed()
-        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Cancel"))
+        compose.tagList().performScrollToNode(hasText("Cancel"))
         compose.onNodeWithText("Cancel").assertIsDisplayed()
-        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Actions"))
-        compose.onAllNodesWithText("+")[0].performClick()
+        compose.tagList().performScrollToNode(hasText("Actions"))
+        compose.tagList().performScrollToNode(hasText("Actions"))
+        compose.tagChip("tag_0").performClick()
         compose.waitUntil { lookups.get() == 300 }
         assertFalse(lookupOnMain.get())
-        assertEquals(listOf("include:tag_0", "remove:tag_0"), selections)
+        assertEquals(listOf("include:tag_0", "exclude:tag_0", "remove:tag_0"), selections)
     }
 }

@@ -16,6 +16,7 @@ internal fun PostBoundTagSection(
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
     tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
     fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
+    onSearch: (() -> Unit)? = null,
 ) {
     PostTagActionSection(
         post = post,
@@ -26,5 +27,6 @@ internal fun PostBoundTagSection(
         onRemoveIncludeTerm = { term -> onRemoveIncludeTerm(post, term) },
         onRemoveExcludeTerm = { term -> onRemoveExcludeTerm(post, term) },
         onFavoriteTagLongPress = onFavoriteTagLongPress,
+        onSearch = onSearch,
     )
 }

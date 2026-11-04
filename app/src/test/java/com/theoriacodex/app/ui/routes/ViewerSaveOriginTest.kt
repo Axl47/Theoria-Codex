@@ -134,7 +134,7 @@ class ViewerSaveOriginTest {
             compose.runOnIdle { assertNull(retention.session.value) }
             compose.onNodeWithContentDescription("More actions").performClick()
             compose.onNodeWithText("Info").performClick()
-            compose.onNodeWithText("Save to Codex").performClick()
+            compose.onNodeWithContentDescription("Save to Codex").performClick()
             compose.runOnIdle {
                 assertEquals(context, savedContext)
                 assertEquals(query, savedQuery)

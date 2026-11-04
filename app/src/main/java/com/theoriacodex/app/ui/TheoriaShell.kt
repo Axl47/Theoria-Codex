@@ -87,6 +87,7 @@ import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.CreatorProfile
+import com.theoriacodex.app.tags.PostTagSearchActions
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
@@ -154,6 +155,12 @@ internal class RouteOwners {
     val removeSearchExcludeTerm: (Post, SearchTerm) -> Unit = { _, term ->
         dispatchOrQueue(SearchAction.RemoveExcludeTerm(term))
     }
+    val postTagSearchActions = PostTagSearchActions(
+        addAlternative = { post, groupIndex, term ->
+            dispatchOrQueue(SearchAction.AddPostIncludeAlternative(post, groupIndex, term))
+        },
+        applyDraft = { dispatchOrQueue(SearchAction.ApplyDraft) },
+    )
 }
 
 /** Which home tab is showing, and the routes that lead back to it. */
@@ -484,24 +491,19 @@ internal class TheoriaShell(
         }
     }
 
-    suspend fun searchFromCodex(source: SourceKey, includeTags: List<String>) {
+    /** Replaces the current search with [query], built in a Codex for [source]. */
+    fun searchFromCodex(source: SourceKey, query: Query) {
         if (source !in sources.registry.availableSources()) {
             toast("${source.displayName()} source is unavailable")
             return
         }
-        val normalizedIncludeTags = includeTags
-            .map(String::trim)
-            .filter(String::isNotBlank)
-            .distinct()
-        if (normalizedIncludeTags.isEmpty()) {
-            toast("Select at least one ${source.displayName()} tag")
-            return
-        }
         routes.dispatchOrQueue(
-            SearchAction.ApplyTagSearch(includeTags = normalizedIncludeTags, mode = QueryMode.Source(source)),
+            SearchAction.ApplyTagSearch(query.effectiveIncludeTermGroups, query.excludeTerms, query.mode),
         )
         navigation.goToSearch()
-        toast("Searching ${source.displayName()} codex tags: ${normalizedIncludeTags.joinToString(separator = ", ")}")
+        val tags = query.effectiveIncludeTermGroups.map { group -> group.terms.joinToString(" or ") { it.value } } +
+            query.excludeTerms.map { "-${it.value}" }
+        toast("Searching ${source.displayName()} codex tags: ${tags.joinToString(separator = ", ")}")
     }
 
     suspend fun downloadCodex(codexId: String) {
