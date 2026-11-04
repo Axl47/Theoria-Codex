@@ -3,12 +3,12 @@ package com.theoriacodex.app.search
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SortMode
 
-/** The search bar's one line: the first tags, how many more there are, and active filters. */
+/** The search bar's one line: the first required groups or exclusions, how many more, and active filters. */
 internal fun collapsedSearchContextSummary(
     query: Query,
     activeFilterCount: Int,
 ): String? {
-    val terms = query.effectiveIncludeTermGroups.flatMap { it.terms }.map { it.value } +
+    val terms = query.effectiveIncludeTermGroups.map { group -> group.terms.joinToString(" or ") { it.value } } +
         query.excludeTerms.map { "-${it.value}" }
     val tags = terms.take(MAX_SUMMARY_TAGS).joinToString(", ").takeIf(String::isNotBlank)?.let { shown ->
         val hidden = terms.size - MAX_SUMMARY_TAGS

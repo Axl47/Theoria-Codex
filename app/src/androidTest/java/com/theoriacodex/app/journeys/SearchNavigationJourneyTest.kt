@@ -55,7 +55,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         addSearchTag("blue")
         activate(compose.onNode(hasText("blue") and hasClickAction() and
             hasAnyAncestor(hasTestTag("Search composer"))))
-        activate(compose.onNodeWithText("Add “or”"))
+        activate(compose.onNodeWithText("Add an alternative"))
         addSearchTag("green")
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
         // This assertion concerns touch-driven focus dismissal, so Apply receives a real tap.
@@ -68,7 +68,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         val root = container.registry.requests.single { it.source == SourceKey.PIXIV && it.pageToken == null }
         assertEquals(listOf(listOf("landscape"), listOf("blue", "green")),
             root.query.effectiveIncludeTermGroups.map { group -> group.terms.map { it.value } })
-        val summary = compose.onNodeWithText("landscape, blue +1", useUnmergedTree = true)
+        val summary = compose.onNodeWithText("landscape, blue or green", useUnmergedTree = true)
         try {
             compose.waitUntil(conditionDescription = "Grouped query is applied and its field is collapsed", timeoutMillis = 10_000) {
                 summary.isDisplayed()

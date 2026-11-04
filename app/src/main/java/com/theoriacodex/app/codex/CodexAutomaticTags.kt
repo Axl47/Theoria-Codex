@@ -292,6 +292,7 @@ private fun AutoSaveRule(
         if (index > 0) AutoSaveAndLabel()
         TagGroupCard(
             active = addTarget == group.groupIndex,
+            modifier = Modifier.fillMaxWidth(),
             content = {
                 group.rows.forEach { row ->
                     val tag = row.automaticTag
@@ -314,7 +315,7 @@ private fun AutoSaveRule(
     val draft = addTarget?.takeIf { target -> groups.none { group -> group.groupIndex == target } }
     if (draft != null) {
         if (groups.isNotEmpty()) AutoSaveAndLabel()
-        TagGroupCard(active = true, hint = "Choose a tag below")
+        TagGroupCard(active = true, modifier = Modifier.fillMaxWidth(), hint = "Choose a tag below")
     } else if (groups.isNotEmpty()) {
         TextButton(
             modifier = Modifier.fillMaxWidth(),

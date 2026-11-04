@@ -264,6 +264,14 @@ object SearchDraftReducer {
         }.copy(accepted = true)
     }
 
+    fun restoreTerms(
+        state: SearchUiState,
+        includeTermGroups: List<SearchTermGroup>,
+        excludeTerms: List<SearchTerm>,
+    ): SearchDraftReduction = mutateQuery(state) { query ->
+        query.withIncludeTermGroups(includeTermGroups).copy(excludeTerms = excludeTerms)
+    }
+
     fun addPostTerm(
         state: SearchUiState,
         post: Post,

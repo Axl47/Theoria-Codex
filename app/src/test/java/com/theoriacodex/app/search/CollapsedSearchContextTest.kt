@@ -31,7 +31,7 @@ class CollapsedSearchContextTest {
             ))
 
         assertEquals(
-            "tag1, tag2 +1",
+            "tag1, tag2 or tag3",
             collapsedSearchContextSummary(query, 0),
         )
     }

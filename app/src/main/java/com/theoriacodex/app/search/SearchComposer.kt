@@ -1,21 +1,17 @@
 package com.theoriacodex.app.search
 
-import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material3.AssistChip
-import com.theoriacodex.data.repository.SavedSearchEntry
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -24,25 +20,29 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.InputChip
-import androidx.compose.material3.InputChipDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -60,6 +60,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -70,20 +72,18 @@ import androidx.compose.ui.window.DialogProperties
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.search.state.SearchUiState
-import com.theoriacodex.app.ui.components.TagGroupCard
-import com.theoriacodex.app.ui.components.TagGroupOrLabel
+import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.domain.adapter.FacetedSearchScope
-import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
-import com.theoriacodex.domain.model.SearchTermGroup
 
-private data class SelectedTerm(val term: SearchTerm, val excluded: Boolean)
+/** How the query can shrink while suggestions share the screen with it and the keyboard. */
+private val COMPACT_QUERY_MAX_HEIGHT = 144.dp
 
 /**
- * Full-screen search editor: every tag stays visible, sorted under its type when the source has
- * types, and the way the next tag is added is always on screen. It edits the same draft as before,
- * so results only change when [onApply] runs.
+ * Full-screen search editor: the query reads as one expression at the top, tags are edited where
+ * they sit, and new tags are typed just above the keyboard. It edits the same draft as before, so
+ * results only change when [onApply] runs.
  */
 @Composable
 internal fun SearchComposer(
@@ -131,89 +131,107 @@ private fun SearchComposerContent(
 ) {
     val input = state.suggestions.input
     val draft = state.query.draft
-    val groups = draft.effectiveIncludeTermGroups
+    val terms = ComposerTerms(draft.effectiveIncludeTermGroups, draft.excludeTerms, state.query.draftSourceScope)
     val focus = rememberSearchInputFocus()
     val inputRequester = remember { FocusRequester() }
-    var fieldFocused by remember { mutableStateOf(false) }
-    var mode by rememberSaveable { mutableStateOf(SearchAddMode.REQUIRED) }
+    val snackbars = remember { SnackbarHostState() }
+    var excludeNext by rememberSaveable { mutableStateOf(false) }
     var targetTerm by remember { mutableStateOf<SearchTerm?>(null) }
-    var awaitingNewGroup by remember { mutableStateOf(false) }
     var selection by remember { mutableStateOf<SelectedTerm?>(null) }
+    var removalUndo by remember { mutableStateOf<ComposerRemovalUndo?>(null) }
 
-    val targetIndex = groups.indexOfFirst { group -> targetTerm in group.terms }
-    val target = groups.getOrNull(targetIndex)?.let { IndexedTermGroup(targetIndex, it) }
-    val suggestions = composerSuggestions(
-        mode, target, state.suggestions.facetedAutocomplete, state.suggestions.autocomplete,
-    )
+    val targetIndex = terms.groups.indexOfFirst { group -> targetTerm in group.terms }
+    val target = when {
+        targetIndex >= 0 -> ComposerAddTarget.Alternative(targetIndex, terms.groups[targetIndex])
+        excludeNext -> ComposerAddTarget.Excluded
+        else -> ComposerAddTarget.Required
+    }
+    val suggestions = composerSuggestions(target, state.suggestions.facetedAutocomplete, state.suggestions.autocomplete)
     val liveSelection = selection?.takeIf { selected ->
-        if (selected.excluded) selected.term in draft.excludeTerms else groups.any { selected.term in it.terms }
+        if (selected.excluded) selected.term in terms.excluded else terms.groups.any { selected.term in it.terms }
     }
 
     LaunchedEffect(Unit) {
         withFrameNanos { }
         inputRequester.requestFocus()
     }
-    // A tag added to "New group" becomes the group that the next "Any of" tag joins.
-    LaunchedEffect(groups.size) {
-        if (awaitingNewGroup && groups.isNotEmpty()) {
-            targetTerm = groups.last().terms.first()
-            awaitingNewGroup = false
-        }
-    }
+    ComposerRemovalUndoEffect(removalUndo, terms, snackbars, onAction) { removalUndo = null }
 
-    fun add(action: SearchAction) {
-        awaitingNewGroup = mode == SearchAddMode.ANY_OF && target == null
-        onAction(action)
-    }
     fun commitTyped() = commitComposerInput(
-        mode, target, input, state.suggestions.canCommitInput, focus::clear, ::add, onAction, onDigitsCommitted,
+        target, input, state.suggestions.canCommitInput, focus::clear, onAction, onDigitsCommitted,
     )
-    fun selectMode(next: SearchAddMode) {
-        mode = next
-        awaitingNewGroup = false
-        if (next == SearchAddMode.ANY_OF && target == null) {
-            targetTerm = (groups.lastOrNull { it.terms.size > 1 } ?: groups.lastOrNull())?.terms?.first()
-        }
-    }
     fun addAlternativeTo(term: SearchTerm) {
-        mode = SearchAddMode.ANY_OF
+        excludeNext = false
         targetTerm = term
         selection = null
         inputRequester.requestFocus()
     }
+    val queryActions = ComposerQueryActions(
+        onSelect = { selected -> selection = selected },
+        onAddAlternative = ::addAlternativeTo,
+        onEdit = { action ->
+            targetTerm = null
+            selection = null
+            onAction(action)
+        },
+        onRemove = { action, removed, excluded ->
+            targetTerm = null
+            selection = null
+            removalUndo = composerRemovalUndo(terms, removed, excluded)
+            onAction(action)
+        },
+    )
 
     ComposerEditorBody(
-        state, mode, targetIndex, groups, suggestions, liveSelection, fieldFocused, inputRequester,
-        sourcePicker, savedSearches, onOpenSavedSearch, onAction, onOpenSourceAccounts,
+        state, target, targetIndex, terms, suggestions, liveSelection, inputRequester, snackbars,
+        sourcePicker, savedSearches, onOpenSavedSearch, queryActions, onAction, onOpenSourceAccounts,
         onUndo, onReset, onOpenFavorites, onApply, onDismiss,
-        onCommit = ::commitTyped, onModeChange = ::selectMode,
+        onCommit = ::commitTyped,
+        onToggleTarget = {
+            if (target is ComposerAddTarget.Alternative) targetTerm = null else excludeNext = !excludeNext
+            inputRequester.requestFocus()
+        },
         onFieldFocused = { focused ->
-            fieldFocused = focused
             onAction(if (focused) SearchAction.RefreshAutocomplete else SearchAction.ClearAutocomplete)
         },
-        onTargetSelected = { index -> targetTerm = groups.getOrNull(index)?.terms?.first() },
-        onAddSuggestion = { suggestion -> add(suggestion.add); onAction(SearchAction.ClearAutocomplete) },
-        onSelectionChanged = { selected -> selection = selected.takeUnless { it == liveSelection } },
-        onAddAlternative = ::addAlternativeTo,
-        onSelectedAction = { action -> onAction(action); selection = null },
     )
 }
 
+/** Offers Undo for the latest removal, and retracts the offer once restoring would overwrite another edit. */
+@Composable
+private fun ComposerRemovalUndoEffect(
+    undo: ComposerRemovalUndo?,
+    terms: ComposerTerms,
+    snackbars: SnackbarHostState,
+    onAction: (SearchAction) -> Unit,
+    onFinished: () -> Unit,
+) {
+    LaunchedEffect(terms) {
+        if (undo?.stillApplies(terms) == false) onFinished()
+    }
+    LaunchedEffect(undo) {
+        if (undo == null) return@LaunchedEffect
+        val result = snackbars.showSnackbar(undo.message, actionLabel = "Undo", duration = SnackbarDuration.Short)
+        if (result == SnackbarResult.ActionPerformed) {
+            onAction(SearchAction.RestoreDraftTerms(undo.before.groups, undo.before.excluded))
+        }
+        onFinished()
+    }
+}
+
 private fun commitComposerInput(
-    mode: SearchAddMode,
-    target: IndexedTermGroup?,
+    target: ComposerAddTarget,
     input: String,
     canCommit: Boolean,
     clearFocus: () -> Unit,
-    add: (SearchAction) -> Unit,
     onAction: (SearchAction) -> Unit,
     onDigitsCommitted: () -> Unit,
 ) {
-    val action = composerTypedAction(mode, target, input)
+    val action = composerTypedAction(target, input)
     if (action == null) {
         clearFocus()
     } else if (canCommit) {
-        add(action)
+        onAction(action)
         if (action is SearchAction.AddIncludeAlternative) onAction(SearchAction.ClearAutocomplete)
         if (input.trim().all(Char::isDigit)) onDigitsCommitted()
     }
@@ -222,16 +240,17 @@ private fun commitComposerInput(
 @Composable
 private fun ComposerEditorBody(
     state: SearchUiState,
-    mode: SearchAddMode,
+    target: ComposerAddTarget,
     targetIndex: Int,
-    groups: List<SearchTermGroup>,
-    suggestions: List<ComposerSuggestion>,
+    terms: ComposerTerms,
+    suggestions: ComposerSuggestions,
     liveSelection: SelectedTerm?,
-    fieldFocused: Boolean,
     inputRequester: FocusRequester,
+    snackbars: SnackbarHostState,
     sourcePicker: @Composable () -> Unit,
     savedSearches: List<SavedSearchEntry>,
     onOpenSavedSearch: (SavedSearchEntry) -> Unit,
+    queryActions: ComposerQueryActions,
     onAction: (SearchAction) -> Unit,
     onOpenSourceAccounts: () -> Unit,
     onUndo: () -> Unit,
@@ -240,105 +259,116 @@ private fun ComposerEditorBody(
     onApply: () -> Unit,
     onDismiss: () -> Unit,
     onCommit: () -> Unit,
-    onModeChange: (SearchAddMode) -> Unit,
+    onToggleTarget: () -> Unit,
     onFieldFocused: (Boolean) -> Unit,
-    onTargetSelected: (Int) -> Unit,
-    onAddSuggestion: (ComposerSuggestion) -> Unit,
-    onSelectionChanged: (SelectedTerm) -> Unit,
-    onAddAlternative: (SearchTerm) -> Unit,
-    onSelectedAction: (SearchAction) -> Unit,
 ) {
     val input = state.suggestions.input
+    val queryScroll = rememberScrollState()
+    @Composable
+    fun query(compact: Boolean, modifier: Modifier) = ComposerTagList(
+        state, terms, targetIndex, liveSelection, compact, queryScroll, savedSearches, onOpenSavedSearch,
+        queryActions, onOpenSourceAccounts, onAction, modifier,
+    )
     Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
-        ComposerField(
-            input = input,
-            validationMessage = state.query.validationMessage,
-            canCommit = state.suggestions.canCommitInput,
-            showAdd = input.isNotBlank(),
-            inputRequester = inputRequester,
-            sourcePicker = sourcePicker,
-            onFocusChanged = onFieldFocused,
-            onValueChange = { value ->
-                onAction(SearchAction.DismissValidation)
-                onAction(SearchAction.AutocompleteChanged(value))
-            },
-            onCommit = onCommit,
-            onDismiss = onDismiss,
+        ComposerTopBar(
+            state.canUndoSearch, state.hasPendingChanges, sourcePicker, onDismiss, onUndo, onReset, onOpenFavorites, onApply,
         )
-        AddModeSelector(mode, onModeChange)
-        if (mode == SearchAddMode.ANY_OF) {
-            AnyOfTargetRow(
-                groups = groups,
-                targetIndex = targetIndex,
-                onSelect = onTargetSelected,
-            )
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            Column(Modifier.fillMaxSize()) {
+                if (suggestions.isVisible) {
+                    // The query stays on screen while suggestions take the room it gives up.
+                    query(compact = true, Modifier.fillMaxWidth().heightIn(max = COMPACT_QUERY_MAX_HEIGHT))
+                    HorizontalDivider()
+                    ComposerSuggestionList(suggestions, target, onAction, Modifier.weight(1f).fillMaxWidth())
+                } else {
+                    query(compact = false, Modifier.weight(1f).fillMaxWidth())
+                }
+            }
+            SnackbarHost(snackbars, Modifier.align(Alignment.BottomCenter))
         }
-        if (state.query.supportedScopes.isNotEmpty() && (fieldFocused || input.isNotBlank())) {
+        if (state.query.supportedScopes.isNotEmpty() && input.isNotBlank()) {
             SearchScopeRow(
                 scopes = state.query.supportedScopes,
                 selectedScope = state.query.selectedScope,
                 onScopeSelected = { scope -> onAction(SearchAction.SelectSuggestionScope(scope)) },
             )
         }
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            if (suggestions.isNotEmpty()) {
-                ComposerSuggestionList(suggestions, onAddSuggestion)
-            } else {
-                ComposerTagList(
-                    state = state,
-                    savedSearches = savedSearches,
-                    onOpenSavedSearch = onOpenSavedSearch,
-                    selection = liveSelection,
-                    onSelect = onSelectionChanged,
-                    onAddAlternative = onAddAlternative,
-                    onOpenSourceAccounts = onOpenSourceAccounts,
-                    onAction = onAction,
-                )
-            }
-        }
-        ComposerSelectionActions(liveSelection, groups, onAddAlternative, onSelectedAction)
-        HorizontalDivider()
-        ComposerFooter(state.canUndoSearch, state.hasPendingChanges, onUndo, onReset, onOpenFavorites, onApply)
+        ComposerField(
+            input = input,
+            target = target,
+            validationMessage = state.query.validationMessage,
+            canCommit = state.suggestions.canCommitInput,
+            inputRequester = inputRequester,
+            onToggleTarget = onToggleTarget,
+            onFocusChanged = onFieldFocused,
+            onValueChange = { value ->
+                onAction(SearchAction.DismissValidation)
+                onAction(SearchAction.AutocompleteChanged(value))
+            },
+            onCommit = onCommit,
+        )
     }
 }
 
+/** Search stays reachable above the keyboard; less frequent actions wait in the overflow menu. */
 @Composable
-private fun ComposerSelectionActions(
-    selection: SelectedTerm?,
-    groups: List<SearchTermGroup>,
-    onAddAlternative: (SearchTerm) -> Unit,
-    onAction: (SearchAction) -> Unit,
+private fun ComposerTopBar(
+    canUndo: Boolean,
+    canReset: Boolean,
+    sourcePicker: @Composable () -> Unit,
+    onDismiss: () -> Unit,
+    onUndo: () -> Unit,
+    onReset: () -> Unit,
+    onOpenFavorites: () -> Unit,
+    onApply: () -> Unit,
 ) {
-    selection?.let { selected ->
-        SelectedTermActions(
-            selected = selected,
-            groupIndex = groups.indexOfFirst { selected.term in it.terms },
-            groupSize = groups.firstOrNull { selected.term in it.terms }?.terms?.size ?: 0,
-            onAddAlternative = { onAddAlternative(selected.term) },
-            onAction = onAction,
-        )
+    var menuOpen by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, "Close search editor") }
+        sourcePicker()
+        Box(Modifier.weight(1f))
+        Box {
+            IconButton(onClick = { menuOpen = true }) { Icon(Icons.Default.MoreVert, "More search actions") }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                @Composable
+                fun item(label: String, enabled: Boolean, onClick: () -> Unit) = DropdownMenuItem(
+                    text = { Text(label) },
+                    enabled = enabled,
+                    onClick = {
+                        menuOpen = false
+                        onClick()
+                    },
+                )
+                item("Favorites", enabled = true, onOpenFavorites)
+                item("Undo last search", canUndo, onUndo)
+                item("Reset", canReset, onReset)
+            }
+        }
+        Button(onClick = onApply, modifier = Modifier.testTag("Search composer apply")) { Text("Search") }
     }
 }
 
 @Composable
 private fun ComposerField(
     input: String,
+    target: ComposerAddTarget,
     validationMessage: String?,
     canCommit: Boolean,
-    showAdd: Boolean,
     inputRequester: FocusRequester,
-    sourcePicker: @Composable () -> Unit,
+    onToggleTarget: () -> Unit,
     onFocusChanged: (Boolean) -> Unit,
     onValueChange: (String) -> Unit,
     onCommit: () -> Unit,
-    onDismiss: () -> Unit,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, "Close search editor") }
+        ComposerTargetButton(target, onToggleTarget)
         OutlinedTextField(
             modifier = Modifier
                 .weight(1f)
@@ -351,71 +381,50 @@ private fun ComposerField(
             singleLine = true,
             isError = validationMessage != null,
             supportingText = validationMessage?.let { message -> { Text(message) } },
-            placeholder = { Text("Add a tag", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            placeholder = {
+                Text(
+                    when (target) {
+                        is ComposerAddTarget.Alternative -> "Add an alternative"
+                        ComposerAddTarget.Excluded -> "Exclude a tag"
+                        ComposerAddTarget.Required -> "Add a tag"
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            },
             keyboardOptions = KeyboardOptions(
                 imeAction = ImeAction.Done,
                 keyboardType = KeyboardType.Text,
                 capitalization = KeyboardCapitalization.None,
             ),
             keyboardActions = KeyboardActions(onDone = { onCommit() }),
-            trailingIcon = if (showAdd) {
+            trailingIcon = if (input.isNotBlank()) {
                 { TextButton(onClick = onCommit, enabled = canCommit) { Text("Add") } }
             } else {
                 null
             },
         )
-        sourcePicker()
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** Says beside the field how the next tag joins the query, and switches required/excluded or ends "or". */
 @Composable
-private fun AddModeSelector(mode: SearchAddMode, onSelect: (SearchAddMode) -> Unit) {
-    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
-        SearchAddMode.entries.forEachIndexed { index, option ->
-            SegmentedButton(
-                selected = mode == option,
-                onClick = { onSelect(option) },
-                shape = SegmentedButtonDefaults.itemShape(index, SearchAddMode.entries.size),
-                label = { Text(option.label, maxLines = 1) },
-            )
-        }
+private fun ComposerTargetButton(target: ComposerAddTarget, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val (label, description, color) = when (target) {
+        is ComposerAddTarget.Alternative ->
+            Triple("or ✕", "Adding alternatives. Stop adding alternatives", colors.primary)
+        ComposerAddTarget.Excluded ->
+            Triple("− not", "Next tag is excluded. Switch to required", colors.error)
+        ComposerAddTarget.Required ->
+            Triple("+ and", "Next tag is required. Switch to excluded", colors.onSurface)
     }
-}
-
-/** Shows which group an "Any of" tag joins; "New group" starts one from the next tag. */
-@Composable
-private fun AnyOfTargetRow(
-    groups: List<SearchTermGroup>,
-    targetIndex: Int,
-    onSelect: (Int) -> Unit,
-) {
-    LazyRow(
-        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-        contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        items(groups.size) { index ->
-            FilterChip(
-                selected = index == targetIndex,
-                onClick = { onSelect(index) },
-                label = {
-                    Text(
-                        groups[index].terms.joinToString(" or ") { it.value },
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    )
-                },
-            )
-        }
-        item {
-            FilterChip(
-                selected = targetIndex < 0,
-                onClick = { onSelect(-1) },
-                label = { Text("New group") },
-                leadingIcon = { Icon(Icons.Default.Add, null) },
-            )
-        }
-    }
+    OutlinedButton(
+        onClick = onClick,
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = color),
+        contentPadding = PaddingValues(horizontal = 12.dp),
+        modifier = Modifier.testTag("Search add target").semantics { contentDescription = description },
+    ) { Text(label, maxLines = 1) }
 }
 
 @Composable
@@ -478,15 +487,20 @@ private fun SearchScopeRow(
 
 @Composable
 private fun ComposerSuggestionList(
-    suggestions: List<ComposerSuggestion>,
-    onAdd: (ComposerSuggestion) -> Unit,
+    suggestions: ComposerSuggestions,
+    target: ComposerAddTarget,
+    onAction: (SearchAction) -> Unit,
+    modifier: Modifier,
 ) {
-    LazyColumn(Modifier.fillMaxSize()) {
-        items(suggestions) { suggestion ->
+    LazyColumn(modifier) {
+        items(suggestions.rows) { suggestion ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onAdd(suggestion) }
+                    .clickable {
+                        onAction(suggestion.add)
+                        onAction(SearchAction.ClearAutocomplete)
+                    }
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -503,57 +517,53 @@ private fun ComposerSuggestionList(
                 Icon(Icons.Default.Add, "Add ${suggestion.text}", tint = MaterialTheme.colorScheme.primary)
             }
         }
+        if (suggestions.hiddenCount > 0 && target is ComposerAddTarget.Alternative) {
+            item {
+                Text(
+                    composerHiddenSuggestionsNote(suggestions.hiddenCount, target.group),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                )
+            }
+        }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/** The query plus, when it is not sharing the screen with suggestions, what else can start a search. */
 @Composable
 private fun ComposerTagList(
     state: SearchUiState,
+    terms: ComposerTerms,
+    targetIndex: Int,
+    selection: SelectedTerm?,
+    compact: Boolean,
+    scroll: ScrollState,
     savedSearches: List<SavedSearchEntry>,
     onOpenSavedSearch: (SavedSearchEntry) -> Unit,
-    selection: SelectedTerm?,
-    onSelect: (SelectedTerm) -> Unit,
-    onAddAlternative: (SearchTerm) -> Unit,
+    queryActions: ComposerQueryActions,
     onOpenSourceAccounts: () -> Unit,
     onAction: (SearchAction) -> Unit,
+    modifier: Modifier,
 ) {
-    val draft = state.query.draft
-    // Types are only comparable within one source that declares them; Unified stays flat.
-    val typedSource = draft.mode is QueryMode.Source && state.query.supportedScopes.isNotEmpty()
-    val sections = composerSections(draft.effectiveIncludeTermGroups, typedSource)
+    val empty = terms.groups.isEmpty() && terms.excluded.isEmpty()
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = modifier.verticalScroll(scroll).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        if (savedSearches.isNotEmpty()) {
-            ComposerSectionTitle("Saved")
-            SavedSearchChips(savedSearches, onOpenSavedSearch)
-        }
-        sections.forEach { section ->
-            ComposerSectionTitle(section.title)
-            ComposerSectionTerms(section, typedSource, selection, onSelect, onAddAlternative)
-        }
-        if (draft.excludeTerms.isNotEmpty()) {
-            ComposerSectionTitle("Excluded")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                draft.excludeTerms.forEach { term ->
-                    ComposerTermChip(
-                        label = searchTermChipLabel(term, excluded = true),
-                        excluded = true,
-                        selected = selection == SelectedTerm(term, true),
-                        onClick = { onSelect(SelectedTerm(term, true)) },
-                    )
-                }
-            }
-        }
-        if (sections.isEmpty() && draft.excludeTerms.isEmpty()) {
+        ComposerQuery(terms, targetIndex, selection, queryActions)
+        if (compact) return@Column
+        if (empty) {
             Text(
                 "Add tags to build your search.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 8.dp),
             )
+        }
+        if (savedSearches.isNotEmpty()) {
+            ComposerSectionTitle("Saved")
+            SavedSearchChips(savedSearches, onOpenSavedSearch)
         }
         if (
             state.query.appliedSourceScope !is SearchSourceScope.Single &&
@@ -575,137 +585,5 @@ private fun SavedSearchChips(searches: List<SavedSearchEntry>, onOpen: (SavedSea
                 leadingIcon = { Icon(Icons.Default.Bookmark, null, Modifier.size(16.dp)) },
             )
         }
-    }
-}
-
-@Composable
-private fun ComposerSectionTitle(title: String) {
-    Text(
-        title,
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 8.dp),
-    )
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun ComposerSectionTerms(
-    section: ComposerSection,
-    typedSource: Boolean,
-    selection: SelectedTerm?,
-    onSelect: (SelectedTerm) -> Unit,
-    onAddAlternative: (SearchTerm) -> Unit,
-) {
-    // Under a type heading the type is already stated, so chips only name the tag.
-    fun label(term: SearchTerm) = if (typedSource) term.value else searchTermChipLabel(term, excluded = false)
-    @Composable
-    fun chip(term: SearchTerm) = ComposerTermChip(
-        label = label(term),
-        excluded = false,
-        selected = selection == SelectedTerm(term, false),
-        onClick = { onSelect(SelectedTerm(term, false)) },
-    )
-
-    val (single, alternatives) = section.groups.partition { (_, group) -> group.terms.size == 1 }
-    if (single.isNotEmpty()) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            single.forEach { (_, group) -> chip(group.terms.single()) }
-        }
-    }
-    alternatives.forEach { (_, group) ->
-        TagGroupCard(active = false) {
-            group.terms.forEachIndexed { index, term ->
-                if (index > 0) TagGroupOrLabel()
-                chip(term)
-            }
-            TextButton(onClick = { onAddAlternative(group.terms.first()) }) { Text("+ or") }
-        }
-    }
-}
-
-@Composable
-private fun ComposerTermChip(label: String, excluded: Boolean, selected: Boolean, onClick: () -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    InputChip(
-        selected = selected,
-        onClick = onClick,
-        label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        colors = if (excluded) {
-            InputChipDefaults.inputChipColors(
-                labelColor = colors.error,
-                selectedLabelColor = colors.error,
-                selectedContainerColor = colors.error.copy(alpha = 0.14f),
-            )
-        } else {
-            InputChipDefaults.inputChipColors()
-        },
-    )
-}
-
-/** Every tag behaves the same: tap to select, then choose what happens to it here. */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun SelectedTermActions(
-    selected: SelectedTerm,
-    groupIndex: Int,
-    groupSize: Int,
-    onAddAlternative: () -> Unit,
-    onAction: (SearchAction) -> Unit,
-) {
-    val term = selected.term
-    FlowRow(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-    ) {
-        if (selected.excluded) {
-            TextButton(onClick = {
-                onAction(SearchAction.RemoveExcludeTerm(term))
-                onAction(SearchAction.AddIncludeTerm(term))
-            }) { Text("Must have") }
-            TextButton(onClick = { onAction(SearchAction.RemoveExcludeTerm(term)) }) {
-                Text("Remove", color = MaterialTheme.colorScheme.error)
-            }
-            return@FlowRow
-        }
-        TextButton(onClick = onAddAlternative) { Text("Add “or”") }
-        if (groupSize > 1) {
-            TextButton(onClick = { onAction(SearchAction.SplitIncludeAlternative(groupIndex, term)) }) {
-                Text("Make required")
-            }
-        }
-        TextButton(onClick = {
-            onAction(SearchAction.RemoveIncludeTerm(term))
-            onAction(SearchAction.AddExcludeTerm(term))
-        }) { Text("Exclude") }
-        TextButton(onClick = { onAction(SearchAction.RemoveIncludeTerm(term)) }) {
-            Text("Remove", color = MaterialTheme.colorScheme.error)
-        }
-        if (groupSize > 1) {
-            TextButton(onClick = { onAction(SearchAction.RemoveIncludeGroup(groupIndex)) }) {
-                Text("Remove group", color = MaterialTheme.colorScheme.error)
-            }
-        }
-    }
-}
-
-@Composable
-private fun ComposerFooter(
-    canUndo: Boolean,
-    canReset: Boolean,
-    onUndo: () -> Unit,
-    onReset: () -> Unit,
-    onOpenFavorites: () -> Unit,
-    onApply: () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        TextButton(enabled = canUndo, onClick = onUndo) { Text("Undo") }
-        TextButton(enabled = canReset, onClick = onReset) { Text("Reset") }
-        TextButton(onClick = onOpenFavorites) { Text("Favorites") }
-        Box(Modifier.weight(1f))
-        Button(onClick = onApply, modifier = Modifier.testTag("Search composer apply")) { Text("Search") }
     }
 }

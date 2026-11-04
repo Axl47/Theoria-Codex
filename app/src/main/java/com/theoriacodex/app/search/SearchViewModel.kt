@@ -245,6 +245,7 @@ internal class SearchViewModel(
                 is SearchAction.AddIncludeAlternative -> SearchDraftReducer.addIncludeAlternative(it, action.groupIndex, action.term).state
                 is SearchAction.SplitIncludeAlternative -> SearchDraftReducer.splitIncludeAlternative(it, action.groupIndex, action.term).state
                 is SearchAction.RemoveIncludeGroup -> SearchDraftReducer.removeIncludeGroup(it, action.groupIndex).state
+                is SearchAction.RestoreDraftTerms -> SearchDraftReducer.restoreTerms(it, action.includeTermGroups, action.excludeTerms).state
                 is SearchAction.IncludeSuggestion -> SearchDraftReducer.addTerm(it, action.suggestion.toSearchTerm(), excluded = false).state
                 is SearchAction.ExcludeSuggestion -> SearchDraftReducer.addTerm(it, action.suggestion.toSearchTerm(), excluded = true).state
                 SearchAction.ResetDraft -> SearchDraftReducer.resetDraft(it).state
