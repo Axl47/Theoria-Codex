@@ -13,23 +13,55 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.theoriacodex.app.ui.findActivity
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingCommand
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 
 /**
  * Keeps a navigation entry's last values. The entry outlives its composition while another screen
  * sits on top, so a screen returning draws what it already knows instead of waiting on the database.
  */
-internal class RetainedFlowsViewModel(maxFlows: Int = Int.MAX_VALUE) : ViewModel() {
-    // Least recently used first; a flow still on screen stays alive through its collector.
-    private val flows = object : LinkedHashMap<String, StateFlow<Any?>>(16, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, StateFlow<Any?>>) = size > maxFlows
+internal class RetainedFlowsViewModel(private val maxFlows: Int = Int.MAX_VALUE) : ViewModel() {
+    private class RetainedFlow(val state: MutableStateFlow<Any?>, val sharing: Job)
+
+    // Least recently used first.
+    private val flows = LinkedHashMap<String, RetainedFlow>(16, 0.75f, true)
+
+    fun retain(key: String, flow: () -> Flow<Any>): StateFlow<Any?> {
+        val retained = flows.getOrPut(key) { share(flow) }
+        evictIdleFlows(keeping = key)
+        return retained.state
     }
 
-    fun retain(key: String, flow: () -> Flow<Any>): StateFlow<Any?> = flows.getOrPut(key) {
-        flow().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000L), null)
+    /** `WhileSubscribed` semantics, with a job and a subscriber count that eviction can see. */
+    private fun share(flow: () -> Flow<Any>): RetainedFlow {
+        val state = MutableStateFlow<Any?>(null)
+        val sharing = viewModelScope.launch {
+            SharingStarted.WhileSubscribed(5_000L).command(state.subscriptionCount)
+                .distinctUntilChanged()
+                .collectLatest { command ->
+                    if (command == SharingCommand.START) flow().collect { value -> state.value = value }
+                }
+        }
+        return RetainedFlow(state, sharing)
+    }
+
+    /** Evicting cancels sharing, which would otherwise hold its last value; a flow on screen stays live. */
+    private fun evictIdleFlows(keeping: String) {
+        val entries = flows.entries.iterator()
+        while (flows.size > maxFlows && entries.hasNext()) {
+            val (key, retained) = entries.next()
+            if (key != keeping && retained.state.subscriptionCount.value == 0) {
+                retained.sharing.cancel()
+                entries.remove()
+            }
+        }
     }
 }
 
