@@ -2,6 +2,7 @@ package com.theoriacodex.app.search
 
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -145,6 +146,18 @@ class SearchComposerUiTest {
         compose.onNodeWithText("Add an alternative").performClick()
         compose.onNodeWithText("1 match hidden: this group only takes Artists.").assertExists()
         compose.onNodeWithText("rivers").assertDoesNotExist()
+    }
+
+    @Config(qualifiers = "w400dp-h200dp")
+    @Test fun `suggestions keep usable room on a short screen`() {
+        open(
+            SourceKey.GELBOORU, emptyList(),
+            suggestions = SearchUiState().suggestions.copy(
+                input = "ri",
+                autocomplete = listOf(TagSuggestion("rivers", type = null, count = null)),
+            ),
+        )
+        compose.onNodeWithText("rivers").assertIsDisplayed()
     }
 
     @Test fun `less frequent actions wait in the overflow menu`() {

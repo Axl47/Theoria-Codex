@@ -3,6 +3,7 @@ package com.theoriacodex.app.search
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -77,8 +78,11 @@ import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 
-/** How the query can shrink while suggestions share the screen with it and the keyboard. */
+/** How far the query can grow while suggestions share the screen with it and the keyboard. */
 private val COMPACT_QUERY_MAX_HEIGHT = 144.dp
+
+/** The most of a short screen the query may take, so suggestions always stay reachable. */
+private const val COMPACT_QUERY_MAX_FRACTION = 0.4f
 
 /**
  * Full-screen search editor: the query reads as one expression at the top, tags are edited where
@@ -273,11 +277,12 @@ private fun ComposerEditorBody(
         ComposerTopBar(
             state.canUndoSearch, state.hasPendingChanges, sourcePicker, onDismiss, onUndo, onReset, onOpenFavorites, onApply,
         )
-        Box(Modifier.weight(1f).fillMaxWidth()) {
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            val compactMaxHeight = minOf(COMPACT_QUERY_MAX_HEIGHT, maxHeight * COMPACT_QUERY_MAX_FRACTION)
             Column(Modifier.fillMaxSize()) {
                 if (suggestions.isVisible) {
                     // The query stays on screen while suggestions take the room it gives up.
-                    query(compact = true, Modifier.fillMaxWidth().heightIn(max = COMPACT_QUERY_MAX_HEIGHT))
+                    query(compact = true, Modifier.fillMaxWidth().heightIn(max = compactMaxHeight))
                     HorizontalDivider()
                     ComposerSuggestionList(suggestions, target, onAction, Modifier.weight(1f).fillMaxWidth())
                 } else {
