@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -45,6 +47,7 @@ import com.theoriacodex.app.source.SourceIcon
 import com.theoriacodex.app.tags.TagChipRow
 import com.theoriacodex.app.tags.TagPickerChip
 import com.theoriacodex.app.tags.compactTagCount
+import com.theoriacodex.app.tags.tagChipChunks
 import com.theoriacodex.app.ui.components.ExpandedBottomSheet
 import com.theoriacodex.app.ui.components.TagGroupCard
 import com.theoriacodex.app.ui.components.TagGroupOrLabel
@@ -372,16 +375,27 @@ private fun AutoSaveTagPicker(
     when {
         rows.isEmpty() -> AutoSaveMessage("No more ${source.displayName()} tags in this Codex")
         visibleRows.isEmpty() -> AutoSaveMessage("No tags match \"${filter.trim()}\"")
-        else -> TagChipRow {
-            visibleRows.forEach { row ->
-                val tag = row.automaticTag.tag
-                TagPickerChip(
-                    label = tag,
-                    count = compactTagCount(row.postCount),
-                    tapLabel = "Add $tag to Auto-save",
-                    onTap = { onPick(CodexAutomaticTag(source, tag)) },
-                )
-            }
+        else -> AutoSaveTagList(visibleRows.tagChipChunks()) { row ->
+            val tag = row.automaticTag.tag
+            TagPickerChip(
+                label = tag,
+                count = compactTagCount(row.postCount),
+                tapLabel = "Add $tag to Auto-save",
+                onTap = { onPick(CodexAutomaticTag(source, tag)) },
+            )
+        }
+    }
+}
+
+/** A bounded lazy list, since a large Codex can offer thousands of tags inside this scrolling sheet. */
+@Composable
+private fun AutoSaveTagList(
+    rows: List<List<CodexAutomaticTagRow>>,
+    chip: @Composable (CodexAutomaticTagRow) -> Unit,
+) {
+    LazyColumn(Modifier.fillMaxWidth().height(AUTO_SAVE_TAG_LIST_HEIGHT)) {
+        items(rows.size) { rowIndex ->
+            TagChipRow { rows[rowIndex].forEach { row -> chip(row) } }
         }
     }
 }
@@ -427,3 +441,4 @@ internal fun String.normalizedTagFilterText(): String = trim()
     .replace(TAG_FILTER_WHITESPACE, " ")
 
 private val TAG_FILTER_WHITESPACE = Regex("\\s+")
+private val AUTO_SAVE_TAG_LIST_HEIGHT = 320.dp

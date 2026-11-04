@@ -67,4 +67,23 @@ class CodexAutoSaveUiTest {
         compose.onNodeWithContentDescription("Remove sunset from Auto-save").performClick()
         compose.runOnIdle { assertEquals(listOf("landscape", "forest"), rules.value.map { it.tag }) }
     }
+
+    @Test fun `a very large tag list composes only what is on screen`() {
+        compose.setContent {
+            MaterialTheme {
+                CodexAutoSaveSheet(
+                    codexName = "Scenery",
+                    automaticTags = emptyList(),
+                    tagOptionsBySource = mapOf(SourceKey.GELBOORU to List(3_000) { CodexSearchTagOption("tag_%04d".format(it), 1) }),
+                    loading = false,
+                    failed = false,
+                    onRetry = {},
+                    onSetAutomaticTag = { _, _ -> },
+                    onDismiss = {},
+                )
+            }
+        }
+        compose.onNodeWithText("tag_0000").assertExists()
+        compose.onNodeWithText("tag_2999").assertDoesNotExist()
+    }
 }
