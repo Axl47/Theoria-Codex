@@ -17,15 +17,18 @@ internal class DurationRequestPacer(
     private val lock = Mutex()
     private val nextStartBySource = mutableMapOf<SourceKey, Long>()
 
-    /** Suspends until [source] may start another lookup, reserving that slot. */
+    /** Suspends until [source] may start another lookup. Waking re-checks, so a new cooldown holds waiters too. */
     suspend fun awaitTurn(source: SourceKey) {
-        val waitMs = lock.withLock {
-            val now = clock()
-            val start = maxOf(now, nextStartBySource[source] ?: now)
-            nextStartBySource[source] = start + startIntervalMs(source)
-            start - now
+        while (true) {
+            val waitMs = lock.withLock {
+                val now = clock()
+                val nextStart = nextStartBySource[source] ?: now
+                if (now >= nextStart) nextStartBySource[source] = now + startIntervalMs(source)
+                nextStart - now
+            }
+            if (waitMs <= 0L) return
+            delay(waitMs)
         }
-        if (waitMs > 0L) delay(waitMs)
     }
 
     /** Holds every later lookup for [source] until the host has had time to recover. */

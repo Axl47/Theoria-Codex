@@ -2,7 +2,9 @@ package com.theoriacodex.app.media
 
 import com.theoriacodex.domain.adapter.DurationMetadataSourceAdapter
 import com.theoriacodex.domain.adapter.DurationMetadataSourceResult
+import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.withTimeoutOrNull
@@ -95,8 +97,12 @@ internal class MediaDurationAcquisitionEngine(
     private suspend fun acquireFromProvider(post: Post): MediaDurationState {
         traceRecorder.providerResolve()
         val result = runCatchingPreservingCancellation { resolveProviderDuration(post) }
-            .getOrNull()
-            ?: return retryable(MediaDurationFailureReason.PROVIDER_FAILURE)
+            .getOrElse { error ->
+                val throttled = (error as? SourceAdapterException)?.reason == SourceFailureReason.RATE_LIMITED
+                return retryable(
+                    if (throttled) MediaDurationFailureReason.RATE_LIMITED else MediaDurationFailureReason.PROVIDER_FAILURE,
+                )
+            }
         return when (result) {
             is DurationMetadataSourceResult.Known -> MediaDurationState.Known(
                 durationMs = result.durationMs,

@@ -114,6 +114,11 @@ class ViewerReturnTransitionTest {
         assertNull(transition.targetBounds)
     }
 
+    @Test fun `a target in a gap between visible cards is above the viewport`() {
+        assertEquals(-1f, viewerReturnScrollDirection(targetIndex = 11, lastVisibleIndex = 14), 0f)
+        assertEquals(1f, viewerReturnScrollDirection(targetIndex = 15, lastVisibleIndex = 14), 0f)
+    }
+
     @Test fun `return geometry uses window coordinates and uniformly fills the destination crop`() {
         val source = Rect(20f, 40f, 1020f, 2040f)
         val target = Rect(120f, 640f, 420f, 940f)

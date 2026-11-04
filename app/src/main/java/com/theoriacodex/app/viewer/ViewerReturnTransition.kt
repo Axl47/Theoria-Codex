@@ -298,11 +298,18 @@ private suspend fun LazyStaggeredGridState.scrollWithinColumnsTo(index: Int) {
         val visible = layoutInfo.visibleItemsInfo
         if (visible.isEmpty() || visible.any { it.index == index }) return
         val viewport = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).toFloat()
-        val direction = if (index < visible.minOf { it.index }) -1f else 1f
+        val direction = viewerReturnScrollDirection(index, visible.maxOf { it.index })
         if (scrollBy(direction * viewport) == 0f) return scrollToItem(index)
     }
     if (layoutInfo.visibleItemsInfo.none { it.index == index }) scrollToItem(index)
 }
+
+/**
+ * Cards fill columns in index order, so a later card being on screen puts an absent target above the
+ * viewport, even when a tall earlier card in another column is still visible.
+ */
+internal fun viewerReturnScrollDirection(targetIndex: Int, lastVisibleIndex: Int): Float =
+    if (targetIndex < lastVisibleIndex) -1f else 1f
 
 /** A far target falls back to a jump instead of composing an unbounded number of cards. */
 private const val MAX_VIEWER_RETURN_SCROLL_STEPS = 48
