@@ -346,6 +346,7 @@ internal fun CodexLibraryDestination(shell: TheoriaShell, actionCodexId: String?
             onOpenSavedCollectionActions = shell.overlays::openCollectionActions,
             likesCodexId = likesCodexIdForProfile(state.activeProfile.profileId),
             librarySort = state.librarySort,
+            libraryUsage = state.libraryUsage,
             onLibrarySortChange = { sort ->
                 shell.scope.launch { shell.data.settingsRepository.updateSettings { it.copy(codexLibrarySort = sort) } }
             },

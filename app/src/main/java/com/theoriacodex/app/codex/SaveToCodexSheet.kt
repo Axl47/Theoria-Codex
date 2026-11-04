@@ -72,6 +72,7 @@ internal fun SaveToCodexSheet(
     codexCoverCandidates: Map<String, List<CodexCoverCandidate>>,
     relevanceScores: Map<String, Double> = emptyMap(),
     librarySort: CodexLibrarySort = CodexLibrarySort.MANUAL,
+    libraryUsage: Map<String, CodexLibraryUsage> = emptyMap(),
     containingCodexIds: Set<String> = emptySet(),
     excludedCodexIds: Set<String> = emptySet(),
     onCreateCodex: (String, String) -> Unit,
@@ -114,6 +115,7 @@ internal fun SaveToCodexSheet(
         codexCoverCandidates = codexCoverCandidates,
         relevanceScores = relevanceScores,
         librarySort = librarySort,
+        libraryUsage = libraryUsage,
         containingCodexIds = containingCodexIds,
         onSelectCodex = onSelectCodex,
         onCycleProfile = {
@@ -149,6 +151,7 @@ private fun SaveToCodexSheetContent(
     codexCoverCandidates: Map<String, List<CodexCoverCandidate>>,
     relevanceScores: Map<String, Double>,
     librarySort: CodexLibrarySort,
+    libraryUsage: Map<String, CodexLibraryUsage>,
     containingCodexIds: Set<String>,
     onSelectCodex: (String) -> Unit,
     onCycleProfile: () -> Unit,
@@ -159,9 +162,11 @@ private fun SaveToCodexSheetContent(
     var insideSaved by rememberSaveable(selectedProfile?.profileId) { mutableStateOf(false) }
     var sortByRelevance by rememberSaveable { mutableStateOf(true) }
     val likesId = selectedProfile?.profileId?.let(::likesCodexIdForProfile)
-    val rootCodices = remember(selectedCodices, likesId, insideSaved, librarySort, codexItemCounts) {
+    val rootCodices = remember(selectedCodices, likesId, insideSaved, librarySort, codexItemCounts, libraryUsage) {
         savePickerCodices(
-            sortCodicesForLibrary(selectedCodices, librarySort, codexItemCounts, likesId), likesId, insideSaved,
+            sortCodicesForLibrary(selectedCodices, librarySort, codexItemCounts, likesId, libraryUsage),
+            likesId,
+            insideSaved,
         )
     }
     BackHandler(enabled = insideSaved) { insideSaved = false; searchText = "" }

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Sort the Codex Library and the library order in Add to Codex by Most watched or Most opened, using the time and open counts shown in Stats.
+
 ### Changed
 
 - Recents sections (All, Watched, Codex, Searches) moved from a row of chips into a dropdown beside the source selector, leaving more of the screen for your history.

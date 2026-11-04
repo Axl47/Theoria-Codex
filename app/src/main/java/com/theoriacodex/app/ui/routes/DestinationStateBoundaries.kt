@@ -9,6 +9,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.core.net.toUri
@@ -25,8 +26,12 @@ import com.theoriacodex.app.codex.sortLiveCodexPosts
 import com.theoriacodex.app.codex.CodexCollectionSource
 import com.theoriacodex.app.codex.CodexCollectionPresentation
 import com.theoriacodex.app.codex.CodexActionOptions
+import com.theoriacodex.app.codex.CodexLibraryUsage
 import com.theoriacodex.app.codex.FOLLOWED_CODEX_ID
+import com.theoriacodex.app.codex.observeCodexLibraryUsage
+import com.theoriacodex.app.codex.usesUsage
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import com.theoriacodex.app.codex.CodexCoverCandidate
 import com.theoriacodex.app.codex.codexBelongsToProfile
 import com.theoriacodex.app.di.DataDependencies
@@ -92,6 +97,7 @@ internal data class CodexDestinationState(
     val coverCandidates: Map<String, List<CodexCoverCandidate>>,
     val observeActionOptions: (String) -> Flow<CodexActionOptions>,
     val librarySort: com.theoriacodex.data.repository.CodexLibrarySort,
+    val libraryUsage: Map<String, CodexLibraryUsage>?,
 )
 
 internal data class CodexDetailDestinationState(
@@ -118,6 +124,7 @@ internal data class SaveToCodexDestinationState(
     val coverCandidates: Map<String, List<CodexCoverCandidate>>,
     val relevanceScores: Map<String, Double>,
     val containingCodexIds: Set<String>,
+    val libraryUsage: Map<String, CodexLibraryUsage>,
 )
 
 internal data class ViewerDestinationState(
@@ -221,6 +228,12 @@ internal fun CodexDestinationStateBoundary(
             { id: String -> source.observeActionOptions(id, availableSources) }
         }
         CodexContentWarmUp(data, collection.itemCounts, savedSortFor)
+        // Subscribed only while a usage sort needs it, since statistics are written during use.
+        val libraryUsage = if (settings.codexLibrarySort.usesUsage) {
+            rememberRetained("library-usage") { data.statisticsRepository.observeCodexLibraryUsage() }.value
+        } else {
+            null
+        }
         content(
             CodexDestinationState(
                 allCodices = codices,
@@ -231,6 +244,7 @@ internal fun CodexDestinationStateBoundary(
                 coverCandidates = collection.coverCandidates,
                 observeActionOptions = observeActions,
                 librarySort = settings.codexLibrarySort,
+                libraryUsage = libraryUsage,
             ),
         )
     }
@@ -354,6 +368,10 @@ internal fun SaveToCodexDestinationStateBoundary(
                 .observeSaveRelevance(codices.mapTo(linkedSetOf(), Codex::codexId), posts, searchQuery)
         }.collectAsStateWithLifecycle(initialValue = emptyMap())
     }
+    // One reading per open: watching behind this sheet writes usage, which must not move rows under a tap.
+    val libraryUsage = produceState(emptyMap<String, CodexLibraryUsage>(), data.statisticsRepository) {
+        value = data.statisticsRepository.observeCodexLibraryUsage().first()
+    }
     val activeProfile = settings.activeRecommendationProfile()
     content(
         SaveToCodexDestinationState(
@@ -370,6 +388,7 @@ internal fun SaveToCodexDestinationStateBoundary(
             coverCandidates = collection.coverCandidates,
             relevanceScores = relevance.value,
             containingCodexIds = containingCodexIds.value,
+            libraryUsage = libraryUsage.value,
         ),
     )
 }

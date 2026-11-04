@@ -145,6 +145,7 @@ private fun CodexReorderList(
     // The draft stays in manual order underneath an automatic sort, so Done can always commit it.
     val rows = sortCodicesForLibrary(
         state.ordering.reorderDraft, presentation.librarySort, presentation.itemCounts, presentation.likesCodexId,
+        presentation.libraryUsage.orEmpty(),
     )
     val list = rememberLazyListState()
     val rowSpacing = with(LocalDensity.current) { 8.dp.toPx() }
@@ -239,9 +240,11 @@ private fun CodexGrid(
     // A first frame in manual order would move the restored scroll anchor to the wrong Codex.
     val awaitingCounts = presentation.librarySort.usesItemCounts &&
         presentation.codices.any { it.codexId !in presentation.itemCounts }
-    if (awaitingCounts) return
+    val awaitingUsage = presentation.librarySort.usesUsage && presentation.libraryUsage == null
+    if (awaitingCounts || awaitingUsage) return
     val sorted = sortCodicesForLibrary(
         presentation.codices, presentation.librarySort, presentation.itemCounts, presentation.likesCodexId,
+        presentation.libraryUsage.orEmpty(),
     )
     val entries = savedCodexLibraryEntries(sorted, presentation.likesCodexId)
     val gridState = rememberLazyGridState()

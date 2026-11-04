@@ -37,6 +37,8 @@ internal data class CodexListPresentation(
     val actionFailed: Boolean = false,
     val retryActionOptions: () -> Unit = {},
     val librarySort: CodexLibrarySort = CodexLibrarySort.MANUAL,
+    /** Null until statistics first answer, or while no sort needs them. */
+    val libraryUsage: Map<String, CodexLibraryUsage>? = null,
 )
 
 internal data class CodexListActions(

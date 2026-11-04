@@ -449,6 +449,8 @@ enum class CodexLibrarySort {
     OLDEST,
     MOST_ITEMS,
     FEWEST_ITEMS,
+    MOST_WATCHED,
+    MOST_OPENED,
 }
 
 data class AppSettings(

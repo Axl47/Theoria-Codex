@@ -297,6 +297,7 @@ private fun SaveToCodexOverlay(shell: TheoriaShell) {
             codexCoverCandidates = state.coverCandidates,
             relevanceScores = state.relevanceScores,
             librarySort = state.settings.codexLibrarySort,
+            libraryUsage = state.libraryUsage,
             containingCodexIds = state.containingCodexIds,
             excludedCodexIds = pendingSave.excludedCodexIds,
             onCreateCodex = { profileId, name ->

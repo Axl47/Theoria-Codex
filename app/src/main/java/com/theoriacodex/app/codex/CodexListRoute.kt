@@ -40,6 +40,7 @@ internal fun CodexListScreen(
     onOpenSavedCollectionActions: (String) -> Unit = {},
     librarySort: CodexLibrarySort = CodexLibrarySort.MANUAL,
     onLibrarySortChange: (CodexLibrarySort) -> Unit = {},
+    libraryUsage: Map<String, CodexLibraryUsage>? = null,
 ) {
     val state = remember {
         CodexListUiState(codices).apply {
@@ -58,6 +59,7 @@ internal fun CodexListScreen(
         actionFailed = options.failed,
         retryActionOptions = { retry++ },
         librarySort = librarySort,
+        libraryUsage = libraryUsage,
     )
     val actions = CodexListActions(
         onOpenCodex, onImportCodex, onDownloadCodex, onShareCodex, onSearchFromCodex,
