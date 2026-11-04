@@ -3,6 +3,8 @@ package com.theoriacodex.sources.pixiv
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
+import com.theoriacodex.domain.adapter.DurationMetadataSourceAdapter
+import com.theoriacodex.domain.adapter.DurationMetadataSourceResult
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.MAX_RELATED_POST_CANDIDATES
@@ -57,7 +59,7 @@ class PixivSourceAdapter(
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val minRequestIntervalMs: Long = 350L,
     private val languageTag: String = Locale.getDefault().toLanguageTag(),
-) : SourceAdapter, CreatorPostsSourceAdapter, RelatedPostsSourceAdapter {
+) : SourceAdapter, CreatorPostsSourceAdapter, RelatedPostsSourceAdapter, DurationMetadataSourceAdapter {
     override val sourceKey: SourceKey = SourceKey.PIXIV
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
@@ -327,6 +329,16 @@ class PixivSourceAdapter(
             },
             durationMs = null,
         )
+    }
+
+    /** Search pages omit ugoira frames; failures propagate so the engine can retry them later. */
+    override suspend fun resolveDurationMetadata(post: Post): DurationMetadataSourceResult {
+        val isUgoira = post.id.source == SourceKey.PIXIV &&
+            (post.full?.mime == PIXIV_UGOIRA_MIME || post.media.any { it.mime == PIXIV_UGOIRA_MIME })
+        if (!isUgoira) return DurationMetadataSourceResult.Unsupported
+        return fetchUgoiraDurationMs(post.id.sourcePostId)
+            ?.let(DurationMetadataSourceResult::Known)
+            ?: DurationMetadataSourceResult.Unsupported
     }
 
     private suspend fun fetchUgoiraDurationMs(postId: String): Long? {

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.codex
 
+import com.theoriacodex.app.ui.codexMorph
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.size
@@ -90,6 +91,7 @@ private fun SavedCollectionTile(
     modifier: Modifier,
 ) {
     CodexCoverTile(
+        codexId = collection.codexId,
         name = collection.name,
         itemCount = presentation.itemCounts[collection.codexId] ?: 0,
         covers = presentation.coverCandidates[collection.codexId].orEmpty(),
@@ -104,6 +106,7 @@ private fun SavedCollectionTile(
 /** Every Codex in the library: name and count over its cover, with actions on long press. */
 @Composable
 internal fun CodexCoverTile(
+    codexId: String,
     name: String,
     itemCount: Int,
     covers: List<CodexCoverCandidate>,
@@ -116,7 +119,7 @@ internal fun CodexCoverTile(
     val onCover = covers.isNotEmpty()
     val textColor = if (onCover) Color.White else MaterialTheme.colorScheme.onSurface
     Box(
-        modifier.clip(RoundedCornerShape(16.dp))
+        modifier.codexMorph(codexId).clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .combinedClickable(
                 onClick = onOpen,

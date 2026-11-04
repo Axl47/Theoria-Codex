@@ -46,6 +46,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import com.theoriacodex.app.media.noMediaDurationStateForPost
+import com.theoriacodex.app.ui.components.FeedCardEnvironment
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
@@ -82,6 +84,19 @@ class ViewerReturnTransitionTest {
         compose.runOnIdle { assertTrue(visible.isEmpty()) }
     }
 
+    @Test fun `media counts as settling from the start of a close until it lands`() {
+        val transition = ViewerReturnTransition()
+        transition.openedFrom("origin")
+        assertTrue(!transition.mediaSettling)
+        transition.begin(postId)
+        assertTrue(transition.mediaSettling)
+        transition.finishLanding()
+        assertTrue(!transition.mediaSettling)
+        transition.begin(postId)
+        transition.clear()
+        assertTrue(!transition.mediaSettling)
+    }
+
     @Test fun `only the originating grid and current post can supply a centered target`() {
         val transition = ViewerReturnTransition()
         val target = Rect(10f, 200f, 210f, 500f)
@@ -97,6 +112,11 @@ class ViewerReturnTransitionTest {
         transition.clear()
         assertNull(transition.request)
         assertNull(transition.targetBounds)
+    }
+
+    @Test fun `a target in a gap between visible cards is above the viewport`() {
+        assertEquals(-1f, viewerReturnScrollDirection(targetIndex = 11, lastVisibleIndex = 14), 0f)
+        assertEquals(1f, viewerReturnScrollDirection(targetIndex = 15, lastVisibleIndex = 14), 0f)
     }
 
     @Test fun `return geometry uses window coordinates and uniformly fills the destination crop`() {
@@ -202,7 +222,7 @@ class ViewerReturnTransitionTest {
                     composable("feed") { Box(Modifier.fillMaxSize().testTag("source feed")) }
                     composable("viewer") {
                         ViewerReturnLifetime(this)
-                        val value = rememberViewerReturnProgress()
+                        val value = rememberViewerReturnProgress().value
                         SideEffect { progress = value }
                         Box(Modifier.fillMaxSize().testTag("returning media"))
                     }
@@ -274,10 +294,10 @@ class ViewerReturnTransitionTest {
                     },
                     shelfContent = {
                         RelatedPostsShelf(
-                            state = loaded, posts = related, likedPostIds = emptySet(), pixivUgoiraClient = null,
-                            onToggleLike = {}, onOpenPost = { _, _ -> }, onLongPress = {}, onDismiss = {},
-                            onRetry = {}, onPreviousPage = {}, onNextPage = {}, onViewportChanged = { _, _ -> },
-                            onAuthoritativeDurationKnown = { _, _ -> },
+                            state = loaded, posts = related,
+                            environment = FeedCardEnvironment(null, emptySet(), emptyMap(), noMediaDurationStateForPost, {}, { _, _ -> }, { _, _ -> }),
+                            onOpenPost = { _, _ -> }, onLongPress = {}, onDismiss = {},
+                            onRetry = {}, onPreviousPage = {}, onNextPage = {},
                         )
                     },
                 )

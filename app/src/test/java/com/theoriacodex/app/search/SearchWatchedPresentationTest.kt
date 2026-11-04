@@ -50,7 +50,7 @@ class SearchWatchedPresentationTest {
             listOf(RecentPostEntry(post, now - 120_000, ViewerStreamSource.SEARCH, null, maxViewedMediaNumber = 9)),
         )
         compose.setContent {
-            CompositionLocalProvider(LocalPostWatchPresentation provides presentation) {
+            CompositionLocalProvider(LocalPostWatchPresentation provides androidx.compose.runtime.rememberUpdatedState(presentation)) {
                 MaterialTheme {
                     Box(Modifier.size(400.dp, 700.dp)) {
                         if (forYou) {

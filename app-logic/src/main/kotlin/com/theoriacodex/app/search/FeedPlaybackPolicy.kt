@@ -24,6 +24,9 @@ fun shouldFeedMediaPlay(
 
 const val FEED_PLAYER_ACTIVATION_DELAY_MS = 180L
 
+/** Long enough for an opening Viewer to cover a paused card, which keeps its last frame until then. */
+const val FEED_PLAYER_RELEASE_GRACE_MS = 1_000L
+
 fun shouldAcquireFeedPlayerLease(
     isActive: Boolean,
     stableVisibilityElapsed: Boolean,

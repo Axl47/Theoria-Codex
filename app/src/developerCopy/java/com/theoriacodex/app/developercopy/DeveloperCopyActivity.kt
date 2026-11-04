@@ -1,13 +1,13 @@
 package com.theoriacodex.app.developercopy
 
 import android.app.Activity
-import android.net.Uri
 import android.os.Bundle
 import android.util.AtomicFile
 import android.widget.TextView
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.theoriacodex.app.BuildConfig
+import com.theoriacodex.app.R
 import com.theoriacodex.app.sourceauth.AndroidCredentialEnvelopeStore
 import com.theoriacodex.app.sourceauth.CredentialStoreWriteResult
 import com.theoriacodex.data.android.room.RoomProfileBackupStore
@@ -26,6 +26,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import androidx.core.net.toUri
 
 /** ADB launches this only after placing a one-shot request in Debug's private storage using run-as. */
 class DeveloperCopyActivity : Activity() {
@@ -42,7 +43,7 @@ class DeveloperCopyActivity : Activity() {
             finish()
             return
         }
-        setContentView(TextView(this).apply { text = "Copying production profiles into Debug…"; setPadding(32, 32, 32, 32) })
+        setContentView(TextView(this).apply { setText(R.string.developer_copy_in_progress); setPadding(32, 32, 32, 32) })
         scope.launch {
             withContext(Dispatchers.IO) {
                 val request = consumeRequest(job) ?: return@withContext
@@ -53,7 +54,7 @@ class DeveloperCopyActivity : Activity() {
                         packageManager.requireCopySigner(PRODUCTION_PACKAGE, request)
                         val provider = packageManager.resolveContentProvider(COPY_AUTHORITY, 0)
                         require(provider?.packageName == PRODUCTION_PACKAGE && provider.exported)
-                        val input = requireNotNull(contentResolver.openInputStream(Uri.parse("content://$COPY_AUTHORITY/snapshot")))
+                        val input = requireNotNull(contentResolver.openInputStream("content://$COPY_AUTHORITY/snapshot".toUri()))
                         val payload = input.use(::readCopyPayload)
                         importCopy(payload)
                     }

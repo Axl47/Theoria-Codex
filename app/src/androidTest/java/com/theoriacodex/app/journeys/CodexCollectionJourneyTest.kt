@@ -1,5 +1,7 @@
 package com.theoriacodex.app.journeys
 
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.onAllNodesWithText
@@ -31,7 +33,7 @@ class CodexCollectionJourneyTest : AppJourneyFixture() {
         compose.onNodeWithText("Name").performTextInput("Second collection")
         activate(compose.onNodeWithText("Save"))
         compose.waitUntil(10_000) { io { container.content.observeCodices().first().any { it.name == "Second collection" } } }
-        activate(compose.onNodeWithContentDescription("Actions for Journey collection"))
+        compose.onNodeWithText("Journey collection").performTouchInput { longClick() }
         activate(compose.onNodeWithText("Rename"))
         compose.onNodeWithText("Name").performTextReplacement("Renamed collection")
         activate(compose.onNodeWithText("Save"))
@@ -48,7 +50,7 @@ class CodexCollectionJourneyTest : AppJourneyFixture() {
         compose.waitUntil(10_000) { io { container.content.observeCodexItems(collection.codexId).first().size == 3 } }
         assertEquals(original, io { container.content.observeCodexItems(collection.codexId).first() })
         activate(compose.onNodeWithContentDescription("Back"))
-        activate(compose.onNodeWithContentDescription("Actions for Renamed collection"))
+        compose.onNodeWithText("Renamed collection").performTouchInput { longClick() }
         activate(compose.onNodeWithText("Delete Codex"))
         compose.onNodeWithText("Delete Codex?").assertIsDisplayed()
         activate(compose.onNodeWithText("Cancel"))

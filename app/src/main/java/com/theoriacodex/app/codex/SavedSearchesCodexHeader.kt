@@ -28,7 +28,7 @@ internal fun SavedSearchesCodexHeader(
     visiblePosts: List<Post>,
     posts: List<Post>,
     filters: CodexCollectionFilters,
-    resolvingDurations: Boolean,
+    durationsBlockPaging: Boolean,
     gridState: LazyStaggeredGridState,
     onBack: () -> Unit,
     restoreState: FeedFabRestoreState,
@@ -38,7 +38,7 @@ internal fun SavedSearchesCodexHeader(
 ) {
     var showSearches by remember { mutableStateOf(false) }
     LiveCodexHeader("Searches", SAVED_SEARCHES_CODEX_ID, owner,
-        entries.associate { it.id to it.name }, visiblePosts, posts, filters, resolvingDurations, gridState,
+        entries.associate { it.id to it.name }, visiblePosts, posts, filters, durationsBlockPaging, gridState,
         onBack, "Searches", onManage = { showSearches = true })
     if (showSearches) SavedSearchesManagementSheet(entries, restoreState, onChange, onRename, onRemove) {
         showSearches = false

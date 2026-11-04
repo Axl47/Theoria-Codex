@@ -52,10 +52,7 @@ class PostTagActionTypedCountsTest {
                 }
             }
         }
-        listOf("0", "12", "34").forEach { count ->
-            compose.onNode(hasScrollAction()).performScrollToNode(hasText(count))
-            compose.onNodeWithText(count).assertIsDisplayed()
-        }
+        assertCountsDisplayed("0", "12", "34")
         assertEquals(mapOf(SearchTerm("shared", sourceNamespace = "tag") to 0, artist to 12), postActionSuppliedCounts(post))
     }
 
@@ -82,8 +79,15 @@ class PostTagActionTypedCountsTest {
                 }
             }
         }
-        listOf("7", "12", "34").forEach { count ->
-            compose.onNode(hasScrollAction()).performScrollToNode(hasText(count))
+        assertCountsDisplayed("7", "12", "34")
+    }
+
+    /** Counts load on real dispatchers, which waiting for Compose to go idle does not cover. */
+    private fun assertCountsDisplayed(vararg counts: String) {
+        counts.forEach { count ->
+            compose.waitUntil(conditionDescription = "count $count loads", timeoutMillis = 10_000) {
+                runCatching { compose.onNode(hasScrollAction()).performScrollToNode(hasText(count)) }.isSuccess
+            }
             compose.onNodeWithText(count).assertIsDisplayed()
         }
     }

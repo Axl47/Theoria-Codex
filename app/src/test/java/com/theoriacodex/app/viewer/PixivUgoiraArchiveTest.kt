@@ -91,7 +91,7 @@ class PixivUgoiraArchiveTest {
             "app/src/main/java/com/theoriacodex/app/viewer/PixivUgoiraPlayer.kt",
         ).readText()
         val search = repositoryFile(
-            "app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt",
+            "app/src/main/java/com/theoriacodex/app/search/SearchResultCard.kt",
         ).readText()
 
         assertTrue(source.contains("archiveFlights"))

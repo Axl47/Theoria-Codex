@@ -183,6 +183,24 @@ class SearchScrollRestorationTest {
         }
     }
 
+    @Test fun `resuming a route leaves a live grid where the user left it`() {
+        state.value = state.value.copy(
+            content = state.value.content.copy(results = posts.take(40)),
+            restoration = SearchRestorationUiState.Restored(false),
+        )
+        render()
+        compose.onNodeWithTag("restore-grid").performScrollToIndex(25)
+        compose.runOnIdle {
+            state.value = state.value.copy(restoration = SearchRestorationUiState.Restored(
+                false, SearchScrollState(3, 0), 2L, keepLiveGrid = true,
+            ))
+        }
+        compose.runOnIdle {
+            assertEquals(listOf(2L), acknowledgements)
+            assertEquals(25, grid.firstVisibleItemIndex)
+        }
+    }
+
     @Test fun `explicit reset to top does not wait for duration lookups`() {
         state.value = state.value.copy(restoration = SearchRestorationUiState.Restored(
             false, SearchScrollState(0, 0), 1L, resetToTop = true,

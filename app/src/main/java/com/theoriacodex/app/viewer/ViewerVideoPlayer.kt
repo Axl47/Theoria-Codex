@@ -1,24 +1,20 @@
 package com.theoriacodex.app.viewer
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
@@ -32,7 +28,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -58,6 +53,7 @@ internal fun ViewerVideoPlayer(
     modifier: Modifier = Modifier,
     terminalMessage: String? = null,
     mediaModifier: Modifier = Modifier,
+    aspectRatio: Float? = null,
     controls: ViewerRendererControls,
     events: ViewerRendererEvents,
     mediaKey: ViewerMediaKey,
@@ -65,9 +61,9 @@ internal fun ViewerVideoPlayer(
     loadingPreview: (@Composable () -> Unit)? = null,
 ) {
     val context = LocalContext.current
-    val metered = context.isMediaNetworkMetered()
-    val location = remember(media, quality, qualityHeight, metered) {
-        resolveViewerVideoPlaybackLocation(media.withVideoQuality(quality, metered, qualityHeight))
+    // The metered check is a system call, so it runs when the page picks its stream, not on every recomposition.
+    val location = remember(media, quality, qualityHeight) {
+        resolveViewerVideoPlaybackLocation(media.withVideoQuality(quality, context.isMediaNetworkMetered(), qualityHeight))
     }
     if (!terminalMessage.isNullOrBlank()) {
         ViewerVideoMessage(terminalMessage, modifier)
@@ -95,11 +91,11 @@ internal fun ViewerVideoPlayer(
         positions.save(mediaKey, it)
         context.videoPlaybackInfrastructure().feedPositionHandoff.publish(mediaKey, it)
     }
-    ViewerVideoSystemBindings(state.player, controls.isActive, events)
+    ViewerVideoSystemBindings(state.player, controls.isActive && controls.systemControlsReady, events)
     ViewerVideoCommands(state, controls)
     ViewerVideoLifecycle(state, controls)
     ViewerVideoProgress(state, events)
-    ViewerVideoContent(state, postId, playbackDiagnosticsEnabled, controls, events, modifier, mediaModifier, loadingPreview)
+    ViewerVideoContent(state, postId, playbackDiagnosticsEnabled, controls, events, modifier, mediaModifier, aspectRatio, loadingPreview)
 }
 
 private class ViewerVideoState {
@@ -337,14 +333,16 @@ private fun ViewerVideoContent(
     events: ViewerRendererEvents,
     modifier: Modifier,
     mediaModifier: Modifier,
+    aspectRatio: Float?,
     loadingPreview: (@Composable () -> Unit)?,
 ) {
     val diagnostics = playbackDiagnosticsSemantics(diagnosticsEnabled, state.actuallyPlaying, "Viewer")
     Box(modifier.testTag(viewerVideoTestTag(postId)).then(diagnostics?.let {
         Modifier.semantics { stateDescription = it.stateDescription; contentDescription = it.contentDescription }
     } ?: Modifier), contentAlignment = Alignment.Center) {
+        // A player view with no video size yet fills its parent, so its parent is the media's own shape.
         AndroidView(
-            modifier = Modifier.fillMaxSize().then(mediaModifier),
+            modifier = Modifier.viewerFittedMedia(aspectRatio).then(mediaModifier),
             factory = { context -> createTexturePlayerView(context).apply { useController = false; player = state.player; state.view = this } },
             update = { view ->
                 state.view = view
@@ -366,8 +364,10 @@ private fun ViewerVideoTimelineOverlay(
     events: ViewerRendererEvents, modifier: Modifier,
 ) {
     if (!controls.isActive || state.failed || state.duration <= 0L || state.player == null) return
-    if (controls.showControls) ViewerVideoTimeline(state, source, controls, events, modifier)
-    else if (controls.showPassiveProgress) ViewerPassiveProgressBar(state.position, state.duration, modifier)
+    ViewerChromeVisibility(controls.showControls, modifier) {
+        ViewerTimelineVeil { ViewerVideoTimeline(state, source, controls, events) }
+    }
+    if (controls.showPassiveProgress) ViewerPassiveProgressBar(state.position, state.duration, modifier)
 }
 
 @Composable
@@ -376,29 +376,29 @@ private fun ViewerVideoTimeline(
     source: SourceKey,
     controls: ViewerRendererControls,
     events: ViewerRendererEvents,
-    modifier: Modifier,
 ) {
-    ViewerPlaybackFooter(modifier) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            TimelinePlaybackButton(isPaused = !controls.isPlaying, onToggle = {
-                events.onTogglePlayback()
-                state.setPlaying(!controls.isPlaying && controls.isActive)
-                events.onTimelineInteractionActiveChanged(true)
-                events.onTimelineInteractionActiveChanged(false)
-            })
-            MediaTimelineBar(
-                positionMs = state.position, durationMs = state.duration,
-                onSeekStarted = { state.scrubbing = true },
-                onSeekFinished = state::seek,
-                onSeekCancelled = { state.scrubbing = false },
-                preview = { target ->
-                    state.player?.currentMediaItem?.localConfiguration?.uri?.toString()?.let { location ->
-                        ViewerVideoScrubPreview(location, source, target)
-                    }
-                },
-                onInteractionActiveChanged = events.onTimelineInteractionActiveChanged, modifier = Modifier.weight(1f),
-            )
-        }
+    ViewerPlaybackFooter {
+        MediaTimelineBar(
+            positionMs = state.position, durationMs = state.duration,
+            onSeekStarted = { state.scrubbing = true },
+            onSeekFinished = state::seek,
+            onSeekCancelled = { state.scrubbing = false },
+            preview = { target ->
+                state.player?.currentMediaItem?.localConfiguration?.uri?.toString()?.let { location ->
+                    ViewerVideoScrubPreview(location, source, target)
+                }
+            },
+            onInteractionActiveChanged = events.onTimelineInteractionActiveChanged,
+            playbackRate = controls.playbackRate,
+            leading = {
+                TimelinePlaybackButton(isPaused = !controls.isPlaying, onToggle = {
+                    events.onTogglePlayback()
+                    state.setPlaying(!controls.isPlaying && controls.isActive)
+                    events.onTimelineInteractionActiveChanged(true)
+                    events.onTimelineInteractionActiveChanged(false)
+                })
+            },
+        )
     }
 }
 

@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
@@ -13,7 +14,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import java.util.UUID
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -34,13 +38,14 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.max
 
-internal const val VIEWER_RETURN_DURATION_MS = 320
+internal const val VIEWER_RETURN_DURATION_MS = TheoriaMotion.SCREEN_MS
 internal const val VIEWER_RETURN_HOLD_MS = 700
 private const val VIEWER_RETURN_TARGET_WAIT_MS = 300L
 
@@ -51,6 +56,8 @@ internal sealed interface ViewerReturnShelfId {
     data class Related(val seedId: PostId) : ViewerReturnShelfId
     data class Saved(val codexId: String) : ViewerReturnShelfId
     data class ForYou(val sectionId: String) : ViewerReturnShelfId
+    /** Every row of the Recents timeline, since viewing a post can regroup them; rows are found by post. */
+    data object RecentsTimeline : ViewerReturnShelfId
 }
 
 internal val LocalViewerReturnShelf = staticCompositionLocalOf<ViewerReturnShelfId?> { null }
@@ -109,6 +116,10 @@ internal class ViewerReturnTransition {
         private set
     var targetCorners by mutableStateOf(ViewerReturnCorners())
         private set
+
+    /** True while closing media is still moving, so the returning feed can hold its heaviest startup work. */
+    var mediaSettling by mutableStateOf(false)
+        private set
     private val mediaCorners = mutableMapOf<PostId, ViewerReturnCorners>()
     private var centered = false
     private var rowCentered = false
@@ -129,10 +140,15 @@ internal class ViewerReturnTransition {
     fun begin(postId: PostId) {
         openingBounds = null
         request = ViewerReturnRequest(originGridId, postId, originShelfId)
+        mediaSettling = true
         targetBounds = null
         centered = false
         rowCentered = originShelfId == null
         mediaBounds.clear()
+    }
+
+    fun finishLanding() {
+        mediaSettling = false
     }
 
     fun recordBounds(gridId: String?, postId: PostId, bounds: Rect, shelfId: ViewerReturnShelfId? = null, corners: ViewerReturnCorners = ViewerReturnCorners()) {
@@ -161,6 +177,7 @@ internal class ViewerReturnTransition {
     }
 
     fun clear() {
+        mediaSettling = false
         retainedPostIds = emptySet()
         openingCorners = ViewerReturnCorners()
         targetCorners = ViewerReturnCorners()
@@ -173,6 +190,73 @@ internal class ViewerReturnTransition {
         openingBounds = null
         centered = false
         mediaBounds.clear()
+    }
+}
+
+private const val DISMISS_DRAG_RANGE_FRACTION = 0.5f
+private const val DISMISS_COMMIT_PROGRESS = 0.25f
+private const val DISMISS_MIN_SCALE = 0.7f
+private const val DISMISS_BACK_RANGE_FRACTION = 0.5f
+
+/** A pull commits past a quarter of its range or on a downward fling; flicking back up cancels it. */
+internal fun viewerDismissCommits(progress: Float, velocityY: Float, flingVelocity: Float): Boolean = when {
+    velocityY <= -flingVelocity -> false
+    velocityY >= flingVelocity -> true
+    else -> progress >= DISMISS_COMMIT_PROGRESS
+}
+
+/**
+ * The finger's hold on the media before the Viewer closes. The feed is not composed behind the
+ * Viewer, so this only shrinks the media over its dimming background; once released, the return
+ * transition takes over from wherever the media was left.
+ */
+internal class ViewerDismissDrag {
+    var progress by mutableFloatStateOf(0f)
+        private set
+    var translationX by mutableFloatStateOf(0f)
+        private set
+    var translationY by mutableFloatStateOf(0f)
+        private set
+    val active by derivedStateOf { progress > 0f }
+    val scale: Float get() = 1f - (1f - DISMISS_MIN_SCALE) * progress
+    val pastCommit: Boolean get() = progress >= DISMISS_COMMIT_PROGRESS
+
+    fun followPull(x: Float, y: Float, height: Float) {
+        val pull = y.coerceAtLeast(0f)
+        progress = (pull / (height * DISMISS_DRAG_RANGE_FRACTION).coerceAtLeast(1f)).coerceIn(0f, 1f)
+        translationX = x
+        translationY = pull
+    }
+
+    /** System back reports its own progress and which edge it began from. */
+    fun followBack(backProgress: Float, fromLeftEdge: Boolean, backDistance: Float) {
+        progress = (backProgress * DISMISS_BACK_RANGE_FRACTION).coerceIn(0f, 1f)
+        translationX = backProgress * backDistance * if (fromLeftEdge) 1f else -1f
+        translationY = 0f
+    }
+
+    suspend fun recoil() {
+        val startProgress = progress
+        val startX = translationX
+        val startY = translationY
+        animate(1f, 0f, animationSpec = TheoriaMotion.settleFraction) { remaining, _ ->
+            progress = startProgress * remaining
+            translationX = startX * remaining
+            translationY = startY * remaining
+        }
+    }
+}
+
+/** Applies the held pose, handing off to the return transition as its progress advances. */
+internal fun Modifier.viewerDismissDrag(drag: ViewerDismissDrag?, returnProgress: () -> Float): Modifier {
+    if (drag == null) return this
+    return graphicsLayer {
+        val remaining = 1f - returnProgress().coerceIn(0f, 1f)
+        val poseScale = 1f + (drag.scale - 1f) * remaining
+        scaleX = poseScale
+        scaleY = poseScale
+        translationX = drag.translationX * remaining
+        translationY = drag.translationY * remaining
     }
 }
 
@@ -194,7 +278,7 @@ internal fun ViewerReturnGridEffect(
         if (request?.gridId != gridId) return@LaunchedEffect
         val index = request.shelfId?.let(shelfIds::indexOf) ?: postIds.indexOf(request.postId)
         if (index < 0) return@LaunchedEffect
-        state.scrollToItem(index)
+        state.scrollWithinColumnsTo(index)
         val item = snapshotFlow { state.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } }
             .filterNotNull().first()
         val layout = state.layoutInfo
@@ -204,6 +288,31 @@ internal fun ViewerReturnGridEffect(
         transition.centered(gridId, request.postId)
     }
 }
+
+/**
+ * Reaches an offscreen card through relative scrolls, including one the Viewer swiped to. Jumping
+ * with scrollToItem lines every column up at the target, which later forces a reshuffle.
+ */
+private suspend fun LazyStaggeredGridState.scrollWithinColumnsTo(index: Int) {
+    repeat(MAX_VIEWER_RETURN_SCROLL_STEPS) {
+        val visible = layoutInfo.visibleItemsInfo
+        if (visible.isEmpty() || visible.any { it.index == index }) return
+        val viewport = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).toFloat()
+        val direction = viewerReturnScrollDirection(index, visible.maxOf { it.index })
+        if (scrollBy(direction * viewport) == 0f) return scrollToItem(index)
+    }
+    if (layoutInfo.visibleItemsInfo.none { it.index == index }) scrollToItem(index)
+}
+
+/**
+ * Cards fill columns in index order, so a later card being on screen puts an absent target above the
+ * viewport, even when a tall earlier card in another column is still visible.
+ */
+internal fun viewerReturnScrollDirection(targetIndex: Int, lastVisibleIndex: Int): Float =
+    if (targetIndex < lastVisibleIndex) -1f else 1f
+
+/** A far target falls back to a jump instead of composing an unbounded number of cards. */
+private const val MAX_VIEWER_RETURN_SCROLL_STEPS = 48
 
 /** Carousel media needs both its vertical shelf and horizontal card positioned before landing. */
 @Composable
@@ -226,13 +335,22 @@ internal fun ViewerReturnColumn(
     shelfIds: List<ViewerReturnShelfId?>,
     state: LazyListState,
     content: @Composable () -> Unit,
+) = ViewerReturnColumn(state, shelfIds, { request -> shelfIds.indexOf(request.shelfId) }, content)
+
+/** [rowOf] finds the column item holding a request; [rowsKey] changes whenever that answer could. */
+@Composable
+internal fun ViewerReturnColumn(
+    state: LazyListState,
+    rowsKey: Any,
+    rowOf: (ViewerReturnRequest) -> Int,
+    content: @Composable () -> Unit,
 ) {
     val gridId = rememberSaveable { UUID.randomUUID().toString() }
     val transition = LocalViewerReturnTransition.current
     val request = transition?.request
-    LaunchedEffect(request, gridId, shelfIds) {
+    LaunchedEffect(request, gridId, rowsKey) {
         if (request?.gridId != gridId || request.shelfId == null) return@LaunchedEffect
-        val index = shelfIds.indexOf(request.shelfId)
+        val index = rowOf(request)
         if (index < 0) return@LaunchedEffect
         state.centerViewerReturnItem(index)
         transition.centered(gridId, request.postId)
@@ -264,9 +382,12 @@ private suspend fun LazyListState.centerViewerReturnItem(index: Int) {
 internal fun viewerReturnCenterScroll(itemTop: Int, itemHeight: Int, viewportStart: Int, viewportEnd: Int): Float =
     itemTop + itemHeight / 2f - (viewportStart + viewportEnd) / 2f
 
-/** One progress value describes both directions: zero is fullscreen and one is the feed card. */
+/**
+ * One progress value describes both directions: zero is fullscreen and one is the feed card. Read it
+ * only while drawing, because reading it in composition recomposes the whole Viewer on every frame.
+ */
 @Composable
-internal fun rememberViewerReturnProgress(): Float {
+internal fun rememberViewerReturnProgress(): State<Float> {
     val transition = LocalViewerReturnTransition.current
     val request = transition?.request
     val progress = remember { Animatable(if (transition?.openingBounds != null) 1f else 0f) }
@@ -282,35 +403,56 @@ internal fun rememberViewerReturnProgress(): Float {
         withTimeoutOrNull(VIEWER_RETURN_TARGET_WAIT_MS) {
             snapshotFlow { transition.targetBounds }.filterNotNull().first()
         }
-        progress.animateTo(1f, tween(if (transition.targetBounds == null) 180 else VIEWER_RETURN_DURATION_MS))
+        progress.animateTo(1f, tween(if (transition.targetBounds == null) TheoriaMotion.MEDIUM_MS else VIEWER_RETURN_DURATION_MS))
+        transition.finishLanding()
     }
-    return progress.value
+    return progress.asState()
+}
+
+/** Chosen when the media starts moving, so a card that appears later cannot make it jump. */
+private class ViewerLandingTarget {
+    private var chosen = false
+    private var target: Rect? = null
+
+    fun resolve(moving: Boolean, current: Rect?): Rect? {
+        if (!moving) return current
+        if (!chosen) {
+            chosen = true
+            target = current
+        }
+        return target
+    }
 }
 
 /** Uniform scale plus an animated crop preserves media proportions when the card has a different aspect ratio. */
 @Composable
-internal fun Modifier.viewerReturnMedia(progress: Float, aspectRatio: Float?): Modifier {
+internal fun Modifier.viewerReturnMedia(progress: () -> Float, aspectRatio: Float?): Modifier {
     val transition = LocalViewerReturnTransition.current ?: return this
     if (transition.request == null && transition.openingBounds == null) return this
     var windowBounds by remember { mutableStateOf(Rect.Zero) }
     val closing = transition.request != null
-    val target = remember(transition.request, progress > 0f) {
-        if (closing) transition.targetBounds else transition.openingBounds
-    }
-    val geometry = viewerReturnGeometry(windowBounds, target, aspectRatio, progress)
-    val corners = if (closing) transition.targetCorners else transition.openingCorners
+    val landing = remember(transition.request) { ViewerLandingTarget() }
+    fun geometry(current: Float) = viewerReturnGeometry(
+        windowBounds,
+        landing.resolve(current > 0f, if (closing) transition.targetBounds else transition.openingBounds),
+        aspectRatio,
+        current,
+    )
     return onGloballyPositioned {
-        if (windowBounds.isEmpty || progress == 0f) windowBounds = it.boundsInWindow(clipBounds = false)
+        if (windowBounds.isEmpty || progress() == 0f) windowBounds = it.boundsInWindow(clipBounds = false)
     }
         .drawWithContent {
-            drawViewerReturnFrame(progress, closing, geometry.crop, corners)
+            val current = progress()
+            val corners = if (closing) transition.targetCorners else transition.openingCorners
+            drawViewerReturnFrame(current, closing, geometry(current).crop, corners)
         }
         .graphicsLayer {
+            val moved = geometry(progress())
             transformOrigin = TransformOrigin(0.5f, 0.5f)
-            scaleX = geometry.scale
-            scaleY = geometry.scale
-            translationX = geometry.translationX
-            translationY = geometry.translationY
+            scaleX = moved.scale
+            scaleY = moved.scale
+            translationX = moved.translationX
+            translationY = moved.translationY
         }
 }
 

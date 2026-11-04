@@ -3,6 +3,10 @@ package com.theoriacodex.app.journeys
 import android.graphics.Color
 import android.graphics.BitmapFactory
 import android.view.View
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
@@ -44,11 +48,14 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
         }
         launch()
         tab("Codex")
-        activate(compose.onNodeWithContentDescription("Actions for Offline collection"))
+        compose.onNodeWithText("Offline collection").performTouchInput { longClick() }
         activate(compose.onNodeWithText("Make available offline"))
         val offline = requireNotNull(container.features.offlineMedia)
         compose.waitUntil(10_000) { offline.store.snapshot.value.postCount == 2 }
-        compose.onNodeWithText("2 posts available offline").assertIsDisplayed()
+        // The storage sheet is still opening, and its owner rows sit below its fold.
+        val storage = compose.onNodeWithTag("offline-storage-list")
+        storage.performScrollToNode(hasText("2 posts available offline"))
+        compose.waitUntil(10_000) { compose.onNodeWithText("2 posts available offline").isDisplayed() }
         val localPaths = io { sourcePosts.map { requireNotNull(offline.find(it.id)?.full?.localPath) } }
         assertTrue(localPaths.all { File(it).isFile })
         localPaths.forEach { path ->
@@ -66,7 +73,9 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
                 assertTrue(File(path).delete())
             }
         }
+        storage.performScrollToNode(hasText("Clear disposable cache"))
         activate(compose.onNodeWithText("Clear disposable cache"))
+        storage.performScrollToIndex(0)
         compose.waitUntil(10_000) {
             compose.onAllNodesWithText("Disposable cache cleared. Offline copies are still available.")
                 .fetchSemanticsNodes().isNotEmpty()

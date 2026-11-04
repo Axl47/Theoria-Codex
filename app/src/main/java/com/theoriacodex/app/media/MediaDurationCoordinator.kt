@@ -3,6 +3,7 @@ package com.theoriacodex.app.media
 import android.os.Trace
 import com.theoriacodex.data.repository.MediaDurationRepository
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.SourceKey
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -21,6 +22,9 @@ import kotlinx.coroutines.withContext
 
 fun interface MediaDurationAcquirer {
     suspend fun acquire(post: Post): MediaDurationState
+
+    /** An answer that costs no work, so the post can skip the queue entirely. */
+    fun settleWithoutWork(post: Post): MediaDurationState? = null
 }
 
 interface MediaDurationTraceRecorder {
@@ -92,6 +96,7 @@ class MediaDurationCoordinator(
     private val retryDelayMs: Long = DEFAULT_RETRY_DELAY_MS,
     private val maxQueuedKeys: Int = DEFAULT_MAX_QUEUED_KEYS,
     private val maxConcurrentWork: Int = DEFAULT_MAX_CONCURRENT_WORK,
+    private val maxConcurrentForSource: (SourceKey) -> Int = ::defaultDurationConcurrencyForSource,
     private val maxRetainedStates: Int = DEFAULT_MAX_RETAINED_STATES,
     private val traceRecorder: MediaDurationTraceRecorder = AndroidMediaDurationTraceRecorder,
 ) : AutoCloseable {
@@ -176,6 +181,12 @@ class MediaDurationCoordinator(
             return DurationDemandAdmission.DECIDED
         }
 
+        acquirer.settleWithoutWork(post)?.let { settled ->
+            putStateLocked(demand.key, settled)
+            traceRecorder.publication()
+            return DurationDemandAdmission.DECIDED
+        }
+
         posts[demand.key] = post
         val submission = scheduler.submit(demand)
         if (submission == DurationDemandSubmission.Rejected) {
@@ -188,7 +199,7 @@ class MediaDurationCoordinator(
         deferredDemands.remove(demand.key).forEach(scheduler::submit)
         putStateLocked(demand.key, MediaDurationState.Pending)
         hadOutstandingWork = true
-        preemptBackgroundForLocked(demand.priority)
+        preemptBackgroundForLocked(demand.priority, demand.key.postId.source)
         pumpLocked()
         return DurationDemandAdmission.SCHEDULED
     }
@@ -231,8 +242,7 @@ class MediaDurationCoordinator(
             )
             gate = aggregateExecutionGate()
             active.values.toList().forEach { work ->
-                val mustPause = !gate.lifecycleStarted || !gate.scrollIdle
-                if (mustPause) cancelActiveLocked(work, requeue = true)
+                if (!gate.allows(work.priority)) cancelActiveLocked(work, requeue = true)
             }
             pumpLocked()
         }
@@ -294,19 +304,27 @@ class MediaDurationCoordinator(
         return true
     }
 
-    private fun preemptBackgroundForLocked(priority: DurationDemandPriority) {
-        if (priority > DurationDemandPriority.VISIBLE || active.size < maxConcurrentWork) return
+    private fun preemptBackgroundForLocked(priority: DurationDemandPriority, source: SourceKey) {
+        if (priority > DurationDemandPriority.VISIBLE) return
+        val full = active.size >= maxConcurrentWork
+        if (!full && !isSourceSaturatedLocked(source)) return
         val background = active.values
-            .filter { work -> work.priority == DurationDemandPriority.BACKGROUND_IDLE }
+            .filter { work ->
+                work.priority == DurationDemandPriority.BACKGROUND_IDLE && (full || work.key.postId.source == source)
+            }
             .minByOrNull(ActiveWork::sequence)
             ?: return
         cancelActiveLocked(background, requeue = true)
     }
 
+    private fun isSourceSaturatedLocked(source: SourceKey): Boolean {
+        return active.keys.count { key -> key.postId.source == source } >= maxConcurrentForSource(source)
+    }
+
     private fun pumpLocked() {
         while (active.size < maxConcurrentWork) {
             refillQueueLocked()
-            val next = scheduler.takeNext(gate) ?: break
+            val next = scheduler.takeNext(gate, ::isSourceSaturatedLocked) ?: break
             val post = posts[next.key]
             if (post == null) {
                 removeStateIfPendingLocked(next.key)
@@ -349,6 +367,7 @@ class MediaDurationCoordinator(
             priority = scheduled.priority,
             demands = scheduled.demands.associateByTo(linkedMapOf(), DurationDemand::identity),
             sequence = sequence,
+            queueSequence = scheduled.sequence,
             traceCookie = cookie,
             job = job,
         )
@@ -385,7 +404,10 @@ class MediaDurationCoordinator(
     private suspend fun loadStoredState(key: MediaDurationKey): MediaDurationState? {
         val repository = durationRepository ?: return null
         return try {
-            repository.get(key.toStoredKey())?.toMediaDurationState()
+            // "No media" costs nothing to re-derive, and a source may have gained a resolver since.
+            repository.get(key.toStoredKey())?.toMediaDurationState()?.takeUnless { state ->
+                state == MediaDurationState.Unsupported(MediaDurationUnsupportedReason.NO_AUTHORITATIVE_MEDIA)
+            }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
@@ -411,7 +433,7 @@ class MediaDurationCoordinator(
         if (requeue) {
             var retained = false
             work.demands.values.forEach { demand ->
-                when (val submission = scheduler.submit(demand)) {
+                when (val submission = scheduler.submit(demand, work.queueSequence)) {
                     is DurationDemandSubmission.Accepted -> {
                         retained = true
                         deferEvictedDemandsLocked(submission)
@@ -484,6 +506,7 @@ class MediaDurationCoordinator(
         var priority: DurationDemandPriority,
         val demands: LinkedHashMap<String, DurationDemand>,
         val sequence: Long,
+        val queueSequence: Long,
         val traceCookie: Int,
         val job: Job,
     )
@@ -491,10 +514,16 @@ class MediaDurationCoordinator(
     private companion object {
         const val DEFAULT_RETRY_DELAY_MS = 5L * 60L * 1_000L
         const val DEFAULT_MAX_QUEUED_KEYS = 512
-        const val DEFAULT_MAX_CONCURRENT_WORK = 1
+        const val DEFAULT_MAX_CONCURRENT_WORK = 8
         const val DEFAULT_MAX_RETAINED_STATES = 2_048
         const val LEGACY_ENVIRONMENT_IDENTITY = "legacy-duration-environment"
     }
+}
+
+/** Per-source lanes keep one slow or rate-limited host from holding up the others. */
+private fun defaultDurationConcurrencyForSource(source: SourceKey): Int {
+    // Pixiv durations cost a rate-limited API call; the others are ranged reads from a media CDN.
+    return if (source == SourceKey.PIXIV) 2 else 4
 }
 
 internal const val TRACE_DURATION_DEMAND = "TheoriaDurationDemand"

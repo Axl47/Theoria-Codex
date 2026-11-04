@@ -48,8 +48,8 @@ class ViewerRelatedNavigationTest {
         val actions = compose.onNodeWithContentDescription("Media actions")
         actions.performTouchInput {
             down(Offset(width * 0.8f, centerY))
-            moveTo(Offset(width * 0.55f, centerY))
-            moveTo(Offset(width * 0.55f, centerY))
+            moveTo(Offset(width * 0.3f, centerY))
+            moveTo(Offset(width * 0.3f, centerY))
         }
         compose.mainClock.advanceTimeBy(96)
         assertTrue("Next must enter from the right", actions.fetchSemanticsNode().positionInRoot.x < 0f)

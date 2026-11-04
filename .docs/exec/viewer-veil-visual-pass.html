@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Viewer Veil visual pass</title>
+<style>
+:root{--bg:#0f1115;--fg:#e8e8ea;--mut:#a0a2a8;--bd:#2c2f36;--acc:#8bc4ff}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 system-ui,sans-serif;display:grid;grid-template-columns:210px minmax(0,1fr);gap:32px;padding:24px;max-width:1120px}
+nav{position:sticky;top:24px;align-self:start;font-size:13.5px}nav a{display:block;color:var(--mut);text-decoration:none;padding:3px 0}
+h1{margin:0 0 8px;font-size:26px}h2{margin:32px 0 8px;font-size:19px;border-top:1px solid var(--bd);padding-top:20px}
+table{border-collapse:collapse;width:100%;font-size:14px}td,th{border:1px solid var(--bd);padding:6px 9px;text-align:left;vertical-align:top}
+code{background:#1a1d23;padding:1px 4px;border-radius:4px;font-size:13px}pre{background:#1a1d23;padding:10px;border-radius:8px;overflow:auto}
+.status{border:1px solid var(--bd);border-radius:10px;padding:12px 14px}
+@media(max-width:760px){body{grid-template-columns:1fr}nav{position:static}}
+</style></head><body>
+<nav><a href="#purpose">Purpose</a><a href="#status">Current status</a><a href="#context">Context</a><a href="#phases">Phases</a><a href="#work">Work plan</a><a href="#validation">Validation</a><a href="#progress">Progress</a><a href="#surprises">Surprises</a><a href="#decisions">Decisions</a><a href="#outcomes">Outcomes</a><a href="#recovery">Recovery</a></nav>
+<main>
+<h1>Viewer Veil visual pass</h1>
+<section id="purpose"><h2>Purpose / Big Picture</h2>
+<p>The Viewer reused the navy panels of the app's secondary screens, so it read as a screen containing an image. This pass makes it read as the image with controls on top. Capabilities and gestures do not change. When complete, opening any post shows white controls on soft shadows (the "veil"), with progress and the selected thumbnail tinted from the artwork.</p></section>
+<section id="status"><h2>Current Status</h2><div class="status"><b>Implemented; awaiting the owner's hands-on check.</b> Next action: the owner tries scrubbing, level gestures and bright art on the phone, using the steps under Validation.</div></section>
+<section id="context"><h2>Context And Orientation</h2>
+<p>Viewer code lives in <code>app/src/main/java/com/theoriacodex/app/viewer/</code>. <code>ViewerScreen.kt</code> draws the pager and, above it, the overlays that belong to the screen: top bar, post strip, related shelf. Each player (<code>ViewerVideoPlayer.kt</code>, <code>ViewerGifPlayer.kt</code>, <code>ViewerAnimatedWebPPlayer.kt</code>, <code>PixivUgoiraPlayerUi.kt</code>) draws its own timeline inside the page.</p>
+<p>That split decides where shadows go. A scrim in the screen's overlay would sit on top of the timeline and dim it, so each player's timeline draws its own scrim (<code>ViewerTimelineVeil</code>), and the screen draws one only when no timeline is present (<code>ViewerBottomChrome</code>).</p>
+<p>"Scrim" means a black gradient that fades to transparent. "Accent" means the color taken from the current artwork.</p></section>
+<section id="phases"><h2>Phases</h2><table><tr><th>Phase</th><th>Result</th><th>Accepted when</th></tr>
+<tr><td>Timeline</td><td>One track for all animated media, full width in portrait, inside the reserved gesture height</td><td><code>MediaTimelineBarTest</code> passes, including its height limit</td></tr>
+<tr><td>Scrub preview</td><td>Frames extracted at displayed size and media shape, time and distance shown, other chrome faded</td><td><code>ViewerScrubPreviewTest</code> passes; preview visibly sharp on a device</td></tr>
+<tr><td>Feedback</td><td>Level rails on the gesture's side; seek wash and chevrons</td><td><code>ViewerLevelGesturesTest</code>, <code>SeekJumpFeedbackTest</code> pass</td></tr>
+<tr><td>Chrome</td><td>Top bar, strip, related shelf and page segments on scrims; black status inset</td><td><code>ViewerPostStripTest</code>, <code>ViewerRelatedNavigationTest</code> pass</td></tr>
+<tr><td>Tint</td><td>Accent sampled from the thumbnail, white fallback</td><td><code>ViewerArtworkAccentTest</code> passes</td></tr></table></section>
+<section id="work"><h2>Work Plan</h2><ul>
+<li><code>ViewerVeil.kt</code>: shared colors, type and scrims; <code>ViewerTimelineVeil</code>, <code>ViewerBottomChrome</code>, page segments.</li>
+<li><code>MediaTimelineBar.kt</code>: <code>ViewerTimelineTrack</code> replaces the Material slider and WebP's progress bar. The footer is 70dp, inside <code>VIEWER_TIMELINE_HEIGHT</code> (72dp), which sets where Viewer gestures stop.</li>
+<li><code>ViewerScrubPreview.kt</code>: <code>viewerScrubFrameSize</code>, <code>LocalViewerMediaAspectRatio</code>.</li>
+<li><code>ViewerLevelFeedback.kt</code>, <code>ViewerPlaybackFeedback.kt</code>, <code>SeekJumpFeedback.kt</code>: new feedback visuals.</li>
+<li><code>ViewerChrome.kt</code>, <code>ViewerPostStrip.kt</code>, <code>ViewerRelatedStrip.kt</code>, <code>ViewerScreen.kt</code>: chrome restyle and scrub fade.</li>
+<li><code>ViewerArtworkAccent.kt</code>: <code>viewerAccentFromPixels</code>, <code>rememberViewerAccent</code>.</li>
+<li><code>ui/TheoriaAdaptiveScaffold.kt</code>, <code>ui/TheoriaApp.kt</code>: black behind the status bar while the Viewer shows.</li>
+</ul><p>Deliberately untouched: gesture logic, the post strip's position as a sibling above the pager, the portrait 40dp pager padding (return-transition geometry depends on page bounds), and dropdown menus.</p></section>
+<section id="validation"><h2>Validation And Acceptance</h2>
+<p>From the repository root, with <code>JAVA_HOME</code> set to JDK 21 or newer:</p>
+<pre>./gradlew --offline :app:testDebugUnitTest --tests 'com.theoriacodex.app.viewer.*' --tests 'com.theoriacodex.app.ui.*'
+./gradlew --offline :app:detekt
+./gradlew :app:lintDebug --offline --no-daemon</pre>
+<p>Device install uses only <code>com.theoriacodex.debug</code>, after checking the APK's application ID and debug signer. Manual steps for the owner: open a bright image, a video, a GIF, an animated WebP and a multi-page post; scrub near both ends; drag brightness and volume with each thumb; double-tap both sides; rotate to landscape; open and close the related shelf; swipe between posts and watch the tint change.</p></section>
+<section id="progress"><h2>Progress</h2><table><tr><th>Date</th><th>State</th><th>Item</th></tr>
+<tr><td>2026-11-03</td><td>Done</td><td>Directions mocked; owner chose Veil with tint and asked for the findings to be fixed</td></tr>
+<tr><td>2026-11-03</td><td>Done</td><td>All phases implemented; host tests pass</td></tr>
+<tr><td>2026-11-03</td><td>Done</td><td>Debug build installed on the S24; one video seen rendering in the new design</td></tr>
+<tr><td>2026-11-03</td><td>Done</td><td>Real scrub on the S24 with controls up: drag moved a 2:42 video from the start to 1:59 on the same post; no crashes logged. <code>com.theoriacodex</code> install time unchanged</td></tr>
+<tr><td>2026-11-03</td><td>Done (host only)</td><td>Owner follow-ups: closing animation, growing recommendation drawer, double-tap seek keeps controls closed, vivid tint. Device testing stopped at the owner's request because the phone was in use</td></tr>
+<tr><td>2026-11-03</td><td>Remaining</td><td>Owner's hands-on check of feel, thumb occlusion and sharpness on real media</td></tr></table></section>
+<section id="surprises"><h2>Surprises And Discoveries</h2><ul>
+<li>A scrim cannot live in the screen overlay, because the timeline is drawn beneath that overlay inside each player.</li>
+<li>Host rendering on pale gradients showed visible scrim edges that the HTML mock hid; easing stops were added.</li>
+<li>Default Roboto digits are already tabular, so the jitter finding applies only to device fonts with variable digits. <code>tnum</code> is kept as a guard.</li>
+<li>The navy status-bar band came from the root Scaffold's default background, not from the Viewer.</li>
+<li>Detekt still reports <code>MediaTimelineBar</code> over the cognitive-complexity limit (19, reduced by this pass). Module-wide Detekt was already failing on other screens.</li>
+<li>The first tint picked the most prominent hue and discarded pale colors, so skin tones won on nearly all character art and every post looked peach. It now weighs vividness above area and discounts skin.</li>
+</ul></section>
+<section id="decisions"><h2>Decision Log</h2><table><tr><th>Decision</th><th>Rationale</th><th>Date / author</th></tr>
+<tr><td>Veil over Island</td><td>Owner's choice; keeps the art continuous and covers less of it</td><td>2026-11-03, owner</td></tr>
+<tr><td>Tint from the artwork</td><td>Owner's choice. Hue comes from the art; saturation and lightness are fixed so contrast holds over any art</td><td>2026-11-03, owner</td></tr>
+<tr><td>Hand-written hue sampling over the Palette library</td><td>About 30 testable lines, no new dependency, and the fixed lightness is what guarantees contrast anyway</td><td>2026-11-03, agent</td></tr>
+<tr><td>No backdrop blur</td><td>Live blur behind video adds rendering cost and a dependency for little visual gain</td><td>2026-11-03, agent</td></tr>
+<tr><td>Replace the top-centre level pill</td><td>Moves feedback to the gesture's side, the visible change the owner approved; its test was rewritten accordingly</td><td>2026-11-03, agent</td></tr>
+<tr><td>Feed cards wait for the closing media to land before binding players</td><td>Player binding and surface attach block the main thread. Cards show posters for at most the close, then all start together, so simultaneous autoplay holds for presented cards. Not yet measured on a device</td><td>2026-11-03, agent</td></tr>
+<tr><td>The drawer grows on the Viewer side only</td><td>Search and For You shelves keep their paged behavior; the request was about the drawer</td><td>2026-11-03, agent</td></tr>
+</table></section>
+<section id="outcomes"><h2>Outcomes And Retrospective</h2><p>The Viewer now has one visual system and one progress bar across media types. Host tests prove structure and behavior; they do not prove feel. The library used for device checks holds explicit media, so visual review beyond one frame was done on placeholder art rendered on the host, and final visual acceptance belongs to the owner.</p></section>
+<section id="recovery"><h2>Idempotence And Recovery</h2><p>All Gradle commands are safe to rerun. Each phase is its own commit, so <code>git revert</code> removes one. There are no data migrations. Reinstalling the debug APK with <code>adb install -r</code> keeps its data and does not touch <code>com.theoriacodex</code>.</p></section>
+</main></body></html>

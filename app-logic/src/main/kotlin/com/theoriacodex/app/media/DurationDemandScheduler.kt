@@ -1,14 +1,22 @@
 package com.theoriacodex.app.media
 
+import com.theoriacodex.domain.model.SourceKey
+
 data class DurationExecutionGate(
     val lifecycleStarted: Boolean,
     val scrollIdle: Boolean,
-)
+) {
+    fun allows(priority: DurationDemandPriority): Boolean {
+        return lifecycleStarted && (scrollIdle || priority == DurationDemandPriority.ACTIVE_FILTER)
+    }
+}
 
 data class ScheduledDurationWork(
     val key: MediaDurationKey,
     val priority: DurationDemandPriority,
     val demands: List<DurationDemand>,
+    /** Pass back to [DurationDemandScheduler.submit] so requeued work keeps its place in line. */
+    val sequence: Long,
 )
 
 sealed interface DurationDemandSubmission {
@@ -30,10 +38,10 @@ class DurationDemandScheduler(
         require(maxQueuedKeys > 0) { "Duration queue bound must be positive" }
     }
 
-    fun submit(demand: DurationDemand): DurationDemandSubmission {
+    fun submit(demand: DurationDemand, sequence: Long = nextSequence()): DurationDemandSubmission {
         val existing = entries[demand.key]
         if (existing != null) {
-            existing.tickets[demand.identity] = Ticket(demand, nextSequence())
+            existing.tickets[demand.identity] = Ticket(demand, sequence)
             return DurationDemandSubmission.Accepted()
         }
 
@@ -52,15 +60,20 @@ class DurationDemandScheduler(
 
         entries[demand.key] = QueueEntry(
             key = demand.key,
-            tickets = linkedMapOf(demand.identity to Ticket(demand, nextSequence())),
+            tickets = linkedMapOf(demand.identity to Ticket(demand, sequence)),
         )
         return DurationDemandSubmission.Accepted(evictedKey, evictedDemands)
     }
 
-    fun takeNext(gate: DurationExecutionGate): ScheduledDurationWork? {
-        if (!gate.lifecycleStarted || !gate.scrollIdle) return null
+    /** A duration filter hides posts until decided, so only its demand runs during a scroll. */
+    fun takeNext(
+        gate: DurationExecutionGate,
+        isSourceSaturated: (SourceKey) -> Boolean = { false },
+    ): ScheduledDurationWork? {
+        if (!gate.lifecycleStarted) return null
         val next = entries.values
             .asSequence()
+            .filter { entry -> gate.allows(entry.effectivePriority()) && !isSourceSaturated(entry.key.postId.source) }
             .minWithOrNull(ENTRY_COMPARATOR)
             ?: return null
         entries.remove(next.key)
@@ -70,6 +83,7 @@ class DurationDemandScheduler(
             demands = next.tickets.values
                 .sortedBy(Ticket::sequence)
                 .map(Ticket::demand),
+            sequence = next.effectiveSequence(),
         )
     }
 

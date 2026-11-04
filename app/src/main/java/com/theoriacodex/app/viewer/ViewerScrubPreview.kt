@@ -2,11 +2,20 @@
 
 package com.theoriacodex.app.viewer
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import kotlin.math.abs
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.draw.shadow
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
 import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,11 +26,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,10 +64,30 @@ import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
+/** The current media's width over height, so scrub previews can take its real shape. */
+internal val LocalViewerMediaAspectRatio = staticCompositionLocalOf<Float?> { null }
+
+private val SCRUB_FRAME_LONG_EDGE = 224.dp
+private val SCRUB_FRAME_PORTRAIT_HEIGHT = 168.dp
+private val SCRUB_FRAME_MIN_EDGE = 72.dp
+
+/** A preview frame in the media's shape, with both edges clamped so extreme panoramas stay visible. */
+internal fun viewerScrubFrameSize(aspectRatio: Float?): DpSize {
+    val ratio = aspectRatio?.takeIf { it > 0f } ?: (16f / 9f)
+    return if (ratio >= 1f) {
+        DpSize(SCRUB_FRAME_LONG_EDGE, (SCRUB_FRAME_LONG_EDGE / ratio).coerceAtLeast(SCRUB_FRAME_MIN_EDGE))
+    } else {
+        DpSize((SCRUB_FRAME_PORTRAIT_HEIGHT * ratio).coerceAtLeast(SCRUB_FRAME_MIN_EDGE), SCRUB_FRAME_PORTRAIT_HEIGHT)
+    }
+}
+
+internal fun formatScrubDelta(deltaMs: Long): String =
+    "${if (deltaMs < 0L) "-" else "+"}${formatTimelineTime(abs(deltaMs))}"
+
 /** A floating thumbnail is presentation only; the track below owns the drag gesture. */
 @Composable
-internal fun ViewerScrubPreview(positionMs: Long, progress: Float, content: @Composable () -> Unit) {
-    val gapPx = with(LocalDensity.current) { 4.dp.roundToPx() }
+internal fun ViewerScrubPreview(positionMs: Long, deltaMs: Long, progress: Float, content: @Composable () -> Unit) {
+    val gapPx = with(LocalDensity.current) { 8.dp.roundToPx() }
     val position = remember(progress, gapPx) {
         object : PopupPositionProvider {
             override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize,
@@ -74,13 +101,20 @@ internal fun ViewerScrubPreview(positionMs: Long, progress: Float, content: @Com
     Popup(popupPositionProvider = position, properties = PopupProperties(
         focusable = false, dismissOnBackPress = false, dismissOnClickOutside = false,
     )) {
-        val shape = RoundedCornerShape(6.dp)
-        Column(Modifier.size(144.dp, 108.dp).clip(shape).background(Color.Black)
-            .border(1.dp, Color.White.copy(alpha = 0.6f), shape).testTag("viewer-scrub-preview"),
+        val shape = RoundedCornerShape(12.dp)
+        Column(
+            Modifier.testTag("viewer-scrub-preview"),
             horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { content() }
-            Text(formatTimelineTime(positionMs), color = Color.White, modifier = Modifier.height(24.dp))
+            Box(
+                Modifier.size(viewerScrubFrameSize(LocalViewerMediaAspectRatio.current)).shadow(12.dp, shape).background(Color.Black, shape).clip(shape),
+                contentAlignment = Alignment.Center,
+            ) { content() }
+            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(formatTimelineTime(positionMs), color = Color.White, style = ViewerVeil.LargeReadout, fontWeight = FontWeight.Medium)
+                Text(formatScrubDelta(deltaMs), Modifier.padding(bottom = 3.dp), color = Color.White.copy(alpha = ViewerVeil.SECONDARY_TEXT_ALPHA), style = ViewerVeil.Time)
+            }
         }
     }
 }
@@ -90,11 +124,14 @@ internal fun ViewerScrubPreview(positionMs: Long, progress: Float, content: @Com
 internal fun ViewerVideoScrubPreview(location: String, source: SourceKey, positionMs: Long) {
     val context = LocalContext.current
     val target by rememberUpdatedState(positionMs)
+    // Extract at the size actually shown: fixed small frames were enlarged about threefold on high-density screens.
+    val frameSize = viewerScrubFrameSize(LocalViewerMediaAspectRatio.current)
+    val (widthPx, heightPx) = with(LocalDensity.current) { frameSize.width.roundToPx().even() to frameSize.height.roundToPx().even() }
     var frame by remember(location, source) { mutableStateOf<Pair<Long, Bitmap>?>(null) }
     var failed by remember(location, source) { mutableStateOf(false) }
     LaunchedEffect(location, source) {
         try {
-            extractPreviewFrames(context, location, source, { target }) { requested, bitmap ->
+            extractPreviewFrames(context, location, source, widthPx, heightPx, { target }) { requested, bitmap ->
                 frame = requested to bitmap
             }
         } catch (_: TimeoutCancellationException) {
@@ -118,15 +155,18 @@ internal fun ViewerVideoScrubPreview(location: String, source: SourceKey, positi
     }
 }
 
+/** Video encoders and effects expect even dimensions. */
+private fun Int.even(): Int = this and 1.inv()
+
 private suspend fun extractPreviewFrames(
-    context: Context, location: String, source: SourceKey,
+    context: Context, location: String, source: SourceKey, widthPx: Int, heightPx: Int,
     target: () -> Long, publish: (Long, Bitmap) -> Unit,
 ) {
     val request = context.videoPlaybackInfrastructure().bind(location, source.requestHeaders())
     FrameExtractor.Builder(context, request.mediaItem)
         .setMediaSourceFactory(request.mediaSourceFactory)
         .setSeekParameters(SeekParameters.CLOSEST_SYNC)
-        .setEffects(listOf(Presentation.createForWidthAndHeight(144, 84, Presentation.LAYOUT_SCALE_TO_FIT)))
+        .setEffects(listOf(Presentation.createForWidthAndHeight(widthPx, heightPx, Presentation.LAYOUT_SCALE_TO_FIT)))
         .build().use { extractor ->
             snapshotFlow { target() }.conflate().collect { requested ->
                 delay(80L)

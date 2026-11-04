@@ -1,5 +1,11 @@
 package com.theoriacodex.app.viewer
 
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.layout.size
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -31,6 +37,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.viewer.state.ViewerMediaError
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -75,6 +82,7 @@ private fun SeekJumpFeedbackOverlay(
 
     val alpha = remember { Animatable(0f) }
     val scale = remember { Animatable(0.92f) }
+    val cascade = remember { Animatable(0f) }
     val direction = feedback.direction
     val label = remember(feedback.totalDeltaMs) {
         formatSeekJumpFeedback(feedback.totalDeltaMs)
@@ -83,22 +91,24 @@ private fun SeekJumpFeedbackOverlay(
     LaunchedEffect(feedback.serial) {
         alpha.snapTo(0f)
         scale.snapTo(0.92f)
+        cascade.snapTo(0f)
+        launch { cascade.animateTo(1f, tween(TheoriaMotion.SCREEN_MS)) }
         launch {
             alpha.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(durationMillis = 90),
+                animationSpec = tween(TheoriaMotion.SHORT_MS),
             )
         }
         launch {
             scale.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(durationMillis = 140),
+                animationSpec = tween(TheoriaMotion.SHORT_MS),
             )
         }
         delay(750L)
         alpha.animateTo(
             targetValue = 0f,
-            animationSpec = tween(durationMillis = 180),
+            animationSpec = tween(TheoriaMotion.MEDIUM_MS),
         )
         onExpired(feedback.serial)
     }
@@ -111,36 +121,70 @@ private fun SeekJumpFeedbackOverlay(
         },
     ) {
         SeekFeedbackBackdrop(direction, Modifier.matchParentSize())
-        SeekFeedbackLabel(label, Modifier.align(
+        SeekFeedbackLabel(label, direction, { cascade.value }, Modifier.align(
             if (direction == SeekJumpDirection.Backward) Alignment.CenterStart else Alignment.CenterEnd,
         ))
     }
 }
 
 @Composable
-private fun SeekFeedbackLabel(label: String, modifier: Modifier) {
-    Box(modifier.fillMaxHeight().width(112.dp), contentAlignment = Alignment.Center) {
+private fun SeekFeedbackLabel(label: String, direction: SeekJumpDirection, cascade: () -> Float, modifier: Modifier) {
+    Column(
+        modifier.fillMaxHeight().width(132.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
+    ) {
+        SeekFeedbackChevrons(direction, cascade)
         Text(
             text = label,
             color = Color.White,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
+            style = ViewerVeil.LargeReadout,
+            fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
             maxLines = 1,
         )
     }
 }
 
+/** Three chevrons light up in the direction of travel, ending brightest at the leading one. */
+@Composable
+private fun SeekFeedbackChevrons(direction: SeekJumpDirection, cascade: () -> Float) {
+    Canvas(Modifier.size(width = 54.dp, height = 28.dp)) {
+        val forward = direction == SeekJumpDirection.Forward
+        val step = size.width / 3f
+        val halfWidth = step * 0.3f
+        val halfHeight = size.height * 0.3f
+        repeat(3) { index ->
+            val fade = (cascade() * 3f - index).coerceIn(0f, 1f) * (0.5f + index * 0.25f)
+            val x = if (forward) step * (index + 0.5f) else size.width - step * (index + 0.5f)
+            val tip = if (forward) halfWidth else -halfWidth
+            val chevron = Path().apply {
+                moveTo(x - tip, center.y - halfHeight)
+                lineTo(x + tip, center.y)
+                lineTo(x - tip, center.y + halfHeight)
+            }
+            drawPath(chevron, Color.White.copy(alpha = fade), style = Stroke(3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+        }
+    }
+}
+
 @Composable
 private fun SeekFeedbackBackdrop(direction: SeekJumpDirection, modifier: Modifier) {
     Canvas(modifier) {
-        val horizontalRadius = (maxOf(size.height / 2f, size.width / 2f) * 0.30f)
-            .coerceAtLeast(96.dp.toPx())
-        val centerX = if (direction == SeekJumpDirection.Backward) 0f else size.width
-        drawOval(
-            color = Color.Black.copy(alpha = 0.50f),
-            topLeft = Offset(centerX - horizontalRadius, 0f),
-            size = Size(horizontalRadius * 2f, size.height),
+        val washWidth = size.width * 0.46f
+        val backward = direction == SeekJumpDirection.Backward
+        val stops = arrayOf(
+            0f to Color.Black.copy(alpha = 0.58f), 0.35f to Color.Black.copy(alpha = 0.4f), 0.65f to Color.Black.copy(alpha = 0.16f),
+            0.88f to Color.Black.copy(alpha = 0.03f), 1f to Color.Transparent,
+        )
+        drawRect(
+            brush = if (backward) {
+                Brush.horizontalGradient(*stops, endX = washWidth)
+            } else {
+                Brush.horizontalGradient(*stops, startX = size.width, endX = size.width - washWidth)
+            },
+            topLeft = Offset(if (backward) 0f else size.width - washWidth, 0f),
+            size = Size(washWidth, size.height),
         )
     }
 }

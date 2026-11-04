@@ -113,6 +113,37 @@ class MediaDurationCoordinatorTest {
     }
 
     @Test
+    fun `scroll start leaves active filter work running`() = runTest {
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var attempts = 0
+        val coordinator = coordinator(
+            scope = this,
+            acquirer = MediaDurationAcquirer {
+                attempts += 1
+                started.complete(Unit)
+                release.await()
+                known(4_000L)
+            },
+        )
+        val post = post("filter-scroll")
+        val key = key(post)
+        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        coordinator.submit(post, demand("search", key, DurationDemandPriority.ACTIVE_FILTER))
+        runCurrent()
+        started.await()
+
+        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = false)
+        runCurrent()
+        release.complete(Unit)
+        runCurrent()
+
+        assertEquals(1, attempts)
+        assertEquals(known(4_000L), coordinator.states.value[key])
+        coordinator.close()
+    }
+
+    @Test
     fun `same fingerprint shares one job and one remaining consumer keeps it alive`() = runTest {
         val started = CompletableDeferred<Unit>()
         val finish = CompletableDeferred<MediaDurationState>()
@@ -266,7 +297,7 @@ class MediaDurationCoordinatorTest {
     }
 
     @Test
-    fun `default coordinator executes at most one acquisition at a time`() = runTest {
+    fun `a one-slot coordinator executes at most one acquisition at a time`() = runTest {
         val releaseFirst = CompletableDeferred<Unit>()
         var active = 0
         var maximumActive = 0
@@ -295,6 +326,62 @@ class MediaDurationCoordinatorTest {
         runCurrent()
         assertEquals(1, maximumActive)
         assertEquals(3, completed)
+        coordinator.close()
+    }
+
+    @Test
+    fun `an answer that needs no work never queues`() = runTest {
+        var acquisitions = 0
+        val unsupported = MediaDurationState.Unsupported(MediaDurationUnsupportedReason.NO_AUTHORITATIVE_MEDIA)
+        val coordinator = coordinator(
+            scope = this,
+            acquirer = object : MediaDurationAcquirer {
+                override suspend fun acquire(post: Post): MediaDurationState {
+                    acquisitions += 1
+                    return known(1_000L)
+                }
+
+                override fun settleWithoutWork(post: Post) = unsupported
+            },
+        )
+        val post = post("gif")
+
+        val admission = coordinator.submit(post, demand("search", key(post), DurationDemandPriority.ACTIVE_FILTER))
+
+        assertEquals(DurationDemandAdmission.DECIDED, admission)
+        assertEquals(unsupported, coordinator.states.value[key(post)])
+        assertEquals(0, acquisitions)
+        coordinator.close()
+    }
+
+    @Test
+    fun `a saturated source waits without holding up another source`() = runTest {
+        val started = mutableListOf<String>()
+        val release = CompletableDeferred<Unit>()
+        val coordinator = MediaDurationCoordinator(
+            acquirer = MediaDurationAcquirer { post ->
+                started += post.id.sourcePostId
+                release.await()
+                known(1_000L)
+            },
+            parentScope = this,
+            maxConcurrentWork = 8,
+            maxConcurrentForSource = { source -> if (source == SourceKey.HITOMI) 1 else 2 },
+            traceRecorder = NoOpMediaDurationTraceRecorder,
+        )
+        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        val hitomi = listOf(post("slow-1"), post("slow-2"))
+        val gelbooru = post("fast").let { it.copy(id = PostId(SourceKey.GELBOORU, "fast")) }
+        (hitomi + gelbooru).forEach { candidate ->
+            coordinator.submit(candidate, demand("search", key(candidate), DurationDemandPriority.ACTIVE_FILTER))
+        }
+        runCurrent()
+
+        assertEquals(listOf("slow-1", "fast"), started)
+
+        release.complete(Unit)
+        runCurrent()
+        assertEquals(listOf("slow-1", "fast", "slow-2"), started)
         coordinator.close()
     }
 
@@ -362,6 +449,28 @@ class MediaDurationCoordinatorTest {
         second.close()
     }
 
+    @Test
+    fun `stored no-media verdict is re-derived after a source gains a resolver`() = runTest {
+        val repository = InMemoryMediaDurationRepository()
+        val post = post("ugoira")
+        val key = key(post)
+        repository.put(
+            key.toStoredKey(),
+            MediaDurationState.Unsupported(MediaDurationUnsupportedReason.NO_AUTHORITATIVE_MEDIA).toStoredState()!!,
+        )
+        val coordinator = coordinator(
+            scope = this,
+            acquirer = MediaDurationAcquirer { known(2_000L) },
+            durationRepository = repository,
+        )
+        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        coordinator.submit(post, demand("search", key, DurationDemandPriority.ACTIVE_FILTER))
+        runCurrent()
+
+        assertEquals(known(2_000L), coordinator.states.value[key])
+        coordinator.close()
+    }
+
     private fun coordinator(
         scope: CoroutineScope,
         acquirer: MediaDurationAcquirer,
@@ -372,6 +481,7 @@ class MediaDurationCoordinatorTest {
             acquirer = acquirer,
             durationRepository = durationRepository,
             parentScope = scope,
+            maxConcurrentWork = 1,
             traceRecorder = traceRecorder,
         )
     }

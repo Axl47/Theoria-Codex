@@ -50,6 +50,13 @@ kover {
 
 subprojects {
     tasks.withType<Test>().configureEach {
+        // Newer JDKs warn before blocking what Robolectric and Gson rely on; older JDKs reject these flags.
+        // Decided per task at execution, because a module's toolchain can differ from Gradle's own JVM.
+        doFirst {
+            val test = this as Test
+            if (test.javaVersion >= JavaVersion.VERSION_24) test.jvmArgs("--enable-native-access=ALL-UNNAMED")
+            if (test.javaVersion >= JavaVersion.VERSION_26) test.jvmArgs("--enable-final-field-mutation=ALL-UNNAMED")
+        }
         if (plugins.hasPlugin("com.android.application") || plugins.hasPlugin("com.android.library")) {
             // Robolectric's Android 16+ runtime accesses JDK internals on Java 21.
             jvmArgs(

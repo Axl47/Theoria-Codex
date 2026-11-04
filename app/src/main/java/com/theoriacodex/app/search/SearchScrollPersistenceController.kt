@@ -21,6 +21,17 @@ internal data class SearchScrollPersistenceTarget(
     val state: SearchScrollState,
 )
 
+internal fun SearchCoordinator.scrollPersistence(
+    dispatcher: CoroutineDispatcher,
+    debounceMillis: Long,
+) = SearchScrollPersistenceController(dispatcher, debounceMillis) { target ->
+    persistSearchScrollState(
+        index = target.state.firstVisibleItemIndex,
+        offsetPx = target.state.firstVisibleItemOffsetPx,
+        queryHash = target.queryHash,
+    )
+}
+
 /**
  * Navigation-owner closeable for debounced scroll writes. Its scheduler is independent from
  * viewModelScope so ViewModel teardown can cancel route work first and still synchronously drain

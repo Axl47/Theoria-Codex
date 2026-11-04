@@ -1,5 +1,6 @@
 package com.theoriacodex.app.codex
 
+import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.theoriacodex.app.media.animatedDurationRangeLabel
 import com.theoriacodex.app.ui.components.FilterChoiceChip
@@ -9,13 +10,14 @@ import com.theoriacodex.app.ui.components.rememberFeedScrollSignal
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
+import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkAdd
@@ -52,13 +54,14 @@ import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
+import com.theoriacodex.app.search.unknownAnimatedDurationPolicy
 import com.theoriacodex.app.source.displayName
-import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
+import com.theoriacodex.app.ui.components.FeedScrollSignal
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
-import com.theoriacodex.app.ui.components.PostActionSheet
+import com.theoriacodex.app.ui.components.FeedPostActionSheet
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
 import com.theoriacodex.app.viewer.PixivUgoiraClient
@@ -70,6 +73,21 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
+
+/** Not answered yet is not the same as gone; saying so would flash on every first open. */
+@Composable
+private fun CodexUnavailable(loading: Boolean, onBack: () -> Unit) {
+    if (loading) return
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("This codex no longer exists.", style = MaterialTheme.typography.titleMedium)
+        TextButton(onClick = onBack) { Text("Back to codex list") }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -107,8 +125,7 @@ fun CodexDetailScreen(
     onDeleteCodex: () -> Unit,
     isLikesCodex: Boolean,
     onTitleLongPress: (() -> Unit)? = null,
-    customHeader: (@Composable (List<Post>, CodexCollectionFilters, Boolean,
-        androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState) -> Unit)? = null,
+    customHeader: (@Composable (List<Post>, CodexCollectionFilters, Boolean, LazyStaggeredGridState) -> Unit)? = null,
     customFilters: (@Composable (() -> Unit) -> Unit)? = null,
     customFiltersActive: Boolean = false,
     emptyMessage: String? = null,
@@ -122,218 +139,226 @@ fun CodexDetailScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
     var editSelection by remember { mutableStateOf(CodexEditSelection()) }
-    val durationMinBucket = fabRestoreState.durationMinBucket
-    val durationMaxBucket = fabRestoreState.durationMaxBucket
-    val gridState = rememberLazyStaggeredGridState()
-    val animatedDurationRange = remember(durationMinBucket, durationMaxBucket) {
-        AnimatedDurationRange(durationMinBucket, durationMaxBucket)
-    }
-    val sourceOptions = remember(posts, availableSources) {
-        codexSearchSourceOptions(posts, availableSources).map(CodexSearchSourceOption::source)
-    }
-    val representedSources = remember(sourceOptions) { sourceOptions.toSet() }
-    val supportsLanguage = remember(representedSources) {
-        supportsCodexLanguageFilter(representedSources)
-    }
-    val supportsFullColor = remember(representedSources) {
-        supportsCodexFullColorFilter(representedSources)
-    }
+    val gridState = rememberRetainedFeedGridState("codex-detail")
+    val sourceOptions = remember(posts, availableSources) { codexSearchSourceOptions(posts, availableSources).map(CodexSearchSourceOption::source) }
+    val supportsLanguage = remember(sourceOptions) { supportsCodexLanguageFilter(sourceOptions.toSet()) }
+    val supportsFullColor = remember(sourceOptions) { supportsCodexFullColorFilter(sourceOptions.toSet()) }
     val filters = remember(fabRestoreState) { fabRestoreState.savedCollectionFilters() }
-    val unknownDurationPolicy = remember(resolveUnknownAnimatedDurations) {
-        if (resolveUnknownAnimatedDurations) {
-            UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
-        } else {
-            UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS
-        }
-    }
-    val durationFilterActive = !animatedDurationRange.isFullRange
-    val durationMetadata = rememberDurationFilterMetadata(posts, durationStates, durationFilterActive)
-    val acquiredDurations = durationMetadata.knownDurationMsByPostId
-    val durationReadiness = durationMetadata.readiness
-    val visiblePosts = remember(posts, filters, unknownDurationPolicy, acquiredDurations) {
-        filterCodexCollectionPosts(
-            posts,
-            filters,
-            unknownDurationPolicy,
-            knownDurationMsByPostId = acquiredDurations,
-        )
-    }
-    val applyFilters: (CodexCollectionFilters) -> Unit = { updated ->
-        onFabRestoreStateChange(
-            fabRestoreState.copy(
-                animatedOnly = updated.animatedOnly,
-                durationMinBucket = updated.animatedDurationRange.normalizedMinBucket,
-                durationMaxBucket = updated.animatedDurationRange.normalizedMaxBucket,
-                source = updated.source?.name,
-                language = updated.language.name,
-                fullColorOnly = updated.fullColorOnly,
-            ),
-        )
-    }
-
+    val feed = rememberCodexDetailFeed(posts, filters, fabRestoreState, durationStates, resolveUnknownAnimatedDurations)
+    val applyFilters = { updated: CodexCollectionFilters -> onFabRestoreStateChange(fabRestoreState.withCollectionFilters(updated)) }
     LaunchedEffect(posts.map(Post::id)) {
         editSelection = editSelection.retainAvailable(posts.mapTo(mutableSetOf(), Post::id))
     }
-    CodexFilterReconciliationEffect(
-        filters = filters,
-        sourceOptions = sourceOptions,
-        supportsLanguage = supportsLanguage,
-        supportsFullColor = supportsFullColor,
-        onFiltersChange = applyFilters,
-    )
-    LaunchedEffect(durationFilterActive) { onDurationFilterChanged(durationFilterActive) }
+    CodexFilterReconciliationEffect(filters, sourceOptions, supportsLanguage, supportsFullColor, applyFilters)
+    LaunchedEffect(feed.durationFilterActive) { onDurationFilterChanged(feed.durationFilterActive) }
     DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
-
-    if (codexName == null) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text("This codex no longer exists.", style = MaterialTheme.typography.titleMedium)
-            TextButton(onClick = onBack) { Text("Back to codex list") }
-        }
-        return
-    }
-
+    if (codexName == null) return CodexUnavailable(loading, onBack)
     val filterScroll = rememberFeedScrollSignal()
-    val filterLabels = codexFilterLabels(filters, sortMode, customFiltersActive)
-    val resetFilters = {
-        onFabRestoreStateChange(FeedFabRestoreState(sortMode = CodexSortMode.NEWEST_SAVED.name))
-    }
+    val resetFilters = { onFabRestoreStateChange(FeedFabRestoreState(sortMode = CodexSortMode.NEWEST_SAVED.name)) }
     Scaffold(
         modifier = Modifier.nestedScroll(filterScroll.connection),
         contentWindowInsets = WindowInsets(0),
         floatingActionButton = {
-            FeedFilterFab(
-                modifier = Modifier.padding(bottom = 8.dp),
-                labels = filterLabels,
-                contentDescription = "Filter Codex collection",
+            CodexDetailFilterFab(
+                filters, sortMode, customFiltersActive, fabRestoreState, filterScroll, resetFilters, onFabRestoreStateChange,
                 onClick = { showFilterSheet = true },
-                onClear = {
-                    val previous = fabRestoreState
-                    resetFilters()
-                    ({ onFabRestoreStateChange(previous) })
-                },
-                scrollSignal = filterScroll,
             )
         },
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            if (customHeader != null) {
-                customHeader(visiblePosts, filters, durationReadiness.isResolving, gridState)
-            } else CodexDetailHeader(
-                codexName = codexName,
-                onTitleLongPress = onTitleLongPress,
-                itemSummary = codexItemSummary(
-                    visibleCount = visiblePosts.size,
-                    totalCount = posts.size,
-                    filtersActive = filters.isActive || customFiltersActive,
-                    selectedCount = editSelection.selectedPostIds.size.takeIf { editSelection.active },
-                ),
-                itemCount = posts.size,
-                editSelection = editSelection,
-                onBack = onBack,
-                onBeginEdit = { editSelection = editSelection.begin() },
-                onCancelEdit = { editSelection = editSelection.exit() },
-                onAddSelected = {
-                    val selected = posts.filter { it.id in editSelection.selectedPostIds }
-                    editSelection = editSelection.exit()
-                    onAddPostsToAnotherCodex(selected)
-                },
-                onRemoveSelected = {
-                    val selected = posts.filter { it.id in editSelection.selectedPostIds }
-                    editSelection = editSelection.exit()
-                    onRemovePosts(selected)
-                },
-                onDeleteCodex = { showDeleteConfirm = true },
-                isLikesCodex = isLikesCodex,
-            )
-            CodexDetailGrid(
-                posts = visiblePosts,
-                likedPostIds = likedPostIds,
-                onToggleLike = onToggleLike,
-                collectionIsEmpty = posts.isEmpty(),
-                loading = loading,
-                resolvingDurations = durationReadiness.isResolving,
-                editSelection = editSelection,
-                gridState = gridState,
-                pixivUgoiraClient = pixivUgoiraClient,
-                resolvePostById = resolvePostById,
-                acquiredDurations = acquiredDurations,
-                durationStateForPost = durationStateForPost,
-                onDurationPostVisibilityChanged = onDurationPostVisibilityChanged,
-                onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
-                onOpenViewer = { index -> onOpenViewer(visiblePosts, index) },
-                onToggleSelection = { postId -> editSelection = editSelection.toggle(postId) },
-                onOpenPostActions = { post -> selectedActionPost = post },
-                emptyMessage = emptyMessage,
-            )
-        }
+        CodexDetailBody(
+            padding, codexName, posts, feed, filters, customHeader, customFiltersActive, editSelection, { editSelection = it },
+            isLikesCodex, likedPostIds, onToggleLike, loading, gridState, pixivUgoiraClient, resolvePostById, durationStateForPost,
+            onDurationPostVisibilityChanged, onAuthoritativeDurationKnown, onOpenViewer, { selectedActionPost = it }, emptyMessage,
+            onTitleLongPress, onBack, onAddPostsToAnotherCodex, onRemovePosts, onDeleteCodex = { showDeleteConfirm = true },
+        )
     }
-
     if (showFilterSheet) {
         CodexFilterSheet(
-            filters = filters,
-            sourceOptions = sourceOptions,
-            supportsLanguage = supportsLanguage,
-            supportsFullColor = supportsFullColor,
-            sortMode = sortMode,
-            onFiltersChange = applyFilters,
-            onSortChange = { updatedSort ->
-                onFabRestoreStateChange(fabRestoreState.copy(sortMode = updatedSort.name))
-            },
-            onReset = resetFilters,
-            onDismiss = { showFilterSheet = false },
-            followedFilters = customFilters?.let { content -> ({ content { showFilterSheet = false } }) },
+            filters, sourceOptions, supportsLanguage, supportsFullColor, sortMode, applyFilters,
+            { updatedSort -> onFabRestoreStateChange(fabRestoreState.copy(sortMode = updatedSort.name)) },
+            resetFilters, { showFilterSheet = false },
+            customFilters?.let { content -> ({ content { showFilterSheet = false } }) },
         )
     }
-
-    if (selectedActionPost != null) {
-        val post = requireNotNull(selectedActionPost)
-        PostActionSheet(
-            post = post,
-            creatorBrowsingSources = creatorBrowsingSources,
-            onDismiss = { selectedActionPost = null },
-            onSaveToDevice = { onSavePostToDevice(post) },
-            onSaveToCodex = { onAddPostsToAnotherCodex(listOf(post)) },
+    selectedActionPost?.let { post ->
+        FeedPostActionSheet(
+            post, creatorBrowsingSources, { selectedActionPost = null }, onSavePostToDevice, { onAddPostsToAnotherCodex(listOf(it)) },
+            onOpenCreatorProfile, onOpenLegacyCreatorProfile, onGoToSearch, onPostUrlCopied, onAddIncludeTerm, onAddExcludeTerm,
+            onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, tagVideoCountProvider, fetchTagVideoCounts,
             saveToCodexLabel = "Add to another Codex",
             onRemoveFromCodex = if (customHeader == null) ({ onRemovePosts(listOf(post)) }) else null,
-            onOpenCreatorProfile = onOpenCreatorProfile,
-            onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
-            onGoToSearch = onGoToSearch,
-            onPostUrlCopied = onPostUrlCopied,
-            tagContent = {
-                PostTagActionSection(
-                    post = post,
-                    tagVideoCountProvider = tagVideoCountProvider,
-                    fetchTagVideoCounts = fetchTagVideoCounts,
-                    onAddIncludeTerm = { term -> onAddIncludeTerm(post, term) },
-                    onAddExcludeTerm = { term -> onAddExcludeTerm(post, term) },
-                    onRemoveIncludeTerm = { term -> onRemoveIncludeTerm(post, term) },
-                    onRemoveExcludeTerm = { term -> onRemoveExcludeTerm(post, term) },
-                    onFavoriteTagLongPress = onFavoriteTagLongPress,
-                )
-            },
         )
     }
+    CodexDeleteConfirmationDialog(showDeleteConfirm, codexName, isLikesCodex, { showDeleteConfirm = false }) {
+        showDeleteConfirm = false
+        onDeleteCodex()
+    }
+}
 
-    CodexDeleteConfirmationDialog(
-        visible = showDeleteConfirm,
-        codexName = codexName,
-        isLikesCodex = isLikesCodex,
-        onDismiss = { showDeleteConfirm = false },
-        onConfirm = {
-            showDeleteConfirm = false
-            onDeleteCodex()
+@Composable
+private fun CodexDetailBody(
+    padding: PaddingValues,
+    codexName: String,
+    posts: List<Post>,
+    feed: CodexDetailFeed,
+    filters: CodexCollectionFilters,
+    customHeader: (@Composable (List<Post>, CodexCollectionFilters, Boolean, LazyStaggeredGridState) -> Unit)?,
+    customFiltersActive: Boolean,
+    editSelection: CodexEditSelection,
+    onEditSelectionChange: (CodexEditSelection) -> Unit,
+    isLikesCodex: Boolean,
+    likedPostIds: Set<PostId>,
+    onToggleLike: ((Post) -> Unit)?,
+    loading: Boolean,
+    gridState: LazyStaggeredGridState,
+    pixivUgoiraClient: PixivUgoiraClient?,
+    resolvePostById: suspend (PostId) -> Post?,
+    durationStateForPost: (Post) -> Flow<MediaDurationState?>,
+    onDurationPostVisibilityChanged: (Post, Boolean) -> Unit,
+    onAuthoritativeDurationKnown: (Post, Long) -> Unit,
+    onOpenViewer: (List<Post>, Int) -> Unit,
+    onOpenPostActions: (Post) -> Unit,
+    emptyMessage: String?,
+    onTitleLongPress: (() -> Unit)?,
+    onBack: () -> Unit,
+    onAddPostsToAnotherCodex: (List<Post>) -> Unit,
+    onRemovePosts: (List<Post>) -> Unit,
+    onDeleteCodex: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        if (customHeader != null) {
+            customHeader(feed.visiblePosts, filters, feed.durationsBlockPaging, gridState)
+        } else CodexEditableHeader(
+            codexName, posts, feed.visiblePosts, filters.isActive || customFiltersActive, editSelection, isLikesCodex,
+            onEditSelectionChange, onTitleLongPress, onBack, onAddPostsToAnotherCodex, onRemovePosts, onDeleteCodex,
+        )
+        CodexDetailGrid(
+            feed.visiblePosts, likedPostIds, onToggleLike, posts.isEmpty(), loading, feed.resolvingDurations,
+            editSelection, gridState, pixivUgoiraClient, resolvePostById, feed.acquiredDurations, durationStateForPost,
+            onDurationPostVisibilityChanged, onAuthoritativeDurationKnown,
+            { index -> onOpenViewer(feed.visiblePosts, index) },
+            { postId -> onEditSelectionChange(editSelection.toggle(postId)) },
+            onEditSelectionChange, onOpenPostActions, emptyMessage,
+        )
+    }
+}
+
+@Composable
+private fun CodexDetailFilterFab(
+    filters: CodexCollectionFilters,
+    sortMode: CodexSortMode,
+    customFiltersActive: Boolean,
+    fabRestoreState: FeedFabRestoreState,
+    filterScroll: FeedScrollSignal,
+    resetFilters: () -> Unit,
+    onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
+    onClick: () -> Unit,
+) {
+    FeedFilterFab(
+        modifier = Modifier.padding(bottom = 8.dp),
+        labels = codexFilterLabels(filters, sortMode, customFiltersActive),
+        contentDescription = "Filter Codex collection",
+        onClick = onClick,
+        onClear = {
+            val previous = fabRestoreState
+            resetFilters()
+            ({ onFabRestoreStateChange(previous) })
         },
+        scrollSignal = filterScroll,
+    )
+}
+
+/** What the collection grid shows once the saved filters and known durations are applied. */
+private data class CodexDetailFeed(
+    val visiblePosts: List<Post>,
+    val acquiredDurations: Map<PostId, Long>,
+    val durationFilterActive: Boolean,
+    val resolvingDurations: Boolean,
+    val durationsBlockPaging: Boolean,
+)
+
+@Composable
+private fun rememberCodexDetailFeed(
+    posts: List<Post>,
+    filters: CodexCollectionFilters,
+    fabRestoreState: FeedFabRestoreState,
+    durationStates: Map<MediaDurationKey, MediaDurationState>,
+    resolveUnknownAnimatedDurations: Boolean,
+): CodexDetailFeed {
+    val durationMinBucket = fabRestoreState.durationMinBucket
+    val durationMaxBucket = fabRestoreState.durationMaxBucket
+    val animatedDurationRange = remember(durationMinBucket, durationMaxBucket) {
+        AnimatedDurationRange(durationMinBucket, durationMaxBucket)
+    }
+    val unknownDurationPolicy = unknownAnimatedDurationPolicy(resolveUnknownAnimatedDurations)
+    val durationFilterActive = !animatedDurationRange.isFullRange
+    val durationMetadata = rememberDurationFilterMetadata(posts, durationStates, durationFilterActive, retainKey = "codex-detail")
+    val acquiredDurations = durationMetadata.knownDurationMsByPostId
+    val presentedPosts = durationMetadata.presentedPosts ?: posts
+    val visiblePosts = remember(presentedPosts, filters, unknownDurationPolicy, acquiredDurations) {
+        filterCodexCollectionPosts(presentedPosts, filters, unknownDurationPolicy, knownDurationMsByPostId = acquiredDurations)
+    }
+    val resolvingDurations = durationMetadata.readiness.isResolving
+    val durationsBlockPaging = durationMetadata.blocksPaging
+    return remember(visiblePosts, acquiredDurations, durationFilterActive, resolvingDurations, durationsBlockPaging) {
+        CodexDetailFeed(visiblePosts, acquiredDurations, durationFilterActive, resolvingDurations, durationsBlockPaging)
+    }
+}
+
+private fun FeedFabRestoreState.withCollectionFilters(updated: CodexCollectionFilters) = copy(
+    animatedOnly = updated.animatedOnly,
+    durationMinBucket = updated.animatedDurationRange.normalizedMinBucket,
+    durationMaxBucket = updated.animatedDurationRange.normalizedMaxBucket,
+    source = updated.source?.name,
+    language = updated.language.name,
+    fullColorOnly = updated.fullColorOnly,
+)
+
+/** The standard header, for collections whose membership the user can edit. */
+@Composable
+private fun CodexEditableHeader(
+    codexName: String,
+    posts: List<Post>,
+    visiblePosts: List<Post>,
+    filtersActive: Boolean,
+    editSelection: CodexEditSelection,
+    isLikesCodex: Boolean,
+    onEditSelectionChange: (CodexEditSelection) -> Unit,
+    onTitleLongPress: (() -> Unit)?,
+    onBack: () -> Unit,
+    onAddPostsToAnotherCodex: (List<Post>) -> Unit,
+    onRemovePosts: (List<Post>) -> Unit,
+    onDeleteCodex: () -> Unit,
+) {
+    CodexDetailHeader(
+        codexName = codexName,
+        onTitleLongPress = onTitleLongPress,
+        itemSummary = codexItemSummary(
+            visibleCount = visiblePosts.size,
+            totalCount = posts.size,
+            filtersActive = filtersActive,
+            selectedCount = editSelection.selectedPostIds.size.takeIf { editSelection.active },
+        ),
+        itemCount = posts.size,
+        editSelection = editSelection,
+        onBack = onBack,
+        onBeginEdit = { onEditSelectionChange(editSelection.begin()) },
+        onCancelEdit = { onEditSelectionChange(editSelection.exit()) },
+        onAddSelected = {
+            val selected = posts.filter { it.id in editSelection.selectedPostIds }
+            onEditSelectionChange(editSelection.exit())
+            onAddPostsToAnotherCodex(selected)
+        },
+        onRemoveSelected = {
+            val selected = posts.filter { it.id in editSelection.selectedPostIds }
+            onEditSelectionChange(editSelection.exit())
+            onRemovePosts(selected)
+        },
+        onDeleteCodex = onDeleteCodex,
+        isLikesCodex = isLikesCodex,
     )
 }
 
@@ -495,6 +520,7 @@ private fun CodexDetailGrid(
     onAuthoritativeDurationKnown: (Post, Long) -> Unit,
     onOpenViewer: (Int) -> Unit,
     onToggleSelection: (PostId) -> Unit,
+    onSelectionChange: (CodexEditSelection) -> Unit,
     onOpenPostActions: (Post) -> Unit,
     emptyMessage: String? = null,
 ) {
@@ -525,10 +551,11 @@ private fun CodexDetailGrid(
         }
         return
     }
+    val postIds = remember(posts) { posts.map(Post::id) }
     TwoColumnPostStaggeredGrid(
         posts = posts,
         state = gridState,
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().codexDragSelect(gridState, postIds, editSelection, onSelectionChange),
         footerMessage = if (resolvingDurations) "Resolving durations…" else null,
     ) { index, post ->
         val observedDurationMs = observedMediaDurationMs(post, durationStateForPost)
@@ -579,9 +606,8 @@ private fun CodexSelectablePostCard(
             onClick = {
                 if (editSelection.active) onToggleSelection(post.id) else onOpenViewer(index)
             },
-            onLongPress = {
-                if (editSelection.active) onToggleSelection(post.id) else onOpenPostActions(post)
-            },
+            // While selecting, the grid's drag-select owns long press.
+            onLongPress = { if (!editSelection.active) onOpenPostActions(post) },
             onViewportChanged = { visible -> onDurationPostVisibilityChanged(post, visible) },
             onAuthoritativeDurationKnown = { durationMs ->
                 onAuthoritativeDurationKnown(post, durationMs)

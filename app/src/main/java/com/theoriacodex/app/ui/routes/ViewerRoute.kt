@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.app.related.accumulatedPosts
 import com.theoriacodex.app.viewer.LocalViewerReturnTransition
 
 import com.theoriacodex.data.repository.CodexUsageTarget
@@ -23,6 +24,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.State
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
@@ -34,13 +37,13 @@ import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.related.RelatedPostsUiState
-import com.theoriacodex.app.related.loadedPosts
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.ViewerMediaPrefetcher
 import com.theoriacodex.app.viewer.ViewerPostResolver
 import com.theoriacodex.app.viewer.ViewerScreen
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.ViewerRestorationRequest
+import com.theoriacodex.app.viewer.ViewerReturnTransition
 import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.mergeViewerPosts
 import com.theoriacodex.app.viewer.withRelatedPosts
@@ -57,6 +60,7 @@ import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
@@ -247,230 +251,105 @@ internal fun ViewerRoute(
     val viewerOwner = viewModel<ViewerViewModel>(factory = ownerFactory)
     val durationOwner = viewModel<MediaDurationRouteViewModel>(
         key = "viewer-duration-owner",
-        factory = MediaDurationRouteViewModel.factory(
-            dependencies.mediaDurationCoordinator,
-            "viewer",
-        ),
+        factory = MediaDurationRouteViewModel.factory(dependencies.mediaDurationCoordinator, "viewer"),
     )
     val ownerHandle = remember(viewerOwner) { ViewerRouteOwnerHandle(viewerOwner) }
     val viewerState by viewerOwner.state.collectAsStateWithLifecycle()
     val session by viewerOwner.session.collectAsStateWithLifecycle()
     val retainedPostIds = remember(viewerState.pages) { viewerState.pages.mapTo(mutableSetOf()) { it.post.id } }
     SideEffect { viewerReturn?.retainPosts(retainedPostIds) }
-    val claimedSessionId = remember(viewerOwner) {
-        dependencies.sessionRetentionOwner.session.value?.sessionId
-    }
-    var restorationAttempt by remember(viewerOwner) { mutableIntStateOf(0) }
-    var restorationFailed by remember(viewerOwner) { mutableStateOf(false) }
-    var restorationInProgress by remember(viewerOwner) { mutableStateOf(false) }
-
+    val restoration = rememberViewerSessionRestoration(viewerOwner, latestDependencies)
     DisposableEffect(viewerOwner) {
         latestScreenCallbacks.value.onOwnerChanged(ownerHandle)
         onDispose {
             latestScreenCallbacks.value.onOwnerChanged(null)
         }
     }
-
-    LaunchedEffect(viewerOwner, claimedSessionId, restorationAttempt) {
-        restorationFailed = false
-        val currentDependencies = latestDependencies.value
-        val handedOff = currentDependencies.sessionRetentionOwner.handoffTo(
-            owner = viewerOwner,
-            claimedSessionId = claimedSessionId,
-        )
-        if (!handedOff && viewerOwner.session.value == null) {
-            val pending = viewerOwner.restorationRequest
-            val restored = try {
-                restorationInProgress = pending != null
-                pending?.let { identity -> currentDependencies.restoreSession(identity) }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Exception) {
-                null
-            } finally {
-                restorationInProgress = false
-            }
-            if (restored == null) {
-                restorationFailed = true
-            } else {
-                viewerOwner.replaceSession(restored)
-            }
-        }
-    }
-
-    val activeLiveSource = session?.let { active ->
-        liveSourceState.forSource(active.context.streamSource)
-    }
-    LaunchedEffect(
-        viewerOwner,
-        session?.sessionId,
-        session?.searchVisibilityFilters,
-        activeLiveSource?.queryHash,
-        activeLiveSource?.results,
-        activeLiveSource?.retainedLikedPostIds,
-        liveSourceState.likedPostIds,
-        liveSourceState.savedPostIds,
-        liveSourceState.watchedPostIds,
-        liveSourceState.unknownAnimatedDurationPolicy,
-    ) {
-        val currentSession = viewerOwner.session.value ?: return@LaunchedEffect
-        val incoming = liveSourceState.visiblePostsFor(currentSession) ?: return@LaunchedEffect
-        val merged = mergeViewerPosts(currentSession.posts, incoming)
-        if (merged.size != currentSession.posts.size) {
-            viewerOwner.updateSession { latest ->
-                if (latest.sessionId == currentSession.sessionId) {
-                    latest.copy(posts = mergeViewerPosts(latest.posts, incoming))
-                } else {
-                    latest
-                }
-            }
-        }
-    }
-
+    LaunchedEffect(viewerOwner, restoration.claimedSessionId, restoration.attempt) { restoration.run() }
+    ViewerLiveSourceMergeEffect(viewerOwner, session, liveSourceState)
     CollectRouteEffects(viewerOwner.effects) { effect ->
-        val callbacks = latestEffectCallbacks.value
-        val currentState = viewerOwner.state.value
-        if (!effect.isCurrentFor(currentState)) return@CollectRouteEffects
-        fun post(postId: PostId): Post? = currentState.pages
-            .firstOrNull { page -> page.post.id == postId }
-            ?.post
-
-        when (effect) {
-            is ViewerEffect.SavePost -> post(effect.postId)?.let { selected ->
-                viewerOwner.session.value?.context?.let { context -> callbacks.onSavePost(selected, context) }
-            }
-
-            is ViewerEffect.ShareMedia -> callbacks.onSharePost(post(effect.postId))
-
-            is ViewerEffect.DownloadMedia -> {
-                val page = currentState.pages.firstOrNull { candidate ->
-                    candidate.post.id == effect.postId
-                }
-                val media = page?.media?.firstOrNull { candidate ->
-                    candidate.key == effect.mediaKey
-                }?.ref
-                callbacks.onDownloadMedia(
-                    if (page != null && media != null) {
-                        ViewerDownloadRequest(
-                            post = page.post,
-                            media = media,
-                            pageIndex = effect.mediaKey.mediaIndex,
-                            totalPages = page.media.size,
-                        )
-                    } else {
-                        null
-                    },
-                )
-            }
-
-            is ViewerEffect.SetLiked -> post(effect.postId)?.let { selected ->
-                val launchAction = viewerOwner.session.value?.onToggleLike
-                if (launchAction != null) launchAction(selected) else callbacks.onToggleLike(selected)
-            }
-
-            is ViewerEffect.OpenCreatorProfile -> callbacks.onOpenCreatorProfile(effect.creator)
-
-            is ViewerEffect.ApplyTag -> post(effect.postId)?.let { selected ->
-                callbacks.onApplyTag(selected, effect.term, effect.excluded)
-            }
-
-            is ViewerEffect.RetryMedia -> {
-                val page = currentState.pages.firstOrNull { candidate ->
-                    candidate.post.id == effect.mediaKey.postId
-                }
-                val failedMedia = page?.media?.firstOrNull { candidate ->
-                    candidate.key == effect.mediaKey
-                }?.ref
-                if (page != null && failedMedia != null) {
-                    recoverAndApplyMedia(
-                        viewerOwner = viewerOwner,
-                        post = page.post,
-                        failedMedia = failedMedia,
-                        callbacks = callbacks,
-                    )
-                }
-            }
-
-            is ViewerEffect.LoadMore -> viewerOwner.session.value
-                ?.context
-                ?.streamSource
-                ?.let(callbacks.onLoadMore)
-
-            is ViewerEffect.Dismiss -> {
-                viewerOwner.clearSession(retainPresentation = true)
-                latestDependencies.value.sessionRetentionOwner.clear()
-                callbacks.onDismiss()
-                currentState.currentPage?.post?.id?.let { viewerReturn?.begin(it) }
-            }
-
-            is ViewerEffect.ResolvePost,
-            is ViewerEffect.PrefetchMedia,
-            -> Unit
-        }
+        handleViewerEffect(effect, viewerOwner, latestEffectCallbacks.value, latestDependencies, viewerReturn)
     }
-
-    val usageCodexId = statisticsCodexId(session?.context)
-    val usagePost = viewerState.currentPage?.post
-    val usageMedia = viewerState.currentPage?.selectedMedia?.ref
-    val usageTarget = usageCodexId?.let { id -> usagePost?.let { post ->
-        CodexUsageTarget(
-            id, statisticsPostKey(post.id), usageMedia?.let { com.theoriacodex.app.media.isVideoMediaRef(it) } == true,
-        )
-    } }
-    LaunchedEffect(usageTarget) { dependencies.onCodexUsageTargetChanged(usageTarget) }
+    ViewerUsageTargetEffect(session?.context, viewerState, dependencies.onCodexUsageTargetChanged)
 
     val activeSession = session
     if (activeSession == null && viewerState.pages.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (restorationFailed) {
-                    Text("This viewing session could not be restored.")
-                    if (viewerOwner.pendingRestoration?.streamKey != ViewerStreamSource.RELATED.name) {
-                        TextButton(onClick = { restorationAttempt++ }) { Text("Retry") }
-                    }
-                    TextButton(onClick = {
-                        routeScope.launch { latestEffectCallbacks.value.onRestorationUnavailable() }
-                    }) { Text("Back to browsing") }
-                } else if (restorationInProgress) {
-                    CircularProgressIndicator()
-                    Text("Restoring your place…")
-                }
-            }
-        }
+        ViewerRestorationPlaceholder(
+            failed = restoration.failed,
+            inProgress = restoration.inProgress,
+            canRetry = viewerOwner.pendingRestoration?.streamKey != ViewerStreamSource.RELATED.name,
+            onRetry = restoration::retry,
+            onBackToBrowsing = { routeScope.launch { latestEffectCallbacks.value.onRestorationUnavailable() } },
+        )
         return
     }
+    ViewerRouteScreen(
+        activeSession, viewerState, viewerOwner, durationOwner, liveSourceState, renderConfig, dependencies,
+        screenCallbacks, latestDependencies, latestEffectCallbacks, latestScreenCallbacks, routeScope,
+    )
+}
 
+/** Renders the claimed or restored session, once the route has one to show. */
+@Composable
+private fun ViewerRouteScreen(
+    activeSession: ViewerSession?,
+    viewerState: ViewerUiState,
+    viewerOwner: ViewerViewModel,
+    durationOwner: MediaDurationRouteViewModel,
+    liveSourceState: ViewerRouteLiveSourceState,
+    renderConfig: ViewerRouteRenderConfig,
+    dependencies: ViewerRouteDependencies,
+    screenCallbacks: ViewerRouteScreenCallbacks,
+    latestDependencies: State<ViewerRouteDependencies>,
+    latestEffectCallbacks: State<ViewerRouteEffectCallbacks>,
+    latestScreenCallbacks: State<ViewerRouteScreenCallbacks>,
+    routeScope: CoroutineScope,
+) {
     val matchingSourceState = activeSession?.let { active ->
         liveSourceState.forSource(active.context.streamSource)
             ?.takeIf { sourceState -> sourceState.queryHash == active.context.queryHash }
     }
     val canLoadMoreFromSource = activeSession?.liveSearchBinding == true &&
         matchingSourceState?.canLoadMore == true
+    // Remembered so an unchanged session keeps one list, which is how the owner recognizes no new work.
+    val durationPosts = remember(viewerState.pages) { viewerState.pages.map { page -> dependencies.canonicalizePost(page.post) } }
     SideEffect {
         if (activeSession == null) return@SideEffect
         durationOwner.synchronize(
             identity = activeSession.sessionId,
-            posts = viewerState.pages.map { page -> dependencies.canonicalizePost(page.post) },
+            posts = durationPosts,
             resolveInBackground = false,
         )
     }
-    val relatedSource = activeSession?.relatedBinding?.source ?: activeSession?.context?.streamSource
-    val relatedSnapshot = activeSession?.let(liveSourceState::relatedSourceFor)
-    val relatedState = relatedSnapshot?.relatedPosts ?: RelatedPostsUiState.Idle
-    val relatedPosts = activeSession?.let { active ->
-        filterSearchResults(
-            results = relatedState.loadedPosts, filters = active.searchVisibilityFilters,
-            likedPostIds = if (relatedSource == ViewerStreamSource.FOR_YOU) emptySet() else liveSourceState.likedPostIds,
-            savedPostIds = if (relatedSource == ViewerStreamSource.FOR_YOU) emptySet() else liveSourceState.savedPostIds,
-            watchedPostIds = if (relatedSource == ViewerStreamSource.FOR_YOU) emptySet() else liveSourceState.watchedPostIds,
-            retainedLikedPostIds = relatedSnapshot?.retainedLikedPostIds.orEmpty(),
-            unknownAnimatedDurationPolicy = liveSourceState.unknownAnimatedDurationPolicy,
-        )
-    }.orEmpty()
+    val related = rememberViewerRelatedPosts(activeSession, liveSourceState)
     androidx.compose.runtime.CompositionLocalProvider(com.theoriacodex.app.viewer.LocalViewerInstantSeek provides renderConfig.instantSeek) {
+        ViewerRouteRenderer(
+            activeSession, viewerState, viewerOwner, durationOwner, renderConfig, related, screenCallbacks,
+            canLoadMoreFromSource, matchingSourceState?.loadingMore == true,
+            latestDependencies, latestEffectCallbacks, latestScreenCallbacks, routeScope,
+        )
+    }
+}
+
+@Composable
+private fun ViewerRouteRenderer(
+    activeSession: ViewerSession?,
+    viewerState: ViewerUiState,
+    viewerOwner: ViewerViewModel,
+    durationOwner: MediaDurationRouteViewModel,
+    renderConfig: ViewerRouteRenderConfig,
+    related: ViewerRelatedPosts,
+    screenCallbacks: ViewerRouteScreenCallbacks,
+    canLoadMoreFromSource: Boolean,
+    loadingMoreFromSource: Boolean,
+    latestDependencies: State<ViewerRouteDependencies>,
+    latestEffectCallbacks: State<ViewerRouteEffectCallbacks>,
+    latestScreenCallbacks: State<ViewerRouteScreenCallbacks>,
+    routeScope: CoroutineScope,
+) {
     ViewerScreen(
         uiState = viewerState.copy(related = com.theoriacodex.app.viewer.state.ViewerRelatedUiState(
-            relatedState, relatedPosts, activeSession?.relatedNavigation, activeSession?.relatedPostIds.orEmpty(),
+            related.state, related.posts, activeSession?.relatedNavigation, activeSession?.relatedPostIds.orEmpty(),
         )),
         saveToCodexQuery = activeSession?.saveQuery,
         creatorBrowsingSources = renderConfig.creatorBrowsingSources,
@@ -484,26 +363,21 @@ internal fun ViewerRoute(
         tagVideoCountProvider = renderConfig.tagVideoCountProvider,
         fetchTagVideoCounts = renderConfig.fetchTagVideoCounts,
         canLoadMoreFromSource = canLoadMoreFromSource,
-        loadingMoreFromSource = matchingSourceState?.loadingMore == true,
+        loadingMoreFromSource = loadingMoreFromSource,
         invertMultiImageScrollDirection = renderConfig.invertMultiImageScrollDirection,
         videoQuality = renderConfig.videoQuality,
         likedPostIds = renderConfig.likedPostIds,
         onIncludeRelatedPosts = {
-            relatedState.requestOrNull?.seed?.id?.let { seedId ->
-                viewerOwner.updateSession { current -> current.withRelatedPosts(seedId, relatedPosts) }
+            related.state.requestOrNull?.seed?.id?.let { seedId ->
+                viewerOwner.updateSession { current -> current.withRelatedPosts(seedId, related.posts) }
             }
         },
-        onDismissRelatedPosts = { relatedSource?.let(screenCallbacks.onDismissRelatedPosts) },
-        onRetryRelatedPosts = { relatedSource?.let(screenCallbacks.onRetryRelatedPosts) },
+        onDismissRelatedPosts = { related.source?.let(screenCallbacks.onDismissRelatedPosts) },
+        onRetryRelatedPosts = { related.source?.let(screenCallbacks.onRetryRelatedPosts) },
         onRequestMediaRecovery = { post, failedMedia ->
             routeScope.launch {
                 if (viewerOwner.session.value == null) return@launch
-                recoverAndApplyMedia(
-                    viewerOwner = viewerOwner,
-                    post = post,
-                    failedMedia = failedMedia,
-                    callbacks = latestEffectCallbacks.value,
-                )
+                recoverAndApplyMedia(viewerOwner, post, failedMedia, latestEffectCallbacks.value)
             }
         },
         onVisiblePostChanged = { post, viewedMediaNumber ->
@@ -531,7 +405,233 @@ internal fun ViewerRoute(
         },
         onOpenCreatorFallback = screenCallbacks.onOpenCreatorFallback,
     )
+}
+
+/** Claims the pending session once per owner, or rebuilds one from its compact saved identity. */
+@Stable
+private class ViewerSessionRestoration(
+    private val owner: ViewerViewModel,
+    val claimedSessionId: String?,
+    private val dependencies: State<ViewerRouteDependencies>,
+) {
+    var attempt by mutableIntStateOf(0)
+        private set
+    var failed by mutableStateOf(false)
+        private set
+    var inProgress by mutableStateOf(false)
+        private set
+
+    fun retry() {
+        attempt++
     }
+
+    suspend fun run() {
+        failed = false
+        val current = dependencies.value
+        val handedOff = current.sessionRetentionOwner.handoffTo(owner = owner, claimedSessionId = claimedSessionId)
+        if (handedOff || owner.session.value != null) return
+        val restored = restore(current)
+        if (restored == null) failed = true else owner.replaceSession(restored)
+    }
+
+    private suspend fun restore(current: ViewerRouteDependencies): ViewerSession? {
+        val pending = owner.restorationRequest
+        return try {
+            inProgress = pending != null
+            pending?.let { identity -> current.restoreSession(identity) }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            null
+        } finally {
+            inProgress = false
+        }
+    }
+}
+
+@Composable
+private fun rememberViewerSessionRestoration(
+    owner: ViewerViewModel,
+    dependencies: State<ViewerRouteDependencies>,
+): ViewerSessionRestoration = remember(owner) {
+    ViewerSessionRestoration(owner, dependencies.value.sessionRetentionOwner.session.value?.sessionId, dependencies)
+}
+
+/** Extends a live session with what its source has since loaded, under the launch's filters. */
+@Composable
+private fun ViewerLiveSourceMergeEffect(
+    viewerOwner: ViewerViewModel,
+    session: ViewerSession?,
+    liveSourceState: ViewerRouteLiveSourceState,
+) {
+    val activeLiveSource = session?.let { active -> liveSourceState.forSource(active.context.streamSource) }
+    LaunchedEffect(
+        viewerOwner,
+        session?.sessionId,
+        session?.searchVisibilityFilters,
+        activeLiveSource?.queryHash,
+        activeLiveSource?.results,
+        activeLiveSource?.retainedLikedPostIds,
+        liveSourceState.likedPostIds,
+        liveSourceState.savedPostIds,
+        liveSourceState.watchedPostIds,
+        liveSourceState.unknownAnimatedDurationPolicy,
+    ) {
+        val currentSession = viewerOwner.session.value ?: return@LaunchedEffect
+        val incoming = liveSourceState.visiblePostsFor(currentSession) ?: return@LaunchedEffect
+        val merged = mergeViewerPosts(currentSession.posts, incoming)
+        if (merged.size != currentSession.posts.size) {
+            viewerOwner.updateSession { latest ->
+                if (latest.sessionId == currentSession.sessionId) {
+                    latest.copy(posts = mergeViewerPosts(latest.posts, incoming))
+                } else {
+                    latest
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Handles one effect against the state at its delivery, not when it was emitted. Effects run in
+ * order because the collector awaits each one, so nothing here may launch work of its own.
+ */
+private suspend fun handleViewerEffect(
+    effect: ViewerEffect,
+    viewerOwner: ViewerViewModel,
+    callbacks: ViewerRouteEffectCallbacks,
+    dependencies: State<ViewerRouteDependencies>,
+    viewerReturn: ViewerReturnTransition?,
+) {
+    val currentState = viewerOwner.state.value
+    if (!effect.isCurrentFor(currentState)) return
+    fun post(postId: PostId): Post? = currentState.pages.firstOrNull { page -> page.post.id == postId }?.post
+    when (effect) {
+        is ViewerEffect.SavePost -> post(effect.postId)?.let { selected ->
+            viewerOwner.session.value?.context?.let { context -> callbacks.onSavePost(selected, context) }
+        }
+        is ViewerEffect.ShareMedia -> callbacks.onSharePost(post(effect.postId))
+        is ViewerEffect.DownloadMedia -> callbacks.onDownloadMedia(viewerDownloadRequest(effect, currentState))
+        is ViewerEffect.SetLiked -> post(effect.postId)?.let { selected ->
+            val launchAction = viewerOwner.session.value?.onToggleLike
+            if (launchAction != null) launchAction(selected) else callbacks.onToggleLike(selected)
+        }
+        is ViewerEffect.OpenCreatorProfile -> callbacks.onOpenCreatorProfile(effect.creator)
+        is ViewerEffect.ApplyTag -> post(effect.postId)?.let { selected ->
+            callbacks.onApplyTag(selected, effect.term, effect.excluded)
+        }
+        is ViewerEffect.RetryMedia -> retryViewerMedia(effect, currentState, viewerOwner, callbacks)
+        is ViewerEffect.LoadMore -> viewerOwner.session.value?.context?.streamSource?.let(callbacks.onLoadMore)
+        is ViewerEffect.Dismiss -> {
+            viewerOwner.clearSession(retainPresentation = true)
+            dependencies.value.sessionRetentionOwner.clear()
+            callbacks.onDismiss()
+            currentState.currentPage?.post?.id?.let { viewerReturn?.begin(it) }
+        }
+        is ViewerEffect.ResolvePost,
+        is ViewerEffect.PrefetchMedia,
+        -> Unit
+    }
+}
+
+private fun viewerDownloadRequest(effect: ViewerEffect.DownloadMedia, state: ViewerUiState): ViewerDownloadRequest? {
+    val page = state.pages.firstOrNull { candidate -> candidate.post.id == effect.postId } ?: return null
+    val media = page.media.firstOrNull { candidate -> candidate.key == effect.mediaKey }?.ref ?: return null
+    return ViewerDownloadRequest(
+        post = page.post,
+        media = media,
+        pageIndex = effect.mediaKey.mediaIndex,
+        totalPages = page.media.size,
+    )
+}
+
+private suspend fun retryViewerMedia(
+    effect: ViewerEffect.RetryMedia,
+    state: ViewerUiState,
+    viewerOwner: ViewerViewModel,
+    callbacks: ViewerRouteEffectCallbacks,
+) {
+    val page = state.pages.firstOrNull { candidate -> candidate.post.id == effect.mediaKey.postId } ?: return
+    val failedMedia = page.media.firstOrNull { candidate -> candidate.key == effect.mediaKey }?.ref ?: return
+    recoverAndApplyMedia(viewerOwner, page.post, failedMedia, callbacks)
+}
+
+/** Reports which Codex and media this session is spending time on, for usage statistics. */
+@Composable
+private fun ViewerUsageTargetEffect(
+    context: ViewerLaunchContext?,
+    state: ViewerUiState,
+    onChanged: (CodexUsageTarget?) -> Unit,
+) {
+    val usageCodexId = statisticsCodexId(context)
+    val usagePost = state.currentPage?.post
+    val usageMedia = state.currentPage?.selectedMedia?.ref
+    val usageTarget = usageCodexId?.let { id -> usagePost?.let { post ->
+        CodexUsageTarget(
+            id, statisticsPostKey(post.id), usageMedia?.let { com.theoriacodex.app.media.isVideoMediaRef(it) } == true,
+        )
+    } }
+    LaunchedEffect(usageTarget) { onChanged(usageTarget) }
+}
+
+@Composable
+private fun ViewerRestorationPlaceholder(
+    failed: Boolean,
+    inProgress: Boolean,
+    canRetry: Boolean,
+    onRetry: () -> Unit,
+    onBackToBrowsing: () -> Unit,
+) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (failed) {
+                Text("This viewing session could not be restored.")
+                if (canRetry) TextButton(onClick = onRetry) { Text("Retry") }
+                TextButton(onClick = onBackToBrowsing) { Text("Back to browsing") }
+            } else if (inProgress) {
+                CircularProgressIndicator()
+                Text("Restoring your place…")
+            }
+        }
+    }
+}
+
+/** The related drawer for this session: which source feeds it, its state, and its visible posts. */
+private class ViewerRelatedPosts(
+    val source: ViewerStreamSource?,
+    val state: RelatedPostsUiState,
+    val posts: List<Post>,
+)
+
+@Composable
+private fun rememberViewerRelatedPosts(
+    activeSession: ViewerSession?,
+    liveSourceState: ViewerRouteLiveSourceState,
+): ViewerRelatedPosts {
+    val relatedSource = activeSession?.relatedBinding?.source ?: activeSession?.context?.streamSource
+    val relatedSnapshot = activeSession?.let(liveSourceState::relatedSourceFor)
+    val relatedState = relatedSnapshot?.relatedPosts ?: RelatedPostsUiState.Idle
+    // New likes extend the drawer instead of replacing it, for as long as this Viewer session lasts.
+    var shownRelatedPosts by remember(activeSession?.sessionId) { mutableStateOf(emptyList<Post>()) }
+    val accumulatedRelatedPosts = remember(shownRelatedPosts, relatedState) { relatedState.accumulatedPosts(shownRelatedPosts) }
+    SideEffect { shownRelatedPosts = accumulatedRelatedPosts }
+    val relatedPosts = remember(
+        activeSession?.searchVisibilityFilters, accumulatedRelatedPosts, relatedSource, liveSourceState.likedPostIds,
+        liveSourceState.savedPostIds, liveSourceState.watchedPostIds, relatedSnapshot?.retainedLikedPostIds,
+        liveSourceState.unknownAnimatedDurationPolicy,
+    ) {
+        activeSession?.let { active ->
+            filterSearchResults(
+                results = accumulatedRelatedPosts, filters = active.searchVisibilityFilters,
+                likedPostIds = if (relatedSource == ViewerStreamSource.FOR_YOU) emptySet() else liveSourceState.likedPostIds,
+                savedPostIds = if (relatedSource == ViewerStreamSource.FOR_YOU) emptySet() else liveSourceState.savedPostIds,
+                watchedPostIds = if (relatedSource == ViewerStreamSource.FOR_YOU) emptySet() else liveSourceState.watchedPostIds,
+                retainedLikedPostIds = relatedSnapshot?.retainedLikedPostIds.orEmpty(),
+                unknownAnimatedDurationPolicy = liveSourceState.unknownAnimatedDurationPolicy,
+            )
+        }.orEmpty()
+    }
+    return remember(relatedSource, relatedState, relatedPosts) { ViewerRelatedPosts(relatedSource, relatedState, relatedPosts) }
 }
 
 /** Prevents buffered or suspended effects from crossing a Viewer session replacement. */

@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performTouchInput
@@ -42,11 +43,15 @@ class ViewerLevelGesturesTest {
     private lateinit var levels: ViewerLevelControls
     private lateinit var audio: AudioManager
     private lateinit var activity: Activity
-    private val layout = mutableStateOf(ViewerMediaLayout(false, false, false, false))
+    private val layout = mutableStateOf(ViewerMediaLayout(false, false, false))
     private val transform = mutableStateOf(ViewerTransformState())
     private val controls = mutableStateOf(ViewerRendererControls(true, true, false, true, 1f, 0L, 0L))
     private val navigations = mutableListOf<ViewerHorizontalSwipeDirection>()
     private var chromeToggles = 0
+    private var interactions = 0
+    private var seekInteractions = 0
+    private var dismissDrags = 0
+    private var infoSwipes = 0
 
     @Before fun setup() {
         activity = activityController.setup().get()
@@ -77,6 +82,24 @@ class ViewerLevelGesturesTest {
             assertEquals("0", levels.feedback?.label)
             assertEquals(0, chromeToggles)
             assertEquals(emptyList<ViewerHorizontalSwipeDirection>(), navigations)
+        }
+    }
+
+    @Test fun `the centre column of video closes and opens info while the outer columns stay levels`() {
+        showPage()
+        swipeSide(0.5f, up = false)
+        compose.runOnIdle {
+            assert(dismissDrags > 0)
+            assertEquals(0.5f, activity.window.attributes.screenBrightness, 0f)
+            assertNull(levels.feedback)
+        }
+        swipeSide(0.5f, up = true)
+        compose.runOnIdle { assertEquals(1, infoSwipes) }
+        val pulls = dismissDrags
+        swipeSide(0.2f, up = false)
+        compose.runOnIdle {
+            assertEquals(pulls, dismissDrags)
+            assertEquals(0f, activity.window.attributes.screenBrightness, 0.001f)
         }
     }
 
@@ -126,7 +149,7 @@ class ViewerLevelGesturesTest {
         }
     }
 
-    @Test fun `compact top indicator stays during a held gesture then expires after release`() {
+    @Test fun `level rail stays on its gesture's side during a held drag then expires after release`() {
         showPage()
         compose.mainClock.autoAdvance = false
         compose.onNodeWithContentDescription("Media actions").performTouchInput {
@@ -137,8 +160,8 @@ class ViewerLevelGesturesTest {
         compose.onNodeWithContentDescription("Brightness").assertIsDisplayed()
         val indicator = compose.onNodeWithContentDescription("Brightness").fetchSemanticsNode().boundsInRoot
         val media = compose.onNodeWithContentDescription("Media actions").fetchSemanticsNode().boundsInRoot
-        assertEquals(media.top + (media.height - media.width) / 2 + 8f, indicator.top, 1f)
-        org.junit.Assert.assertTrue(indicator.width < 150f)
+        org.junit.Assert.assertTrue("rail should hug the leading edge", indicator.right < media.center.x)
+        assertEquals(media.center.y, indicator.center.y, 40f)
         compose.runOnIdle { assertNotNull(levels.feedback) }
         compose.onNodeWithContentDescription("Media actions").performTouchInput { up() }
         compose.mainClock.advanceTimeByFrame()
@@ -146,6 +169,16 @@ class ViewerLevelGesturesTest {
         compose.mainClock.advanceTimeBy(1_500L)
         compose.runOnIdle { assertNull(levels.feedback) }
         compose.onNodeWithContentDescription("Brightness").assertDoesNotExist()
+    }
+
+    @Test fun `double tap seeking does not open the controls`() {
+        showPage()
+        compose.onNodeWithContentDescription("Media actions").performTouchInput { doubleClick(Offset(width * 0.9f, centerY)) }
+        compose.runOnIdle {
+            assertEquals(1, seekInteractions)
+            assertEquals(0, interactions)
+            assertEquals(0, chromeToggles)
+        }
     }
 
     private fun swipeSide(x: Float, up: Boolean) {
@@ -166,12 +199,30 @@ class ViewerLevelGesturesTest {
         val imageSession = ViewerImageSession()
         compose.setContent {
             MaterialTheme {
-                Box(Modifier.size(360.dp, 500.dp)) {
+                Box(Modifier.size(360.dp, 500.dp).viewerGestures(
+                    ViewerGestureConfig(
+                        enabled = !transform.value.isZoomed && !layout.value.pictureInPicture && !layout.value.touchExploration,
+                        levels = levels.takeIf { video },
+                    ),
+                    object : ViewerGestureHandler {
+                        override fun onPress() = Unit
+                        override fun onHorizontalDrag(displacement: Float) = Unit
+                        override fun onHorizontalRelease(displacement: Float, velocity: Float) {
+                            viewerSwipeDecision(displacement, displacement, velocity, 1000f, 400f)?.let(navigations::add)
+                        }
+                        override fun onDismissDrag(x: Float, y: Float, height: Float) { dismissDrags++ }
+                        override fun onDismissRelease(velocityY: Float) = Unit
+                        override fun onInfoSwipe() { infoSwipes++ }
+                        override fun onGestureEnd() = Unit
+                        override fun onLevelLimit() = Unit
+                    },
+                )) {
                     ViewerMediaPage(
-                        post, media, 0, 1, controls.value, events, transform.value, { transform.value = it },
+                        post, media, 0, controls.value, events, transform.value, { transform.value = it },
                         layout.value, ViewerVideoOptions(VideoQuality.AUTO, null, "Unavailable", false),
-                        positions, null, imageSession, null, {}, {}, { chromeToggles++ }, navigations::add, null,
+                        positions, null, imageSession, null, {}, { interactions++ }, { chromeToggles++ }, null,
                         levelControls = levels,
+                        onSeekInteraction = { seekInteractions++ },
                     )
                 }
             }

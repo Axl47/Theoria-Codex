@@ -76,6 +76,9 @@ class CodexLibraryScrollReturnTest {
         fun releaseLibraryData() {
             var pending: CompletableDeferred<Unit>? = null
             compose.waitUntil(conditionDescription = "library subscribes to delayed collection data", timeoutMillis = 10_000) {
+                // This condition never reads the Compose tree, so nothing else would drain the main
+                // looper and let settings that answer after the first idle recompose the destination.
+                compose.waitForIdle()
                 pending = pendingLoads.tryReceive().getOrNull()
                 pending != null
             }
@@ -98,11 +101,14 @@ class CodexLibraryScrollReturnTest {
                 collection.performClick()
                 compose.onNodeWithText("Return to library").assertIsDisplayed()
                 if (iteration == 1) restoration.emulateSavedInstanceStateRestore()
+                compose.mainClock.autoAdvance = false
                 compose.onNodeWithText("Return to library").performClick()
-                releaseLibraryData()
-                compose.waitUntil(10_000) {
-                    compose.onAllNodesWithText("Collection 24").fetchSemanticsNodes().isNotEmpty()
-                }
+                // The tiles must be there at once, or the screen is blank and a morph has nothing to land on.
+                compose.mainClock.advanceTimeByFrame()
+                compose.mainClock.advanceTimeByFrame()
+                collection.assertExists()
+                compose.mainClock.autoAdvance = true
+                compose.waitForIdle()
                 collection.assertIsDisplayed()
                 assertEquals(top, collection.fetchSemanticsNode().boundsInRoot.top, 1f)
             }

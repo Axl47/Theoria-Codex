@@ -63,4 +63,10 @@ class DurationFilterReadinessTest {
             durationMs = durationMs,
         )
     }
+
+    @Test
+    fun `a few remaining lookups do not hold back the next page`() {
+        assertEquals(false, DurationFilterReadiness(pendingCount = 8, candidateCount = 40).blocksPaging)
+        assertEquals(true, DurationFilterReadiness(pendingCount = 9, candidateCount = 40).blocksPaging)
+    }
 }

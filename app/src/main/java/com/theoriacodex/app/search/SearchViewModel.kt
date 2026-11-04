@@ -114,22 +114,12 @@ internal class SearchViewModel(
     private var autocompleteJob: Job? = null
     private var trendingJob: Job? = null
     private var restorationJob: Job? = null
-    private var pendingHistoricalQuery: SearchAction.ApplyHistoricalQuery? = null
+    private var pendingRootSearch: (() -> Unit)? = null
     private var activeContinuation: SearchContinuation? = null
     private var pageRetrySource: SourceKey? = null
     private var latestEnvironmentSettings: AppSettings? = null
     private val appliedByMode = mutableMapOf<String, Query>()
-    private val scrollPersistence = SearchScrollPersistenceController(
-        dispatcher = scrollPersistenceDispatcher,
-        debounceMillis = scrollPersistenceDelayMs,
-        persist = { target ->
-            coordinator.persistSearchScrollState(
-                index = target.state.firstVisibleItemIndex,
-                offsetPx = target.state.firstVisibleItemOffsetPx,
-                queryHash = target.queryHash,
-            )
-        },
-    )
+    private val scrollPersistence = coordinator.scrollPersistence(scrollPersistenceDispatcher, scrollPersistenceDelayMs)
     init {
         relatedDiagnostics.record("owner created", mutableState.value.relatedPosts)
         addCloseable("related-posts-diagnostics", java.io.Closeable {
@@ -140,38 +130,13 @@ internal class SearchViewModel(
 
     override fun onAction(action: SearchAction) {
         when (action) {
-            is SearchAction.SelectSort,
-            is SearchAction.SetDateRange,
-            is SearchAction.SetDateRangePreset,
-            is SearchAction.AddIncludeTerm,
-            is SearchAction.AddExcludeTerm,
-            is SearchAction.RemoveIncludeTerm,
-            is SearchAction.RemoveExcludeTerm,
-            is SearchAction.AddIncludeAlternative,
-            is SearchAction.SplitIncludeAlternative,
-            is SearchAction.RemoveIncludeGroup,
-            is SearchAction.IncludeSuggestion,
-            is SearchAction.ExcludeSuggestion,
-            SearchAction.ResetDraft,
-            SearchAction.ClearDraft,
-            is SearchAction.AddPostIncludeTerm,
-            is SearchAction.AddPostExcludeTerm,
-            is SearchAction.SetNhentaiLanguage,
-            is SearchAction.SetNhentaiFullColor,
-            SearchAction.ResetFilters,
-            -> applyDraftAction(action)
+            is SearchAction.DraftEdit -> applyDraftAction(action)
 
             is SearchAction.SelectMode -> selectMode(action.mode)
 
             is SearchAction.ToggleTemporarySource -> toggleTemporarySource(action.source)
 
-            is SearchAction.SelectSuggestionScope -> {
-                val reduction = SearchDraftReducer.selectScope(mutableState.value, action.scope)
-                if (reduction.accepted) {
-                    mutableState.value = reduction.state
-                    refreshAutocomplete(mutableState.value.suggestions.input)
-                }
-            }
+            is SearchAction.SelectSuggestionScope -> selectSuggestionScope(action)
 
             is SearchAction.AutocompleteChanged -> refreshAutocomplete(action.input)
 
@@ -187,9 +152,11 @@ internal class SearchViewModel(
             }
             SearchAction.ApplyDraft -> applyDraft()
 
-            is SearchAction.ApplyHistoricalQuery -> acceptHistoricalQuery(action)
+            is SearchAction.ApplyHistoricalQuery -> runAfterRestoration {
+                applyHistoricalQuery(action.query, action.sourceScope)
+            }
 
-            is SearchAction.ApplyTagSearch -> applyTagSearch(action)
+            is SearchAction.ApplyTagSearch -> runAfterRestoration { applyTagSearch(action) }
 
             is SearchAction.RetrySource -> retrySource(action.source)
 
@@ -199,17 +166,9 @@ internal class SearchViewModel(
 
             SearchAction.CancelActiveRequest -> cancelActiveRequest()
 
-            SearchAction.DismissError -> {
-                mutableState.value = mutableState.value.copy(
-                    content = mutableState.value.content.copy(error = null),
-                )
-            }
+            SearchAction.DismissError -> dismissError()
 
-            SearchAction.DismissValidation -> {
-                mutableState.value = mutableState.value.copy(
-                    query = mutableState.value.query.copy(validationMessage = null),
-                )
-            }
+            SearchAction.DismissValidation -> dismissValidation()
 
             SearchAction.Restore -> restore()
 
@@ -250,7 +209,27 @@ internal class SearchViewModel(
         }
     }
 
-    private fun applyDraftAction(action: SearchAction) {
+    private fun selectSuggestionScope(action: SearchAction.SelectSuggestionScope) {
+        val reduction = SearchDraftReducer.selectScope(mutableState.value, action.scope)
+        if (reduction.accepted) {
+            mutableState.value = reduction.state
+            refreshAutocomplete(mutableState.value.suggestions.input)
+        }
+    }
+
+    private fun dismissError() {
+        mutableState.value = mutableState.value.copy(
+            content = mutableState.value.content.copy(error = null),
+        )
+    }
+
+    private fun dismissValidation() {
+        mutableState.value = mutableState.value.copy(
+            query = mutableState.value.query.copy(validationMessage = null),
+        )
+    }
+
+    private fun applyDraftAction(action: SearchAction.DraftEdit) {
         mutateDraft {
             when (action) {
                 is SearchAction.SelectSort -> SearchDraftReducer.mutateQuery(it) { query -> query.copy(sort = action.sort) }.state
@@ -291,7 +270,6 @@ internal class SearchViewModel(
                         query.copy(sort = com.theoriacodex.domain.model.SortMode.NEWEST, dateRange = null)
                     }.state
                 }
-                else -> error("Not a draft action: $action")
             }
         }
     }
@@ -371,13 +349,17 @@ internal class SearchViewModel(
         )
     }
 
-    private fun acceptHistoricalQuery(action: SearchAction.ApplyHistoricalQuery) {
-        if (mutableState.value.restoration !is SearchRestorationUiState.Restored) {
-            pendingHistoricalQuery = action
-            restore()
+    /**
+     * Runs a search requested from outside Search, such as from Recents or a Codex. Before Search has
+     * restored, it waits (latest request wins), because restoration would replace its draft and request.
+     */
+    private fun runAfterRestoration(search: () -> Unit) {
+        if (mutableState.value.restoration is SearchRestorationUiState.Restored) {
+            search()
             return
         }
-        applyHistoricalQuery(action.query, action.sourceScope)
+        pendingRootSearch = search
+        restore()
     }
 
     private fun applyHistoricalQuery(query: Query, sourceScope: SearchSourceScope, undo: Boolean = false) {
@@ -920,9 +902,9 @@ internal class SearchViewModel(
                 savedStateHandle[SearchSavedStateKeys.RESTORATION_COMPLETED] = true
                 persistDraftQuery()
                 refreshTrending()
-                val historicalQuery = pendingHistoricalQuery.also { pendingHistoricalQuery = null }
-                if (historicalQuery != null) {
-                    applyHistoricalQuery(historicalQuery.query, historicalQuery.sourceScope)
+                val pendingSearch = pendingRootSearch.also { pendingRootSearch = null }
+                if (pendingSearch != null) {
+                    pendingSearch()
                 } else if (environmentChanged) {
                     val current = mutableState.value
                     launchRootSearch(
@@ -986,7 +968,7 @@ internal class SearchViewModel(
     private fun requestRouteEntryScrollRestoration() {
         if (mutableState.value.restoration !is SearchRestorationUiState.Restored) return
         val scrollState = savedStateHandle.savedSearchScrollState() ?: return
-        reduce(SearchStateChange.RouteEntryScrollRestorationRequested(scrollState))
+        reduce(SearchStateChange.RouteEntryScrollRestorationRequested(scrollState, keepLiveGrid = true))
     }
 
     private fun persistDraftQuery() {
@@ -1040,7 +1022,6 @@ internal class SearchViewModel(
 
     override fun onCleared() {
         effectChannel.close()
-        super.onCleared()
     }
 
     companion object {

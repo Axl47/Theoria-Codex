@@ -35,6 +35,8 @@ fun filterCodexCollectionPosts(
     unknownAnimatedDurationPolicy: UnknownAnimatedDurationPolicy,
     knownDurationMsByPostId: Map<PostId, Long> = emptyMap(),
 ): List<Post> {
+    // Runs on the main thread as a Codex opens, so an unfiltered Codex keeps its list untouched.
+    if (!filters.isActive) return posts
     return filterSearchResults(
         results = posts,
         filters = SearchVisibilityFilters(

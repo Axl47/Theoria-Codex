@@ -72,14 +72,11 @@ internal fun SavedCodexRoute(
     resolvePost: suspend (PostId) -> Post?,
     onToggleLike: (Post) -> Unit = {},
 ) {
-    val settings = remember(data.settingsRepository) { data.settingsRepository.observeSettings() }
-        .collectAsStateWithLifecycle(initialValue = null).value ?: return
-    val searches = remember(data.savedSearches) { data.savedSearches.observeSavedSearches() }
-        .collectAsStateWithLifecycle(initialValue = null).value ?: return
-    val likesId = likesCodexIdForProfile(settings.activeRecommendationProfile().profileId)
-    val likesCount = remember(data.likesRepository, settings.activeRecommendationProfile().profileId) {
-        data.likesRepository.observeLikes(settings.activeRecommendationProfile().profileId)
-    }.collectAsStateWithLifecycle(initialValue = null).value?.size ?: return
+    val settings = browsingMetadataOwner(data).state.collectAsStateWithLifecycle().value?.settings ?: return
+    val searches = rememberRetained("saved-searches") { data.savedSearches.observeSavedSearches() }.value ?: return
+    val profileId = settings.activeRecommendationProfile().profileId
+    val likesId = likesCodexIdForProfile(profileId)
+    val likesCount = rememberRetained("likes:$profileId") { data.likesRepository.observeLikedPostIds(profileId) }.value?.size ?: return
     val counts = listOf(likesCount, settings.followedCreators.size, searches.size)
     val scroll = rememberLazyListState()
     val children = remember(likesId) { savedCodexChildren(likesId) }

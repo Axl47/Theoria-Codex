@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Host check zero debt</title>
+<style>
+:root{--bg:#0f1115;--fg:#e8e8ea;--mut:#a0a2a8;--bd:#2c2f36;--acc:#8bc4ff}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 system-ui,sans-serif;display:grid;grid-template-columns:210px minmax(0,1fr);gap:32px;padding:24px}
+nav{position:sticky;top:24px;align-self:start;font-size:13.5px}nav a{display:block;color:var(--mut);text-decoration:none;padding:3px 0}
+h1{margin:0 0 8px;font-size:26px}h2{margin:32px 0 8px;font-size:19px;border-top:1px solid var(--bd);padding-top:20px}
+table{border-collapse:collapse;width:100%;font-size:14px}td,th{border:1px solid var(--bd);padding:6px 9px;text-align:left;vertical-align:top}
+code{background:#1a1d23;padding:1px 4px;border-radius:4px;font-size:13px}pre{background:#1a1d23;padding:10px;border-radius:8px;overflow:auto}
+.status{border:1px solid var(--bd);border-radius:10px;padding:12px 14px}
+@media(max-width:760px){body{grid-template-columns:1fr}nav{position:static}}
+</style></head><body>
+<nav><a href="#purpose">Purpose</a><a href="#status">Current status</a><a href="#context">Context</a><a href="#phases">Phases</a><a href="#work">Work plan</a><a href="#validation">Validation</a><a href="#progress">Progress</a><a href="#surprises">Surprises</a><a href="#decisions">Decisions</a><a href="#outcomes">Outcomes</a><a href="#recovery">Recovery</a></nav>
+<main>
+<h1>Host check zero debt</h1>
+<section id="purpose"><h2>Purpose / Big Picture</h2>
+<p>The host checks passed partly because a Detekt baseline hid findings and because warnings do not fail a build. This work makes the checks mean what they say: every Detekt baseline is empty, every warning a host check prints is fixed or explained, and app behavior does not change. Afterwards, a new finding is visible the moment it appears, because nothing is hiding it.</p></section>
+<section id="status"><h2>Current Status</h2><div class="status"><b>Implemented and passing every host check. Not yet run on a device.</b> Next action: the owner authorizes a debug install on the S24, or tries the Viewer, Search and tab switching there, and a physical-device performance run decides whether the recomposition changes held up.</div></section>
+<section id="context"><h2>Context And Orientation</h2>
+<p>A "host check" is one that runs on the development machine without a device. <code>.github/workflows/verify.yml</code> defines them: module tests, assembling Debug and Release, Android lint, the hotspot budget (<code>scripts/check_hotspots.py</code>, reading <code>config/quality/hotspot-budgets.json</code>), the jscpd duplicate audit, Detekt, Kover coverage, and changed-line coverage.</p>
+<p>"Detekt" is the static analyser. Its baseline files in <code>config/detekt/</code> list findings to ignore. Only two rules produced findings here: <code>LongMethod</code> (over 60 lines) and <code>CognitiveComplexMethod</code> (over 15).</p>
+<p>A "recomposition" is Compose re-running a composable because something it read changed. Compose can skip a child whose inputs are unchanged, so creating a new object on every run can make children re-run needlessly. Much of the care in this work is about not doing that.</p>
+<p>Before this work, removing the baselines showed 19 findings across 11 functions, all in <code>:app</code>. The worst were <code>TheoriaAppContent</code> (1464 lines, complexity 526) and <code>ViewerScreen</code> (580 lines, complexity 271). The other baseline entries were stale.</p></section>
+<section id="phases"><h2>Phases</h2><table><tr><th>Phase</th><th>Result</th><th>Accepted when</th></tr>
+<tr><td>Inventory</td><td>Real findings separated from stale baseline entries</td><td>Detekt run with empty baselines; lint SARIF, compiler warnings and Gradle problems report read</td></tr>
+<tr><td>Warnings</td><td>Lint warnings, test deprecations and test JVM warnings fixed</td><td>Lint reports zero results; no compiler warnings</td></tr>
+<tr><td>Screens</td><td>Feed screens, Viewer and the shell split into small composables</td><td>Detekt passes with empty baselines</td></tr>
+<tr><td>Budgets</td><td>Baselines and hotspot budgets lowered to the new reality</td><td><code>check_hotspots.py</code> passes against the merge base</td></tr>
+<tr><td>Review</td><td>Sol second opinion on the design, then the review loop on the diff</td><td>No open blocker or should</td></tr></table></section>
+<section id="work"><h2>Work Plan</h2><ul>
+<li><code>ui/TheoriaShell.kt</code>: small state holders (<code>RouteOwners</code>, <code>HomeNavigation</code>, <code>PendingCodexSave</code>, <code>ShellOverlays</code>) and <code>TheoriaShell</code>, which carries dependencies and the commands that cross destinations.</li>
+<li><code>ui/TheoriaShellEffects.kt</code>, <code>ui/TheoriaHomeDestinations.kt</code>, <code>ui/TheoriaNavDestinations.kt</code>: effects and destinations leave <code>ui/TheoriaApp.kt</code>.</li>
+<li><code>viewer/ViewerScreenState.kt</code>, <code>viewer/ViewerFrameEffects.kt</code>, <code>viewer/ViewerPostPager.kt</code>, <code>viewer/ViewerScreenChrome.kt</code>: <code>ViewerScreen</code> split by state, effects, pager and overlays.</li>
+<li><code>search/SearchResultCard.kt</code>, <code>search/SearchFeed.kt</code>, <code>search/SearchResultsBody.kt</code>: Search split; <code>ui/components/FeedPostCard.kt</code> and <code>tags/PostBoundTagSection.kt</code> are shared with For You, Creator, Codex and Recents.</li>
+<li><code>config/detekt/baseline-*.xml</code> emptied; <code>config/quality/hotspot-budgets.json</code> and <code>config/quality/coverage-boundaries.json</code> updated.</li>
+</ul></section>
+<section id="validation"><h2>Validation And Acceptance</h2>
+<p>From the repository root, with <code>JAVA_HOME</code> set to JDK 21 or newer:</p>
+<pre>./gradlew :app:detektDebug :app-logic:detektMain :core-data-android:detektDebug :core-domain:detektMain :core-data:detektMain :core-sources:detektMain :core-stubs:detektMain --warning-mode=all
+./gradlew :core-domain:test :core-data:test :core-sources:test :core-stubs:test :app-logic:test :core-data-android:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease --warning-mode=all
+./gradlew :app:lint :core-data-android:lintDebug --offline --no-daemon
+./gradlew :koverXmlReport :koverVerify
+python3 scripts/check_hotspots.py --base "$(git merge-base HEAD origin/main)"
+npm run audit:duplicates</pre>
+<p>Host tests do not establish hardware playback, PiP or TalkBack behavior, and performance needs physical-device measurements with simultaneous autoplay. Those are not established by this work; the owner's device check is listed under Current Status.</p></section>
+<section id="progress"><h2>Progress</h2><table><tr><th>Date</th><th>State</th><th>Item</th></tr>
+<tr><td>2026-11-03</td><td>Done</td><td>Inventory of every host check; Sol second opinion on the refactor design</td></tr>
+<tr><td>2026-11-03</td><td>Done</td><td>Lint, deprecation and test JVM warnings</td></tr>
+<tr><td>2026-11-03</td><td>Done</td><td>All 11 functions under the limits; baselines empty</td></tr>
+<tr><td>2026-11-03</td><td>Done</td><td>Sol review: two rounds, approved; its one nit fixed</td></tr>
+<tr><td>2026-11-03</td><td>Done</td><td>Two flaky UI tests traced and fixed; every CI lane run from scratch, then three more full-suite runs alongside a release build</td></tr>
+<tr><td>2026-11-03</td><td>Remaining</td><td>Physical-device check of Viewer, feeds and tab switching. No emulator exists on the Mac, and the S24 install needs the owner's authorization</td></tr></table></section>
+<section id="surprises"><h2>Surprises And Discoveries</h2><ul>
+<li>Most baseline entries were stale. Their functions had already been refactored, and nothing flags an entry that no longer matches.</li>
+<li>Detekt passing said little: the hotspot budget was already failing on <code>TheoriaApp.kt</code> by 32 lines.</li>
+<li>Bundling feed values into a new object on every composition would have made every visible card recompose. The bundles are remembered on their inputs for this reason.</li>
+<li>Passing JVM flags based on Gradle's own JDK broke <code>:app-logic:test</code>, whose toolchain is older and rejects the flag. The check now reads each test task's JVM.</li>
+<li><code>CodexLibraryScrollReturnTest</code> looked like a slow-machine timeout, but it passed at eight times CPU load. A probe showed the wait normally takes 0 ms and that every thread was idle when it failed. Its wait condition never read the Compose tree, so nothing drained the main looper when settings answered after the first idle. A longer timeout would have changed nothing. Forcing a 500 ms settings delay reproduced it every time.</li>
+<li><code>PostTagActionTypedCountsTest</code> scrolled to counts that load on real dispatchers, which waiting for Compose to go idle does not cover. The hunt for the first flake surfaced it.</li>
+<li>Declaring Detekt's internal <code>friendPaths</code> as a task input did not clear the artifact-transform deprecation, so that change was reverted. Trying AGP 9.5.0 removed AGP's own <code>setVisible</code> warning, but Kover and Detekt still emit it.</li>
+<li>Several screens passed local function references such as <code>::clearFilters</code>. The Compose compiler can memoize those with their first captured values, as a comment in <code>ViewerScreen</code> already warned. They are lambdas now, so undo always restores the current filters.</li>
+</ul></section>
+<section id="decisions"><h2>Decision Log</h2><table><tr><th>Decision</th><th>Rationale</th><th>Date / author</th></tr>
+<tr><td>Refactor rather than raise limits or suppress</td><td>The request was to handle every finding, and these functions were the debt</td><td>2026-11-03 / agent</td></tr>
+<tr><td>Keep the empty baseline files and the ratchet</td><td>They make any future addition fail the hotspot check, with no new tooling</td><td>2026-11-03 / agent</td></tr>
+<tr><td>Keep <code>TheoriaShell</code> as one object carrying dependencies</td><td>Sol advised against a broad actions holder because of stale captures. Its commands read state when they run and the like factories still capture their launching owner, so that risk is handled; passing 20 dependencies through each destination would be worse</td><td>2026-11-03 / agent, after Sol H10</td></tr>
+<tr><td><code>ViewerControls</code> is remembered on the values it judges</td><td>Sol named this the riskiest extraction. A new instance whenever chrome or transition state changes cannot act on a state that has passed; <code>ViewerControlsTest</code> guards it</td><td>2026-11-03 / agent, after Sol H1</td></tr>
+<tr><td>The Codex library stays two call sites</td><td>The Home tab and the action overlay retain flows under different ViewModel store owners</td><td>2026-11-03 / agent, after Sol H4</td></tr></table></section>
+<section id="outcomes"><h2>Outcomes And Retrospective</h2><p>Baselines are empty and only <code>SearchViewModel.kt</code> keeps a frozen line-budget exception. Final host results: 1787 module tests with 0 failures and 3 skipped live-network tests; Detekt clean; lint 0 results; Kover and changed-line coverage (89.57%) pass; hotspot and configuration-cache checks pass.</p>
+<table><tr><th>Still reported</th><th>Why it remains</th></tr>
+<tr><td>Gradle: <code>Configuration.setVisible</code> deprecated</td><td>Emitted inside Kover 0.9.11 and Detekt 2.0.0-alpha.6, both the latest published, and AGP 9.3.3. Bumping AGP alone cannot clear it. Removal is scheduled for Gradle 11.</td></tr>
+<tr><td>Gradle: undeclared artifact transform at <code>detektDebug</code></td><td>Raised inside the Detekt plugin's task action. Declaring <code>friendPaths</code> did not clear it. Removal is scheduled for Gradle 10.</td></tr>
+<tr><td>jscpd: wire-format records in <code>LegacyJsonRecords.kt</code> and <code>LegacyLikesStorageRecords.kt</code></td><td>Frozen legacy file formats owned by two modules. Sharing them would couple two independent migrations.</td></tr>
+<tr><td>jscpd: parameter lists of <code>RecentsScreen</code> and <code>ForYouScreen</code></td><td>Matching callback names with no logic. Bundling them would change public screen signatures for no behavior.</td></tr></table></section>
+<section id="recovery"><h2>Idempotence And Recovery</h2><p>Each phase is its own commit, so a phase can be reverted alone. Re-running any check is safe. To see the real findings if a baseline ever regains entries, empty the <code>CurrentIssues</code> element in <code>config/detekt/baseline-*.xml</code>, run the Detekt tasks, and restore with <code>git checkout -- config/detekt</code>.</p></section>
+</main></body></html>

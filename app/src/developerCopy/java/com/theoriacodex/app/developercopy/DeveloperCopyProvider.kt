@@ -25,6 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import androidx.core.net.toUri
 
 /** Manifest entry exists only in opt-in personalRelease; every read authenticates Binder's UID. */
 class DeveloperCopyProvider : ContentProvider() {
@@ -41,7 +42,7 @@ class DeveloperCopyProvider : ContentProvider() {
             app.packageManager.requireCopySigner(DEBUG_PACKAGE, BuildConfig.DEVELOPER_COPY_CERT_SHA256)
         }.isSuccess
         requireCopyCaller(callers, matches)
-        require(mode == "r" && uri == Uri.parse("content://$COPY_AUTHORITY/snapshot"))
+        require(mode == "r" && uri == "content://$COPY_AUTHORITY/snapshot".toUri())
         check(exporting.compareAndSet(false, true)) { "An export is already running" }
         val pipe = try {
             ParcelFileDescriptor.createReliablePipe()

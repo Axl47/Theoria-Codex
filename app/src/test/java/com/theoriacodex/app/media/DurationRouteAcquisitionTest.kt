@@ -21,7 +21,7 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class DurationRouteAcquisitionTest {
     @Test
-    fun `scrolling cancels real range acquisition and idle resumes without rewriting feed posts`() = runTest {
+    fun `scrolling cancels real background acquisition and idle resumes without rewriting feed posts`() = runTest {
         val bytes = bundledMp4()
         val transport = RangeFixture(bytes)
         val probe = BoundedMediaDurationProbe(transport)
@@ -30,15 +30,15 @@ class DurationRouteAcquisitionTest {
             resolveProviderDuration = { DurationMetadataSourceResult.Unsupported },
             probeDuration = probe::probe,
             traceRecorder = NoOpMediaDurationTraceRecorder,
+            pacer = DurationRequestPacer(startIntervalMs = { 0L }),
         )
-        val coordinator = MediaDurationCoordinator(engine, parentScope = backgroundScope,
+        val coordinator = MediaDurationCoordinator(engine, parentScope = backgroundScope, maxConcurrentWork = 1,
             traceRecorder = NoOpMediaDurationTraceRecorder)
         val route = MediaDurationRouteViewModel(coordinator, "search", backgroundScope)
         val posts = List(3) { animatedTestPost(sourcePostId = "range-$it") }
         val originalFirst = posts.first()
         route.onEnvironmentChanged(lifecycleStarted = true, scrollIdle = false)
         route.synchronize("query", posts, resolveInBackground = true)
-        route.onFilterChanged(true)
         route.onPostVisibilityChanged(originalFirst, true)
         runCurrent()
         assertEquals(0, transport.calls)
@@ -55,6 +55,7 @@ class DurationRouteAcquisitionTest {
         assertEquals(1, transport.calls)
         assertTrue(coordinator.states.value.values.none { it is MediaDurationState.Known })
 
+        route.onFilterChanged(true)
         route.onEnvironmentChanged(lifecycleStarted = true, scrollIdle = true)
         advanceTimeBy(2_000)
         runCurrent()
@@ -63,7 +64,7 @@ class DurationRouteAcquisitionTest {
         assertTrue(route.states.value.values.all {
             it == MediaDurationState.Known(2_000L, MediaDurationProvenance.CONTAINER_PROBE)
         })
-        assertEquals(bytes.size * 3L, transport.returnedBytes)
+        assertEquals(DEFAULT_DURATION_PROBE_INITIAL_BYTES * 3L, transport.returnedBytes)
         assertSame(originalFirst, posts.first())
         assertTrue(posts.all { it.durationMs == null })
         val settledCalls = transport.calls

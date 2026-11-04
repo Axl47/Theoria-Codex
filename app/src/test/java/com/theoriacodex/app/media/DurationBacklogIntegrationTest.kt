@@ -54,7 +54,7 @@ class DurationBacklogIntegrationTest {
     @Test fun `a filter retains its settled decisions when the shared process cache evicts them`() = runTest {
         val coordinator = MediaDurationCoordinator(
             acquirer = MediaDurationAcquirer { known() }, parentScope = backgroundScope,
-            maxQueuedKeys = 1, maxRetainedStates = 2, traceRecorder = NoOpMediaDurationTraceRecorder,
+            maxQueuedKeys = 1, maxConcurrentWork = 1, maxRetainedStates = 2, traceRecorder = NoOpMediaDurationTraceRecorder,
         )
         val owner = MediaDurationRouteViewModel(coordinator, "evicted-decisions", backgroundScope)
         val posts = List(5) { animatedTestPost(sourcePostId = "$it") }

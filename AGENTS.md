@@ -59,6 +59,7 @@ Keep `AGENTS.md` limited to durable product intent, safety boundaries, and accep
 - Automated device lanes must use isolated packages. Production changes require explicit authorization; destructive actions require authorization for the exact action after explaining possible data loss. Production installs use the signed release/update path.
 - Developer profile copying must remain read-only against production and excluded from public builds.
 - Never alter unrelated phone packages, governors, or persistent device settings to make benchmarks pass. Never configure `SideEffectRunListener`.
+- Provider feeds are poorly moderated and can show sexualized depictions of minors. When testing on a device, use logs and accessibility text instead of screenshots or recordings wherever feeds, search results, or the Viewer show provider media. Do not save, describe, or look at such content; if it appears, leave that screen and tell the user.
 
 ## Acceptance and Releases
 

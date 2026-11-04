@@ -1,5 +1,6 @@
 package com.theoriacodex.app.recents
 
+import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
 import androidx.compose.foundation.layout.height
 import com.theoriacodex.app.ui.components.POST_SHELF_CARD_WIDTH
 import com.theoriacodex.app.ui.components.POST_SHELF_MEDIA_ASPECT_RATIO
@@ -25,8 +26,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
+import com.theoriacodex.app.ui.TopLevelDestination
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
@@ -51,10 +54,12 @@ import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.noMediaDurationStateForPost
 import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.search.SearchResultCard
+import com.theoriacodex.app.viewer.ViewerReturnColumn
+import com.theoriacodex.app.viewer.ViewerReturnShelf
+import com.theoriacodex.app.viewer.ViewerReturnShelfId
 import com.theoriacodex.app.source.displayName
-import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.ui.components.SourceSelector
-import com.theoriacodex.app.ui.components.PostActionSheet
+import com.theoriacodex.app.ui.components.FeedPostActionSheet
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.RecentActivityEntry
@@ -112,200 +117,223 @@ fun RecentsScreen(
     var searchFilter by rememberSaveable { mutableStateOf(RecentSearchFilter.ALL) }
     var showMenu by remember { mutableStateOf(false) }
     var selectedSource by rememberSaveable { mutableStateOf<SourceKey?>(null) }
-    var sourceMenuExpanded by remember { mutableStateOf(false) }
-    val visibleWatchedPosts = remember(watchedPosts, selectedSource) {
-        filterRecentPostsBySource(watchedPosts, selectedSource)
-    }
-    val visibleCodexPosts = remember(codexPosts, selectedSource) {
-        filterRecentPostsBySource(codexPosts, selectedSource)
-    }
-    val visibleSearches = remember(searches, selectedSource) { searches.filter { it.matchesSource(selectedSource) } }
-    val visibleFypSearches = remember(fypSearches, selectedSource) { fypSearches.filter { it.matchesSource(selectedSource) } }
-    val visibleActivity = remember(activity, selectedSource) { activity.filter { it.matchesSource(selectedSource) } }
+    val visible = rememberVisibleRecents(watchedPosts, codexPosts, searches, fypSearches, activity, selectedSource)
     val sourceEmptyMessage = selectedSource?.let { "No recent activity from ${it.displayName()}." }
-    val openWatchedPost: (Int) -> Unit = { onOpenWatchedPost(visibleWatchedPosts, it) }
-    val openCodexPost: (Int) -> Unit = { onOpenCodexPost(visibleCodexPosts, it) }
+    val openWatchedPost: (Int) -> Unit = { onOpenWatchedPost(visible.watchedPosts, it) }
+    val openCodexPost: (Int) -> Unit = { onOpenCodexPost(visible.codexPosts, it) }
     val now = remember(watchedPosts, codexPosts, searches, fypSearches, activity) { System.currentTimeMillis() }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var selectedActionSection by remember { mutableStateOf(RecentPostSection.WATCHED) }
     var searchToPin by remember { mutableStateOf<RecentSearchEntry?>(null) }
-    val onPinSearch: ((RecentSearchEntry) -> Unit)? = onSaveSearch?.let {
-        { entry: RecentSearchEntry -> searchToPin = entry }
-    }
+    val onPinSearch = onSaveSearch?.let { { entry: RecentSearchEntry -> searchToPin = entry } }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        RecentsHeader(
-            onOpenMenu = { showMenu = true },
-            sourceSelector = {
-                SourceSelector(
-                    selectedSource = selectedSource,
-                    availableSources = SourceKey.entries,
-                    allSourcesLabel = "All sources",
-                    accessibilityLabel = "Filter Recents by source",
-                    enabled = true,
-                    expanded = sourceMenuExpanded,
-                    onExpandedChange = { sourceMenuExpanded = it },
-                    onSourceSelected = {
-                        selectedSource = it
-                        sourceMenuExpanded = false
-                    },
-                )
+        RecentsHeader(onOpenMenu = { showMenu = true }) { RecentsSourceSelector(selectedSource, onSelected = { selectedSource = it }) }
+
+        RecentsFilterChips(filter, onSelected = { filter = it })
+
+        RecentsTab(
+            filter, searchFilter, { searchFilter = it }, visible, sourceEmptyMessage, now,
+            RecentsPostCards(
+                pixivUgoiraClient, likedPostIds, durationStateForPost, onDurationPostVisibilityChanged,
+                onDurationEnvironmentChanged, onAuthoritativeDurationKnown, onToggleLike,
+            ),
+            { post, section ->
+                selectedActionPost = post
+                selectedActionSection = section
             },
+            openWatchedPost, openCodexPost, onOpenSearch, onOpenFypSearch, onPinSearch,
         )
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            RecentsFilter.entries.forEach { option ->
-                FilterChip(
-                    selected = filter == option,
-                    onClick = { filter = option },
-                    label = { Text(option.label) },
-                )
-            }
-        }
-
-        when (filter) {
-            RecentsFilter.WATCHED -> WatchedGrid(
-                watchedPosts = visibleWatchedPosts,
-                now = now,
-                pixivUgoiraClient = pixivUgoiraClient,
-                likedPostIds = likedPostIds,
-                durationStateForPost = durationStateForPost,
-                onDurationPostVisibilityChanged = onDurationPostVisibilityChanged,
-                onDurationEnvironmentChanged = onDurationEnvironmentChanged,
-                onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
-                onToggleLike = onToggleLike,
-                onOpenWatchedPost = openWatchedPost,
-                onLongPress = {
-                    selectedActionPost = it
-                    selectedActionSection = RecentPostSection.WATCHED
-                },
-                showMediaProgress = true,
-                emptyMessage = sourceEmptyMessage ?: "Posts appear here after you open them in Viewer.",
-            )
-
-            RecentsFilter.CODEX -> WatchedGrid(
-                watchedPosts = visibleCodexPosts,
-                now = now,
-                pixivUgoiraClient = pixivUgoiraClient,
-                likedPostIds = likedPostIds,
-                durationStateForPost = durationStateForPost,
-                onDurationPostVisibilityChanged = onDurationPostVisibilityChanged,
-                onDurationEnvironmentChanged = onDurationEnvironmentChanged,
-                onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
-                onToggleLike = onToggleLike,
-                onOpenWatchedPost = openCodexPost,
-                onLongPress = {
-                    selectedActionPost = it
-                    selectedActionSection = RecentPostSection.CODEX
-                },
-                emptyMessage = sourceEmptyMessage ?: "Posts appear here after you open them from Codex.",
-            )
-
-            RecentsFilter.SEARCHES -> SearchHistoryList(
-                searches = when (searchFilter) {
-                    RecentSearchFilter.ALL -> (visibleSearches + visibleFypSearches).sortedByDescending { it.searchedAtEpochMs }
-                    RecentSearchFilter.SEARCH -> visibleSearches
-                    RecentSearchFilter.FOR_YOU -> visibleFypSearches
-                },
-                selectedFilter = searchFilter,
-                onFilterSelected = { searchFilter = it },
-                emptyMessage = sourceEmptyMessage ?: "Searches appear here after you search or For You generates them.",
-                now = now,
-                onOpenSearch = { entry ->
-                    if (entry.kind == RecentSearchKind.FYP) onOpenFypSearch(entry) else onOpenSearch(entry)
-                },
-                onPinSearch = onPinSearch,
-            )
-
-            RecentsFilter.ALL -> ActivityList(
-                activity = visibleActivity,
-                pixivUgoiraClient = pixivUgoiraClient,
-                likedPostIds = likedPostIds,
-                durationStateForPost = durationStateForPost,
-                onDurationPostVisibilityChanged = onDurationPostVisibilityChanged,
-                onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
-                onToggleLike = onToggleLike,
-                onLongPress = { post, section ->
-                    selectedActionPost = post
-                    selectedActionSection = section
-                },
-                emptyMessage = sourceEmptyMessage ?: "Recent posts and applied searches appear here.",
-                watchedPosts = visibleWatchedPosts,
-                codexPosts = visibleCodexPosts,
-                now = now,
-                onOpenWatchedPost = openWatchedPost,
-                onOpenCodexPost = openCodexPost,
-                onOpenSearch = onOpenSearch,
-                onOpenFypSearch = onOpenFypSearch,
-                onPinSearch = onPinSearch,
-            )
-        }
     }
 
     if (showMenu) {
         RecentsClearMenu(
-            filter = filter,
-            sourceFiltered = selectedSource != null,
-            isEmpty = { target -> recentsIsEmpty(target, watchedPosts, codexPosts, searches, fypSearches, activity) },
-            onClear = onClear,
-            onDismiss = { showMenu = false },
+            filter, selectedSource != null, { target -> recentsIsEmpty(target, watchedPosts, codexPosts, searches, fypSearches, activity) },
+            onClear, onDismiss = { showMenu = false },
         )
     }
 
     selectedActionPost?.let { post ->
-        PostActionSheet(
-            post = post,
-            creatorBrowsingSources = creatorBrowsingSources,
-            onDismiss = { selectedActionPost = null },
-            onSaveToDevice = { onSaveToDevice(post) },
-            onSaveToCodex = { onRequestSaveToCodex(post) },
-            onOpenCreatorProfile = onOpenCreatorProfile,
-            onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
-            onGoToSearch = onGoToSearch,
-            onPostUrlCopied = onPostUrlCopied,
-            onStartOver = if (maxOf(post.mediaCount ?: 1, post.media.size) > 1) {
-                {
-                    onStartOver(post, selectedActionSection)
-                    selectedActionPost = null
-                }
-            } else null,
-            tagContent = {
-                PostTagActionSection(
-                    post = post,
-                    tagVideoCountProvider = tagVideoCountProvider,
-                    fetchTagVideoCounts = fetchTagVideoCounts,
-                    onAddIncludeTerm = { term -> onAddIncludeTerm(post, term) },
-                    onAddExcludeTerm = { term -> onAddExcludeTerm(post, term) },
-                    onRemoveIncludeTerm = { term -> onRemoveIncludeTerm(post, term) },
-                    onRemoveExcludeTerm = { term -> onRemoveExcludeTerm(post, term) },
-                    onFavoriteTagLongPress = onFavoriteTagLongPress,
-                )
-            },
+        FeedPostActionSheet(
+            post, creatorBrowsingSources, { selectedActionPost = null }, onSaveToDevice, onRequestSaveToCodex, onOpenCreatorProfile,
+            onOpenLegacyCreatorProfile, onGoToSearch, onPostUrlCopied, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm,
+            onRemoveExcludeTerm, onFavoriteTagLongPress, tagVideoCountProvider, fetchTagVideoCounts,
+            onStartOver = {
+                onStartOver(post, selectedActionSection)
+                selectedActionPost = null
+            }.takeIf { maxOf(post.mediaCount ?: 1, post.media.size) > 1 },
         )
     }
 
     searchToPin?.let { entry ->
-        SavedSearchNameDialog(
-            initialName = recentSearchPresentation(entry).title.take(MAX_SAVED_SEARCH_NAME_LENGTH),
-            renaming = false,
-            onDismiss = { searchToPin = null },
-            onConfirm = { name ->
-                onSaveSearch?.invoke(name, entry)
-                searchToPin = null
+        SavedSearchNameDialog(recentSearchPresentation(entry).title.take(MAX_SAVED_SEARCH_NAME_LENGTH), false, { searchToPin = null }) { name ->
+            onSaveSearch?.invoke(name, entry)
+            searchToPin = null
+        }
+    }
+}
+
+@Composable
+private fun RecentsSourceSelector(selectedSource: SourceKey?, onSelected: (SourceKey?) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    SourceSelector(
+        selectedSource = selectedSource,
+        availableSources = SourceKey.entries,
+        allSourcesLabel = "All sources",
+        accessibilityLabel = "Filter Recents by source",
+        enabled = true,
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        onSourceSelected = {
+            onSelected(it)
+            expanded = false
+        },
+    )
+}
+
+@Composable
+private fun RecentsFilterChips(filter: RecentsFilter, onSelected: (RecentsFilter) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RecentsFilter.entries.forEach { option ->
+            FilterChip(
+                selected = filter == option,
+                onClick = { onSelected(option) },
+                label = { Text(option.label) },
+            )
+        }
+    }
+}
+
+/** The body under the filter chips, for whichever tab is selected. */
+@Composable
+private fun RecentsTab(
+    filter: RecentsFilter,
+    searchFilter: RecentSearchFilter,
+    onSearchFilterChange: (RecentSearchFilter) -> Unit,
+    visible: VisibleRecents,
+    sourceEmptyMessage: String?,
+    now: Long,
+    cards: RecentsPostCards,
+    onLongPress: (Post, RecentPostSection) -> Unit,
+    openWatchedPost: (Int) -> Unit,
+    openCodexPost: (Int) -> Unit,
+    onOpenSearch: (RecentSearchEntry) -> Unit,
+    onOpenFypSearch: (RecentSearchEntry) -> Unit,
+    onPinSearch: ((RecentSearchEntry) -> Unit)?,
+) {
+    when (filter) {
+        RecentsFilter.WATCHED -> RecentPostsGrid(
+            visible.watchedPosts, now, cards, openWatchedPost, RecentPostSection.WATCHED, onLongPress,
+            showMediaProgress = true,
+            emptyMessage = sourceEmptyMessage ?: "Posts appear here after you open them in Viewer.",
+        )
+        RecentsFilter.CODEX -> RecentPostsGrid(
+            visible.codexPosts, now, cards, openCodexPost, RecentPostSection.CODEX, onLongPress,
+            showMediaProgress = false,
+            emptyMessage = sourceEmptyMessage ?: "Posts appear here after you open them from Codex.",
+        )
+        RecentsFilter.SEARCHES -> SearchHistoryList(
+            searches = when (searchFilter) {
+                RecentSearchFilter.ALL -> (visible.searches + visible.fypSearches).sortedByDescending { it.searchedAtEpochMs }
+                RecentSearchFilter.SEARCH -> visible.searches
+                RecentSearchFilter.FOR_YOU -> visible.fypSearches
             },
+            selectedFilter = searchFilter,
+            onFilterSelected = onSearchFilterChange,
+            emptyMessage = sourceEmptyMessage ?: "Searches appear here after you search or For You generates them.",
+            now = now,
+            onOpenSearch = { entry -> if (entry.kind == RecentSearchKind.FYP) onOpenFypSearch(entry) else onOpenSearch(entry) },
+            onPinSearch = onPinSearch,
+        )
+        RecentsFilter.ALL -> ActivityList(
+            visible.activity, cards.pixivUgoiraClient, cards.likedPostIds, cards.durationStateForPost, cards.onDurationPostVisibilityChanged,
+            cards.onAuthoritativeDurationKnown, cards.onToggleLike, onLongPress,
+            emptyMessage = sourceEmptyMessage ?: "Recent posts and applied searches appear here.",
+            watchedPosts = visible.watchedPosts,
+            codexPosts = visible.codexPosts,
+            now = now,
+            onOpenWatchedPost = openWatchedPost,
+            onOpenCodexPost = openCodexPost,
+            onOpenSearch = onOpenSearch,
+            onOpenFypSearch = onOpenFypSearch,
+            onPinSearch = onPinSearch,
         )
     }
+}
+
+/** Recents after the source filter; everything the tabs show comes from here. */
+private class VisibleRecents(
+    val watchedPosts: List<RecentPostEntry>,
+    val codexPosts: List<RecentPostEntry>,
+    val searches: List<RecentSearchEntry>,
+    val fypSearches: List<RecentSearchEntry>,
+    val activity: List<RecentActivityEntry>,
+)
+
+@Composable
+private fun rememberVisibleRecents(
+    watchedPosts: List<RecentPostEntry>,
+    codexPosts: List<RecentPostEntry>,
+    searches: List<RecentSearchEntry>,
+    fypSearches: List<RecentSearchEntry>,
+    activity: List<RecentActivityEntry>,
+    source: SourceKey?,
+): VisibleRecents = remember(watchedPosts, codexPosts, searches, fypSearches, activity, source) {
+    VisibleRecents(
+        filterRecentPostsBySource(watchedPosts, source),
+        filterRecentPostsBySource(codexPosts, source),
+        searches.filter { it.matchesSource(source) },
+        fypSearches.filter { it.matchesSource(source) },
+        activity.filter { it.matchesSource(source) },
+    )
+}
+
+/** What each post tile in Recents shares, whichever tab shows it. */
+private class RecentsPostCards(
+    val pixivUgoiraClient: PixivUgoiraClient?,
+    val likedPostIds: Set<PostId>,
+    val durationStateForPost: (Post) -> Flow<MediaDurationState?>,
+    val onDurationPostVisibilityChanged: (Post, Boolean) -> Unit,
+    val onDurationEnvironmentChanged: (Boolean, Boolean) -> Unit,
+    val onAuthoritativeDurationKnown: (Post, Long) -> Unit,
+    val onToggleLike: ((Post) -> Unit)?,
+)
+
+@Composable
+private fun RecentPostsGrid(
+    posts: List<RecentPostEntry>,
+    now: Long,
+    cards: RecentsPostCards,
+    onOpen: (Int) -> Unit,
+    section: RecentPostSection,
+    onLongPress: (Post, RecentPostSection) -> Unit,
+    showMediaProgress: Boolean,
+    emptyMessage: String,
+) {
+    WatchedGrid(
+        watchedPosts = posts,
+        now = now,
+        pixivUgoiraClient = cards.pixivUgoiraClient,
+        likedPostIds = cards.likedPostIds,
+        durationStateForPost = cards.durationStateForPost,
+        onDurationPostVisibilityChanged = cards.onDurationPostVisibilityChanged,
+        onDurationEnvironmentChanged = cards.onDurationEnvironmentChanged,
+        onAuthoritativeDurationKnown = cards.onAuthoritativeDurationKnown,
+        onToggleLike = cards.onToggleLike,
+        onOpenWatchedPost = onOpen,
+        onLongPress = { onLongPress(it, section) },
+        showMediaProgress = showMediaProgress,
+        emptyMessage = emptyMessage,
+    )
 }
 
 @Composable
@@ -389,7 +417,8 @@ private fun WatchedGrid(
         EmptyRecentState(emptyMessage)
         return
     }
-    val gridState = rememberLazyStaggeredGridState()
+    val gridState = rememberRetainedFeedGridState("recents")
+    ScrollToTopOnTabReselect(TopLevelDestination.Recents) { gridState.animateScrollToItem(0) }
     DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
     val rows = remember(watchedPosts, now) { recentsGridRows(watchedPosts, now) }
     // Headings hold a null so Viewer return still finds each post by its grid position.
@@ -454,7 +483,7 @@ private fun RecentPostCard(
         showSourceBadge = true,
         metadataLabel = relativeTimeLabel(
             now,
-            com.theoriacodex.app.search.LocalPostWatchPresentation.current.positions[post.id]?.lastViewedAt
+            com.theoriacodex.app.search.LocalPostWatchPresentation.current.value.positions[post.id]?.lastViewedAt
                 ?: entry.viewedAtEpochMs,
         ),
         viewedMediaNumber = viewedMediaNumber,
@@ -492,7 +521,9 @@ private fun SearchHistoryList(
             return@Column
         }
         val days = remember(searches, now) { searches.groupBy { recentsDay(it.searchedAtEpochMs) } }
-        LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        val list = rememberLazyListState()
+        ScrollToTopOnTabReselect(TopLevelDestination.Recents) { list.animateScrollToItem(0) }
+        LazyColumn(Modifier.fillMaxSize(), state = list, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             days.forEach { (day, entries) ->
                 item(key = "day:$day") { RecentsDayHeading(recentsDayLabel(entries.first().searchedAtEpochMs, now)) }
                 items(entries, key = { entry -> "${entry.kind}:${entry.queryHash}" }) { entry ->
@@ -528,11 +559,18 @@ private fun ActivityList(
         return
     }
     val timeline = remember(activity, now) { recentsTimeline(activity, now) }
-    LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val list = rememberLazyListState()
+    ScrollToTopOnTabReselect(TopLevelDestination.Recents) { list.animateScrollToItem(0) }
+    ViewerReturnColumn(list, timeline, { request -> timeline.indexOfFirst { it.holdsPost(request.postId) } }) {
+    LazyColumn(modifier = Modifier.fillMaxSize(), state = list, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         itemsIndexed(timeline, key = { index, item -> timelineKey(index, item) }) { _, item ->
             when (item) {
                 is RecentsTimelineItem.Day -> RecentsDayHeading(item.label)
-                is RecentsTimelineItem.Posts -> LazyRow(
+                is RecentsTimelineItem.Posts -> {
+                val row = rememberLazyListState()
+                ViewerReturnShelf(ViewerReturnShelfId.RecentsTimeline, item.entries.map { it.post.id }, row) {
+                LazyRow(
+                    state = row,
                     // The same square frame as other shelves keeps every card in a row the same height.
                     modifier = Modifier.height(POST_SHELF_CARD_WIDTH / POST_SHELF_MEDIA_ASPECT_RATIO),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -553,6 +591,8 @@ private fun ActivityList(
                         }
                     }
                 }
+                }
+                }
                 is RecentsTimelineItem.Search -> RecentSearchRow(
                     entry = item.entry,
                     now = now,
@@ -564,7 +604,11 @@ private fun ActivityList(
             }
         }
     }
+    }
 }
+
+private fun RecentsTimelineItem.holdsPost(postId: PostId): Boolean =
+    this is RecentsTimelineItem.Posts && entries.any { it.post.id == postId }
 
 private fun timelineKey(index: Int, item: RecentsTimelineItem): String = when (item) {
     is RecentsTimelineItem.Day -> "day:${item.date}"

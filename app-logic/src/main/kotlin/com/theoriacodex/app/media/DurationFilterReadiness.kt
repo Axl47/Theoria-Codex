@@ -9,7 +9,13 @@ data class DurationFilterReadiness(
 ) {
     val isResolving: Boolean
         get() = pendingCount > 0
+
+    /** The next page may load while a few lookups remain, so scrolling meets posts instead of a wait. */
+    val blocksPaging: Boolean
+        get() = pendingCount > DURATION_PAGING_ALLOWANCE
 }
+
+private const val DURATION_PAGING_ALLOWANCE = 8
 
 fun durationFilterReadiness(
     posts: List<Post>,

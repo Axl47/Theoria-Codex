@@ -110,4 +110,10 @@ class CodexCollectionFiltersTest {
             taxonomy = taxonomy,
         )
     }
+
+    @org.junit.Test
+    fun `an inactive filter returns the same list without copying it`() {
+        val posts = listOf(post(SourceKey.PIXIV, "first"), post(SourceKey.GELBOORU, "second"))
+        org.junit.Assert.assertSame(posts, filterCodexCollectionPosts(posts, CodexCollectionFilters(), UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS))
+    }
 }

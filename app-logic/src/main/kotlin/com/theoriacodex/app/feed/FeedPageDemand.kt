@@ -11,7 +11,7 @@ data class FeedPageDemandInput(
     val refreshing: Boolean = false,
     val paging: Boolean = false,
     val failed: Boolean = false,
-    val resolvingDurations: Boolean = false,
+    val durationsBlockPaging: Boolean = false,
     val lastVisibleCanonicalIndex: Int? = null,
     val atVisibleEnd: Boolean = false,
     val scrolling: Boolean = false,
@@ -56,7 +56,7 @@ class FeedPageDemand(
             if (requested == input.completedGeneration) return FeedPageDemandResult()
             requestedGeneration = null
         }
-        if (!input.canLoadMore || input.resolvingDurations) return FeedPageDemandResult()
+        if (!input.canLoadMore || input.durationsBlockPaging) return FeedPageDemandResult()
 
         val nearCanonicalEnd = input.lastVisibleCanonicalIndex?.let { index ->
             input.canonicalCount > 0 && index >= ((input.canonicalCount - 1) * PREFETCH_RATIO).toInt()

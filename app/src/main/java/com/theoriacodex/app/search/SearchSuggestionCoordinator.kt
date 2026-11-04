@@ -202,6 +202,12 @@ internal class SearchSuggestionCoordinator(
             .map(FacetedTagSuggestion::toPortableLegacySuggestion)
     }
 
+    /** The selected scope if the source supports it, else everything, else nothing. */
+    private fun autocompleteScope(mode: QueryMode.Source, selectedScope: FacetedSearchScope): FacetedSearchScope? {
+        val supported = supportedSearchScopes(mode)
+        return selectedScope.takeIf { it in supported } ?: FacetedSearchScope.All.takeIf { it in supported }
+    }
+
     private suspend fun fetchSourceAutocomplete(
         mode: QueryMode.Source,
         selectedScope: FacetedSearchScope,
@@ -211,9 +217,7 @@ internal class SearchSuggestionCoordinator(
     ): SearchAutocompleteResult {
         val adapter = registry.adapterFor(mode.source)
         if (adapter is FacetedSearchSourceAdapter) {
-            val supported = supportedSearchScopes(mode)
-            val scope = selectedScope.takeIf { it in supported }
-                ?: FacetedSearchScope.All.takeIf { it in supported }
+            val scope = autocompleteScope(mode, selectedScope)
                 ?: return SearchAutocompleteResult(input, selectedScope, UNSUPPORTED_SEARCH_SCOPE_MESSAGE)
             val fetched = fetchProviderAutocomplete(
                 key = AutocompleteFetchKey(mode.source, normalizeMatchToken(prefix), scope),
@@ -270,9 +274,7 @@ internal class SearchSuggestionCoordinator(
     ): SearchAutocompleteResult {
         val adapter = registry.adapterFor(mode.source)
         if (adapter is FacetedSearchSourceAdapter) {
-            val supported = supportedSearchScopes(mode)
-            val scope = selectedScope.takeIf { it in supported }
-                ?: FacetedSearchScope.All.takeIf { it in supported }
+            val scope = autocompleteScope(mode, selectedScope)
                 ?: return SearchAutocompleteResult(input, selectedScope, UNSUPPORTED_SEARCH_SCOPE_MESSAGE)
             val ranked = rankFacetedTagSuggestions(
                 tagSuggestionStore.findFaceted(

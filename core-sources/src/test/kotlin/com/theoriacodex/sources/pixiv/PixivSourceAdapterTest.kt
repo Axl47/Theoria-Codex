@@ -376,6 +376,47 @@ class PixivSourceAdapterTest {
         assertEquals("https://app-api.pixiv.net/v1/ugoira/metadata", httpClient.requests.last().url)
     }
 
+    @Test
+    fun `duration metadata reads ugoira frames and never asks about other posts`() = runTest {
+        val credentials = FakeCredentialsProvider().apply {
+            pixivTokens = PixivAuthTokens(
+                accessToken = "access",
+                refreshToken = "refresh",
+                expiresAtEpochMs = Long.MAX_VALUE,
+            )
+        }
+        val httpClient = QueueHttpClient(
+            SourceHttpResponse(
+                statusCode = 200,
+                body = """{"ugoira_metadata":{"frames":[{"delay":80},{"delay":120}]}}""",
+            ),
+        )
+        val adapter = PixivSourceAdapter(httpClient = httpClient, credentialsProvider = credentials)
+        fun post(mime: String) = com.theoriacodex.domain.model.Post(
+            id = com.theoriacodex.domain.model.PostId(SourceKey.PIXIV, "12345"),
+            preview = com.theoriacodex.domain.model.ImageRef(url = "https://i.pximg.net/p.jpg", localPath = null, mime = null),
+            full = com.theoriacodex.domain.model.ImageRef(url = "https://i.pximg.net/f", localPath = null, mime = mime),
+            pageUrl = null,
+            width = null,
+            height = null,
+            canonicalTags = emptyList(),
+            rawTags = emptyList(),
+            authorName = null,
+            createdAtEpochMs = null,
+        )
+
+        assertEquals(
+            com.theoriacodex.domain.adapter.DurationMetadataSourceResult.Unsupported,
+            adapter.resolveDurationMetadata(post("image/gif")),
+        )
+        assertEquals(0, httpClient.requests.size)
+        assertEquals(
+            com.theoriacodex.domain.adapter.DurationMetadataSourceResult.Known(200L),
+            adapter.resolveDurationMetadata(post(PIXIV_UGOIRA_MIME)),
+        )
+        assertEquals("https://app-api.pixiv.net/v1/ugoira/metadata", httpClient.requests.single().url)
+    }
+
 
     @Test
     fun `creator search uses user illustrations endpoint and preserves pagination`() = runTest {

@@ -8,9 +8,11 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeUp
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.state.createViewerUiState
 import com.theoriacodex.app.viewer.state.reduceViewerState
@@ -88,6 +90,8 @@ class ViewerSwipeAnimationTest {
             down(Offset(width * 0.8f, height * 0.5f))
             moveTo(Offset(width * 0.72f, height * 0.5f))
             moveTo(Offset(width * 0.72f, height * 0.5f))
+            // Holding still removes the release velocity, so only distance decides.
+            advanceEventTime(200)
             up()
         }
         compose.waitForIdle()
@@ -95,6 +99,72 @@ class ViewerSwipeAnimationTest {
         compose.runOnIdle { assertEquals(1, state.value.currentPageIndex) }
         // Only the selected page exposes these actions, so a mismatched pager leaves no such node.
         assertEquals(0, compose.onNodeWithContentDescription("Media actions").fetchSemanticsNode().positionInRoot.x.toInt())
+    }
+
+    @Test fun `a flick during a settle commits the first post and continues to the next`() {
+        val first = slidePosts(gallery = false).first()
+        val posts = listOf("first", "second", "third").map { first.copy(id = PostId(SourceKey.GELBOORU, it)) }
+        val state = mutableStateOf(createViewerUiState(ViewerSessionIdentity("swipe"), posts, requiresResolution = { false }))
+        setSlideContent(state, ViewerReturnTransition(), posts.first(), posts, related = false, inverted = false)
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        val actions = compose.onNodeWithContentDescription("Media actions")
+        val bounds = actions.fetchSemanticsNode().size
+        actions.performTouchInput { swipeLeft() }
+        compose.mainClock.advanceTimeBy(64)
+        compose.runOnIdle { assertEquals(0, state.value.currentPageIndex) }
+
+        // The first page is still sliding away, and the gesture must survive it leaving the screen.
+        compose.onRoot().performTouchInput { down(Offset(bounds.width * 0.9f, bounds.height * 0.5f)) }
+        compose.mainClock.advanceTimeByFrame()
+        compose.runOnIdle { assertEquals(1, state.value.currentPageIndex) }
+        compose.onRoot().performTouchInput {
+            moveTo(Offset(bounds.width * 0.1f, bounds.height * 0.5f))
+            up()
+        }
+        compose.mainClock.advanceTimeBy(600)
+        compose.runOnIdle { assertEquals(2, state.value.currentPageIndex) }
+        assertEquals(0, compose.onNodeWithContentDescription("Media actions").fetchSemanticsNode().positionInRoot.x.toInt())
+    }
+
+    @Test fun `a long pull closes the viewer and a short one returns`() {
+        val posts = slidePosts(gallery = false)
+        val actions = mutableListOf<com.theoriacodex.app.viewer.state.ViewerAction>()
+        val state = mutableStateOf(createViewerUiState(ViewerSessionIdentity("swipe"), posts, requiresResolution = { false }))
+        compose.setContent {
+            MaterialTheme {
+                ViewerScreen(
+                    uiState = state.value, creatorBrowsingSources = emptySet(),
+                    onAction = { actions += it; state.value = reduceViewerState(state.value, it).state },
+                    onOpenInBrowser = {}, onRemoveIncludeTerm = { _, _ -> }, onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
+                )
+            }
+        }
+        compose.waitForIdle()
+        val media = compose.onNodeWithContentDescription("Media actions")
+        fun pull(toFraction: Float) = media.performTouchInput {
+            down(Offset(centerX, height * 0.3f))
+            moveTo(Offset(centerX, height * toFraction))
+            advanceEventTime(200)
+            up()
+        }
+        pull(0.34f)
+        compose.waitForIdle()
+        assertTrue(actions.none { it == com.theoriacodex.app.viewer.state.ViewerAction.Dismiss })
+        assertEquals(0f, media.fetchSemanticsNode().positionInRoot.x, 1f)
+        pull(0.8f)
+        compose.waitForIdle()
+        assertTrue(actions.any { it == com.theoriacodex.app.viewer.state.ViewerAction.Dismiss })
+    }
+
+    @Test fun `swiping up opens post information`() {
+        val posts = slidePosts(gallery = false)
+        val state = mutableStateOf(createViewerUiState(ViewerSessionIdentity("swipe"), posts, requiresResolution = { false }))
+        setSlideContent(state, ViewerReturnTransition(), posts.first(), posts, related = false, inverted = false)
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Media actions").performTouchInput { swipeUp(startY = height * 0.7f, endY = height * 0.2f) }
+        compose.waitForIdle()
+        compose.runOnIdle { assertTrue(state.value.controls.metadataVisible) }
     }
 
     private fun checkSlide(gallery: Boolean, opening: Boolean = false, thumbnail: Boolean = false, heldDrag: Boolean = false, cancelled: Boolean = false, related: Boolean = false, inverted: Boolean = false) {
@@ -117,7 +187,7 @@ class ViewerSwipeAnimationTest {
             assertEquals(0, state.value.currentPage?.selectedMediaIndex)
         }
         val x = actions.fetchSemanticsNode().positionInRoot.x
-        assertTrue("The outgoing page should be partway across the screen: x=$x", if (inverted) x > 0f && x < width else x < 0f && x > -width)
+        assertTrue("The outgoing page should be partway across the screen: x=$x", if (inverted) x > 0f && x < width * 1.1f else x < 0f && x > -width * 1.1f)
         compose.mainClock.advanceTimeBy(400)
         compose.runOnIdle {
             assertFinalSelection(state.value, gallery, cancelled)
@@ -187,9 +257,9 @@ class ViewerSwipeAnimationTest {
 
 
     private fun dragEndFraction(inverted: Boolean, cancelled: Boolean): Float = when {
-        inverted -> 0.45f
+        inverted -> 0.7f
         cancelled -> 0.72f
-        else -> 0.55f
+        else -> 0.3f
     }
 
     private fun slidePosts(gallery: Boolean): List<Post> {

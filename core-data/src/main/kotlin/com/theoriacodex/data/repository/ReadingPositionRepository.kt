@@ -6,12 +6,14 @@ import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /** Last visible media, independent of Recents' monotonic highest-media achievement. */
 data class ReadingPosition(
@@ -64,19 +66,24 @@ class FileBackedReadingPositionRepository(
 
     override suspend fun snapshot(): List<ReadingPosition> = mutex.withLock { load().toList() }
 
-    override suspend fun record(position: ReadingPosition) = mutex.withLock {
+    override suspend fun record(position: ReadingPosition) = writing {
         val current = load()
         val previous = current.firstOrNull { it.postId == position.postId && it.section == position.section }
-        if (previous != null && previous.lastViewedAt > position.lastViewedAt) return@withLock
+        if (previous != null && previous.lastViewedAt > position.lastViewedAt) return@writing
         persist(normalizeReadingPositions(listOf(position) + current, entryLimit))
     }
 
-    override suspend fun replace(positions: List<ReadingPosition>) = mutex.withLock {
+    override suspend fun replace(positions: List<ReadingPosition>) = writing {
         persist(normalizeReadingPositions(positions, entryLimit))
     }
 
-    override suspend fun merge(positions: List<ReadingPosition>) = mutex.withLock {
+    override suspend fun merge(positions: List<ReadingPosition>) = writing {
         persist(normalizeReadingPositions(load() + positions, entryLimit))
+    }
+
+    /** Each write re-sorts and re-encodes the whole list, which must not run on a caller's main thread. */
+    private suspend fun writing(block: suspend () -> Unit) = withContext(Dispatchers.Default) {
+        mutex.withLock { block() }
     }
 
     private suspend fun load(): List<ReadingPosition> {

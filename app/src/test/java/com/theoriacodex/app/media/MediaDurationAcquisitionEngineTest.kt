@@ -1,6 +1,8 @@
 package com.theoriacodex.app.media
 
 import com.theoriacodex.domain.adapter.DurationMetadataSourceResult
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -30,6 +32,87 @@ class MediaDurationAcquisitionEngineTest {
         assertEquals(known(4_000L), engine.acquire(post("direct")))
         assertEquals(0, providerCalls)
         assertEquals(1, probeCalls)
+    }
+
+    @Test
+    fun `a throttled lookup pauses its source and retries before giving up`() = runTest {
+        val results = ArrayDeque(listOf(rateLimited(), known(4_000L)))
+        val startedAt = mutableListOf<Long>()
+        val pacer = DurationRequestPacer(clock = { testScheduler.currentTime }, startIntervalMs = { 0L }, cooldownMs = 15_000L)
+        val engine = MediaDurationAcquisitionEngine(
+            hasProviderDurationResolver = { false },
+            resolveProviderDuration = { DurationMetadataSourceResult.Unsupported },
+            probeDuration = {
+                startedAt += testScheduler.currentTime
+                results.removeFirst()
+            },
+            clock = { 1_000L },
+            traceRecorder = NoOpMediaDurationTraceRecorder,
+            pacer = pacer,
+        )
+
+        assertEquals(known(4_000L), engine.acquire(post("busy")))
+        assertEquals(listOf(0L, 15_000L), startedAt)
+    }
+
+    @Test
+    fun `a provider rate limit is treated as throttling`() = runTest {
+        var attempts = 0
+        val engine = MediaDurationAcquisitionEngine(
+            hasProviderDurationResolver = { true },
+            resolveProviderDuration = {
+                attempts += 1
+                if (attempts == 1) throw SourceAdapterException(SourceFailureReason.RATE_LIMITED, "429")
+                DurationMetadataSourceResult.Known(9_000L)
+            },
+            probeDuration = { error("Probe should not run") },
+            traceRecorder = NoOpMediaDurationTraceRecorder,
+            pacer = DurationRequestPacer(clock = { testScheduler.currentTime }, startIntervalMs = { 0L }, cooldownMs = 15_000L),
+        )
+
+        assertEquals(
+            MediaDurationState.Known(9_000L, MediaDurationProvenance.PROVIDER),
+            engine.acquire(post("ugoira").copy(full = null, media = emptyList())),
+        )
+        assertEquals(2, attempts)
+        assertEquals(15_000L, testScheduler.currentTime)
+    }
+
+    @Test
+    fun `a host that keeps throttling ends in a retryable failure`() = runTest {
+        var attempts = 0
+        val engine = MediaDurationAcquisitionEngine(
+            hasProviderDurationResolver = { false },
+            resolveProviderDuration = { DurationMetadataSourceResult.Unsupported },
+            probeDuration = {
+                attempts += 1
+                rateLimited()
+            },
+            traceRecorder = NoOpMediaDurationTraceRecorder,
+            pacer = DurationRequestPacer(clock = { testScheduler.currentTime + 1L }, startIntervalMs = { 0L }, cooldownMs = 10L),
+        )
+
+        assertEquals(rateLimited(), engine.acquire(post("busy")))
+        assertEquals(3, attempts)
+    }
+
+    @Test
+    fun `media that needs no lookup settles without work`() {
+        val gif = post("gif").let { base ->
+            val ref = ImageRef(url = "https://example.test/gif.gif", localPath = null, mime = "image/gif")
+            base.copy(preview = ref, full = ref, media = listOf(ref))
+        }
+        val engine = engine(
+            hasProvider = { false },
+            resolveProvider = { error("Provider should not run") },
+            probe = { error("Probe should not run") },
+        )
+
+        assertEquals(
+            MediaDurationState.Unsupported(MediaDurationUnsupportedReason.NO_AUTHORITATIVE_MEDIA),
+            engine.settleWithoutWork(gif),
+        )
+        assertEquals(null, engine.settleWithoutWork(post("video")))
     }
 
     @Test
@@ -143,4 +226,6 @@ class MediaDurationAcquisitionEngineTest {
             createdAtEpochMs = null,
         )
     }
+
+    private fun rateLimited() = MediaDurationState.RetryableFailure(1L, MediaDurationFailureReason.RATE_LIMITED)
 }

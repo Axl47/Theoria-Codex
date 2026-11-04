@@ -7,13 +7,75 @@
 - Sort the Codex Library by name, date added, or item count from Reorder mode; switching back to Manual restores your own arrangement.
 - Use the Codex Library sort as the non-suggested order in Add to Codex.
 - Rename a recommendation profile from its Settings menu, keeping its likes, Codices, and hidden tags.
+- Pull down on the Viewer to close it; the media follows your finger, then lands back on its card.
+- Swipe up on the Viewer to open post information.
+- Hold a video, GIF, or ugoira to play it at 2× until you let go; long press still opens information on other media.
+- Liking a post in the Viewer gives a small heart pop and a haptic tick.
+- Pull down to refresh Search results and For You.
+- Long-press and drag across a Codex in edit mode to select a whole range of posts.
+- Tap the current tab again to scroll back to the top.
+- Show a Play icon on animated posts in the Viewer's thumbnail strip and recommendation drawer.
 
 ### Changed
 
+- With a duration filter on, posts now keep appearing while you scroll, and the next page loads sooner instead of waiting for every duration on the current one.
+- With a duration filter on, posts appear in feed order, and a post that takes too long joins the bottom of the list instead of shifting everything above you.
+- Duration lookups read far less data per video and run several at a time.
+- Pixiv ugoira now show up under a duration filter instead of always being hidden.
+- Redesign the full-screen Viewer around the artwork: controls now float on soft shadows instead of solid bars, on images, animated media, and video alike.
+- Tint the seek bar and selected thumbnail with a vivid color from the current artwork, such as hair, clothes or background, falling back to white for monochrome art.
+- Give the seek bar the full screen width in portrait for finer scrubbing; it thickens and shows a handle while you drag.
+- Show sharp scrub previews in the video's real shape, with a large time and how far you have moved, while other controls fade away.
+- Show brightness and volume on a readable rail on the side you are swiping, instead of a tiny label at the top.
+- Show double-tap seeking with a soft edge shadow and chevrons pointing the way you jumped.
+- Double-tap seeking no longer opens the Viewer controls.
+- New recommendations now add to the Viewer's recommendation drawer instead of replacing what was there.
+- Show the page position of multi-page image posts as a segmented bar above the thumbnails.
+- Animated WebP now uses the same progress bar as other media, including the thin line while controls are hidden.
+- Show the playback speed beside the time when it is not 1×.
+- Posts with video open more smoothly, and video cards take much less work to appear in feeds.
+- With controls showing, swipes and taps just above a video's timeline now work, instead of that strip of the screen ignoring them.
 - Show every Codex in the Library as a cover tile with its name and count on the cover, matching the Saved collections; Codex actions now open by long press.
 - Separate Saved from the other Codices in the Library with a thin line.
 - Choose the source in For You and Recents from the same icon menu as Search.
 - Mark watched posts in Search and For You with an eye icon instead of a time label that looked like an upload date.
+- Opening a creator now slides in quickly and Back plays the exact reverse, replacing a slow crossfade.
+- A Codex now grows out of its Library tile and shrinks back into it.
+- Reordering Codices and For You sections glides neighbouring rows, settles the dropped row, ticks at each position, and scrolls long lists at their edges.
+- Tapping a tab slides to it instead of jumping.
+- Slow swipes between the main tabs commit at about 16% of the screen, like the Viewer, instead of snapping back before half.
+- Viewer controls fade in and out, and Settings pages and For You views transition instead of cutting.
+- System back in the Viewer now follows your swipe, shrinking the media before it returns to its card.
+- On video, brightness and volume swipes use the outer columns of the screen, leaving the centre for closing and information.
+- Viewer swipes keep your finger's speed when they land, and swiping during a landing continues to the next post instead of being ignored.
+- A short, fast flick now changes post, a slow drag needs about 16% of the screen, and flicking back cancels the swipe.
+- Video keeps playing while you swipe.
+- Pages stretch and tick softly when there is nothing further to swipe to.
+- Double-tap zooms at the tapped point with a smooth animation, and pinching now zooms around your fingers.
+
+### Fixed
+
+- Zoomed gallery pages can now pan to their edges when they are a different shape from the first page.
+- Browsing many Codices no longer keeps growing memory use.
+- Feeds no longer reshuffle into different columns after closing the Viewer or when scrolling back up.
+- Gelbooru videos no longer disappear from a duration filter for five minutes when the host is briefly overloaded.
+- Searching with a Codex's tags now always updates Search's tags and runs that search, instead of sometimes repeating the previous one when Search had not opened yet.
+- Smooth the Viewer's closing animation by waiting to start feed videos until the media lands on its card.
+- Remove the navy band behind the status bar above the Viewer's black background.
+- Double-tap to zoom a still image anywhere on screen, not only in its middle.
+- Keep zoomed media on screen instead of letting it be dragged out of view.
+- Return a post to its card in Recents' All view, instead of playing the fallback animation for posts on screen.
+- Show the Codex Library immediately when leaving a Codex, instead of a blank screen while it reloads.
+- Stop a Codex briefly saying it no longer exists, or that it is empty, while it opens.
+- Show a Codex and the Saved screen immediately when returning to them from the Viewer.
+- Open the Viewer and Codices without waiting for settings and likes to reload.
+- Open Add to Codex with your Codices already listed, instead of briefly empty.
+- Stop the whole app redrawing whenever a post opens, which stalled the opening animation.
+- Stop feed videos going blank behind the Viewer when you tap a post.
+- Open large Codices like Likes with their posts already showing, instead of an empty screen after the opening animation.
+- Stop rapid flicks in the Viewer being dropped when one lands while the previous post is still settling.
+- Stop the Viewer dipping to black when the full image replaces its preview, on opening a post and while swiping.
+- Keep a loading thumbnail or video inside the media's own shape instead of briefly filling the screen.
 
 ## [1.0.1] - 2026-11-02
 

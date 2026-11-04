@@ -20,14 +20,12 @@ import com.theoriacodex.domain.model.Codex
 internal fun SavedSearchesCodexBoundary(
     data: DataDependencies,
     sources: SourceDependencies,
+    settings: com.theoriacodex.data.repository.AppSettings,
     filters: FeedFabRestoreState,
     sort: CodexSortMode,
     content: @Composable (CodexDetailDestinationState) -> Unit,
 ) {
-    val settings = remember(data.settingsRepository) { data.settingsRepository.observeSettings() }
-        .collectAsStateWithLifecycle(initialValue = null).value ?: return
-    val entries = remember(data.savedSearches) { data.savedSearches.observeSavedSearches() }
-        .collectAsStateWithLifecycle(initialValue = null).value ?: return
+    val entries = rememberRetained("saved-searches") { data.savedSearches.observeSavedSearches() }.value ?: return
     val available = sources.availableSources.collectAsStateWithLifecycle().value
     val execution = remember(data, sources.registry) {
         SearchCoordinator(sources.registry, data.queryRepository, data.settingsRepository, data.uiRestoreRepository,

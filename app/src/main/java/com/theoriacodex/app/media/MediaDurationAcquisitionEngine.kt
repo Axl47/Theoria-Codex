@@ -2,7 +2,9 @@ package com.theoriacodex.app.media
 
 import com.theoriacodex.domain.adapter.DurationMetadataSourceAdapter
 import com.theoriacodex.domain.adapter.DurationMetadataSourceResult
+import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.withTimeoutOrNull
@@ -15,6 +17,7 @@ internal class MediaDurationAcquisitionEngine(
     private val operationTimeoutMs: Long = DEFAULT_DURATION_ACQUISITION_TIMEOUT_MS,
     private val retryDelayMs: Long = DEFAULT_DURATION_ACQUISITION_RETRY_MS,
     private val traceRecorder: MediaDurationTraceRecorder = AndroidMediaDurationTraceRecorder,
+    private val pacer: DurationRequestPacer = DurationRequestPacer(clock),
 ) : MediaDurationAcquirer {
     constructor(
         registry: SourceAdapterRegistry,
@@ -39,41 +42,67 @@ internal class MediaDurationAcquisitionEngine(
         require(retryDelayMs > 0L) { "Duration acquisition retry delay must be positive" }
     }
 
-    override suspend fun acquire(post: Post): MediaDurationState {
-        return withTimeoutOrNull(operationTimeoutMs) {
-            acquireWithinTimeout(post)
-        } ?: retryable(MediaDurationFailureReason.TIMEOUT)
-    }
-
-    private suspend fun acquireWithinTimeout(post: Post): MediaDurationState {
-        return when (
-            planDurationAcquisition(
-                DurationAcquisitionFacts(
-                    knownDurationMs = animatedDurationMs(post),
-                    persistedState = null,
-                    hasAuthoritativeFullVideo = authoritativeDurationProbeRef(post) != null,
-                    hasProviderDurationResolver = hasProviderDurationResolver(post),
-                ),
-            )
-        ) {
+    /** Answers that need no network, so they never wait behind paced lookups. */
+    override fun settleWithoutWork(post: Post): MediaDurationState? {
+        return when (plan(post)) {
             is DurationAcquisitionPlan.AlreadyKnown -> MediaDurationState.Known(
                 durationMs = requireNotNull(animatedDurationMs(post)),
                 provenance = MediaDurationProvenance.PROVIDER,
             )
-            is DurationAcquisitionPlan.UsePersisted -> error("Persistence is coordinator-owned")
-            DurationAcquisitionPlan.ProbeAuthoritativeMedia -> probe(post)
-            DurationAcquisitionPlan.AskProvider -> acquireFromProvider(post)
             is DurationAcquisitionPlan.Unsupported -> MediaDurationState.Unsupported(
                 MediaDurationUnsupportedReason.NO_AUTHORITATIVE_MEDIA,
             )
+            else -> null
+        }
+    }
+
+    /** The pacing wait sits outside the timeout, which only bounds time spent on the network. */
+    override suspend fun acquire(post: Post): MediaDurationState {
+        settleWithoutWork(post)?.let { return it }
+        var result: MediaDurationState = retryable(MediaDurationFailureReason.RATE_LIMITED)
+        repeat(MAX_THROTTLED_ATTEMPTS) {
+            pacer.awaitTurn(post.id.source)
+            result = withTimeoutOrNull(operationTimeoutMs) {
+                acquireWithinTimeout(post)
+            } ?: retryable(MediaDurationFailureReason.TIMEOUT)
+            val throttled = result as? MediaDurationState.RetryableFailure
+            if (throttled?.reason != MediaDurationFailureReason.RATE_LIMITED) return result
+            pacer.onThrottled(post.id.source)
+        }
+        return result
+    }
+
+    private fun plan(post: Post): DurationAcquisitionPlan {
+        return planDurationAcquisition(
+            DurationAcquisitionFacts(
+                knownDurationMs = animatedDurationMs(post),
+                persistedState = null,
+                hasAuthoritativeFullVideo = authoritativeDurationProbeRef(post) != null,
+                hasProviderDurationResolver = hasProviderDurationResolver(post),
+            ),
+        )
+    }
+
+    private suspend fun acquireWithinTimeout(post: Post): MediaDurationState {
+        return when (plan(post)) {
+            DurationAcquisitionPlan.ProbeAuthoritativeMedia -> probe(post)
+            DurationAcquisitionPlan.AskProvider -> acquireFromProvider(post)
+            is DurationAcquisitionPlan.AlreadyKnown,
+            is DurationAcquisitionPlan.Unsupported,
+            is DurationAcquisitionPlan.UsePersisted,
+            -> error("Settled before any acquisition starts")
         }
     }
 
     private suspend fun acquireFromProvider(post: Post): MediaDurationState {
         traceRecorder.providerResolve()
         val result = runCatchingPreservingCancellation { resolveProviderDuration(post) }
-            .getOrNull()
-            ?: return retryable(MediaDurationFailureReason.PROVIDER_FAILURE)
+            .getOrElse { error ->
+                val throttled = (error as? SourceAdapterException)?.reason == SourceFailureReason.RATE_LIMITED
+                return retryable(
+                    if (throttled) MediaDurationFailureReason.RATE_LIMITED else MediaDurationFailureReason.PROVIDER_FAILURE,
+                )
+            }
         return when (result) {
             is DurationMetadataSourceResult.Known -> MediaDurationState.Known(
                 durationMs = result.durationMs,
@@ -112,3 +141,4 @@ internal class MediaDurationAcquisitionEngine(
 
 internal const val DEFAULT_DURATION_ACQUISITION_TIMEOUT_MS = 12_000L
 private const val DEFAULT_DURATION_ACQUISITION_RETRY_MS = 5L * 60L * 1_000L
+private const val MAX_THROTTLED_ATTEMPTS = 3

@@ -1,5 +1,8 @@
 package com.theoriacodex.app.viewer
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -30,10 +33,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -44,7 +45,7 @@ import com.theoriacodex.app.related.retainedLikedPostIds
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
-/** Collapsing is local; only explicit Dismiss clears the source shelf and its retained liked seeds. */
+/** Collapsing is local and survives new recommendations; only explicit Dismiss clears the source shelf and its retained liked seeds. */
 @Composable
 internal fun ViewerRelatedStrip(
     state: RelatedPostsUiState,
@@ -61,10 +62,11 @@ internal fun ViewerRelatedStrip(
     val latestExpandedChange by rememberUpdatedState(onExpandedChange)
     DisposableEffect(Unit) { onDispose { latestExpandedChange(false) } }
     val request = state.requestOrNull ?: return
-    var expanded by remember(request.seed.id, request.generation) { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(false) }
     var hidden by remember(request.seed.id, request.generation) { mutableStateOf(false) }
-    val scopeIds = remember(state) {
-        state.retainedLikedPostIds + state.availablePages.flatMap { page -> page.posts.map { it.id } }
+    // The drawer may hold posts from earlier recommendations, so opening one of those keeps it in scope.
+    val scopeIds = remember(state, posts) {
+        state.retainedLikedPostIds + state.availablePages.flatMap { page -> page.posts.map { it.id } } + posts.map { it.id }
     }
     LaunchedEffect(currentPostId, scopeIds) {
         if (currentPostId !in scopeIds) hidden = true
@@ -83,9 +85,10 @@ internal fun ViewerRelatedStrip(
 
         Surface(
             onClick = { expanded = !expanded; onInteraction() },
-            modifier = Modifier.align(Alignment.TopEnd).size(width = 32.dp, height = 48.dp),
+            modifier = Modifier.align(Alignment.TopEnd).size(width = 28.dp, height = 44.dp),
             shape = RoundedCornerShape(topStartPercent = 50, bottomStartPercent = 50),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            color = ViewerVeil.Capsule,
+            contentColor = Color.White,
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(if (expanded) Icons.AutoMirrored.Filled.KeyboardArrowRight else Icons.AutoMirrored.Filled.KeyboardArrowLeft,
@@ -100,7 +103,7 @@ private fun ViewerRelatedStripContent(
     state: RelatedPostsUiState, posts: List<Post>, currentPostId: PostId, enabled: Boolean,
     onSelect: (Post) -> Unit, onDismiss: () -> Unit, onRetry: () -> Unit,
 ) {
-    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+    Surface(shape = MaterialTheme.shapes.medium, color = Color.Black.copy(alpha = 0.78f), contentColor = Color.White) {
         Column(Modifier.padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("More like this", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)

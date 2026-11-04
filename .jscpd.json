@@ -2,7 +2,10 @@
   "threshold": 0.6,
   "minLines": 12,
   "minTokens": 80,
-  "reporters": ["console", "json"],
+  "reporters": [
+    "console",
+    "json"
+  ],
   "output": "build/reports/jscpd",
   "pattern": "**/*.kt",
   "ignore": [
@@ -10,6 +13,10 @@
     "**/.gradle/**",
     "**/.kotlin/**",
     "**/src/test/**",
-    "**/src/androidTest/**"
+    "**/src/androidTest/**",
+    "**/src/testFixtures/**"
+  ],
+  "ignorePattern": [
+    "import [a-zA-Z0-9_.]+"
   ]
 }

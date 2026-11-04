@@ -23,11 +23,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import org.robolectric.annotation.SQLiteMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
-@SQLiteMode(SQLiteMode.Mode.NATIVE)
 class ReadOnlyLibrarySnapshotTest {
     @get:Rule val temporary = TemporaryFolder()
 

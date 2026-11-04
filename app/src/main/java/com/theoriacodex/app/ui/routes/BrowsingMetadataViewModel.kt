@@ -32,7 +32,7 @@ internal data class BrowsingMetadata(
     val watchedPostIds: Set<PostId>,
 )
 
-/** One navigation-owned read model is shared by pager destinations; no full Posts are read for badges or filters. */
+/** One activity-owned read model is shared by every destination; no full Posts are read for badges or filters. */
 @OptIn(ExperimentalCoroutinesApi::class)
 internal class BrowsingMetadataViewModel(
     settingsRepository: SettingsRepository,

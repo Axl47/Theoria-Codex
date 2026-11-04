@@ -38,6 +38,18 @@ class RelatedFeedProjectionTest {
     }
 
     @Test
+    fun `a late arrival below its neighbours does not pull the shelf away from its seed`() {
+        val posts = listOf(post("0"), post("1"), post("2"), post("3"))
+        val related = RelatedPostsUiState.Idle.begin(posts[1], 1, 1)
+        val lateFirst = listOf(posts[1], posts[2], posts[3], posts[0])
+
+        val projection = buildRelatedFeedProjection(posts, lateFirst, related)
+
+        assertEquals(listOf("1", "shelf", "2", "3", "0"), projection.labels())
+        assertEquals(0, projection.gridIndexForCanonicalIndex(1))
+    }
+
+    @Test
     fun `shelf precedes first visible post when no predecessor exists`() {
         val posts = listOf(post("0"), post("1"), post("2"))
         val related = RelatedPostsUiState.Idle.begin(posts[0], 0, 1)
