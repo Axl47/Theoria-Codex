@@ -18,6 +18,10 @@
 
 ### Changed
 
+- With a duration filter on, posts now keep appearing while you scroll, and the next page loads sooner instead of waiting for every duration on the current one.
+- With a duration filter on, posts appear in feed order, and a post that takes too long joins the bottom of the list instead of shifting everything above you.
+- Duration lookups read far less data per video and run several at a time.
+- Pixiv ugoira now show up under a duration filter instead of always being hidden.
 - Redesign the full-screen Viewer around the artwork: controls now float on soft shadows instead of solid bars, on images, animated media, and video alike.
 - Tint the seek bar and selected thumbnail with a vivid color from the current artwork, such as hair, clothes or background, falling back to white for monochrome art.
 - Give the seek bar the full screen width in portrait for finer scrubbing; it thickens and shows a handle while you drag.
@@ -51,6 +55,8 @@
 
 ### Fixed
 
+- Feeds no longer reshuffle into different columns after closing the Viewer or when scrolling back up.
+- Gelbooru videos no longer disappear from a duration filter for five minutes when the host is briefly overloaded.
 - Searching with a Codex's tags now always updates Search's tags and runs that search, instead of sometimes repeating the previous one when Search had not opened yet.
 - Smooth the Viewer's closing animation by waiting to start feed videos until the media lands on its card.
 - Remove the navy band behind the status bar above the Viewer's black background.

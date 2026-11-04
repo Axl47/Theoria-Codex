@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stable feeds and faster durations</title>
+<style>
+:root{--bg:#0f1115;--fg:#e8e8ea;--mut:#a0a2a8;--bd:#2c2f36;--acc:#8bc4ff}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 system-ui,sans-serif;display:grid;grid-template-columns:210px minmax(0,1fr);gap:32px;padding:24px}
+nav{position:sticky;top:24px;align-self:start;font-size:13.5px}nav a{display:block;color:var(--mut);text-decoration:none;padding:3px 0}
+h1{margin:0 0 8px;font-size:26px}h2{margin:32px 0 8px;font-size:19px;border-top:1px solid var(--bd);padding-top:20px}
+table{border-collapse:collapse;width:100%;font-size:14px}td,th{border:1px solid var(--bd);padding:6px 9px;text-align:left;vertical-align:top}
+code{background:#1a1d23;padding:1px 4px;border-radius:4px;font-size:13px}pre{background:#1a1d23;padding:10px;border-radius:8px;overflow:auto}
+.status{border:1px solid var(--bd);border-radius:10px;padding:12px 14px}
+@media(max-width:760px){body{grid-template-columns:1fr}nav{position:static}}
+</style></head><body>
+<nav><a href="#purpose">Purpose</a><a href="#status">Current status</a><a href="#context">Context</a><a href="#phases">Phases</a><a href="#work">Work plan</a><a href="#validation">Validation</a><a href="#progress">Progress</a><a href="#surprises">Surprises</a><a href="#decisions">Decisions</a><a href="#outcomes">Outcomes</a><a href="#recovery">Recovery</a></nav>
+<main>
+<h1>Stable feeds and faster durations</h1>
+<section id="purpose"><h2>Purpose / Big Picture</h2>
+<p>With a duration filter on, posts appeared only after scrolling stopped, and earlier posts could land above the viewport and reshuffle the grid. On every feed, closing the Viewer and scrolling back up moved cards between columns. After this work, filtered posts keep arriving during a scroll, shown cards keep their position, and feeds keep their columns across the Viewer.</p></section>
+<section id="status"><h2>Current Status</h2><div class="status"><b>Implemented and proven on a physical Samsung S24+ for Gelbooru.</b> Pixiv and Hitomi were not exercised end to end on the device; see Validation. Next action: the developer's manual check on the phone.</div></section>
+<section id="context"><h2>Context And Orientation</h2>
+<p>A "lookup" finds a post's duration. <code>MediaDurationCoordinator</code> schedules lookups, <code>MediaDurationAcquisitionEngine</code> chooses how to answer one, and <code>BoundedMediaDurationProbe</code> reads ranges of the media file. A duration filter hides a post until its duration is decided.</p>
+<p>The "frontier" is how far through a feed posts have been revealed. <code>LazyVerticalStaggeredGrid</code> is the Compose grid. It remembers each card's column by list position, in memory only, and rebuilds columns by guessing when that memory is missing. <code>scrollToItem</code> lines every column up at one card, which later forces a full reassignment.</p></section>
+<section id="phases"><h2>Phases</h2><table><tr><th>Phase</th><th>Result</th><th>Accepted when</th></tr>
+<tr><td>Source durations</td><td>Pixiv ugoira resolve through frame metadata</td><td>Adapter and coordinator tests pass</td></tr>
+<tr><td>Reveal</td><td>Posts appear in order; late posts join the bottom</td><td><code>DurationRevealTest</code> passes; no column moves with the filter on</td></tr>
+<tr><td>Scheduling</td><td>Filter lookups continue during scrolls and keep their place</td><td>Scheduler and coordinator tests pass</td></tr>
+<tr><td>Grid stability</td><td>Retained grid state; relative Viewer return; live grid not re-jumped</td><td>The cycle in Validation reports zero moves</td></tr>
+<tr><td>Throughput</td><td>Per-source parallelism, earlier paging, small targeted reads</td><td>Probe and paging tests pass</td></tr>
+<tr><td>Host pressure</td><td>Paced lookups; throttling retried in place</td><td>No lookup is left failed by throttling on a device run</td></tr></table></section>
+<section id="work"><h2>Work Plan</h2><ul>
+<li><code>app-logic/.../media/DurationReveal.kt</code>: pure frontier and late-arrival logic, advanced by <code>DurationFilterProjection</code>.</li>
+<li><code>ui/components/FeedRetainedState.kt</code>: route-scoped ViewModel holding grid states and projections across the Viewer.</li>
+<li><code>viewer/ViewerReturnTransition.kt</code>: reach the card through relative scrolls. <code>search/SearchScrollEffects.kt</code>: a resumed route leaves a live grid alone.</li>
+<li><code>app-logic/.../media/DurationDemandScheduler.kt</code>, <code>media/MediaDurationCoordinator.kt</code>: filter work runs during scrolls, requeues keep their sequence, and sources have their own limits.</li>
+<li><code>media/BoundedMediaDurationProbe.kt</code>, <code>app-logic/.../media/Mp4DurationParser.kt</code>: read 16 KB, follow box sizes to <code>moov</code>, and fall back to the old windows.</li>
+<li><code>media/DurationRequestPacer.kt</code>, <code>media/MediaDurationAcquisitionEngine.kt</code>: spacing, cooldown and retry. Lookups that need no network settle before queueing.</li>
+<li><code>ui/components/FeedLaneJumpLogger.kt</code>: debug-only column-change detector. It stays as the acceptance instrument.</li>
+</ul></section>
+<section id="validation"><h2>Validation And Acceptance</h2>
+<p>From the repository root, with <code>JAVA_HOME</code> set to JDK 21 or newer: <code>./gradlew :core-sources:test :app-logic:test :app:testDebugUnitTest :app:detektDebug :app-logic:detektMain</code>.</p>
+<p>On a device, install only the verified debug package, then read <code>adb logcat -s TheoriaGridJump</code> while scrolling down, opening and closing a post, and scrolling up. Acceptance: no <code>moved=</code> lines.</p>
+<table><tr><th>Measured on the S24+, Gelbooru</th><th>Before</th><th>After</th></tr>
+<tr><td>Column moves per scroll, Viewer, scroll cycle</td><td>Up to 393 cards</td><td>0, filter on and off</td></tr>
+<tr><td>Video durations resolved in a 75-swipe run</td><td>24</td><td>63</td></tr>
+<tr><td>Lookups left failed in that run</td><td>16 of 40</td><td>0</td></tr>
+<tr><td>Resolve rate</td><td>0.63/s</td><td>1.10/s</td></tr>
+<tr><td>Playback 404s in that run</td><td>4</td><td>3</td></tr></table>
+<p>The runs cover different posts, because decided lookups are cached. Not proven on a device: live Pixiv durations, Hitomi, and how scrolling feels.</p></section>
+<section id="progress"><h2>Progress</h2><ul>
+<li>[x] 2026-11-03 All phases implemented, each in its own commit.</li>
+<li>[x] 2026-11-03 Grid cycles and lookup runs measured on the device.</li>
+<li>[ ] Developer checks feel on the phone and live Pixiv durations.</li>
+</ul></section>
+<section id="surprises"><h2>Surprises And Discoveries</h2><ul>
+<li>Search re-applied its saved position with <code>scrollToItem</code> on every route resume. Retaining grid state alone left 12 to 14 cards jumping at each deep return; the layout log showed column offsets becoming equal.</li>
+<li>Gelbooru's <code>img4</code> host answers an overloaded client with <code>404</code> for files it can serve. The same URL returned 404 from the Mac straight after a phone burst, then 206 shortly after. The pre-change build lost posts to this too.</li>
+<li>Parallelism alone made throttling much worse: about 10 requests a second produced mostly 404s.</li>
+<li>Most lookups in the tested Gelbooru query are GIFs, which cannot be measured without downloading them, so a duration filter hides them.</li>
+</ul></section>
+<section id="decisions"><h2>Decision Log</h2><ul>
+<li><b>Late posts join the bottom.</b> The developer chose this over skipping them: the filter serves discovery, so smoothness matters more than exact order, and appending never disturbs the grid's position-based memory. 2026-11-03, developer and Claude.</li>
+<li><b>Pass a stuck post after eight later decisions, not after a timer.</b> A count adapts to network speed: on a slow network everything is slow together. 2026-11-03, Claude.</li>
+<li><b>Keep the Compose grid.</b> A custom layout would remove the guessing, but five screens depend on the current grid and the measured jumps are gone without it. 2026-11-03, Claude.</li>
+<li><b>Gelbooru starts one lookup per 500 ms.</b> It resolved faster overall than 300 ms, which spent more time in cooldown. 2026-11-03, Claude.</li>
+<li><b>Gelbooru durations stay on the probe path.</b> The API rejected a keyless request, and no Gelbooru response was inspected. The adapter already reads a duration field when one is present. Hitomi's gallery data has no duration field. 2026-11-03, Claude.</li>
+</ul></section>
+<section id="outcomes"><h2>Outcomes And Retrospective</h2><p>Lookups were never individually slow; the rules around them caused the wait. Two jumps and a missing history caused the reshuffling, so the fix is mostly removing behaviour. A single-line log of column offsets found the second jump faster than reading code had. Restoring after process death still jumps, because no column history survives it. It is rarer, and no moves appeared in the one post-restart scroll measured.</p></section>
+<section id="recovery"><h2>Idempotence And Recovery</h2><p>No destructive operations or schema changes are involved. Every build and test command can be rerun. Each phase is a separate commit that can be reverted alone. A throwaway baseline can be built with <code>git worktree add</code> at <code>3b48c6e2</code>; remove it with <code>git worktree remove</code>. Never install to <code>com.theoriacodex</code>.</p></section>
+</main></body></html>
