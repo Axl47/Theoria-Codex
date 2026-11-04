@@ -55,6 +55,8 @@ Keep `AGENTS.md` limited to durable product intent, safety boundaries, and accep
 ## Personal-device Safety
 
 - The Android emulator on the Windows development PC is not available for now, so do not plan device or emulator testing around it.
+- On the Mac, run device tests on the `theoria-search-test` AVD (Pixel 6, API 36, `google_apis` arm64-v8a, no Play Store), opened through T3 Code's `device_open`. Recreate it with those settings if it is missing.
+- `scripts/verify_debug_device.sh` refuses to run while the personal phone is also connected, and that connection is not ours to change. Instead, run `scripts/verify_device_apk.py` on both APKs, confirm the target's `ro.kernel.qemu` is `1`, then use `adb -s <emulator-serial>` to `install -r -t` both and run `shell am instrument -w -e class <test> com.theoriacodex.debug.test/androidx.test.runner.AndroidJUnitRunner`.
 - Protect `com.theoriacodex` and its data. Before any device installation or test, verify every packaged APK’s application ID and signing lane; variant names are insufficient. New or changed device commands require a host-only task-graph/preflight check.
 - Automated device lanes must use isolated packages. Production changes require explicit authorization; destructive actions require authorization for the exact action after explaining possible data loss. Production installs use the signed release/update path.
 - Developer profile copying must remain read-only against production and excluded from public builds.
