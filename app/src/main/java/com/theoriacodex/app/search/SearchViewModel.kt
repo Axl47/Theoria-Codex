@@ -119,17 +119,7 @@ internal class SearchViewModel(
     private var pageRetrySource: SourceKey? = null
     private var latestEnvironmentSettings: AppSettings? = null
     private val appliedByMode = mutableMapOf<String, Query>()
-    private val scrollPersistence = SearchScrollPersistenceController(
-        dispatcher = scrollPersistenceDispatcher,
-        debounceMillis = scrollPersistenceDelayMs,
-        persist = { target ->
-            coordinator.persistSearchScrollState(
-                index = target.state.firstVisibleItemIndex,
-                offsetPx = target.state.firstVisibleItemOffsetPx,
-                queryHash = target.queryHash,
-            )
-        },
-    )
+    private val scrollPersistence = coordinator.scrollPersistence(scrollPersistenceDispatcher, scrollPersistenceDelayMs)
     init {
         relatedDiagnostics.record("owner created", mutableState.value.relatedPosts)
         addCloseable("related-posts-diagnostics", java.io.Closeable {
