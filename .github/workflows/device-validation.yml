@@ -114,10 +114,11 @@ jobs:
           disk-size: 6G
           ram-size: 4096M
           disable-animations: true
+          # swiftshader_indirect kills the API 36 emulator once the Viewer draws its gradient scrims.
           emulator-options: >-
             -no-snapshot
             -no-window
-            -gpu swiftshader_indirect
+            -gpu swangle_indirect
             -noaudio
             -no-boot-anim
           script: bash scripts/verify_ci_emulator.sh debug
@@ -196,10 +197,11 @@ jobs:
           disk-size: 6G
           ram-size: 4096M
           disable-animations: true
+          # swiftshader_indirect kills the API 36 emulator once the Viewer draws its gradient scrims.
           emulator-options: >-
             -no-snapshot
             -no-window
-            -gpu swiftshader_indirect
+            -gpu swangle_indirect
             -noaudio
             -no-boot-anim
           script: bash scripts/verify_ci_emulator.sh acceptance
