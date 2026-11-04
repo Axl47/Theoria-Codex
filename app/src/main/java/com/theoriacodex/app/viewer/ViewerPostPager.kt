@@ -195,7 +195,7 @@ private fun ViewerPostPage(
             pixivUgoiraClient = pixivUgoiraClient,
             onAction = onAction,
             onInteraction = { controls.markInteraction() },
-            onSeekInteraction = { controls.markSeekInteraction() },
+            onSeekInteraction = { controls.markPassiveInteraction() },
             onToggleChrome = { controls.toggleChrome() },
             imageSession = screen.imageSession,
             onRequestMediaRecovery = onRequestMediaRecovery,
@@ -263,7 +263,7 @@ private fun ViewerPostPageEffects(
     LaunchedEffect(mediaPagerState.settledPage, currentPostIndex, pageState.pendingMediaIndex, swipe.dragging, swipe.settling) {
         if (swipeActive || pageState.pendingMediaIndex != null) return@LaunchedEffect
         reportSettledMedia(isCurrentPost, mediaPagerState.settledPage, selectedMediaIndex, post, onAction, onVisibleMediaChanged)
-        if (postPage == postPagerState.currentPage) controls.markInteraction()
+        if (postPage == postPagerState.currentPage) controls.markPassiveInteraction()
     }
 }
 

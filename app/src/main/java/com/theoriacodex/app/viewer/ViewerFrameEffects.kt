@@ -73,7 +73,7 @@ internal fun rememberViewerSwipe(
                 onAction(ViewerAction.SelectMedia(mediaIndex))
             }
         },
-        onInteraction = { controls.markInteraction() },
+        onInteraction = { controls.markPassiveInteraction() },
         onLimit = { haptics.performHapticFeedback(TheoriaHaptics.Limit) },
         flingVelocity = flingVelocity,
     )
@@ -236,7 +236,7 @@ private fun ViewerNavigationEffects(
     }
     LaunchedEffect(uiState.currentPageIndex, posts.size, postPagerState) {
         controls.setOverviewVisible(false)
-        controls.markInteraction()
+        controls.markPassiveInteraction()
     }
     LaunchedEffect(frame.selection.post.id, currentPostIndex, uiState.currentPage?.pendingMediaIndex) {
         if (uiState.currentPage?.pendingMediaIndex == null) {

@@ -71,8 +71,8 @@ internal class ViewerControls(
         if (!chromeVisible && !opening && !returning) onAction(ViewerAction.ToggleChrome)
     }
 
-    /** Seeking shows its own feedback: it keeps open controls alive but never opens them. */
-    fun markSeekInteraction() {
+    /** For seeking and navigation: keeps open controls alive but never opens them; only a tap does. */
+    fun markPassiveInteraction() {
         screen.interactionSerial += 1
     }
 

@@ -171,7 +171,11 @@ private fun ViewerUiState.replaceSession(action: ViewerAction.ReplaceSession): V
             },
         ).let { replacement ->
             replacement.copy(
-                controls = replacement.controls.copy(playbackMode = controls.playbackMode),
+                controls = replacement.controls.copy(
+                    playbackMode = controls.playbackMode,
+                    // A live update of the same session, such as pagination, must not reopen hidden chrome.
+                    chromeVisible = if (session == action.session) controls.chromeVisible else replacement.controls.chromeVisible,
+                ),
                 related = ViewerRelatedUiState(navigation = action.relatedNavigation, extraPostIds = action.relatedPostIds),
             )
         },

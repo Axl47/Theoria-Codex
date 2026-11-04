@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Moving to another post or image in the Viewer no longer brings back the header and footer; they stay hidden until you tap.
+
 ## [1.1.0] - 2026-11-03
 
 ### Added

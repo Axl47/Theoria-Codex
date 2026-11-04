@@ -46,6 +46,13 @@ class ViewerControlsTest {
         }
         assertEquals("a returning Viewer keeps chrome closed", emptyList<ViewerAction>(), interact())
         assertEquals(4, screen.interactionSerial)
+        actions.clear()
+        compose.runOnIdle {
+            returning.value = false
+            controls.markPassiveInteraction()
+        }
+        compose.runOnIdle { assertEquals("navigation leaves hidden chrome closed", emptyList<ViewerAction>(), actions.toList()) }
+        assertEquals(5, screen.interactionSerial)
     }
 
     @Test fun `dismissal closes every surface once`() {

@@ -33,6 +33,18 @@ class ViewerStateReducerTest {
     }
 
     @Test
+    fun `live session updates keep chrome hidden and a new session shows it`() {
+        val post = samplePost("first")
+        val identity = session("live-chrome")
+        var state = reduceViewerState(ViewerUiState.Empty, ViewerAction.ReplaceSession(identity, listOf(post))).state
+        state = reduceViewerState(state, ViewerAction.ToggleChrome).state
+        state = reduceViewerState(state, ViewerAction.ReplaceSession(identity, listOf(post))).state
+        assertEquals(false, state.controls.chromeVisible)
+        state = reduceViewerState(state, ViewerAction.ReplaceSession(session("other"), listOf(post))).state
+        assertEquals(true, state.controls.chromeVisible)
+    }
+
+    @Test
     fun `completion modes preserve order stop at queue end and reject obsolete media`() {
         val first = samplePost("first", media = listOf(media("video/mp4", "one.mp4"), media("video/mp4", "two.mp4")))
         val second = samplePost("second", media = listOf(media("video/mp4", "three.mp4")))
