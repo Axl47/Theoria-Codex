@@ -68,11 +68,7 @@ internal fun rememberSearchFeed(
             hideWatched = fabRestoreState.hideWatched, animatedDurationRange = animatedDurationRange,
         )
     }
-    val unknownAnimatedDurationPolicy = if (resolveUnknownAnimatedDurations) {
-        UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
-    } else {
-        UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS
-    }
+    val unknownDurationPolicy = unknownAnimatedDurationPolicy(resolveUnknownAnimatedDurations)
     val displayResults = remember(state.content.results, state.content.displayVersion, state.query.appliedQueryHash) {
         state.content.results
     }
@@ -84,10 +80,10 @@ internal fun rememberSearchFeed(
     })
     val visibleResults = remember(
         presentedResults, visibilityFilters, likedPostIds, retainedLikedPostIds, savedPostIds, watchedPostIds,
-        unknownAnimatedDurationPolicy, acquiredDurations,
+        unknownDurationPolicy, acquiredDurations,
     ) {
         filterSearchResults(
-            presentedResults, visibilityFilters, likedPostIds, savedPostIds, watchedPostIds, unknownAnimatedDurationPolicy,
+            presentedResults, visibilityFilters, likedPostIds, savedPostIds, watchedPostIds, unknownDurationPolicy,
             acquiredDurations, retainedLikedPostIds,
         )
     }
@@ -96,7 +92,7 @@ internal fun rememberSearchFeed(
         canonicalPosts = displayResults, visibleCanonicalPosts = visibleResults,
         relatedState = state.relatedPosts, visibilityFilters = visibilityFilters,
         likedPostIds = likedPostIds, savedPostIds = savedPostIds, watchedPostIds = watchedPostIds,
-        unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy, durationStates = durationStates,
+        unknownAnimatedDurationPolicy = unknownDurationPolicy, durationStates = durationStates,
         durationFilterActive = animatedDurationFilterActive,
     )
     return remember(

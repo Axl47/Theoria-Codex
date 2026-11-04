@@ -25,6 +25,14 @@ enum class UnknownAnimatedDurationPolicy {
     RESOLVE_IN_BACKGROUND,
 }
 
+fun unknownAnimatedDurationPolicy(resolveInBackground: Boolean): UnknownAnimatedDurationPolicy {
+    return if (resolveInBackground) {
+        UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
+    } else {
+        UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS
+    }
+}
+
 data class FavoriteTagSection(
     val source: SourceKey,
     val tags: List<String>,

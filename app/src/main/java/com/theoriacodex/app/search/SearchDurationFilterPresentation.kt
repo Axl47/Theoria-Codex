@@ -29,13 +29,7 @@ internal fun rememberSearchDurationFilterPresentation(
     retainKey: String,
 ): SearchDurationFilterPresentation {
     val active = !range.isFullRange
-    val unknownPolicy = remember(resolveUnknownAnimatedDurations) {
-        if (resolveUnknownAnimatedDurations) {
-            UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
-        } else {
-            UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS
-        }
-    }
+    val unknownPolicy = unknownAnimatedDurationPolicy(resolveUnknownAnimatedDurations)
     val metadata = rememberDurationFilterMetadata(posts, durationStates, active, retainKey)
     val readiness = metadata.readiness
     return SearchDurationFilterPresentation(

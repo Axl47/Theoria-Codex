@@ -54,6 +54,7 @@ import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
+import com.theoriacodex.app.search.unknownAnimatedDurationPolicy
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
@@ -292,13 +293,7 @@ private fun rememberCodexDetailFeed(
     val animatedDurationRange = remember(durationMinBucket, durationMaxBucket) {
         AnimatedDurationRange(durationMinBucket, durationMaxBucket)
     }
-    val unknownDurationPolicy = remember(resolveUnknownAnimatedDurations) {
-        if (resolveUnknownAnimatedDurations) {
-            UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
-        } else {
-            UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS
-        }
-    }
+    val unknownDurationPolicy = unknownAnimatedDurationPolicy(resolveUnknownAnimatedDurations)
     val durationFilterActive = !animatedDurationRange.isFullRange
     val durationMetadata = rememberDurationFilterMetadata(posts, durationStates, durationFilterActive, retainKey = "codex-detail")
     val acquiredDurations = durationMetadata.knownDurationMsByPostId
