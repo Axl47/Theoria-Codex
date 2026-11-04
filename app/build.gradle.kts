@@ -147,8 +147,8 @@ android {
         targetSdk = libs.versions.androidCompileSdk.get().toInt()
         // Keep this calculation aligned with MainReleaseTagParser and the release workflow:
         // 1_500_000_000 + major * 10_000 + minor * 100 + patch.
-        versionCode = 1_500_010_100
-        versionName = "1.1.0"
+        versionCode = 1_500_010_200
+        versionName = "1.2.0"
         if (versionCodeOverride != null) {
             versionCode = versionCodeOverride
         }
