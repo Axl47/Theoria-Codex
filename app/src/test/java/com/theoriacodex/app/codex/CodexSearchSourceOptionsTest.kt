@@ -165,6 +165,38 @@ class CodexSearchSourceOptionsTest {
         )
     }
 
+    @Test
+    fun `search terms keep types apart and ignore other sources`() {
+        val artist = com.theoriacodex.domain.model.PostTaxonomyTerm("mika", com.theoriacodex.domain.model.SearchFacet.ARTIST)
+        val tag = com.theoriacodex.domain.model.PostTaxonomyTerm("mika")
+        val posts = listOf(
+            post(SourceKey.PIXIV, "1").copy(taxonomy = listOf(artist, tag)),
+            post(SourceKey.PIXIV, "2").copy(taxonomy = listOf(artist, com.theoriacodex.domain.model.PostTaxonomyTerm("-blocked"))),
+            post(SourceKey.GELBOORU, "3").copy(taxonomy = listOf(tag)),
+        )
+
+        val terms = codexSearchTerms(posts, SourceKey.PIXIV)
+
+        assertEquals(
+            listOf(artist.toSearchTerm() to 2, tag.toSearchTerm() to 1),
+            terms.options.map { it.term to it.count },
+        )
+        assertEquals(listOf("1", "2"), terms.posts.map(CodexDrawPost::sourcePostId))
+    }
+
+    @Test
+    fun `a draw takes every tag from one post and respects the amount`() {
+        val first = CodexDrawPost("1", listOf("a", "b", "c").map { com.theoriacodex.domain.model.SearchTerm(it) })
+        val second = CodexDrawPost("2", listOf("x", "y").map { com.theoriacodex.domain.model.SearchTerm(it) })
+        repeat(20) { seed ->
+            val draw = requireNotNull(drawCodexTerms(listOf(first, second), 2, kotlin.random.Random(seed)))
+            val owner = listOf(first, second).single { it.sourcePostId == draw.sourcePostId }
+            assertEquals(2, draw.terms.size)
+            assertEquals(true, owner.terms.containsAll(draw.terms))
+        }
+        assertEquals(null, drawCodexTerms(emptyList(), 2))
+    }
+
     private fun post(
         source: SourceKey,
         sourcePostId: String,

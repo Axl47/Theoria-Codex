@@ -202,8 +202,10 @@ sealed interface SearchAction {
         val query: Query,
         val sourceScope: SearchSourceScope = SearchSourceScope.fromQuery(query),
     ) : SearchAction
+    /** Replaces the draft with a complete tag query and runs it at once. */
     data class ApplyTagSearch(
-        val includeTags: List<String>,
+        val includeTermGroups: List<SearchTermGroup>,
+        val excludeTerms: List<SearchTerm> = emptyList(),
         val mode: QueryMode = QueryMode.Unified,
     ) : SearchAction
     data object ResetDraft : DraftEdit
@@ -219,6 +221,7 @@ sealed interface SearchAction {
     data class CommitTagInput(val input: String) : SearchAction
     data class AddPostIncludeTerm(val post: Post, val term: SearchTerm) : DraftEdit
     data class AddPostExcludeTerm(val post: Post, val term: SearchTerm) : DraftEdit
+    data class AddPostIncludeAlternative(val post: Post, val groupIndex: Int, val term: SearchTerm) : DraftEdit
     data class SetNhentaiLanguage(val filter: NhentaiLanguageFilter) : DraftEdit
     data class SetNhentaiFullColor(val enabled: Boolean) : DraftEdit
     data object ResetFilters : DraftEdit

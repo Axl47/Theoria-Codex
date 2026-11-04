@@ -60,6 +60,7 @@ class ViewerRouteRestorationUiTest {
         withRoute(onGoToSearch = { wentToSearch = true }) {
             compose.onNodeWithContentDescription("More actions").performClick()
             compose.onNodeWithText("Info").performClick()
+            compose.onNodeWithContentDescription("More post actions").performClick()
             compose.onNodeWithText("Go to Search").performClick()
             compose.runOnIdle { assertEquals(true, wentToSearch) }
             assertExitingPresentation()

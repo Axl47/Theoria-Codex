@@ -6,6 +6,7 @@ import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.search.SearchResultCard
+import com.theoriacodex.app.tags.LocalPostTagSearchActions
 import com.theoriacodex.app.tags.PostBoundTagSection
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.domain.model.CreatorProfile
@@ -133,6 +134,7 @@ internal fun FeedPostActionSheet(
     onRemoveFromCodex: (() -> Unit)? = null,
     onStartOver: (() -> Unit)? = null,
 ) {
+    val searchActions = LocalPostTagSearchActions.current
     PostActionSheet(
         post, creatorBrowsingSources, onDismiss, { onSaveToDevice(post) },
         onSaveToCodex = { onSaveToCodex(post) },
@@ -147,6 +149,13 @@ internal fun FeedPostActionSheet(
         PostBoundTagSection(
             post, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm, onRemoveExcludeTerm,
             onFavoriteTagLongPress, tagVideoCountProvider, fetchTagVideoCounts,
+            onSearch = onGoToSearch?.let { goToSearch ->
+                {
+                    searchActions.applyDraft()
+                    onDismiss()
+                    goToSearch()
+                }
+            },
         )
     }
 }

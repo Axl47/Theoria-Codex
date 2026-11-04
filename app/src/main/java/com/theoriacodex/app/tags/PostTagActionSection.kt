@@ -1,8 +1,6 @@
 package com.theoriacodex.app.tags
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -14,7 +12,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -23,6 +20,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -46,12 +44,18 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.Role
 import com.theoriacodex.app.search.searchScopeLabel
 import com.theoriacodex.app.search.searchTermChipLabel
+import com.theoriacodex.app.search.state.SearchDraftReducer
+import com.theoriacodex.app.source.displayName
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 
+/**
+ * A post's tags beside the search they feed. Tapping a tag edits the live Search draft, and the tray
+ * below shows the result. [onSearch] runs the draft; it is null where this screen cannot reach Search.
+ */
 @Composable
 fun PostTagActionSection(
     post: Post,
@@ -66,17 +70,74 @@ fun PostTagActionSection(
     onRemoveExcludeTerm: (SearchTerm) -> Unit,
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
     draftQuery: Query? = null,
+    onSearch: (() -> Unit)? = null,
 ) {
     val termGroups = remember(post.taxonomy, post.canonicalTags, post.rawTags) {
         postActionTermGroups(post)
     }
-    val terms = remember(termGroups) { termGroups.flatMap(PostActionTermGroup::terms) }
-    val generalTags = remember(terms) {
-        terms.filter(SearchTerm::isGeneralPostTag).map(SearchTerm::value).distinct()
-    }
     val draft = draftQuery ?: LocalSearchDraftSelection.current.collectAsStateWithLifecycle(initialValue = null).value
     val selection = remember(post.id.source, draft) {
         PostTagSelection(post.id.source, draft?.includeTerms.orEmpty(), draft?.excludeTerms.orEmpty())
+    }
+    val countOf = rememberPostTagCounts(post, termGroups, tagVideoCountProvider, fetchTagVideoCounts)
+    var targetTerm by remember(post.id) { mutableStateOf<SearchTerm?>(null) }
+    var pendingSwitch by remember(post.id) { mutableStateOf<PendingSourceSwitch?>(null) }
+    var expandedGroups by remember(post.id) { mutableStateOf(emptySet<String>()) }
+    val draftGroups = draft?.effectiveIncludeTermGroups.orEmpty()
+    val targetGroup = draftGroups.indexOfFirst { group -> targetTerm in group.terms }.takeIf { it >= 0 }
+    val searchActions = LocalPostTagSearchActions.current
+    val editor = PostTagEditor(
+        post, draft, selection, targetGroup,
+        onAddInclude = onAddIncludeTerm,
+        onAddExclude = onAddExcludeTerm,
+        onRemoveInclude = onRemoveIncludeTerm,
+        onRemoveExclude = onRemoveExcludeTerm,
+        onAddAlternative = { groupIndex, term -> searchActions.addAlternative(post, groupIndex, term) },
+        onConfirmSwitch = { pendingSwitch = it },
+    )
+
+    Column(Modifier.fillMaxWidth()) {
+        LazyColumn(
+            modifier = Modifier.weight(1f, fill = false).fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            item(key = "header") { header() }
+            if (loading) {
+                item(key = "loading") { Text("Loading tags...", style = MaterialTheme.typography.bodySmall) }
+            } else {
+                postTagList(
+                    groups = termGroups,
+                    expandedGroups = expandedGroups,
+                    onExpandGroup = { label -> expandedGroups = expandedGroups + label },
+                ) { term -> PostTagChip(term, countOf(term), editor, onFavoriteTagLongPress) }
+            }
+            item(key = "footer") { footer() }
+        }
+        QueryTray(
+            title = "Your search",
+            emptyText = "Tap a tag to start a search.",
+            query = draft,
+            targetGroup = targetGroup,
+            onTargetGroup = { index -> targetTerm = index?.let { draftGroups[it].terms.first() } },
+            onSearch = onSearch,
+            confirmation = pendingSwitch?.let { pending ->
+                pending.confirmation(post.id.source, editor) { pendingSwitch = null }
+            },
+        )
+    }
+}
+
+/** Looks up each tag's count: general tags by name, typed tags by their full identity. */
+@Composable
+private fun rememberPostTagCounts(
+    post: Post,
+    termGroups: List<PostActionTermGroup>,
+    tagVideoCountProvider: (SourceKey, String) -> Int?,
+    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?>,
+): (SearchTerm) -> Int? {
+    val terms = remember(termGroups) { termGroups.flatMap(PostActionTermGroup::terms) }
+    val generalTags = remember(terms) {
+        terms.filter(SearchTerm::isGeneralPostTag).map(SearchTerm::value).distinct()
     }
     val suppliedCounts = remember(post.taxonomy) { postActionSuppliedCounts(post) }
     val generalCounts = remember(suppliedCounts) {
@@ -84,56 +145,106 @@ fun PostTagActionSection(
     }
     val tagVideoCounts = rememberTagCounts(post.id.source, generalTags, tagVideoCountProvider, fetchTagVideoCounts, generalCounts)
     val typedCounts = rememberSearchTermCounts(post.id.source, terms, suppliedCounts)
+    return { term -> if (term.isGeneralPostTag()) tagVideoCounts[term.value] else typedCounts[term] }
+}
 
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val columns = if (maxWidth.value >= 354f) 3 else 2
-    LazyColumn(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        item(key = "header") { header() }
-        item(key = "search-terms") { Text("Search terms", style = MaterialTheme.typography.titleSmall) }
-        if (loading) {
-            item(key = "loading") { Text("Loading tags...", style = MaterialTheme.typography.bodySmall) }
-        } else {
-            tagActionGrid(
-                groups = termGroups,
-                columns = columns,
-                videoCounts = tagVideoCounts,
-                typedCounts = typedCounts,
-                selection = selection,
-                onFavoriteTagLongPress = if (onFavoriteTagLongPress != null) {
-                    { tag -> onFavoriteTagLongPress(post.id.source, tag) }
-                } else {
-                    null
-                },
-                onIncludeTerm = { term ->
-                    togglePostTagTerm(term, selection.included(term), onAddIncludeTerm, onRemoveIncludeTerm) {
-                        selection.excluded(term)?.let(onRemoveExcludeTerm)
-                    }
-                },
-                onExcludeTerm = { term ->
-                    togglePostTagTerm(term, selection.excluded(term), onAddExcludeTerm, onRemoveExcludeTerm) {
-                        selection.included(term)?.let(onRemoveIncludeTerm)
-                    }
+/** A typed tag from another source, waiting because adding it would drop terms from the draft. */
+private class PendingSourceSwitch(val term: SearchTerm, val excluded: Boolean, val lost: List<SearchTerm>) {
+    fun message(source: SourceKey): String {
+        val removed = lost.joinToString(", ") { searchTermChipLabel(it, excluded = false) }
+        return "${if (excluded) "Excluding" else "Adding"} ${term.value} switches Search to ${source.displayName()} and removes $removed."
+    }
+
+    fun confirmation(source: SourceKey, editor: PostTagEditor, onClose: () -> Unit) = TrayConfirmation(
+        message = message(source),
+        confirmLabel = "Switch source",
+        dismissLabel = "Keep",
+        onConfirm = {
+            editor.commit(term, excluded)
+            onClose()
+        },
+        onDismiss = onClose,
+    )
+}
+
+/** Turns chip gestures into edits of the Search draft, holding back any that would lose terms. */
+private class PostTagEditor(
+    val post: Post,
+    val draft: Query?,
+    val selection: PostTagSelection,
+    val targetGroup: Int?,
+    val onAddInclude: (SearchTerm) -> Boolean,
+    val onAddExclude: (SearchTerm) -> Boolean,
+    val onRemoveInclude: (SearchTerm) -> Unit,
+    val onRemoveExclude: (SearchTerm) -> Unit,
+    val onAddAlternative: (Int, SearchTerm) -> Boolean,
+    val onConfirmSwitch: (PendingSourceSwitch) -> Unit,
+) {
+    fun commit(term: SearchTerm, excluded: Boolean): Boolean =
+        if (excluded) onAddExclude(term) else onAddInclude(term)
+
+    /**
+     * Every addition passes here, so none can drop terms unasked. [onAccepted] removes an opposing
+     * entry only once the draft takes the new one; a confirmed switch has already dropped it.
+     */
+    private fun add(term: SearchTerm, excluded: Boolean, onAccepted: () -> Unit = {}) {
+        val lost = draft?.let { SearchDraftReducer.termsLostToPostTerm(it, post.id.source, term) }.orEmpty()
+        when {
+            lost.isNotEmpty() -> onConfirmSwitch(PendingSourceSwitch(term, excluded, lost))
+            commit(term, excluded) -> onAccepted()
+        }
+    }
+
+    fun tap(term: SearchTerm) {
+        when (val effect = tagTapEffect(term, selection, targetGroup)) {
+            TagTapEffect.AddRequired -> add(term, excluded = false)
+            is TagTapEffect.AddAlternative -> onAddAlternative(effect.groupIndex, term)
+            is TagTapEffect.SwitchToExcluded -> add(effect.stored, excluded = true) { onRemoveInclude(effect.stored) }
+            is TagTapEffect.Clear -> onRemoveExclude(effect.stored)
+        }
+    }
+
+    fun canTap(term: SearchTerm): Boolean = targetGroup == null || selection.chipState(term) != TagChipState.NONE ||
+        draft?.let { SearchDraftReducer.postTermForGroup(it, post.id.source, targetGroup, term) } != null
+
+    /** The states TalkBack can reach directly, leaving out what a tap on the chip already does. */
+    fun alternateActions(term: SearchTerm): List<TagChipAction> {
+        val name = searchTermChipLabel(term, excluded = false)
+        return when (selection.chipState(term)) {
+            TagChipState.NONE -> listOf(TagChipAction("Exclude $name from Search") { add(term, excluded = true) })
+            TagChipState.REQUIRED -> listOf(
+                TagChipAction("Remove $name from Search") { selection.included(term)?.let(onRemoveInclude) },
+            )
+            TagChipState.EXCLUDED -> listOf(
+                TagChipAction("Include $name in Search") {
+                    selection.excluded(term)?.let { stored -> add(stored, excluded = false) { onRemoveExclude(stored) } }
                 },
             )
         }
-        item(key = "footer") { footer() }
-    }
     }
 }
 
-private fun togglePostTagTerm(
+@Composable
+private fun PostTagChip(
     term: SearchTerm,
-    stored: SearchTerm?,
-    onAdd: (SearchTerm) -> Boolean,
-    onRemove: (SearchTerm) -> Unit,
-    onRemoveOpposite: () -> Unit,
+    count: Int?,
+    editor: PostTagEditor,
+    onFavoriteLongPress: ((SourceKey, String) -> Unit)?,
 ) {
-    if (stored != null) onRemove(stored)
-    else if (onAdd(term)) onRemoveOpposite()
+    val name = searchTermChipLabel(term, excluded = false)
+    val state = editor.selection.chipState(term)
+    val favorite = onFavoriteLongPress?.takeIf { term.isGeneralPostTag() }
+    TagPickerChip(
+        label = term.value,
+        count = count?.let(::compactTagCount),
+        state = state,
+        enabled = editor.canTap(term),
+        tapLabel = tagTapLabel(name, state),
+        onTap = { editor.tap(term) },
+        alternateActions = editor.alternateActions(term),
+        onLongPress = favorite?.let { { it(editor.post.id.source, term.value) } },
+        longPressLabel = favorite?.let { "Add $name to favorites" },
+    )
 }
 
 @Composable
@@ -200,15 +311,12 @@ private fun rememberTagCounts(source: SourceKey, tags: List<String>,
     return counts
 }
 
-private fun LazyListScope.tagActionGrid(
+/** Type headings over wrapping chips; a long group shows its first tags until it is expanded. */
+private fun LazyListScope.postTagList(
     groups: List<PostActionTermGroup>,
-    columns: Int,
-    videoCounts: Map<String, Int?>,
-    typedCounts: Map<SearchTerm, Int?>,
-    selection: PostTagSelection,
-    onFavoriteTagLongPress: ((String) -> Unit)?,
-    onIncludeTerm: (SearchTerm) -> Unit,
-    onExcludeTerm: (SearchTerm) -> Unit,
+    expandedGroups: Set<String>,
+    onExpandGroup: (String) -> Unit,
+    chip: @Composable (SearchTerm) -> Unit,
 ) {
     if (groups.isEmpty()) {
         item(key = "empty") {
@@ -220,106 +328,34 @@ private fun LazyListScope.tagActionGrid(
         }
         return
     }
-
-    groups.forEachIndexed { groupIndex, group ->
-        item(key = "group:$groupIndex", contentType = "group") {
+    item(key = "hint") {
+        Text(
+            text = "Tap a tag to add it, again to exclude it, and once more to clear it.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+    }
+    groups.forEach { group ->
+        item(key = "group:${group.label}", contentType = "group") {
             Text(
                 text = group.label,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp),
             )
         }
-        val rows = group.terms.chunked(columns)
-        items(rows.size, key = { "row:$groupIndex:$it" }, contentType = { "tags" }) { rowIndex ->
-            val rowTerms = rows[rowIndex]
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.Top,
-            ) {
-                rowTerms.forEach { term ->
-                    val generalTag = term.takeIf(SearchTerm::isGeneralPostTag)?.value
-                    TagActionCell(
-                        label = term.value,
-                        actionLabel = searchTermChipLabel(term, excluded = false),
-                        videoCount = if (generalTag != null) videoCounts[generalTag] else typedCounts[term],
-                        includeSelected = selection.included(term) != null,
-                        excludeSelected = selection.excluded(term) != null,
-                        onTagLongPress = if (generalTag != null && onFavoriteTagLongPress != null) {
-                            { onFavoriteTagLongPress(generalTag) }
-                        } else {
-                            null
-                        },
-                        onInclude = { onIncludeTerm(term) },
-                        onExclude = { onExcludeTerm(term) },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                repeat(columns - rowTerms.size) {
-                    Spacer(modifier = Modifier.weight(1f))
+        val collapsed = group.label !in expandedGroups && group.terms.size > COLLAPSE_TAGS_OVER
+        val rows = (if (collapsed) group.terms.take(COLLAPSED_TAG_COUNT) else group.terms).tagChipChunks()
+        items(rows.size, key = { "row:${group.label}:$it" }, contentType = { "tags" }) { rowIndex ->
+            TagChipRow {
+                rows[rowIndex].forEach { term -> chip(term) }
+                if (collapsed && rowIndex == rows.lastIndex) {
+                    TextButton(onClick = { onExpandGroup(group.label) }) {
+                        Text("+${group.terms.size - COLLAPSED_TAG_COUNT} more")
+                    }
                 }
             }
-        }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun TagActionCell(
-    label: String,
-    actionLabel: String,
-    videoCount: Int?,
-    includeSelected: Boolean,
-    excludeSelected: Boolean,
-    onTagLongPress: (() -> Unit)?,
-    onInclude: () -> Unit,
-    onExclude: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        TagSelectionSurface(
-            tag = label,
-            active = includeSelected || excludeSelected,
-            modifier = Modifier.fillMaxWidth(),
-            longPressModifier = if (onTagLongPress != null) {
-                Modifier.combinedClickable(
-                    onClick = {},
-                    onLongClick = onTagLongPress,
-                )
-            } else {
-                Modifier
-            },
-        )
-        // Reserve the count line so asynchronous metadata cannot resize rows mid-scroll.
-        Text(
-            text = videoCount?.toString().orEmpty(),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.58f),
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            TagActionPill(
-                label = "+",
-                actionLabel = "Include $actionLabel in Search",
-                compact = true,
-                selected = includeSelected,
-                onClick = onInclude,
-                modifier = Modifier.weight(1f),
-            )
-            TagActionPill(
-                label = "-",
-                actionLabel = "Exclude $actionLabel from Search",
-                compact = true,
-                selected = excludeSelected,
-                onClick = onExclude,
-                modifier = Modifier.weight(1f),
-            )
         }
     }
 }
@@ -352,8 +388,8 @@ private fun FavoriteTagActionCell(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             TagActionPill(
-                label = "+",
                 actionLabel = "Include $tag in Search",
+                icon = { Text("+", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                 selected = false,
                 onClick = onAdd,
                 modifier = Modifier.weight(1f),
@@ -407,15 +443,12 @@ private fun TagActionPill(
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    label: String? = null,
-    icon: (@Composable () -> Unit)? = null,
-    compact: Boolean = false,
+    icon: @Composable () -> Unit,
 ) {
     val accent = MaterialTheme.colorScheme.primary
     Surface(
         modifier = modifier
-            .then(if (compact) Modifier.height(24.dp) else Modifier)
-            .sizeIn(minWidth = 48.dp, minHeight = if (compact) 24.dp else 48.dp).semantics {
+            .sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics {
             this.selected = selected
             contentDescription = actionLabel
             stateDescription = if (selected) "Selected" else "Not selected"
@@ -427,33 +460,7 @@ private fun TagActionPill(
             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
         },
     ) {
-        TagActionPillContent(selected, label, icon, compact)
-    }
-}
-
-@Composable
-private fun TagActionPillContent(
-    selected: Boolean,
-    label: String?,
-    icon: (@Composable () -> Unit)?,
-    compact: Boolean,
-) {
-    val accent = MaterialTheme.colorScheme.primary
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = if (compact) 2.dp else 4.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (icon != null) {
-            icon()
-        } else if (label != null) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                color = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        Box(Modifier.fillMaxWidth().padding(vertical = 4.dp), Alignment.Center) { icon() }
     }
 }
 
@@ -491,7 +498,7 @@ internal fun postActionTermGroups(post: Post): List<PostActionTermGroup> {
         .entries
         .sortedWith(
             compareBy<Map.Entry<PostActionGroupKey, List<SearchTerm>>> { entry ->
-                POST_ACTION_FACET_ORDER.indexOf(entry.key.facet)
+                postTagFacetOrder.indexOf(entry.key.facet)
             }.thenBy { entry -> entry.key.namespaceOrder }
                 .thenBy { entry -> entry.key.sourceNamespace.orEmpty() },
         )
@@ -546,13 +553,16 @@ private fun SearchTerm.normalizedPostActionTermOrNull(): SearchTerm? {
     return copy(value = normalizedValue, sourceNamespace = normalizedNamespace)
 }
 
-private val POST_ACTION_FACET_ORDER = listOf(
-    SearchFacet.TAG,
+/** The most identifying types come first, since they tend to make the most useful searches. */
+internal val postTagFacetOrder = listOf(
     SearchFacet.ARTIST,
-    SearchFacet.CHARACTER,
     SearchFacet.SERIES,
+    SearchFacet.CHARACTER,
+    SearchFacet.TAG,
     SearchFacet.GROUP,
     SearchFacet.TYPE,
     SearchFacet.LANGUAGE,
 )
 private const val GENERAL_TAG_NAMESPACE = "tag"
+private const val COLLAPSE_TAGS_OVER = 16
+private const val COLLAPSED_TAG_COUNT = 12

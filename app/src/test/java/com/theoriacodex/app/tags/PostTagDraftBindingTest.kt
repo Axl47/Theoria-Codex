@@ -7,11 +7,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.performSemanticsAction
-import androidx.compose.ui.semantics.SemanticsActions
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.domain.model.SearchTerm
@@ -48,25 +44,22 @@ class PostTagDraftBindingTest {
                 onRemoveIncludeTerm = { term -> draft.value = draft.value.withIncludeTermsAsRequired(draft.value.includeTerms - term) },
                 onRemoveExcludeTerm = { term -> draft.value = draft.value.copy(excludeTerms = draft.value.excludeTerms - term) })
         } }
-        fun click(label: String) = compose.onNodeWithContentDescription(label)
-            .performSemanticsAction(SemanticsActions.OnClick) { it() }
-        val selected = SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)
-        val absent = SemanticsMatcher.expectValue(SemanticsProperties.Selected, false)
-        click("Include cat in Search")
-        compose.onNodeWithText("+").assert(selected)
-        compose.onNodeWithText("-").assert(absent)
+        val chip = compose.tagChip("cat")
+        fun state(value: String) = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, value)
+        chip.assert(state("Excluded"))
+        // A refused edit changes nothing, and the opposing entry goes only once the new one is in.
         compose.runOnIdle { accept = false }
-        click("Exclude cat from Search")
-        compose.onNodeWithText("+").assert(selected)
-        compose.onNodeWithText("-").assert(absent)
+        chip.performCustomAction("Include cat in Search")
+        chip.assert(state("Excluded"))
         compose.runOnIdle { accept = true }
-        click("Exclude cat from Search")
-        compose.onNodeWithText("+").assert(absent)
-        compose.onNodeWithText("-").assert(selected)
+        chip.performCustomAction("Include cat in Search")
+        chip.assert(state("Required"))
         compose.runOnIdle { accept = false }
-        click("Include cat in Search")
-        compose.onNodeWithText("+").assert(absent)
-        compose.onNodeWithText("-").assert(selected)
+        chip.performClick()
+        chip.assert(state("Required"))
+        compose.runOnIdle { accept = true }
+        chip.performClick()
+        chip.assert(state("Excluded"))
         assertEquals(listOf(tag), draft.value.excludeTerms)
     }
 
@@ -86,16 +79,17 @@ class PostTagDraftBindingTest {
                     onRemoveIncludeTerm = { removed += it }, onRemoveExcludeTerm = {})
             } }
         }
-        val included = SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)
-        val absent = SemanticsMatcher.expectValue(SemanticsProperties.Selected, false)
-        compose.onNodeWithText("+").assert(included)
+        val included = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Required")
+        val absent = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Not in search")
+        val tagChip = compose.tagChip("cat")
+        tagChip.assert(included)
         compose.runOnIdle { visible.value = false }
         compose.runOnIdle { visible.value = true }
-        compose.onNodeWithText("+").assert(included).performClick()
+        tagChip.assert(included).performCustomAction("Remove cat from Search")
         assertEquals(listOf(tag), removed)
         compose.runOnIdle { owner.value = base }
-        compose.onNodeWithText("+").assert(absent).performClick()
+        tagChip.assert(absent).performClick()
         assertEquals(1, added)
-        compose.onNodeWithText("+").assert(absent)
+        tagChip.assert(absent)
     }
 }

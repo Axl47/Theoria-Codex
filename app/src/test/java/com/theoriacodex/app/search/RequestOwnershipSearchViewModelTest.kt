@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.domain.model.SearchTermGroup
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -352,7 +353,7 @@ internal class RequestOwnershipSearchViewModelTest : SearchViewModelTestFixture(
 
             viewModel.onAction(
                 SearchAction.ApplyTagSearch(
-                    includeTags = listOf("codex"),
+                    includeTermGroups = listOf(SearchTermGroup.single(SearchTerm("codex"))),
                     mode = QueryMode.Source(SourceKey.PIXIV),
                 )
             )
@@ -387,7 +388,7 @@ internal class RequestOwnershipSearchViewModelTest : SearchViewModelTestFixture(
 
             val viewModel = viewModel(adapter, queryRepository = queries, uiRestoreRepository = restores)
             // The shell flushes queued actions when the owner is published, ahead of the route's Restore.
-            viewModel.onAction(SearchAction.ApplyTagSearch(listOf("codex"), QueryMode.Source(SourceKey.PIXIV)))
+            viewModel.onAction(SearchAction.ApplyTagSearch(listOf(SearchTermGroup.single(SearchTerm("codex"))), mode = QueryMode.Source(SourceKey.PIXIV)))
             viewModel.onAction(SearchAction.Restore)
             advanceUntilIdle()
 

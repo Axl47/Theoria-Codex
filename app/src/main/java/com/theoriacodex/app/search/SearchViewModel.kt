@@ -264,6 +264,8 @@ internal class SearchViewModel(
                         supportedScopes = coordinator::supportedSearchScopes,
                     ).state
                 }
+                is SearchAction.AddPostIncludeAlternative ->
+                    SearchDraftReducer.addPostIncludeAlternative(it, action.post, action.groupIndex, action.term).state
                 is SearchAction.SetNhentaiLanguage -> SearchDraftReducer.setNhentaiLanguage(it, action.filter).state
                 is SearchAction.SetNhentaiFullColor -> SearchDraftReducer.setNhentaiFullColor(it, action.enabled).state
                 SearchAction.ResetFilters -> {
@@ -329,8 +331,8 @@ internal class SearchViewModel(
     private fun applyTagSearch(action: SearchAction.ApplyTagSearch) {
         val reduction = SearchDraftReducer.prepareTagSearch(
             state = mutableState.value,
-            includeTags = action.includeTags,
-            excludeTags = emptyList(),
+            includeTermGroups = action.includeTermGroups,
+            excludeTerms = action.excludeTerms,
             mode = action.mode,
             availableSources = mutableState.value.query.availableSources.toSet(),
             supportedScopes = coordinator::supportedSearchScopes,

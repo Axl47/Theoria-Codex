@@ -3,7 +3,6 @@ package com.theoriacodex.app.tags
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -86,7 +85,7 @@ class PostTagActionTypedCountsTest {
     private fun assertCountsDisplayed(vararg counts: String) {
         counts.forEach { count ->
             compose.waitUntil(conditionDescription = "count $count loads", timeoutMillis = 10_000) {
-                runCatching { compose.onNode(hasScrollAction()).performScrollToNode(hasText(count)) }.isSuccess
+                runCatching { compose.tagList().performScrollToNode(hasText(count)) }.isSuccess
             }
             compose.onNodeWithText(count).assertIsDisplayed()
         }

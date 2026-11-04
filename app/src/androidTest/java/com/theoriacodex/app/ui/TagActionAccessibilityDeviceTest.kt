@@ -13,7 +13,9 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHeightIsAtLeast
-import androidx.compose.ui.test.assertHeightIsEqualTo
+import androidx.compose.ui.test.assertTouchHeightIsEqualTo
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -46,13 +48,14 @@ class TagActionAccessibilityDeviceTest {
                 onRemoveIncludeTerm = { removed -> draft = draft.withIncludeTermsAsRequired(draft.includeTerms - removed) },
                 onRemoveExcludeTerm = {})
         } } }
-        val action = compose.onNodeWithContentDescription("Include portrait in Search")
-        action.assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
-        action.assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, true))
-        action.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Selected"))
-        action.assertWidthIsAtLeast(48.dp).assertHeightIsEqualTo(24.dp)
-        action.performSemanticsAction(SemanticsActions.OnClick) { it() }
-        action.assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, false))
+        val chip = compose.onNode(hasText("portrait") and hasClickAction())
+        chip.assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+        chip.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Required"))
+        chip.assertTouchHeightIsEqualTo(48.dp)
+        val remove = chip.fetchSemanticsNode().config[SemanticsActions.CustomActions]
+            .first { it.label == "Remove portrait from Search" }
+        compose.runOnIdle { remove.action() }
+        chip.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Not in search"))
         compose.runOnIdle { assertEquals(emptyList<SearchTerm>(), draft.includeTerms) }
     }
 
