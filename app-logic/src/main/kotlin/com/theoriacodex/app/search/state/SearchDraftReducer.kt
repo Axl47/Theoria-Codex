@@ -345,14 +345,14 @@ object SearchDraftReducer {
         return joined.takeUnless { wrongSource || it in query.includeTerms }
     }
 
-    /** Post tags come from the source itself, so they skip the check that typed Gelbooru input needs. */
-    fun addPostIncludeAlternative(
+    /** Post and saved tags come from the source itself, so they skip the check that typed Gelbooru input needs. */
+    fun addKnownIncludeAlternative(
         state: SearchUiState,
-        post: Post,
+        source: SourceKey,
         groupIndex: Int,
         term: SearchTerm,
     ): SearchDraftReduction {
-        val joined = postTermForGroup(state.query.draft, post.id.source, groupIndex, term)
+        val joined = postTermForGroup(state.query.draft, source, groupIndex, term)
             ?: return SearchDraftReduction(state, changed = false, accepted = false)
         return mutateQuery(state) { query ->
             query.withIncludeTermGroups(

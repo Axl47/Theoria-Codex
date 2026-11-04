@@ -113,7 +113,7 @@ internal fun FavoriteTagSheet(
                 .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("Favorite tags", style = MaterialTheme.typography.titleLarge)
+            Text("Saved tags", style = MaterialTheme.typography.titleLarge)
             if (sections.isEmpty()) {
                 Text(emptyMessage, style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)

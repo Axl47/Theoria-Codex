@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -28,6 +29,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -73,8 +75,11 @@ import androidx.compose.ui.window.DialogProperties
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.search.state.SearchUiState
+import com.theoriacodex.app.tags.TagPickerChip
+import com.theoriacodex.app.tags.tagTapLabel
 import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.domain.adapter.FacetedSearchScope
+import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 
@@ -83,6 +88,9 @@ private val COMPACT_QUERY_MAX_HEIGHT = 144.dp
 
 /** The most of a short screen the query may take, so suggestions always stay reachable. */
 private const val COMPACT_QUERY_MAX_FRACTION = 0.4f
+
+/** Long saved tags ellipsize here, so one cannot fill the row by itself. */
+private val SAVED_TAG_MAX_WIDTH = 240.dp
 
 /**
  * Full-screen search editor: the query reads as one expression at the top, tags are edited where
@@ -97,12 +105,13 @@ internal fun SearchComposer(
     onApply: () -> Unit,
     onReset: () -> Unit,
     onUndo: () -> Unit,
-    onOpenFavorites: () -> Unit,
+    onManageSavedTags: () -> Unit,
     onOpenSourceAccounts: () -> Unit,
     onDigitsCommitted: () -> Unit,
     onDismiss: () -> Unit,
     savedSearches: List<SavedSearchEntry> = emptyList(),
     onOpenSavedSearch: (SavedSearchEntry) -> Unit = {},
+    savedTags: List<SavedTag> = emptyList(),
 ) {
     Dialog(
         onDismissRequest = onDismiss,
@@ -111,8 +120,8 @@ internal fun SearchComposer(
         Surface(Modifier.fillMaxSize().testTag("Search composer")) {
             SearchComposerContent(
                 state, onAction, sourcePicker, onApply, onReset, onUndo,
-                onOpenFavorites, onOpenSourceAccounts, onDigitsCommitted, onDismiss,
-                savedSearches, onOpenSavedSearch,
+                onManageSavedTags, onOpenSourceAccounts, onDigitsCommitted, onDismiss,
+                savedSearches, onOpenSavedSearch, savedTags,
             )
         }
     }
@@ -126,12 +135,13 @@ private fun SearchComposerContent(
     onApply: () -> Unit,
     onReset: () -> Unit,
     onUndo: () -> Unit,
-    onOpenFavorites: () -> Unit,
+    onManageSavedTags: () -> Unit,
     onOpenSourceAccounts: () -> Unit,
     onDigitsCommitted: () -> Unit,
     onDismiss: () -> Unit,
     savedSearches: List<SavedSearchEntry>,
     onOpenSavedSearch: (SavedSearchEntry) -> Unit,
+    savedTags: List<SavedTag>,
 ) {
     val input = state.suggestions.input
     val draft = state.query.draft
@@ -150,7 +160,10 @@ private fun SearchComposerContent(
         excludeNext -> ComposerAddTarget.Excluded
         else -> ComposerAddTarget.Required
     }
+    // A narrowed scope asks for one tag type, and saved tags are general tags.
+    val savedTagMatches = savedTags.takeIf { state.query.selectedScope.isAll || state.query.selectedScope.facet == SearchFacet.TAG }.orEmpty()
     val suggestions = composerSuggestions(target, state.suggestions.facetedAutocomplete, state.suggestions.autocomplete)
+        .withSavedTags(target, input, savedTagMatches, draft)
     val liveSelection = selection?.takeIf { selected ->
         if (selected.excluded) selected.term in terms.excluded else terms.groups.any { selected.term in it.terms }
     }
@@ -188,8 +201,8 @@ private fun SearchComposerContent(
 
     ComposerEditorBody(
         state, target, targetIndex, terms, suggestions, liveSelection, inputRequester, snackbars,
-        sourcePicker, savedSearches, onOpenSavedSearch, queryActions, onAction, onOpenSourceAccounts,
-        onUndo, onReset, onOpenFavorites, onApply, onDismiss,
+        sourcePicker, savedSearches, onOpenSavedSearch, savedTags, queryActions, onAction, onOpenSourceAccounts,
+        onUndo, onReset, onManageSavedTags, onApply, onDismiss,
         onCommit = ::commitTyped,
         onToggleTarget = {
             if (target is ComposerAddTarget.Alternative) targetTerm = null else excludeNext = !excludeNext
@@ -254,12 +267,13 @@ private fun ComposerEditorBody(
     sourcePicker: @Composable () -> Unit,
     savedSearches: List<SavedSearchEntry>,
     onOpenSavedSearch: (SavedSearchEntry) -> Unit,
+    savedTags: List<SavedTag>,
     queryActions: ComposerQueryActions,
     onAction: (SearchAction) -> Unit,
     onOpenSourceAccounts: () -> Unit,
     onUndo: () -> Unit,
     onReset: () -> Unit,
-    onOpenFavorites: () -> Unit,
+    onManageSavedTags: () -> Unit,
     onApply: () -> Unit,
     onDismiss: () -> Unit,
     onCommit: () -> Unit,
@@ -270,12 +284,12 @@ private fun ComposerEditorBody(
     val queryScroll = rememberScrollState()
     @Composable
     fun query(compact: Boolean, modifier: Modifier) = ComposerTagList(
-        state, terms, targetIndex, liveSelection, compact, queryScroll, savedSearches, onOpenSavedSearch,
-        queryActions, onOpenSourceAccounts, onAction, modifier,
+        state, terms, targetIndex, liveSelection, compact, queryScroll, savedSearches, onOpenSavedSearch, savedTags,
+        onManageSavedTags, queryActions, onOpenSourceAccounts, onAction, modifier,
     )
     Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
         ComposerTopBar(
-            state.canUndoSearch, state.hasPendingChanges, sourcePicker, onDismiss, onUndo, onReset, onOpenFavorites, onApply,
+            state.canUndoSearch, state.hasPendingChanges, sourcePicker, onDismiss, onUndo, onReset, onApply,
         )
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val compactMaxHeight = minOf(COMPACT_QUERY_MAX_HEIGHT, maxHeight * COMPACT_QUERY_MAX_FRACTION)
@@ -324,7 +338,6 @@ private fun ComposerTopBar(
     onDismiss: () -> Unit,
     onUndo: () -> Unit,
     onReset: () -> Unit,
-    onOpenFavorites: () -> Unit,
     onApply: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -347,7 +360,6 @@ private fun ComposerTopBar(
                         onClick()
                     },
                 )
-                item("Favorites", enabled = true, onOpenFavorites)
                 item("Undo last search", canUndo, onUndo)
                 item("Reset", canReset, onReset)
             }
@@ -508,7 +520,11 @@ private fun ComposerSuggestionList(
                     }
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                if (suggestion.saved) {
+                    Icon(Icons.Default.Star, "Saved tag", Modifier.size(18.dp), MaterialTheme.colorScheme.primary)
+                }
                 Column(Modifier.weight(1f)) {
                     Text(suggestion.text, style = MaterialTheme.typography.bodyLarge)
                     if (suggestion.meta.isNotBlank()) {
@@ -546,6 +562,8 @@ private fun ComposerTagList(
     scroll: ScrollState,
     savedSearches: List<SavedSearchEntry>,
     onOpenSavedSearch: (SavedSearchEntry) -> Unit,
+    savedTags: List<SavedTag>,
+    onManageSavedTags: () -> Unit,
     queryActions: ComposerQueryActions,
     onOpenSourceAccounts: () -> Unit,
     onAction: (SearchAction) -> Unit,
@@ -566,10 +584,7 @@ private fun ComposerTagList(
                 modifier = Modifier.padding(vertical = 8.dp),
             )
         }
-        if (savedSearches.isNotEmpty()) {
-            ComposerSectionTitle("Saved")
-            SavedSearchChips(savedSearches, onOpenSavedSearch)
-        }
+        ComposerSavedSection(savedSearches, onOpenSavedSearch, savedTags, state.query.draft, targetIndex, onManageSavedTags, onAction)
         if (
             state.query.appliedSourceScope !is SearchSourceScope.Single &&
             visibleSourceStatusChipStatuses(state.content.statuses).isNotEmpty()
@@ -577,6 +592,31 @@ private fun ComposerTagList(
             SourceStatusActions(state, onAction, onOpenSourceAccounts)
         }
     }
+}
+
+/** Saved searches and saved tags share one section, each keeping its own row and icon. */
+@Composable
+private fun ComposerSavedSection(
+    savedSearches: List<SavedSearchEntry>,
+    onOpenSavedSearch: (SavedSearchEntry) -> Unit,
+    savedTags: List<SavedTag>,
+    draft: Query,
+    targetIndex: Int,
+    onManageSavedTags: () -> Unit,
+    onAction: (SearchAction) -> Unit,
+) {
+    if (savedSearches.isEmpty() && savedTags.isEmpty()) return
+    Row {
+        ComposerSectionTitle("Saved", Modifier.weight(1f).alignByBaseline())
+        if (savedTags.isNotEmpty()) {
+            TextButton(
+                onClick = onManageSavedTags,
+                modifier = Modifier.alignByBaseline().semantics { contentDescription = "Manage saved tags" },
+            ) { Text("Manage") }
+        }
+    }
+    if (savedSearches.isNotEmpty()) SavedSearchChips(savedSearches, onOpenSavedSearch)
+    if (savedTags.isNotEmpty()) SavedTagChips(savedTags, draft, targetIndex, onAction)
 }
 
 /** One tap reruns a saved search, replacing the current draft. */
@@ -588,6 +628,28 @@ private fun SavedSearchChips(searches: List<SavedSearchEntry>, onOpen: (SavedSea
                 onClick = { onOpen(entry) },
                 label = { Text(entry.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 leadingIcon = { Icon(Icons.Default.Bookmark, null, Modifier.size(16.dp)) },
+            )
+        }
+    }
+}
+
+/** Saved tags work like tags in post info: taps add, exclude, then clear, and the chip shows which applies. */
+@Composable
+private fun SavedTagChips(tags: List<SavedTag>, draft: Query, targetIndex: Int, onAction: (SearchAction) -> Unit) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(tags, key = SavedTag::value) { tag ->
+            val chipState = tag.state(draft)
+            TagPickerChip(
+                label = tag.value,
+                count = null,
+                state = chipState,
+                enabled = tag.canTap(draft, targetIndex),
+                tapLabel = tagTapLabel(searchTermChipLabel(tag.term, excluded = false), chipState),
+                onTap = { tag.tapActions(draft, targetIndex).forEach(onAction) },
+                leadingIcon = Icons.Default.Star,
+                reserveCountSlot = false,
+                // A scrolling row offers unbounded width, which would leave the chip's label none.
+                modifier = Modifier.widthIn(max = SAVED_TAG_MAX_WIDTH),
             )
         }
     }

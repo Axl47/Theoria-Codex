@@ -173,9 +173,8 @@ class SearchDraftReducerTest {
     @Test
     fun `post tags join a group of their type, even on sources that validate typed input`() {
         val draft = query(QueryMode.Source(SourceKey.GELBOORU), listOf(SearchTerm("sea"), SearchTerm("mika", SearchFacet.ARTIST)))
-        val post = post(SourceKey.GELBOORU)
 
-        val joined = SearchDraftReducer.addPostIncludeAlternative(state(draft), post, 0, SearchTerm("snow", SearchFacet.TAG, "tag"))
+        val joined = SearchDraftReducer.addKnownIncludeAlternative(state(draft), SourceKey.GELBOORU, 0, SearchTerm("snow", SearchFacet.TAG, "tag"))
         assertTrue(joined.accepted)
         assertEquals(listOf(SearchTerm("sea"), SearchTerm("snow")), joined.state.query.draft.effectiveIncludeTermGroups[0].terms)
 

@@ -15,12 +15,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -32,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
@@ -73,6 +76,8 @@ internal fun TagPickerChip(
     alternateActions: List<TagChipAction> = emptyList(),
     onLongPress: (() -> Unit)? = null,
     longPressLabel: String? = null,
+    leadingIcon: ImageVector? = null,
+    reserveCountSlot: Boolean = true,
 ) {
     val colors = MaterialTheme.colorScheme
     val shape = RoundedCornerShape(8.dp)
@@ -103,7 +108,7 @@ internal fun TagPickerChip(
         contentColor = tint,
         border = BorderStroke(1.dp, if (neutral) colors.outlineVariant else tint),
     ) {
-        TagChipContent(label, count, state, if (neutral) colors.onSurfaceVariant else tint)
+        TagChipContent(label, count, state, if (neutral) colors.onSurfaceVariant else tint, leadingIcon, reserveCountSlot)
     }
 }
 
@@ -115,12 +120,20 @@ private fun tagChipTint(state: TagChipState) = when (state) {
 }
 
 @Composable
-private fun TagChipContent(label: String, count: String?, state: TagChipState, countColor: Color) {
+private fun TagChipContent(
+    label: String,
+    count: String?,
+    state: TagChipState,
+    countColor: Color,
+    leadingIcon: ImageVector?,
+    reserveCountSlot: Boolean,
+) {
     Row(
         modifier = Modifier.height(CHIP_HEIGHT).padding(start = 10.dp, end = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        leadingIcon?.let { Icon(it, null, Modifier.size(16.dp), MaterialTheme.colorScheme.primary) }
         state.mark?.let {
             Text(it, style = MaterialTheme.typography.labelLarge, modifier = Modifier.clearAndSetSemantics {})
         }
@@ -131,8 +144,10 @@ private fun TagChipContent(label: String, count: String?, state: TagChipState, c
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        Box(Modifier.width(with(LocalDensity.current) { COUNT_SLOT_WIDTH.sp.toDp() }), Alignment.CenterEnd) {
-            count?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = countColor, maxLines = 1) }
+        if (reserveCountSlot) {
+            Box(Modifier.width(with(LocalDensity.current) { COUNT_SLOT_WIDTH.sp.toDp() }), Alignment.CenterEnd) {
+                count?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = countColor, maxLines = 1) }
+            }
         }
     }
 }

@@ -45,6 +45,31 @@ import org.junit.Test
 
 class SearchNavigationJourneyTest : AppJourneyFixture() {
     @Test
+    fun favoriteTagFromSettingsAppearsInSavedAndCyclesThroughTheSearch() {
+        io {
+            val profile = container.settings.observeSettings().first().activeProfileId
+            container.settings.addFavoriteTag(profile, SourceKey.PIXIV, "journeytag")
+        }
+        launch()
+        activate(compose.onNodeWithTag("Search bar"))
+        compose.onNodeWithText("Saved").assertIsDisplayed()
+        activate(compose.onNode(hasText("journeytag") and hasClickLabel("Include journeytag in Search")))
+        activate(compose.onNode(hasText("journeytag") and hasClickLabel("Exclude journeytag from Search")))
+        compose.onNodeWithText("Excluded").assertIsDisplayed()
+        compose.onNodeWithTag("Search composer apply").performClick()
+        compose.waitUntil(conditionDescription = "Provider excludes the saved tag", timeoutMillis = 10_000) {
+            container.registry.requests.any { request ->
+                request.source == SourceKey.PIXIV && request.pageToken == null &&
+                    request.query.excludeTags.contains("journeytag")
+            }
+        }
+    }
+
+    private fun hasClickLabel(label: String) = SemanticsMatcher("click label is $label") { node ->
+        SemanticsActions.OnClick in node.config && node.config[SemanticsActions.OnClick].label == label
+    }
+
+    @Test
     fun groupedSearchPagesReturnsFromViewerAndSurvivesActivityRecreation() {
         launch()
         activate(compose.onNodeWithTag("Search bar"))

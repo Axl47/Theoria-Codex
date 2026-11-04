@@ -211,11 +211,11 @@ private fun ComposerTermChip(
 }
 
 @Composable
-internal fun ComposerSectionTitle(title: String) {
+internal fun ComposerSectionTitle(title: String, modifier: Modifier = Modifier) {
     Text(
         title,
         style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 8.dp),
+        modifier = modifier.padding(top = 8.dp),
     )
 }

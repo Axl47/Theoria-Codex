@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- Your favorite tags now appear in the search editor's Saved section with a star.
+- Tap a saved tag to add it, again to exclude it, and once more to clear it; the chip shows which applies.
+- Saved tags matching what you type appear first in the suggestions, marked with a star.
+
+### Changed
+
+- Manage saved tags from the Manage action in the Saved section, which replaces Favorites in the search editor's overflow menu.
+- The Favorite tags sheet is now called Saved tags.
+
 ## [1.2.0] - 2026-11-04
 
 ### Added
