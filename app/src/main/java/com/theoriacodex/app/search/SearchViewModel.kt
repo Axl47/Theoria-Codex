@@ -265,7 +265,9 @@ internal class SearchViewModel(
                     ).state
                 }
                 is SearchAction.AddPostIncludeAlternative ->
-                    SearchDraftReducer.addPostIncludeAlternative(it, action.post, action.groupIndex, action.term).state
+                    SearchDraftReducer.addKnownIncludeAlternative(it, action.post.id.source, action.groupIndex, action.term).state
+                is SearchAction.AddSavedTagAlternative ->
+                    SearchDraftReducer.addKnownIncludeAlternative(it, action.source, action.groupIndex, action.term).state
                 is SearchAction.SetNhentaiLanguage -> SearchDraftReducer.setNhentaiLanguage(it, action.filter).state
                 is SearchAction.SetNhentaiFullColor -> SearchDraftReducer.setNhentaiFullColor(it, action.enabled).state
                 SearchAction.ResetFilters -> {

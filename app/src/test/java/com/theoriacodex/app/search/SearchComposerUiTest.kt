@@ -2,6 +2,8 @@ package com.theoriacodex.app.search
 
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
@@ -43,14 +45,17 @@ class SearchComposerUiTest {
         SearchTermGroup(listOf(SearchTerm("rin", SearchFacet.CHARACTER), SearchTerm("aoi", SearchFacet.CHARACTER))),
     )
 
+    private fun hasStateDescription(value: String) =
+        SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, value)
+
     private fun open(
         source: SourceKey,
         scopes: List<FacetedSearchScope>,
         saved: List<SavedSearchEntry> = emptyList(),
         onOpenSaved: (SavedSearchEntry) -> Unit = {},
         suggestions: SearchSuggestionsUiState = SearchUiState().suggestions,
-        onOpenFavorites: () -> Unit = {},
-        savedTags: List<String> = emptyList(),
+        onManageSavedTags: () -> Unit = {},
+        savedTags: List<SavedTag> = emptyList(),
     ) {
         val base = SearchUiState()
         val draft = emptySearchQuery(QueryMode.Source(source)).copy(
@@ -62,7 +67,7 @@ class SearchComposerUiTest {
             MaterialTheme {
                 SearchComposer(
                     state = state, onAction = { actions += it }, sourcePicker = {}, onApply = {}, onReset = {},
-                    onUndo = {}, onOpenFavorites = onOpenFavorites, onOpenSourceAccounts = {}, onDigitsCommitted = {}, onDismiss = {},
+                    onUndo = {}, onManageSavedTags = onManageSavedTags, onOpenSourceAccounts = {}, onDigitsCommitted = {}, onDismiss = {},
                     savedSearches = saved, onOpenSavedSearch = onOpenSaved, savedTags = savedTags,
                 )
             }
@@ -82,11 +87,37 @@ class SearchComposerUiTest {
         compose.runOnIdle { assertEquals(entry, opened) }
     }
 
-    @Test fun `tapping a saved tag adds it to the draft`() {
-        open(SourceKey.GELBOORU, emptyList(), savedTags = listOf("blue_hair"))
+    @Test fun `saved tags cycle through the search and can be managed`() {
+        var managed = false
+        open(
+            SourceKey.GELBOORU, emptyList(), onManageSavedTags = { managed = true },
+            savedTags = listOf(SavedTag(SourceKey.GELBOORU, "blue_hair"), SavedTag(SourceKey.GELBOORU, "sketch")),
+        )
         compose.onNodeWithText("Saved").assertExists()
+        val label = compose.onNodeWithText("blue_hair", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertTrue("The scrolling row must leave the label room", label.right > label.left)
         compose.onNodeWithText("blue_hair").performClick()
         compose.runOnIdle { assertEquals(SearchAction.AddIncludeTerm(SearchTerm("blue_hair")), actions.last()) }
+        // Already excluded in the fixture's draft, so the chip shows it and its tap clears it.
+        compose.onNode(hasStateDescription("Excluded")).performClick()
+        compose.runOnIdle { assertEquals(SearchAction.RemoveExcludeTerm(sketch), actions.last()) }
+        compose.onNodeWithText("Manage").performClick()
+        compose.runOnIdle { assertTrue(managed) }
+    }
+
+    @Test fun `a saved tag matching the typed text leads the suggestions with a star`() {
+        open(
+            SourceKey.GELBOORU, emptyList(),
+            savedTags = listOf(SavedTag(SourceKey.GELBOORU, "riverside")),
+            suggestions = SearchUiState().suggestions.copy(
+                input = "river",
+                autocomplete = listOf(TagSuggestion("rivers", type = null, count = null)),
+            ),
+        )
+        compose.onNodeWithContentDescription("Saved tag").assertIsDisplayed()
+        val saved = compose.onNodeWithText("riverside").getUnclippedBoundsInRoot().top
+        val provider = compose.onNodeWithText("rivers").getUnclippedBoundsInRoot().top
+        assertTrue(saved < provider)
     }
 
     @Test fun `the query keeps draft order with type labels and a visible group`() {
@@ -169,12 +200,9 @@ class SearchComposerUiTest {
     }
 
     @Test fun `less frequent actions wait in the overflow menu`() {
-        var favorites = false
-        open(SourceKey.GELBOORU, emptyList(), onOpenFavorites = { favorites = true })
-        compose.onNodeWithText("Favorites").assertDoesNotExist()
+        open(SourceKey.GELBOORU, emptyList())
+        compose.onNodeWithText("Undo last search").assertDoesNotExist()
         compose.onNodeWithContentDescription("More search actions").performClick()
         compose.onNodeWithText("Undo last search").assertIsNotEnabled()
-        compose.onNodeWithText("Favorites").performClick()
-        compose.runOnIdle { assertTrue(favorites) }
     }
 }

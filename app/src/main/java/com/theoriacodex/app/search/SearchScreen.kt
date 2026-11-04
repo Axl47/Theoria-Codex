@@ -291,7 +291,7 @@ private fun SearchComposerDialog(
             onAction(SearchAction.ClearAutocomplete)
             chrome.showFilterSheet = false
         },
-        onOpenFavorites = { chrome.showFavoriteTagSheet = true },
+        onManageSavedTags = { chrome.showFavoriteTagSheet = true },
         onOpenSourceAccounts = onOpenSourceAccounts,
         onDigitsCommitted = { resetScroll() },
         onDismiss = { chrome.closeComposer(onAction) },
@@ -301,7 +301,9 @@ private fun SearchComposerDialog(
             onOpenSavedSearch(entry)
         },
         // The same tag can be a favorite on several sources, but it reads as one chip here.
-        savedTags = favoriteSections.flatMap(FavoriteTagSection::tags).distinct(),
+        savedTags = favoriteSections
+            .flatMap { section -> section.tags.map { tag -> SavedTag(section.source, tag) } }
+            .distinctBy(SavedTag::value),
     )
 }
 
@@ -554,8 +556,8 @@ private fun SearchFavoriteTags(
     val sections = rememberFavoriteTagSections(state, favoriteTags)
     val emptyMessage = remember(state.query.draft.mode) {
         when (val mode = state.query.draft.mode) {
-            is QueryMode.Source -> "No favorite tags saved for ${mode.source.displayName()} yet."
-            QueryMode.Unified -> "No favorite tags saved yet."
+            is QueryMode.Source -> "No saved tags for ${mode.source.displayName()} yet."
+            QueryMode.Unified -> "No saved tags yet."
         }
     }
     FavoriteTagSheet(
