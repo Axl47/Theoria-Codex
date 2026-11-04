@@ -26,6 +26,7 @@ on:
       - 'scripts/verify_device_apk.py'
       - 'scripts/verify_debug_device.sh'
       - 'scripts/device_validation_common.sh'
+      - 'scripts/free_ci_disk.sh'
       - 'scripts/prepare_ci_android_sdk.sh'
       - 'scripts/verify_ci_emulator.sh'
       - '.github/workflows/device-validation.yml'
@@ -46,6 +47,7 @@ on:
       - 'scripts/verify_device_apk.py'
       - 'scripts/verify_debug_device.sh'
       - 'scripts/device_validation_common.sh'
+      - 'scripts/free_ci_disk.sh'
       - 'scripts/prepare_ci_android_sdk.sh'
       - 'scripts/verify_ci_emulator.sh'
       - '.github/workflows/device-validation.yml'
@@ -96,6 +98,9 @@ jobs:
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+
+      - name: Free disk space for the emulator
+        run: bash scripts/free_ci_disk.sh
 
       - name: Update Android command-line tools for minor API versions
         run: bash scripts/prepare_ci_android_sdk.sh
@@ -183,6 +188,9 @@ jobs:
 
       - name: Build minified release acceptance
         run: ./gradlew :app:assembleReleaseAcceptance --stacktrace
+
+      - name: Free disk space for the emulator
+        run: bash scripts/free_ci_disk.sh
 
       - name: Update Android command-line tools for minor API versions
         run: bash scripts/prepare_ci_android_sdk.sh
