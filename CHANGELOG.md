@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-04
+
 ### Added
 
 - Sort the Codex Library and the library order in Add to Codex by Most watched or Most opened, using the time and open counts shown in Stats.
