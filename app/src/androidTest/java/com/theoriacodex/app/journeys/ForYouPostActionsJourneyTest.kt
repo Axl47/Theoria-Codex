@@ -40,7 +40,7 @@ class ForYouPostActionsJourneyTest : AppJourneyFixture() {
         }
         launch()
         tab("Recents")
-        compose.onNodeWithText("Searches").performClick()
+        openRecentsSection("Searches")
         compose.onNodeWithTag("Recent search:for_you:actions").performClick()
         val card = searchCardTestTag(first.id)
         compose.waitUntil(10_000) { compose.onAllNodesWithTag(card).fetchSemanticsNodes().isNotEmpty() }

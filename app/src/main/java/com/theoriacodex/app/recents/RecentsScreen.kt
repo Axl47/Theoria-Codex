@@ -15,11 +15,10 @@ import com.theoriacodex.app.ui.components.ActionMenuRow
 import com.theoriacodex.app.ui.components.ActionMenuSheet
 import com.theoriacodex.app.ui.components.AdaptivePostGrid
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -31,6 +30,7 @@ import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
 import com.theoriacodex.app.ui.TopLevelDestination
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
@@ -39,6 +39,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,6 +49,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.MediaDurationState
@@ -58,7 +62,9 @@ import com.theoriacodex.app.viewer.ViewerReturnColumn
 import com.theoriacodex.app.viewer.ViewerReturnShelf
 import com.theoriacodex.app.viewer.ViewerReturnShelfId
 import com.theoriacodex.app.source.displayName
+import com.theoriacodex.app.ui.components.SingleChoiceMenu
 import com.theoriacodex.app.ui.components.SourceSelector
+import com.theoriacodex.app.ui.components.expandableControlSemantics
 import com.theoriacodex.app.ui.components.FeedPostActionSheet
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.viewer.PixivUgoiraClient
@@ -131,9 +137,10 @@ fun RecentsScreen(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        RecentsHeader(onOpenMenu = { showMenu = true }) { RecentsSourceSelector(selectedSource, onSelected = { selectedSource = it }) }
-
-        RecentsFilterChips(filter, onSelected = { filter = it })
+        RecentsHeader(onOpenMenu = { showMenu = true }) {
+            RecentsSectionSelector(filter, onSelected = { filter = it })
+            RecentsSourceSelector(selectedSource, onSelected = { selectedSource = it })
+        }
 
         RecentsTab(
             filter, searchFilter, { searchFilter = it }, visible, sourceEmptyMessage, now,
@@ -194,26 +201,39 @@ private fun RecentsSourceSelector(selectedSource: SourceKey?, onSelected: (Sourc
     )
 }
 
+/** Picks which Recents section fills the screen; it sits beside the source selector to keep the header on one row. */
 @Composable
-private fun RecentsFilterChips(filter: RecentsFilter, onSelected: (RecentsFilter) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RecentsFilter.entries.forEach { option ->
-            FilterChip(
-                selected = filter == option,
-                onClick = { onSelected(option) },
-                label = { Text(option.label) },
-            )
+private fun RecentsSectionSelector(filter: RecentsFilter, onSelected: (RecentsFilter) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        TextButton(
+            onClick = { expanded = true },
+            contentPadding = PaddingValues(start = 8.dp, end = 4.dp),
+            modifier = Modifier
+                .semantics { contentDescription = RECENTS_SECTION_SELECTOR_LABEL }
+                .expandableControlSemantics(
+                    expanded = expanded,
+                    description = "${if (expanded) "Expanded" else "Collapsed"}; ${filter.label} selected",
+                    onExpandedChange = { expanded = it },
+                ),
+        ) {
+            Row(Modifier.clearAndSetSemantics {}, verticalAlignment = Alignment.CenterVertically) {
+                Text(filter.label)
+                Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+            }
         }
+        SingleChoiceMenu(
+            expanded = expanded,
+            onDismiss = { expanded = false },
+            options = RecentsFilter.entries,
+            selected = filter,
+            label = { it.label },
+            onSelect = onSelected,
+        )
     }
 }
 
-/** The body under the filter chips, for whichever tab is selected. */
+/** The body under the header, for whichever section is selected. */
 @Composable
 private fun RecentsTab(
     filter: RecentsFilter,
@@ -339,14 +359,14 @@ private fun RecentPostsGrid(
 @Composable
 private fun RecentsHeader(
     onOpenMenu: () -> Unit,
-    sourceSelector: @Composable () -> Unit,
+    selectors: @Composable () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text("Recents", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-        sourceSelector()
+        selectors()
         IconButton(onClick = onOpenMenu) { Icon(Icons.Default.MoreVert, "Recents actions") }
     }
 }
@@ -717,6 +737,8 @@ private enum class RecentsFilter(val label: String) {
     CODEX("Codex"),
     SEARCHES("Searches"),
 }
+
+private const val RECENTS_SECTION_SELECTOR_LABEL = "Filter Recents by section"
 
 private enum class RecentSearchFilter(val label: String) {
     ALL("All"),

@@ -34,7 +34,7 @@ class SavedSearchJourneyTest : AppJourneyFixture() {
         }
         launch()
         tab("Recents")
-        compose.onNodeWithText("Searches").performClick()
+        openRecentsSection("Searches")
         compose.onNodeWithTag("Recent search:pin-journey")
             .performSemanticsAction(SemanticsActions.OnLongClick) { it() }
         compose.onNode(hasSetTextAction()).performTextReplacement("My landscapes")

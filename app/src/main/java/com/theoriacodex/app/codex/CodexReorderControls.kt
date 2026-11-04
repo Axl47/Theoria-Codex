@@ -7,9 +7,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -23,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.components.ListReorderHandle
+import com.theoriacodex.app.ui.components.SingleChoiceMenu
 import com.theoriacodex.data.repository.CodexLibrarySort
 import com.theoriacodex.domain.model.Codex
 
@@ -46,20 +44,14 @@ internal fun CodexLibrarySortSelector(sort: CodexLibrarySort, onChange: (CodexLi
                     Text("Sort: ${sort.label}")
                 }
             }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                CodexLibrarySort.entries.forEach { option ->
-                    DropdownMenuItem(
-                        text = { Text(option.label) },
-                        trailingIcon = {
-                            if (option == sort) Icon(Icons.Default.Check, contentDescription = "Selected")
-                        },
-                        onClick = {
-                            expanded = false
-                            onChange(option)
-                        },
-                    )
-                }
-            }
+            SingleChoiceMenu(
+                expanded = expanded,
+                onDismiss = { expanded = false },
+                options = CodexLibrarySort.entries,
+                selected = sort,
+                label = { it.label },
+                onSelect = onChange,
+            )
         }
         if (sort != CodexLibrarySort.MANUAL) {
             Text(

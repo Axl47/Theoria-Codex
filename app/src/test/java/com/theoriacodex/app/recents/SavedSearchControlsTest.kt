@@ -13,7 +13,6 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
@@ -51,7 +50,7 @@ class SavedSearchControlsTest {
                 onSave = { name, entry -> savedSearches.value = listOf(SavedSearchEntry("pin", name, entry, 100)) },
             )
         } }
-        compose.onNodeWithText("Searches").performClick()
+        openSearches()
         compose.onNodeWithTag("Recent search:${recent.queryHash}")
             .performSemanticsAction(SemanticsActions.OnLongClick) { it() }
         compose.onNode(hasSetTextAction()).performTextReplacement("Night recipe")
@@ -68,7 +67,7 @@ class SavedSearchControlsTest {
         compose.setContent { MaterialTheme {
             TestRecents(searches = listOf(recent), onSave = { name, entry -> saved = name to entry })
         } }
-        compose.onNodeWithText("Searches").performClick()
+        openSearches()
         compose.onNodeWithContentDescription("Save search").performClick()
         compose.onNode(hasSetTextAction()).performTextReplacement("Morning recipe")
         compose.onNodeWithText("Save", substring = false).performClick()
@@ -90,7 +89,7 @@ class SavedSearchControlsTest {
         } }
         compose.onNodeWithContentDescription("Filter Recents by source").performClick()
         compose.onNodeWithContentDescription("Pixiv").performClick()
-        compose.onNodeWithText("Searches").performClick()
+        openSearches()
         compose.onNodeWithTag("Recent search:${pixiv.queryHash}").assertExists()
         compose.onNodeWithTag("Recent search:${gelbooru.queryHash}").assertDoesNotExist()
         compose.onNodeWithTag("Recent search:${multi.queryHash}").performClick()
@@ -101,11 +100,9 @@ class SavedSearchControlsTest {
         compose.onNodeWithText("For You", substring = false).performClick()
         compose.onNodeWithTag("Recent search:${fyp.queryHash}").assertExists()
         compose.onNodeWithTag("Recent search:${pixiv.queryHash}").assertDoesNotExist()
-        // The first "All" is the Recents tab; the second is the Searches filter.
-        compose.onAllNodesWithText("All", substring = false)[1].performClick()
+        compose.onNodeWithText("All", substring = false).performClick()
         compose.onNodeWithContentDescription("Filter Recents by source").performClick()
         compose.onNodeWithContentDescription("All sources").performClick()
-        compose.onNodeWithText("Searches").performClick()
         compose.onNodeWithTag("Recent search:${gelbooru.queryHash}").assertExists()
     }
 
@@ -155,6 +152,11 @@ class SavedSearchControlsTest {
             onRemoveIncludeTerm = { _, _ -> }, onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
             onOpenWatchedPost = onOpenPost, onOpenCodexPost = { _, _ -> }, onOpenSearch = onOpen, onOpenFypSearch = onOpenFyp, onClear = {},
         )
+    }
+
+    private fun openSearches() {
+        compose.onNodeWithContentDescription("Filter Recents by section").performClick()
+        compose.onNodeWithText("Searches").performClick()
     }
 
     private fun search(kind: RecentSearchKind): RecentSearchEntry {

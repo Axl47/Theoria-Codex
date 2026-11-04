@@ -8,6 +8,7 @@ import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
@@ -90,6 +91,12 @@ abstract class AppJourneyFixture {
 
     protected fun tab(label: String) {
         activate(compose.onNodeWithContentDescription(label))
+        compose.waitForIdle()
+    }
+
+    protected fun openRecentsSection(label: String) {
+        activate(compose.onNodeWithContentDescription("Filter Recents by section"))
+        activate(compose.onNodeWithText(label))
         compose.waitForIdle()
     }
 

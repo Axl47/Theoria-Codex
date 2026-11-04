@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Recents sections (All, Watched, Codex, Searches) moved from a row of chips into a dropdown beside the source selector, leaving more of the screen for your history.
+
 ### Fixed
 
 - Moving to another post or image in the Viewer no longer brings back the header and footer; they stay hidden until you tap.

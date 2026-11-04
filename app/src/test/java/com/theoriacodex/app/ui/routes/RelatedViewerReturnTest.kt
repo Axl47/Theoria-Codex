@@ -87,9 +87,9 @@ class RelatedViewerReturnTest {
             }
             compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Recents").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithContentDescription("Recents").performClick()
-            val historyTab = "Searches"
-            compose.waitUntil(10_000) { compose.onNodeWithText(historyTab).isDisplayed() }
-            compose.onNodeWithText(historyTab).performClick()
+            compose.waitUntil(10_000) { compose.onNodeWithContentDescription("Filter Recents by section").isDisplayed() }
+            compose.onNodeWithContentDescription("Filter Recents by section").performClick()
+            compose.onNodeWithText("Searches").performClick()
             compose.waitUntil(10_000) { compose.onAllNodesWithTag("Recent search:return-query").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("Recent search:return-query").performClick()
             compose.waitUntil(10_000) { compose.onAllNodesWithTag(searchCardTestTag(posts[6].id)).fetchSemanticsNodes().isNotEmpty() }

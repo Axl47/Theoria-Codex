@@ -168,7 +168,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         }
         launch()
         tab("Recents")
-        activate(compose.onNodeWithText("Searches"))
+        openRecentsSection("Searches")
         activate(compose.onNodeWithTag("Recent search:journey:multi"))
         waitForCard(0)
         val multiRequests = container.registry.requests.filter { it.pageToken == null }
@@ -177,7 +177,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         assertTrue(io { container.data.queryRepository.observeAppliedQuery("unified").first() == null })
         container.registry.requests.clear()
         tab("Recents")
-        activate(compose.onNodeWithText("Searches"))
+        openRecentsSection("Searches")
         activate(compose.onNodeWithTag("Recent search:for_you:journey"))
         compose.waitUntil(10_000) { container.registry.requests.count { it.pageToken == null } >= 2 }
         val replay = container.registry.requests.filter { it.pageToken == null }

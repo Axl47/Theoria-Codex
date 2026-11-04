@@ -27,24 +27,25 @@ private const val STATUS_TAG = "benchmark_journey_status"
 /** Uses the real bottom navigation, collection card and creator action; no synthetic feed switching. */
 internal fun UiDevice.completeFiveFeedJourney() {
     exerciseCurrentFeed("Search")
-    clickDestination("For You")
+    clickDescription("For You")
     exerciseCurrentFeed("For You")
-    clickDestination("Recents")
+    clickDescription("Recents")
+    clickDescription("Filter Recents by section")
     clickText("Watched")
     exerciseCurrentFeed("Watched Recents")
-    clickDestination("Codex")
+    clickDescription("Codex")
     clickText("Benchmark collection")
     exerciseCurrentFeed("Codex detail")
     pressBack()
-    clickDestination("Search")
+    clickDescription("Search")
     requireMovingFeedPreviews("Search before creator")
     findObjects(By.res(MEDIA_PATTERN)).first().longClick()
     clickText("Benchmark creator")
     exerciseCurrentFeed("Creator Profile")
     pressBack()
-    clickDestination("Settings")
+    clickDescription("Settings")
     requireNoPreviewLeases()
-    clickDestination("Search")
+    clickDescription("Search")
     requireMovingFeedPreviews("Search after tab return")
     val video = findObjects(By.res(MEDIA_PATTERN)).firstOrNull { "_video_" in it.resourceName.orEmpty() }
         ?: error("Search fixture must present a video for real Viewer entry")
@@ -194,9 +195,9 @@ private fun pixelsAdvanced(before: IntArray, after: IntArray): Boolean = before.
         kotlin.math.abs(Color.blue(a) - Color.blue(b)) > 30
 } >= 12
 
-private fun UiDevice.clickDestination(label: String) {
+private fun UiDevice.clickDescription(label: String) {
     val item = wait(Until.findObject(By.desc(label)), JOURNEY_TIMEOUT_MS)
-        ?: error("Bottom navigation '$label' was unavailable")
+        ?: error("Route control '$label' was unavailable")
     item.click()
 }
 
