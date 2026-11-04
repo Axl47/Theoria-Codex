@@ -3,6 +3,7 @@ package com.theoriacodex.app.journeys
 import android.graphics.Color
 import android.graphics.BitmapFactory
 import android.view.View
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
@@ -44,7 +45,7 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
         }
         launch()
         tab("Codex")
-        activate(compose.onNodeWithContentDescription("Actions for Offline collection"))
+        compose.onNodeWithText("Offline collection").performTouchInput { longClick() }
         activate(compose.onNodeWithText("Make available offline"))
         val offline = requireNotNull(container.features.offlineMedia)
         compose.waitUntil(10_000) { offline.store.snapshot.value.postCount == 2 }
