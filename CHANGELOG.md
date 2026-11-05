@@ -28,6 +28,7 @@
 
 ### Fixed
 
+- Search Reset is available immediately for restored tags, without needing to edit a tag first.
 - Opening a video on a metered network or with Data saver no longer downloads a larger version in advance that the Viewer then doesn't play.
 - Restoring a backup now adds what's missing to your existing profiles and collections, and your profiles keep their names. Restoring the same backup again no longer creates duplicates.
 - Retrying a search that timed out now repeats that search instead of the one before it.

@@ -47,6 +47,10 @@ data class SearchUiState(
     val hasPendingChanges: Boolean
         get() = query.draft != query.applied ||
             query.draftSourceScope != query.appliedSourceScope
+
+    /** Reset clears the current draft, including restored searches and uncommitted input. */
+    val canResetDraft: Boolean
+        get() = query.draft != emptySearchQuery(query.draft.mode) || suggestions.input.isNotEmpty()
 }
 
 /** Route-scoped source selection; it is intentionally separate from the durable QueryMode. */

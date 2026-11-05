@@ -291,7 +291,7 @@ private fun ComposerEditorBody(
     )
     Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
         ComposerTopBar(
-            state.canUndoSearch, state.hasPendingChanges, sourcePicker, onDismiss, onUndo, onReset, onApply,
+            state.canUndoSearch, state.canResetDraft, sourcePicker, onDismiss, onUndo, onReset, onApply,
         )
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val compactMaxHeight = minOf(COMPACT_QUERY_MAX_HEIGHT, maxHeight * COMPACT_QUERY_MAX_FRACTION)

@@ -1,6 +1,8 @@
 package com.theoriacodex.app.journeys
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasAnyAncestor
@@ -44,6 +46,30 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SearchNavigationJourneyTest : AppJourneyFixture() {
+    @Test
+    fun restoredTagsCanBeResetWithoutEditingThem() {
+        launch()
+        activate(compose.onNodeWithTag("Search bar"))
+        activate(compose.onNode(hasContentDescription("Search source:", substring = true) and
+            hasAnyAncestor(hasTestTag("Search composer"))))
+        activate(compose.onNodeWithContentDescription("Pixiv"))
+        addSearchTag("landscape")
+        activate(compose.onNodeWithTag("Search composer apply"))
+        compose.waitUntil(10_000) {
+            io { container.data.queryRepository.observeAppliedQuery("source:PIXIV").first() }
+                ?.includeTags?.contains("landscape") == true
+        }
+        coldGraphRelaunch()
+        activate(compose.onNodeWithTag("Search bar"))
+        val restoredTag = compose.onNode(hasText("landscape") and hasAnyAncestor(hasTestTag("Search composer")))
+        restoredTag.assertIsDisplayed()
+        activate(compose.onNodeWithContentDescription("More search actions"))
+        compose.onNodeWithText("Reset").assertIsEnabled().performClick()
+        restoredTag.assertDoesNotExist()
+        activate(compose.onNodeWithContentDescription("More search actions"))
+        compose.onNodeWithText("Reset").assertIsNotEnabled()
+    }
+
     @Test
     fun favoriteTagFromSettingsAppearsInSavedAndCyclesThroughTheSearch() {
         io {

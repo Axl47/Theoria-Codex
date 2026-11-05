@@ -24,6 +24,22 @@ import org.junit.Test
 
 class SearchStateContractTest {
     @Test
+    fun `reset availability follows clearable draft content rather than pending edits`() {
+        val empty = emptySearchQuery(QueryMode.Source(SourceKey.PIXIV))
+        val tagged = empty.withIncludeTermsAsRequired(listOf(SearchTerm("landscape")))
+        val restored = SearchUiState(query = SearchQueryUiState(draft = tagged, applied = tagged))
+        assertFalse(restored.hasPendingChanges)
+        assertTrue(restored.canResetDraft)
+
+        val cleared = SearchDraftReducer.clearDraft(restored).state
+        assertTrue(cleared.hasPendingChanges)
+        assertFalse(cleared.canResetDraft)
+        assertTrue(cleared.copy(suggestions = SearchSuggestionsUiState(input = "sky")).canResetDraft)
+        assertTrue(cleared.copy(query = cleared.query.copy(draft = empty.copy(sort = SortMode.POPULAR))).canResetDraft)
+        assertFalse(SearchUiState().canResetDraft)
+    }
+
+    @Test
     fun `resolved posts replace canonical members once while preserving order and query state`() {
         val first = post("first")
         val second = post("second")
