@@ -250,6 +250,8 @@ interface StatisticsRepository {
     suspend fun recordPostUrlCopy()
     suspend fun recordCodexEntry(codexId: String)
     suspend fun recordTranslationUsage(phraseCount: Long, sourceCharacterCount: Long)
+    /** Keeps the larger value of every counter, so restoring the same backup twice changes nothing. */
+    suspend fun mergeRestored(imported: LifetimeStatistics)
 }
 
 data class LikedPost(

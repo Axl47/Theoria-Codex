@@ -56,7 +56,7 @@ class ProfileCapacityTest {
             val settings = DataStoreSettingsRepository(directory, scope)
             settings.updateSettings { fullSettings(64) }
             val service = ProfileBackupService(settings, library, InMemorySavedSearchRepository(),
-                InMemoryReadingPositionRepository(), journal, newOperationId = { "capacity" })
+                InMemoryReadingPositionRepository(), journal)
             assertTrue(runCatching { service.restore(ProfileBackupCodec().encode(backup)) }.isFailure)
             assertFalse(journal.exists())
             assertEquals(0, library.merges)
@@ -70,7 +70,7 @@ class ProfileCapacityTest {
         val reopenedScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         try {
             val settings = DataStoreSettingsRepository(directory, reopenedScope)
-            assertTrue(settings.observeSettings().first().recommendationProfiles.any { it.profileId == "restored-capacity-0" })
+            assertTrue(settings.observeSettings().first().recommendationProfiles.any { it.profileId == "incoming" })
             val service = ProfileBackupService(settings, library, InMemorySavedSearchRepository(),
                 InMemoryReadingPositionRepository(), journal)
             assertEquals(1, ProfileBackupCodec().decode(service.export()).library.codices.size)
@@ -85,6 +85,6 @@ class ProfileCapacityTest {
         var merges = 0
         private var library = BackupLibrary(emptyList(), emptyList(), emptyList(), emptyList())
         override suspend fun snapshot(includeRecents: Boolean) = library
-        override suspend fun merge(library: BackupLibrary) { merges++; this.library = library }
+        override suspend fun merge(library: BackupLibrary): Int { merges++; this.library = library; return library.codices.size }
     }
 }

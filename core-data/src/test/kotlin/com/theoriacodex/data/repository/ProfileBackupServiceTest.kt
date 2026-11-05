@@ -38,7 +38,7 @@ class ProfileBackupServiceTest {
         assertEquals(expected, codec.decode(bytes))
         val harness = harness()
         val result = harness.service.restore(bytes)
-        assertEquals(2, result.profilesAdded)
+        assertEquals(1, result.collectionsAdded)
         assertEquals(1, harness.pins.observeSavedSearches().first().size)
     }
 
@@ -47,10 +47,26 @@ class ProfileBackupServiceTest {
         val bytes = codec.encode(backup())
         harness.service.restore(bytes, applyPreferences = true, selectImportedProfile = true)
         val first = harness.settings.observeSettings().first()
-        assertEquals("restored-operation-0", first.activeProfileId)
+        assertEquals("profile-main", first.activeProfileId)
         harness.service.restore(bytes, applyPreferences = true, selectImportedProfile = true)
         assertEquals(first, harness.settings.observeSettings().first())
         assertEquals(1, harness.pins.observeSavedSearches().first().size)
+    }
+
+    @Test fun `restoring the same backup twice adds nothing the second time`() = runTest {
+        val directory = temporary.newFolder()
+        val settings = InMemorySettingsRepository()
+        val pins = InMemorySavedSearchRepository()
+        val service = ProfileBackupService(settings, FakeBackupStore(), pins,
+            FileBackedReadingPositionRepository(directory), directory.resolve("restore.json"))
+        val bytes = codec.encode(backup())
+
+        service.restore(bytes)
+        val afterFirst = settings.observeSettings().first()
+        service.restore(bytes)
+
+        assertEquals(afterFirst.recommendationProfiles, settings.observeSettings().first().recommendationProfiles)
+        assertEquals(1, pins.observeSavedSearches().first().size)
     }
 
     @Test fun `portable round trip preserves profile libraries rules settings and exact search replay`() {
@@ -90,26 +106,64 @@ class ProfileBackupServiceTest {
         assertEquals(ScenarioPreset.NORMAL, restored.settings.scenarioPreset)
     }
 
-    @Test fun `restore adds fresh profile identities and preserves current preferences and content`() = runTest {
+    @Test fun `restore merges into matching profiles and preserves current preferences and content`() = runTest {
         val harness = harness()
         val existing = harness.settings.observeSettings().first()
+        harness.settings.updateSettings {
+            it.copy(favoriteTagsByProfile = mapOf("profile-main" to listOf(FavoriteTagEntry(SourceKey.PIXIV, "mine"))))
+        }
         harness.pins.save("Existing", search())
         val result = harness.service.restore(codec.encode(backup()))
         val settings = harness.settings.observeSettings().first()
-        assertEquals(2, result.profilesAdded)
+        assertEquals(0, result.profilesAdded)
         assertEquals(1, result.collectionsAdded)
         assertEquals(existing.activeProfileId, settings.activeProfileId)
         assertEquals(existing.cache, settings.cache)
-        assertEquals(4, settings.recommendationProfiles.size)
+        assertEquals(existing.recommendationProfiles, settings.recommendationProfiles)
         val imported = harness.store.library
-        val profileId = "restored-operation-0"
-        assertTrue(ProfileLibraryIds.belongsTo(imported.codices.single().codexId, profileId))
-        assertEquals(profileId, imported.likes.single().profileId)
-        assertEquals(imported.codices.single().codexId, imported.items.single().codexId)
-        assertEquals(backup().settings.favoriteTagsByProfile["profile-main"], settings.favoriteTagsByProfile[profileId])
+        assertEquals("legacy-codex", imported.codices.single().codexId)
+        assertEquals("profile-main", imported.likes.single().profileId)
+        assertEquals(listOf("mine", "cat"), settings.favoriteTagsByProfile.getValue("profile-main").map { it.tag })
         assertEquals(2, harness.pins.observeSavedSearches().first().size)
         assertEquals(4, harness.positions.snapshot().single().mediaNumber)
         assertFalse(harness.journal.exists())
+    }
+
+    @Test fun `a profile this device lacks comes back under its own name`() = runTest {
+        val harness = harness()
+        val extra = RecommendationProfile("profile-extra", "Extra")
+        val withExtra = backup().let { it.copy(settings = it.settings.copy(
+            recommendationProfiles = it.settings.recommendationProfiles + extra,
+        )) }
+        val result = harness.service.restore(codec.encode(withExtra))
+        assertEquals(1, result.profilesAdded)
+        assertTrue(extra in harness.settings.observeSettings().first().recommendationProfiles)
+    }
+
+    @Test fun `statistics travel with history and restoring them twice changes nothing`() = runTest {
+        val directory = temporary.newFolder()
+        val settings = InMemorySettingsRepository()
+        val source = InMemoryStatisticsRepository()
+        source.recordAppOpen()
+        source.recordWatchedPost(SourceKey.PIXIV, setOf("cat"))
+        val service = ProfileBackupService(settings, FakeBackupStore(), InMemorySavedSearchRepository(),
+            FileBackedReadingPositionRepository(directory), directory.resolve("restore.json"), source)
+
+        val exported = service.export(includeRecents = true)
+        assertNull(codec.decode(service.export(includeRecents = false)).statistics)
+
+        val target = InMemoryStatisticsRepository()
+        target.recordAppOpen()
+        target.recordAppOpen()
+        val restoring = ProfileBackupService(settings, FakeBackupStore(), InMemorySavedSearchRepository(),
+            FileBackedReadingPositionRepository(temporary.newFolder()), directory.resolve("target.json"), target)
+        restoring.restore(exported)
+        val first = target.observeStatistics().first()
+        assertEquals(2L, first.appOpenCount)
+        assertEquals(1L, first.watchedPostCount)
+        assertEquals(1L, first.watchedByTag[StatisticsTagKey(SourceKey.PIXIV, "cat")])
+        restoring.restore(exported)
+        assertEquals(first, target.observeStatistics().first())
     }
 
     @Test fun `global preferences are restored only when explicitly requested`() = runTest {
@@ -153,7 +207,7 @@ class ProfileBackupServiceTest {
         assertFalse(restarted.recoverPendingRestore())
         assertEquals(1, harness.store.library.codices.size)
         assertEquals(1, harness.pins.observeSavedSearches().first().size)
-        assertEquals(4, settings.observeSettings().first().recommendationProfiles.size)
+        assertEquals(backup().settings.favoriteTagsByProfile, settings.observeSettings().first().favoriteTagsByProfile)
     }
 
     @Test fun `invalid backup and capacity overflow fail before any durable restore mutation`() = runTest {
@@ -201,7 +255,7 @@ class ProfileBackupServiceTest {
         val positions = FileBackedReadingPositionRepository(directory)
         val journal = directory.resolve("restore.json")
         return Harness(settings, store, pins, positions, journal,
-            ProfileBackupService(settings, store, pins, positions, journal, clock = { 100L }, newOperationId = { "operation" }))
+            ProfileBackupService(settings, store, pins, positions, journal, clock = { 100L }))
     }
 }
 
@@ -219,9 +273,11 @@ private class FakeBackupStore : ProfileBackupStore {
     var merges = 0
     override suspend fun snapshot(includeRecents: Boolean): BackupLibrary =
         if (includeRecents) library else library.copy(watched = emptyList(), searches = emptyList())
-    override suspend fun merge(library: BackupLibrary) {
+    override suspend fun merge(library: BackupLibrary): Int {
         merges += 1
+        val added = library.codices.count { codex -> this.library.codices.none { it.codexId == codex.codexId } }
         this.library = library
+        return added
     }
 }
 

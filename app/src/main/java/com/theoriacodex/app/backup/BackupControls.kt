@@ -60,7 +60,7 @@ internal fun BackupDialogs(
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Save all profiles, collections, Likes, rules, saved searches, follows, and preferences.")
                     Text("Login credentials and downloaded media are not included.")
-                    BackupCheckbox("Include Recents and reading positions", state.includeRecents, onIncludeRecents)
+                    BackupCheckbox("Include Recents, reading positions, and statistics", state.includeRecents, onIncludeRecents)
                 }
             },
             confirmButton = { TextButton(onClick = onExport) { Text("Choose destination") } },
@@ -91,7 +91,7 @@ private fun RestoreBackupDialog(
                 Text("${preview.profileNames.size} profiles · ${preview.collectionCount} collections · ${preview.savedPostCount} saved posts")
                 Text(preview.profileNames.joinToString())
                 Text("${preview.likeCount} Likes · ${preview.savedSearchCount} saved searches · ${preview.followedCreatorCount} follows · ${preview.recentCount} recent entries")
-                Text("Adds new profiles and collections alongside your existing data. Your current profile stays selected.")
+                Text("Adds what's missing to matching profiles and collections. Nothing you have is removed or changed, and restoring twice adds nothing more.")
                 Text("Login credentials and downloaded media are not included.")
                 BackupCheckbox("Also apply global preferences", state.applyPreferences, onApplyPreferences, !state.busy)
                 if (state.busy) Text("Restoring backup…")

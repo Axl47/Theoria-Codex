@@ -36,6 +36,10 @@ class InMemoryStatisticsRepository(
         StatisticsPolicies.recordSearch(current, sources)
     }
 
+    override suspend fun mergeRestored(imported: LifetimeStatistics) = mutate { current ->
+        StatisticsPolicies.mergeRestored(current, imported)
+    }
+
     override suspend fun recordForYouSearch() = mutate(StatisticsPolicies::recordForYouSearch)
 
     override suspend fun recordForYouSave() = mutate(StatisticsPolicies::recordForYouSave)

@@ -69,8 +69,9 @@ class RoomProfileBackupStore(
         )
     }
 
-    override suspend fun merge(library: BackupLibrary) {
+    override suspend fun merge(library: BackupLibrary): Int =
         database.withTransaction {
+            var collectionsAdded = 0
             // Existing shared payloads can contain useful offline bytes and richer resolved media.
             library.posts.forEach { post ->
                 dao.insertPost(PostEntity(post.id.source.name, post.id.sourcePostId, postCodec.encode(post)))
@@ -79,6 +80,7 @@ class RoomProfileBackupStore(
             library.codices.forEach { codex ->
                 if (dao.insertCodex(CodexEntity(codex.codexId, codex.name, codex.createdAtEpochMs, displayOrder)) != -1L) {
                     displayOrder += 1
+                    collectionsAdded += 1
                     dao.insertAutomaticTags(codex.automaticTags.map {
                         CodexAutomaticTagEntity(codex.codexId, it.source.name, sourceTagKey(it.source, it.tag), it.tag, it.groupIndex)
                     })
@@ -99,8 +101,8 @@ class RoomProfileBackupStore(
                     like.likedAtEpochMs, gson.toJson(like.tags)))
             }
             mergeRecents(library)
+            collectionsAdded
         }
-    }
 
     private fun mergeRecents(library: BackupLibrary) {
         library.watched.asReversed().forEach { entry ->

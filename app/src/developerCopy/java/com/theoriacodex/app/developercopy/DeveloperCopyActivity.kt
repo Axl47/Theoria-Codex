@@ -96,7 +96,6 @@ class DeveloperCopyActivity : Activity() {
             val backup = ProfileBackupService(
                 settings, RoomProfileBackupStore(database), FileBackedSavedSearchRepository(storage),
                 FileBackedReadingPositionRepository(storage), File(storage, "pending_profile_restore.json"),
-                newOperationId = { "copy-${sha256(payload.backup)}" },
             )
             // Recover any earlier admitted restore before starting a new snapshot's import.
             backup.recoverPendingRestore()

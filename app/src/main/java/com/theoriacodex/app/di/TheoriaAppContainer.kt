@@ -258,6 +258,7 @@ internal class DefaultTheoriaAppContainer(
         savedSearches = savedSearches,
         readingPositions = readingPositions,
         journalFile = File(storageDirectory, "pending_profile_restore.json"),
+        statistics = statisticsStore,
     )
     private val uiRestoreRepository = DataStoreUiRestoreRepository(
         baseDirectory = storageDirectory,
