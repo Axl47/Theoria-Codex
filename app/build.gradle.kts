@@ -438,6 +438,11 @@ dependencies {
 baselineProfile {
     automaticGenerationDuringBuild = false
     saveInSrc = true
+    // Journeys run the fixture app, whose own classes never ship in a release.
+    filter {
+        exclude("com.theoriacodex.app.benchmark.**")
+        exclude("com.theoriacodex.app.fixtures.**")
+    }
 }
 
 val verifyBenchmarkFixtureArtifact = tasks.register<Exec>("verifyBenchmarkFixtureArtifact") {
