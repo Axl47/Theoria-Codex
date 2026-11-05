@@ -14,7 +14,6 @@ import androidx.compose.ui.platform.LocalUriHandler
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.referer
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.domain.adapter.SourceFailureReason
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,9 +33,7 @@ internal fun StatusRow(
     val uriHandler = LocalUriHandler.current
     val selectedStatus = statuses.firstOrNull { it.source == selected }
     selectedStatus?.let { status ->
-        val requiresAccount = onOpenAccounts != null &&
-            (status.failureReason == SourceFailureReason.AUTH_REQUIRED ||
-                status.failureReason == SourceFailureReason.AUTH_EXPIRED)
+        val requiresAccount = onOpenAccounts != null && status.requiresAccount()
         AlertDialog(
             onDismissRequest = { selected = null },
             title = { Text(status.source.displayName()) },

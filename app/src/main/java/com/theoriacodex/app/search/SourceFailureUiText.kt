@@ -21,13 +21,14 @@ internal fun visibleSourceStatusChipStatuses(
     }
 }
 
+/** A source that only an account change can fix, whatever a retry would do. */
+internal fun SourceRunStatus.requiresAccount(): Boolean =
+    state == SourceRunState.FAILED &&
+        (failureReason == SourceFailureReason.AUTH_REQUIRED || failureReason == SourceFailureReason.AUTH_EXPIRED)
+
 internal fun buildSourceAuthErrorMessage(statuses: List<SourceRunStatus>): String? {
     val authSources = statuses
-        .filter { status ->
-            status.state == SourceRunState.FAILED &&
-                (status.failureReason == SourceFailureReason.AUTH_REQUIRED ||
-                    status.failureReason == SourceFailureReason.AUTH_EXPIRED)
-        }
+        .filter(SourceRunStatus::requiresAccount)
         .map { it.source.displayName() }
         .distinct()
     if (authSources.isEmpty()) return null

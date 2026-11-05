@@ -17,6 +17,7 @@
 ### Fixed
 
 - Opening a video on a metered network or with Data saver no longer downloads a larger version in advance that the Viewer then doesn't play.
+- For You now shows sources that need an account and opens Source accounts from them, as Search does.
 
 ## [1.2.0] - 2026-11-04
 

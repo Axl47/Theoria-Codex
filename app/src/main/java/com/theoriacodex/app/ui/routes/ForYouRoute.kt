@@ -43,6 +43,7 @@ internal data class ForYouRouteConfig(
 internal data class ForYouRouteCallbacks(
     val onOpenViewer: suspend (ForYouEffect.OpenViewer) -> Unit,
     val onNavigateToSearch: suspend () -> Unit,
+    val onOpenSourceAccounts: () -> Unit = {},
     val onShowMessage: (String) -> Unit,
     val onSeedHidden: suspend (profileId: String, entries: List<ForYouBlacklistEntry>) -> Boolean,
     val onToggleLike: (Post) -> Unit,
@@ -179,6 +180,7 @@ private fun ForYouRouteContent(
         onPostUrlCopied = callbacks.onPostUrlCopied,
         onOpenCreatorProfile = callbacks.onOpenCreatorProfile,
         onOpenLegacyCreatorProfile = callbacks.onOpenLegacyCreatorProfile,
+        onOpenSourceAccounts = callbacks.onOpenSourceAccounts,
         onAddIncludeTerm = callbacks.onAddIncludeTerm,
         onAddExcludeTerm = callbacks.onAddExcludeTerm,
         onRemoveIncludeTerm = callbacks.onRemoveIncludeTerm,

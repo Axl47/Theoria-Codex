@@ -117,6 +117,7 @@ fun ForYouScreen(
     onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
     onGoToSearch: () -> Unit,
+    onOpenSourceAccounts: () -> Unit = {},
     fabRestoreState: FeedFabRestoreState = FeedFabRestoreState(),
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit = {},
 ) {
@@ -160,6 +161,7 @@ fun ForYouScreen(
             ForYouResults(
                 state, feed, cards, gridState, pageDemand, filterScroll, filterLabels, clearFilters, showSourceMenu,
                 onSourceMenuChange = { showSourceMenu = it }, onShowFilters = { showSortSheet = true },
+                onOpenSourceAccounts = onOpenSourceAccounts,
                 onAction = onAction, onLongPress = { selectedActionPost = it },
             )
         }
@@ -212,6 +214,7 @@ private fun ForYouResults(
     showSourceMenu: Boolean,
     onSourceMenuChange: (Boolean) -> Unit,
     onShowFilters: () -> Unit,
+    onOpenSourceAccounts: () -> Unit,
     onAction: (ForYouAction) -> Unit,
     onLongPress: (Post) -> Unit,
 ) {
@@ -250,9 +253,10 @@ private fun ForYouResults(
             )
             ForYouSeedSummary(state)
             com.theoriacodex.app.search.StatusRow(
-                statuses = state.statuses.filter { it.source in state.retryableSources },
+                statuses = state.actionableStatuses,
                 retryEnabled = !state.isRefreshing && !state.isPaging,
                 onRetrySource = { onAction(ForYouAction.RetrySource(it)) },
+                onOpenAccounts = onOpenSourceAccounts,
             )
             FeedContinueLoading(pageDemand)
             ForYouFeedBody(state, feed, cards, gridState, onAction, onLongPress)
