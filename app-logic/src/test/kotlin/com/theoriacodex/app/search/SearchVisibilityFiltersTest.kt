@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -252,9 +253,10 @@ class SearchVisibilityFiltersTest {
     fun `favoriteTagSections limits source mode to the active source`() {
         val sections = favoriteTagSections(
             mode = QueryMode.Source(SourceKey.GELBOORU),
-            favoriteTags = mapOf(
-                SourceKey.PIXIV to listOf("sky"),
-                SourceKey.GELBOORU to listOf("blue_hair", "cat_ears"),
+            favoriteTags = listOf(
+                FavoriteTagEntry(SourceKey.PIXIV, "sky"),
+                FavoriteTagEntry(SourceKey.GELBOORU, "blue_hair"),
+                FavoriteTagEntry(SourceKey.GELBOORU, listOf("cat_ears", "fox_ears")),
             ),
             sourceDisplayOrder = listOf(SourceKey.PIXIV, SourceKey.GELBOORU),
         )
@@ -263,7 +265,10 @@ class SearchVisibilityFiltersTest {
             listOf(
                 FavoriteTagSection(
                     source = SourceKey.GELBOORU,
-                    tags = listOf("blue_hair", "cat_ears"),
+                    entries = listOf(
+                        FavoriteTagEntry(SourceKey.GELBOORU, "blue_hair"),
+                        FavoriteTagEntry(SourceKey.GELBOORU, listOf("cat_ears", "fox_ears")),
+                    ),
                 )
             ),
             sections,
@@ -274,11 +279,10 @@ class SearchVisibilityFiltersTest {
     fun `favoriteTagSections groups unified favorites by search source order`() {
         val sections = favoriteTagSections(
             mode = QueryMode.Unified,
-            favoriteTags = mapOf(
-                SourceKey.RULE34VIDEO to listOf("dance"),
-                SourceKey.PIXIV to listOf("sky"),
-                SourceKey.GELBOORU to emptyList(),
-                SourceKey.NHENTAI to listOf("english"),
+            favoriteTags = listOf(
+                FavoriteTagEntry(SourceKey.RULE34VIDEO, "dance"),
+                FavoriteTagEntry(SourceKey.PIXIV, "sky"),
+                FavoriteTagEntry(SourceKey.NHENTAI, "english"),
             ),
             sourceDisplayOrder = listOf(
                 SourceKey.GELBOORU,
@@ -290,9 +294,9 @@ class SearchVisibilityFiltersTest {
 
         assertEquals(
             listOf(
-                FavoriteTagSection(source = SourceKey.PIXIV, tags = listOf("sky")),
-                FavoriteTagSection(source = SourceKey.NHENTAI, tags = listOf("english")),
-                FavoriteTagSection(source = SourceKey.RULE34VIDEO, tags = listOf("dance")),
+                FavoriteTagSection(SourceKey.PIXIV, listOf(FavoriteTagEntry(SourceKey.PIXIV, "sky"))),
+                FavoriteTagSection(SourceKey.NHENTAI, listOf(FavoriteTagEntry(SourceKey.NHENTAI, "english"))),
+                FavoriteTagSection(SourceKey.RULE34VIDEO, listOf(FavoriteTagEntry(SourceKey.RULE34VIDEO, "dance"))),
             ),
             sections,
         )

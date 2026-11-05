@@ -107,7 +107,7 @@ class DataStoreRepositoriesTest {
         assertFalse(settings.viewer.automaticTextTranslationEnabled)
         assertTrue(settings.viewer.enabledOcrLanguages.isEmpty())
         assertEquals("profile-custom", settings.activeProfileId)
-        assertEquals(listOf("blue_hair"), settings.favoriteTagsByProfile.getValue("profile-custom").map { it.tag })
+        assertEquals(listOf("blue_hair"), settings.favoriteTagsByProfile.getValue("profile-custom").map { it.tags.single() })
         assertFalse(legacy.exists())
         val archive = directory.resolve("settings_store.json.migrated-v3")
         assertTrue(archive.isFile)
@@ -285,12 +285,12 @@ class DataStoreRepositoriesTest {
         coroutineScope {
             (0 until 40).map { index ->
                 async(Dispatchers.Default) {
-                    repository.addFavoriteTag(profile, SourceKey.PIXIV, "tag-$index")
+                    repository.addFavoriteTag(profile, SourceKey.PIXIV, listOf("tag-$index"))
                 }
             }.awaitAll()
         }
 
-        val tags = repository.observeSettings().first().favoriteTagsByProfile.getValue(profile).map { it.tag }.toSet()
+        val tags = repository.observeSettings().first().favoriteTagsByProfile.getValue(profile).map { it.tags.single() }.toSet()
         assertEquals((0 until 40).map { index -> "tag-$index" }.toSet(), tags)
         closeScope(scope)
     }

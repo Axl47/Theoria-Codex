@@ -46,6 +46,7 @@ import com.theoriacodex.app.media.animatedDurationBucketLabel
 import com.theoriacodex.app.media.animatedDurationRangeLabel
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.tags.FavoriteTagActionGrid
+import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.domain.model.SourceKey
 import kotlin.math.roundToInt
 
@@ -103,8 +104,8 @@ internal fun FavoriteTagSheet(
     tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
     fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
     emptyMessage: String,
-    onAddTag: (String) -> Unit,
-    onRemoveTag: (SourceKey, String) -> Unit,
+    onAddTag: (FavoriteTagEntry) -> Unit,
+    onRemoveTag: (SourceKey, List<String>) -> Unit,
     onDismiss: () -> Unit,
 ) {
     ExpandedBottomSheet(onDismiss) {
@@ -134,18 +135,18 @@ private fun FavoriteTagSectionContent(
     section: FavoriteTagSection,
     tagVideoCountProvider: (SourceKey, String) -> Int?,
     fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?>,
-    onAddTag: (String) -> Unit,
-    onRemoveTag: (SourceKey, String) -> Unit,
+    onAddTag: (FavoriteTagEntry) -> Unit,
+    onRemoveTag: (SourceKey, List<String>) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(section.source.displayName(), style = MaterialTheme.typography.titleSmall)
         FavoriteTagActionGrid(
             source = section.source,
-            tags = section.tags,
+            entries = section.entries,
             tagVideoCountProvider = tagVideoCountProvider,
             fetchTagVideoCounts = fetchTagVideoCounts,
             onAddTag = onAddTag,
-            onRemoveTag = { tag -> onRemoveTag(section.source, tag) },
+            onRemoveTag = { entry -> onRemoveTag(section.source, entry.tags) },
         )
     }
 }

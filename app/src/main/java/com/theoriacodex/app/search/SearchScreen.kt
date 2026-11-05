@@ -50,6 +50,7 @@ import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
 import com.theoriacodex.app.ui.components.rememberFeedScrollSignal
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.FeedFabRestoreState
+import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.CreatorProfile
@@ -82,7 +83,7 @@ fun SearchScreen(
     pendingLikePostIds: Set<PostId> = emptySet(),
     savedPostIds: Set<PostId> = emptySet(),
     watchedPostIds: Set<PostId> = emptySet(),
-    favoriteTags: Map<SourceKey, List<String>> = emptyMap(),
+    favoriteTags: List<FavoriteTagEntry> = emptyList(),
     resolveUnknownAnimatedDurations: Boolean = false,
     durationStates: Map<MediaDurationKey, MediaDurationState> = emptyMap(),
     durationStateForPost: (Post) -> Flow<MediaDurationState?> = noMediaDurationStateForPost,
@@ -97,8 +98,8 @@ fun SearchScreen(
     onSaveToDevice: (Post) -> Unit,
     onPostUrlCopied: (Post) -> Unit = {},
     onOpenSourceAccounts: () -> Unit = {},
-    onAddFavoriteTag: (SourceKey, String) -> Unit = { _, _ -> },
-    onRemoveFavoriteTag: (SourceKey, String) -> Unit = { _, _ -> },
+    onAddFavoriteTag: (SourceKey, List<String>) -> Unit = { _, _ -> },
+    onRemoveFavoriteTag: (SourceKey, List<String>) -> Unit = { _, _ -> },
     fabRestoreState: FeedFabRestoreState = FeedFabRestoreState(),
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit = {},
     oldSearchBar: Boolean = false,
@@ -150,9 +151,8 @@ fun SearchScreen(
         )
     }
     if (chrome.composerOpen) {
-        SearchComposerDialog(
-            state, feed, chrome, gridState, sourcePicker, applyDraft, onAction, onOpenSourceAccounts, savedSearches, onOpenSavedSearch, favoriteTags,
-        )
+        SearchComposerDialog(state, feed, chrome, gridState, sourcePicker, applyDraft, onAction, onOpenSourceAccounts, savedSearches, onOpenSavedSearch,
+            favoriteTags, onAddFavoriteTag, onRemoveFavoriteTag)
     }
     if (chrome.showFavoriteTagSheet) {
         SearchFavoriteTags(state, favoriteTags, tagVideoCountProvider, fetchTagVideoCounts, onAction, onRemoveFavoriteTag, onDismiss = { chrome.showFavoriteTagSheet = false })
@@ -273,7 +273,9 @@ private fun SearchComposerDialog(
     onOpenSourceAccounts: () -> Unit,
     savedSearches: List<SavedSearchEntry>,
     onOpenSavedSearch: (SavedSearchEntry) -> Unit,
-    favoriteTags: Map<SourceKey, List<String>>,
+    favoriteTags: List<FavoriteTagEntry>,
+    onAddFavoriteTag: (SourceKey, List<String>) -> Unit,
+    onRemoveFavoriteTag: (SourceKey, List<String>) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val favoriteSections = rememberFavoriteTagSections(state, favoriteTags)
@@ -300,10 +302,13 @@ private fun SearchComposerDialog(
             chrome.closeComposer(onAction)
             onOpenSavedSearch(entry)
         },
-        // The same tag can be a favorite on several sources, but it reads as one chip here.
-        savedTags = favoriteSections
-            .flatMap { section -> section.tags.map { tag -> SavedTag(section.source, tag) } }
-            .distinctBy(SavedTag::value),
+        savedTags = ComposerSavedTags(
+            // The same tag can be a favorite on several sources, but it reads as one chip here.
+            entries = favoriteSections.flatMap(FavoriteTagSection::entries).distinctBy(FavoriteTagEntry::key),
+            saveSource = savedTagSource(state),
+            onSave = onAddFavoriteTag,
+            onRemove = onRemoveFavoriteTag,
+        ),
     )
 }
 
@@ -365,7 +370,7 @@ private fun SearchPostSheet(
     onOpenCreatorProfile: (CreatorProfile) -> Unit,
     onOpenLegacyCreatorProfile: (Post) -> Unit,
     onPostUrlCopied: (Post) -> Unit,
-    onAddFavoriteTag: (SourceKey, String) -> Unit,
+    onAddFavoriteTag: (SourceKey, List<String>) -> Unit,
     applyDraft: () -> Unit,
 ) {
     PostActionSheet(
@@ -396,7 +401,7 @@ private fun SearchPostSheet(
                 },
                 onRemoveIncludeTerm = { term -> onAction(SearchAction.RemoveIncludeTerm(term)) },
                 onRemoveExcludeTerm = { term -> onAction(SearchAction.RemoveExcludeTerm(term)) },
-                onFavoriteTagLongPress = onAddFavoriteTag,
+                onFavoriteTagLongPress = { source, tag -> onAddFavoriteTag(source, listOf(tag)) },
                 onSearch = {
                     actionPost.dismiss()
                     applyDraft()
@@ -526,15 +531,26 @@ private suspend fun resetSearchScroll(
     onAction(SearchAction.ScrollChanged(0, 0))
 }
 
+/** The sources in the order Search lists them. */
+private fun SearchUiState.sourceDisplayOrder(): List<SourceKey> =
+    query.modeOptions.mapNotNull { mode -> (mode as? QueryMode.Source)?.source }
+
+/**
+ * Where a tag saved from the composer goes. Saved tags belong to a source, so a search across
+ * several saves under the first one it covers; every saved tag shows while searching them all.
+ */
+private fun savedTagSource(state: SearchUiState): SourceKey? =
+    (state.query.draft.mode as? QueryMode.Source)?.source
+        ?: state.query.draftSourceScope.explicitSources.firstOrNull()
+        ?: state.sourceDisplayOrder().firstOrNull()
+
 /** The favorite tags that apply to the draft's source, grouped per source when searching all of them. */
 @Composable
 private fun rememberFavoriteTagSections(
     state: SearchUiState,
-    favoriteTags: Map<SourceKey, List<String>>,
+    favoriteTags: List<FavoriteTagEntry>,
 ): List<FavoriteTagSection> {
-    val sourceDisplayOrder = remember(state.query.modeOptions) {
-        state.query.modeOptions.mapNotNull { mode -> (mode as? QueryMode.Source)?.source }
-    }
+    val sourceDisplayOrder = remember(state.query.modeOptions) { state.sourceDisplayOrder() }
     return remember(state.query.draft.mode, favoriteTags, sourceDisplayOrder) {
         favoriteTagSections(
             mode = state.query.draft.mode,
@@ -547,11 +563,11 @@ private fun rememberFavoriteTagSections(
 @Composable
 private fun SearchFavoriteTags(
     state: SearchUiState,
-    favoriteTags: Map<SourceKey, List<String>>,
+    favoriteTags: List<FavoriteTagEntry>,
     tagVideoCountProvider: (SourceKey, String) -> Int?,
     fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?>,
     onAction: (SearchAction) -> Unit,
-    onRemoveFavoriteTag: (SourceKey, String) -> Unit,
+    onRemoveFavoriteTag: (SourceKey, List<String>) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sections = rememberFavoriteTagSections(state, favoriteTags)
@@ -566,7 +582,10 @@ private fun SearchFavoriteTags(
         tagVideoCountProvider = tagVideoCountProvider,
         fetchTagVideoCounts = fetchTagVideoCounts,
         emptyMessage = emptyMessage,
-        onAddTag = { tag -> onAction(SearchAction.AddIncludeTerm(SearchTerm(tag))) },
+        onAddTag = { entry ->
+            val terms = entry.terms
+            onAction(terms.singleOrNull()?.let(SearchAction::AddIncludeTerm) ?: SearchAction.AddSavedTagGroup(terms))
+        },
         onRemoveTag = onRemoveFavoriteTag,
         onDismiss = onDismiss,
     )

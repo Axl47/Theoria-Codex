@@ -369,25 +369,45 @@ class RepositoryContractTest(
         val repository = createSettingsRepository()
         val profileId = defaultRecommendationProfiles().first().profileId
 
-        assertTrue(repository.addFavoriteTag(" $profileId ", SourceKey.GELBOORU, "Blue Hair"))
-        assertFalse(repository.addFavoriteTag(profileId, SourceKey.GELBOORU, "blue_hair"))
+        assertTrue(repository.addFavoriteTag(" $profileId ", SourceKey.GELBOORU, listOf("Blue Hair")))
+        assertFalse(repository.addFavoriteTag(profileId, SourceKey.GELBOORU, listOf("blue_hair")))
         assertTrue(repository.addForYouBlacklistEntry(profileId, SourceKey.PIXIV, listOf("Night", "Cat")))
         assertFalse(repository.addForYouBlacklistEntry(profileId, SourceKey.PIXIV, listOf("cat", "night")))
-        assertFalse(repository.addFavoriteTag("missing", SourceKey.PIXIV, "cat"))
+        assertFalse(repository.addFavoriteTag("missing", SourceKey.PIXIV, listOf("cat")))
         assertFalse(repository.addForYouBlacklistEntry("missing", SourceKey.PIXIV, listOf("cat")))
 
         var settings = repository.observeSettings().first()
-        assertEquals(listOf("blue_hair"), settings.favoriteTagsByProfile.getValue(profileId).map(FavoriteTagEntry::tag))
+        assertEquals(listOf("blue_hair"), settings.favoriteTagsByProfile.getValue(profileId).map { it.tags.single() })
         assertEquals(
             listOf(listOf("cat", "night")),
             settings.forYouBlacklistByProfile.getValue(profileId).map(ForYouBlacklistEntry::tags),
         )
 
-        assertTrue(repository.removeFavoriteTag(profileId, SourceKey.GELBOORU, " BLUE HAIR "))
+        assertTrue(repository.removeFavoriteTag(profileId, SourceKey.GELBOORU, listOf(" BLUE HAIR ")))
         assertTrue(repository.removeForYouBlacklistEntry(profileId, SourceKey.PIXIV, listOf("NIGHT", "cat")))
         settings = repository.observeSettings().first()
         assertTrue(settings.favoriteTagsByProfile[profileId].isNullOrEmpty())
         assertTrue(settings.forYouBlacklistByProfile[profileId].isNullOrEmpty())
+    }
+
+    @Test
+    fun `a saved or group is one entry whatever the order of its tags`() = runTest {
+        val repository = createSettingsRepository()
+        val profileId = defaultRecommendationProfiles().first().profileId
+
+        assertTrue(repository.addFavoriteTag(profileId, SourceKey.GELBOORU, listOf("Blue Hair", "red_hair", "blue_hair")))
+        assertFalse(repository.addFavoriteTag(profileId, SourceKey.GELBOORU, listOf("red_hair", "blue_hair")))
+        assertTrue(repository.addFavoriteTag(profileId, SourceKey.GELBOORU, listOf("blue_hair")))
+        assertEquals(
+            listOf(listOf("blue_hair", "red_hair"), listOf("blue_hair")),
+            repository.observeSettings().first().favoriteTagsByProfile.getValue(profileId).map(FavoriteTagEntry::tags),
+        )
+
+        assertTrue(repository.removeFavoriteTag(profileId, SourceKey.GELBOORU, listOf("RED HAIR", "blue_hair")))
+        assertEquals(
+            listOf(listOf("blue_hair")),
+            repository.observeSettings().first().favoriteTagsByProfile.getValue(profileId).map(FavoriteTagEntry::tags),
+        )
     }
 
     @Test
@@ -410,7 +430,7 @@ class RepositoryContractTest(
         val created = repository.addRecommendationProfile("  Sketching  ")
         assertEquals("Sketching", created.name)
         assertEquals(created.profileId, repository.observeSettings().first().activeProfileId)
-        assertTrue(repository.addFavoriteTag(created.profileId, SourceKey.PIXIV, "portrait"))
+        assertTrue(repository.addFavoriteTag(created.profileId, SourceKey.PIXIV, listOf("portrait")))
         assertTrue(repository.addForYouBlacklistEntry(created.profileId, SourceKey.PIXIV, listOf("draft")))
 
         assertTrue(repository.removeRecommendationProfile(" ${created.profileId} "))

@@ -44,6 +44,7 @@ import com.theoriacodex.app.source.creatorBrowsingSources
 import com.theoriacodex.app.ui.findActivity
 import com.theoriacodex.app.sourceauth.CredentialStoreRecoveryState
 import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.RecentActivityEntry
 import com.theoriacodex.data.repository.RecentPostEntry
@@ -68,7 +69,7 @@ internal data class BrowsingDestinationState(
     val creatorBrowsingSources: Set<SourceKey>,
     val likedPostIds: Set<PostId>,
     val activeProfileLikesCount: Int,
-    val favoriteTags: Map<SourceKey, List<String>>,
+    val favoriteTags: List<FavoriteTagEntry>,
     val savedPostIds: Set<PostId>,
     val watchedPostIds: Set<PostId>,
 ) {
@@ -165,7 +166,6 @@ internal fun BrowsingDestinationStateBoundary(
         activeProfileLikesCount = metadata.likedPostIds.size,
         favoriteTags = remember(settings.favoriteTagsByProfile, activeProfile.profileId) {
             settings.favoriteTagsByProfile[activeProfile.profileId].orEmpty()
-                .groupBy { it.source }.mapValues { (_, entries) -> entries.map { it.tag } }
         },
         savedPostIds = metadata.savedPostIds,
         watchedPostIds = metadata.watchedPostIds,

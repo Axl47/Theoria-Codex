@@ -46,12 +46,8 @@ internal object RepositoryPolicies {
                 if (normalizedProfileId !in profileIds) return@mapNotNull null
                 val normalizedEntries = entries
                     .asSequence()
-                    .mapNotNull { entry ->
-                        normalizeFavoriteTag(entry.source, entry.tag)
-                            .takeIf(String::isNotBlank)
-                            ?.let { tag -> FavoriteTagEntry(source = entry.source, tag = tag) }
-                    }
-                    .distinctBy { entry -> entry.source to sourceTagKey(entry.source, entry.tag) }
+                    .mapNotNull { entry -> normalizeFavoriteTagEntry(entry.source, entry.tags) }
+                    .distinctBy { entry -> entry.source to favoriteTagKeys(entry.source, entry.tags) }
                     .toList()
                 normalizedProfileId to normalizedEntries
             }
@@ -231,24 +227,21 @@ internal object RepositoryPolicies {
         settings: AppSettings,
         profileId: String,
         source: SourceKey,
-        tag: String,
+        tags: List<String>,
     ): Result<AppSettings, Boolean> {
         val current = normalizeSettings(settings)
         val normalizedProfileId = normalizeProfileId(profileId)
         if (current.recommendationProfiles.none { it.profileId == normalizedProfileId }) {
             return Result(current, false)
         }
-        val normalizedTag = normalizeFavoriteTag(source, tag)
-        if (normalizedTag.isBlank()) return Result(current, false)
-        val normalizedKey = sourceTagKey(source, normalizedTag)
+        val entry = normalizeFavoriteTagEntry(source, tags) ?: return Result(current, false)
+        val keys = favoriteTagKeys(source, entry.tags)
         val existing = current.favoriteTagsByProfile[normalizedProfileId].orEmpty()
-        if (existing.any { entry -> entry.source == source && sourceTagKey(source, entry.tag) == normalizedKey }) {
+        if (existing.any { saved -> saved.source == source && favoriteTagKeys(source, saved.tags) == keys }) {
             return Result(current, false)
         }
         val updated = current.copy(
-            favoriteTagsByProfile = current.favoriteTagsByProfile + (
-                normalizedProfileId to (existing + FavoriteTagEntry(source, normalizedTag))
-                ),
+            favoriteTagsByProfile = current.favoriteTagsByProfile + (normalizedProfileId to (existing + entry)),
         )
         return Result(normalizeSettings(updated), true)
     }
@@ -257,15 +250,15 @@ internal object RepositoryPolicies {
         settings: AppSettings,
         profileId: String,
         source: SourceKey,
-        tag: String,
+        tags: List<String>,
     ): Result<AppSettings, Boolean> {
         val current = normalizeSettings(settings)
         val normalizedProfileId = normalizeProfileId(profileId)
-        val normalizedKey = sourceTagKey(source, tag)
-        if (normalizedKey.isBlank()) return Result(current, false)
+        val keys = favoriteTagKeys(source, tags)
+        if (keys.isEmpty()) return Result(current, false)
         val existing = current.favoriteTagsByProfile[normalizedProfileId].orEmpty()
         val updatedEntries = existing.filterNot { entry ->
-            entry.source == source && sourceTagKey(source, entry.tag) == normalizedKey
+            entry.source == source && favoriteTagKeys(source, entry.tags) == keys
         }
         if (updatedEntries.size == existing.size) return Result(current, false)
         val updatedByProfile = current.favoriteTagsByProfile.toMutableMap().apply {
@@ -289,6 +282,18 @@ internal object RepositoryPolicies {
     fun normalizeFavoriteTag(source: SourceKey, tag: String): String {
         return normalizeFavoriteTagForStorage(source, tag)
     }
+
+    /** Normalizes each tag and drops blanks and repeats; null when no tag remains. */
+    fun normalizeFavoriteTagEntry(source: SourceKey, tags: List<String>): FavoriteTagEntry? = tags
+        .map { tag -> normalizeFavoriteTag(source, tag) }
+        .filter(String::isNotBlank)
+        .distinctBy { tag -> sourceTagKey(source, tag) }
+        .takeIf(List<String>::isNotEmpty)
+        ?.let { normalized -> FavoriteTagEntry(source, normalized) }
+
+    /** An entry's identity: its tags as the source compares them, ignoring order. */
+    private fun favoriteTagKeys(source: SourceKey, tags: List<String>): Set<String> =
+        tags.mapNotNullTo(mutableSetOf()) { tag -> sourceTagKey(source, tag).takeIf(String::isNotBlank) }
 
     fun normalizeProfileId(profileId: String): String = CodexLikesPolicy.normalizeProfileId(profileId)
 

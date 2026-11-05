@@ -304,14 +304,14 @@ class InMemoryRepositoriesTest {
             repo.addFavoriteTag(
                 profileId = created.profileId,
                 source = SourceKey.GELBOORU,
-                tag = "Blue Hair",
+                tags = listOf("Blue Hair"),
             )
         )
         var settings = repo.observeSettings().first()
 
         assertTrue(settings.recommendationProfiles.any { it.profileId == created.profileId && it.name == "Sketching" })
         assertEquals(created.profileId, settings.activeProfileId)
-        assertEquals(listOf("blue_hair"), settings.favoriteTagsByProfile[created.profileId].orEmpty().map { it.tag })
+        assertEquals(listOf("blue_hair"), settings.favoriteTagsByProfile[created.profileId].orEmpty().map { it.tags.single() })
 
         assertTrue(repo.removeRecommendationProfile(created.profileId))
         settings = repo.observeSettings().first()
@@ -373,33 +373,33 @@ class InMemoryRepositoriesTest {
             repo.addFavoriteTag(
                 profileId = profileId,
                 source = SourceKey.GELBOORU,
-                tag = "Blue Hair",
+                tags = listOf("Blue Hair"),
             )
         )
         assertFalse(
             repo.addFavoriteTag(
                 profileId = profileId,
                 source = SourceKey.GELBOORU,
-                tag = "blue_hair",
+                tags = listOf("blue_hair"),
             )
         )
         assertTrue(
             repo.addFavoriteTag(
                 profileId = profileId,
                 source = SourceKey.PIXIV,
-                tag = "Blue Hair",
+                tags = listOf("Blue Hair"),
             )
         )
 
         var settings = repo.observeSettings().first()
-        assertEquals(listOf("blue_hair"), settings.favoriteTagsByProfile[profileId].orEmpty().filter { it.source == SourceKey.GELBOORU }.map { it.tag })
-        assertEquals(listOf("Blue Hair"), settings.favoriteTagsByProfile[profileId].orEmpty().filter { it.source == SourceKey.PIXIV }.map { it.tag })
+        assertEquals(listOf("blue_hair"), settings.favoriteTagsByProfile[profileId].orEmpty().filter { it.source == SourceKey.GELBOORU }.map { it.tags.single() })
+        assertEquals(listOf("Blue Hair"), settings.favoriteTagsByProfile[profileId].orEmpty().filter { it.source == SourceKey.PIXIV }.map { it.tags.single() })
 
         assertTrue(
             repo.removeFavoriteTag(
                 profileId = profileId,
                 source = SourceKey.GELBOORU,
-                tag = "blue_hair",
+                tags = listOf("blue_hair"),
             )
         )
         settings = repo.observeSettings().first()

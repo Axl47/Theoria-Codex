@@ -4,6 +4,7 @@ import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.search.state.emptySearchQuery
 import com.theoriacodex.app.tags.TagChipState
+import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.QueryMode
@@ -60,7 +61,7 @@ class SearchComposerModelTest {
         assertEquals(null, composerTypedAction(ComposerAddTarget.Required, "  "))
     }
 
-    private val blueHair = SavedTag(SourceKey.GELBOORU, "blue_hair")
+    private val blueHair = FavoriteTagEntry(SourceKey.GELBOORU, "blue_hair")
     private fun gelbooruDraft(include: List<SearchTerm> = emptyList(), exclude: List<SearchTerm> = emptyList()) =
         emptySearchQuery(QueryMode.Source(SourceKey.GELBOORU))
             .withIncludeTermGroups(include.map(SearchTermGroup::single))
@@ -68,7 +69,7 @@ class SearchComposerModelTest {
 
     @Test fun `a saved tag cycles add, exclude, clear and reuses the draft's stored form`() {
         val stored = SearchTerm("Blue_Hair")
-        assertEquals(listOf(SearchAction.AddIncludeTerm(blueHair.term)), blueHair.tapActions(gelbooruDraft(), -1))
+        assertEquals(listOf(SearchAction.AddIncludeTerm(blueHair.terms.single())), blueHair.tapActions(gelbooruDraft(), -1))
         assertEquals(
             listOf(SearchAction.AddExcludeTerm(stored), SearchAction.RemoveIncludeTerm(stored)),
             blueHair.tapActions(gelbooruDraft(include = listOf(stored)), -1),
@@ -90,13 +91,39 @@ class SearchComposerModelTest {
         val tagDraft = gelbooruDraft(include = listOf(SearchTerm("sea")))
         assertTrue(blueHair.canTap(tagDraft, 0))
         assertEquals(
-            listOf(SearchAction.AddSavedTagAlternative(SourceKey.GELBOORU, 0, blueHair.term)),
+            listOf(SearchAction.AddSavedTagAlternative(SourceKey.GELBOORU, 0, blueHair.terms.single())),
             blueHair.tapActions(tagDraft, 0),
         )
     }
 
+    private val hairColors = FavoriteTagEntry(SourceKey.GELBOORU, listOf("blue_hair", "red_hair"))
+
+    @Test fun `a saved group is added as one group and removed by the next tap, whatever its order`() {
+        assertEquals(listOf(SearchAction.AddSavedTagGroup(hairColors.terms)), hairColors.tapActions(gelbooruDraft(), -1))
+        val draft = gelbooruDraft(include = listOf(SearchTerm("sea")))
+            .let { it.withIncludeTermGroups(it.effectiveIncludeTermGroups + SearchTermGroup(listOf(SearchTerm("Red_Hair"), SearchTerm("blue_hair")))) }
+        assertEquals(TagChipState.REQUIRED, hairColors.state(draft))
+        assertEquals(listOf(SearchAction.RemoveIncludeGroup(1)), hairColors.tapActions(draft, -1))
+        assertFalse(hairColors.canTap(gelbooruDraft(include = listOf(SearchTerm("sea"))), 0))
+    }
+
+    @Test fun `tag menus offer to save general tags and find what is already saved`() {
+        val saved = ComposerSavedTags(listOf(blueHair, hairColors), SourceKey.GELBOORU)
+        assertEquals(hairColors, saved.entryFor(listOf(SearchTerm("red_hair"), SearchTerm("blue_hair"))))
+        assertEquals(blueHair, saved.entryFor(listOf(SearchTerm("blue_hair", sourceNamespace = "tag"))))
+        assertEquals(null, saved.entryFor(listOf(SearchTerm("blue_hair", SearchFacet.ARTIST))))
+        assertTrue(saved.canSave(listOf(SearchTerm("sea"), SearchTerm("sky"))))
+        assertFalse(saved.canSave(listOf(SearchTerm("mika", SearchFacet.ARTIST))))
+    }
+
+    @Test fun `saved groups stay out of suggestions`() {
+        val rows = ComposerSuggestions(emptyList(), 0)
+            .withSavedTags(ComposerAddTarget.Required, "hair", listOf(hairColors, blueHair), gelbooruDraft()).rows
+        assertEquals(listOf("blue_hair"), rows.map { it.text })
+    }
+
     @Test fun `typed text puts matching saved tags first, merging a row the provider also returned`() {
-        val other = SavedTag(SourceKey.GELBOORU, "dark_blue_sky")
+        val other = FavoriteTagEntry(SourceKey.GELBOORU, "dark_blue_sky")
         val provider = composerSuggestions(
             ComposerAddTarget.Required, emptyList(),
             listOf(TagSuggestion("blueberry", type = null, count = 5), TagSuggestion("blue_hair", type = null, count = 9)),
@@ -109,10 +136,10 @@ class SearchComposerModelTest {
 
     @Test fun `saved suggestions skip tags already in the search and honor the target`() {
         val none = ComposerSuggestions(emptyList(), 0)
-        assertTrue(none.withSavedTags(ComposerAddTarget.Required, "blue", listOf(blueHair), gelbooruDraft(exclude = listOf(blueHair.term))).rows.isEmpty())
+        assertTrue(none.withSavedTags(ComposerAddTarget.Required, "blue", listOf(blueHair), gelbooruDraft(exclude = listOf(blueHair.terms.single()))).rows.isEmpty())
         assertTrue(none.withSavedTags(ComposerAddTarget.Required, " ", listOf(blueHair), gelbooruDraft()).rows.isEmpty())
         assertEquals(
-            SearchAction.AddExcludeTerm(blueHair.term),
+            SearchAction.AddExcludeTerm(blueHair.terms.single()),
             none.withSavedTags(ComposerAddTarget.Excluded, "-blue", listOf(blueHair), gelbooruDraft()).rows.single().add,
         )
         assertTrue(none.withSavedTags(ComposerAddTarget.Alternative(0, artist), "blue", listOf(blueHair), gelbooruDraft(include = listOf(artist.terms.single()))).rows.isEmpty())

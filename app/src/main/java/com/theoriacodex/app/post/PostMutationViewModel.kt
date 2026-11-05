@@ -54,13 +54,14 @@ internal class PostMutationViewModel(
         }
     }
 
-    fun favorite(profileId: String, source: SourceKey, tag: String, add: Boolean) {
+    /** Saves or removes one tag, or an "or" group when [tags] holds several. */
+    fun favorite(profileId: String, source: SourceKey, tags: List<String>, add: Boolean) {
         scope.launch {
             commands.withLock {
                 val result = runCatchingPreservingCancellation {
-                    if (add) settings.addFavoriteTag(profileId, source, tag)
+                    if (add) settings.addFavoriteTag(profileId, source, tags)
                     else {
-                        settings.removeFavoriteTag(profileId, source, tag)
+                        settings.removeFavoriteTag(profileId, source, tags)
                         true
                     }
                 }

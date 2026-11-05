@@ -48,7 +48,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
     fun favoriteTagFromSettingsAppearsInSavedAndCyclesThroughTheSearch() {
         io {
             val profile = container.settings.observeSettings().first().activeProfileId
-            container.settings.addFavoriteTag(profile, SourceKey.PIXIV, "journeytag")
+            container.settings.addFavoriteTag(profile, SourceKey.PIXIV, listOf("journeytag"))
         }
         launch()
         activate(compose.onNodeWithTag("Search bar"))

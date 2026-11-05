@@ -18,6 +18,7 @@ import com.theoriacodex.app.search.state.SearchSuggestionsUiState
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.search.state.emptySearchQuery
 import com.theoriacodex.data.repository.RecentSearchEntry
+import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -55,7 +56,7 @@ class SearchComposerUiTest {
         onOpenSaved: (SavedSearchEntry) -> Unit = {},
         suggestions: SearchSuggestionsUiState = SearchUiState().suggestions,
         onManageSavedTags: () -> Unit = {},
-        savedTags: List<SavedTag> = emptyList(),
+        savedTags: ComposerSavedTags = ComposerSavedTags(emptyList()),
     ) {
         val base = SearchUiState()
         val draft = emptySearchQuery(QueryMode.Source(source)).copy(
@@ -91,7 +92,7 @@ class SearchComposerUiTest {
         var managed = false
         open(
             SourceKey.GELBOORU, emptyList(), onManageSavedTags = { managed = true },
-            savedTags = listOf(SavedTag(SourceKey.GELBOORU, "blue_hair"), SavedTag(SourceKey.GELBOORU, "sketch")),
+            savedTags = ComposerSavedTags(listOf(FavoriteTagEntry(SourceKey.GELBOORU, "blue_hair"), FavoriteTagEntry(SourceKey.GELBOORU, "sketch"))),
         )
         compose.onNodeWithText("Saved").assertExists()
         val label = compose.onNodeWithText("blue_hair", useUnmergedTree = true).getUnclippedBoundsInRoot()
@@ -105,10 +106,27 @@ class SearchComposerUiTest {
         compose.runOnIdle { assertTrue(managed) }
     }
 
+    @Test fun `tapping a general tag offers to save it and a saved group adds as one group`() {
+        var savedAs: Pair<SourceKey, List<String>>? = null
+        val group = FavoriteTagEntry(SourceKey.GELBOORU, listOf("blue_hair", "red_hair"))
+        open(
+            SourceKey.GELBOORU, emptyList(),
+            savedTags = ComposerSavedTags(listOf(group), SourceKey.GELBOORU, onSave = { source, tags -> savedAs = source to tags }),
+        )
+        compose.onNodeWithText("Artist mika").performClick()
+        compose.onNodeWithText("Save tag").assertDoesNotExist()
+        compose.onNodeWithText("Exclude instead").assertExists()
+        compose.onNodeWithText("− sketch").performClick()
+        compose.onNodeWithText("Save tag").performClick()
+        compose.runOnIdle { assertEquals(SourceKey.GELBOORU to listOf("sketch"), savedAs) }
+        compose.onNodeWithText("blue_hair or red_hair").performClick()
+        compose.runOnIdle { assertEquals(SearchAction.AddSavedTagGroup(group.terms), actions.last()) }
+    }
+
     @Test fun `a saved tag matching the typed text leads the suggestions with a star`() {
         open(
             SourceKey.GELBOORU, emptyList(),
-            savedTags = listOf(SavedTag(SourceKey.GELBOORU, "riverside")),
+            savedTags = ComposerSavedTags(listOf(FavoriteTagEntry(SourceKey.GELBOORU, "riverside"))),
             suggestions = SearchUiState().suggestions.copy(
                 input = "river",
                 autocomplete = listOf(TagSuggestion("rivers", type = null, count = null)),

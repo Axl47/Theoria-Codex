@@ -123,7 +123,7 @@ class ProfileBackupServiceTest {
         val imported = harness.store.library
         assertEquals("legacy-codex", imported.codices.single().codexId)
         assertEquals("profile-main", imported.likes.single().profileId)
-        assertEquals(listOf("mine", "cat"), settings.favoriteTagsByProfile.getValue("profile-main").map { it.tag })
+        assertEquals(listOf("mine", "cat"), settings.favoriteTagsByProfile.getValue("profile-main").map { it.tags.single() })
         assertEquals(2, harness.pins.observeSavedSearches().first().size)
         assertEquals(4, harness.positions.snapshot().single().mediaNumber)
         assertFalse(harness.journal.exists())

@@ -28,6 +28,7 @@ import com.theoriacodex.app.search.state.SearchEffect
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
@@ -47,7 +48,7 @@ internal data class SearchRouteConfig(
     val pendingLikePostIds: Set<PostId> = emptySet(),
     val savedPostIds: Set<PostId>,
     val watchedPostIds: Set<PostId>,
-    val favoriteTags: Map<SourceKey, List<String>>,
+    val favoriteTags: List<FavoriteTagEntry>,
     val resolveUnknownAnimatedDurations: Boolean,
 )
 
@@ -63,8 +64,8 @@ internal data class SearchRouteCallbacks(
     val onPostUrlCopied: (Post) -> Unit = {},
     val onOpenSourceAccounts: () -> Unit = {},
     val onOpenSavedSearch: (SavedSearchEntry) -> Unit = {},
-    val onAddFavoriteTag: (SourceKey, String) -> Unit,
-    val onRemoveFavoriteTag: (SourceKey, String) -> Unit,
+    val onAddFavoriteTag: (SourceKey, List<String>) -> Unit,
+    val onRemoveFavoriteTag: (SourceKey, List<String>) -> Unit,
 )
 
 /**

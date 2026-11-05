@@ -53,14 +53,14 @@ class DataStoreRepositoryContractsTest(
             )
         )
         val profile = repository.addRecommendationProfile("  Contract Profile  ")
-        assertTrue(repository.addFavoriteTag(profile.profileId, SourceKey.GELBOORU, "Blue Hair"))
-        assertFalse(repository.addFavoriteTag(profile.profileId, SourceKey.GELBOORU, "blue_hair"))
+        assertTrue(repository.addFavoriteTag(profile.profileId, SourceKey.GELBOORU, listOf("Blue Hair")))
+        assertFalse(repository.addFavoriteTag(profile.profileId, SourceKey.GELBOORU, listOf("blue_hair")))
         assertTrue(repository.addForYouBlacklistEntry(profile.profileId, SourceKey.PIXIV, listOf("Night", "Cat")))
 
         val updated = repository.observeSettings().first()
         assertEquals(profile.profileId, updated.activeProfileId)
         assertEquals("Contract Profile", updated.recommendationProfiles.last().name)
-        assertEquals(listOf("blue_hair"), updated.favoriteTagsByProfile.getValue(profile.profileId).map { it.tag })
+        assertEquals(listOf("blue_hair"), updated.favoriteTagsByProfile.getValue(profile.profileId).map { it.tags.single() })
         assertEquals(
             listOf("cat", "night"),
             updated.forYouBlacklistByProfile.getValue(profile.profileId).single().tags,

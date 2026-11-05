@@ -3,6 +3,7 @@ package com.theoriacodex.app.search
 import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.media.animatedDurationMs
 import com.theoriacodex.app.media.isAnimatedPost
+import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -33,9 +34,10 @@ fun unknownAnimatedDurationPolicy(resolveInBackground: Boolean): UnknownAnimated
     }
 }
 
+/** One source's saved tags and "or" groups, in the order they were saved. */
 data class FavoriteTagSection(
     val source: SourceKey,
-    val tags: List<String>,
+    val entries: List<FavoriteTagEntry>,
 )
 
 /** Keep recommendation seeds reachable until dismissal, including after viewing or automatic saving. */
@@ -100,22 +102,13 @@ private fun matchesAnimatedDurationFilter(
 
 fun favoriteTagSections(
     mode: QueryMode,
-    favoriteTags: Map<SourceKey, List<String>>,
+    favoriteTags: List<FavoriteTagEntry>,
     sourceDisplayOrder: List<SourceKey>,
 ): List<FavoriteTagSection> {
-    val orderedSources = (sourceDisplayOrder + favoriteTags.keys).distinct()
-    return when (mode) {
-        is QueryMode.Source -> favoriteTags[mode.source]
-            .orEmpty()
-            .takeIf(List<String>::isNotEmpty)
-            ?.let { tags -> listOf(FavoriteTagSection(mode.source, tags)) }
-            .orEmpty()
-
-        QueryMode.Unified -> orderedSources.mapNotNull { source ->
-            favoriteTags[source]
-                .orEmpty()
-                .takeIf(List<String>::isNotEmpty)
-                ?.let { tags -> FavoriteTagSection(source, tags) }
-        }
+    val bySource = favoriteTags.groupBy(FavoriteTagEntry::source)
+    val sources = when (mode) {
+        is QueryMode.Source -> listOf(mode.source)
+        QueryMode.Unified -> (sourceDisplayOrder + bySource.keys).distinct()
     }
+    return sources.mapNotNull { source -> bySource[source]?.let { entries -> FavoriteTagSection(source, entries) } }
 }

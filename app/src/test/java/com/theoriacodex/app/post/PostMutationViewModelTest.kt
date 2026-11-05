@@ -49,13 +49,13 @@ class PostMutationViewModelTest {
     @Test fun `failed Like and favorite mutations retain feedback until acknowledged`() = runTest {
         val stored = InMemorySettingsRepository()
         val settings = object : SettingsRepository by stored {
-            override suspend fun addFavoriteTag(profileId: String, source: SourceKey, tag: String): Boolean =
+            override suspend fun addFavoriteTag(profileId: String, source: SourceKey, tags: List<String>): Boolean =
                 error("disk unavailable")
         }
         val owner = PostMutationViewModel(settings, { _, _, _ -> error("Room unavailable") },
             this, StandardTestDispatcher(testScheduler))
         owner.like(stored.observeSettings().first().recommendationProfiles.first(), testPost()) { error("No commit occurred") }
-        owner.favorite("profile-main", SourceKey.PIXIV, "tag", true)
+        owner.favorite("profile-main", SourceKey.PIXIV, listOf("tag"), true)
         advanceUntilIdle()
         assertTrue(owner.pendingLikePostIds.value.isEmpty())
         val notices = owner.feedback.notices.value

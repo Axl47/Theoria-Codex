@@ -47,6 +47,11 @@ private fun validateProfileTags(root: JsonObject, key: String, profileIds: Set<S
                 require(tags.isNotEmpty() && tags.all(String::isNotBlank))
             } else {
                 entry.asJsonObject.backupString("tag")
+                // A saved "or" group also lists every alternative.
+                if (entry.asJsonObject.get("tags")?.isJsonNull == false) {
+                    val tags = entry.asJsonObject.backupStrings("tags")
+                    require(tags.isNotEmpty() && tags.all(String::isNotBlank))
+                }
             }
         }
     }

@@ -30,7 +30,7 @@ class ProfileCapacityTest {
             val settings = DataStoreSettingsRepository(directory, scope)
             settings.updateSettings { expected }
             assertTrue(runCatching { settings.addRecommendationProfile("Overflow") }.isFailure)
-            assertTrue(runCatching { settings.addFavoriteTag("p0", SourceKey.PIXIV, "overflow") }.isFailure)
+            assertTrue(runCatching { settings.addFavoriteTag("p0", SourceKey.PIXIV, listOf("overflow")) }.isFailure)
             assertTrue(runCatching { settings.addForYouBlacklistEntry("p0", SourceKey.PIXIV, listOf("overflow")) }.isFailure)
             assertEquals(expected, settings.observeSettings().first())
         } finally { scope.cancel(); scope.coroutineContext.job.join() }

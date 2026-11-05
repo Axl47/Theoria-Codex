@@ -45,6 +45,20 @@ class SearchDraftReducerTest {
     }
 
     @Test
+    fun `a saved group joins as one new group without repeating required tags`() {
+        val draft = query(QueryMode.Unified, listOf(SearchTerm("sea")))
+
+        val added = SearchDraftReducer.addIncludeGroup(state(draft), listOf(SearchTerm("sea"), SearchTerm("sky"), SearchTerm("cloud")))
+        val repeated = SearchDraftReducer.addIncludeGroup(state(draft), listOf(SearchTerm("sea")))
+
+        assertEquals(
+            listOf(SearchTermGroup.single(SearchTerm("sea")), SearchTermGroup(listOf(SearchTerm("sky"), SearchTerm("cloud")))),
+            added.state.query.draft.effectiveIncludeTermGroups,
+        )
+        assertFalse(repeated.accepted)
+    }
+
+    @Test
     fun `restoring terms undoes a removal exactly, keeping group order and exclusions`() {
         val groups = listOf(
             SearchTermGroup(listOf(SearchTerm("rin"), SearchTerm("aoi"))),

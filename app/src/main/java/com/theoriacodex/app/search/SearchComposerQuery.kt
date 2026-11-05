@@ -35,6 +35,7 @@ internal data class SelectedTerm(val term: SearchTerm, val excluded: Boolean)
 
 /** What a [ComposerQuery] needs from the composer that owns its selection and add target. */
 internal class ComposerQueryActions(
+    val savedTags: ComposerSavedTags,
     val onSelect: (SelectedTerm?) -> Unit,
     val onAddAlternative: (SearchTerm) -> Unit,
     /** Edits the draft and closes the tag's menu. */
@@ -82,6 +83,7 @@ internal fun ComposerQuery(
                             actions.onEdit(SearchAction.AddIncludeTerm(term))
                         },
                     )
+                    ComposerSaveItem(listOf(term), "Save tag", actions)
                     ComposerRemoveItem("Remove") {
                         actions.onRemove(SearchAction.RemoveExcludeTerm(term), listOf(term), true)
                     }
@@ -142,6 +144,8 @@ private fun ComposerRequiredTerm(
                 onClick = { actions.onEdit(SearchAction.SplitIncludeAlternative(groupIndex, term)) },
             )
         }
+        ComposerSaveItem(listOf(term), "Save tag", actions)
+        if (inAlternatives) ComposerSaveItem(group.terms, "Save the “or” group", actions)
         DropdownMenuItem(
             text = { Text("Exclude instead") },
             onClick = {
@@ -155,6 +159,33 @@ private fun ComposerRequiredTerm(
                 actions.onRemove(SearchAction.RemoveIncludeGroup(groupIndex), group.terms, false)
             }
         }
+    }
+}
+
+/**
+ * Saves [terms] as one saved tag, or as a saved "or" group when there are several, or offers to
+ * remove the entry already saved for exactly them. Typed tags cannot be saved, so they show nothing.
+ */
+@Composable
+private fun ComposerSaveItem(terms: List<SearchTerm>, saveLabel: String, actions: ComposerQueryActions) {
+    val saved = actions.savedTags
+    val entry = saved.entryFor(terms)
+    val source = saved.saveSource
+    when {
+        entry != null -> DropdownMenuItem(
+            text = { Text(if (terms.size > 1) "Remove the “or” group from saved tags" else "Remove from saved tags") },
+            onClick = {
+                saved.onRemove(entry.source, entry.tags)
+                actions.onSelect(null)
+            },
+        )
+        source != null && saved.canSave(terms) -> DropdownMenuItem(
+            text = { Text(saveLabel) },
+            onClick = {
+                saved.onSave(source, terms.map(SearchTerm::value))
+                actions.onSelect(null)
+            },
+        )
     }
 }
 

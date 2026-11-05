@@ -22,10 +22,10 @@ class ProfileDeletionServiceTest {
             val before = settings.observeSettings().first()
             guard.retire(profile.profileId)
             assertTrue(runCatching { settings.addFavoriteTag(profile.profileId,
-                com.theoriacodex.domain.model.SourceKey.PIXIV, "tag") }.isFailure)
+                com.theoriacodex.domain.model.SourceKey.PIXIV, listOf("tag")) }.isFailure)
             assertTrue(runCatching { settings.setActiveProfile(profile.profileId) }.isFailure)
             org.junit.Assert.assertEquals(before, settings.observeSettings().first())
-            assertTrue(settings.addFavoriteTag("profile-main", com.theoriacodex.domain.model.SourceKey.PIXIV, "tag"))
+            assertTrue(settings.addFavoriteTag("profile-main", com.theoriacodex.domain.model.SourceKey.PIXIV, listOf("tag")))
         } finally { directory.deleteRecursively() }
     }
 

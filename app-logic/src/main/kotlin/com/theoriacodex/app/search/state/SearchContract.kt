@@ -185,6 +185,8 @@ sealed interface SearchAction {
     data class AddIncludeAlternative(val groupIndex: Int, val term: SearchTerm) : DraftEdit
     /** A saved tag joins a group directly: it was already validated when [source] offered it. */
     data class AddSavedTagAlternative(val source: SourceKey, val groupIndex: Int, val term: SearchTerm) : DraftEdit
+    /** A saved "or" group joins the draft as one new required group. */
+    data class AddSavedTagGroup(val terms: List<SearchTerm>) : DraftEdit
     data class SplitIncludeAlternative(val groupIndex: Int, val term: SearchTerm) : DraftEdit
     data class RemoveIncludeGroup(val groupIndex: Int) : DraftEdit
     /** Puts the draft's tags back exactly as they were, for undoing a removal. */

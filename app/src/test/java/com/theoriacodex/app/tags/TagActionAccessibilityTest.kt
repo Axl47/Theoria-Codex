@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.search.state.emptySearchQuery
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -57,8 +58,8 @@ class TagActionAccessibilityTest {
     @Test fun `favorite actions name the tag and expose an accessibility click`() {
         val removed = mutableListOf<String>()
         compose.setContent { MaterialTheme { Box(Modifier.width(320.dp)) {
-            FavoriteTagActionGrid(SourceKey.PIXIV, listOf("portrait", "second", "third"),
-                onAddTag = {}, onRemoveTag = { removed += it })
+            FavoriteTagActionGrid(SourceKey.PIXIV, listOf("portrait", "second", "third").map { FavoriteTagEntry(SourceKey.PIXIV, it) },
+                onAddTag = {}, onRemoveTag = { removed += it.tags })
         } } }
         compose.onNodeWithContentDescription("Remove portrait from favorites")
             .performSemanticsAction(SemanticsActions.OnClick) { it() }

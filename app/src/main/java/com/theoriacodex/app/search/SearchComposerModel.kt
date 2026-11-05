@@ -7,7 +7,9 @@ import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.tags.TagChipState
 import com.theoriacodex.app.tags.TagTapEffect
 import com.theoriacodex.app.tags.chipState
+import com.theoriacodex.app.tags.isGeneralPostTag
 import com.theoriacodex.app.tags.tagTapEffect
+import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -46,22 +48,51 @@ internal data class ComposerSuggestion(
     val saved: Boolean = false,
 )
 
-/** A saved tag, with the source whose rules decide when two spellings are the same tag. */
-internal data class SavedTag(val source: SourceKey, val value: String) {
-    val term: SearchTerm get() = SearchTerm(value)
+/*
+ * Saved tags are general tags kept per source, whose rules decide when two spellings are the same
+ * tag. An entry with several tags is an "or" group: it joins the draft as one group of alternatives.
+ */
+
+/** Identifies an entry among chips: a tag never holds a line break, so the key cannot collide. */
+internal val FavoriteTagEntry.key: String get() = tags.joinToString("\n")
+
+/** The draft terms a saved entry stands for. */
+internal val FavoriteTagEntry.terms: List<SearchTerm> get() = tags.map(::SearchTerm)
+
+/** The entry's chip text; a group reads as its alternatives. */
+internal val FavoriteTagEntry.label: String get() = tags.joinToString(" or ")
+
+/** True when [terms] are exactly this entry's tags, in any order. */
+internal fun FavoriteTagEntry.matches(terms: List<SearchTerm>): Boolean =
+    terms.isNotEmpty() && terms.all(SearchTerm::isGeneralPostTag) &&
+        terms.mapTo(mutableSetOf()) { sourceTagKey(source, it.value) } == tags.mapTo(mutableSetOf()) { sourceTagKey(source, it) }
+
+private fun FavoriteTagEntry.groupIndexIn(draft: Query): Int =
+    draft.effectiveIncludeTermGroups.indexOfFirst { group -> matches(group.terms) }
+
+/** How a saved entry currently relates to the draft. A group is only ever required or absent. */
+internal fun FavoriteTagEntry.state(draft: Query): TagChipState = when (val tag = terms.singleOrNull()) {
+    null -> if (groupIndexIn(draft) >= 0) TagChipState.REQUIRED else TagChipState.NONE
+    else -> PostTagSelection(source, draft.includeTerms, draft.excludeTerms).chipState(tag)
 }
 
-/** How a saved tag currently relates to the draft. */
-internal fun SavedTag.state(draft: Query): TagChipState =
-    PostTagSelection(source, draft.includeTerms, draft.excludeTerms).chipState(term)
-
-/** While a group is the target, a saved tag not yet in the query is only usable if the group would take it. */
-internal fun SavedTag.canTap(draft: Query, targetIndex: Int): Boolean = targetIndex < 0 ||
+/**
+ * While a group is the target, a saved tag not yet in the query is only usable if the group would
+ * take it. A saved group cannot join another group, so it waits until no group is the target.
+ */
+internal fun FavoriteTagEntry.canTap(draft: Query, targetIndex: Int): Boolean = targetIndex < 0 ||
     state(draft) != TagChipState.NONE ||
-    SearchDraftReducer.postTermForGroup(draft, source, targetIndex, term) != null
+    terms.singleOrNull()?.let { SearchDraftReducer.postTermForGroup(draft, source, targetIndex, it) } != null
 
-/** The edits one tap makes, following the same add, exclude, clear cycle as tags in post info. */
-internal fun SavedTag.tapActions(draft: Query, targetIndex: Int): List<SearchAction> {
+/**
+ * The edits one tap makes. A tag follows the same add, exclude, clear cycle as tags in post info;
+ * a group is added, then removed.
+ */
+internal fun FavoriteTagEntry.tapActions(draft: Query, targetIndex: Int): List<SearchAction> {
+    val term = terms.singleOrNull() ?: return when (val index = groupIndexIn(draft)) {
+        -1 -> listOf(SearchAction.AddSavedTagGroup(terms))
+        else -> listOf(SearchAction.RemoveIncludeGroup(index))
+    }
     val selection = PostTagSelection(source, draft.includeTerms, draft.excludeTerms)
     return when (val effect = tagTapEffect(term, selection, targetIndex.takeIf { it >= 0 })) {
         TagTapEffect.AddRequired -> listOf(SearchAction.AddIncludeTerm(term))
@@ -70,6 +101,25 @@ internal fun SavedTag.tapActions(draft: Query, targetIndex: Int): List<SearchAct
             listOf(SearchAction.AddExcludeTerm(effect.stored), SearchAction.RemoveIncludeTerm(effect.stored))
         is TagTapEffect.Clear -> listOf(SearchAction.RemoveExcludeTerm(effect.stored))
     }
+}
+
+/** What tapping a saved group's chip does: a group is only ever added or removed. */
+internal fun savedGroupTapLabel(label: String, state: TagChipState): String =
+    if (state == TagChipState.NONE) "Include $label in Search" else "Remove $label from Search"
+
+/** Saved tags as the composer's tag menus see them, and how to change them. */
+internal class ComposerSavedTags(
+    val entries: List<FavoriteTagEntry>,
+    /** Where a new save goes; null when the composer has no source to save under. */
+    val saveSource: SourceKey? = null,
+    val onSave: (SourceKey, List<String>) -> Unit = { _, _ -> },
+    val onRemove: (SourceKey, List<String>) -> Unit = { _, _ -> },
+) {
+    /** The saved entry that is exactly [terms], whichever source it was saved under. */
+    fun entryFor(terms: List<SearchTerm>): FavoriteTagEntry? = entries.firstOrNull { it.matches(terms) }
+
+    /** Only general tags can be saved, so a typed tag, or a group of them, offers no save. */
+    fun canSave(terms: List<SearchTerm>): Boolean = terms.isNotEmpty() && terms.all(SearchTerm::isGeneralPostTag)
 }
 
 /**
@@ -119,32 +169,33 @@ internal fun composerSuggestions(
 internal fun ComposerSuggestions.withSavedTags(
     target: ComposerAddTarget,
     input: String,
-    savedTags: List<SavedTag>,
+    savedTags: List<FavoriteTagEntry>,
     draft: Query,
 ): ComposerSuggestions {
     val typed = input.trim().removePrefix("-")
     if (typed.isBlank()) return this
     val targetIndex = (target as? ComposerAddTarget.Alternative)?.index ?: -1
+    // Suggestions complete one tag, so saved groups stay in the saved row.
     val matches = savedTags
         .filter { tag ->
-            sourceTagKey(tag.source, tag.value).contains(sourceTagKey(tag.source, typed)) &&
+            tag.tags.size == 1 &&
+                sourceTagKey(tag.source, tag.tags.single()).contains(sourceTagKey(tag.source, typed)) &&
                 tag.state(draft) == TagChipState.NONE && tag.canTap(draft, targetIndex)
         }
-        .sortedByDescending { tag -> sourceTagKey(tag.source, tag.value).startsWith(sourceTagKey(tag.source, typed)) }
+        .sortedByDescending { tag -> sourceTagKey(tag.source, tag.tags.single()).startsWith(sourceTagKey(tag.source, typed)) }
         .take(MAX_SAVED_SUGGESTIONS)
     val merged = matches.map { tag -> tag to rows.firstOrNull { row -> row.isGeneralFormOf(tag) } }
     val savedRows = merged.map { (tag, row) ->
-        row?.copy(saved = true) ?: ComposerSuggestion(tag.value, "", tag.addAction(target), tag.term, saved = true)
+        val term = tag.terms.single()
+        row?.copy(saved = true) ?: ComposerSuggestion(term.value, "", tag.addAction(target, term), term, saved = true)
     }
     return copy(rows = savedRows + (rows - merged.mapNotNull { it.second }.toSet()))
 }
 
-private fun ComposerSuggestion.isGeneralFormOf(tag: SavedTag): Boolean =
-    term.facet == SearchFacet.TAG &&
-        (term.sourceNamespace == null || term.sourceNamespace.equals("tag", ignoreCase = true)) &&
-        sourceTagKey(tag.source, term.value) == sourceTagKey(tag.source, tag.value)
+private fun ComposerSuggestion.isGeneralFormOf(tag: FavoriteTagEntry): Boolean =
+    term.isGeneralPostTag() && sourceTagKey(tag.source, term.value) == sourceTagKey(tag.source, tag.tags.single())
 
-private fun SavedTag.addAction(target: ComposerAddTarget): SearchAction = when (target) {
+private fun FavoriteTagEntry.addAction(target: ComposerAddTarget, term: SearchTerm): SearchAction = when (target) {
     is ComposerAddTarget.Alternative -> SearchAction.AddSavedTagAlternative(source, target.index, term)
     ComposerAddTarget.Excluded -> SearchAction.AddExcludeTerm(term)
     ComposerAddTarget.Required -> SearchAction.AddIncludeTerm(term)

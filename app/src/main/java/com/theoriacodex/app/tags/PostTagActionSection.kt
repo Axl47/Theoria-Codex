@@ -42,10 +42,12 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.Role
+import com.theoriacodex.app.search.label
 import com.theoriacodex.app.search.searchScopeLabel
 import com.theoriacodex.app.search.searchTermChipLabel
 import com.theoriacodex.app.search.state.SearchDraftReducer
 import com.theoriacodex.app.source.displayName
+import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SearchFacet
@@ -247,19 +249,21 @@ private fun PostTagChip(
     )
 }
 
+/** Saved tags and "or" groups with actions to search for them or remove them; only single tags show counts. */
 @Composable
 fun FavoriteTagActionGrid(
     source: SourceKey,
-    tags: List<String>,
+    entries: List<FavoriteTagEntry>,
     tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
     fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
     emptyText: String = "No favorite tags",
-    onAddTag: (String) -> Unit,
-    onRemoveTag: (String) -> Unit,
+    onAddTag: (FavoriteTagEntry) -> Unit,
+    onRemoveTag: (FavoriteTagEntry) -> Unit,
 ) {
-    val tagVideoCounts = rememberTagCounts(source, tags, tagVideoCountProvider, fetchTagVideoCounts)
+    val singleTags = remember(entries) { entries.mapNotNull { it.tags.singleOrNull() } }
+    val tagVideoCounts = rememberTagCounts(source, singleTags, tagVideoCountProvider, fetchTagVideoCounts)
 
-    if (tags.isEmpty()) {
+    if (entries.isEmpty()) {
         Text(
             text = emptyText,
             style = MaterialTheme.typography.bodySmall,
@@ -271,18 +275,18 @@ fun FavoriteTagActionGrid(
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val columns = if (maxWidth.value >= 354f) 3 else 2
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-    tags.chunked(columns).forEach { rowTags ->
+    entries.chunked(columns).forEach { rowTags ->
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.Top,
         ) {
-            rowTags.forEach { tag ->
+            rowTags.forEach { entry ->
                 FavoriteTagActionCell(
-                    tag = tag,
-                    videoCount = tagVideoCounts[tag],
-                    onAdd = { onAddTag(tag) },
-                    onRemove = { onRemoveTag(tag) },
+                    tag = entry.label,
+                    videoCount = entry.tags.singleOrNull()?.let(tagVideoCounts::get),
+                    onAdd = { onAddTag(entry) },
+                    onRemove = { onRemoveTag(entry) },
                     modifier = Modifier.weight(1f),
                 )
             }

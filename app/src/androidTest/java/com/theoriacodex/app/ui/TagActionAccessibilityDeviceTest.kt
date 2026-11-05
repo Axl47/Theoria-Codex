@@ -28,6 +28,7 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -62,8 +63,8 @@ class TagActionAccessibilityDeviceTest {
     @Test fun favoriteRemovalNamesTheTagAndWorksThroughAccessibility() {
         val removed = mutableListOf<String>()
         compose.setContent { MaterialTheme { Box(Modifier.width(320.dp)) {
-            FavoriteTagActionGrid(SourceKey.PIXIV, listOf("portrait", "second", "third"),
-                onAddTag = {}, onRemoveTag = { removed += it })
+            FavoriteTagActionGrid(SourceKey.PIXIV, listOf("portrait", "second", "third").map { FavoriteTagEntry(SourceKey.PIXIV, it) },
+                onAddTag = {}, onRemoveTag = { removed += it.tags })
         } } }
         compose.onNodeWithContentDescription("Remove portrait from favorites")
             .assertWidthIsAtLeast(48.dp).assertHeightIsAtLeast(48.dp)

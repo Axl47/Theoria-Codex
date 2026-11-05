@@ -254,6 +254,22 @@ object SearchDraftReducer {
             .copy(accepted = true)
     }
 
+    /**
+     * Adds general [terms] as one new group of alternatives, leaving out any the draft already
+     * requires. Only general tags are accepted, so the group suits every source.
+     */
+    fun addIncludeGroup(state: SearchUiState, terms: List<SearchTerm>): SearchDraftReduction {
+        val fresh = terms.mapNotNull { it.normalizedOrNull() }
+            .filter(SearchTerm::isPortableGeneralTag)
+            .distinct()
+            .filterNot { it in state.query.draft.includeTerms }
+            .take(MAX_GROUP_ALTERNATIVES)
+        if (fresh.isEmpty()) return SearchDraftReduction(state, changed = false, accepted = false)
+        return mutateQuery(state) { query ->
+            query.withIncludeTermGroups(query.effectiveIncludeTermGroups + SearchTermGroup(fresh))
+        }.copy(accepted = true)
+    }
+
     fun removeIncludeGroup(state: SearchUiState, groupIndex: Int): SearchDraftReduction {
         val groups = state.query.draft.effectiveIncludeTermGroups
         if (groupIndex !in groups.indices) {

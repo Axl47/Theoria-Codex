@@ -79,6 +79,7 @@ import com.theoriacodex.app.tags.TagPickerChip
 import com.theoriacodex.app.tags.tagTapLabel
 import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.domain.adapter.FacetedSearchScope
+import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
@@ -111,7 +112,7 @@ internal fun SearchComposer(
     onDismiss: () -> Unit,
     savedSearches: List<SavedSearchEntry> = emptyList(),
     onOpenSavedSearch: (SavedSearchEntry) -> Unit = {},
-    savedTags: List<SavedTag> = emptyList(),
+    savedTags: ComposerSavedTags = ComposerSavedTags(emptyList()),
 ) {
     Dialog(
         onDismissRequest = onDismiss,
@@ -141,7 +142,7 @@ private fun SearchComposerContent(
     onDismiss: () -> Unit,
     savedSearches: List<SavedSearchEntry>,
     onOpenSavedSearch: (SavedSearchEntry) -> Unit,
-    savedTags: List<SavedTag>,
+    savedTags: ComposerSavedTags,
 ) {
     val input = state.suggestions.input
     val draft = state.query.draft
@@ -161,7 +162,7 @@ private fun SearchComposerContent(
         else -> ComposerAddTarget.Required
     }
     // A narrowed scope asks for one tag type, and saved tags are general tags.
-    val savedTagMatches = savedTags.takeIf { state.query.selectedScope.isAll || state.query.selectedScope.facet == SearchFacet.TAG }.orEmpty()
+    val savedTagMatches = savedTags.entries.takeIf { state.query.selectedScope.isAll || state.query.selectedScope.facet == SearchFacet.TAG }.orEmpty()
     val suggestions = composerSuggestions(target, state.suggestions.facetedAutocomplete, state.suggestions.autocomplete)
         .withSavedTags(target, input, savedTagMatches, draft)
     val liveSelection = selection?.takeIf { selected ->
@@ -184,6 +185,7 @@ private fun SearchComposerContent(
         inputRequester.requestFocus()
     }
     val queryActions = ComposerQueryActions(
+        savedTags = savedTags,
         onSelect = { selected -> selection = selected },
         onAddAlternative = ::addAlternativeTo,
         onEdit = { action ->
@@ -267,7 +269,7 @@ private fun ComposerEditorBody(
     sourcePicker: @Composable () -> Unit,
     savedSearches: List<SavedSearchEntry>,
     onOpenSavedSearch: (SavedSearchEntry) -> Unit,
-    savedTags: List<SavedTag>,
+    savedTags: ComposerSavedTags,
     queryActions: ComposerQueryActions,
     onAction: (SearchAction) -> Unit,
     onOpenSourceAccounts: () -> Unit,
@@ -562,7 +564,7 @@ private fun ComposerTagList(
     scroll: ScrollState,
     savedSearches: List<SavedSearchEntry>,
     onOpenSavedSearch: (SavedSearchEntry) -> Unit,
-    savedTags: List<SavedTag>,
+    savedTags: ComposerSavedTags,
     onManageSavedTags: () -> Unit,
     queryActions: ComposerQueryActions,
     onOpenSourceAccounts: () -> Unit,
@@ -599,16 +601,16 @@ private fun ComposerTagList(
 private fun ComposerSavedSection(
     savedSearches: List<SavedSearchEntry>,
     onOpenSavedSearch: (SavedSearchEntry) -> Unit,
-    savedTags: List<SavedTag>,
+    savedTags: ComposerSavedTags,
     draft: Query,
     targetIndex: Int,
     onManageSavedTags: () -> Unit,
     onAction: (SearchAction) -> Unit,
 ) {
-    if (savedSearches.isEmpty() && savedTags.isEmpty()) return
+    if (savedSearches.isEmpty() && savedTags.entries.isEmpty()) return
     Row {
         ComposerSectionTitle("Saved", Modifier.weight(1f).alignByBaseline())
-        if (savedTags.isNotEmpty()) {
+        if (savedTags.entries.isNotEmpty()) {
             TextButton(
                 onClick = onManageSavedTags,
                 modifier = Modifier.alignByBaseline().semantics { contentDescription = "Manage saved tags" },
@@ -616,7 +618,7 @@ private fun ComposerSavedSection(
         }
     }
     if (savedSearches.isNotEmpty()) SavedSearchChips(savedSearches, onOpenSavedSearch)
-    if (savedTags.isNotEmpty()) SavedTagChips(savedTags, draft, targetIndex, onAction)
+    if (savedTags.entries.isNotEmpty()) SavedTagChips(savedTags.entries, draft, targetIndex, onAction)
 }
 
 /** One tap reruns a saved search, replacing the current draft. */
@@ -633,18 +635,22 @@ private fun SavedSearchChips(searches: List<SavedSearchEntry>, onOpen: (SavedSea
     }
 }
 
-/** Saved tags work like tags in post info: taps add, exclude, then clear, and the chip shows which applies. */
+/**
+ * Saved tags work like tags in post info: taps add, exclude, then clear, and the chip shows which
+ * applies. A saved "or" group is added as one group, and its next tap removes it.
+ */
 @Composable
-private fun SavedTagChips(tags: List<SavedTag>, draft: Query, targetIndex: Int, onAction: (SearchAction) -> Unit) {
+private fun SavedTagChips(tags: List<FavoriteTagEntry>, draft: Query, targetIndex: Int, onAction: (SearchAction) -> Unit) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(tags, key = SavedTag::value) { tag ->
+        items(tags, key = FavoriteTagEntry::key) { tag ->
             val chipState = tag.state(draft)
+            val group = tag.tags.size > 1
             TagPickerChip(
-                label = tag.value,
+                label = tag.label,
                 count = null,
                 state = chipState,
                 enabled = tag.canTap(draft, targetIndex),
-                tapLabel = tagTapLabel(searchTermChipLabel(tag.term, excluded = false), chipState),
+                tapLabel = if (group) savedGroupTapLabel(tag.label, chipState) else tagTapLabel(tag.label, chipState),
                 onTap = { tag.tapActions(draft, targetIndex).forEach(onAction) },
                 leadingIcon = Icons.Default.Star,
                 reserveCountSlot = false,
