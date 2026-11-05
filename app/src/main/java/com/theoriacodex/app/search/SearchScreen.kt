@@ -50,6 +50,7 @@ import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
 import com.theoriacodex.app.ui.components.rememberFeedScrollSignal
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.FeedFabRestoreState
+import com.theoriacodex.app.ui.components.NameEntryDialog
 import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -98,8 +99,9 @@ fun SearchScreen(
     onSaveToDevice: (Post) -> Unit,
     onPostUrlCopied: (Post) -> Unit = {},
     onOpenSourceAccounts: () -> Unit = {},
-    onAddFavoriteTag: (SourceKey, List<String>) -> Unit = { _, _ -> },
+    onAddFavoriteTag: (SourceKey, List<String>, String?) -> Unit = { _, _, _ -> },
     onRemoveFavoriteTag: (SourceKey, List<String>) -> Unit = { _, _ -> },
+    onRenameFavoriteTag: (SourceKey, List<String>, String) -> Unit = { _, _, _ -> },
     fabRestoreState: FeedFabRestoreState = FeedFabRestoreState(),
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit = {},
     oldSearchBar: Boolean = false,
@@ -155,7 +157,7 @@ fun SearchScreen(
             favoriteTags, onAddFavoriteTag, onRemoveFavoriteTag)
     }
     if (chrome.showFavoriteTagSheet) {
-        SearchFavoriteTags(state, favoriteTags, tagVideoCountProvider, fetchTagVideoCounts, onAction, onRemoveFavoriteTag, onDismiss = { chrome.showFavoriteTagSheet = false })
+        SearchFavoriteTags(state, favoriteTags, tagVideoCountProvider, fetchTagVideoCounts, onAction, onRemoveFavoriteTag, onRenameFavoriteTag) { chrome.showFavoriteTagSheet = false }
     }
     if (chrome.showFilterSheet) {
         SearchFilterSheet(state, feed, fabRestoreState, onAction, onFabRestoreStateChange, filterActions::resetFilterDraft) {
@@ -274,7 +276,7 @@ private fun SearchComposerDialog(
     savedSearches: List<SavedSearchEntry>,
     onOpenSavedSearch: (SavedSearchEntry) -> Unit,
     favoriteTags: List<FavoriteTagEntry>,
-    onAddFavoriteTag: (SourceKey, List<String>) -> Unit,
+    onAddFavoriteTag: (SourceKey, List<String>, String?) -> Unit,
     onRemoveFavoriteTag: (SourceKey, List<String>) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -370,7 +372,7 @@ private fun SearchPostSheet(
     onOpenCreatorProfile: (CreatorProfile) -> Unit,
     onOpenLegacyCreatorProfile: (Post) -> Unit,
     onPostUrlCopied: (Post) -> Unit,
-    onAddFavoriteTag: (SourceKey, List<String>) -> Unit,
+    onAddFavoriteTag: (SourceKey, List<String>, String?) -> Unit,
     applyDraft: () -> Unit,
 ) {
     PostActionSheet(
@@ -401,7 +403,7 @@ private fun SearchPostSheet(
                 },
                 onRemoveIncludeTerm = { term -> onAction(SearchAction.RemoveIncludeTerm(term)) },
                 onRemoveExcludeTerm = { term -> onAction(SearchAction.RemoveExcludeTerm(term)) },
-                onFavoriteTagLongPress = { source, tag -> onAddFavoriteTag(source, listOf(tag)) },
+                onFavoriteTagLongPress = { source, tag -> onAddFavoriteTag(source, listOf(tag), null) },
                 onSearch = {
                     actionPost.dismiss()
                     applyDraft()
@@ -568,9 +570,11 @@ private fun SearchFavoriteTags(
     fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?>,
     onAction: (SearchAction) -> Unit,
     onRemoveFavoriteTag: (SourceKey, List<String>) -> Unit,
+    onRenameFavoriteTag: (SourceKey, List<String>, String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sections = rememberFavoriteTagSections(state, favoriteTags)
+    var renaming by remember { mutableStateOf<FavoriteTagEntry?>(null) }
     val emptyMessage = remember(state.query.draft.mode) {
         when (val mode = state.query.draft.mode) {
             is QueryMode.Source -> "No saved tags for ${mode.source.displayName()} yet."
@@ -587,8 +591,22 @@ private fun SearchFavoriteTags(
             onAction(terms.singleOrNull()?.let(SearchAction::AddIncludeTerm) ?: SearchAction.AddSavedTagGroup(terms))
         },
         onRemoveTag = onRemoveFavoriteTag,
+        onRenameTag = { entry -> renaming = entry },
         onDismiss = onDismiss,
     )
+    renaming?.let { entry ->
+        NameEntryDialog(
+            title = "Name “or” group",
+            initialName = entry.name.orEmpty(),
+            optional = true,
+            hint = "Leave blank to show it as ${entry.alternativesText}.",
+            onDismiss = { renaming = null },
+            onSave = { name ->
+                onRenameFavoriteTag(entry.source, entry.tags, name)
+                renaming = null
+            },
+        )
+    }
 }
 
 @Composable

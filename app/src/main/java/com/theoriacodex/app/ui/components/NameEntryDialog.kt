@@ -16,18 +16,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 
-/** Asks for one trimmed, non-blank name; shared by everything the user can name. */
+/**
+ * Asks for one trimmed name; shared by everything the user can name. A name is required unless
+ * [optional], where saving a blank field passes an empty name and [hint] says what that means.
+ */
 @Composable
 internal fun NameEntryDialog(
     title: String,
     initialName: String,
     onDismiss: () -> Unit,
     onSave: (String) -> Unit,
+    optional: Boolean = false,
+    hint: String? = null,
 ) {
     var value by remember(initialName) { mutableStateOf(initialName) }
     fun saveIfValid() {
         val trimmed = value.trim()
-        if (trimmed.isNotBlank()) onSave(trimmed)
+        if (optional || trimmed.isNotBlank()) onSave(trimmed)
     }
 
     AlertDialog(
@@ -38,7 +43,8 @@ internal fun NameEntryDialog(
                 modifier = Modifier.fillMaxWidth(),
                 value = value,
                 onValueChange = { value = it.replace("\n", " ") },
-                label = { Text("Name") },
+                label = { Text(if (optional) "Name (optional)" else "Name") },
+                supportingText = hint?.let { { Text(it) } },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { saveIfValid() }),

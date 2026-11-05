@@ -116,6 +116,11 @@ class SearchComposerModelTest {
         assertFalse(saved.canSave(listOf(SearchTerm("mika", SearchFacet.ARTIST))))
     }
 
+    @Test fun `a named group shows its name, an unnamed one its alternatives`() {
+        assertEquals("blue_hair or red_hair", hairColors.label)
+        assertEquals("Hair", hairColors.copy(name = "Hair").label)
+    }
+
     @Test fun `saved groups stay out of suggestions`() {
         val rows = ComposerSuggestions(emptyList(), 0)
             .withSavedTags(ComposerAddTarget.Required, "hair", listOf(hairColors, blueHair), gelbooruDraft()).rows

@@ -257,7 +257,8 @@ internal data class LegacyProviderHealthSnapshotRecord(
 
 /**
  * A saved tag keeps its first tag in [tag], so builds that predate "or" groups still read one.
- * [tags] is written only for a group and, when present, holds every alternative.
+ * [tags] is written only for a group and, when present, holds every alternative; [name] is a
+ * group's optional label.
  */
 internal data class LegacyFavoriteTagEntryRecord(
     @field:SerializedName("source")
@@ -266,6 +267,8 @@ internal data class LegacyFavoriteTagEntryRecord(
     val tag: String? = null,
     @field:SerializedName("tags")
     val tags: List<String>? = null,
+    @field:SerializedName("name")
+    val name: String? = null,
 ) {
     fun toDomainOrNull(): FavoriteTagEntry? {
         val resolvedSource = source
@@ -273,7 +276,7 @@ internal data class LegacyFavoriteTagEntryRecord(
             ?.takeIf(String::isNotEmpty)
             ?.let { value -> runCatching { SourceKey.valueOf(value) }.getOrNull() }
             ?: return null
-        return RepositoryPolicies.normalizeFavoriteTagEntry(resolvedSource, tags ?: listOfNotNull(tag))
+        return RepositoryPolicies.normalizeFavoriteTagEntry(resolvedSource, tags ?: listOfNotNull(tag), name)
     }
 
     companion object {
@@ -283,6 +286,7 @@ internal data class LegacyFavoriteTagEntryRecord(
                 source = entry.source.name,
                 tag = normalized.first(),
                 tags = normalized.takeIf { it.size > 1 },
+                name = entry.name,
             )
         }
     }

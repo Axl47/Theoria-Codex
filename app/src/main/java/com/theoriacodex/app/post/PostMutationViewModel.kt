@@ -54,21 +54,28 @@ internal class PostMutationViewModel(
         }
     }
 
-    /** Saves or removes one tag, or an "or" group when [tags] holds several. */
-    fun favorite(profileId: String, source: SourceKey, tags: List<String>, add: Boolean) {
+    /** Saves or removes one tag, or an "or" group when [tags] holds several; [name] labels a new group. */
+    fun favorite(profileId: String, source: SourceKey, tags: List<String>, add: Boolean, name: String? = null) {
+        updateFavorites {
+            if (add) {
+                val added = settings.addFavoriteTag(profileId, source, tags, name)
+                feedback.add(if (added) "Added to favorite tags" else "Already in favorite tags")
+            } else {
+                settings.removeFavoriteTag(profileId, source, tags)
+            }
+        }
+    }
+
+    /** Names a saved group, or clears its name when [name] is blank. */
+    fun renameFavorite(profileId: String, source: SourceKey, tags: List<String>, name: String) {
+        updateFavorites { settings.renameFavoriteTag(profileId, source, tags, name) }
+    }
+
+    private fun updateFavorites(change: suspend () -> Unit) {
         scope.launch {
             commands.withLock {
-                val result = runCatchingPreservingCancellation {
-                    if (add) settings.addFavoriteTag(profileId, source, tags)
-                    else {
-                        settings.removeFavoriteTag(profileId, source, tags)
-                        true
-                    }
-                }
-                when {
-                    result.isFailure -> feedback.add("Could not update favorite tags. Please try again.")
-                    add -> feedback.add(if (result.getOrThrow()) "Added to favorite tags" else "Already in favorite tags")
-                }
+                val result = runCatchingPreservingCancellation { change() }
+                if (result.isFailure) feedback.add("Could not update favorite tags. Please try again.")
             }
         }
     }

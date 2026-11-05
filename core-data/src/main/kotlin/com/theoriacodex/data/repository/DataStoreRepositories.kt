@@ -222,10 +222,10 @@ class DataStoreSettingsRepository(
         }
     }
 
-    override suspend fun addFavoriteTag(profileId: String, source: SourceKey, tags: List<String>): Boolean {
+    override suspend fun addFavoriteTag(profileId: String, source: SourceKey, tags: List<String>, name: String?): Boolean {
         return mutateSettings { current ->
             profileWriteGuard.requireProfileWritable(profileId)
-            RepositoryPolicies.addFavoriteTag(current, profileId, source, tags)
+            RepositoryPolicies.addFavoriteTag(current, profileId, source, tags, name)
         }
     }
 
@@ -233,6 +233,13 @@ class DataStoreSettingsRepository(
         return mutateSettings { current ->
             profileWriteGuard.requireProfileWritable(profileId)
             RepositoryPolicies.removeFavoriteTag(current, profileId, source, tags)
+        }
+    }
+
+    override suspend fun renameFavoriteTag(profileId: String, source: SourceKey, tags: List<String>, name: String?): Boolean {
+        return mutateSettings { current ->
+            profileWriteGuard.requireProfileWritable(profileId)
+            RepositoryPolicies.renameFavoriteTag(current, profileId, source, tags, name)
         }
     }
 

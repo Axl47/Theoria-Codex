@@ -363,11 +363,14 @@ internal class TheoriaShell(
         creatorOwner = { routes.creatorOwner },
         offlineMedia = features.offlineMedia,
     )
-    /** Saves one tag, or an "or" group, for the active profile. */
-    val addFavoriteTags: (SourceKey, List<String>) -> Unit = { source, tags ->
-        owners.postMutations.favorite(owners.settings.state.value.activeProfile.profileId, source, tags, true)
+    /** Saves one tag, or an "or" group with an optional name, for the active profile. */
+    val addFavoriteTags: (SourceKey, List<String>, String?) -> Unit = { source, tags, name ->
+        owners.postMutations.favorite(owners.settings.state.value.activeProfile.profileId, source, tags, true, name)
     }
-    val addFavoriteTag: (SourceKey, String) -> Unit = { source, tag -> addFavoriteTags(source, listOf(tag)) }
+    val addFavoriteTag: (SourceKey, String) -> Unit = { source, tag -> addFavoriteTags(source, listOf(tag), null) }
+    val renameFavoriteTags: (SourceKey, List<String>, String) -> Unit = { source, tags, name ->
+        owners.postMutations.renameFavorite(owners.settings.state.value.activeProfile.profileId, source, tags, name)
+    }
     val removeFavoriteTags: (SourceKey, List<String>) -> Unit = { source, tags ->
         owners.postMutations.favorite(owners.settings.state.value.activeProfile.profileId, source, tags, false)
     }

@@ -15,7 +15,7 @@ class FavoriteTagEntryRecordTest {
 
     @Test
     fun `a saved group keeps its first tag readable by older builds and round trips`() {
-        val group = FavoriteTagEntry(SourceKey.GELBOORU, listOf("blue_hair", "red_hair"))
+        val group = FavoriteTagEntry(SourceKey.GELBOORU, listOf("blue_hair", "red_hair"), "Hair colors")
 
         val record = LegacyFavoriteTagEntryRecord.fromDomain(group)
 

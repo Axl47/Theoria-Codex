@@ -49,7 +49,7 @@ class PostMutationViewModelTest {
     @Test fun `failed Like and favorite mutations retain feedback until acknowledged`() = runTest {
         val stored = InMemorySettingsRepository()
         val settings = object : SettingsRepository by stored {
-            override suspend fun addFavoriteTag(profileId: String, source: SourceKey, tags: List<String>): Boolean =
+            override suspend fun addFavoriteTag(profileId: String, source: SourceKey, tags: List<String>, name: String?): Boolean =
                 error("disk unavailable")
         }
         val owner = PostMutationViewModel(settings, { _, _, _ -> error("Room unavailable") },

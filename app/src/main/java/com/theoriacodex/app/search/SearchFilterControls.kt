@@ -106,6 +106,7 @@ internal fun FavoriteTagSheet(
     emptyMessage: String,
     onAddTag: (FavoriteTagEntry) -> Unit,
     onRemoveTag: (SourceKey, List<String>) -> Unit,
+    onRenameTag: (FavoriteTagEntry) -> Unit,
     onDismiss: () -> Unit,
 ) {
     ExpandedBottomSheet(onDismiss) {
@@ -121,7 +122,7 @@ internal fun FavoriteTagSheet(
             } else {
                 sections.forEachIndexed { index, section ->
                     FavoriteTagSectionContent(
-                        section, tagVideoCountProvider, fetchTagVideoCounts, onAddTag, onRemoveTag,
+                        section, tagVideoCountProvider, fetchTagVideoCounts, onAddTag, onRemoveTag, onRenameTag,
                     )
                     if (index != sections.lastIndex) HorizontalDivider()
                 }
@@ -137,6 +138,7 @@ private fun FavoriteTagSectionContent(
     fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?>,
     onAddTag: (FavoriteTagEntry) -> Unit,
     onRemoveTag: (SourceKey, List<String>) -> Unit,
+    onRenameTag: (FavoriteTagEntry) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(section.source.displayName(), style = MaterialTheme.typography.titleSmall)
@@ -147,6 +149,7 @@ private fun FavoriteTagSectionContent(
             fetchTagVideoCounts = fetchTagVideoCounts,
             onAddTag = onAddTag,
             onRemoveTag = { entry -> onRemoveTag(section.source, entry.tags) },
+            onRenameTag = onRenameTag,
         )
     }
 }

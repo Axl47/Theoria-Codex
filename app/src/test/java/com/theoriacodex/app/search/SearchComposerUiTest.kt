@@ -13,6 +13,8 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextInput
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchSuggestionsUiState
 import com.theoriacodex.app.search.state.SearchUiState
@@ -57,10 +59,11 @@ class SearchComposerUiTest {
         suggestions: SearchSuggestionsUiState = SearchUiState().suggestions,
         onManageSavedTags: () -> Unit = {},
         savedTags: ComposerSavedTags = ComposerSavedTags(emptyList()),
+        include: List<SearchTermGroup> = groups,
     ) {
         val base = SearchUiState()
         val draft = emptySearchQuery(QueryMode.Source(source)).copy(
-            includeTermGroups = groups,
+            includeTermGroups = include,
             excludeTerms = listOf(sketch),
         )
         val state = base.copy(query = base.query.copy(draft = draft, supportedScopes = scopes), suggestions = suggestions)
@@ -111,7 +114,7 @@ class SearchComposerUiTest {
         val group = FavoriteTagEntry(SourceKey.GELBOORU, listOf("blue_hair", "red_hair"))
         open(
             SourceKey.GELBOORU, emptyList(),
-            savedTags = ComposerSavedTags(listOf(group), SourceKey.GELBOORU, onSave = { source, tags -> savedAs = source to tags }),
+            savedTags = ComposerSavedTags(listOf(group), SourceKey.GELBOORU, onSave = { source, tags, _ -> savedAs = source to tags }),
         )
         compose.onNodeWithText("Artist mika").performClick()
         compose.onNodeWithText("Save tag").assertDoesNotExist()
@@ -121,6 +124,29 @@ class SearchComposerUiTest {
         compose.runOnIdle { assertEquals(SourceKey.GELBOORU to listOf("sketch"), savedAs) }
         compose.onNodeWithText("blue_hair or red_hair").performClick()
         compose.runOnIdle { assertEquals(SearchAction.AddSavedTagGroup(group.terms), actions.last()) }
+    }
+
+    @Test fun `saving an or group asks for an optional name and the chip shows it`() {
+        var saved: Triple<SourceKey, List<String>, String?>? = null
+        val sea = SearchTermGroup(listOf(SearchTerm("sea"), SearchTerm("sky")))
+        open(
+            SourceKey.GELBOORU, emptyList(), include = listOf(sea),
+            savedTags = ComposerSavedTags(
+                listOf(FavoriteTagEntry(SourceKey.GELBOORU, listOf("cat", "dog"), "Pets")), SourceKey.GELBOORU,
+                onSave = { source, tags, name -> saved = Triple(source, tags, name) },
+            ),
+        )
+        compose.onNodeWithText("Pets").assertExists()
+        compose.onNodeWithText("sky").performClick()
+        compose.onNodeWithText("Save the “or” group").performClick()
+        compose.onNodeWithText("Name (optional)").performTextInput("Outdoors")
+        compose.onNodeWithText("Save").performClick()
+        compose.runOnIdle { assertEquals(Triple(SourceKey.GELBOORU, listOf("sea", "sky"), "Outdoors"), saved) }
+
+        compose.onNodeWithText("sea").performClick()
+        compose.onNodeWithText("Save the “or” group").performClick()
+        compose.onNodeWithText("Save").performClick()
+        compose.runOnIdle { assertEquals(null, saved?.third) }
     }
 
     @Test fun `a saved tag matching the typed text leads the suggestions with a star`() {

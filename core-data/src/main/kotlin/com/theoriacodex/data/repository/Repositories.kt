@@ -450,10 +450,14 @@ data class ForYouBlacklistEntry(
     val tags: List<String>,
 )
 
-/** A saved tag, or an "or" group of saved tags that matches posts carrying any one of [tags]. */
+/**
+ * A saved tag, or an "or" group of saved tags that matches posts carrying any one of [tags].
+ * A group may carry a [name] to show in place of its tags; a single tag never does.
+ */
 data class FavoriteTagEntry(
     val source: SourceKey,
     val tags: List<String>,
+    val name: String? = null,
 ) {
     constructor(source: SourceKey, tag: String) : this(source, listOf(tag))
 }
@@ -526,9 +530,11 @@ interface SettingsRepository {
     suspend fun addForYouBlacklistEntry(profileId: String, source: SourceKey, tags: List<String>): Boolean
     suspend fun removeForYouBlacklistEntry(profileId: String, source: SourceKey, tags: List<String>): Boolean
     /** Saves one tag, or several as an "or" group; false when the same entry is already saved. */
-    suspend fun addFavoriteTag(profileId: String, source: SourceKey, tags: List<String>): Boolean
+    suspend fun addFavoriteTag(profileId: String, source: SourceKey, tags: List<String>, name: String? = null): Boolean
     /** Removes the entry holding exactly [tags], in any order. */
     suspend fun removeFavoriteTag(profileId: String, source: SourceKey, tags: List<String>): Boolean
+    /** Names the saved group holding exactly [tags]; a blank [name] clears it. False when nothing changed. */
+    suspend fun renameFavoriteTag(profileId: String, source: SourceKey, tags: List<String>, name: String?): Boolean
     suspend fun setProviderHealthSnapshots(snapshots: List<ProviderHealthSnapshot>)
 }
 

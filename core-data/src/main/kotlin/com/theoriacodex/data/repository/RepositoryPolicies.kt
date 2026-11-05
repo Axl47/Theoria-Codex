@@ -46,7 +46,7 @@ internal object RepositoryPolicies {
                 if (normalizedProfileId !in profileIds) return@mapNotNull null
                 val normalizedEntries = entries
                     .asSequence()
-                    .mapNotNull { entry -> normalizeFavoriteTagEntry(entry.source, entry.tags) }
+                    .mapNotNull { entry -> normalizeFavoriteTagEntry(entry.source, entry.tags, entry.name) }
                     .distinctBy { entry -> entry.source to favoriteTagKeys(entry.source, entry.tags) }
                     .toList()
                 normalizedProfileId to normalizedEntries
@@ -228,13 +228,14 @@ internal object RepositoryPolicies {
         profileId: String,
         source: SourceKey,
         tags: List<String>,
+        name: String? = null,
     ): Result<AppSettings, Boolean> {
         val current = normalizeSettings(settings)
         val normalizedProfileId = normalizeProfileId(profileId)
         if (current.recommendationProfiles.none { it.profileId == normalizedProfileId }) {
             return Result(current, false)
         }
-        val entry = normalizeFavoriteTagEntry(source, tags) ?: return Result(current, false)
+        val entry = normalizeFavoriteTagEntry(source, tags, name) ?: return Result(current, false)
         val keys = favoriteTagKeys(source, entry.tags)
         val existing = current.favoriteTagsByProfile[normalizedProfileId].orEmpty()
         if (existing.any { saved -> saved.source == source && favoriteTagKeys(source, saved.tags) == keys }) {
@@ -270,6 +271,31 @@ internal object RepositoryPolicies {
         )
     }
 
+    fun renameFavoriteTag(
+        settings: AppSettings,
+        profileId: String,
+        source: SourceKey,
+        tags: List<String>,
+        name: String?,
+    ): Result<AppSettings, Boolean> {
+        val current = normalizeSettings(settings)
+        val normalizedProfileId = normalizeProfileId(profileId)
+        val keys = favoriteTagKeys(source, tags)
+        val existing = current.favoriteTagsByProfile[normalizedProfileId].orEmpty()
+        var changed = false
+        val updatedEntries = existing.map { entry ->
+            if (entry.source != source || favoriteTagKeys(source, entry.tags) != keys) return@map entry
+            val renamed = normalizeFavoriteTagEntry(source, entry.tags, name) ?: entry
+            changed = changed || renamed != entry
+            renamed
+        }
+        if (!changed) return Result(current, false)
+        return Result(
+            state = normalizeSettings(current.copy(favoriteTagsByProfile = current.favoriteTagsByProfile + (normalizedProfileId to updatedEntries))),
+            value = true,
+        )
+    }
+
     fun mergeProviderHealth(
         settings: AppSettings,
         snapshots: List<ProviderHealthSnapshot>,
@@ -283,13 +309,21 @@ internal object RepositoryPolicies {
         return normalizeFavoriteTagForStorage(source, tag)
     }
 
-    /** Normalizes each tag and drops blanks and repeats; null when no tag remains. */
-    fun normalizeFavoriteTagEntry(source: SourceKey, tags: List<String>): FavoriteTagEntry? = tags
-        .map { tag -> normalizeFavoriteTag(source, tag) }
-        .filter(String::isNotBlank)
-        .distinctBy { tag -> sourceTagKey(source, tag) }
-        .takeIf(List<String>::isNotEmpty)
-        ?.let { normalized -> FavoriteTagEntry(source, normalized) }
+    /**
+     * Normalizes each tag and drops blanks and repeats; null when no tag remains. Only a group keeps
+     * a [name], trimmed onto one line and capped at [MAX_FAVORITE_TAG_NAME_LENGTH] characters.
+     */
+    fun normalizeFavoriteTagEntry(source: SourceKey, tags: List<String>, name: String? = null): FavoriteTagEntry? {
+        val normalized = tags
+            .map { tag -> normalizeFavoriteTag(source, tag) }
+            .filter(String::isNotBlank)
+            .distinctBy { tag -> sourceTagKey(source, tag) }
+            .takeIf(List<String>::isNotEmpty)
+            ?: return null
+        val groupName = name?.replace(LINE_BREAK_REGEX, " ")?.trim()?.take(MAX_FAVORITE_TAG_NAME_LENGTH)
+            ?.takeIf { it.isNotBlank() && normalized.size > 1 }
+        return FavoriteTagEntry(source, normalized, groupName)
+    }
 
     /** An entry's identity: its tags as the source compares them, ignoring order. */
     private fun favoriteTagKeys(source: SourceKey, tags: List<String>): Set<String> =
@@ -309,3 +343,6 @@ internal object RepositoryPolicies {
 
     private fun Double?.orZero(): Double = this ?: 0.0
 }
+
+private const val MAX_FAVORITE_TAG_NAME_LENGTH = 60
+private val LINE_BREAK_REGEX = Regex("\\s*[\\r\\n]+\\s*")

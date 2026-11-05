@@ -97,6 +97,7 @@ private fun SearchDestination(shell: TheoriaShell) {
                 onPostUrlCopied = { shell.recordPostUrlCopy() },
                 onAddFavoriteTag = shell.addFavoriteTags,
                 onRemoveFavoriteTag = shell.removeFavoriteTags,
+                onRenameFavoriteTag = shell.renameFavoriteTags,
             ),
             onOwnerAvailable = routes::publishSearch,
         )

@@ -561,15 +561,21 @@ class InMemorySettingsRepository : SettingsRepository {
         }
     }
 
-    override suspend fun addFavoriteTag(profileId: String, source: SourceKey, tags: List<String>): Boolean {
+    override suspend fun addFavoriteTag(profileId: String, source: SourceKey, tags: List<String>, name: String?): Boolean {
         return mutateSettings { current ->
-            RepositoryPolicies.addFavoriteTag(current, profileId, source, tags)
+            RepositoryPolicies.addFavoriteTag(current, profileId, source, tags, name)
         }
     }
 
     override suspend fun removeFavoriteTag(profileId: String, source: SourceKey, tags: List<String>): Boolean {
         return mutateSettings { current ->
             RepositoryPolicies.removeFavoriteTag(current, profileId, source, tags)
+        }
+    }
+
+    override suspend fun renameFavoriteTag(profileId: String, source: SourceKey, tags: List<String>, name: String?): Boolean {
+        return mutateSettings { current ->
+            RepositoryPolicies.renameFavoriteTag(current, profileId, source, tags, name)
         }
     }
 

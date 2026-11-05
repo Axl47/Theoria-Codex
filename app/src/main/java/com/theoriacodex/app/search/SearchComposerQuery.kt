@@ -18,6 +18,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import com.theoriacodex.app.ui.components.NameEntryDialog
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.SpanStyle
@@ -103,7 +107,10 @@ private fun ComposerAlternativesCapsule(
     actions: ComposerQueryActions,
 ) {
     val requester = remember { BringIntoViewRequester() }
+    var naming by remember { mutableStateOf(false) }
     LaunchedEffect(isTarget) { if (isTarget) requester.bringIntoView() }
+    // The tag's menu closes once Save is chosen, so the group asks for its name here.
+    if (naming) SaveGroupNameDialog(group.terms, actions.savedTags) { naming = false }
     TagGroupCard(
         active = isTarget,
         modifier = Modifier.bringIntoViewRequester(requester),
@@ -111,7 +118,7 @@ private fun ComposerAlternativesCapsule(
     ) {
         group.terms.forEachIndexed { termIndex, term ->
             if (termIndex > 0) TagGroupOrLabel()
-            ComposerRequiredTerm(term, index, group, selection, actions)
+            ComposerRequiredTerm(term, index, group, selection, actions) { naming = true }
         }
         if (isTarget) {
             TagGroupOrLabel()
@@ -133,6 +140,7 @@ private fun ComposerRequiredTerm(
     group: SearchTermGroup,
     selection: SelectedTerm?,
     actions: ComposerQueryActions,
+    onSaveGroup: () -> Unit = {},
 ) {
     val selected = SelectedTerm(term, excluded = false)
     val inAlternatives = group.terms.size > 1
@@ -145,7 +153,7 @@ private fun ComposerRequiredTerm(
             )
         }
         ComposerSaveItem(listOf(term), "Save tag", actions)
-        if (inAlternatives) ComposerSaveItem(group.terms, "Save the “or” group", actions)
+        if (inAlternatives) ComposerSaveItem(group.terms, "Save the “or” group", actions, onSaveGroup)
         DropdownMenuItem(
             text = { Text("Exclude instead") },
             onClick = {
@@ -167,7 +175,12 @@ private fun ComposerRequiredTerm(
  * remove the entry already saved for exactly them. Typed tags cannot be saved, so they show nothing.
  */
 @Composable
-private fun ComposerSaveItem(terms: List<SearchTerm>, saveLabel: String, actions: ComposerQueryActions) {
+private fun ComposerSaveItem(
+    terms: List<SearchTerm>,
+    saveLabel: String,
+    actions: ComposerQueryActions,
+    onSaveGroup: () -> Unit = {},
+) {
     val saved = actions.savedTags
     val entry = saved.entryFor(terms)
     val source = saved.saveSource
@@ -182,7 +195,7 @@ private fun ComposerSaveItem(terms: List<SearchTerm>, saveLabel: String, actions
         source != null && saved.canSave(terms) -> DropdownMenuItem(
             text = { Text(saveLabel) },
             onClick = {
-                saved.onSave(source, terms.map(SearchTerm::value))
+                if (terms.size > 1) onSaveGroup() else saved.onSave(source, terms.map(SearchTerm::value), null)
                 actions.onSelect(null)
             },
         )
@@ -248,5 +261,23 @@ internal fun ComposerSectionTitle(title: String, modifier: Modifier = Modifier) 
         style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier.padding(top = 8.dp),
+    )
+}
+
+/** Saves [group] as one "or" group once the user names it or leaves the name blank. */
+@Composable
+private fun SaveGroupNameDialog(group: List<SearchTerm>, savedTags: ComposerSavedTags, onClose: () -> Unit) {
+    // The menu only offers saving while there is a source to save under.
+    val source = savedTags.saveSource ?: return
+    NameEntryDialog(
+        title = "Save “or” group",
+        initialName = "",
+        optional = true,
+        hint = "Leave blank to show it as ${group.joinToString(" or ") { it.value }}.",
+        onDismiss = onClose,
+        onSave = { name ->
+            savedTags.onSave(source, group.map(SearchTerm::value), name.ifBlank { null })
+            onClose()
+        },
     )
 }

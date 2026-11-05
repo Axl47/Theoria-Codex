@@ -411,6 +411,25 @@ class RepositoryContractTest(
     }
 
     @Test
+    fun `a saved group can be named on saving and renamed, while a single tag stays unnamed`() = runTest {
+        val repository = createSettingsRepository()
+        val profileId = defaultRecommendationProfiles().first().profileId
+        suspend fun names() = repository.observeSettings().first().favoriteTagsByProfile.getValue(profileId).map(FavoriteTagEntry::name)
+
+        assertTrue(repository.addFavoriteTag(profileId, SourceKey.PIXIV, listOf("sea", "sky"), " Blue\nthings "))
+        assertTrue(repository.addFavoriteTag(profileId, SourceKey.PIXIV, listOf("cat"), "Cats"))
+        assertEquals(listOf("Blue things", null), names())
+
+        assertTrue(repository.renameFavoriteTag(profileId, SourceKey.PIXIV, listOf("sky", "sea"), "Outdoors"))
+        assertFalse(repository.renameFavoriteTag(profileId, SourceKey.PIXIV, listOf("sky", "sea"), "Outdoors"))
+        assertFalse(repository.renameFavoriteTag(profileId, SourceKey.PIXIV, listOf("cat"), "Cats"))
+        assertEquals(listOf("Outdoors", null), names())
+
+        assertTrue(repository.renameFavoriteTag(profileId, SourceKey.PIXIV, listOf("sea", "sky"), "  "))
+        assertEquals(listOf(null, null), names())
+    }
+
+    @Test
     fun `renaming a recommendation profile keeps its identity and rejects unusable input`() = runTest {
         val repository = createSettingsRepository()
         val created = repository.addRecommendationProfile("Sketching")

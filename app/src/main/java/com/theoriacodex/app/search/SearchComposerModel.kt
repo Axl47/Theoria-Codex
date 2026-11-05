@@ -59,8 +59,11 @@ internal val FavoriteTagEntry.key: String get() = tags.joinToString("\n")
 /** The draft terms a saved entry stands for. */
 internal val FavoriteTagEntry.terms: List<SearchTerm> get() = tags.map(::SearchTerm)
 
-/** The entry's chip text; a group reads as its alternatives. */
-internal val FavoriteTagEntry.label: String get() = tags.joinToString(" or ")
+/** A group's alternatives as one phrase, as it reads when the group has no name. */
+internal val FavoriteTagEntry.alternativesText: String get() = tags.joinToString(" or ")
+
+/** The entry's chip text: a group's name, else its alternatives. */
+internal val FavoriteTagEntry.label: String get() = name ?: alternativesText
 
 /** True when [terms] are exactly this entry's tags, in any order. */
 internal fun FavoriteTagEntry.matches(terms: List<SearchTerm>): Boolean =
@@ -112,7 +115,8 @@ internal class ComposerSavedTags(
     val entries: List<FavoriteTagEntry>,
     /** Where a new save goes; null when the composer has no source to save under. */
     val saveSource: SourceKey? = null,
-    val onSave: (SourceKey, List<String>) -> Unit = { _, _ -> },
+    /** Saves tags under a source; a group may carry a name. */
+    val onSave: (SourceKey, List<String>, String?) -> Unit = { _, _, _ -> },
     val onRemove: (SourceKey, List<String>) -> Unit = { _, _ -> },
 ) {
     /** The saved entry that is exactly [terms], whichever source it was saved under. */

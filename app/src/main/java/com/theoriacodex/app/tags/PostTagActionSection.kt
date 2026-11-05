@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -42,6 +43,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.Role
+import com.theoriacodex.app.search.alternativesText
 import com.theoriacodex.app.search.label
 import com.theoriacodex.app.search.searchScopeLabel
 import com.theoriacodex.app.search.searchTermChipLabel
@@ -249,7 +251,10 @@ private fun PostTagChip(
     )
 }
 
-/** Saved tags and "or" groups with actions to search for them or remove them; only single tags show counts. */
+/**
+ * Saved tags and "or" groups with actions to search for them or remove them. Single tags show
+ * counts; a named group shows its alternatives instead, and groups can be renamed when [onRenameTag] is set.
+ */
 @Composable
 fun FavoriteTagActionGrid(
     source: SourceKey,
@@ -259,6 +264,7 @@ fun FavoriteTagActionGrid(
     emptyText: String = "No favorite tags",
     onAddTag: (FavoriteTagEntry) -> Unit,
     onRemoveTag: (FavoriteTagEntry) -> Unit,
+    onRenameTag: ((FavoriteTagEntry) -> Unit)? = null,
 ) {
     val singleTags = remember(entries) { entries.mapNotNull { it.tags.singleOrNull() } }
     val tagVideoCounts = rememberTagCounts(source, singleTags, tagVideoCountProvider, fetchTagVideoCounts)
@@ -284,9 +290,11 @@ fun FavoriteTagActionGrid(
             rowTags.forEach { entry ->
                 FavoriteTagActionCell(
                     tag = entry.label,
-                    videoCount = entry.tags.singleOrNull()?.let(tagVideoCounts::get),
+                    detail = entry.tags.singleOrNull()?.let { tagVideoCounts[it]?.toString() }
+                        ?: entry.name?.let { entry.alternativesText }.orEmpty(),
                     onAdd = { onAddTag(entry) },
                     onRemove = { onRemoveTag(entry) },
+                    onRename = onRenameTag?.takeIf { entry.tags.size > 1 }?.let { rename -> { rename(entry) } },
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -367,10 +375,11 @@ private fun LazyListScope.postTagList(
 @Composable
 private fun FavoriteTagActionCell(
     tag: String,
-    videoCount: Int?,
+    detail: String,
     onAdd: () -> Unit,
     onRemove: () -> Unit,
     modifier: Modifier = Modifier,
+    onRename: (() -> Unit)? = null,
 ) {
     Column(
         modifier = modifier,
@@ -383,7 +392,9 @@ private fun FavoriteTagActionCell(
             modifier = Modifier.fillMaxWidth(),
         )
         Text(
-            text = videoCount?.toString().orEmpty(),
+            text = detail,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.58f),
         )
@@ -398,6 +409,15 @@ private fun FavoriteTagActionCell(
                 onClick = onAdd,
                 modifier = Modifier.weight(1f),
             )
+            onRename?.let { rename ->
+                TagActionPill(
+                    actionLabel = "Name $tag",
+                    icon = { Icon(imageVector = Icons.Default.Edit, contentDescription = null) },
+                    selected = false,
+                    onClick = rename,
+                    modifier = Modifier.weight(1f),
+                )
+            }
             TagActionPill(
                 actionLabel = "Remove $tag from favorites",
                 icon = {
