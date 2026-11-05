@@ -13,6 +13,8 @@
 - Your favorite tags now appear in the search editor's Saved section with a star.
 - Tap a saved tag to add it, again to exclude it, and once more to clear it; the chip shows which applies.
 - Saved tags matching what you type appear first in the suggestions, marked with a star.
+- Liking a post in the Followed and Searches collections now opens its related posts, as it does in Search, For You and creator pages.
+- Hold a post and choose More like this to open its related posts without liking it, in Search, For You, creator pages and the Followed and Searches collections.
 
 ### Changed
 
