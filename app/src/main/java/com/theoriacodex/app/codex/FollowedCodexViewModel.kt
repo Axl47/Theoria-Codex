@@ -4,6 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.theoriacodex.app.related.RelatedPostsLoader
+import com.theoriacodex.app.related.RelatedPostsLoading
+import com.theoriacodex.app.related.UnsupportedRelatedPostsLoader
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.CacheRepository
 import com.theoriacodex.data.repository.FollowedCreator
@@ -20,12 +23,16 @@ internal typealias FollowedFeedState = LiveCodexFeedState
 internal class FollowedCodexViewModel(
     private val registry: SourceAdapterRegistry,
     private val cacheRepository: CacheRepository,
+    relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
 ) : ViewModel(), LiveCodexFeedOwner {
     private val feed = LiveCodexFeedController<CreatorBranch>(viewModelScope,
         fetch = { branch, _ -> fetch(branch) },
         cacheCover = { post -> cacheRepository.cacheNamedThumbnail(FOLLOWED_CODEX_ID, post) },
+        relatedPostsLoader = relatedPostsLoader,
     )
     override val state = feed.state
+    override val relatedState = feed.relatedState
+    override val related = feed.related
     private var follows: List<FollowedCreator> = emptyList()
     private var availableSources: Set<SourceKey>? = null
 
@@ -77,7 +84,7 @@ internal class FollowedCodexViewModel(
 
     companion object {
         fun factory(registry: SourceAdapterRegistry, cacheRepository: CacheRepository) = viewModelFactory {
-            initializer { FollowedCodexViewModel(registry, cacheRepository) }
+            initializer { FollowedCodexViewModel(registry, cacheRepository, RelatedPostsLoader(registry)) }
         }
     }
 }

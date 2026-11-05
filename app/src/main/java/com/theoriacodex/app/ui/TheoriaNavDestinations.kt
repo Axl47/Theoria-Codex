@@ -23,11 +23,14 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.theoriacodex.app.codex.CodexDetailScreen
+import com.theoriacodex.app.codex.CodexRelatedShelf
+import com.theoriacodex.app.codex.LiveCodexFeedOwner
 import com.theoriacodex.app.codex.SAVED_CODEX_ID
 import com.theoriacodex.app.codex.likesCodexIdForProfile
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.media.MediaDurationState
+import com.theoriacodex.app.related.requestOrNull
 import com.theoriacodex.app.related.retainedLikedPostIds
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.ui.components.codexFeedFabContext
@@ -168,12 +171,16 @@ private fun CodexDetailContent(
         { shell.navController.popBackStack() }, { shell.overlays.showFollowedCreators = true },
         shell.owners.savedSearches::rename, shell.owners.savedSearches::remove,
     )
+    val liveOwner = state.followedOwner ?: state.savedSearchOwner
     CodexDetailScreen(
         codexName = state.codex?.name,
         onTitleLongPress = { shell.overlays.codexActionTargetId = codexId },
         customHeader = virtualUi?.header,
         likedPostIds = state.likedPostIds,
-        onToggleLike = if (virtualUi != null) ({ post -> shell.toggleLikeAndSyncCodex(post) }) else null,
+        onToggleLike = liveOwner?.let { owner ->
+            { post -> shell.toggleLikeAndSyncCodex(post) { outcome -> owner.related.onLikeCommitted(post, outcome) } }
+        },
+        related = liveOwner?.let { owner -> rememberLiveCodexRelatedShelf(shell, owner) },
         customFilters = virtualUi?.filters,
         customFiltersActive = virtualUi?.filtersActive == true,
         emptyMessage = virtualUi?.emptyMessage,
@@ -438,3 +445,14 @@ private fun viewerScreenCallbacks(shell: TheoriaShell) = ViewerRouteScreenCallba
     },
     onOpenCreatorFallback = shell::launchOpenCreator,
 )
+
+/** A live Codex's related shelf, opening its posts in the Viewer as a related stream. */
+@Composable
+private fun rememberLiveCodexRelatedShelf(shell: TheoriaShell, owner: LiveCodexFeedOwner): CodexRelatedShelf {
+    val relatedState by owner.relatedState.collectAsStateWithLifecycle()
+    return remember(owner, relatedState) {
+        CodexRelatedShelf(relatedState, owner.related) { posts, index ->
+            relatedState.requestOrNull?.seed?.let { seed -> shell.openRelatedViewer(seed, posts, index) }
+        }
+    }
+}

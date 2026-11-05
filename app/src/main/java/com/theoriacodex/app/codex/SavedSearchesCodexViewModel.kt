@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.theoriacodex.app.related.RelatedPostsLoading
+import com.theoriacodex.app.related.UnsupportedRelatedPostsLoader
 import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.CodexSortMode
@@ -19,11 +21,15 @@ internal class SavedSearchesCodexViewModel(
     private val coordinator: SearchCoordinator,
     private val loader: SavedSearchFeedLoader,
     cache: CacheRepository,
+    relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
 ) : ViewModel(), LiveCodexFeedOwner {
     private val feed = LiveCodexFeedController<SavedSearchBranch>(viewModelScope, loader::load,
         cacheCover = { post -> cache.cacheNamedThumbnail(SAVED_SEARCHES_CODEX_ID, post) },
+        relatedPostsLoader = relatedPostsLoader,
     )
     override val state = feed.state
+    override val relatedState = feed.relatedState
+    override val related = feed.related
     private var entries: List<SavedSearchEntry> = emptyList()
     private var available: Set<SourceKey>? = null
     private var runtime: com.theoriacodex.data.repository.SourceRuntimeSettings? = null
@@ -48,8 +54,11 @@ internal class SavedSearchesCodexViewModel(
     override fun retry() = feed.retry()
 
     companion object {
-        fun factory(coordinator: SearchCoordinator, cache: CacheRepository) = viewModelFactory {
-            initializer { SavedSearchesCodexViewModel(coordinator, SavedSearchFeedLoader(coordinator), cache) }
-        }
+        fun factory(coordinator: SearchCoordinator, cache: CacheRepository, relatedPostsLoader: RelatedPostsLoading) =
+            viewModelFactory {
+                initializer {
+                    SavedSearchesCodexViewModel(coordinator, SavedSearchFeedLoader(coordinator), cache, relatedPostsLoader)
+                }
+            }
     }
 }

@@ -1,5 +1,9 @@
 package com.theoriacodex.app.codex
 
+import com.theoriacodex.app.related.RelatedPostsLoading
+import com.theoriacodex.app.related.RelatedPostsRouteController
+import com.theoriacodex.app.related.RelatedPostsUiState
+import com.theoriacodex.app.related.UnsupportedRelatedPostsLoader
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.coroutines.mapConcurrent
 import com.theoriacodex.data.repository.CodexSortMode
@@ -30,6 +34,9 @@ internal data class LiveCodexFeedState(
 
 internal interface LiveCodexFeedOwner {
     val state: StateFlow<LiveCodexFeedState>
+    val relatedState: StateFlow<RelatedPostsUiState>
+    /** The feed's related shelf, anchored in the order the grid shows ([sortLiveCodexPosts]). */
+    val related: RelatedPostsRouteController
     fun refresh()
     fun loadMore()
     fun retry()
@@ -42,11 +49,15 @@ internal interface LiveCodexBranch {
     val error: String?
 }
 
-/** Shared virtual-collection scheduling: stable branch order, bounded overlap and stale-result rejection. */
+/**
+ * Shared virtual-collection scheduling: stable branch order, bounded overlap and stale-result rejection.
+ * Also owns the collection's related shelf, which a reset or re-sort clears because its anchor moves.
+ */
 internal class LiveCodexFeedController<B : LiveCodexBranch>(
     private val scope: CoroutineScope,
     private val fetch: suspend (B, Boolean) -> B,
     private val cacheCover: suspend (Post) -> Unit,
+    relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
 ) {
     private val mutableState = MutableStateFlow(LiveCodexFeedState())
     val state = mutableState.asStateFlow()
@@ -55,15 +66,27 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
     private var generation = 0L
     private var coverPostId: PostId? = null
     private var coverSort = CodexSortMode.NEWEST_SAVED
+    private val mutableRelated = MutableStateFlow<RelatedPostsUiState>(RelatedPostsUiState.Idle)
+    val relatedState = mutableRelated.asStateFlow()
+    // Live collections never promote shelf posts: their posts come only from their branches.
+    val related = RelatedPostsRouteController(
+        scope = scope,
+        loader = relatedPostsLoader,
+        currentState = { mutableRelated.value },
+        canonicalPosts = { sortLiveCodexPosts(state.value.posts, coverSort) },
+        updateState = { mutableRelated.value = it },
+    )
 
     fun updateCoverSort(sort: CodexSortMode) {
         if (coverSort == sort) return
         coverSort = sort
+        related.clear("live codex re-sorted")
         scope.launch { cacheFirstPost(generation, root = true) }
     }
 
     fun reset(initial: List<B>) {
         job?.cancel()
+        related.clear("live codex reset")
         generation++
         coverPostId = null
         branches = initial.associateByTo(linkedMapOf()) { it.id }

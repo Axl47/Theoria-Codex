@@ -1,6 +1,11 @@
 package com.theoriacodex.app.codex
 
 import androidx.lifecycle.ViewModelStore
+import com.theoriacodex.app.related.LikeToggleOutcome
+import com.theoriacodex.app.related.RelatedPostsLoading
+import com.theoriacodex.app.related.RelatedPostsUiState
+import com.theoriacodex.app.related.UnsupportedRelatedPostsLoader
+import com.theoriacodex.app.related.loadedPosts
 import com.theoriacodex.app.search.TestAdapter
 import com.theoriacodex.app.search.TestRegistry
 import com.theoriacodex.app.testing.testPost
@@ -13,6 +18,7 @@ import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -181,18 +187,54 @@ class FollowedCodexViewModelTest {
         } finally { store.clear(); Dispatchers.resetMain() }
     }
 
+    @Test fun `related shelf anchors in the shown order and closes when the feed or its order changes`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        try {
+            val old = testPost(SourceKey.PIXIV, "old").copy(createdAtEpochMs = 10)
+            val new = testPost(SourceKey.PIXIV, "new").copy(createdAtEpochMs = 20)
+            val related = listOf(testPost(SourceKey.PIXIV, "related"))
+            val owner = owner(relatedLoader = FixedRelatedLoader(related)) { _, _ -> Page(listOf(old, new), null) }
+            store.put("owner", owner)
+            val selected = listOf(follow("1"))
+            owner.synchronize(selected, setOf(SourceKey.PIXIV))
+            advanceUntilIdle()
+
+            owner.related.onLikeCommitted(old, LikeToggleOutcome.LIKED)
+            advanceUntilIdle()
+            val loaded = owner.relatedState.value as RelatedPostsUiState.Loaded
+            // Newest first, so "old" is the second tile the grid shows.
+            assertEquals(1, loaded.request.anchorCanonicalIndex)
+            assertEquals(related, loaded.loadedPosts)
+
+            owner.synchronize(selected, setOf(SourceKey.PIXIV), CodexSortMode.OLDEST_SAVED)
+            assertEquals(RelatedPostsUiState.Idle, owner.relatedState.value)
+
+            owner.related.show(old)
+            advanceUntilIdle()
+            owner.synchronize(selected + follow("2"), setOf(SourceKey.PIXIV), CodexSortMode.OLDEST_SAVED)
+            assertEquals(RelatedPostsUiState.Idle, owner.relatedState.value)
+        } finally { store.clear(); Dispatchers.resetMain() }
+    }
+
+    private class FixedRelatedLoader(private val posts: List<Post>) : RelatedPostsLoading {
+        override fun supports(source: SourceKey) = true
+        override suspend fun load(seed: PostId) = posts
+    }
+
     private fun follow(id: String) = FollowedCreator(
         CreatorProfile(SourceKey.PIXIV, "Artist $id", id, uploadsQuery = "user:$id"), "membership:$id",
     )
 
     private fun owner(
         cache: CacheRepository = TrackingCacheRepository(),
+        relatedLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
         fetch: suspend (CreatorProfile, String?) -> Page<Post>,
     ): FollowedCodexViewModel {
         val adapter = object : SourceAdapter by TestAdapter(SourceKey.PIXIV), CreatorPostsSourceAdapter {
             override suspend fun searchCreatorPosts(creator: CreatorProfile, pageToken: String?) = fetch(creator, pageToken)
         }
-        return FollowedCodexViewModel(TestRegistry(listOf(adapter)), cache)
+        return FollowedCodexViewModel(TestRegistry(listOf(adapter)), cache, relatedLoader)
     }
 
     private class TrackingCacheRepository : CacheRepository {

@@ -34,7 +34,9 @@ internal fun SavedSearchesCodexBoundary(
     val owner = viewModel<SavedSearchesCodexViewModel>(
         viewModelStoreOwner = com.theoriacodex.app.codex.LocalSavedCodexSessionOwner.current
             ?: checkNotNull(androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner.current),
-        factory = SavedSearchesCodexViewModel.factory(execution, data.cacheRepository),
+        factory = SavedSearchesCodexViewModel.factory(
+            execution, data.cacheRepository, com.theoriacodex.app.related.RelatedPostsLoader(sources.registry),
+        ),
     )
     val selected = remember(entries, filters.excludedSavedSearches) {
         val excluded = filters.excludedSavedSearches.toSet()

@@ -675,10 +675,26 @@ internal class TheoriaShell(
 
     /** Opens the Viewer from a Codex; resumes at the saved position when this post has one. */
     fun openCodexViewer(codexId: String, visiblePosts: List<Post>, index: Int) {
+        openStaticViewer(visiblePosts, "codex:$codexId", index, ViewerStreamSource.CODEX, persistContext = true)
+    }
+
+    /** Opens a related shelf no feed owner pages, such as a live Codex's; like other related streams it is not restored. */
+    fun openRelatedViewer(seed: Post, shelfPosts: List<Post>, index: Int) {
+        val queryHash = "related:${seed.id.source.name}:${seed.id.sourcePostId}"
+        openStaticViewer(shelfPosts, queryHash, index, ViewerStreamSource.RELATED, persistContext = false)
+    }
+
+    private fun openStaticViewer(
+        visiblePosts: List<Post>,
+        queryHash: String,
+        index: Int,
+        streamSource: ViewerStreamSource,
+        persistContext: Boolean,
+    ) {
         val context = ViewerLaunchContext(
-            queryHash = "codex:$codexId",
+            queryHash = queryHash,
             startIndex = index,
-            streamSource = ViewerStreamSource.CODEX,
+            streamSource = streamSource,
             scrollOffsetHint = 0,
         )
         scope.launch {
@@ -687,7 +703,7 @@ internal class TheoriaShell(
                     ViewerSession(posts = visiblePosts, context = context, liveSearchBinding = false),
                 ),
             )
-            data.uiRestoreRepository.setViewerLaunchContext(context)
+            if (persistContext) data.uiRestoreRepository.setViewerLaunchContext(context)
             navController.navigate(AppRoute.Viewer)
         }
     }

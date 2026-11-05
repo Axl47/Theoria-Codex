@@ -64,6 +64,7 @@ import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.FeedPostActionSheet
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
+import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.FeedFabRestoreState
@@ -91,7 +92,7 @@ private fun CodexUnavailable(loading: Boolean, onBack: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CodexDetailScreen(
+internal fun CodexDetailScreen(
     codexName: String?,
     posts: List<Post>,
     sortMode: CodexSortMode,
@@ -134,6 +135,7 @@ fun CodexDetailScreen(
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit = {},
     likedPostIds: Set<PostId> = emptySet(),
     onToggleLike: ((Post) -> Unit)? = null,
+    related: CodexRelatedShelf? = null,
 ) {
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -144,11 +146,9 @@ fun CodexDetailScreen(
     val supportsLanguage = remember(sourceOptions) { supportsCodexLanguageFilter(sourceOptions.toSet()) }
     val supportsFullColor = remember(sourceOptions) { supportsCodexFullColorFilter(sourceOptions.toSet()) }
     val filters = remember(fabRestoreState) { fabRestoreState.savedCollectionFilters() }
-    val feed = rememberCodexDetailFeed(posts, filters, fabRestoreState, durationStates, resolveUnknownAnimatedDurations)
+    val feed = rememberCodexDetailFeed(posts, filters, fabRestoreState, durationStates, resolveUnknownAnimatedDurations, related, likedPostIds)
     val applyFilters = { updated: CodexCollectionFilters -> onFabRestoreStateChange(fabRestoreState.withCollectionFilters(updated)) }
-    LaunchedEffect(posts.map(Post::id)) {
-        editSelection = editSelection.retainAvailable(posts.mapTo(mutableSetOf(), Post::id))
-    }
+    LaunchedEffect(posts.map(Post::id)) { editSelection = editSelection.retainAvailable(posts.mapTo(mutableSetOf(), Post::id)) }
     CodexFilterReconciliationEffect(filters, sourceOptions, supportsLanguage, supportsFullColor, applyFilters)
     LaunchedEffect(feed.durationFilterActive) { onDurationFilterChanged(feed.durationFilterActive) }
     DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
@@ -187,6 +187,7 @@ fun CodexDetailScreen(
             onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, tagVideoCountProvider, fetchTagVideoCounts,
             saveToCodexLabel = "Add to another Codex",
             onRemoveFromCodex = if (customHeader == null) ({ onRemovePosts(listOf(post)) }) else null,
+            onShowRelated = related?.let { shelf -> { shelf.controller.show(post) } },
         )
     }
     CodexDeleteConfirmationDialog(showDeleteConfirm, codexName, isLikesCodex, { showDeleteConfirm = false }) {
@@ -241,7 +242,7 @@ private fun CodexDetailBody(
             onDurationPostVisibilityChanged, onAuthoritativeDurationKnown,
             { index -> onOpenViewer(feed.visiblePosts, index) },
             { postId -> onEditSelectionChange(editSelection.toggle(postId)) },
-            onEditSelectionChange, onOpenPostActions, emptyMessage,
+            onEditSelectionChange, onOpenPostActions, emptyMessage, feed.related,
         )
     }
 }
@@ -271,13 +272,14 @@ private fun CodexDetailFilterFab(
     )
 }
 
-/** What the collection grid shows once the saved filters and known durations are applied. */
+/** What the collection grid shows once the saved filters and known durations are applied, plus any related shelf. */
 private data class CodexDetailFeed(
     val visiblePosts: List<Post>,
     val acquiredDurations: Map<PostId, Long>,
     val durationFilterActive: Boolean,
     val resolvingDurations: Boolean,
     val durationsBlockPaging: Boolean,
+    val related: CodexRelatedFeed?,
 )
 
 @Composable
@@ -287,6 +289,8 @@ private fun rememberCodexDetailFeed(
     fabRestoreState: FeedFabRestoreState,
     durationStates: Map<MediaDurationKey, MediaDurationState>,
     resolveUnknownAnimatedDurations: Boolean,
+    relatedShelf: CodexRelatedShelf?,
+    likedPostIds: Set<PostId>,
 ): CodexDetailFeed {
     val durationMinBucket = fabRestoreState.durationMinBucket
     val durationMaxBucket = fabRestoreState.durationMaxBucket
@@ -303,8 +307,11 @@ private fun rememberCodexDetailFeed(
     }
     val resolvingDurations = durationMetadata.readiness.isResolving
     val durationsBlockPaging = durationMetadata.blocksPaging
-    return remember(visiblePosts, acquiredDurations, durationFilterActive, resolvingDurations, durationsBlockPaging) {
-        CodexDetailFeed(visiblePosts, acquiredDurations, durationFilterActive, resolvingDurations, durationsBlockPaging)
+    val related = relatedShelf?.let { shelf ->
+        rememberCodexRelatedFeed(shelf, posts, visiblePosts, filters, likedPostIds, durationStates, unknownDurationPolicy, durationFilterActive)
+    }
+    return remember(visiblePosts, acquiredDurations, durationFilterActive, resolvingDurations, durationsBlockPaging, related) {
+        CodexDetailFeed(visiblePosts, acquiredDurations, durationFilterActive, resolvingDurations, durationsBlockPaging, related)
     }
 }
 
@@ -523,41 +530,11 @@ private fun CodexDetailGrid(
     onSelectionChange: (CodexEditSelection) -> Unit,
     onOpenPostActions: (Post) -> Unit,
     emptyMessage: String? = null,
+    relatedFeed: CodexRelatedFeed? = null,
 ) {
-    if (posts.isEmpty()) {
-        if (loading) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text("Loading followed posts…")
-                    CircularProgressIndicator()
-                }
-            }
-        } else {
-            FeedEmptyTile(
-                title = if (collectionIsEmpty) "This codex is empty" else "No matching posts",
-                message = emptyMessage ?: when {
-                    collectionIsEmpty -> "Browse and save posts"
-                    resolvingDurations -> "Resolving durations…"
-                    else -> "Adjust your filters"
-                },
-                contentPadding = 24.dp,
-            )
-        }
-        return
-    }
-    val postIds = remember(posts) { posts.map(Post::id) }
-    TwoColumnPostStaggeredGrid(
-        posts = posts,
-        state = gridState,
-        modifier = Modifier.fillMaxSize().codexDragSelect(gridState, postIds, editSelection, onSelectionChange),
-        footerMessage = if (resolvingDurations) "Resolving durations…" else null,
-    ) { index, post ->
+    if (posts.isEmpty()) return CodexDetailEmptyState(collectionIsEmpty, loading, resolvingDurations, emptyMessage)
+    val footerMessage = if (resolvingDurations) "Resolving durations…" else null
+    val card: @Composable (Int, Post) -> Unit = { index, post ->
         val observedDurationMs = observedMediaDurationMs(post, durationStateForPost)
         CodexSelectablePostCard(
             post = post,
@@ -573,6 +550,50 @@ private fun CodexDetailGrid(
             onOpenViewer = onOpenViewer,
             onToggleSelection = onToggleSelection,
             onOpenPostActions = onOpenPostActions,
+        )
+    }
+    if (relatedFeed != null) {
+        val environment = rememberFeedCardEnvironment(
+            pixivUgoiraClient, likedPostIds, acquiredDurations, durationStateForPost, onToggleLike,
+            onDurationPostVisibilityChanged, onAuthoritativeDurationKnown,
+        )
+        CodexRelatedPostGrid(relatedFeed, posts, gridState, footerMessage, environment, onOpenPostActions, card)
+        return
+    }
+    val postIds = remember(posts) { posts.map(Post::id) }
+    TwoColumnPostStaggeredGrid(
+        posts = posts,
+        state = gridState,
+        modifier = Modifier.fillMaxSize().codexDragSelect(gridState, postIds, editSelection, onSelectionChange),
+        footerMessage = footerMessage,
+    ) { index, post -> card(index, post) }
+}
+
+/** The grid's place-holder while a live collection loads or when nothing matches. */
+@Composable
+private fun CodexDetailEmptyState(collectionIsEmpty: Boolean, loading: Boolean, resolvingDurations: Boolean, emptyMessage: String?) {
+    if (loading) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text("Loading followed posts…")
+                CircularProgressIndicator()
+            }
+        }
+    } else {
+        FeedEmptyTile(
+            title = if (collectionIsEmpty) "This codex is empty" else "No matching posts",
+            message = emptyMessage ?: when {
+                collectionIsEmpty -> "Browse and save posts"
+                resolvingDurations -> "Resolving durations…"
+                else -> "Adjust your filters"
+            },
+            contentPadding = 24.dp,
         )
     }
 }
