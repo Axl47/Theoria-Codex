@@ -1,6 +1,8 @@
 package com.theoriacodex.app.ui
 
 import android.text.format.Formatter
+import android.net.Uri
+import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -104,23 +106,10 @@ internal fun rememberLibraryTransferTools(
         backup?.import(uri?.toString())
     }
     val autoBackup = container.workflows.autoBackup
-    val autoBackupFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
-        if (tree != null && autoBackup != null) {
-            val resolver = context.contentResolver
-            val previous = autoBackup.status.value.folderUri
-            val name = resolver.adoptAutoBackupFolder(tree)
-            if (previous != tree.toString()) resolver.releaseAutoBackupFolder(previous)
-            autoBackup.enable(tree.toString(), name)
-        }
-    }
+    val autoBackupFolder = rememberAutoBackupFolderPicker(autoBackup)
     val currentMessage by rememberUpdatedState(onMessage)
     LaunchedEffect(backup) { backup?.effects?.collect { currentMessage(it) } }
-    // A backup that keeps failing protects nothing, so say so where it will be seen, not only in Settings.
-    LaunchedEffect(autoBackup) {
-        autoBackup?.status?.map { it.failure }?.distinctUntilChanged()?.collect { failure ->
-            if (failure != null) currentMessage("Automatic backup failed. See Settings > Storage & app.")
-        }
-    }
+    AutoBackupFailureEffect(autoBackup) { currentMessage(it) }
     return remember(downloads, backup, offline, export, import, autoBackup, autoBackupFolder) {
         LibraryTransferTools(downloads, backup, offline, autoBackup,
             chooseBackupDestination = { export.launch("theoria-backup.json") },
@@ -131,6 +120,30 @@ internal fun rememberLibraryTransferTools(
                 autoBackup?.disable()
             },
         )
+    }
+}
+
+@Composable
+private fun rememberAutoBackupFolderPicker(autoBackup: AutoBackupWorkflow?): ManagedActivityResultLauncher<Uri?, Uri?> {
+    val resolver = LocalContext.current.applicationContext.contentResolver
+    return rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
+        if (tree != null && autoBackup != null) {
+            val previous = autoBackup.status.value.folderUri
+            val name = resolver.adoptAutoBackupFolder(tree)
+            if (previous != tree.toString()) resolver.releaseAutoBackupFolder(previous)
+            autoBackup.enable(tree.toString(), name)
+        }
+    }
+}
+
+/** A backup that keeps failing protects nothing, so say so where it will be seen, not only in Settings. */
+@Composable
+private fun AutoBackupFailureEffect(autoBackup: AutoBackupWorkflow?, onMessage: suspend (String) -> Unit) {
+    val currentMessage by rememberUpdatedState(onMessage)
+    LaunchedEffect(autoBackup) {
+        autoBackup?.status?.map { it.failure }?.distinctUntilChanged()?.collect { failure ->
+            if (failure != null) currentMessage("Automatic backup failed. See Settings > Storage & app.")
+        }
     }
 }
 

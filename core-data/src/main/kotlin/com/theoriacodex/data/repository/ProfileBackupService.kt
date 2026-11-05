@@ -49,14 +49,18 @@ class ProfileBackupService(
                     pins == savedSearches.observeSavedSearches().first() &&
                     (!includeRecents || positions == readingPositions.snapshot())
                 ) {
-                    // Usage totals change constantly and share nothing with the library, so they need no stable read.
-                    val totals = if (includeRecents) statistics?.observeStatistics()?.first() else null
-                    return@withLock codec.encode(ProfileBackup(clock(), initialSettings, library, pins, positions, totals))
+                    return@withLock codec.encode(
+                        ProfileBackup(clock(), initialSettings, library, pins, positions, statisticsFor(includeRecents)),
+                    )
                 }
             }
             error("Your library changed while preparing the backup. Try again after current saves finish.")
         }
     }
+
+    /** Usage totals change constantly and share nothing with the library, so they need no stable read. */
+    private suspend fun statisticsFor(includeRecents: Boolean): LifetimeStatistics? =
+        if (includeRecents) statistics?.observeStatistics()?.first() else null
 
     fun preview(bytes: ByteArray): ProfileBackupPreview = codec.decode(bytes).preview()
 

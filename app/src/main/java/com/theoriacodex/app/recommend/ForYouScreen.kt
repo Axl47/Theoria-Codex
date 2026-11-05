@@ -457,12 +457,7 @@ private fun ForYouFeedBody(
         state.isRefreshing && feed.visibleResults.isEmpty() -> FeedLoadingState()
 
         state.errorMessage != null && feed.visibleResults.isEmpty() -> {
-            val online by LocalNetworkOnline.current.collectAsStateWithLifecycle()
-            FeedErrorTile(
-                message = if (online) state.errorMessage.orEmpty() else OFFLINE_FEED_MESSAGE,
-                title = OFFLINE_FEED_TITLE.takeUnless { online },
-                onRetry = { onAction(ForYouAction.Refresh(shuffle = true)) },
-            )
+            ForYouFeedError(state.errorMessage.orEmpty()) { onAction(ForYouAction.Refresh(shuffle = true)) }
         }
 
         feed.related.projection.entries.isEmpty() -> FeedEmptyTile(message = forYouEmptyMessage(state, feed))
@@ -515,6 +510,16 @@ private fun ForYouFeedBody(
             }
         }
     }
+}
+
+@Composable
+private fun ForYouFeedError(message: String, onRetry: () -> Unit) {
+    val online by LocalNetworkOnline.current.collectAsStateWithLifecycle()
+    FeedErrorTile(
+        message = if (online) message else OFFLINE_FEED_MESSAGE,
+        title = OFFLINE_FEED_TITLE.takeUnless { online },
+        onRetry = onRetry,
+    )
 }
 
 @Composable

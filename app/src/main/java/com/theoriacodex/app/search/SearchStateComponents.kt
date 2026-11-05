@@ -57,6 +57,12 @@ internal fun StatusRow(
             dismissButton = { TextButton(onClick = { selected = null }) { Text("Close") } },
         )
     }
+    StatusChips(statuses) { selected = it }
+}
+
+/** Offline, one chip replaces every source a returning network could fix, since none of them is at fault. */
+@Composable
+private fun StatusChips(statuses: List<SourceRunStatus>, onSelect: (SourceKey) -> Unit) {
     val online by LocalNetworkOnline.current.collectAsStateWithLifecycle()
     val offlineFailures = !online && statuses.any(SourceRunStatus::retriesOnReconnect)
     val chips = if (online) statuses else statuses.filterNot(SourceRunStatus::retriesOnReconnect)
@@ -66,8 +72,7 @@ internal fun StatusRow(
         }
         items(chips.size) { index ->
             val status = chips[index]
-            val text = sourceStatusChipText(status)
-            AssistChip(onClick = { selected = status.source }, label = { Text(text) })
+            AssistChip(onClick = { onSelect(status.source) }, label = { Text(sourceStatusChipText(status)) })
         }
     }
 }
