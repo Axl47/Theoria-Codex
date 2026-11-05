@@ -97,6 +97,7 @@ internal fun TheoriaAppContent(
         com.theoriacodex.app.search.LocalPostWatchPresentation provides watchPresentation,
         LocalCodexSaveRelevanceLoader provides saveRelevanceLoader,
         LocalViewerReturnTransition provides viewerReturnTransition,
+        LocalNetworkOnline provides shell.sources.networkOnline,
     ) {
         com.theoriacodex.app.codex.SavedCodexSession {
             PostTagContextProvider(

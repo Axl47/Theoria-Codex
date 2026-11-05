@@ -1,5 +1,8 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.media.reconnections
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.take
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -113,6 +116,29 @@ internal class AdmissionFailureSearchViewModelTest : SearchViewModelTestFixture(
             assertEquals(listOf("fast"), queryRepository.observeAppliedQuery("source:PIXIV").first()?.includeTags)
             assertEquals(listOf(listOf("fast")), recents.observeSearches().first().map { it.query.includeTags })
         }
+
+    @Test
+    fun `a failed search retries by itself when the network returns`() = runTest(mainDispatcherRule.dispatcher) {
+        val network = MutableStateFlow(false)
+        val adapter = ViewModelSearchAdapter()
+        val viewModel = viewModel(adapter, reconnections = network.take(2).reconnections())
+        restore(viewModel)
+        viewModel.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
+        adapter.failingTags += "offline"
+        viewModel.onAction(SearchAction.AddIncludeTerm(SearchTerm("offline")))
+        viewModel.onAction(SearchAction.ApplyDraft)
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.content.error != null)
+        val attempts = adapter.searchCount
+
+        adapter.failingTags.clear()
+        network.value = true
+        advanceUntilIdle()
+
+        assertEquals(attempts + 1, adapter.searchCount)
+        assertEquals(null, viewModel.state.value.content.error)
+        assertTrue(resultIds(viewModel).isNotEmpty())
+    }
 
     @Test
     fun `admitted root failure applies failed query disables paging persists once and retry targets it`() =

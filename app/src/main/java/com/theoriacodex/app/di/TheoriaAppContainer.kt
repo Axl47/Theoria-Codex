@@ -1,5 +1,6 @@
 package com.theoriacodex.app.di
 
+import com.theoriacodex.app.media.NetworkMonitor
 import android.content.Context
 import androidx.core.net.toUri
 import com.theoriacodex.app.backup.AndroidAutoBackupFolder
@@ -112,6 +113,7 @@ data class SourceDependencies(
     val pixivUgoiraClient: PixivUgoiraClient,
     val registry: SourceAdapterRegistry,
     val availableSources: StateFlow<Set<SourceKey>>,
+    val networkOnline: StateFlow<Boolean> = kotlinx.coroutines.flow.MutableStateFlow(true),
     val pixivTokens: PixivTokenCoordinator = PixivTokenCoordinator(accounts, pixivAuthApi),
 )
 
@@ -327,6 +329,7 @@ internal class DefaultTheoriaAppContainer(
         pixivUgoiraClient = pixivUgoiraClient,
         registry = sourceRegistry,
         availableSources = accountStore.availableSources,
+        networkOnline = NetworkMonitor(appContext).online,
         pixivTokens = pixivTokenCoordinator,
     )
 

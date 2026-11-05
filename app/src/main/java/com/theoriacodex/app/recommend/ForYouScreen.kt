@@ -1,5 +1,9 @@
 package com.theoriacodex.app.recommend
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.theoriacodex.app.search.OFFLINE_FEED_MESSAGE
+import com.theoriacodex.app.search.OFFLINE_FEED_TITLE
+import com.theoriacodex.app.ui.LocalNetworkOnline
 import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.theoriacodex.app.media.animatedDurationRangeLabel
@@ -453,8 +457,10 @@ private fun ForYouFeedBody(
         state.isRefreshing && feed.visibleResults.isEmpty() -> FeedLoadingState()
 
         state.errorMessage != null && feed.visibleResults.isEmpty() -> {
+            val online by LocalNetworkOnline.current.collectAsStateWithLifecycle()
             FeedErrorTile(
-                message = state.errorMessage.orEmpty(),
+                message = if (online) state.errorMessage.orEmpty() else OFFLINE_FEED_MESSAGE,
+                title = OFFLINE_FEED_TITLE.takeUnless { online },
                 onRetry = { onAction(ForYouAction.Refresh(shuffle = true)) },
             )
         }

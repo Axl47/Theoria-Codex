@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import kotlinx.coroutines.flow.emptyFlow
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -76,6 +77,7 @@ internal class SearchViewModel(
     private val rootRequestTimeoutMs: Long = DEFAULT_ROOT_REQUEST_TIMEOUT_MS,
     scrollPersistenceDelayMs: Long = DEFAULT_SCROLL_PERSISTENCE_DELAY_MS,
     scrollPersistenceDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    reconnections: Flow<Unit> = emptyFlow(),
 ) : ViewModel(), RouteStateOwner<SearchUiState, SearchAction, SearchEffect> {
     private val mutableState = MutableStateFlow(initialSearchState(coordinator.availableSources, executionService))
     private val effectChannel = Channel<SearchEffect>(capacity = Channel.BUFFERED)
@@ -126,6 +128,7 @@ internal class SearchViewModel(
             relatedDiagnostics.record("owner cleared", mutableState.value.relatedPosts)
         })
         addCloseable(SEARCH_SCROLL_PERSISTENCE_KEY, scrollPersistence)
+        viewModelScope.launch { reconnections.collect { retryAfterReconnect() } }
     }
 
     override fun onAction(action: SearchAction) {
@@ -743,6 +746,21 @@ internal class SearchViewModel(
         launchPage(activeContinuation, source)
     }
 
+    /** Retries what failed while offline, one source at a time so each keeps its own continuation. */
+    private suspend fun retryAfterReconnect() {
+        val current = mutableState.value
+        if (current.execution.activeRequestId != null) return
+        if (current.content.error != null) {
+            retry()
+            return
+        }
+        current.content.statuses.filter { it.retriesOnReconnect() }.forEach { status ->
+            if (mutableState.value.execution.activeRequestId != null) return
+            retrySource(status.source)
+            activeRequestJob?.join()
+        }
+    }
+
     private fun launchPage(continuation: SearchContinuation?, retrySource: SourceKey? = null) {
         pageRetrySource = retrySource
         val current = mutableState.value
@@ -1033,6 +1051,7 @@ internal class SearchViewModel(
         fun factory(
             coordinator: SearchCoordinator,
             relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
+            reconnections: Flow<Unit> = emptyFlow(),
         ): ViewModelProvider.Factory {
             return viewModelFactory {
                 initializer {
@@ -1040,6 +1059,7 @@ internal class SearchViewModel(
                         coordinator = coordinator,
                         savedStateHandle = createSavedStateHandle(),
                         relatedPostsLoader = relatedPostsLoader,
+                        reconnections = reconnections,
                     )
                 }
             }

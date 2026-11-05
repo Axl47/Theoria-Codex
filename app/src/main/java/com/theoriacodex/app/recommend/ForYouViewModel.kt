@@ -1,5 +1,7 @@
 package com.theoriacodex.app.recommend
 
+import kotlinx.coroutines.flow.emptyFlow
+import com.theoriacodex.app.search.retriesOnReconnect
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -54,6 +56,7 @@ internal class ForYouViewModel(
     initialSort: SortMode? = null,
     coroutineScope: CoroutineScope? = null,
     relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
+    reconnections: Flow<Unit> = emptyFlow(),
 ) : ViewModel(), RouteStateOwner<ForYouUiState, ForYouAction, ForYouEffect> {
     constructor(
         coordinator: ForYouCoordinator,
@@ -61,8 +64,9 @@ internal class ForYouViewModel(
         initialProfiles: List<RecommendationProfile> = defaultRecommendationProfiles(),
         initialSort: SortMode? = null,
         relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
+        reconnections: Flow<Unit> = emptyFlow(),
     ) : this(coordinator as ForYouRouteEngine, savedStateHandle, initialProfiles, initialSort,
-        relatedPostsLoader = relatedPostsLoader)
+        relatedPostsLoader = relatedPostsLoader, reconnections = reconnections)
 
     private val ownerScope = coroutineScope ?: viewModelScope
     private var latestSettings: AppSettings? = null
@@ -105,6 +109,7 @@ internal class ForYouViewModel(
         addCloseable("related-posts-diagnostics", java.io.Closeable {
             relatedDiagnostics.record("owner cleared", mutableState.value.relatedPosts)
         })
+        ownerScope.launch { reconnections.collect { retryAfterReconnect() } }
     }
     override val state: StateFlow<ForYouUiState> = mutableState.asStateFlow()
     private val effectChannel = Channel<ForYouEffect>(capacity = Channel.BUFFERED)
@@ -124,6 +129,15 @@ internal class ForYouViewModel(
         emit = { effectChannel.trySend(it) },
         settingsChanged = { settings -> synchronizeEnvironment(settings, mutableState.value.activeProfileLikesCount) },
     )
+
+    private fun retryAfterReconnect() {
+        val current = mutableState.value
+        if (current.errorMessage != null && current.results.isEmpty()) {
+            onAction(ForYouAction.Refresh(shuffle = false))
+        } else {
+            onAction(ForYouAction.RetrySources(current.statuses.filter { it.retriesOnReconnect() }.mapTo(mutableSetOf()) { it.source }))
+        }
+    }
 
     private fun admitPreview(result: ForYouFeedResult) {
         cancelActiveReduction()
@@ -435,6 +449,7 @@ internal class ForYouViewModel(
             initialProfiles: List<RecommendationProfile> = defaultRecommendationProfiles(),
             initialSort: SortMode? = null,
             relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
+            reconnections: Flow<Unit> = emptyFlow(),
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 ForYouViewModel(
@@ -443,6 +458,7 @@ internal class ForYouViewModel(
                     initialProfiles = initialProfiles,
                     initialSort = initialSort,
                     relatedPostsLoader = relatedPostsLoader,
+                    reconnections = reconnections,
                 )
             }
         }

@@ -192,6 +192,31 @@ class ForYouViewModelTest {
     }
 
     @Test
+    fun `reconnecting retries sources that failed while offline without a new root`() = runTest {
+        val first = testPost(sourcePostId = "first")
+        val engine = FakeForYouRouteEngine().apply {
+            refreshResult = listOf(first)
+            refreshCanLoadMore = true
+            pageError = "no connection"
+        }
+        val returned = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val owner = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this,
+            reconnections = kotlinx.coroutines.flow.flow { returned.await(); emit(Unit) })
+        owner.synchronizeEnvironment(AppSettings(), 1)
+        advanceUntilIdle()
+        owner.onAction(ForYouAction.LoadNextPage)
+        advanceUntilIdle()
+
+        engine.pageError = null
+        engine.pageResult = listOf(first, testPost(sourcePostId = "second"))
+        returned.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(listOf("first", "second"), owner.state.value.results.map { it.id.sourcePostId })
+        assertEquals(1, engine.records.size)
+    }
+
+    @Test
     fun `committed related likes promote once and survive pagination before root replacement`() = runTest {
         val seed = testPost(sourcePostId = "seed")
         val promoted = testPost(sourcePostId = "promoted")

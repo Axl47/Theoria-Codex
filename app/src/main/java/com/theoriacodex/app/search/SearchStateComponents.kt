@@ -1,5 +1,7 @@
 package com.theoriacodex.app.search
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.theoriacodex.app.ui.LocalNetworkOnline
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.lazy.LazyRow
@@ -55,9 +57,15 @@ internal fun StatusRow(
             dismissButton = { TextButton(onClick = { selected = null }) { Text("Close") } },
         )
     }
+    val online by LocalNetworkOnline.current.collectAsStateWithLifecycle()
+    val offlineFailures = !online && statuses.any(SourceRunStatus::retriesOnReconnect)
+    val chips = if (online) statuses else statuses.filterNot(SourceRunStatus::retriesOnReconnect)
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(statuses.size) { index ->
-            val status = statuses[index]
+        if (offlineFailures) item {
+            AssistChip(onClick = {}, enabled = false, label = { Text(OFFLINE_STATUS_CHIP) })
+        }
+        items(chips.size) { index ->
+            val status = chips[index]
             val text = sourceStatusChipText(status)
             AssistChip(onClick = { selected = status.source }, label = { Text(text) })
         }
@@ -86,9 +94,12 @@ internal fun ErrorBlock(
     title: String = "Could not load results",
     actionLabel: String = "Retry",
 ) {
+    val online by LocalNetworkOnline.current.collectAsStateWithLifecycle()
+    // Without a retry this is an account problem, which reconnecting won't fix.
+    val offline = !online && onRetry != null
     FeedErrorTile(
-        message = message,
-        title = title,
+        message = if (offline) OFFLINE_FEED_MESSAGE else message,
+        title = if (offline) OFFLINE_FEED_TITLE else title,
         actionLabel = actionLabel,
         onRetry = onRetry,
     )

@@ -26,6 +26,8 @@ import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.statistics.StatisticsUsageCategory
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.filter
@@ -93,6 +95,9 @@ internal fun Modifier.codexMorph(codexId: String, morph: CodexMorphScope? = Loca
 }
 
 /** Tapping the tab that is already showing; each tab's scrolling content listens for its own. */
+/** Ambient connectivity for failure wording and for the feed owners that retry on reconnect. */
+internal val LocalNetworkOnline = staticCompositionLocalOf<StateFlow<Boolean>> { MutableStateFlow(true) }
+
 internal val LocalTabReselects = staticCompositionLocalOf<SharedFlow<TopLevelDestination>> { MutableSharedFlow() }
 
 /** Returns [destination]'s content to its top when its tab is tapped again. */

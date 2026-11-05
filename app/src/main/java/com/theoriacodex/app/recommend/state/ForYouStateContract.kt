@@ -122,6 +122,7 @@ sealed interface ForYouAction {
     ) : ForYouAction
     data object LoadNextPage : ForYouAction
     data class RetrySource(val source: SourceKey) : ForYouAction
+    data class RetrySources(val sources: Set<SourceKey>) : ForYouAction
     data class OpenResult(
         val index: Int,
         val scrollOffsetHint: Int = 0,
@@ -259,6 +260,7 @@ fun ForYouUiState.reduce(action: ForYouAction): ForYouTransition {
         is ForYouAction.RetrySource -> if (action.source in retryableSources) {
             beginPage(setOf(action.source))
         } else unchanged()
+        is ForYouAction.RetrySources -> beginPage(action.sources intersect retryableSources)
 
         is ForYouAction.OpenResult -> openResult(action)
 

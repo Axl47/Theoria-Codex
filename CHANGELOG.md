@@ -4,6 +4,9 @@
 
 ### Added
 
+- Share a provider link to Theoria from any app to open it here.
+- Settings > Sources has a shortcut to let provider links open in Theoria directly, and shows which sites are on.
+- Search and For You now retry failed feeds on their own when your connection comes back.
 - Back up daily to a folder you choose, under Settings > Storage & app. Theoria keeps the last seven and tells you if one fails.
 - Backups now include your statistics when you include Recents.
 - Undo right after deleting a Codex or clearing Likes.
@@ -15,6 +18,7 @@
 
 - Manage saved tags from the Manage action in the Saved section, which replaces Favorites in the search editor's overflow menu.
 - The Favorite tags sheet is now called Saved tags.
+- Feeds now say you're offline instead of blaming each source when the connection is the problem.
 - On a metered network, feed cards now autoplay a smaller video stream when the source offers one.
 
 ### Fixed
