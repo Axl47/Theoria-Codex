@@ -1,6 +1,7 @@
 package com.theoriacodex.app.codex
 
 import com.theoriacodex.app.related.LikeToggleOutcome
+import com.theoriacodex.data.repository.ClearedLikesSnapshot
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.CodexLikesTransactions
 import com.theoriacodex.data.repository.RecommendationProfile
@@ -38,12 +39,14 @@ class LikesCodexSyncService internal constructor(
         return if (nowLiked) LikeToggleOutcome.LIKED else LikeToggleOutcome.UNLIKED
     }
 
-    suspend fun clearProfile(profileId: String) {
+    /** Returns what Undo needs to bring the Likes back, or null when there were none. */
+    suspend fun clearProfile(profileId: String): ClearedLikesSnapshot? =
         transactions.clearLikesAndLikedMemberships(
             profileId = profileId,
             systemCodexId = likesCodexIdForProfile(profileId),
-        )
-    }
+        ).undo
+
+    suspend fun restoreClearedLikes(snapshot: ClearedLikesSnapshot) = transactions.restoreClearedLikes(snapshot)
 
     suspend fun removeProfileCodex(profileId: String) {
         transactions.clearLikesAndDeleteSystemCodex(

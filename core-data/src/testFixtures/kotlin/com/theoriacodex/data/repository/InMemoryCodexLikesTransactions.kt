@@ -111,6 +111,9 @@ class InMemoryCodexLikesTransactions(
         systemCodexId: String,
     ): CodexLikesClearResult {
         val likedIds = likes.observeLikedPostIds(profileId).first()
+        val removedLikes = likes.observeLikes(profileId).first()
+        val memberships = codices.observeCodexItems(systemCodexId).first().filter { it.postId in likedIds }
+        val posts = codices.observeCodexPosts(systemCodexId, CodexSortMode.NEWEST_SAVED).first().filter { it.id in likedIds }
         val before = codices.observeCodexItems(systemCodexId).first().map { it.postId }.toSet()
         likes.clearLikes(profileId)
         likedIds.forEach { postId ->
@@ -119,7 +122,13 @@ class InMemoryCodexLikesTransactions(
         return CodexLikesClearResult(
             clearedLikes = likedIds.size,
             removedMemberships = likedIds.count(before::contains),
+            undo = ClearedLikesSnapshot(memberships, posts, removedLikes).takeIf { removedLikes.isNotEmpty() },
         )
+    }
+
+    override suspend fun restoreClearedLikes(snapshot: ClearedLikesSnapshot) {
+        codices.restoreItems(snapshot.items, snapshot.posts)
+        likes.restoreLikes(snapshot.likes)
     }
 
     override suspend fun clearLikesAndDeleteSystemCodex(

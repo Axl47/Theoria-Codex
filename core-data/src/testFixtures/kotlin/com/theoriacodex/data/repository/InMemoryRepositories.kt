@@ -130,6 +130,27 @@ class InMemoryCodexRepository : CodexRepository {
         }
     }
 
+    override suspend fun deleteCodexForUndo(codexId: String): DeletedCodexSnapshot? = mutex.withLock {
+        val position = codices.value.indexOfFirst { it.codexId == codexId }
+        if (position < 0) return@withLock null
+        val items = itemsByCodex.value[codexId].orEmpty()
+        val snapshot = DeletedCodexSnapshot(codices.value[position], position, items, items.mapNotNull { postsById.value[it.postId] })
+        codices.value = codices.value.filterNot { it.codexId == codexId }
+        itemsByCodex.value = itemsByCodex.value - codexId
+        snapshot
+    }
+
+    override suspend fun restoreDeletedCodex(snapshot: DeletedCodexSnapshot) {
+        mutex.withLock {
+            if (codices.value.none { it.codexId == snapshot.codex.codexId }) {
+                codices.value = codices.value.toMutableList().apply {
+                    add(snapshot.position.coerceAtMost(size), snapshot.codex)
+                }
+            }
+        }
+        restoreItems(snapshot.items, snapshot.posts)
+    }
+
     override fun observeCodexItems(codexId: String): Flow<List<CodexItem>> {
         return itemsByCodex.map { map -> map[codexId].orEmpty() }
     }

@@ -95,6 +95,46 @@ class RoomProfileBackupStoreTest {
         assertEquals(20L, recents.observeSearches().first().single().searchedAtEpochMs)
     }
 
+    @Test fun `deleting a Codex for Undo restores its place rules and otherwise orphaned posts`() = runTest {
+        content.ensureCodex("a", "First")
+        content.ensureCodex("b", "Second")
+        content.setAutomaticTag("a", CodexAutomaticTag(SourceKey.PIXIV, "cat"), true)
+        val post = post("42")
+        content.addItems("a", listOf(post))
+
+        val snapshot = requireNotNull(content.deleteCodexForUndo("a"))
+        assertEquals(null, content.getPost(post.id))
+        assertEquals(listOf("b"), content.observeCodices().first().map { it.codexId })
+
+        content.ensureCodex("c", "First")
+        content.restoreDeletedCodex(snapshot)
+
+        val restored = content.observeCodices().first()
+        assertEquals(listOf("a", "b", "c"), restored.map { it.codexId })
+        assertEquals("First 2", restored.first().name)
+        assertEquals(listOf(CodexAutomaticTag(SourceKey.PIXIV, "cat")), restored.first().automaticTags)
+        assertEquals(listOf(post.id), content.observeCodexItems("a").first().map { it.postId })
+        assertEquals(post.id, content.getPost(post.id)?.id)
+        assertEquals(null, content.deleteCodexForUndo("missing"))
+    }
+
+    @Test fun `clearing Likes returns a snapshot that restores them and their membership`() = runTest {
+        val likesCodex = ProfileLibraryIds.likes("profile-main")
+        val post = post("42")
+        content.toggleLikeAndSyncSystemCodex("profile-main", likesCodex, "Likes", post, listOf("cat"))
+
+        val cleared = content.clearLikesAndLikedMemberships("profile-main", likesCodex)
+        assertEquals(1, cleared.clearedLikes)
+        assertTrue(content.observeLikedPostIds("profile-main").first().isEmpty())
+        assertEquals(null, content.clearLikesAndLikedMemberships("profile-main", likesCodex).undo)
+
+        content.restoreClearedLikes(requireNotNull(cleared.undo))
+
+        assertEquals(setOf(post.id), content.observeLikedPostIds("profile-main").first())
+        assertEquals(listOf("cat"), content.observeLikes("profile-main").first().single().tags)
+        assertEquals(listOf(post.id), content.observeCodexItems(likesCodex).first().map { it.postId })
+    }
+
     @Test fun `invalid membership rolls back every content write in an import`() = runTest {
         val post = post("new")
         val invalid = BackupLibrary(emptyList(), listOf(CodexItem("missing", post.id, 1L)), listOf(post), emptyList())

@@ -30,7 +30,7 @@ class CodexCommandHostTest {
         val post = testPost()
         repository.addItem("saved", post)
         val original = repository.observeCodexItems("saved").first()
-        val owner = CodexCommandViewModel(repository, {}, {}, CodexCleaningService(InMemoryCodexLikesTransactions(repository)))
+        val owner = CodexCommandViewModel(repository, { null }, {}, {}, CodexCleaningService(InMemoryCodexLikesTransactions(repository)))
         val owners = ViewModelStore().apply { put("commands", owner) }
         val snackbar = SnackbarHostState()
         val deleted = mutableListOf<String>()
@@ -51,7 +51,8 @@ class CodexCommandHostTest {
                 owner.rename("saved", "Newest")
             }
             compose.waitUntil(5_000) { deleted == listOf("deleted") }
-            compose.waitUntil(5_000) { snackbar.currentSnackbarData?.visuals?.message == "Codex renamed" }
+            compose.waitUntil(5_000) { snackbar.currentSnackbarData?.visuals?.actionLabel == "Undo" }
+            assertEquals("Codex deleted", snackbar.currentSnackbarData?.visuals?.message)
             assertEquals(null, repository.observeCodex("deleted").first())
         } finally {
             owners.clear()

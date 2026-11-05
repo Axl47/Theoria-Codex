@@ -277,7 +277,7 @@ private fun rememberShellOwners(container: TheoriaAppContainer, appContext: Cont
         factory = viewModelFactory {
             initializer {
                 CodexCommandViewModel(
-                    data.codexRepository, workflows.likesCodexSync::clearProfile,
+                    data.codexRepository, workflows.likesCodexSync::clearProfile, workflows.likesCodexSync::restoreClearedLikes,
                     workflows.codexTransfer::reorderVisibleCodices, workflows.codexCleaning,
                 )
             }

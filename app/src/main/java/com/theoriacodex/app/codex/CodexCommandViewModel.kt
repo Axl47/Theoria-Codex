@@ -2,6 +2,8 @@ package com.theoriacodex.app.codex
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.theoriacodex.data.repository.ClearedLikesSnapshot
+import com.theoriacodex.data.repository.DeletedCodexSnapshot
 import com.theoriacodex.data.repository.CodexCleaningRequest
 import com.theoriacodex.data.repository.CodexCleaningSnapshot
 import com.theoriacodex.data.repository.CodexRepository
@@ -24,7 +26,9 @@ internal sealed interface CodexCommand {
     data class Rename(val id: String, val name: String) : CodexCommand
     data class AutomaticTag(val id: String, val tag: CodexAutomaticTag, val enabled: Boolean) : CodexCommand
     data class Delete(val id: String) : CodexCommand
+    data class RestoreDeleted(val snapshot: DeletedCodexSnapshot) : CodexCommand
     data class ClearLikes(val profileId: String) : CodexCommand
+    data class RestoreLikes(val snapshot: ClearedLikesSnapshot) : CodexCommand
     data class Reorder(val visibleIds: List<String>) : CodexCommand
     data class Remove(val id: String, val items: List<CodexItem>, val posts: List<Post>) : CodexCommand
     data class Restore(val items: List<CodexItem>, val posts: List<Post>) : CodexCommand
@@ -50,7 +54,9 @@ internal data class CodexCommandFeedback(
         is CodexCommand.Rename -> if (succeeded) "Codex renamed" else "Could not rename Codex"
         is CodexCommand.AutomaticTag -> if (succeeded) "Automatic tag updated" else "Could not update automatic tag"
         is CodexCommand.Delete -> if (succeeded) "Codex deleted" else "Could not delete Codex"
+        is CodexCommand.RestoreDeleted -> if (succeeded) "Codex restored" else "Could not restore Codex"
         is CodexCommand.ClearLikes -> if (succeeded) "Likes cleared" else "Could not clear Likes"
+        is CodexCommand.RestoreLikes -> if (succeeded) "Likes restored" else "Could not restore Likes"
         is CodexCommand.Reorder -> if (succeeded) "Codices reordered" else "Could not reorder Codices"
         is CodexCommand.Remove -> if (succeeded) "${command.items.size} posts removed" else "Could not remove posts"
         is CodexCommand.Restore -> if (succeeded) "Posts restored" else "Could not restore posts"
@@ -60,7 +66,8 @@ internal data class CodexCommandFeedback(
 /** Serial retained mutations with acknowledged feedback; cancelling a UI collector loses no Retry or Undo. */
 internal class CodexCommandViewModel(
     private val repository: CodexRepository,
-    private val clearLikes: suspend (String) -> Unit,
+    private val clearLikes: suspend (String) -> ClearedLikesSnapshot?,
+    private val restoreLikes: suspend (ClearedLikesSnapshot) -> Unit,
     private val commitReorder: suspend (List<String>) -> Unit,
     private val cleaning: CodexCleaningService,
     scopeOverride: CoroutineScope? = null,
@@ -121,8 +128,10 @@ internal class CodexCommandViewModel(
             is CodexCommand.Create -> repository.ensureCodex(command.id, command.name)
             is CodexCommand.Rename -> repository.renameCodex(command.id, command.name)
             is CodexCommand.AutomaticTag -> repository.setAutomaticTag(command.id, command.tag, command.enabled)
-            is CodexCommand.Delete -> repository.deleteCodex(command.id)
-            is CodexCommand.ClearLikes -> clearLikes(command.profileId)
+            is CodexCommand.Delete -> return Outcome(repository.deleteCodexForUndo(command.id)?.let(CodexCommand::RestoreDeleted))
+            is CodexCommand.RestoreDeleted -> repository.restoreDeletedCodex(command.snapshot)
+            is CodexCommand.ClearLikes -> return Outcome(clearLikes(command.profileId)?.let(CodexCommand::RestoreLikes))
+            is CodexCommand.RestoreLikes -> restoreLikes(command.snapshot)
             is CodexCommand.Reorder -> commitReorder(command.visibleIds)
             is CodexCommand.Remove -> {
                 repository.removeItems(command.id, command.items.mapTo(linkedSetOf()) { it.postId })

@@ -8,7 +8,9 @@ import com.theoriacodex.data.repository.CodexCleaningSnapshot
 import com.theoriacodex.data.repository.CodexBulkImportResult
 import com.theoriacodex.data.repository.CodexBulkReorderResult
 import com.theoriacodex.data.repository.CodexLikeSyncResult
+import com.theoriacodex.data.repository.ClearedLikesSnapshot
 import com.theoriacodex.data.repository.CodexLikesClearResult
+import com.theoriacodex.data.repository.DeletedCodexSnapshot
 import com.theoriacodex.data.repository.CodexLikesPolicy
 import com.theoriacodex.data.repository.CodexLikesTransactions
 import com.theoriacodex.data.repository.CodexProfileDeleteResult
@@ -202,6 +204,37 @@ class RoomCodexLikesRepository(
                 normalizeCodexOrderInside()
                 cleanupOrphanPostsInside(removedItems.map { it.source to it.sourcePostId })
             }
+        }
+    }
+
+    override suspend fun deleteCodexForUndo(codexId: String): DeletedCodexSnapshot? = database.withTransaction {
+        val all = dao.codices()
+        val position = all.indexOfFirst { it.codexId == codexId }
+        if (position < 0) return@withTransaction null
+        val entity = all[position]
+        val rows = dao.itemsForCodex(codexId)
+        val snapshot = DeletedCodexSnapshot(
+            codex = entity.toDomain(dao.automaticTagsForCodex(codexId)),
+            position = position,
+            items = rows.mapNotNull { it.toDomainOrNull() },
+            posts = rows.mapNotNull { row -> dao.post(row.source, row.sourcePostId)?.let(codec::decodePost) },
+        )
+        deleteCodex(codexId)
+        snapshot
+    }
+
+    override suspend fun restoreDeletedCodex(snapshot: DeletedCodexSnapshot) {
+        database.withTransaction {
+            val codex = snapshot.codex
+            writeGuard.requireCodexWritable(codex.codexId)
+            val current = dao.codices()
+            // A Codex created under this name during the Undo window keeps it; this one gets a free one.
+            val name = CodexLikesPolicy.resolveUniqueCodexName(codex.name, current.map { it.toDomain() }, excludeCodexId = codex.codexId)
+            if (dao.insertCodex(CodexEntity(codex.codexId, name, codex.createdAtEpochMs, current.size)) != -1L) {
+                if (codex.automaticTags.isNotEmpty()) dao.insertAutomaticTags(codex.automaticTags.map { it.toEntity(codex.codexId) })
+                reorderCodex(codex.codexId, snapshot.position)
+            }
+            restoreItems(snapshot.items, snapshot.posts)
         }
     }
 
@@ -438,6 +471,13 @@ class RoomCodexLikesRepository(
         if (normalized.isBlank()) return CodexLikesClearResult(0, 0)
         return database.withTransaction {
             val likedBeforeClear = dao.likesForProfile(normalized)
+            val likedKeys = likedBeforeClear.mapTo(mutableSetOf()) { it.source to it.sourcePostId }
+            val memberships = dao.itemsForCodex(systemCodexId).filter { (it.source to it.sourcePostId) in likedKeys }
+            val undo = ClearedLikesSnapshot(
+                items = memberships.mapNotNull { it.toDomainOrNull() },
+                posts = likedBeforeClear.mapNotNull { dao.post(it.source, it.sourcePostId)?.let(codec::decodePost) },
+                likes = likedBeforeClear.mapNotNull(codec::decodeLike),
+            )
             val clearedLikes = dao.deleteLikes(normalized)
             var removedMemberships = 0
             likedBeforeClear.forEach { liked ->
@@ -448,7 +488,19 @@ class RoomCodexLikesRepository(
                 )
             }
             cleanupOrphanPostsInside(likedBeforeClear.map { it.source to it.sourcePostId })
-            CodexLikesClearResult(clearedLikes, removedMemberships)
+            CodexLikesClearResult(clearedLikes, removedMemberships, undo.takeIf { clearedLikes > 0 })
+        }
+    }
+
+    override suspend fun restoreClearedLikes(snapshot: ClearedLikesSnapshot) {
+        database.withTransaction {
+            restoreItems(snapshot.items, snapshot.posts)
+            snapshot.likes.forEach { like ->
+                dao.insertLike(LikedPostEntity(
+                    like.profileId, like.postId.source.name, like.postId.sourcePostId,
+                    like.likedAtEpochMs, codec.encodeTags(like.tags),
+                ))
+            }
         }
     }
 

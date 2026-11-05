@@ -4,6 +4,8 @@
 
 ### Added
 
+- Backups now include your statistics when you include Recents.
+- Undo right after deleting a Codex or clearing Likes.
 - Your favorite tags now appear in the search editor's Saved section with a star.
 - Tap a saved tag to add it, again to exclude it, and once more to clear it; the chip shows which applies.
 - Saved tags matching what you type appear first in the suggestions, marked with a star.
@@ -17,6 +19,7 @@
 ### Fixed
 
 - Opening a video on a metered network or with Data saver no longer downloads a larger version in advance that the Viewer then doesn't play.
+- Restoring a backup now adds what's missing to your existing profiles and collections, and your profiles keep their names. Restoring the same backup again no longer creates duplicates.
 - For You now shows sources that need an account and opens Source accounts from them, as Search does.
 
 ## [1.2.0] - 2026-11-04
