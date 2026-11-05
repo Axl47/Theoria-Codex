@@ -15,6 +15,7 @@
 - Saved tags matching what you type appear first in the suggestions, marked with a star.
 - Tap a tag in the search editor and choose Save tag to add it to your saved tags, or remove it from them if it is already saved.
 - Save an "or" group as a saved tag from any of its tags' menu; tapping the saved group adds the whole group to your search, and tapping it again removes it.
+- Give a saved "or" group a name when you save it, or later from Manage in the Saved section; the chip shows the name instead of its tags.
 - Liking a post in Recents or in the Followed and Searches collections now opens its related posts, as it does in Search, For You and creator pages.
 - Hold a post and choose More like this to open its related posts without liking it, in Search, For You, Recents, creator pages and the Followed and Searches collections.
 
