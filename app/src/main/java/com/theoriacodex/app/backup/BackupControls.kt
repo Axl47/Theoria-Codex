@@ -77,6 +77,7 @@ private fun autoBackupProgress(status: AutoBackupStatus): String {
     return when {
         status.running -> "Saving…"
         last == null -> "No backup yet"
+        System.currentTimeMillis() - last < DateUtils.MINUTE_IN_MILLIS -> "Last just now"
         else -> "Last ${DateUtils.getRelativeTimeSpanString(last, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS)}"
     }
 }

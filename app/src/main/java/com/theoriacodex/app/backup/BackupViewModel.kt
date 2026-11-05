@@ -155,7 +155,9 @@ internal class BackupViewModel(
 
 private fun ProfileRestoreResult.message(): String =
     if (profilesAdded == 0 && collectionsAdded == 0) "Backup restored into your existing collections."
-    else "Backup restored: $profilesAdded profiles and $collectionsAdded collections added."
+    else "Backup restored: ${countLabel(profilesAdded, "profile")} and ${countLabel(collectionsAdded, "collection")} added."
+
+private fun countLabel(count: Int, noun: String) = "$count ${if (count == 1) noun else "${noun}s"}"
 
 private fun Throwable.backupMessage(fallback: String): String =
     when (this) {

@@ -189,6 +189,20 @@ class PixivUgoiraClientTest {
     }
 
     @Test
+    fun `memory pressure drops decoded frames and playback recovers from the disk archive`() = runTest {
+        val directory = temporaryFolder.newFolder("pressure")
+        val client = fixtureClient(directory)
+        assertTrue(client.load("disk", UgoiraSizeBucket.CARD).isSuccess)
+        assertTrue(client.cachedDecodedBytes() > 0L)
+
+        client.releaseMemoryCaches()
+
+        assertEquals(0L, client.cachedDecodedBytes())
+        assertEquals(null, client.cached("disk", UgoiraSizeBucket.CARD))
+        assertTrue(client.load("disk", UgoiraSizeBucket.CARD).isSuccess)
+    }
+
+    @Test
     fun `deadline terminates partial decoding without caching or recycling displayed frames`() = runTest {
         val bitmap = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
         val partial = CompletableDeferred<Unit>()

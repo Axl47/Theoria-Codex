@@ -56,6 +56,14 @@ class MainActivityIntentFilterDeviceTest {
     }
 
     @Test
+    fun sharedTextReachesTheAppAsItsFirstLink() {
+        val share = Intent(Intent.ACTION_SEND).setType("text/plain")
+            .putExtra(Intent.EXTRA_TEXT, "A title https://www.pixiv.net/artworks/42.")
+        assertMainActivityMatches(share)
+        assertEquals("https://www.pixiv.net/artworks/42", share.incomingPayloadUri().toString())
+    }
+
+    @Test
     fun codexImportFilterPreservesEverySupportedSchemeAndMimeCombination() {
         listOf("content", "file").forEach { scheme ->
             listOf("application/json", "text/json").forEach { mimeType ->
