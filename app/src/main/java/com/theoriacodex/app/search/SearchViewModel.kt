@@ -126,7 +126,7 @@ internal class SearchViewModel(
         addCloseable(SEARCH_SCROLL_PERSISTENCE_KEY, scrollPersistence)
         viewModelScope.launch {
             reconnections.collect {
-                retrySearchAfterReconnect({ mutableState.value }, ::retry) { source -> retrySource(source); activeRequestJob }
+                retrySearchAfterReconnect(mutableState, ::retry) { source -> retrySource(source); activeRequestJob }
             }
         }
     }

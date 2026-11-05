@@ -141,6 +141,40 @@ internal class AdmissionFailureSearchViewModelTest : SearchViewModelTestFixture(
     }
 
     @Test
+    fun `a request still failing when the network returns gets the retry once it ends`() = runTest(mainDispatcherRule.dispatcher) {
+        val network = MutableStateFlow(false)
+        val adapter = ViewModelSearchAdapter()
+        val firstAttempt = CompletableDeferred<Unit>()
+        var attempts = 0
+        val viewModel = viewModel(adapter, reconnections = network.take(2).reconnections(), executionService = { coordinator ->
+            object : SearchExecutionService by coordinator {
+                override suspend fun executeInitial(query: Query, sourceScope: SearchSourceScope): SearchExecutionResult {
+                    if ("offline" !in query.includeTags || ++attempts > 1) return coordinator.executeInitial(query, sourceScope)
+                    firstAttempt.await()
+                    return coordinator.executeInitial(query, sourceScope).also { adapter.failingTags.clear() }
+                }
+            }
+        })
+        restore(viewModel)
+        viewModel.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
+        adapter.failingTags += "offline"
+        viewModel.onAction(SearchAction.AddIncludeTerm(SearchTerm("offline")))
+        viewModel.onAction(SearchAction.ApplyDraft)
+        // Not advanceUntilIdle: that would jump past the root timeout and end the gated request.
+        runCurrent()
+
+        network.value = true
+        runCurrent()
+        assertEquals(1, attempts)
+        firstAttempt.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(2, attempts)
+        assertEquals(null, viewModel.state.value.content.error)
+        assertTrue(resultIds(viewModel).isNotEmpty())
+    }
+
+    @Test
     fun `admitted root failure applies failed query disables paging persists once and retry targets it`() =
         runTest(mainDispatcherRule.dispatcher) {
             val queryRepository = InMemoryQueryRepository()

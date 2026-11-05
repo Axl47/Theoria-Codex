@@ -11,7 +11,9 @@ import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
 
 internal fun searchViewModelFactory(
     coordinator: SearchCoordinator,
@@ -30,18 +32,18 @@ internal fun searchViewModelFactory(
 
 /** Retries what failed while offline, one source at a time so each keeps its own continuation. */
 internal suspend fun retrySearchAfterReconnect(
-    state: () -> SearchUiState,
+    state: StateFlow<SearchUiState>,
     retry: () -> Unit,
     retrySource: (SourceKey) -> Job?,
 ) {
-    val current = state()
-    if (current.execution.activeRequestId != null) return
-    if (current.content.error != null) {
+    // A request begun offline may still be failing; waiting lets its outcome get this retry too.
+    val settled = state.first { it.execution.activeRequestId == null }
+    if (settled.content.error != null) {
         retry()
         return
     }
-    current.content.statuses.filter { it.retriesOnReconnect() }.forEach { status ->
-        if (state().execution.activeRequestId != null) return
+    settled.content.statuses.filter { it.retriesOnReconnect() }.forEach { status ->
+        state.first { it.execution.activeRequestId == null }
         retrySource(status.source)?.join()
     }
 }

@@ -217,6 +217,34 @@ class ForYouViewModelTest {
     }
 
     @Test
+    fun `a page still failing when the network returns gets the retry once it ends`() = runTest {
+        val first = testPost(sourcePostId = "first")
+        val gate = CompletableDeferred<Unit>()
+        val engine = FakeForYouRouteEngine().apply {
+            refreshResult = listOf(first)
+            refreshCanLoadMore = true
+        }
+        val returned = CompletableDeferred<Unit>()
+        val owner = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this,
+            reconnections = kotlinx.coroutines.flow.flow { returned.await(); emit(Unit) })
+        owner.synchronizeEnvironment(AppSettings(), 1)
+        advanceUntilIdle()
+        engine.pageError = "no connection"
+        engine.pageGate = gate
+        owner.onAction(ForYouAction.LoadNextPage)
+        advanceUntilIdle()
+        assertTrue(owner.state.value.isPaging)
+
+        returned.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(1, engine.pageTokens.size)
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(2, engine.pageTokens.size)
+    }
+
+    @Test
     fun `committed related likes promote once and survive pagination before root replacement`() = runTest {
         val seed = testPost(sourcePostId = "seed")
         val promoted = testPost(sourcePostId = "promoted")
@@ -299,6 +327,7 @@ private class FakeForYouRouteEngine : ForYouRouteEngine {
     var refreshCanLoadMore = false
     var pageResult: List<Post> = emptyList()
     var pageError: String? = null
+    var pageGate: CompletableDeferred<Unit>? = null
     var firstStarted: CompletableDeferred<Unit>? = null
     var firstRelease: CompletableDeferred<Unit>? = null
     var blacklistStarted: CompletableDeferred<Unit>? = null
@@ -328,6 +357,7 @@ private class FakeForYouRouteEngine : ForYouRouteEngine {
 
     override suspend fun loadPage(continuation: ForYouContinuation, sources: Set<SourceKey>): UnifiedSearchResult {
         pageTokens += sources.map { continuation.pageTokens[it] }
+        pageGate?.await()
         pageError?.let { error(it) }
         return UnifiedSearchResult(pageResult, sources.associateWith { null }, sources.map { SourceRunStatus(it, SourceRunState.SUCCESS) })
     }

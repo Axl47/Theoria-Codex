@@ -44,6 +44,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.ensureActive
@@ -131,8 +132,9 @@ internal class ForYouViewModel(
         settingsChanged = { settings -> synchronizeEnvironment(settings, mutableState.value.activeProfileLikesCount) },
     )
 
-    private fun retryAfterReconnect() {
-        val current = mutableState.value
+    /** Waits out any request begun offline, which may still be failing, so its outcome gets this retry too. */
+    private suspend fun retryAfterReconnect() {
+        val current = mutableState.first { !it.isRefreshing && !it.isPaging }
         if (current.errorMessage != null && current.results.isEmpty()) {
             onAction(ForYouAction.Refresh(shuffle = false))
         } else {
