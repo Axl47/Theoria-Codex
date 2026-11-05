@@ -1,5 +1,6 @@
 package com.theoriacodex.app.backup
 
+import android.text.format.DateUtils
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -40,6 +41,43 @@ internal fun BackupControls(state: BackupUiState, onExport: () -> Unit, onImport
             },
             style = MaterialTheme.typography.bodySmall,
         )
+    }
+}
+
+/** Daily backup to a folder; compact because it is checked rarely and only needs attention on failure. */
+@Composable
+internal fun AutoBackupControls(
+    status: AutoBackupStatus,
+    onChooseFolder: () -> Unit,
+    onBackUpNow: () -> Unit,
+    onTurnOff: () -> Unit,
+) {
+    if (!status.enabled) {
+        OutlinedButton(onClick = onChooseFolder, modifier = Modifier.fillMaxWidth()) {
+            Text("Back up daily to a folder")
+        }
+        return
+    }
+    Text(
+        text = "Daily backup to ${status.folderName ?: "your folder"} · ${autoBackupProgress(status)}",
+        style = MaterialTheme.typography.bodySmall,
+    )
+    status.failure?.let { failure ->
+        Text(failure, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        TextButton(onClick = onBackUpNow, enabled = !status.running) { Text("Back up now") }
+        TextButton(onClick = onChooseFolder) { Text("Change folder") }
+        TextButton(onClick = onTurnOff) { Text("Turn off") }
+    }
+}
+
+private fun autoBackupProgress(status: AutoBackupStatus): String {
+    val last = status.lastSuccessEpochMs
+    return when {
+        status.running -> "Saving…"
+        last == null -> "No backup yet"
+        else -> "Last ${DateUtils.getRelativeTimeSpanString(last, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS)}"
     }
 }
 

@@ -52,12 +52,16 @@ internal fun ShellOwnerHosts(shell: TheoriaShell) {
         owners.codexSaves.effects.collect { message -> snackbarHostState.showSnackbar(message) }
     }
     val appUsageTracker = shell.features.appUsageTracker
-    DisposableEffect(appUsageTracker) {
+    val autoBackup = shell.workflows.autoBackup
+    DisposableEffect(appUsageTracker, autoBackup) {
         val processLifecycle = ProcessLifecycleOwner.get().lifecycle
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_START -> appUsageTracker.onForeground()
-                Lifecycle.Event.ON_STOP -> appUsageTracker.onBackground()
+                Lifecycle.Event.ON_STOP -> {
+                    appUsageTracker.onBackground()
+                    autoBackup?.onAppBackgrounded()
+                }
                 else -> Unit
             }
         }

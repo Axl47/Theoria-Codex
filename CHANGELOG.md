@@ -4,6 +4,7 @@
 
 ### Added
 
+- Back up daily to a folder you choose, under Settings > Storage & app. Theoria keeps the last seven and tells you if one fails.
 - Backups now include your statistics when you include Recents.
 - Undo right after deleting a Codex or clearing Likes.
 - Your favorite tags now appear in the search editor's Saved section with a star.
