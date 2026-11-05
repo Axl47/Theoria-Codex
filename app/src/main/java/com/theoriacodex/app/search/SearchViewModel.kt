@@ -605,14 +605,11 @@ internal class SearchViewModel(
                     requestId, query, sourceScope, expectedExecutionKey, persistAcceptedResult, undo, undoScrollState, onSuccess,
                 )
             } catch (_: TimeoutCancellationException) {
-                failRequestIfCurrent(requestId, ROOT_REQUEST_TIMEOUT_MESSAGE)
+                failRootRequestIfCurrent(requestId, ROOT_REQUEST_TIMEOUT_MESSAGE, query, sourceScope, expectedExecutionKey)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                failRequestIfCurrent(
-                    requestId = requestId,
-                    message = error.message ?: "Search failed",
-                )
+                failRootRequestIfCurrent(requestId, error.message ?: "Search failed", query, sourceScope, expectedExecutionKey)
             } finally {
                 if (!isActive) cancelRequestIfCurrent(requestId)
             }
@@ -814,6 +811,20 @@ internal class SearchViewModel(
         if (mutableState.value.execution.activeRequestId == requestId) {
             reduce(SearchStateChange.RequestFailed(requestId, message))
         }
+    }
+
+    /** Records the attempted query as a provider failure does, so Retry repeats it and not the search before it. */
+    private fun failRootRequestIfCurrent(
+        requestId: Long,
+        message: String,
+        query: Query,
+        sourceScope: SearchSourceScope,
+        executionKey: String,
+    ) {
+        if (mutableState.value.execution.activeRequestId != requestId) return
+        rememberAppliedQuery(query, sourceScope)
+        reduce(SearchStateChange.RequestFailed(requestId, message, appliedQuery = query,
+            appliedSourceScope = sourceScope, appliedQueryHash = executionKey))
     }
 
     private fun refreshAutocomplete(input: String) {

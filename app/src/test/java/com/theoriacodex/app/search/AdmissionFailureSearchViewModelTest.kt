@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import kotlinx.coroutines.awaitCancellation
 import com.theoriacodex.app.media.reconnections
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.take
@@ -173,6 +174,43 @@ internal class AdmissionFailureSearchViewModelTest : SearchViewModelTestFixture(
         assertEquals(null, viewModel.state.value.content.error)
         assertTrue(resultIds(viewModel).isNotEmpty())
     }
+
+    @Test
+    fun `a search that times out across a reconnect retries itself, not the search before it`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val network = MutableStateFlow(false)
+            val adapter = ViewModelSearchAdapter()
+            var hangSecond = true
+            val viewModel = viewModel(adapter, rootRequestTimeoutMs = 100L, reconnections = network.take(2).reconnections(),
+                executionService = { coordinator ->
+                    object : SearchExecutionService by coordinator {
+                        override suspend fun executeInitial(query: Query, sourceScope: SearchSourceScope): SearchExecutionResult {
+                            if ("second" in query.includeTags && hangSecond) awaitCancellation()
+                            return coordinator.executeInitial(query, sourceScope)
+                        }
+                    }
+                })
+            restore(viewModel)
+            viewModel.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
+            viewModel.onAction(SearchAction.AddIncludeTerm(SearchTerm("first")))
+            viewModel.onAction(SearchAction.ApplyDraft)
+            runCurrent()
+            viewModel.onAction(SearchAction.ClearDraft)
+            viewModel.onAction(SearchAction.AddIncludeTerm(SearchTerm("second")))
+            viewModel.onAction(SearchAction.ApplyDraft)
+            runCurrent()
+
+            network.value = true
+            runCurrent()
+            hangSecond = false
+            adapter.searchedTags.clear()
+            advanceTimeBy(101L)
+            runCurrent()
+
+            assertEquals(listOf("second"), adapter.searchedTags)
+            assertEquals(listOf("second"), viewModel.state.value.query.applied.includeTags)
+            assertEquals(null, viewModel.state.value.content.error)
+        }
 
     @Test
     fun `admitted root failure applies failed query disables paging persists once and retry targets it`() =
