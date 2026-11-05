@@ -163,6 +163,19 @@ class RelatedPostsStateTest {
         }
     }
 
+    @Test
+    fun `a shelf follows its seed, then its chain, when the list reorders under it`() {
+        val seed = post("seed")
+        val chained = post("chained")
+        val request = RelatedPostsUiState.Idle.begin(chained, 2, 1, ancestorSeedPostIds = setOf(seed.id)).request
+        val ids = { names: List<String> -> names.map { post(it).id } }
+
+        assertEquals(0, request.anchorIndexIn(ids(listOf("chained", "a", "seed"))))
+        assertEquals(2, request.anchorIndexIn(ids(listOf("new", "a", "seed"))))
+        assertEquals(1, request.anchorIndexIn(ids(listOf("a", "b"))))
+        assertEquals(-1, request.anchorIndexIn(emptyList()))
+    }
+
     private fun post(id: String): Post = Post(
         id = PostId(SourceKey.PIXIV, id),
         preview = ImageRef("https://example.com/$id.jpg", null, "image/jpeg"),

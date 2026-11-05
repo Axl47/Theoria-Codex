@@ -219,3 +219,14 @@ fun promoteRelatedPost(
 }
 
 const val MAX_RELATED_POSTS: Int = 6
+
+/**
+ * Where this shelf sits in a list that can reorder under it, such as Recents: after its seed, else
+ * after the first earlier seed of its chain still listed, else after its anchor index. -1 when empty.
+ */
+fun RelatedPostsRequest.anchorIndexIn(postIds: List<PostId>): Int {
+    if (postIds.isEmpty()) return -1
+    postIds.indexOf(seed.id).takeIf { it >= 0 }?.let { return it }
+    postIds.indexOfFirst { it in ancestorSeedPostIds }.takeIf { it >= 0 }?.let { return it }
+    return anchorCanonicalIndex.coerceAtMost(postIds.lastIndex)
+}

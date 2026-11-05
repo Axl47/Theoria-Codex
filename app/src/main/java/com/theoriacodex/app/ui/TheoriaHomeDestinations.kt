@@ -13,6 +13,7 @@ import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.recents.RecentsClearTarget
 import com.theoriacodex.app.recommend.state.ForYouEffect
 import com.theoriacodex.app.search.state.SearchEffect
+import com.theoriacodex.app.recents.RecentsRelatedViewModel
 import com.theoriacodex.app.recents.RecentsScreen
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.source.creatorBrowsingSources
@@ -242,22 +243,35 @@ private fun TheoriaShell.clearRecents(target: RecentsClearTarget, state: Recents
     }
 }
 
+/** Resolves durations for every post Recents can show. */
+@Composable
+private fun rememberRecentsDurationOwner(shell: TheoriaShell, state: RecentsDestinationState): MediaDurationRouteViewModel {
+    val durationOwner = viewModel<MediaDurationRouteViewModel>(
+        key = "recents-duration-owner",
+        factory = MediaDurationRouteViewModel.factory(shell.features.mediaDurationCoordinator, "recents"),
+    )
+    SideEffect {
+        durationOwner.synchronize(
+            identity = "recents",
+            posts = (state.watchedPosts + state.codexPosts).map(RecentPostEntry::post),
+            resolveInBackground = false,
+        )
+    }
+    return durationOwner
+}
+
 @Composable
 private fun RecentsDestination(shell: TheoriaShell) {
     val routes = shell.routes
     RecentsDestinationStateBoundary(shell.data) { state ->
-        val durationOwner = viewModel<MediaDurationRouteViewModel>(
-            key = "recents-duration-owner",
-            factory = MediaDurationRouteViewModel.factory(shell.features.mediaDurationCoordinator, "recents"),
+        val durationOwner = rememberRecentsDurationOwner(shell, state)
+        val relatedOwner = viewModel<RecentsRelatedViewModel>(
+            key = "recents-related-owner",
+            factory = RecentsRelatedViewModel.factory(shell.features.relatedPosts),
         )
-        SideEffect {
-            durationOwner.synchronize(
-                identity = "recents",
-                posts = (state.watchedPosts + state.codexPosts).map(RecentPostEntry::post),
-                resolveInBackground = false,
-            )
-        }
         RecentsScreen(
+            related = rememberRelatedShelfBinding(shell, relatedOwner.state, relatedOwner.related),
+            onShownPostsChanged = relatedOwner::showing,
             onSaveSearch = shell.owners.savedSearches::save,
             watchedPosts = state.watchedPosts,
             codexPosts = state.codexPosts,
@@ -273,7 +287,9 @@ private fun RecentsDestination(shell: TheoriaShell) {
             creatorBrowsingSources = shell.sources.registry.creatorBrowsingSources(),
             tagVideoCountProvider = shell.features.search::tagVideoCount,
             fetchTagVideoCounts = shell.features.search::fetchTagVideoCounts,
-            onToggleLike = { post -> shell.toggleLikeAndSyncCodex(post) },
+            onToggleLike = { post ->
+                shell.toggleLikeAndSyncCodex(post) { outcome -> relatedOwner.related.onLikeCommitted(post, outcome) }
+            },
             onRequestSaveToCodex = { post -> shell.requestSaveToCodex(post) },
             onSaveToDevice = shell::requestSaveToDevice,
             onPostUrlCopied = { shell.recordPostUrlCopy() },

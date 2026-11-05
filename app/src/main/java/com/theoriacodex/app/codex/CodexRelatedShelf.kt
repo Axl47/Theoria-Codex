@@ -7,8 +7,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
-import com.theoriacodex.app.related.RelatedPostsRouteController
-import com.theoriacodex.app.related.RelatedPostsUiState
+import com.theoriacodex.app.related.RelatedShelfBinding
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.ui.components.FeedCardEnvironment
@@ -19,23 +18,16 @@ import com.theoriacodex.app.ui.components.rememberRelatedFeedPresentation
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
-/** A live Codex's related shelf: its current state, the owner that drives it, and how its posts open. */
-internal data class CodexRelatedShelf(
-    val state: RelatedPostsUiState,
-    val controller: RelatedPostsRouteController,
-    val onOpenPost: (posts: List<Post>, index: Int) -> Unit,
-)
-
 /** The shelf plus where it sits among the collection's filtered posts. */
 internal data class CodexRelatedFeed(
-    val shelf: CodexRelatedShelf,
+    val shelf: RelatedShelfBinding,
     val presentation: RelatedFeedPresentation,
 )
 
 /** Projects [shelf] into the collection, filtering its posts by the collection's own media filters. */
 @Composable
 internal fun rememberCodexRelatedFeed(
-    shelf: CodexRelatedShelf,
+    shelf: RelatedShelfBinding,
     posts: List<Post>,
     visiblePosts: List<Post>,
     filters: CodexCollectionFilters,

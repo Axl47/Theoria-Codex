@@ -66,6 +66,8 @@ import com.theoriacodex.app.ui.components.SingleChoiceMenu
 import com.theoriacodex.app.ui.components.SourceSelector
 import com.theoriacodex.app.ui.components.expandableControlSemantics
 import com.theoriacodex.app.ui.components.FeedPostActionSheet
+import com.theoriacodex.app.related.RelatedShelfBinding
+import com.theoriacodex.app.viewer.ViewerReturnRequest
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.RecentActivityEntry
@@ -84,7 +86,7 @@ import com.theoriacodex.app.search.relativeTimeLabel
 import kotlinx.coroutines.flow.Flow
 
 @Composable
-fun RecentsScreen(
+internal fun RecentsScreen(
     watchedPosts: List<RecentPostEntry>,
     codexPosts: List<RecentPostEntry>,
     searches: List<RecentSearchEntry>,
@@ -118,6 +120,8 @@ fun RecentsScreen(
     onClear: (RecentsClearTarget) -> Unit,
     onSaveSearch: ((String, RecentSearchEntry) -> Unit)? = null,
     onStartOver: (Post, RecentPostSection) -> Unit = { _, _ -> },
+    related: RelatedShelfBinding? = null,
+    onShownPostsChanged: (key: String, posts: List<Post>) -> Unit = { _, _ -> },
 ) {
     var filter by rememberSaveable { mutableStateOf(RecentsFilter.ALL) }
     var searchFilter by rememberSaveable { mutableStateOf(RecentSearchFilter.ALL) }
@@ -132,6 +136,9 @@ fun RecentsScreen(
     var selectedActionSection by remember { mutableStateOf(RecentPostSection.WATCHED) }
     var searchToPin by remember { mutableStateOf<RecentSearchEntry?>(null) }
     val onPinSearch = onSaveSearch?.let { { entry: RecentSearchEntry -> searchToPin = entry } }
+    val cards = RecentsPostCards(pixivUgoiraClient, likedPostIds, durationStateForPost, onDurationPostVisibilityChanged,
+        onDurationEnvironmentChanged, onAuthoritativeDurationKnown, onToggleLike)
+    val relatedSlot = rememberRecentsRelated(related, filter, selectedSource, visible, cards, onShownPostsChanged) { selectedActionPost = it }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
@@ -143,11 +150,7 @@ fun RecentsScreen(
         }
 
         RecentsTab(
-            filter, searchFilter, { searchFilter = it }, visible, sourceEmptyMessage, now,
-            RecentsPostCards(
-                pixivUgoiraClient, likedPostIds, durationStateForPost, onDurationPostVisibilityChanged,
-                onDurationEnvironmentChanged, onAuthoritativeDurationKnown, onToggleLike,
-            ),
+            filter, searchFilter, { searchFilter = it }, visible, sourceEmptyMessage, now, cards, relatedSlot,
             { post, section ->
                 selectedActionPost = post
                 selectedActionSection = section
@@ -172,6 +175,7 @@ fun RecentsScreen(
                 onStartOver(post, selectedActionSection)
                 selectedActionPost = null
             }.takeIf { maxOf(post.mediaCount ?: 1, post.media.size) > 1 },
+            onShowRelated = related?.let { shelf -> { shelf.controller.show(post) } },
         )
     }
 
@@ -243,6 +247,7 @@ private fun RecentsTab(
     sourceEmptyMessage: String?,
     now: Long,
     cards: RecentsPostCards,
+    related: RecentsRelatedSlot?,
     onLongPress: (Post, RecentPostSection) -> Unit,
     openWatchedPost: (Int) -> Unit,
     openCodexPost: (Int) -> Unit,
@@ -252,12 +257,12 @@ private fun RecentsTab(
 ) {
     when (filter) {
         RecentsFilter.WATCHED -> RecentPostsGrid(
-            visible.watchedPosts, now, cards, openWatchedPost, RecentPostSection.WATCHED, onLongPress,
+            visible.watchedPosts, now, cards, related, openWatchedPost, RecentPostSection.WATCHED, onLongPress,
             showMediaProgress = true,
             emptyMessage = sourceEmptyMessage ?: "Posts appear here after you open them in Viewer.",
         )
         RecentsFilter.CODEX -> RecentPostsGrid(
-            visible.codexPosts, now, cards, openCodexPost, RecentPostSection.CODEX, onLongPress,
+            visible.codexPosts, now, cards, related, openCodexPost, RecentPostSection.CODEX, onLongPress,
             showMediaProgress = false,
             emptyMessage = sourceEmptyMessage ?: "Posts appear here after you open them from Codex.",
         )
@@ -276,7 +281,7 @@ private fun RecentsTab(
         )
         RecentsFilter.ALL -> ActivityList(
             visible.activity, cards.pixivUgoiraClient, cards.likedPostIds, cards.durationStateForPost, cards.onDurationPostVisibilityChanged,
-            cards.onAuthoritativeDurationKnown, cards.onToggleLike, onLongPress,
+            cards.onAuthoritativeDurationKnown, cards.onToggleLike, onLongPress, related,
             emptyMessage = sourceEmptyMessage ?: "Recent posts and applied searches appear here.",
             watchedPosts = visible.watchedPosts,
             codexPosts = visible.codexPosts,
@@ -291,7 +296,7 @@ private fun RecentsTab(
 }
 
 /** Recents after the source filter; everything the tabs show comes from here. */
-private class VisibleRecents(
+internal class VisibleRecents(
     val watchedPosts: List<RecentPostEntry>,
     val codexPosts: List<RecentPostEntry>,
     val searches: List<RecentSearchEntry>,
@@ -318,7 +323,7 @@ private fun rememberVisibleRecents(
 }
 
 /** What each post tile in Recents shares, whichever tab shows it. */
-private class RecentsPostCards(
+internal class RecentsPostCards(
     val pixivUgoiraClient: PixivUgoiraClient?,
     val likedPostIds: Set<PostId>,
     val durationStateForPost: (Post) -> Flow<MediaDurationState?>,
@@ -333,6 +338,7 @@ private fun RecentPostsGrid(
     posts: List<RecentPostEntry>,
     now: Long,
     cards: RecentsPostCards,
+    related: RecentsRelatedSlot?,
     onOpen: (Int) -> Unit,
     section: RecentPostSection,
     onLongPress: (Post, RecentPostSection) -> Unit,
@@ -349,6 +355,7 @@ private fun RecentPostsGrid(
         onDurationEnvironmentChanged = cards.onDurationEnvironmentChanged,
         onAuthoritativeDurationKnown = cards.onAuthoritativeDurationKnown,
         onToggleLike = cards.onToggleLike,
+        related = related,
         onOpenWatchedPost = onOpen,
         onLongPress = { onLongPress(it, section) },
         showMediaProgress = showMediaProgress,
@@ -428,6 +435,7 @@ private fun WatchedGrid(
     onDurationEnvironmentChanged: (Boolean, Boolean) -> Unit,
     onAuthoritativeDurationKnown: (Post, Long) -> Unit,
     onToggleLike: ((Post) -> Unit)?,
+    related: RecentsRelatedSlot?,
     onOpenWatchedPost: (Int) -> Unit,
     onLongPress: (Post) -> Unit,
     emptyMessage: String = "Posts appear here after you open them in Viewer.",
@@ -440,13 +448,20 @@ private fun WatchedGrid(
     val gridState = rememberRetainedFeedGridState("recents")
     ScrollToTopOnTabReselect(TopLevelDestination.Recents) { gridState.animateScrollToItem(0) }
     DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
-    val rows = remember(watchedPosts, now) { recentsGridRows(watchedPosts, now) }
-    // Headings hold a null so Viewer return still finds each post by its grid position.
+    val rows = remember(watchedPosts, now, related?.request) {
+        recentsGridRows(watchedPosts, now).withRelatedShelf(related?.request, watchedPosts)
+    }
+    // Headings and the shelf hold a null so Viewer return still finds each post by its grid position.
     val postIds = remember(rows) { rows.map { (it as? RecentsGridRow.Post)?.entry?.post?.id } }
+    val shelfIds = remember(rows, related?.request) {
+        rows.map { row -> related?.request?.seed?.id?.takeIf { row == RecentsGridRow.RelatedShelf }?.let(ViewerReturnShelfId::Related) }
+    }
 
-    AdaptivePostGrid(postIds = postIds, state = gridState, modifier = Modifier.fillMaxSize()) {
+    AdaptivePostGrid(postIds = postIds, state = gridState, modifier = Modifier.fillMaxSize(), shelfIds = shelfIds) {
         rows.forEach { row ->
             when (row) {
+                RecentsGridRow.RelatedShelf ->
+                    item(key = "related-shelf", span = StaggeredGridItemSpan.FullLine) { related?.content?.invoke() }
                 is RecentsGridRow.Day ->
                     item(key = "day:${row.date}", span = StaggeredGridItemSpan.FullLine) { RecentsDayHeading(row.label) }
                 is RecentsGridRow.Post -> {
@@ -564,6 +579,7 @@ private fun ActivityList(
     onAuthoritativeDurationKnown: (Post, Long) -> Unit,
     onToggleLike: ((Post) -> Unit)?,
     onLongPress: (Post, RecentPostSection) -> Unit,
+    related: RecentsRelatedSlot?,
     watchedPosts: List<RecentPostEntry>,
     codexPosts: List<RecentPostEntry>,
     now: Long,
@@ -578,14 +594,16 @@ private fun ActivityList(
         EmptyRecentState(emptyMessage)
         return
     }
-    val timeline = remember(activity, now) { recentsTimeline(activity, now) }
+    val timeline = remember(activity, now, related?.request) { recentsTimeline(activity, now).withRelatedShelf(related?.request) }
     val list = rememberLazyListState()
     ScrollToTopOnTabReselect(TopLevelDestination.Recents) { list.animateScrollToItem(0) }
-    ViewerReturnColumn(list, timeline, { request -> timeline.indexOfFirst { it.holdsPost(request.postId) } }) {
+    val shelfSeed = related?.request?.seed?.id
+    ViewerReturnColumn(list, timeline, { request -> timeline.indexOfFirst { it.holdsReturn(request, shelfSeed) } }) {
     LazyColumn(modifier = Modifier.fillMaxSize(), state = list, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         itemsIndexed(timeline, key = { index, item -> timelineKey(index, item) }) { _, item ->
             when (item) {
                 is RecentsTimelineItem.Day -> RecentsDayHeading(item.label)
+                RecentsTimelineItem.RelatedShelf -> related?.content?.invoke()
                 is RecentsTimelineItem.Posts -> {
                 val row = rememberLazyListState()
                 ViewerReturnShelf(ViewerReturnShelfId.RecentsTimeline, item.entries.map { it.post.id }, row) {
@@ -627,13 +645,18 @@ private fun ActivityList(
     }
 }
 
-private fun RecentsTimelineItem.holdsPost(postId: PostId): Boolean =
-    this is RecentsTimelineItem.Posts && entries.any { it.post.id == postId }
+/** Whether a Viewer return lands on this row: the related shelf by its seed, otherwise the row holding the post. */
+private fun RecentsTimelineItem.holdsReturn(request: ViewerReturnRequest, shelfSeed: PostId?): Boolean = when (this) {
+    RecentsTimelineItem.RelatedShelf -> shelfSeed != null && request.shelfId == ViewerReturnShelfId.Related(shelfSeed)
+    is RecentsTimelineItem.Posts -> request.shelfId !is ViewerReturnShelfId.Related && entries.any { it.post.id == request.postId }
+    else -> false
+}
 
 private fun timelineKey(index: Int, item: RecentsTimelineItem): String = when (item) {
     is RecentsTimelineItem.Day -> "day:${item.date}"
     is RecentsTimelineItem.Posts -> "posts:$index:${item.entries.first().viewedAtEpochMs}"
     is RecentsTimelineItem.Search -> "search:${item.entry.queryHash}:${item.entry.searchedAtEpochMs}"
+    RecentsTimelineItem.RelatedShelf -> "related-shelf"
 }
 
 private fun openRecentPost(
@@ -731,7 +754,7 @@ private fun EmptyRecentState(message: String) {
     }
 }
 
-private enum class RecentsFilter(val label: String) {
+internal enum class RecentsFilter(val label: String) {
     ALL("All"),
     WATCHED("Watched"),
     CODEX("Codex"),

@@ -65,6 +65,7 @@ import com.theoriacodex.app.ui.components.FeedPostActionSheet
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
 import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
+import com.theoriacodex.app.related.RelatedShelfBinding
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.FeedFabRestoreState
@@ -135,7 +136,7 @@ internal fun CodexDetailScreen(
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit = {},
     likedPostIds: Set<PostId> = emptySet(),
     onToggleLike: ((Post) -> Unit)? = null,
-    related: CodexRelatedShelf? = null,
+    related: RelatedShelfBinding? = null,
 ) {
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -289,7 +290,7 @@ private fun rememberCodexDetailFeed(
     fabRestoreState: FeedFabRestoreState,
     durationStates: Map<MediaDurationKey, MediaDurationState>,
     resolveUnknownAnimatedDurations: Boolean,
-    relatedShelf: CodexRelatedShelf?,
+    relatedShelf: RelatedShelfBinding?,
     likedPostIds: Set<PostId>,
 ): CodexDetailFeed {
     val durationMinBucket = fabRestoreState.durationMinBucket

@@ -10,11 +10,12 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/** One row of the All tab: a day heading, a run of consecutive posts, or a search. */
+/** One row of the All tab: a day heading, a run of consecutive posts, a search, or the related shelf. */
 internal sealed interface RecentsTimelineItem {
     data class Day(val date: LocalDate, val label: String) : RecentsTimelineItem
     data class Posts(val entries: List<RecentPostEntry>) : RecentsTimelineItem
     data class Search(val entry: RecentSearchEntry) : RecentsTimelineItem
+    data object RelatedShelf : RecentsTimelineItem
 }
 
 internal fun recentsDay(epochMs: Long, zone: ZoneId = ZoneId.systemDefault()): LocalDate =
@@ -62,10 +63,11 @@ internal fun recentsTimeline(
     flushPosts()
 }
 
-/** One cell of a post grid: a full-width day heading, or a post at its index in the visible list. */
+/** One cell of a post grid: a full-width day heading, a post at its index in the visible list, or the related shelf. */
 internal sealed interface RecentsGridRow {
     data class Day(val date: LocalDate, val label: String) : RecentsGridRow
     data class Post(val index: Int, val entry: RecentPostEntry) : RecentsGridRow
+    data object RelatedShelf : RecentsGridRow
 }
 
 internal fun recentsGridRows(
