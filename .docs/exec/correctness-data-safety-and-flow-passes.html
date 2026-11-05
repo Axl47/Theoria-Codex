@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Correctness, data safety and flow passes</title>
+<style>
+:root{--bg:#0f1115;--fg:#e8e8ea;--mut:#a0a2a8;--bd:#2c2f36;--acc:#8bc4ff}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 system-ui,sans-serif;display:grid;grid-template-columns:210px minmax(0,1fr);gap:32px;padding:24px}
+nav{position:sticky;top:24px;align-self:start;font-size:13.5px}nav a{display:block;color:var(--mut);text-decoration:none;padding:3px 0}
+h1{margin:0 0 8px;font-size:26px}h2{margin:32px 0 8px;font-size:19px;border-top:1px solid var(--bd);padding-top:20px}
+table{border-collapse:collapse;width:100%;font-size:14px}td,th{border:1px solid var(--bd);padding:6px 9px;text-align:left;vertical-align:top}
+code{background:#1a1d23;padding:1px 4px;border-radius:4px;font-size:13px}pre{background:#1a1d23;padding:10px;border-radius:8px;overflow:auto}
+.status{border:1px solid var(--bd);border-radius:10px;padding:12px 14px}
+@media(max-width:760px){body{grid-template-columns:1fr}nav{position:static}}
+</style></head><body>
+<nav><a href="#purpose">Purpose</a><a href="#status">Current status</a><a href="#context">Context</a><a href="#phases">Phases</a><a href="#work">Work plan</a><a href="#validation">Validation</a><a href="#progress">Progress</a><a href="#surprises">Surprises</a><a href="#decisions">Decisions</a><a href="#outcomes">Outcomes</a><a href="#recovery">Recovery</a></nav>
+<main>
+<h1>Correctness, data safety and flow passes</h1>
+
+<section id="purpose"><h2>Purpose / Big Picture</h2>
+<p>An audit found three groups of gaps. The app wasted cellular data by prefetching a video file the Viewer then didn't play. The library, which exists only on the phone by design, had no automatic copy off it, and restoring a backup created duplicates. Provider links opened in the browser, and a feed that failed offline stayed failed until tapped. After this work the app fetches the stream it plays, backs up daily to a folder the user picks, restores without duplicates, offers Undo for big deletes, accepts shared links, and retries feeds when the network returns.</p>
+</section>
+
+<section id="status"><h2>Current Status</h2>
+<div class="status"><b>Implemented and validated on the emulator; in review.</b> Next action: complete review, CI and merge. The cross-provider duplicate idea was dropped at the developer's request because duplicates have not been seen in use.</div>
+</section>
+
+<section id="context"><h2>Context And Orientation</h2>
+<table>
+<tr><th>Area</th><th>Files</th><th>Term</th></tr>
+<tr><td>Stream choice</td><td><code>app-logic/.../media/VideoQualityPolicy.kt</code>, <code>app/.../viewer/ViewerPlatformPrefetcher.kt</code>, <code>app/.../search/FeedMediaComponents.kt</code></td><td>A <em>rendition</em> is one quality of the same video. The playback cache is keyed by URL, so a different rendition misses it.</td></tr>
+<tr><td>Restore</td><td><code>core-data/.../ProfileBackupService.kt</code>, <code>ProfileBackupRestorePlan.kt</code>, <code>ProfileBackupCodec.kt</code></td><td><em>Merge by identity</em>: rows keep the backup's own IDs, so existing rows win and repeats add nothing.</td></tr>
+<tr><td>Auto backup</td><td><code>app/.../backup/AutoBackup.kt</code>, <code>AndroidAutoBackup.kt</code></td><td>A <em>tree grant</em> is the persistent permission Android gives for a folder the user picks.</td></tr>
+<tr><td>Undo</td><td><code>app/.../codex/CodexCommandViewModel.kt</code>, <code>core-data-android/.../RoomCodexLikesRepository.kt</code></td><td>A <em>snapshot</em> is the exact removed rows, held in memory only for the Undo window.</td></tr>
+<tr><td>Links</td><td><code>app/src/main/AndroidManifest.xml</code>, <code>MainActivity.kt</code>, <code>settings/OpenLinksRow.kt</code></td><td><em>Open by default</em> is Android's per-site switch for sending web links to an app that can't verify the site.</td></tr>
+<tr><td>Network</td><td><code>app/.../media/NetworkMonitor.kt</code>, <code>SearchViewModel.kt</code>, <code>ForYouViewModel.kt</code></td><td><em>Validated</em> means Android confirmed the network really reaches the internet.</td></tr>
+<tr><td>Profile</td><td><code>baseline-profile/.../BaselineProfileGenerator.kt</code>, <code>app/build.gradle.kts</code></td><td>A <em>baseline profile</em> lists code to compile ahead of time. The <em>fixture app</em> is the offline build that serves bundled media.</td></tr>
+</table>
+</section>
+
+<section id="phases"><h2>Phases</h2>
+<ol>
+<li><b>Pass 1, cheap fixes.</b> One stream resolver for prefetch and playback; Data saver rendition on metered feeds; For You route to Source accounts; decoded ugoira frames released under memory pressure; profile journeys for feeds, Viewer and search editor. Accept: a device test sees only the played rendition requested.</li>
+<li><b>Pass 2, data safety.</b> Restore merges by identity and carries statistics; Undo for Delete Codex and Clear Likes; daily backup to a chosen folder. Accept: restoring twice on a device adds a deleted Codex once and renames nothing.</li>
+<li><b>Pass 3, getting content in.</b> Share target, Settings row for open-by-default, reconnect retry and offline wording. Accept: a failed search recovers on the emulator with no tap after airplane mode ends.</li>
+</ol>
+</section>
+
+<section id="work"><h2>Work Plan</h2>
+<table>
+<tr><th>Change</th><th>Choice made explicit</th></tr>
+<tr><td>Prefetch</td><td><code>viewerPlaybackLocation</code> is the only resolver, used by both paths. A per-session quality override in the Viewer can still differ from the setting that prefetch reads; the cost is one cache miss, as before.</td></tr>
+<tr><td>Feed on metered networks</td><td>Always the Data saver rendition, whatever the Viewer quality, since cards are small. Unmetered feeds are unchanged. Every visible card still autoplays.</td></tr>
+<tr><td>Memory</td><td>Only app-owned decoded frames are released at <code>TRIM_MEMORY_BACKGROUND</code>. Coil trims itself and idle players already expire, so neither is touched. Android 14 and later only deliver background-level signals.</td></tr>
+<tr><td>Restore</td><td><code>forRestore</code> and the operation ID were deleted. The durable journal stays for crash safety. Old journals still read, because the extra field is ignored.</td></tr>
+<tr><td>Statistics</td><td>Written only when Recents are included. Restore takes the larger value per counter, so it stays idempotent.</td></tr>
+<tr><td>Undo</td><td>Each snapshot is taken inside the delete transaction and lives in memory. Process death during the window loses Undo, not data integrity. Confirmation dialogs stay.</td></tr>
+<tr><td>Not touched</td><td>Offline media for a deleted Codex, the download queue, and the Measure-first items from the audit (statistics write cost, large Codex re-hashing, hardware bitmaps, scroll saving).</td></tr>
+</table>
+</section>
+
+<section id="validation"><h2>Validation And Acceptance</h2>
+<p>Host, from the repository root with Java 21 or newer:</p>
+<pre>./gradlew :app-logic:test :core-data:test :core-data-android:testDebugUnitTest :app:testDebugUnitTest
+./gradlew :app:detektDebug
+./gradlew :app:lintDebug --offline --no-daemon
+python3 scripts/check_hotspots.py --base "$(git describe --tags --abbrev=0 --match 'v[0-9]*')"</pre>
+<p>Device, on the <code>theoria-search-test</code> emulator only, after <code>scripts/verify_device_apk.py</code> on both APKs and a <code>ro.kernel.qemu=1</code> check:</p>
+<pre>adb -s &lt;emulator&gt; shell am instrument -w -e class com.theoriacodex.app.viewer.ViewerVideoPrefetchDeviceTest com.theoriacodex.debug.test/androidx.test.runner.AndroidJUnitRunner
+ANDROID_SERIAL=&lt;emulator&gt; ./gradlew :app:generateReleaseBaselineProfile</pre>
+<p>Feeds were tested with a nonsense tag and accessibility text so provider media never appeared.</p>
+</section>
+
+<section id="progress"><h2>Progress</h2>
+<ul>
+<li>2026-11-05: Audit agreed; duplicate detection dropped; metered feed quality approved.</li>
+<li>2026-11-05: Pass 1 implemented and tested.</li>
+<li>2026-11-05: Failing test reproduced duplicate restores, then Pass 2 implemented.</li>
+<li>2026-11-05: Pass 3 implemented; all flows exercised on the emulator.</li>
+<li>2026-11-05: Baseline profile regenerated on the emulator.</li>
+</ul>
+</section>
+
+<section id="surprises"><h2>Surprises And Discoveries</h2>
+<ul>
+<li>The manifest's <code>autoVerify</code> left all 17 sites <code>Disabled</code> on the emulator, confirming links went to the browser.</li>
+<li>Profile collection fails with <code>UiAutomationService already registered</code> while <code>agent-device</code> holds the emulator. Close its session first.</li>
+<li>The system folder picker ignores the driver's instant tap; a press held for 150 ms works.</li>
+<li>Leaving within seconds of a cold start skips that backup check, because the shell's observer isn't registered yet. That session changed nothing, and the next exit runs it.</li>
+</ul>
+</section>
+
+<section id="decisions"><h2>Decision Log</h2>
+<table>
+<tr><th>Decision</th><th>Rationale</th><th>Date, author</th></tr>
+<tr><td>Restore keeps backup IDs instead of remapping.</td><td>Fixes duplicates and the data landing outside the active profile at once, and removes code. A profile ID shared across devices merges rather than coexisting, which fits the additive promise.</td><td>2026-11-05, agent</td></tr>
+<tr><td>No WorkManager for backups; run when the app leaves the foreground.</td><td>Library data only changes during use, so that moment captures everything with no new dependency. A killed run leaves a <code>.part</code> file that the next run removes.</td><td>2026-11-05, agent</td></tr>
+<tr><td>Keep seven automatic backups, at most daily (20-hour gate).</td><td>A week of recovery points in a small folder. Twenty hours keeps a same-time-each-day habit from skipping days.</td><td>2026-11-05, agent</td></tr>
+<tr><td>Network state never blocks a request.</td><td>A false offline reading on an unusual network must cost wording only, not a feed.</td><td>2026-11-05, agent</td></tr>
+<tr><td>Metered feeds use a smaller rendition.</td><td>Approved by the developer; simultaneous autoplay is preserved.</td><td>2026-11-05, developer</td></tr>
+<tr><td>Profile collection uses the fixture app.</td><td>No network or provider media during generation, and the fixture exercises real screens.</td><td>2026-11-05, agent</td></tr>
+</table>
+</section>
+
+<section id="outcomes"><h2>Outcomes And Retrospective</h2>
+<p>All three passes shipped together. Performance benefit from the profile and metered streams was not measured on a physical device, so this plan claims no numbers for them. Live provider behaviour with real accounts, including the For You sign-in route with an expired account, is proven by tests only and needs a check on a real account. The lesson worth keeping: when two code paths must agree on a cache key, give them one resolver instead of two copies of the same policy.</p>
+</section>
+
+<section id="recovery"><h2>Recovery</h2>
+<p>Each commit is independent and can be reverted alone. Backups written by this version also open on older versions, because the format version is unchanged and unknown fields are ignored. To undo auto backup on a device, use Turn off in Settings; existing files stay in the folder. If profile generation fails, close any device driver session, confirm <code>ANDROID_SERIAL</code>, and rerun; it changes nothing but the two files in <code>app/src/release/generated/baselineProfiles/</code>.</p>
+</section>
+</main></body></html>
