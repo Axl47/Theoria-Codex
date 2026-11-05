@@ -1,5 +1,6 @@
 package com.theoriacodex.app.recommend
 
+import com.theoriacodex.app.media.reconnections
 import kotlinx.coroutines.flow.emptyFlow
 import com.theoriacodex.app.search.retriesOnReconnect
 import androidx.lifecycle.SavedStateHandle
@@ -449,7 +450,7 @@ internal class ForYouViewModel(
             initialProfiles: List<RecommendationProfile> = defaultRecommendationProfiles(),
             initialSort: SortMode? = null,
             relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
-            reconnections: Flow<Unit> = emptyFlow(),
+            networkOnline: Flow<Boolean> = emptyFlow(),
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 ForYouViewModel(
@@ -458,7 +459,7 @@ internal class ForYouViewModel(
                     initialProfiles = initialProfiles,
                     initialSort = initialSort,
                     relatedPostsLoader = relatedPostsLoader,
-                    reconnections = reconnections,
+                    reconnections = networkOnline.reconnections(),
                 )
             }
         }

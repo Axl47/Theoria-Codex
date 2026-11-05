@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.theoriacodex.app.media.reconnections
 import com.theoriacodex.app.related.RelatedPostsLoading
 import com.theoriacodex.app.related.UnsupportedRelatedPostsLoader
 import com.theoriacodex.app.search.state.SearchUiState
@@ -15,14 +16,14 @@ import kotlinx.coroutines.flow.emptyFlow
 internal fun searchViewModelFactory(
     coordinator: SearchCoordinator,
     relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
-    reconnections: Flow<Unit> = emptyFlow(),
+    networkOnline: Flow<Boolean> = emptyFlow(),
 ): ViewModelProvider.Factory = viewModelFactory {
     initializer {
         SearchViewModel(
             coordinator = coordinator,
             savedStateHandle = createSavedStateHandle(),
             relatedPostsLoader = relatedPostsLoader,
-            reconnections = reconnections,
+            reconnections = networkOnline.reconnections(),
         )
     }
 }

@@ -1,6 +1,5 @@
 package com.theoriacodex.app.ui.routes
 
-import com.theoriacodex.app.media.reconnections
 import com.theoriacodex.app.ui.LocalNetworkOnline
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -111,7 +110,7 @@ internal fun ForYouRoute(
         factory = ForYouViewModel.factory(
             coordinator = coordinator,
             relatedPostsLoader = relatedPostsLoader,
-            reconnections = LocalNetworkOnline.current.reconnections(),
+            networkOnline = LocalNetworkOnline.current,
             initialProfiles = config.settings.recommendationProfiles,
             initialSort = fabRestoreState.sortMode?.let { encoded ->
                 com.theoriacodex.domain.model.SortMode.entries.firstOrNull { it.name == encoded }
