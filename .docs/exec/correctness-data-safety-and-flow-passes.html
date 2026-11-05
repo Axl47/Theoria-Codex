@@ -75,7 +75,8 @@ ANDROID_SERIAL=&lt;emulator&gt; ./gradlew :app:generateReleaseBaselineProfile</p
 <li>2026-11-05: Pass 1 implemented and tested.</li>
 <li>2026-11-05: Failing test reproduced duplicate restores, then Pass 2 implemented.</li>
 <li>2026-11-05: Pass 3 implemented; all flows exercised on the emulator.</li>
-<li>2026-11-05: Baseline profile regenerated on the emulator.</li>
+<li>2026-11-05: Baseline profile regenerated on the emulator: search editor rules 0 to 78, Viewer rules 0 to 207.</li>
+<li>2026-11-05: Tests, Detekt, lint, hotspot gate and release build all pass. Sol approved after two rounds.</li>
 </ul>
 </section>
 
@@ -96,6 +97,7 @@ ANDROID_SERIAL=&lt;emulator&gt; ./gradlew :app:generateReleaseBaselineProfile</p
 <tr><td>Keep seven automatic backups, at most daily (20-hour gate).</td><td>A week of recovery points in a small folder. Twenty hours keeps a same-time-each-day habit from skipping days.</td><td>2026-11-05, agent</td></tr>
 <tr><td>Network state never blocks a request.</td><td>A false offline reading on an unusual network must cost wording only, not a feed.</td><td>2026-11-05, agent</td></tr>
 <tr><td>Metered feeds use a smaller rendition.</td><td>Approved by the developer; simultaneous autoplay is preserved.</td><td>2026-11-05, developer</td></tr>
+<tr><td>Legacy restore journals finish under the backup's own IDs instead of the old remapping.</td><td>Startup recovers journals before any route, so one reaches this version only if the app is sideloaded over an interrupted restore without being opened. No user data is lost even then, so permanent remapping code isn't worth it.</td><td>2026-11-05, agent</td></tr>
 <tr><td>Profile collection uses the fixture app.</td><td>No network or provider media during generation, and the fixture exercises real screens.</td><td>2026-11-05, agent</td></tr>
 </table>
 </section>
