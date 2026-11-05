@@ -12,6 +12,11 @@
 
 - Manage saved tags from the Manage action in the Saved section, which replaces Favorites in the search editor's overflow menu.
 - The Favorite tags sheet is now called Saved tags.
+- On a metered network, feed cards now autoplay a smaller video stream when the source offers one.
+
+### Fixed
+
+- Opening a video on a metered network or with Data saver no longer downloads a larger version in advance that the Viewer then doesn't play.
 
 ## [1.2.0] - 2026-11-04
 
