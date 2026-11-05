@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.net.toUri
 import com.theoriacodex.app.ui.TheoriaApp
 import com.theoriacodex.app.viewer.ViewerAutoPictureInPicture
 
@@ -63,11 +64,19 @@ internal fun Intent.incomingPayloadUri(): Uri? {
             clip.getItemAt(index).uri?.let { return it }
         }
     }
+    if (action == Intent.ACTION_SEND) getStringExtra(Intent.EXTRA_TEXT)?.let(::firstWebUrl)?.let { return it.toUri() }
     return null
 }
+
+private val WEB_URL = Regex("""https?://\S+""", RegexOption.IGNORE_CASE)
+
+/** Apps often share a title with the link, and prose can put punctuation right after it. */
+internal fun firstWebUrl(text: String): String? =
+    WEB_URL.find(text)?.value?.trimEnd('.', ',', ';', ':', '!', '?', ')', ']', '"', '\'')
 
 internal fun Intent.clearConsumedIncomingPayload() {
     data = null
     removeExtra(Intent.EXTRA_STREAM)
+    removeExtra(Intent.EXTRA_TEXT)
     clipData = null
 }

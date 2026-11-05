@@ -154,6 +154,8 @@ private fun SettingsHomeGroups(
         SettingsRow("Accounts", sourceAccountsSummary(state.accounts), Icons.Default.AccountCircle, onClick = {
             open(SettingsPage.ACCOUNTS)
         })
+        SettingsRowDivider()
+        OpenLinksRow()
     }
     SettingsGroup("Viewing") {
         SettingsRow("Playback & downloads", playbackSummary(state), Icons.Default.PlayCircle, onClick = {
