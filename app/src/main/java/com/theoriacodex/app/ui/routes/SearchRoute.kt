@@ -19,6 +19,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.app.search.SearchScreen
+import com.theoriacodex.app.search.searchViewModelFactory
 import com.theoriacodex.app.search.SearchViewModel
 import com.theoriacodex.app.related.RelatedPostsLoading
 import com.theoriacodex.app.related.loadedPosts
@@ -282,7 +283,7 @@ internal fun SearchRoute(
 ) {
     val owner = viewModel<SearchViewModel>(
         key = SEARCH_ROUTE_OWNER_KEY,
-        factory = SearchViewModel.factory(coordinator, relatedPostsLoader, LocalNetworkOnline.current.reconnections()),
+        factory = searchViewModelFactory(coordinator, relatedPostsLoader, LocalNetworkOnline.current.reconnections()),
     )
     val state by owner.state.collectAsStateWithLifecycle()
     val durationPosts = remember(state.content.results, state.relatedPosts) {

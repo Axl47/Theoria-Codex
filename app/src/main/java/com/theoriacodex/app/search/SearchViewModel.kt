@@ -3,11 +3,7 @@ package com.theoriacodex.app.search
 import kotlinx.coroutines.flow.emptyFlow
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
 import com.theoriacodex.app.search.state.withAcceptedSearchHistory
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchDraftContext
@@ -128,7 +124,11 @@ internal class SearchViewModel(
             relatedDiagnostics.record("owner cleared", mutableState.value.relatedPosts)
         })
         addCloseable(SEARCH_SCROLL_PERSISTENCE_KEY, scrollPersistence)
-        viewModelScope.launch { reconnections.collect { retryAfterReconnect() } }
+        viewModelScope.launch {
+            reconnections.collect {
+                retrySearchAfterReconnect({ mutableState.value }, ::retry) { source -> retrySource(source); activeRequestJob }
+            }
+        }
     }
 
     override fun onAction(action: SearchAction) {
@@ -746,21 +746,6 @@ internal class SearchViewModel(
         launchPage(activeContinuation, source)
     }
 
-    /** Retries what failed while offline, one source at a time so each keeps its own continuation. */
-    private suspend fun retryAfterReconnect() {
-        val current = mutableState.value
-        if (current.execution.activeRequestId != null) return
-        if (current.content.error != null) {
-            retry()
-            return
-        }
-        current.content.statuses.filter { it.retriesOnReconnect() }.forEach { status ->
-            if (mutableState.value.execution.activeRequestId != null) return
-            retrySource(status.source)
-            activeRequestJob?.join()
-        }
-    }
-
     private fun launchPage(continuation: SearchContinuation?, retrySource: SourceKey? = null) {
         pageRetrySource = retrySource
         val current = mutableState.value
@@ -1047,28 +1032,11 @@ internal class SearchViewModel(
         effectChannel.close()
     }
 
-    companion object {
-        fun factory(
-            coordinator: SearchCoordinator,
-            relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
-            reconnections: Flow<Unit> = emptyFlow(),
-        ): ViewModelProvider.Factory {
-            return viewModelFactory {
-                initializer {
-                    SearchViewModel(
-                        coordinator = coordinator,
-                        savedStateHandle = createSavedStateHandle(),
-                        relatedPostsLoader = relatedPostsLoader,
-                        reconnections = reconnections,
-                    )
-                }
-            }
-        }
-
-        private const val DEFAULT_AUTOCOMPLETE_DELAY_MS = 300L
-        private const val DEFAULT_ROOT_REQUEST_TIMEOUT_MS = 60_000L
-        private const val DEFAULT_SCROLL_PERSISTENCE_DELAY_MS = 150L
-        private const val SEARCH_SCROLL_PERSISTENCE_KEY = "search-scroll-persistence"
-        private const val ROOT_REQUEST_TIMEOUT_MESSAGE = "Search timed out. Check your connection and try again."
+    private companion object {
+        const val DEFAULT_AUTOCOMPLETE_DELAY_MS = 300L
+        const val DEFAULT_ROOT_REQUEST_TIMEOUT_MS = 60_000L
+        const val DEFAULT_SCROLL_PERSISTENCE_DELAY_MS = 150L
+        const val SEARCH_SCROLL_PERSISTENCE_KEY = "search-scroll-persistence"
+        const val ROOT_REQUEST_TIMEOUT_MESSAGE = "Search timed out. Check your connection and try again."
     }
 }
