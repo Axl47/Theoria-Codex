@@ -34,12 +34,11 @@ internal fun OpenLinksRow() {
 }
 
 private fun Context.openLinksSummary(): String {
-    val hosts = getSystemService(DomainVerificationManager::class.java)
-        ?.getDomainVerificationUserState(packageName)?.hostToStateMap.orEmpty()
-    return openLinksSummary(
-        allowed = hosts.values.count { it != DomainVerificationUserState.DOMAIN_STATE_NONE },
-        total = hosts.size,
-    )
+    val state = getSystemService(DomainVerificationManager::class.java)?.getDomainVerificationUserState(packageName)
+    val hosts = state?.hostToStateMap.orEmpty()
+    // Per-site choices survive Android's overall switch, but it overrides them while off.
+    val allowed = if (state?.isLinkHandlingAllowed == true) hosts.values.count { it != DomainVerificationUserState.DOMAIN_STATE_NONE } else 0
+    return openLinksSummary(allowed, hosts.size)
 }
 
 internal fun openLinksSummary(allowed: Int, total: Int): String = when (allowed) {
