@@ -378,6 +378,7 @@ private fun SearchPostSheet(
         onOpenCreatorProfile = onOpenCreatorProfile,
         onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
         onPostUrlCopied = onPostUrlCopied,
+        onShowRelated = { onAction(SearchAction.ShowRelatedPosts(post)) },
         tagContent = {
             PostTagActionSection(
                 draftQuery = state.query.draft,

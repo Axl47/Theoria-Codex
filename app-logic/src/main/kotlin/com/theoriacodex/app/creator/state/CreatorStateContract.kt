@@ -56,6 +56,8 @@ sealed interface CreatorAction {
         val visibilityFilters: SearchVisibilityFilters = SearchVisibilityFilters(),
     ) : CreatorAction
     data class RelatedLikeCommitted(val post: Post, val outcome: LikeToggleOutcome) : CreatorAction
+    /** "More like this" from a post's action menu: opens the related shelf without a like. */
+    data class ShowRelatedPosts(val post: Post) : CreatorAction
     data object DismissRelatedPosts : CreatorAction
     data object RetryRelatedPosts : CreatorAction
     data object ShowPreviousRelatedPosts : CreatorAction
@@ -118,6 +120,7 @@ fun CreatorUiState.reduce(action: CreatorAction): CreatorTransition = when (acti
     is CreatorAction.OpenResult -> openResult(action)
     is CreatorAction.OpenRelatedResult -> openRelatedResult(action)
     is CreatorAction.RelatedLikeCommitted,
+    is CreatorAction.ShowRelatedPosts,
     CreatorAction.DismissRelatedPosts,
     CreatorAction.RetryRelatedPosts,
     CreatorAction.ShowPreviousRelatedPosts,

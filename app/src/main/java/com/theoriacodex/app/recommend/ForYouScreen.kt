@@ -176,6 +176,7 @@ fun ForYouScreen(
             post, creatorBrowsingSources, { selectedActionPost = null }, onSaveToDevice, onRequestSaveToCodex, onOpenCreatorProfile,
             onOpenLegacyCreatorProfile, onGoToSearch, onPostUrlCopied, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm,
             onRemoveExcludeTerm, onFavoriteTagLongPress,
+            onShowRelated = { onAction(ForYouAction.ShowRelatedPosts(post)) },
         )
     }
 

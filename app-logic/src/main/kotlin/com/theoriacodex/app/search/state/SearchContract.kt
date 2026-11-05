@@ -232,6 +232,8 @@ sealed interface SearchAction {
         val post: Post,
         val outcome: LikeToggleOutcome,
     ) : SearchAction
+    /** "More like this" from a post's action menu: opens the related shelf without a like. */
+    data class ShowRelatedPosts(val post: Post) : SearchAction
     data object RetryRelatedPosts : SearchAction
     data object DismissRelatedPosts : SearchAction
     data object ShowPreviousRelatedPosts : SearchAction

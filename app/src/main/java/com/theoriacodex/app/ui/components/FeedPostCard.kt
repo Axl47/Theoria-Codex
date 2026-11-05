@@ -133,6 +133,7 @@ internal fun FeedPostActionSheet(
     saveToCodexLabel: String = "Save to Codex",
     onRemoveFromCodex: (() -> Unit)? = null,
     onStartOver: (() -> Unit)? = null,
+    onShowRelated: (() -> Unit)? = null,
 ) {
     val searchActions = LocalPostTagSearchActions.current
     PostActionSheet(
@@ -145,6 +146,7 @@ internal fun FeedPostActionSheet(
         onGoToSearch = onGoToSearch,
         onStartOver = onStartOver,
         onPostUrlCopied = onPostUrlCopied,
+        onShowRelated = onShowRelated,
     ) {
         PostBoundTagSection(
             post, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm, onRemoveExcludeTerm,

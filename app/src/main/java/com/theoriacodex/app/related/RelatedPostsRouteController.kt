@@ -37,6 +37,14 @@ internal class RelatedPostsRouteController(
             }
             return
         }
+        show(post)
+    }
+
+    /**
+     * Opens the shelf for [post], as a like does or as "More like this" asks. A post inside the
+     * shelf is first promoted into the feed, so the new shelf chains below it.
+     */
+    fun show(post: Post) {
         if (!loader.supports(post.id.source)) return
         val current = currentState()
         val posts = canonicalPosts()

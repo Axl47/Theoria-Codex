@@ -161,6 +161,7 @@ fun CreatorProfileScreen(
         PostActionSheet(
             post, onDismiss = { selectedActionPost = null }, onSaveToDevice = { onSaveToDevice(post) },
             onSaveToCodex = { onRequestSaveToCodex(post) }, onPostUrlCopied = onPostUrlCopied,
+            onShowRelated = { onAction(CreatorAction.ShowRelatedPosts(post)) },
         ) {
             PostBoundTagSection(post, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm, onRemoveExcludeTerm)
         }

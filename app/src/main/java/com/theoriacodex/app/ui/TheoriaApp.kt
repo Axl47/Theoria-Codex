@@ -93,11 +93,13 @@ internal fun TheoriaAppContent(
         shell.data.readingPositions, shell.data.recentsRepository,
     )
     val viewerReturnTransition = remember { ViewerReturnTransition() }
+    val relatedPostsSupport = remember(shell) { shell.features.relatedPosts::supports }
     CompositionLocalProvider(
         com.theoriacodex.app.search.LocalPostWatchPresentation provides watchPresentation,
         LocalCodexSaveRelevanceLoader provides saveRelevanceLoader,
         LocalViewerReturnTransition provides viewerReturnTransition,
         LocalNetworkOnline provides shell.sources.networkOnline,
+        com.theoriacodex.app.related.LocalRelatedPostsSupport provides relatedPostsSupport,
     ) {
         com.theoriacodex.app.codex.SavedCodexSession {
             PostTagContextProvider(

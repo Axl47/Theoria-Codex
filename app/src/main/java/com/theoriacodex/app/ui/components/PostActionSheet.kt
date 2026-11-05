@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
@@ -32,6 +33,7 @@ import com.theoriacodex.app.creator.creatorProfileActions
 import com.theoriacodex.app.media.copyPostTagsToClipboard
 import com.theoriacodex.app.media.copyPostUrlToClipboard
 import com.theoriacodex.app.post.displayTitleOrNull
+import com.theoriacodex.app.related.LocalRelatedPostsSupport
 import com.theoriacodex.app.source.SourceIcon
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.viewer.buildViewerImageRequest
@@ -61,6 +63,7 @@ fun PostActionSheet(
     onGoToSearch: (() -> Unit)? = null,
     onStartOver: (() -> Unit)? = null,
     onPostUrlCopied: (Post) -> Unit = {},
+    onShowRelated: (() -> Unit)? = null,
     tagContent: @Composable () -> Unit,
 ) {
     require((onOpenCreatorProfile == null) == (onOpenLegacyCreatorProfile == null)) {
@@ -89,6 +92,9 @@ fun PostActionSheet(
     ActionMenuSheet(onDismiss) {
         PostActionHeader(post)
         ActionMenuFollowUpRow(Icons.Default.Sell, "Search terms") { showingTerms = true }
+        onShowRelated?.takeIf { LocalRelatedPostsSupport.current(post.id.source) }?.let { showRelated ->
+            ActionMenuRow(Icons.Default.AutoAwesome, "More like this") { dismissThen(showRelated) }
+        }
 
         onSaveToCodex?.let { save ->
             ActionMenuRow(Icons.Default.BookmarkAdd, saveToCodexLabel) { dismissThen(save) }

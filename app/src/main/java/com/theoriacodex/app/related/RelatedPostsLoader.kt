@@ -6,6 +6,7 @@ import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import androidx.compose.runtime.staticCompositionLocalOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -36,3 +37,6 @@ internal object UnsupportedRelatedPostsLoader : RelatedPostsLoading {
     override fun supports(source: SourceKey): Boolean = false
     override suspend fun load(seed: PostId): List<Post> = emptyList()
 }
+
+/** Whether a post's source can answer "More like this"; the shell provides its loader's answer. */
+internal val LocalRelatedPostsSupport = staticCompositionLocalOf<(SourceKey) -> Boolean> { { false } }

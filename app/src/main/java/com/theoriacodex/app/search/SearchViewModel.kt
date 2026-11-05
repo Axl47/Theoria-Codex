@@ -189,6 +189,7 @@ internal class SearchViewModel(
             }
 
             is SearchAction.RelatedLikeCommitted -> relatedPosts.onLikeCommitted(action.post, action.outcome)
+            is SearchAction.ShowRelatedPosts -> relatedPosts.show(action.post)
 
             SearchAction.RetryRelatedPosts -> relatedPosts.retry()
 

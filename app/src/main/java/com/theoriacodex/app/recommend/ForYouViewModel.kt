@@ -168,6 +168,10 @@ internal class ForYouViewModel(
                 relatedPosts.onLikeCommitted(action.post, action.outcome)
                 return
             }
+            is ForYouAction.ShowRelatedPosts -> {
+                relatedPosts.show(action.post)
+                return
+            }
             ForYouAction.RetryRelatedPosts -> {
                 relatedPosts.retry()
                 return

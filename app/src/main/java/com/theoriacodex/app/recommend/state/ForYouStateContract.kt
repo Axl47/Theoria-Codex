@@ -134,6 +134,8 @@ sealed interface ForYouAction {
         val post: Post,
         val outcome: LikeToggleOutcome,
     ) : ForYouAction
+    /** "More like this" from a post's action menu: opens the related shelf without a like. */
+    data class ShowRelatedPosts(val post: Post) : ForYouAction
     data object RetryRelatedPosts : ForYouAction
     data object DismissRelatedPosts : ForYouAction
     data object ShowPreviousRelatedPosts : ForYouAction
@@ -277,6 +279,7 @@ fun ForYouUiState.reduce(action: ForYouAction): ForYouTransition {
         is ForYouAction.PinSection,
         is ForYouAction.DismissSection,
         is ForYouAction.RelatedLikeCommitted,
+        is ForYouAction.ShowRelatedPosts,
         ForYouAction.RetryRelatedPosts,
         ForYouAction.DismissRelatedPosts,
         ForYouAction.ShowPreviousRelatedPosts,

@@ -95,6 +95,10 @@ internal class CreatorProfileViewModel(
                 relatedPosts.onLikeCommitted(action.post, action.outcome)
                 return
             }
+            is CreatorAction.ShowRelatedPosts -> {
+                relatedPosts.show(action.post)
+                return
+            }
             CreatorAction.DismissRelatedPosts -> {
                 relatedPosts.clear()
                 return
