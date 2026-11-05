@@ -32,6 +32,7 @@ class ProfileBackupService(
     private val readingPositions: ReadingPositionRepository,
     private val journalFile: File,
     private val statistics: StatisticsRepository? = null,
+    private val writeGuard: ProfileLibraryWriteGuard? = null,
     private val codec: ProfileBackupCodec = ProfileBackupCodec(),
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
@@ -121,6 +122,8 @@ class ProfileBackupService(
             check(imported.settings.recommendationProfiles.all { it.profileId in persistedIds }) {
                 "Restored profiles were not retained"
             }
+            // A profile deleted earlier in this process is back, so it must be usable before a restart.
+            imported.settings.recommendationProfiles.forEach { writeGuard?.reinstate(it.profileId) }
             check(journalFile.delete() || !journalFile.exists()) { "Could not finish the restore journal" }
             ProfileRestoreResult(imported.settings.recommendationProfiles.count { it.profileId !in existingProfileIds }, collectionsAdded)
         } catch (cancelled: CancellationException) {

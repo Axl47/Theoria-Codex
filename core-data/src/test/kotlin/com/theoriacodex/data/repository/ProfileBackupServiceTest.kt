@@ -140,6 +140,21 @@ class ProfileBackupServiceTest {
         assertTrue(extra in harness.settings.observeSettings().first().recommendationProfiles)
     }
 
+    @Test fun `a profile deleted this session is usable again once restored, and others stay retired`() = runTest {
+        val directory = temporary.newFolder()
+        val guard = ProfileLibraryWriteGuard().apply {
+            retire("profile-alt")
+            retire("profile-gone")
+        }
+        val service = ProfileBackupService(InMemorySettingsRepository(), FakeBackupStore(), InMemorySavedSearchRepository(),
+            FileBackedReadingPositionRepository(directory), directory.resolve("restore.json"), writeGuard = guard)
+
+        service.restore(codec.encode(backup()))
+
+        assertFalse(guard.isRetired("profile-alt"))
+        assertTrue(guard.isRetired("profile-gone"))
+    }
+
     @Test fun `statistics travel with history and restoring them twice changes nothing`() = runTest {
         val directory = temporary.newFolder()
         val settings = InMemorySettingsRepository()

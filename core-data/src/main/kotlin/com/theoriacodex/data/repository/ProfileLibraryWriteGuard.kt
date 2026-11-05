@@ -1,10 +1,12 @@
 package com.theoriacodex.data.repository
 
-/** Retired identities remain blocked until process exit, including after deletion has committed. */
+/** Retired identities remain blocked until process exit or until a restore brings the profile back. */
 class ProfileLibraryWriteGuard {
     private val retired = mutableSetOf<String>()
 
     @Synchronized fun retire(profileId: String) { retired += profileId }
+    /** Only for a profile a restore has committed: it exists again, so its writes can no longer orphan rows. */
+    @Synchronized fun reinstate(profileId: String) { retired -= profileId }
     @Synchronized fun isRetired(profileId: String): Boolean = profileId in retired
 
     @Synchronized fun requireProfileWritable(profileId: String) {
