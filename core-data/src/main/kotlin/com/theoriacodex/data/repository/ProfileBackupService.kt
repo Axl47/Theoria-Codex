@@ -106,7 +106,7 @@ class ProfileBackupService(
 
     private suspend fun finish(pending: PendingRestore): ProfileRestoreResult = withContext(NonCancellable) {
         try {
-            val imported = pending.backup
+            val imported = pending.legacyOperationId?.let(pending.backup::forLegacyRestore) ?: pending.backup
             preflight(imported, pending.applyPreferences)
             val existingProfileIds = settings.observeSettings().first().recommendationProfiles.mapTo(mutableSetOf()) { it.profileId }
             val collectionsAdded = store.merge(imported.library)
@@ -155,10 +155,12 @@ class ProfileBackupService(
         val record = JsonParser.parseString(raw).asJsonObject
         val preferences = requireNotNull(record.get("applyPreferences"))
         require(preferences.isJsonPrimitive && preferences.asJsonPrimitive.isBoolean)
+        val legacyOperationId = record.get("operationId")?.let { record.backupString("operationId") }
+        require(legacyOperationId == null || legacyOperationId.matches(Regex("[A-Za-z0-9-]{1,80}"))) { "Invalid restore operation" }
         val backup = codec.decode(requireNotNull(record.get("backup")).toString().toByteArray(Charsets.UTF_8))
         val selection = record.get("selectImportedProfile")
         require(selection == null || selection.isJsonPrimitive && selection.asJsonPrimitive.isBoolean)
-        return PendingRestore(preferences.asBoolean, backup, selection?.asBoolean ?: false)
+        return PendingRestore(preferences.asBoolean, backup, selection?.asBoolean ?: false, legacyOperationId)
     }
 }
 
@@ -166,4 +168,5 @@ private data class PendingRestore(
     val applyPreferences: Boolean,
     val backup: ProfileBackup,
     val selectImportedProfile: Boolean = false,
+    val legacyOperationId: String? = null,
 )

@@ -210,6 +210,23 @@ class ProfileBackupServiceTest {
         assertEquals(backup().settings.favoriteTagsByProfile, settings.observeSettings().first().favoriteTagsByProfile)
     }
 
+    @Test fun `a journal from before identity merges finishes under the IDs it already committed`() = runTest {
+        val harness = harness()
+        val journal = com.google.gson.JsonObject().apply {
+            addProperty("operationId", "legacy")
+            addProperty("applyPreferences", false)
+            add("backup", JsonParser.parseString(codec.encode(backup()).toString(Charsets.UTF_8)))
+        }
+        harness.journal.writeText(journal.toString())
+
+        assertTrue(harness.service.recoverPendingRestore())
+
+        assertEquals("restored-legacy-0", harness.store.library.likes.single().profileId)
+        assertTrue(harness.settings.observeSettings().first().recommendationProfiles.any { it.profileId == "restored-legacy-0" })
+        assertEquals(listOf("restored-legacy-0"), harness.pins.observeSavedSearches().first().map { it.id })
+        assertFalse(harness.journal.exists())
+    }
+
     @Test fun `invalid backup and capacity overflow fail before any durable restore mutation`() = runTest {
         val harness = harness()
         val corrupt = JsonParser.parseString(codec.encode(backup()).toString(Charsets.UTF_8)).asJsonObject
