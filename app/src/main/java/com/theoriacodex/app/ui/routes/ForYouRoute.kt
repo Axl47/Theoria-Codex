@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.app.ui.LocalNetworkOnline
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -43,6 +44,7 @@ internal data class ForYouRouteConfig(
 internal data class ForYouRouteCallbacks(
     val onOpenViewer: suspend (ForYouEffect.OpenViewer) -> Unit,
     val onNavigateToSearch: suspend () -> Unit,
+    val onOpenSourceAccounts: () -> Unit = {},
     val onShowMessage: (String) -> Unit,
     val onSeedHidden: suspend (profileId: String, entries: List<ForYouBlacklistEntry>) -> Boolean,
     val onToggleLike: (Post) -> Unit,
@@ -108,6 +110,7 @@ internal fun ForYouRoute(
         factory = ForYouViewModel.factory(
             coordinator = coordinator,
             relatedPostsLoader = relatedPostsLoader,
+            networkOnline = LocalNetworkOnline.current,
             initialProfiles = config.settings.recommendationProfiles,
             initialSort = fabRestoreState.sortMode?.let { encoded ->
                 com.theoriacodex.domain.model.SortMode.entries.firstOrNull { it.name == encoded }
@@ -179,6 +182,7 @@ private fun ForYouRouteContent(
         onPostUrlCopied = callbacks.onPostUrlCopied,
         onOpenCreatorProfile = callbacks.onOpenCreatorProfile,
         onOpenLegacyCreatorProfile = callbacks.onOpenLegacyCreatorProfile,
+        onOpenSourceAccounts = callbacks.onOpenSourceAccounts,
         onAddIncludeTerm = callbacks.onAddIncludeTerm,
         onAddExcludeTerm = callbacks.onAddExcludeTerm,
         onRemoveIncludeTerm = callbacks.onRemoveIncludeTerm,

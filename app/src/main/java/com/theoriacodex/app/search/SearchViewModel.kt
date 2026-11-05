@@ -1,12 +1,9 @@
 package com.theoriacodex.app.search
 
+import kotlinx.coroutines.flow.emptyFlow
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
 import com.theoriacodex.app.search.state.withAcceptedSearchHistory
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchDraftContext
@@ -76,6 +73,7 @@ internal class SearchViewModel(
     private val rootRequestTimeoutMs: Long = DEFAULT_ROOT_REQUEST_TIMEOUT_MS,
     scrollPersistenceDelayMs: Long = DEFAULT_SCROLL_PERSISTENCE_DELAY_MS,
     scrollPersistenceDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    reconnections: Flow<Unit> = emptyFlow(),
 ) : ViewModel(), RouteStateOwner<SearchUiState, SearchAction, SearchEffect> {
     private val mutableState = MutableStateFlow(initialSearchState(coordinator.availableSources, executionService))
     private val effectChannel = Channel<SearchEffect>(capacity = Channel.BUFFERED)
@@ -126,6 +124,11 @@ internal class SearchViewModel(
             relatedDiagnostics.record("owner cleared", mutableState.value.relatedPosts)
         })
         addCloseable(SEARCH_SCROLL_PERSISTENCE_KEY, scrollPersistence)
+        viewModelScope.launch {
+            reconnections.collect {
+                retrySearchAfterReconnect(mutableState, ::retry) { source -> retrySource(source); activeRequestJob }
+            }
+        }
     }
 
     override fun onAction(action: SearchAction) {
@@ -602,14 +605,11 @@ internal class SearchViewModel(
                     requestId, query, sourceScope, expectedExecutionKey, persistAcceptedResult, undo, undoScrollState, onSuccess,
                 )
             } catch (_: TimeoutCancellationException) {
-                failRequestIfCurrent(requestId, ROOT_REQUEST_TIMEOUT_MESSAGE)
+                failRootRequestIfCurrent(requestId, ROOT_REQUEST_TIMEOUT_MESSAGE, query, sourceScope, expectedExecutionKey)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                failRequestIfCurrent(
-                    requestId = requestId,
-                    message = error.message ?: "Search failed",
-                )
+                failRootRequestIfCurrent(requestId, error.message ?: "Search failed", query, sourceScope, expectedExecutionKey)
             } finally {
                 if (!isActive) cancelRequestIfCurrent(requestId)
             }
@@ -811,6 +811,20 @@ internal class SearchViewModel(
         if (mutableState.value.execution.activeRequestId == requestId) {
             reduce(SearchStateChange.RequestFailed(requestId, message))
         }
+    }
+
+    /** Records the attempted query as a provider failure does, so Retry repeats it and not the search before it. */
+    private fun failRootRequestIfCurrent(
+        requestId: Long,
+        message: String,
+        query: Query,
+        sourceScope: SearchSourceScope,
+        executionKey: String,
+    ) {
+        if (mutableState.value.execution.activeRequestId != requestId) return
+        rememberAppliedQuery(query, sourceScope)
+        reduce(SearchStateChange.RequestFailed(requestId, message, appliedQuery = query,
+            appliedSourceScope = sourceScope, appliedQueryHash = executionKey))
     }
 
     private fun refreshAutocomplete(input: String) {
@@ -1029,26 +1043,11 @@ internal class SearchViewModel(
         effectChannel.close()
     }
 
-    companion object {
-        fun factory(
-            coordinator: SearchCoordinator,
-            relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
-        ): ViewModelProvider.Factory {
-            return viewModelFactory {
-                initializer {
-                    SearchViewModel(
-                        coordinator = coordinator,
-                        savedStateHandle = createSavedStateHandle(),
-                        relatedPostsLoader = relatedPostsLoader,
-                    )
-                }
-            }
-        }
-
-        private const val DEFAULT_AUTOCOMPLETE_DELAY_MS = 300L
-        private const val DEFAULT_ROOT_REQUEST_TIMEOUT_MS = 60_000L
-        private const val DEFAULT_SCROLL_PERSISTENCE_DELAY_MS = 150L
-        private const val SEARCH_SCROLL_PERSISTENCE_KEY = "search-scroll-persistence"
-        private const val ROOT_REQUEST_TIMEOUT_MESSAGE = "Search timed out. Check your connection and try again."
+    private companion object {
+        const val DEFAULT_AUTOCOMPLETE_DELAY_MS = 300L
+        const val DEFAULT_ROOT_REQUEST_TIMEOUT_MS = 60_000L
+        const val DEFAULT_SCROLL_PERSISTENCE_DELAY_MS = 150L
+        const val SEARCH_SCROLL_PERSISTENCE_KEY = "search-scroll-persistence"
+        const val ROOT_REQUEST_TIMEOUT_MESSAGE = "Search timed out. Check your connection and try again."
     }
 }

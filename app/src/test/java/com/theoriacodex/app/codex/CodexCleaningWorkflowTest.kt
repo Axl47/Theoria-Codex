@@ -40,7 +40,7 @@ class CodexCleaningWorkflowTest {
                 stored.restoreCleanedCodex(snapshot)
             }
         }
-        val owner = CodexCommandViewModel(repository, {}, {}, CodexCleaningService(failing, StandardTestDispatcher(testScheduler)), this)
+        val owner = CodexCommandViewModel(repository, { null }, {}, {}, CodexCleaningService(failing, StandardTestDispatcher(testScheduler)), this)
         val selected = mutableSetOf("source")
         owner.clean("profile-main", "target", selected)
         selected.clear()
@@ -67,7 +67,7 @@ class CodexCleaningWorkflowTest {
     @Test fun `empty overlap reports no matches without offering Undo`() = runTest {
         val repository = InMemoryCodexRepository()
         listOf("target", "source").forEach { repository.ensureCodex(it, it) }
-        val owner = CodexCommandViewModel(repository, {}, {}, CodexCleaningService(
+        val owner = CodexCommandViewModel(repository, { null }, {}, {}, CodexCleaningService(
             InMemoryCodexLikesTransactions(repository), StandardTestDispatcher(testScheduler),
         ), this)
         owner.clean("profile-main", "target", setOf("source"))

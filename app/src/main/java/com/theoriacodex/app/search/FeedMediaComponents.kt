@@ -36,6 +36,8 @@ import coil.memory.MemoryCache
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.theoriacodex.app.media.MediaRequestFactory
+import com.theoriacodex.app.media.feedPreviewLocation
+import com.theoriacodex.app.media.isMediaNetworkMetered
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.FirstFrameTraceGate
@@ -65,7 +67,8 @@ internal fun SearchVideoPreview(
     onDurationKnown: (Long) -> Unit = {},
 ) {
     val context = LocalContext.current
-    val location = media.localPath ?: media.url
+    // The metered check is a system call, so it runs when a card picks its stream, not on every recomposition.
+    val location = remember(media) { media.feedPreviewLocation(context.isMediaNetworkMetered()) }
     if (location.isNullOrBlank()) {
         onPlaybackError()
         return

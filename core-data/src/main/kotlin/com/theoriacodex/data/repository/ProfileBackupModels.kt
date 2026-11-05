@@ -16,8 +16,8 @@ data class BackupLibrary(
 
 interface ProfileBackupStore {
     suspend fun snapshot(includeRecents: Boolean): BackupLibrary
-    /** Imports the entire library atomically, keeping existing membership and post payloads. */
-    suspend fun merge(library: BackupLibrary)
+    /** Imports the entire library atomically, keeping existing membership and post payloads. Returns collections added. */
+    suspend fun merge(library: BackupLibrary): Int
 }
 
 data class ProfileBackup(
@@ -26,6 +26,8 @@ data class ProfileBackup(
     val library: BackupLibrary,
     val savedSearches: List<SavedSearchEntry> = emptyList(),
     val readingPositions: List<ReadingPosition> = emptyList(),
+    /** Absent from older backups and from backups made without history. */
+    val statistics: LifetimeStatistics? = null,
 ) {
     fun preview() = ProfileBackupPreview(
         createdAtEpochMs = createdAtEpochMs,

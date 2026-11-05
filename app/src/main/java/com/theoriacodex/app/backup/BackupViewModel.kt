@@ -127,7 +127,7 @@ internal class BackupViewModel(
             result.fold(
                 onSuccess = { restored ->
                     dismissDialog()
-                    messages.send("Backup restored: ${restored.profilesAdded} profiles and ${restored.collectionsAdded} collections added.")
+                    messages.send(restored.message())
                 },
                 onFailure = { failure ->
                     messages.send(failure.backupMessage("Could not restore the backup. Please try again."))
@@ -152,6 +152,12 @@ internal class BackupViewModel(
         selectedBytes = null
     }
 }
+
+private fun ProfileRestoreResult.message(): String =
+    if (profilesAdded == 0 && collectionsAdded == 0) "Backup restored into your existing collections."
+    else "Backup restored: ${countLabel(profilesAdded, "profile")} and ${countLabel(collectionsAdded, "collection")} added."
+
+private fun countLabel(count: Int, noun: String) = "$count ${if (count == 1) noun else "${noun}s"}"
 
 private fun Throwable.backupMessage(fallback: String): String =
     when (this) {

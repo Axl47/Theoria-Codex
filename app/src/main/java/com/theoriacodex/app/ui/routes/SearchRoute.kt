@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.app.ui.LocalNetworkOnline
 import com.theoriacodex.data.repository.SavedSearchEntry
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -17,6 +18,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.app.search.SearchScreen
+import com.theoriacodex.app.search.searchViewModelFactory
 import com.theoriacodex.app.search.SearchViewModel
 import com.theoriacodex.app.related.RelatedPostsLoading
 import com.theoriacodex.app.related.loadedPosts
@@ -280,7 +282,7 @@ internal fun SearchRoute(
 ) {
     val owner = viewModel<SearchViewModel>(
         key = SEARCH_ROUTE_OWNER_KEY,
-        factory = SearchViewModel.factory(coordinator, relatedPostsLoader),
+        factory = searchViewModelFactory(coordinator, relatedPostsLoader, LocalNetworkOnline.current),
     )
     val state by owner.state.collectAsStateWithLifecycle()
     val durationPosts = remember(state.content.results, state.relatedPosts) {

@@ -57,7 +57,8 @@ Proceed only after the user approves the version and release-note wording.
 1. Update `versionName` and its matching calculated `versionCode` in `app/build.gradle.kts`.
 2. Add `release-notes/vX.Y.Z.md` using the approved user-facing text.
 3. Move the entries being released from `[Unreleased]` into a dated `[X.Y.Z]` section at the top of root `CHANGELOG.md`, directly below the now-empty `[Unreleased]` section. Preserve existing release history and entries outside this release. Include this changelog archive in the release-preparation diff and commit; do not wait until publication.
-4. Run the host validation batch:
+4. Refresh the baseline profile so startup and the main journeys stay compiled ahead of time. With a supported API 36 or 37 emulator as the only selected target, run `ANDROID_SERIAL=<emulator-serial> ./gradlew :app:generateReleaseBaselineProfile` and include the changed profiles in the release diff. It uses the offline fixture app in an isolated package; if no emulator is available, report that the profile was not refreshed.
+5. Run the host validation batch:
 
    ```sh
    previous_release_tag="$(git describe --tags --abbrev=0 --match 'v[0-9]*')"
@@ -77,8 +78,8 @@ Proceed only after the user approves the version and release-note wording.
    Confirm the hotspot/Detekt debt gate and Detekt report no new issues before continuing.
    Confirm `app/build/outputs/apk/release/output-metadata.json` reports the same name and code. Also confirm the working tree contains only intended release changes and the new version is greater than the prior release.
 
-5. Show the final diff, the exact commit message, and the exact tag that would be created.
-6. Create a release branch and the release-preparation commit only after the user explicitly approves that final diff.
+6. Show the final diff, the exact commit message, and the exact tag that would be created.
+7. Create a release branch and the release-preparation commit only after the user explicitly approves that final diff.
 
 Use this commit message:
 
@@ -86,9 +87,9 @@ Use this commit message:
 chore(release): prepare vX.Y.Z
 ```
 
-7. With explicit authorization for external Git actions, push the branch and open a PR targeting `main`; link it in T3 Code. Do not create the release tag yet.
-8. Watch the PR with T3 Code's `watch_pull_request` tool and end the turn while checks run. Verify `Verify` and `Device Validation` passed for the current PR revision and tested merge result; PR workflows may run on GitHub's synthetic merge commit rather than the branch head. Investigate missing, failed, or cancelled checks and push repairs; the existing watch persists across pushes. Dependency Submission runs on `main`, not on PRs.
-9. Merge only with explicit authorization. Record the actual merged commit SHA on `main`; a squash or merge commit can differ from the PR head. Confirm every workflow triggered for that exact merged SHA completed successfully, including `Verify`, `Device Validation`, and `Dependency Submission`. Match the full `headSha`, not an older PR or main run. If any is missing, fails, is cancelled, or cannot run, stop before tagging and repair through a new PR. Do not treat host or PR success as a substitute for this gate. Stop the PR watch when it is no longer needed.
+8. With explicit authorization for external Git actions, push the branch and open a PR targeting `main`; link it in T3 Code. Do not create the release tag yet.
+9. Watch the PR with T3 Code's `watch_pull_request` tool and end the turn while checks run. Verify `Verify` and `Device Validation` passed for the current PR revision and tested merge result; PR workflows may run on GitHub's synthetic merge commit rather than the branch head. Investigate missing, failed, or cancelled checks and push repairs; the existing watch persists across pushes. Dependency Submission runs on `main`, not on PRs.
+10. Merge only with explicit authorization. Record the actual merged commit SHA on `main`; a squash or merge commit can differ from the PR head. Confirm every workflow triggered for that exact merged SHA completed successfully, including `Verify`, `Device Validation`, and `Dependency Submission`. Match the full `headSha`, not an older PR or main run. If any is missing, fails, is cancelled, or cannot run, stop before tagging and repair through a new PR. Do not treat host or PR success as a substitute for this gate. Stop the PR watch when it is no longer needed.
 
 ## Publish An Approved Release
 

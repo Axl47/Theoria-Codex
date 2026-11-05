@@ -1,7 +1,10 @@
 package com.theoriacodex.data.repository
 
-/** Fresh deterministic IDs make an interrupted additive restore safe to retry. */
-internal fun ProfileBackup.forRestore(operationId: String): ProfileBackup {
+/**
+ * Only for a journal written before restores kept the backup's own IDs: its database commit may already
+ * have used these IDs, so finishing it any other way could duplicate rows or overflow capacity at startup.
+ */
+internal fun ProfileBackup.forLegacyRestore(operationId: String): ProfileBackup {
     val profileMap = settings.recommendationProfiles.mapIndexed { index, profile ->
         profile.profileId to "restored-$operationId-$index"
     }.toMap()
@@ -37,6 +40,7 @@ internal fun ProfileBackup.forRestore(operationId: String): ProfileBackup {
     )
 }
 
+/** Adds what the backup has and this device lacks; anything already here keeps its current values. */
 internal fun AppSettings.mergeRestoredSettings(imported: AppSettings, applyPreferences: Boolean): AppSettings {
     val existingProfileIds = recommendationProfiles.mapTo(mutableSetOf()) { it.profileId }
     val follows = (followedCreators + imported.followedCreators).distinctBy { it.creator.followKey() }
@@ -50,8 +54,13 @@ internal fun AppSettings.mergeRestoredSettings(imported: AppSettings, applyPrefe
         recommendationProfiles = recommendationProfiles + imported.recommendationProfiles.filterNot {
             it.profileId in existingProfileIds
         },
-        favoriteTagsByProfile = imported.favoriteTagsByProfile + favoriteTagsByProfile,
-        forYouBlacklistByProfile = imported.forYouBlacklistByProfile + forYouBlacklistByProfile,
+        favoriteTagsByProfile = favoriteTagsByProfile.unionByProfile(imported.favoriteTagsByProfile),
+        forYouBlacklistByProfile = forYouBlacklistByProfile.unionByProfile(imported.forYouBlacklistByProfile),
         followedCreators = follows,
     ).requireSettingsCapacity()
 }
+
+private fun <T> Map<String, List<T>>.unionByProfile(imported: Map<String, List<T>>): Map<String, List<T>> =
+    (keys + imported.keys).associateWith { profileId ->
+        (this[profileId].orEmpty() + imported[profileId].orEmpty()).distinct()
+    }

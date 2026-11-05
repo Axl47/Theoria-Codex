@@ -181,6 +181,57 @@ internal data class StatisticsDataStoreFile(
 }
 
 internal object StatisticsPolicies {
+    fun mergeRestored(current: LifetimeStatistics, imported: LifetimeStatistics) = current.copy(
+        history = current.history.mergeWith(imported.history) { a, b ->
+            DailyActivity(
+                appOpenCount = maxOf(a.appOpenCount, b.appOpenCount),
+                totalForegroundMs = maxOf(a.totalForegroundMs, b.totalForegroundMs),
+                browsingMs = maxOf(a.browsingMs, b.browsingMs),
+                watchingMs = maxOf(a.watchingMs, b.watchingMs),
+                codexMs = maxOf(a.codexMs, b.codexMs),
+                watchedPostCount = maxOf(a.watchedPostCount, b.watchedPostCount),
+                searchCount = maxOf(a.searchCount, b.searchCount),
+            )
+        },
+        codexStatistics = current.codexStatistics.mergeWith(imported.codexStatistics) { a, b ->
+            CodexStatistics(
+                browsingMs = maxOf(a.browsingMs, b.browsingMs),
+                watchingMs = maxOf(a.watchingMs, b.watchingMs),
+                posts = a.posts.mergeWith(b.posts) { first, second ->
+                    CodexPostStatistics(
+                        label = first.label.ifBlank { second.label },
+                        opens = maxOf(first.opens, second.opens),
+                        videoMs = maxOf(first.videoMs, second.videoMs),
+                        imageMs = maxOf(first.imageMs, second.imageMs),
+                    )
+                },
+            )
+        },
+        appOpenCount = maxOf(current.appOpenCount, imported.appOpenCount),
+        totalForegroundMs = maxOf(current.totalForegroundMs, imported.totalForegroundMs),
+        browsingMs = maxOf(current.browsingMs, imported.browsingMs),
+        watchingMs = maxOf(current.watchingMs, imported.watchingMs),
+        codexMs = maxOf(current.codexMs, imported.codexMs),
+        watchedPostCount = maxOf(current.watchedPostCount, imported.watchedPostCount),
+        watchedBySource = current.watchedBySource.mergeWith(imported.watchedBySource, ::maxOf),
+        watchedByTag = current.watchedByTag.mergeWith(imported.watchedByTag, ::maxOf),
+        searchCount = maxOf(current.searchCount, imported.searchCount),
+        searchesBySource = current.searchesBySource.mergeWith(imported.searchesBySource, ::maxOf),
+        forYouSearchCount = maxOf(current.forYouSearchCount, imported.forYouSearchCount),
+        forYouSaveCount = maxOf(current.forYouSaveCount, imported.forYouSaveCount),
+        postUrlCopyCount = maxOf(current.postUrlCopyCount, imported.postUrlCopyCount),
+        codexEntryCounts = current.codexEntryCounts.mergeWith(imported.codexEntryCounts, ::maxOf),
+        translatedPhraseCount = maxOf(current.translatedPhraseCount, imported.translatedPhraseCount),
+        translatedSourceCharacterCount = maxOf(current.translatedSourceCharacterCount, imported.translatedSourceCharacterCount),
+    )
+
+    private fun <K, V> Map<K, V>.mergeWith(other: Map<K, V>, combine: (V, V) -> V): Map<K, V> =
+        (keys + other.keys).associateWith { key ->
+            val mine = this[key]
+            val theirs = other[key]
+            if (mine != null && theirs != null) combine(mine, theirs) else mine ?: requireNotNull(theirs)
+        }
+
     fun normalize(statistics: LifetimeStatistics): LifetimeStatistics {
         return statistics.copy(
             appOpenCount = statistics.appOpenCount.coerceAtLeast(0L),
@@ -419,6 +470,10 @@ class DataStoreStatisticsRepository(
         mutate { current ->
             StatisticsPolicies.recordTranslationUsage(current, phraseCount, sourceCharacterCount)
         }
+
+    override suspend fun mergeRestored(imported: LifetimeStatistics) = mutate { current ->
+        StatisticsPolicies.mergeRestored(current, imported)
+    }
 
     private suspend fun mutate(transform: (LifetimeStatistics) -> LifetimeStatistics) {
         dataStore.updateDataInBackground { stored ->

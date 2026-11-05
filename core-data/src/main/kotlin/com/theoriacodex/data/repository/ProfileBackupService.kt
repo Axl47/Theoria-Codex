@@ -8,7 +8,6 @@ import java.nio.charset.CodingErrorAction
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption.ATOMIC_MOVE
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
-import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -22,8 +21,9 @@ class ProfileRestorePendingException(cause: Exception) : IllegalStateException(
 )
 
 /**
- * Additive cross-store restore uses a durable intent and idempotent commits. Startup must finish
- * [recoverPendingRestore] before exposing repository-backed routes. No existing profile is deleted.
+ * Restore merges by the backup's own identities through a durable intent, so repeating one or retrying
+ * after a crash adds nothing twice. Startup must finish [recoverPendingRestore] before exposing
+ * repository-backed routes. Nothing already on the device is deleted or overwritten.
  */
 class ProfileBackupService(
     private val settings: SettingsRepository,
@@ -31,9 +31,10 @@ class ProfileBackupService(
     private val savedSearches: SavedSearchRepository,
     private val readingPositions: ReadingPositionRepository,
     private val journalFile: File,
+    private val statistics: StatisticsRepository? = null,
+    private val writeGuard: ProfileLibraryWriteGuard? = null,
     private val codec: ProfileBackupCodec = ProfileBackupCodec(),
     private val clock: () -> Long = System::currentTimeMillis,
-    private val newOperationId: () -> String = { UUID.randomUUID().toString() },
 ) {
     private val mutex = Mutex()
 
@@ -49,12 +50,18 @@ class ProfileBackupService(
                     pins == savedSearches.observeSavedSearches().first() &&
                     (!includeRecents || positions == readingPositions.snapshot())
                 ) {
-                    return@withLock codec.encode(ProfileBackup(clock(), initialSettings, library, pins, positions))
+                    return@withLock codec.encode(
+                        ProfileBackup(clock(), initialSettings, library, pins, positions, statisticsFor(includeRecents)),
+                    )
                 }
             }
             error("Your library changed while preparing the backup. Try again after current saves finish.")
         }
     }
+
+    /** Usage totals change constantly and share nothing with the library, so they need no stable read. */
+    private suspend fun statisticsFor(includeRecents: Boolean): LifetimeStatistics? =
+        if (includeRecents) statistics?.observeStatistics()?.first() else null
 
     fun preview(bytes: ByteArray): ProfileBackupPreview = codec.decode(bytes).preview()
 
@@ -73,9 +80,8 @@ class ProfileBackupService(
                         pending.selectImportedProfile == selectImportedProfile) { "Finish the pending restore first" }
                     return@withLock finish(pending)
                 }
-                val pending = PendingRestore(newOperationId(), applyPreferences, backup, selectImportedProfile)
-                val imported = backup.forRestore(pending.operationId)
-                preflight(imported, applyPreferences)
+                val pending = PendingRestore(applyPreferences, backup, selectImportedProfile)
+                preflight(backup, applyPreferences)
                 withContext(NonCancellable) {
                     writeJournal(pending)
                     finish(pending)
@@ -101,11 +107,13 @@ class ProfileBackupService(
 
     private suspend fun finish(pending: PendingRestore): ProfileRestoreResult = withContext(NonCancellable) {
         try {
-            val imported = pending.backup.forRestore(pending.operationId)
+            val imported = pending.legacyOperationId?.let(pending.backup::forLegacyRestore) ?: pending.backup
             preflight(imported, pending.applyPreferences)
-            store.merge(imported.library)
+            val existingProfileIds = settings.observeSettings().first().recommendationProfiles.mapTo(mutableSetOf()) { it.profileId }
+            val collectionsAdded = store.merge(imported.library)
             savedSearches.merge(imported.savedSearches)
             readingPositions.merge(imported.readingPositions)
+            imported.statistics?.let { statistics?.mergeRestored(it) }
             settings.updateSettings {
                 val merged = it.mergeRestoredSettings(imported.settings, pending.applyPreferences)
                 if (pending.selectImportedProfile) merged.copy(activeProfileId = imported.settings.activeProfileId) else merged
@@ -114,8 +122,10 @@ class ProfileBackupService(
             check(imported.settings.recommendationProfiles.all { it.profileId in persistedIds }) {
                 "Restored profiles were not retained"
             }
+            // A profile deleted earlier in this process is back, so it must be usable before a restart.
+            imported.settings.recommendationProfiles.forEach { writeGuard?.reinstate(it.profileId) }
             check(journalFile.delete() || !journalFile.exists()) { "Could not finish the restore journal" }
-            ProfileRestoreResult(imported.settings.recommendationProfiles.size, imported.library.codices.size)
+            ProfileRestoreResult(imported.settings.recommendationProfiles.count { it.profileId !in existingProfileIds }, collectionsAdded)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
@@ -125,7 +135,6 @@ class ProfileBackupService(
 
     private fun writeJournal(pending: PendingRestore) {
         val record = backupObject {
-            addProperty("operationId", pending.operationId)
             addProperty("applyPreferences", pending.applyPreferences)
             addProperty("selectImportedProfile", pending.selectImportedProfile)
             add("backup", JsonParser.parseString(codec.encode(pending.backup).toString(Charsets.UTF_8)))
@@ -147,20 +156,20 @@ class ProfileBackupService(
             .decode(ByteBuffer.wrap(journalFile.readBytes())).toString()
         checkDocumentDepth(raw)
         val record = JsonParser.parseString(raw).asJsonObject
-        val operationId = record.backupString("operationId")
-        require(operationId.matches(Regex("[A-Za-z0-9-]{1,80}"))) { "Invalid restore operation" }
         val preferences = requireNotNull(record.get("applyPreferences"))
         require(preferences.isJsonPrimitive && preferences.asJsonPrimitive.isBoolean)
+        val legacyOperationId = record.get("operationId")?.let { record.backupString("operationId") }
+        require(legacyOperationId == null || legacyOperationId.matches(Regex("[A-Za-z0-9-]{1,80}"))) { "Invalid restore operation" }
         val backup = codec.decode(requireNotNull(record.get("backup")).toString().toByteArray(Charsets.UTF_8))
         val selection = record.get("selectImportedProfile")
         require(selection == null || selection.isJsonPrimitive && selection.asJsonPrimitive.isBoolean)
-        return PendingRestore(operationId, preferences.asBoolean, backup, selection?.asBoolean ?: false)
+        return PendingRestore(preferences.asBoolean, backup, selection?.asBoolean ?: false, legacyOperationId)
     }
 }
 
 private data class PendingRestore(
-    val operationId: String,
     val applyPreferences: Boolean,
     val backup: ProfileBackup,
     val selectImportedProfile: Boolean = false,
+    val legacyOperationId: String? = null,
 )

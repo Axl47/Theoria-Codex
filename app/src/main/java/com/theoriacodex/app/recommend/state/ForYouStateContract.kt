@@ -9,6 +9,7 @@ import com.theoriacodex.app.related.LikeToggleOutcome
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.related.requestOrNull
 import com.theoriacodex.app.search.SearchVisibilityFilters
+import com.theoriacodex.app.search.requiresAccount
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.ViewerLaunchContext
@@ -72,6 +73,10 @@ data class ForYouUiState(
         get() = statuses.filter { it.state == SourceRunState.FAILED && it.source in continuation?.pageTokens.orEmpty() }
             .mapTo(linkedSetOf()) { it.source }
 
+    /** Failures the status row can act on: retry a paged source, or sign in to one that needs an account. */
+    val actionableStatuses: List<SourceRunStatus>
+        get() = statuses.filter { it.source in retryableSources || it.requiresAccount() }
+
     val pageableSources: Set<SourceKey>
         get() = continuation?.pageTokens.orEmpty().filter { (source, token) ->
             !token.isNullOrBlank() && source !in retryableSources
@@ -117,6 +122,7 @@ sealed interface ForYouAction {
     ) : ForYouAction
     data object LoadNextPage : ForYouAction
     data class RetrySource(val source: SourceKey) : ForYouAction
+    data class RetrySources(val sources: Set<SourceKey>) : ForYouAction
     data class OpenResult(
         val index: Int,
         val scrollOffsetHint: Int = 0,
@@ -254,6 +260,7 @@ fun ForYouUiState.reduce(action: ForYouAction): ForYouTransition {
         is ForYouAction.RetrySource -> if (action.source in retryableSources) {
             beginPage(setOf(action.source))
         } else unchanged()
+        is ForYouAction.RetrySources -> beginPage(action.sources intersect retryableSources)
 
         is ForYouAction.OpenResult -> openResult(action)
 

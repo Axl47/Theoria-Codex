@@ -397,7 +397,7 @@ private fun CodexDeleteConfirmationDialog(
                 if (isLikesCodex) {
                     "Clear all liked posts from this recommendation profile? The Likes Codex will remain."
                 } else {
-                    "Delete \"$codexName\" and all saved items in it? This cannot be undone."
+                    "Delete \"$codexName\" and all saved items in it?"
                 },
             )
         },

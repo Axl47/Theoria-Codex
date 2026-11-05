@@ -159,6 +159,7 @@ private fun ForYouDestination(shell: TheoriaShell) {
             callbacks = ForYouRouteCallbacks(
                 onOpenViewer = { effect -> shell.openForYouViewer(effect) },
                 onNavigateToSearch = { navigation.showTab(TopLevelDestination.Search) },
+                onOpenSourceAccounts = { shell.owners.settings.onAction(SettingsAction.OpenSourceAccounts) },
                 onShowMessage = { message -> Toast.makeText(shell.appContext, message, Toast.LENGTH_SHORT).show() },
                 onSeedHidden = { _, _ -> shell.showActionableFeedback("Seed hidden", "Undo") },
                 onToggleLike = { post -> shell.forYouLikeAction()(post) },

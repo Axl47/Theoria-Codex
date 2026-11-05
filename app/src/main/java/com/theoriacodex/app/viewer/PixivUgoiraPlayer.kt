@@ -180,6 +180,13 @@ class PixivUgoiraClient internal constructor(
         }
     }
 
+    /** Drops decoded frames under memory pressure; disk archives stay, so playback only decodes again. */
+    fun releaseMemoryCaches() = synchronized(cacheLock) {
+        playbackCache.clear()
+        decodedCacheBytes = 0L
+        archiveCache.clear()
+    }
+
     suspend fun disposableCacheBytes(): Long = withContext(Dispatchers.IO) {
         archiveDirectory.listFiles().orEmpty().filter(File::isFile).sumOf(File::length)
     }

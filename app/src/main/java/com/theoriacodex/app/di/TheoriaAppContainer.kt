@@ -1,6 +1,11 @@
 package com.theoriacodex.app.di
 
+import com.theoriacodex.app.media.NetworkMonitor
 import android.content.Context
+import androidx.core.net.toUri
+import com.theoriacodex.app.backup.AndroidAutoBackupFolder
+import com.theoriacodex.app.backup.AutoBackupWorkflow
+import com.theoriacodex.app.backup.SharedPreferencesAutoBackupStore
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.creator.CreatorProfileCoordinator
 import com.theoriacodex.app.media.BoundedMediaDurationProbe
@@ -108,6 +113,7 @@ data class SourceDependencies(
     val pixivUgoiraClient: PixivUgoiraClient,
     val registry: SourceAdapterRegistry,
     val availableSources: StateFlow<Set<SourceKey>>,
+    val networkOnline: StateFlow<Boolean> = kotlinx.coroutines.flow.MutableStateFlow(true),
     val pixivTokens: PixivTokenCoordinator = PixivTokenCoordinator(accounts, pixivAuthApi),
 )
 
@@ -132,6 +138,7 @@ data class WorkflowDependencies(
     val likesCodexSync: LikesCodexSyncService,
     val codexTransfer: CodexTransferService,
     val profileBackup: ProfileBackupService? = null,
+    val autoBackup: AutoBackupWorkflow? = null,
     val profileDeletion: ProfileDeletionService? = null,
 )
 
@@ -258,6 +265,14 @@ internal class DefaultTheoriaAppContainer(
         savedSearches = savedSearches,
         readingPositions = readingPositions,
         journalFile = File(storageDirectory, "pending_profile_restore.json"),
+        statistics = statisticsStore,
+        writeGuard = profileWriteGuard,
+    )
+    private val autoBackup = AutoBackupWorkflow(
+        store = SharedPreferencesAutoBackupStore(appContext),
+        openFolder = { AndroidAutoBackupFolder(appContext.contentResolver, it.toUri()) },
+        export = { profileBackup.export(includeRecents = true) },
+        scope = durableStoreScope,
     )
     private val uiRestoreRepository = DataStoreUiRestoreRepository(
         baseDirectory = storageDirectory,
@@ -315,6 +330,7 @@ internal class DefaultTheoriaAppContainer(
         pixivUgoiraClient = pixivUgoiraClient,
         registry = sourceRegistry,
         availableSources = accountStore.availableSources,
+        networkOnline = NetworkMonitor(appContext).online,
         pixivTokens = pixivTokenCoordinator,
     )
 
@@ -366,6 +382,7 @@ internal class DefaultTheoriaAppContainer(
             canonicalizePost = offlineMedia::withoutOfflineLocations,
         ),
         profileBackup = profileBackup,
+        autoBackup = autoBackup,
         profileDeletion = profileDeletion,
     )
 

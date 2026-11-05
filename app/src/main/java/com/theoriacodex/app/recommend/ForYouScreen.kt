@@ -1,5 +1,9 @@
 package com.theoriacodex.app.recommend
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.theoriacodex.app.search.OFFLINE_FEED_MESSAGE
+import com.theoriacodex.app.search.OFFLINE_FEED_TITLE
+import com.theoriacodex.app.ui.LocalNetworkOnline
 import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.theoriacodex.app.media.animatedDurationRangeLabel
@@ -117,6 +121,7 @@ fun ForYouScreen(
     onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
     onGoToSearch: () -> Unit,
+    onOpenSourceAccounts: () -> Unit = {},
     fabRestoreState: FeedFabRestoreState = FeedFabRestoreState(),
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit = {},
 ) {
@@ -160,6 +165,7 @@ fun ForYouScreen(
             ForYouResults(
                 state, feed, cards, gridState, pageDemand, filterScroll, filterLabels, clearFilters, showSourceMenu,
                 onSourceMenuChange = { showSourceMenu = it }, onShowFilters = { showSortSheet = true },
+                onOpenSourceAccounts = onOpenSourceAccounts,
                 onAction = onAction, onLongPress = { selectedActionPost = it },
             )
         }
@@ -212,6 +218,7 @@ private fun ForYouResults(
     showSourceMenu: Boolean,
     onSourceMenuChange: (Boolean) -> Unit,
     onShowFilters: () -> Unit,
+    onOpenSourceAccounts: () -> Unit,
     onAction: (ForYouAction) -> Unit,
     onLongPress: (Post) -> Unit,
 ) {
@@ -250,9 +257,10 @@ private fun ForYouResults(
             )
             ForYouSeedSummary(state)
             com.theoriacodex.app.search.StatusRow(
-                statuses = state.statuses.filter { it.source in state.retryableSources },
+                statuses = state.actionableStatuses,
                 retryEnabled = !state.isRefreshing && !state.isPaging,
                 onRetrySource = { onAction(ForYouAction.RetrySource(it)) },
+                onOpenAccounts = onOpenSourceAccounts,
             )
             FeedContinueLoading(pageDemand)
             ForYouFeedBody(state, feed, cards, gridState, onAction, onLongPress)
@@ -449,10 +457,7 @@ private fun ForYouFeedBody(
         state.isRefreshing && feed.visibleResults.isEmpty() -> FeedLoadingState()
 
         state.errorMessage != null && feed.visibleResults.isEmpty() -> {
-            FeedErrorTile(
-                message = state.errorMessage.orEmpty(),
-                onRetry = { onAction(ForYouAction.Refresh(shuffle = true)) },
-            )
+            ForYouFeedError(state.errorMessage.orEmpty()) { onAction(ForYouAction.Refresh(shuffle = true)) }
         }
 
         feed.related.projection.entries.isEmpty() -> FeedEmptyTile(message = forYouEmptyMessage(state, feed))
@@ -505,6 +510,16 @@ private fun ForYouFeedBody(
             }
         }
     }
+}
+
+@Composable
+private fun ForYouFeedError(message: String, onRetry: () -> Unit) {
+    val online by LocalNetworkOnline.current.collectAsStateWithLifecycle()
+    FeedErrorTile(
+        message = if (online) message else OFFLINE_FEED_MESSAGE,
+        title = OFFLINE_FEED_TITLE.takeUnless { online },
+        onRetry = onRetry,
+    )
 }
 
 @Composable

@@ -21,13 +21,22 @@ internal fun visibleSourceStatusChipStatuses(
     }
 }
 
+/** A source that only an account change can fix, whatever a retry would do. */
+internal fun SourceRunStatus.requiresAccount(): Boolean =
+    state == SourceRunState.FAILED &&
+        (failureReason == SourceFailureReason.AUTH_REQUIRED || failureReason == SourceFailureReason.AUTH_EXPIRED)
+
+/** A failure a returning network could fix; waiting for rate limits or sign-ins is a separate matter. */
+internal fun SourceRunStatus.retriesOnReconnect(): Boolean =
+    state == SourceRunState.FAILED && !requiresAccount() && failureReason != SourceFailureReason.RATE_LIMITED
+
+internal const val OFFLINE_FEED_TITLE = "You're offline"
+internal const val OFFLINE_FEED_MESSAGE = "This feed will retry when you reconnect."
+internal const val OFFLINE_STATUS_CHIP = "Offline, retries when you reconnect"
+
 internal fun buildSourceAuthErrorMessage(statuses: List<SourceRunStatus>): String? {
     val authSources = statuses
-        .filter { status ->
-            status.state == SourceRunState.FAILED &&
-                (status.failureReason == SourceFailureReason.AUTH_REQUIRED ||
-                    status.failureReason == SourceFailureReason.AUTH_EXPIRED)
-        }
+        .filter(SourceRunStatus::requiresAccount)
         .map { it.source.displayName() }
         .distinct()
     if (authSources.isEmpty()) return null

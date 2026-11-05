@@ -33,6 +33,7 @@ class ProfileBackupCodec(private val gson: Gson = Gson()) {
                 addProperty("mediaNumber", entry.mediaNumber)
                 addProperty("lastViewedAt", entry.lastViewedAt)
             } })
+            backup.statistics?.let { add("statistics", gson.toJsonTree(StatisticsStoreRecord.fromDomain(it))) }
         }.toString().toByteArray(Charsets.UTF_8).also {
             require(it.size <= PROFILE_BACKUP_MAX_BYTES) { "Backup exceeds the 32 MiB metadata limit" }
         }
@@ -56,6 +57,9 @@ class ProfileBackupCodec(private val gson: Gson = Gson()) {
             readingPositions = root.backupObjects("readingPositions", MAX_READING_POSITIONS).map { entry ->
                 ReadingPosition(entry.backupId(), RecentPostSection.valueOf(entry.backupString("section")),
                     entry.backupInt("mediaNumber"), entry.backupLong("lastViewedAt"))
+            },
+            statistics = root.getAsJsonObject("statistics")?.let { record ->
+                gson.fromJson(record, StatisticsStoreRecord::class.java).also(StatisticsStoreRecord::validate).toDomain()
             },
         ).also(::validate)
     }

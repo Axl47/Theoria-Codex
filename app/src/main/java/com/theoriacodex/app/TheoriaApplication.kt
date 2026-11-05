@@ -58,6 +58,22 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
 
     override suspend fun retryAppContainer(): TheoriaAppContainer = readiness.retry()
 
+    /** Coil trims its own memory cache; this covers what the app owns, once the process is at risk of being killed. */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= TRIM_MEMORY_BACKGROUND) releaseMemoryCaches()
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        releaseMemoryCaches()
+    }
+
+    private fun releaseMemoryCaches() {
+        val state = readiness.state.value as? ApplicationDataState.Ready ?: return
+        state.value.sources.pixivUgoiraClient.releaseMemoryCaches()
+    }
+
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)
             .components {

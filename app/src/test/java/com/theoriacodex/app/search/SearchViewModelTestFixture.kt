@@ -83,6 +83,7 @@ internal abstract class SearchViewModelTestFixture {
         relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
         tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
         rootRequestTimeoutMs: Long = 60_000L,
+        reconnections: kotlinx.coroutines.flow.Flow<Unit> = kotlinx.coroutines.flow.emptyFlow(),
     ): SearchViewModel {
         val coordinator = testSearchCoordinator(
             ViewModelSearchRegistry(adapter, *additionalAdapters.toTypedArray()),
@@ -103,6 +104,7 @@ internal abstract class SearchViewModelTestFixture {
             rootRequestTimeoutMs = rootRequestTimeoutMs,
             scrollPersistenceDelayMs = scrollPersistenceDelayMs,
             scrollPersistenceDispatcher = scrollPersistenceDispatcher,
+            reconnections = reconnections,
         )
     }
 

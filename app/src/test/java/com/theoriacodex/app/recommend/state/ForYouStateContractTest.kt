@@ -23,6 +23,16 @@ import org.junit.Test
 
 class ForYouStateContractTest {
     @Test
+    fun `a source needing an account stays actionable even without a page to retry`() {
+        val needsAccount = SourceRunStatus(SourceKey.PIXIV, SourceRunState.FAILED,
+            failureReason = com.theoriacodex.domain.adapter.SourceFailureReason.AUTH_EXPIRED)
+        val unretryable = SourceRunStatus(SourceKey.GELBOORU, SourceRunState.FAILED)
+        val state = ForYouUiState(statuses = listOf(needsAccount, unretryable), continuation = null)
+
+        assertEquals(listOf(needsAccount), state.actionableStatuses)
+    }
+
+    @Test
     fun `undo sort reset replaces the in flight refresh`() {
         val original = loadedState().copy(sortMode = SortMode.TOP)
         val cleared = original.reduce(ForYouAction.SelectSort(SortMode.NEWEST)).state

@@ -297,7 +297,9 @@ private fun ViewerDestination(shell: TheoriaShell) {
                 sessionRetentionOwner = shell.viewerSessions,
                 canonicalizePost = { post -> shell.features.offlineMedia?.withoutOfflineLocations(post) ?: post },
                 postResolver = shell.viewerRouteWorkflow,
-                mediaPrefetcher = ViewerMediaPrefetcher { _, media -> prefetchViewerMedia(shell.appContext, media) },
+                mediaPrefetcher = ViewerMediaPrefetcher { _, media ->
+                    prefetchViewerMedia(shell.appContext, media, state.browsing.settings.viewer.videoQuality)
+                },
                 mediaDurationCoordinator = shell.features.mediaDurationCoordinator,
                 restoreSession = shell.viewerRouteWorkflow::restoreSession,
             ),

@@ -23,7 +23,7 @@ import org.junit.Test
 class CodexRemovalWorkflowTest {
     @Test fun `retained reorder invokes its transaction once and acknowledges completion`() = runTest {
         val orders = mutableListOf<List<String>>()
-        val owner = CodexCommandViewModel(InMemoryCodexRepository(), {}, { orders += it }, CodexCleaningService(InMemoryCodexLikesTransactions()), this)
+        val owner = CodexCommandViewModel(InMemoryCodexRepository(), { null }, {}, { orders += it }, CodexCleaningService(InMemoryCodexLikesTransactions()), this)
         val submitted = mutableListOf("b", "a")
         owner.reorder(submitted)
         submitted.clear()
@@ -56,7 +56,7 @@ class CodexRemovalWorkflowTest {
                 stored.restoreItems(items, posts)
             }
         }
-        val owner = CodexCommandViewModel(repository, {}, {}, CodexCleaningService(InMemoryCodexLikesTransactions(repository)), this)
+        val owner = CodexCommandViewModel(repository, { null }, {}, {}, CodexCleaningService(InMemoryCodexLikesTransactions(repository)), this)
         owner.remove(codex.codexId, original, selected)
         runCurrent()
         assertEquals(original, stored.observeCodexItems(codex.codexId).first())
@@ -90,7 +90,7 @@ class CodexRemovalWorkflowTest {
                 stored.renameCodex(codexId, name)
             }
         }
-        val owner = CodexCommandViewModel(repository, {}, {}, CodexCleaningService(InMemoryCodexLikesTransactions(repository)), this)
+        val owner = CodexCommandViewModel(repository, { null }, {}, {}, CodexCleaningService(InMemoryCodexLikesTransactions(repository)), this)
         val collector = backgroundScope.launch { owner.feedback.collect() }
         owner.rename("captured", "After")
         runCurrent()
@@ -120,7 +120,8 @@ class CodexRemovalWorkflowTest {
         val owner = CodexCommandViewModel(repository, { profile ->
             profiles += profile
             if (profiles.size == 1) error("disk unavailable")
-        }, {}, CodexCleaningService(InMemoryCodexLikesTransactions(repository)), this)
+            null
+        }, {}, {}, CodexCleaningService(InMemoryCodexLikesTransactions(repository)), this)
         owner.create("original-profile", "New")
         owner.delete(likesCodexIdForProfile("original-profile"), "original-profile")
         runCurrent()
@@ -132,5 +133,55 @@ class CodexRemovalWorkflowTest {
         assertTrue(codexBelongsToProfile(requestedIds.singleOrNull() ?: requestedIds.first(), "original-profile"))
         assertEquals(listOf("original-profile", "original-profile"), profiles)
         assertFalse(owner.feedback.value.any { !it.succeeded })
+    }
+
+    @Test
+    fun `undoing a deleted Codex brings it back in place with its posts`() = runTest {
+        val repository = InMemoryCodexRepository()
+        val first = repository.createCodex("First")
+        val second = repository.createCodex("Second")
+        val post = testPost(sourcePostId = "kept")
+        repository.addItem(first.codexId, post)
+        val owner = CodexCommandViewModel(repository, { null }, {}, {}, CodexCleaningService(InMemoryCodexLikesTransactions(repository)), this)
+
+        owner.delete(first.codexId, "profile-main")
+        runCurrent()
+        assertEquals(listOf(second.codexId), repository.observeCodices().first().map { it.codexId })
+        val deleted = owner.feedback.value.single()
+        assertEquals("Undo", deleted.actionLabel)
+
+        owner.acknowledge(deleted.id, performAction = true)
+        runCurrent()
+
+        assertEquals(listOf(first.codexId, second.codexId), repository.observeCodices().first().map { it.codexId })
+        assertEquals(listOf(post.id), repository.observeCodexItems(first.codexId).first().map { it.postId })
+    }
+
+    @Test
+    fun `undoing cleared Likes restores them and clearing none offers no Undo`() = runTest {
+        val repository = InMemoryCodexRepository()
+        val likes = com.theoriacodex.data.repository.InMemoryLikesRepository()
+        val transactions = InMemoryCodexLikesTransactions(repository, likes)
+        val service = LikesCodexSyncService(transactions, repository)
+        val profile = com.theoriacodex.data.repository.RecommendationProfile("profile-main", "Main")
+        service.ensureProfileCodex(profile)
+        val owner = CodexCommandViewModel(repository, service::clearProfile, service::restoreClearedLikes, {},
+            CodexCleaningService(transactions), this)
+
+        owner.delete(likesCodexIdForProfile("profile-main"), "profile-main")
+        runCurrent()
+        assertEquals(null, owner.feedback.value.single().actionLabel)
+        owner.acknowledge(owner.feedback.value.single().id, performAction = false)
+
+        val post = testPost(sourcePostId = "liked")
+        service.toggle(profile, post, listOf("tag"))
+        owner.delete(likesCodexIdForProfile("profile-main"), "profile-main")
+        runCurrent()
+        assertTrue(likes.observeLikedPostIds("profile-main").first().isEmpty())
+
+        owner.acknowledge(owner.feedback.value.single().id, performAction = true)
+        runCurrent()
+        assertEquals(setOf(post.id), likes.observeLikedPostIds("profile-main").first())
+        assertEquals(listOf(post.id), repository.observeCodexItems(likesCodexIdForProfile("profile-main")).first().map { it.postId })
     }
 }

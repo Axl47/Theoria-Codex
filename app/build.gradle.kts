@@ -224,6 +224,8 @@ android {
             applicationIdSuffix = ".baselineprofile"
             versionNameSuffix = "-baselineprofile"
             buildConfigField("boolean", "UPDATER_ENABLED", "false")
+            // Profile journeys run the fixture app, so collection needs no network or provider media.
+            buildConfigField("boolean", "BENCHMARK_FIXTURES_ENABLED", "true")
         }
     }
 
@@ -254,6 +256,10 @@ android {
         getByName("debug").res.directories.add("src/fixtures/res")
         getByName("benchmarkRelease").kotlin.directories.add("src/fixtures/java")
         getByName("benchmarkRelease").res.directories.add("src/fixtures/res")
+        getByName("nonMinifiedRelease").kotlin.directories.add("src/fixtures/java")
+        getByName("nonMinifiedRelease").kotlin.directories.add("src/benchmarkRelease/java")
+        getByName("nonMinifiedRelease").res.directories.add("src/fixtures/res")
+        getByName("nonMinifiedRelease").res.directories.add("src/benchmarkRelease/res")
         getByName("debug").kotlin.directories.add("src/developerCopy/java")
         getByName("debug").res.directories.add("src/developerCopy/res")
         findByName("personalRelease")?.kotlin?.directories?.add("src/developerCopy/java")
@@ -329,6 +335,12 @@ androidComponents {
             // A required AGP-owned mapping proves this measurement lane actually ran R8.
             inputs.file(mapping).withPropertyName("benchmarkR8Mapping")
         }
+    }
+
+    onVariants(selector().withBuildType("nonMinifiedRelease")) { variant ->
+        variant.sources.manifests.addStaticManifestFile(
+            "src/benchmarkRelease/AndroidManifest.xml",
+        )
     }
 
     onVariants(selector().withBuildType("release")) { variant ->
@@ -426,6 +438,11 @@ dependencies {
 baselineProfile {
     automaticGenerationDuringBuild = false
     saveInSrc = true
+    // Journeys run the fixture app, whose own classes never ship in a release.
+    filter {
+        exclude("com.theoriacodex.app.benchmark.**")
+        exclude("com.theoriacodex.app.fixtures.**")
+    }
 }
 
 val verifyBenchmarkFixtureArtifact = tasks.register<Exec>("verifyBenchmarkFixtureArtifact") {

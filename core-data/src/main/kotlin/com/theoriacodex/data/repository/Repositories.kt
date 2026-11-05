@@ -25,6 +25,9 @@ interface CodexRepository {
     suspend fun renameCodex(codexId: String, name: String)
     suspend fun setAutomaticTag(codexId: String, tag: CodexAutomaticTag, enabled: Boolean)
     suspend fun deleteCodex(codexId: String)
+    /** Deletes atomically and returns what Undo needs, or null when the Codex is already gone. */
+    suspend fun deleteCodexForUndo(codexId: String): DeletedCodexSnapshot?
+    suspend fun restoreDeletedCodex(snapshot: DeletedCodexSnapshot)
     fun observeCodexItems(codexId: String): Flow<List<CodexItem>>
     fun observeCodexPosts(codexId: String, sort: CodexSortMode): Flow<List<Post>>
     /** A unique saved-library snapshot for read models that do not need per-collection memberships. */
@@ -46,6 +49,21 @@ interface CodexRepository {
     suspend fun removeItems(codexId: String, postIds: Set<PostId>)
     suspend fun restoreItems(items: List<CodexItem>, posts: List<Post>)
 }
+
+/** Everything needed to undo a Codex deletion, including its place in the Library. Process-only. */
+data class DeletedCodexSnapshot(
+    val codex: Codex,
+    val position: Int,
+    val items: List<CodexItem>,
+    val posts: List<Post>,
+)
+
+/** Exact rows removed by clearing a profile's Likes; process-only authority for Undo. */
+data class ClearedLikesSnapshot(
+    val items: List<CodexItem>,
+    val posts: List<Post>,
+    val likes: List<LikedPost>,
+)
 
 data class CodexSummary(
     val codexId: String,
@@ -250,6 +268,8 @@ interface StatisticsRepository {
     suspend fun recordPostUrlCopy()
     suspend fun recordCodexEntry(codexId: String)
     suspend fun recordTranslationUsage(phraseCount: Long, sourceCharacterCount: Long)
+    /** Keeps the larger value of every counter, so restoring the same backup twice changes nothing. */
+    suspend fun mergeRestored(imported: LifetimeStatistics)
 }
 
 data class LikedPost(
@@ -290,6 +310,8 @@ data class CodexLikesClearResult(
     val clearedLikes: Int,
     /** Only memberships matching the profile's liked post ids are removed. */
     val removedMemberships: Int,
+    /** Null when there was nothing to clear. */
+    val undo: ClearedLikesSnapshot? = null,
 )
 
 data class CodexProfileDeleteResult(
@@ -341,6 +363,8 @@ interface CodexLikesTransactions {
         profileId: String,
         systemCodexId: String,
     ): CodexLikesClearResult
+
+    suspend fun restoreClearedLikes(snapshot: ClearedLikesSnapshot)
 
     /** Profile deletion owns both its likes and its entire profile-specific system Codex. */
     suspend fun clearLikesAndDeleteSystemCodex(

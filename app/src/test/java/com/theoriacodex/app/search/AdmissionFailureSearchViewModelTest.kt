@@ -1,5 +1,9 @@
 package com.theoriacodex.app.search
 
+import kotlinx.coroutines.awaitCancellation
+import com.theoriacodex.app.media.reconnections
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.take
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -112,6 +116,100 @@ internal class AdmissionFailureSearchViewModelTest : SearchViewModelTestFixture(
             assertEquals(listOf("fast-result"), resultIds(viewModel))
             assertEquals(listOf("fast"), queryRepository.observeAppliedQuery("source:PIXIV").first()?.includeTags)
             assertEquals(listOf(listOf("fast")), recents.observeSearches().first().map { it.query.includeTags })
+        }
+
+    @Test
+    fun `a failed search retries by itself when the network returns`() = runTest(mainDispatcherRule.dispatcher) {
+        val network = MutableStateFlow(false)
+        val adapter = ViewModelSearchAdapter()
+        val viewModel = viewModel(adapter, reconnections = network.take(2).reconnections())
+        restore(viewModel)
+        viewModel.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
+        adapter.failingTags += "offline"
+        viewModel.onAction(SearchAction.AddIncludeTerm(SearchTerm("offline")))
+        viewModel.onAction(SearchAction.ApplyDraft)
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.content.error != null)
+        val attempts = adapter.searchCount
+
+        adapter.failingTags.clear()
+        network.value = true
+        advanceUntilIdle()
+
+        assertEquals(attempts + 1, adapter.searchCount)
+        assertEquals(null, viewModel.state.value.content.error)
+        assertTrue(resultIds(viewModel).isNotEmpty())
+    }
+
+    @Test
+    fun `a request still failing when the network returns gets the retry once it ends`() = runTest(mainDispatcherRule.dispatcher) {
+        val network = MutableStateFlow(false)
+        val adapter = ViewModelSearchAdapter()
+        val firstAttempt = CompletableDeferred<Unit>()
+        var attempts = 0
+        val viewModel = viewModel(adapter, reconnections = network.take(2).reconnections(), executionService = { coordinator ->
+            object : SearchExecutionService by coordinator {
+                override suspend fun executeInitial(query: Query, sourceScope: SearchSourceScope): SearchExecutionResult {
+                    if ("offline" !in query.includeTags || ++attempts > 1) return coordinator.executeInitial(query, sourceScope)
+                    firstAttempt.await()
+                    return coordinator.executeInitial(query, sourceScope).also { adapter.failingTags.clear() }
+                }
+            }
+        })
+        restore(viewModel)
+        viewModel.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
+        adapter.failingTags += "offline"
+        viewModel.onAction(SearchAction.AddIncludeTerm(SearchTerm("offline")))
+        viewModel.onAction(SearchAction.ApplyDraft)
+        // Not advanceUntilIdle: that would jump past the root timeout and end the gated request.
+        runCurrent()
+
+        network.value = true
+        runCurrent()
+        assertEquals(1, attempts)
+        firstAttempt.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(2, attempts)
+        assertEquals(null, viewModel.state.value.content.error)
+        assertTrue(resultIds(viewModel).isNotEmpty())
+    }
+
+    @Test
+    fun `a search that times out across a reconnect retries itself, not the search before it`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val network = MutableStateFlow(false)
+            val adapter = ViewModelSearchAdapter()
+            var hangSecond = true
+            val viewModel = viewModel(adapter, rootRequestTimeoutMs = 100L, reconnections = network.take(2).reconnections(),
+                executionService = { coordinator ->
+                    object : SearchExecutionService by coordinator {
+                        override suspend fun executeInitial(query: Query, sourceScope: SearchSourceScope): SearchExecutionResult {
+                            if ("second" in query.includeTags && hangSecond) awaitCancellation()
+                            return coordinator.executeInitial(query, sourceScope)
+                        }
+                    }
+                })
+            restore(viewModel)
+            viewModel.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
+            viewModel.onAction(SearchAction.AddIncludeTerm(SearchTerm("first")))
+            viewModel.onAction(SearchAction.ApplyDraft)
+            runCurrent()
+            viewModel.onAction(SearchAction.ClearDraft)
+            viewModel.onAction(SearchAction.AddIncludeTerm(SearchTerm("second")))
+            viewModel.onAction(SearchAction.ApplyDraft)
+            runCurrent()
+
+            network.value = true
+            runCurrent()
+            hangSecond = false
+            adapter.searchedTags.clear()
+            advanceTimeBy(101L)
+            runCurrent()
+
+            assertEquals(listOf("second"), adapter.searchedTags)
+            assertEquals(listOf("second"), viewModel.state.value.query.applied.includeTags)
+            assertEquals(null, viewModel.state.value.content.error)
         }
 
     @Test

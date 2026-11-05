@@ -1,5 +1,7 @@
 package com.theoriacodex.app.search
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.theoriacodex.app.ui.LocalNetworkOnline
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.lazy.LazyRow
@@ -14,7 +16,6 @@ import androidx.compose.ui.platform.LocalUriHandler
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.referer
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.domain.adapter.SourceFailureReason
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,9 +35,7 @@ internal fun StatusRow(
     val uriHandler = LocalUriHandler.current
     val selectedStatus = statuses.firstOrNull { it.source == selected }
     selectedStatus?.let { status ->
-        val requiresAccount = onOpenAccounts != null &&
-            (status.failureReason == SourceFailureReason.AUTH_REQUIRED ||
-                status.failureReason == SourceFailureReason.AUTH_EXPIRED)
+        val requiresAccount = onOpenAccounts != null && status.requiresAccount()
         AlertDialog(
             onDismissRequest = { selected = null },
             title = { Text(status.source.displayName()) },
@@ -58,11 +57,22 @@ internal fun StatusRow(
             dismissButton = { TextButton(onClick = { selected = null }) { Text("Close") } },
         )
     }
+    StatusChips(statuses) { selected = it }
+}
+
+/** Offline, one chip replaces every source a returning network could fix, since none of them is at fault. */
+@Composable
+private fun StatusChips(statuses: List<SourceRunStatus>, onSelect: (SourceKey) -> Unit) {
+    val online by LocalNetworkOnline.current.collectAsStateWithLifecycle()
+    val offlineFailures = !online && statuses.any(SourceRunStatus::retriesOnReconnect)
+    val chips = if (online) statuses else statuses.filterNot(SourceRunStatus::retriesOnReconnect)
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(statuses.size) { index ->
-            val status = statuses[index]
-            val text = sourceStatusChipText(status)
-            AssistChip(onClick = { selected = status.source }, label = { Text(text) })
+        if (offlineFailures) item {
+            AssistChip(onClick = {}, enabled = false, label = { Text(OFFLINE_STATUS_CHIP) })
+        }
+        items(chips.size) { index ->
+            val status = chips[index]
+            AssistChip(onClick = { onSelect(status.source) }, label = { Text(sourceStatusChipText(status)) })
         }
     }
 }
@@ -89,9 +99,12 @@ internal fun ErrorBlock(
     title: String = "Could not load results",
     actionLabel: String = "Retry",
 ) {
+    val online by LocalNetworkOnline.current.collectAsStateWithLifecycle()
+    // Without a retry this is an account problem, which reconnecting won't fix.
+    val offline = !online && onRetry != null
     FeedErrorTile(
-        message = message,
-        title = title,
+        message = if (offline) OFFLINE_FEED_MESSAGE else message,
+        title = if (offline) OFFLINE_FEED_TITLE else title,
         actionLabel = actionLabel,
         onRetry = onRetry,
     )

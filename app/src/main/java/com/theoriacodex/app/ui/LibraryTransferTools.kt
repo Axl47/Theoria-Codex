@@ -1,6 +1,8 @@
 package com.theoriacodex.app.ui
 
 import android.text.format.Formatter
+import android.net.Uri
+import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -23,6 +25,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.theoriacodex.app.backup.AndroidBackupDocuments
+import com.theoriacodex.app.backup.AutoBackupControls
+import com.theoriacodex.app.backup.AutoBackupWorkflow
+import com.theoriacodex.app.backup.adoptAutoBackupFolder
+import com.theoriacodex.app.backup.releaseAutoBackupFolder
 import com.theoriacodex.app.backup.BackupControls
 import com.theoriacodex.app.backup.BackupDialogs
 import com.theoriacodex.app.backup.BackupViewModel
@@ -41,15 +47,20 @@ import kotlinx.coroutines.launch
 import com.theoriacodex.app.media.PostDownloadItem
 import com.theoriacodex.app.media.openPostDownload
 import com.theoriacodex.app.media.openDownloadedPostFile
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 
 /** Activity-owned transfer work with shell-owned Android document pickers and transient dialogs. */
 internal class LibraryTransferTools(
     val downloads: PostDownloadsViewModel,
     val backup: BackupViewModel?,
     val offline: OfflineStorageViewModel?,
+    val autoBackup: AutoBackupWorkflow?,
     val chooseBackupDestination: () -> Unit,
     val chooseBackup: () -> Unit,
+    val chooseAutoBackupFolder: () -> Unit,
+    val turnOffAutoBackup: () -> Unit,
 ) {
     var showDownloads by mutableStateOf(false)
 }
@@ -94,13 +105,45 @@ internal fun rememberLibraryTransferTools(
     val import = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         backup?.import(uri?.toString())
     }
+    val autoBackup = container.workflows.autoBackup
+    val autoBackupFolder = rememberAutoBackupFolderPicker(autoBackup)
     val currentMessage by rememberUpdatedState(onMessage)
     LaunchedEffect(backup) { backup?.effects?.collect { currentMessage(it) } }
-    return remember(downloads, backup, offline, export, import) {
-        LibraryTransferTools(downloads, backup, offline,
+    AutoBackupFailureEffect(autoBackup) { currentMessage(it) }
+    return remember(downloads, backup, offline, export, import, autoBackup, autoBackupFolder) {
+        LibraryTransferTools(downloads, backup, offline, autoBackup,
             chooseBackupDestination = { export.launch("theoria-backup.json") },
             chooseBackup = { import.launch(arrayOf("application/json", "application/octet-stream")) },
+            chooseAutoBackupFolder = { autoBackupFolder.launch(null) },
+            turnOffAutoBackup = {
+                context.contentResolver.releaseAutoBackupFolder(autoBackup?.status?.value?.folderUri)
+                autoBackup?.disable()
+            },
         )
+    }
+}
+
+@Composable
+private fun rememberAutoBackupFolderPicker(autoBackup: AutoBackupWorkflow?): ManagedActivityResultLauncher<Uri?, Uri?> {
+    val resolver = LocalContext.current.applicationContext.contentResolver
+    return rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
+        if (tree != null && autoBackup != null) {
+            val previous = autoBackup.status.value.folderUri
+            val name = resolver.adoptAutoBackupFolder(tree)
+            if (previous != tree.toString()) resolver.releaseAutoBackupFolder(previous)
+            autoBackup.enable(tree.toString(), name)
+        }
+    }
+}
+
+/** A backup that keeps failing protects nothing, so say so where it will be seen, not only in Settings. */
+@Composable
+private fun AutoBackupFailureEffect(autoBackup: AutoBackupWorkflow?, onMessage: suspend (String) -> Unit) {
+    val currentMessage by rememberUpdatedState(onMessage)
+    LaunchedEffect(autoBackup) {
+        autoBackup?.status?.map { it.failure }?.distinctUntilChanged()?.collect { failure ->
+            if (failure != null) currentMessage("Automatic backup failed. See Settings > Storage & app.")
+        }
     }
 }
 
@@ -134,6 +177,10 @@ internal fun LibraryTransferSettings(tools: LibraryTransferTools) {
     tools.backup?.let { owner ->
         val state by owner.state.collectAsStateWithLifecycle()
         BackupControls(state, owner::showExportOptions, tools.chooseBackup)
+    }
+    tools.autoBackup?.let { owner ->
+        val status by owner.status.collectAsStateWithLifecycle()
+        AutoBackupControls(status, tools.chooseAutoBackupFolder, { owner.backUpNow() }, tools.turnOffAutoBackup)
     }
 }
 

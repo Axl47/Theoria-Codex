@@ -1,5 +1,6 @@
 package com.theoriacodex.app.backup
 
+import android.text.format.DateUtils
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -43,6 +44,44 @@ internal fun BackupControls(state: BackupUiState, onExport: () -> Unit, onImport
     }
 }
 
+/** Daily backup to a folder; compact because it is checked rarely and only needs attention on failure. */
+@Composable
+internal fun AutoBackupControls(
+    status: AutoBackupStatus,
+    onChooseFolder: () -> Unit,
+    onBackUpNow: () -> Unit,
+    onTurnOff: () -> Unit,
+) {
+    if (!status.enabled) {
+        OutlinedButton(onClick = onChooseFolder, modifier = Modifier.fillMaxWidth()) {
+            Text("Back up daily to a folder")
+        }
+        return
+    }
+    Text(
+        text = "Daily backup to ${status.folderName ?: "your folder"} · ${autoBackupProgress(status)}",
+        style = MaterialTheme.typography.bodySmall,
+    )
+    status.failure?.let { failure ->
+        Text(failure, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        TextButton(onClick = onBackUpNow, enabled = !status.running) { Text("Back up now") }
+        TextButton(onClick = onChooseFolder) { Text("Change folder") }
+        TextButton(onClick = onTurnOff) { Text("Turn off") }
+    }
+}
+
+private fun autoBackupProgress(status: AutoBackupStatus): String {
+    val last = status.lastSuccessEpochMs
+    return when {
+        status.running -> "Saving…"
+        last == null -> "No backup yet"
+        System.currentTimeMillis() - last < DateUtils.MINUTE_IN_MILLIS -> "Last just now"
+        else -> "Last ${DateUtils.getRelativeTimeSpanString(last, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS)}"
+    }
+}
+
 @Composable
 internal fun BackupDialogs(
     state: BackupUiState,
@@ -60,7 +99,7 @@ internal fun BackupDialogs(
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Save all profiles, collections, Likes, rules, saved searches, follows, and preferences.")
                     Text("Login credentials and downloaded media are not included.")
-                    BackupCheckbox("Include Recents and reading positions", state.includeRecents, onIncludeRecents)
+                    BackupCheckbox("Include Recents, reading positions, and statistics", state.includeRecents, onIncludeRecents)
                 }
             },
             confirmButton = { TextButton(onClick = onExport) { Text("Choose destination") } },
@@ -91,7 +130,7 @@ private fun RestoreBackupDialog(
                 Text("${preview.profileNames.size} profiles · ${preview.collectionCount} collections · ${preview.savedPostCount} saved posts")
                 Text(preview.profileNames.joinToString())
                 Text("${preview.likeCount} Likes · ${preview.savedSearchCount} saved searches · ${preview.followedCreatorCount} follows · ${preview.recentCount} recent entries")
-                Text("Adds new profiles and collections alongside your existing data. Your current profile stays selected.")
+                Text("Adds what's missing to matching profiles and collections. Nothing you have is removed or changed, and restoring twice adds nothing more.")
                 Text("Login credentials and downloaded media are not included.")
                 BackupCheckbox("Also apply global preferences", state.applyPreferences, onApplyPreferences, !state.busy)
                 if (state.busy) Text("Restoring backup…")

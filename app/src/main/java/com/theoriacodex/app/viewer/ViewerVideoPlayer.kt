@@ -39,7 +39,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import kotlinx.coroutines.delay
 import com.theoriacodex.app.media.isMediaNetworkMetered
-import com.theoriacodex.app.media.withVideoQuality
+import com.theoriacodex.app.media.viewerPlaybackLocation
 
 /** Each mounted renderer leases its player and owns its surface/progress; the route sends commands. */
 @Composable
@@ -63,7 +63,7 @@ internal fun ViewerVideoPlayer(
     val context = LocalContext.current
     // The metered check is a system call, so it runs when the page picks its stream, not on every recomposition.
     val location = remember(media, quality, qualityHeight) {
-        resolveViewerVideoPlaybackLocation(media.withVideoQuality(quality, context.isMediaNetworkMetered(), qualityHeight))
+        media.viewerPlaybackLocation(quality, context.isMediaNetworkMetered(), qualityHeight)
     }
     if (!terminalMessage.isNullOrBlank()) {
         ViewerVideoMessage(terminalMessage, modifier)
