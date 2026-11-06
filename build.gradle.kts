@@ -1,5 +1,6 @@
 import dev.detekt.gradle.Detekt
 import dev.detekt.gradle.extensions.DetektExtension
+import kotlinx.kover.gradle.plugin.dsl.KoverProjectExtension
 import org.gradle.api.tasks.compile.JavaCompile
 import org.gradle.api.tasks.testing.Test
 
@@ -25,14 +26,21 @@ dependencies {
     kover(project(":core-stubs"))
 }
 
+val qualityCoverageVariant = "quality"
+
+// The aggregate quality report merges each module's "quality" variant (declared below), so
+// release, benchmark, and baseline-profile variants are never compiled just for coverage.
 kover {
+    currentProject {
+        createVariant(qualityCoverageVariant) {}
+    }
     reports {
         filters {
             excludes {
                 packages("com.theoriacodex.app.fixtures", "com.theoriacodex.app.benchmark", "com.theoriacodex.app.acceptance")
             }
         }
-        total {
+        variant(qualityCoverageVariant) {
             xml {
                 xmlFile.set(layout.buildDirectory.file("reports/kover/quality.xml"))
             }
@@ -49,6 +57,17 @@ kover {
 }
 
 subprojects {
+    // Coverage measures JVM modules' tests and Android modules' debug unit tests only.
+    pluginManager.withPlugin("org.jetbrains.kotlinx.kover") {
+        extensions.configure<KoverProjectExtension> {
+            currentProject {
+                createVariant(qualityCoverageVariant) {
+                    add("jvm", "debug", optional = true)
+                }
+            }
+        }
+    }
+
     tasks.withType<Test>().configureEach {
         // Newer JDKs warn before blocking what Robolectric and Gson rely on; older JDKs reject these flags.
         // Decided per task at execution, because a module's toolchain can differ from Gradle's own JVM.

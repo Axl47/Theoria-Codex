@@ -214,7 +214,7 @@ jobs:
           --warning-mode=all
 
       - name: Generate aggregate coverage report
-        run: ./gradlew :koverXmlReport :koverVerify --warning-mode=all
+        run: ./gradlew :koverXmlReportQuality :koverVerifyQuality --warning-mode=all
 
       - name: Enforce changed production coverage
         env:
