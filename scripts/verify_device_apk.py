@@ -114,18 +114,24 @@ def verify(apk: Path, expected_package: str = EXPECTED_PACKAGE) -> None:
     if expected_package not in ISOLATED_LANES:
         raise ValueError("Only explicitly isolated device-test packages are allowed")
     analyzer, signer, keytool, keystore = tools()
-    package = run(analyzer, "manifest", "application-id", str(apk)).decode().strip()
-    if package != expected_package:
-        raise ValueError(f"Expected {expected_package}; packaged application ID is {package!r}")
-    debuggable = run(analyzer, "manifest", "debuggable", str(apk)).decode().strip()
-    if debuggable != ISOLATED_LANES[expected_package]:
-        raise ValueError(f"Wrong debuggability for {package}: {debuggable!r}")
-    version = run(analyzer, "manifest", "version-name", str(apk)).decode().strip()
-    if expected_package == EXPECTED_PACKAGE and not version.endswith("-acceptance"):
-        raise ValueError(f"Acceptance APK has the wrong version lane: {version!r}")
+    # One decoded-manifest read replaces separate apkanalyzer JVM launches per field; the
+    # application-id, debuggable, and version-name subcommands read these same attributes.
     raw_manifest = run(analyzer, "manifest", "print", str(apk)).decode()
     manifest = ElementTree.fromstring(raw_manifest)
     android = "{http://schemas.android.com/apk/res/android}"
+    package = manifest.get("package")
+    if package != expected_package:
+        raise ValueError(f"Expected {expected_package}; packaged application ID is {package!r}")
+    application = manifest.find("application")
+    if application is None:
+        raise ValueError(f"Manifest for {package} has no application element")
+    # An absent attribute means not debuggable, as `apkanalyzer manifest debuggable` reports it.
+    debuggable = application.get(android + "debuggable", "false")
+    if debuggable != ISOLATED_LANES[expected_package]:
+        raise ValueError(f"Wrong debuggability for {package}: {debuggable!r}")
+    version = manifest.get(android + "versionName", "")
+    if expected_package == EXPECTED_PACKAGE and not version.endswith("-acceptance"):
+        raise ValueError(f"Acceptance APK has the wrong version lane: {version!r}")
     runners = manifest.findall("instrumentation")
     target = INSTRUMENTATION_TARGETS.get(expected_package)
     if target:
