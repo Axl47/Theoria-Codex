@@ -77,8 +77,10 @@ class RoomRecentsLegacyImporter(
         val validated = stored?.validateProof()
         if (validated is ProofValidation.Invalid) return RecentsImportResult.InvalidProof(validated.reason)
         val previous = (validated as? ProofValidation.Valid)?.proof
-        val destination = database.withTransaction { destinationSummary() }
-        if (previous != null && !previous.sourceArchived && destination != previous.destinationSummary()) {
+        // Drift only guards an unarchived source; archived launches skip the full destination hash.
+        if (previous != null && !previous.sourceArchived &&
+            database.withTransaction { destinationSummary() } != previous.destinationSummary()
+        ) {
             return RecentsImportResult.DestinationDrift(previous)
         }
 
