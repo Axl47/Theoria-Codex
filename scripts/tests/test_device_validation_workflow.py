@@ -4,6 +4,7 @@ import unittest
 
 REPOSITORY_ROOT = pathlib.Path(__file__).resolve().parents[2]
 WORKFLOW = REPOSITORY_ROOT / ".github" / "workflows" / "device-validation.yml"
+RELEASE_WORKFLOW = REPOSITORY_ROOT / ".github" / "workflows" / "main-prerelease.yml"
 
 
 class DeviceValidationWorkflowTest(unittest.TestCase):
@@ -41,6 +42,17 @@ class DeviceValidationWorkflowTest(unittest.TestCase):
         self.assertIn('echo "ANDROID_USER_HOME=$android_user_home" >> "$GITHUB_ENV"', acceptance)
         self.assertLess(acceptance.index('mkdir -p "$android_user_home"'),
                         acceptance.index("run: ./gradlew :app:assembleReleaseAcceptance"))
+
+    def test_tag_reuses_main_checks_and_still_runs_release_acceptance(self) -> None:
+        release = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+        self.assertNotIn("uses: ./.github/workflows/verify.yml", release)
+        for workflow in ("verify.yml", "device-validation.yml", "dependency-submission.yml"):
+            self.assertIn(workflow, release.split("  release-acceptance:", 1)[0])
+        self.assertIn("head_sha=${GITHUB_SHA}&event=push&branch=main", release)
+        self.assertIn("completed/success", release)
+        self.assertIn("release-acceptance-only: true", release)
+        self.assertIn("if: ${{ !inputs.release-acceptance-only }}", self.workflow)
+        self.assertIn("if: inputs.release-acceptance-only ||", self.workflow)
 
 
 if __name__ == "__main__":

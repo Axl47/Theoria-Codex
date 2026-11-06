@@ -6,24 +6,22 @@ on:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  verify:
-    uses: ./.github/workflows/verify.yml
-    secrets:
-      GRADLE_ENCRYPTION_KEY: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
-
-  device-validation:
-    uses: ./.github/workflows/device-validation.yml
-    secrets:
-      GRADLE_ENCRYPTION_KEY: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
-    with:
-      release-acceptance: true
-
-  build-and-publish:
-    needs: [verify, device-validation]
+  # The release skill tags only a commit whose push-to-main checks are green. Prove that
+  # instead of re-running them, and reject a malformed tag before any expensive job starts.
+  preflight:
+    name: Release preflight
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      release-tag: ${{ steps.metadata.outputs.release-tag }}
+      release-title: ${{ steps.metadata.outputs.release-title }}
+      release-notes-file: ${{ steps.metadata.outputs.release-notes-file }}
 
     steps:
       - name: Checkout
@@ -31,20 +29,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Java
-        uses: actions/setup-java@v6.1.0
-        with:
-          distribution: temurin
-          java-version: |
-            17
-            21
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6.4.0
-        with:
-          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
-
-      - name: Compute release metadata
+      - name: Validate release metadata
+        id: metadata
         run: |
           APP_BUILD_FILE="app/build.gradle.kts"
           VERSION_NAME="$(sed -nE 's/^[[:space:]]*versionName[[:space:]]*=[[:space:]]*\"([^\"]+)\".*/\1/p' "$APP_BUILD_FILE" | head -n 1)"
@@ -96,11 +82,63 @@ jobs:
           fi
 
           {
-            echo "VERSION_CODE=${VERSION_CODE}"
-            echo "RELEASE_TITLE=${RELEASE_TITLE}"
-            echo "RELEASE_TAG=${RELEASE_TAG}"
-            echo "RELEASE_NOTES_FILE=${RELEASE_NOTES_FILE}"
-          } >> "$GITHUB_ENV"
+            echo "release-tag=${RELEASE_TAG}"
+            echo "release-title=${RELEASE_TITLE}"
+            echo "release-notes-file=${RELEASE_NOTES_FILE}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Require successful main checks for this exact commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          failed=0
+          for workflow in verify.yml device-validation.yml dependency-submission.yml; do
+            # The newest push-to-main run for this SHA is authoritative; a re-run updates it in place.
+            latest="$(gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs?head_sha=${GITHUB_SHA}&event=push&branch=main&per_page=100" \
+              --jq "[.workflow_runs[] | select(.head_sha == \"${GITHUB_SHA}\" and .head_branch == \"main\" and .event == \"push\")]
+                    | sort_by(.created_at) | last
+                    | if . == null then \"missing\" else \"\(.status)/\(.conclusion) \(.html_url)\" end")"
+            echo "${workflow}: ${latest}"
+            if [[ "$latest" != completed/success\ * ]]; then
+              echo "::error::${workflow} has no successful push-to-main run for ${GITHUB_SHA} (${latest})."
+              failed=1
+            fi
+          done
+          exit "$failed"
+
+  # Debug connected tests already passed on main; only the R8 release lane is tag-specific.
+  release-acceptance:
+    needs: preflight
+    uses: ./.github/workflows/device-validation.yml
+    secrets:
+      GRADLE_ENCRYPTION_KEY: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+    with:
+      release-acceptance-only: true
+
+  build-and-publish:
+    needs: [preflight, release-acceptance]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Setup Java
+        uses: actions/setup-java@v6.1.0
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6.4.0
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
       - name: Assemble release APK
         run: |
@@ -126,10 +164,10 @@ jobs:
       - name: Publish prerelease
         uses: softprops/action-gh-release@v3.0.3
         with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          name: ${{ env.RELEASE_TITLE }}
+          tag_name: ${{ needs.preflight.outputs.release-tag }}
+          name: ${{ needs.preflight.outputs.release-title }}
           prerelease: true
           draft: false
           files: theoria-codex-main.apk
           fail_on_unmatched_files: true
-          body_path: ${{ env.RELEASE_NOTES_FILE }}
+          body_path: ${{ needs.preflight.outputs.release-notes-file }}
