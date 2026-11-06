@@ -18,13 +18,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Row
-import kotlinx.coroutines.launch
-import com.theoriacodex.app.ui.motion.TheoriaMotion
-import com.theoriacodex.app.ui.motion.TheoriaHaptics
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.animation.core.Animatable
+import com.theoriacodex.app.ui.motion.LikedHeartColor
+import com.theoriacodex.app.ui.motion.likePop
+import com.theoriacodex.app.ui.motion.rememberLikeFeedback
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
@@ -179,26 +175,16 @@ private fun ViewerLikeAction(
     onToggleLike: (() -> Unit)?,
 ) {
     if (onToggleLike == null) return
-    val haptics = LocalHapticFeedback.current
-    val scope = rememberCoroutineScope()
-    val pop = remember { Animatable(1f) }
+    val feedback = rememberLikeFeedback()
     IconButton(onClick = {
-        // Pop from the tap, not from state, so swiping onto a liked post stays still.
-        haptics.performHapticFeedback(if (liked) TheoriaHaptics.ToggleOff else TheoriaHaptics.ToggleOn)
-        if (!liked) scope.launch {
-            pop.snapTo(0.6f)
-            pop.animateTo(1f, TheoriaMotion.pop)
-        }
+        feedback.tapped(liked)
         onToggleLike()
     }) {
         Icon(
             imageVector = if (liked) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
             contentDescription = if (liked) "Unlike post" else "Like post",
-            tint = if (liked) ViewerVeil.Liked else Color.White,
-            modifier = Modifier.graphicsLayer {
-                scaleX = pop.value
-                scaleY = pop.value
-            },
+            tint = if (liked) LikedHeartColor else Color.White,
+            modifier = Modifier.likePop(feedback),
         )
     }
 }

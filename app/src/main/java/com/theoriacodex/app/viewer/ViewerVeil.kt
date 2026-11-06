@@ -31,7 +31,6 @@ internal val LocalViewerAccent = compositionLocalOf { Color.White }
 internal object ViewerVeil {
     val Capsule = Color.Black.copy(alpha = 0.62f)
     val InactiveTrack = Color.White.copy(alpha = 0.32f)
-    val Liked = Color(0xFFFF6B81)
     const val SECONDARY_TEXT_ALPHA = 0.68f
 
     private val LegibilityShadow = Shadow(Color.Black.copy(alpha = 0.6f), Offset(0f, 1f), blurRadius = 4f)

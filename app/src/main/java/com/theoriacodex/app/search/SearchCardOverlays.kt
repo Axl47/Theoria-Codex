@@ -2,6 +2,8 @@ package com.theoriacodex.app.search
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -19,8 +21,10 @@ import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -38,6 +42,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.source.SourceLogo
+import com.theoriacodex.app.ui.motion.LikedHeartColor
+import com.theoriacodex.app.ui.motion.likePop
+import com.theoriacodex.app.ui.motion.rememberLikeFeedback
 import com.theoriacodex.domain.model.Post
 
 /**
@@ -68,7 +75,7 @@ internal fun BoxScope.SearchCardBadges(
         OverlayMark(
             text = imageCountBadgeLabel(mediaCount, viewedMediaNumber),
             icon = { Icon(Icons.Outlined.PhotoLibrary, if (viewedMediaNumber == null) "Image count" else "Watched media progress", it) },
-            modifier = Modifier.align(Alignment.TopEnd).padding(OVERLAY_EDGE_PADDING),
+            modifier = Modifier.align(Alignment.TopEnd).then(OverlayMarkPlacement),
         )
     }
     if (onToggleLike != null) SearchCardLikeButton(liked, onToggleLike, Modifier.align(Alignment.TopStart))
@@ -76,13 +83,13 @@ internal fun BoxScope.SearchCardBadges(
         OverlayMark(
             text = durationLabel,
             icon = { Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = it) },
-            modifier = Modifier.align(Alignment.BottomStart).padding(OVERLAY_EDGE_PADDING),
+            modifier = Modifier.align(Alignment.BottomStart).then(OverlayMarkPlacement),
         )
     }
     if (showPreviewContext) {
         SearchCardPreviewContext(
             metadataLabel, watchedDescription, showSourceBadge, post,
-            Modifier.align(Alignment.BottomEnd).padding(OVERLAY_EDGE_PADDING),
+            Modifier.align(Alignment.BottomEnd).then(OverlayMarkPlacement),
         )
     }
     if (mediaCount > 1 && viewedMediaNumber != null) {
@@ -90,26 +97,37 @@ internal fun BoxScope.SearchCardBadges(
     }
 }
 
-/** A 48dp checkbox target whose visible heart sits in the card's corner. */
+/**
+ * A 48dp checkbox target whose visible heart sits in the card's corner, centered on the same line as
+ * the top marks. The ripple is a circle around the heart rather than the square target.
+ */
 @Composable
 private fun SearchCardLikeButton(liked: Boolean, onToggleLike: () -> Unit, modifier: Modifier) {
+    val feedback = rememberLikeFeedback()
+    val interactions = remember { MutableInteractionSource() }
     Box(
         modifier = modifier
-            .padding(4.dp)
             .size(48.dp)
             .likeSemantics(liked)
-            .clickable(role = Role.Checkbox, onClick = onToggleLike),
+            .clickable(interactions, indication = null, role = Role.Checkbox) {
+                feedback.tapped(liked)
+                onToggleLike()
+            },
         contentAlignment = Alignment.TopStart,
     ) {
         Box(
-            modifier = Modifier.padding(2.dp).size(30.dp).testTag("Search like visual"),
+            modifier = Modifier
+                .padding(start = 4.dp, top = 2.dp)
+                .size(30.dp)
+                .testTag("Search like visual")
+                .indication(interactions, ripple(bounded = false, radius = 18.dp)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = if (liked) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
                 contentDescription = null,
-                tint = if (liked) MaterialTheme.colorScheme.error else Color.White,
-                modifier = Modifier.size(22.dp),
+                tint = if (liked) LikedHeartColor else Color.White,
+                modifier = Modifier.size(20.dp).likePop(feedback),
             )
         }
     }
@@ -131,7 +149,7 @@ private fun SearchCardPreviewContext(
     modifier: Modifier,
 ) {
     Row(
-        modifier = modifier,
+        modifier = modifier.height(OVERLAY_ROW_HEIGHT),
         horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -154,7 +172,7 @@ private fun SearchCardPreviewContext(
 /** A white icon and label that rely on the edge scrim, not a container, for contrast. */
 @Composable
 private fun OverlayMark(text: String, icon: @Composable (Modifier) -> Unit, modifier: Modifier) {
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier.height(OVERLAY_ROW_HEIGHT), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
         icon(Modifier.size(13.dp))
         Text(text, style = overlayTextStyle(), maxLines = 1)
     }
@@ -178,7 +196,10 @@ private fun overlayTextStyle(): TextStyle = MaterialTheme.typography.labelSmall.
 
 private val TOP_SCRIM_HEIGHT = 56.dp
 private val BOTTOM_SCRIM_HEIGHT = 72.dp
-private val OVERLAY_EDGE_PADDING = 10.dp
+private val OVERLAY_ROW_HEIGHT = 18.dp
+
+/** Every corner mark shares this inset and the row height above, so marks on one edge share a center line. */
+private val OverlayMarkPlacement = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
 private val OverlayTextShadow = Shadow(Color.Black.copy(alpha = 0.6f), Offset(0f, 1f), blurRadius = 3f)
 private val TopScrim = Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.5f), Color.Transparent))
 private val BottomScrim = Brush.verticalGradient(

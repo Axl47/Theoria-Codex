@@ -6,6 +6,7 @@
 
 - Post cards show their like, count, duration, time and source as plain marks over soft edge shading instead of separate badges, so more of each post stays visible.
 - Galleries you have partly viewed show how far you got as a thin line along the bottom of the card.
+- Liking a post from a card now gives the same haptic tick, heart pop and pink heart as liking it in the Viewer.
 - Recents' All view now groups each day's searches in one row at the top of that day, above the posts you viewed.
 - Searches in Recents read like the search editor: "or" alternatives are muted and excluded tags are red, with the source and time beside each search.
 
