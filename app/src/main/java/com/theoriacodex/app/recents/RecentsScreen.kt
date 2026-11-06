@@ -598,13 +598,19 @@ private fun ActivityList(
     val shelfSeed = related?.request?.seed?.id
     ViewerReturnColumn(list, timeline, { request -> timeline.indexOfFirst { it.holdsReturn(request, shelfSeed) } }) {
     LazyColumn(modifier = Modifier.fillMaxSize(), state = list, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        itemsIndexed(timeline, key = { index, item -> timelineKey(index, item) }) { _, item ->
+        itemsIndexed(
+            timeline,
+            key = { index, item -> timelineKey(index, item) },
+            // Headings, post rows, search rows, and the shelf only reuse compositions of their own kind.
+            contentType = { _, item -> item.javaClass },
+        ) { _, item ->
             when (item) {
                 is RecentsTimelineItem.Day -> RecentsDayHeading(item.label)
                 RecentsTimelineItem.RelatedShelf -> related?.content?.invoke()
                 is RecentsTimelineItem.Posts -> {
                 val row = rememberLazyListState()
-                ViewerReturnShelf(ViewerReturnShelfId.RecentsTimeline, item.entries.map { it.post.id }, row) {
+                val postIds = remember(item.entries) { item.entries.map { it.post.id } }
+                ViewerReturnShelf(ViewerReturnShelfId.RecentsTimeline, postIds, row) {
                 LazyRow(
                     state = row,
                     // The same square frame as other shelves keeps every card in a row the same height.

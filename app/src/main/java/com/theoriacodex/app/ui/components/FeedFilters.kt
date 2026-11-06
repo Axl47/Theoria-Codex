@@ -61,19 +61,29 @@ internal class FeedScrollSignal(private val scope: CoroutineScope) {
     var scrolling by mutableStateOf(false)
         private set
     private var settle: Job? = null
+    private var scrollEvents = 0
 
+    // Scroll events arrive every frame, so each only bumps a counter; one job watches for a quiet window.
     val connection = object : NestedScrollConnection {
         override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
             if (available.y != 0f) {
                 scrolling = true
-                settle?.cancel()
-                settle = scope.launch {
-                    delay(SCROLL_SETTLE_MS)
-                    scrolling = false
-                }
+                scrollEvents++
+                if (settle?.isActive != true) settle = scope.launch { awaitSettle() }
             }
             return Offset.Zero
         }
+    }
+
+    /** Clears [scrolling] once no scroll has arrived for [SCROLL_SETTLE_MS], give or take one tick. */
+    private suspend fun awaitSettle() {
+        var quietMs = 0L
+        while (quietMs < SCROLL_SETTLE_MS) {
+            val seen = scrollEvents
+            delay(SCROLL_SETTLE_TICK_MS)
+            quietMs = if (seen == scrollEvents) quietMs + SCROLL_SETTLE_TICK_MS else 0L
+        }
+        scrolling = false
     }
 }
 
@@ -238,4 +248,5 @@ internal fun SourceFilterChip(source: SourceKey, selected: Boolean, onClick: () 
 
 private const val MAX_NAMED_FILTERS = 2
 private const val SCROLL_SETTLE_MS = 350L
+private const val SCROLL_SETTLE_TICK_MS = 50L
 private const val UNDO_WINDOW_MS = 5_000L
