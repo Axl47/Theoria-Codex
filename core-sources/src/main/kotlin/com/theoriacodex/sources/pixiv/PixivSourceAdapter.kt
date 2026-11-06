@@ -73,8 +73,11 @@ class PixivSourceAdapter(
         requiresCredentials = true,
     )
 
-    private val throttleMutex = Mutex()
-    private var lastRequestAtEpochMs: Long = 0L
+    /** Feed pages and settings lookups; background duration lookups never queue in front of them. */
+    private val browsePacer = PixivRequestPacer(minRequestIntervalMs, clock)
+
+    /** Ugoira duration lookups are already paced per source by the duration engine; this lane keeps them apart. */
+    private val durationPacer = PixivRequestPacer(minRequestIntervalMs, clock)
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> {
         val offset = pageToken?.toIntOrNull()?.coerceAtLeast(0) ?: 0
@@ -218,8 +221,9 @@ class PixivSourceAdapter(
     private suspend fun authorizedGet(
         url: String,
         query: Map<String, String>,
+        pacer: PixivRequestPacer = browsePacer,
     ): String {
-        throttle()
+        pacer.awaitTurn()
         val currentTokens = tokenCoordinator.activeTokens()
         val response = try {
             httpClient.get(
@@ -284,17 +288,6 @@ class PixivSourceAdapter(
         )
     }
 
-    private suspend fun throttle() {
-        throttleMutex.withLock {
-            val now = clock()
-            val waitMs = minRequestIntervalMs - (now - lastRequestAtEpochMs)
-            if (waitMs > 0L) {
-                delay(waitMs)
-            }
-            lastRequestAtEpochMs = clock()
-        }
-    }
-
     private fun parseIllust(raw: JsonObject): Post? {
         val id = raw.longValue("id")?.toString() ?: return null
         val media = parsePixivMedia(raw)
@@ -345,6 +338,7 @@ class PixivSourceAdapter(
         val response = authorizedGet(
             url = "$PIXIV_API_BASE/v1/ugoira/metadata",
             query = mapOf("illust_id" to postId),
+            pacer = durationPacer,
         )
         val root = parseJsonObject(response, gson, "Pixiv")
         val metadata = root.optionalJsonObject("ugoira_metadata") ?: return null
@@ -366,6 +360,18 @@ class PixivSourceAdapter(
             SortMode.TOP -> "popular_desc"
             SortMode.RANDOM -> "date_desc"
         }
+    }
+}
+
+/** Spaces requests on one lane at least [minIntervalMs] apart. */
+private class PixivRequestPacer(private val minIntervalMs: Long, private val clock: () -> Long) {
+    private val mutex = Mutex()
+    private var lastRequestAtEpochMs = 0L
+
+    suspend fun awaitTurn() = mutex.withLock {
+        val waitMs = minIntervalMs - (clock() - lastRequestAtEpochMs)
+        if (waitMs > 0L) delay(waitMs)
+        lastRequestAtEpochMs = clock()
     }
 }
 
