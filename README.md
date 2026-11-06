@@ -1,350 +1,51 @@
 # Theoria Codex
 
-Supports only the latest stable Android major release and its immediate predecessor: currently **Android 17 and Android 16** (minimum API 36; compile/target API 37). Preview releases do not advance this window. Older Android versions cannot install new builds.
+A local-first Android app for browsing, collecting, and rediscovering media from multiple art and gallery sites in one place.
 
-For local builds, run Gradle with **JDK 21**; Android 16/17 Robolectric tests require it. Keep **JDK 17** available for the JVM modules’ existing compilation toolchains. CI installs both and runs Gradle on JDK 21.
+You search across sources (one at a time or all together), open posts in a full-screen viewer, and save what you like into personal collections called **Codices**. Your likes and tag history drive a **For You** feed. Everything (collections, likes, history, preferences) stays on your device. There are no accounts or cloud sync.
 
+## What it does
 
-Theoria Codex is an Android-first, local-first, tag-driven media browser and collection app. It is built around a small loop: search real sources, open posts in an immersive viewer, save or like what matters, revisit activity through Recents, and use liked/tag history to drive recommendations.
-
-## Current App Shape
-
-The app has five top-level tabs, in bottom-navigation and pager order:
-
-- `Search`: source-specific or Unified search, staged draft/apply behavior, include/exclude terms, source status chips, autocomplete/favorite tag sheets, direct NHentai gallery ID open, and local filters such as `Animated only`, animated duration range, `Hide liked`, and `Hide saved`. Sources with typed taxonomy expose faceted `Tags`, `Artists`, `Characters`, and `Series` scopes, with `Groups`, `Types`, and `Languages` under `More`.
-- `Recents`: independent Watched and Codex activity, applied searches, and exact For You search replay. Galleries resume their last page; Start over preserves the highest-page badge. Name and pin complete searches, rename them, and replay them after clearing history or restarting.
-- `For You`: recommendation browsing from profile-scoped liked posts and source/tag affinity. Users can blacklist the current recommendation seed and manage blacklisted tag sets in Settings.
-- `Codex`: local saved collections. Codices can be created, renamed, reordered, sorted, deleted, downloaded, exported to JSON, imported from JSON, and used as a source-specific tag search launcher.
-- `Settings`: recommendation profiles, source enablement and Unified weights, source accounts, cache controls, provider health snapshots, changelog history, and developer scenario presets in debug builds.
-
-## Viewer And Media
-
-Viewer handles still images, videos, GIF-like animated media, animated WebP, Pixiv ugoira, and multi-page posts. Multi-page and mixed-media posts support full-view paging, a two-column Media Overview that preserves the exact media order, type badges without grid autoplay, and a persisted scroll-direction toggle. Animated media supports playback-rate controls, scrub/seek affordances, and repeated double-tap seek feedback. Animated WebP uses Android’s native decoder for ordinary playback and a bounded controllable decoder for scrubbing; Media Overview requests a separate static first frame. Gestures share one spatial map of 35/30/35 columns: on video the outer columns double-tap to seek and swipe vertically for brightness and volume, and the centre double-taps to zoom. Outside those level swipes, pulling down closes the Viewer and swiping up opens post information. Holding seekable media plays it at 2× until release.
-
-Saving a post or collection to the device downloads every gallery page, with per-page progress and failed-page retry. Viewer download saves only the selected page. Filenames retain a bounded Unicode title plus source, canonical post ID, and gallery page. Repeated downloads preserve existing files: Android may save a numbered copy; an existing-file refusal is reported without offering a futile Retry. A Hitomi anime record with a playable video exposes exactly one MP4 item—the poster remains preview metadata rather than becoming a second page—and downloading it creates one `.mp4` request with the source headers.
-
-Media policy is shared across Search, Viewer, Codex, Creator Profile, and downloads. Source-aware request headers, progressive image URLs, canonical download URLs, lazy media resolution, and filename rules live in app media helpers instead of being duplicated inside screens.
+- **Search**: tag-based search per source or across all of them (Unified), with include/exclude terms, autocomplete, saved tags, and filters like *Animated only*, *Hide liked*, and *Hide saved*.
+- **Viewer**: images, video, GIFs, animated WebP, Pixiv ugoira, and multi-page galleries, with gesture seek, brightness and volume controls, playback speed, quality selection, and picture-in-picture.
+- **Codex**: local collections you can sort, export or import as JSON, make available offline, or save to the device.
+- **For You**: recommendations from your liked posts and tag affinity, with blacklists and separate profiles.
+- **Recents**: watch and search history, with named pinned searches and gallery resume.
+- **Creators**: follow creators locally and check for new posts on demand.
+- **Backup**: export and restore profiles, collections, likes, and preferences. Credentials and media are never included.
 
 ## Sources
 
-The app's real-source set includes:
+Pixiv · Gelbooru · NHentai · Hitomi · Iwara · Rule34 Paheal · Rule34 Video · Rule34 Gen · Rule34.xxx (needs an API key in Settings)
 
-- Pixiv
-- Gelbooru
-- NHentai
-- Hitomi
-- Iwara
-- Rule34 Paheal
-- Rule34 Video
-- Rule34 Gen
-- Rule34.xxx, after `user_id` and `api_key` are saved in Settings
+## Platform
 
-`core-sources` also contains an AIBooru adapter, but the app exposure policy does not currently include AIBooru in the UI. Source exposure is controlled by `app/src/main/java/com/theoriacodex/app/source/SourceMetadata.kt`; adapter construction is centralized in `core-sources/src/main/kotlin/com/theoriacodex/sources/RealAdapterRegistry.kt`.
+Android 17 and 16 only (min API 36, target API 37). Release builds update themselves from GitHub prereleases. Debug builds install separately as **Theoria Debug**.
 
-Credential-gated local and live checks use these environment variables when available:
+## Project layout
 
-```sh
-THEORIA_PIXIV_ACCESS_TOKEN
-THEORIA_GELBOORU_USER_ID
-THEORIA_GELBOORU_API_KEY
-THEORIA_RULE34XXX_USER_ID
-THEORIA_RULE34XXX_API_KEY
-```
+| Module | Role |
+| --- | --- |
+| `app` | Compose UI, navigation, ViewModels, app-level coordinators |
+| `app-logic` | Platform-free search, feed, media, and recommendation policy |
+| `core-domain` | Domain models, source contracts, and query state |
+| `core-data` / `core-data-android` | Repositories, DataStore settings, and Room storage |
+| `core-sources` | Real provider integrations and HTTP |
+| `core-stubs` | Fixture sources for deterministic tests |
+| `baseline-profile`, `macrobenchmark` | Startup profiles and performance measurement |
 
-## Architecture
+## Building
 
-- `app`: Android Compose shell, top-level navigation, viewer/search/codex/settings screens, source account flows, deep links, update UI, and app-level coordinators.
-- `core-domain`: immutable domain models, source adapter contracts, query state, capability gates, unified search orchestration, and recommendation primitives.
-- `app-logic`: platform-free Search reducers, visibility filtering, feed/media policy, recommendation policy, and duration scheduling.
-- `core-data`: storage-independent repository contracts, shared policy, DataStore-backed Settings/UI restore, and the remaining bounded atomic-file repositories.
-- `core-data-android`: Room ownership for Codex membership, versioned post snapshots, and profile Likes, including verified legacy migration.
-- `core-sources`: real source integrations, HTTP infrastructure, source helper policy, media MIME helpers, and opt-in live provider health tooling.
-- `core-stubs`: fixture-backed source adapters and provider contract tests for deterministic development and CI coverage.
-- `baseline-profile`: connected cold-start and top-level-navigation profile generation for the optimized release app.
-
-`TheoriaApplication` creates one asynchronous `TheoriaAppContainer` in `app/src/main/java/com/theoriacodex/app/di/TheoriaAppContainer.kt`. That container owns repositories, source clients, credentials, updates, coordinators, and cross-repository workflows; Compose only resolves the ready container.
-
-Search, Viewer, For You, and Creator each have a navigation-scoped ViewModel that owns immutable UI state, request identity, paging, and effects. Their composables render state and forward typed actions. `TheoriaApp.kt` remains the navigation and Android-effect host, and cross-route access uses weak ViewModel-lifetime handles rather than a second mutable state owner.
-
-Search, For You, and Creator execution services return immutable results to those route owners. Failed provider pages retain their exact continuation for in-place Retry while healthy posts keep their order. Shared browsing metadata observes membership IDs once across routes. Viewer sends stable controls to separate image/video/animation renderers; frame timing stays inside each renderer.
-
-## Local Persistence
-
-Runtime state is local-first. The production owners are:
-
-- `databases/theoria_content.db`: Room owns Codices, ordered membership, reusable versioned post snapshots, profile Likes, Recents, durable media-duration decisions, and cross-boundary transactions.
-- `theoria_codex/settings_store_v3.json`: typed DataStore file for source settings, profiles, favorites, blacklists, Viewer settings, health snapshots, and cache preferences.
-- `theoria_codex/ui_restore_store_v2.json`: typed DataStore file for the selected tab, Search scroll state, and Viewer launch restoration.
-- `theoria_codex/query_store.json`: applied queries; Search scroll state belongs to UI restore storage.
-- `theoria_codex/pinned_searches.json`: bounded named searches independent of rolling history.
-- `theoria_codex/reading_positions.json`: last gallery page, separate from Recents' highest-page progress.
-- `theoria_codex/offline_media`: verified complete media copies shared across offline collections, separate from disposable playback caches.
-- `theoria_codex/pending_profile_restore.json`: temporary durable intent used to complete an interrupted additive backup restore before opening routes.
-- `theoria_codex/tag_suggestions.json`: learned/cached tag suggestions seeded from the bundled `tag_store.json` asset.
-- `theoria_codex/update_state.json`: startup updater state, ignored/remind-later choices, pending install metadata, and changelog state.
-- `theoria_codex/cache/thumbnails` and `theoria_codex/cache/full`: local media cache folders.
-
-Legacy `codex_store.json`, `likes_store.json`, `settings_store.json`, and `ui_restore_store.json` files are one-time migration inputs. Migration verifies schemas, keys, relationships, counts, hashes, and destination state before archiving any source; conflict or drift fails closed. Source credentials and pending Pixiv PKCE sessions use separate bounded AES-GCM envelopes under `noBackupFilesDir`, backed by Android Keystore and excluded from device transfer.
-
-## Deep Links And Imports
-
-The Android manifest handles exact Pixiv auth callback paths, source post/profile links for supported providers, and JSON file/content URIs for Codex import. Hitomi routing accepts reader links and gallery paths for anime, CG, doujinshi, manga, artist-CG, game-CG, and image-set posts, plus `artist/<slug>-all.html` creator links. Codex sharing includes post identities and portable snapshots so collection metadata can import without a live provider. Imports validate document size, depth and version before preparing entries, prefer portable snapshots and local metadata, and resolve missing legacy entries in bounded batches. Progress, cancellation and Retry survive Activity recreation; membership commits only after preparation succeeds.
-
-Settings > Storage & Caching also exports all profiles, collections, Likes, automatic rules, follows, favorites, named searches, and preferences, with optional Recents and reading positions. Restore previews the archive and adds new profiles alongside existing data; applying global preferences is optional. Credentials, downloaded media, signed media URLs, and device paths are excluded. Interrupted restores resume from a verified intent journal.
-
-Profile creation and restore reject capacity overflow before changing library data. Collection commands retain their captured destination across navigation and Activity recreation, and keep Retry or exact membership Undo available until acknowledged.
-
-Collection actions offer Make available offline. Only complete verified galleries count as available; shared copies are retained until their final collection owner is removed. Manage storage reports bytes, exposes offline progress/retry/cancel, and clears disposable Coil, video, GIF, and Ugoira caches separately from offline copies. Keep media offline when saving queues acquisition after the collection transaction completes. Save to device uses a separate bounded DownloadManager queue with progress, cancellation, and failed-item retry; a device-only intent journal resumes queued gallery pages after process restart and reconciles existing Android transfers before creating more. Offline collection jobs also resume from canonical IDs and reuse verified completed copies. These operational queues are excluded from backup and contain no media URLs or credentials.
-
-## Releases And Updates
-
-Release builds enable the startup updater. The updater reads GitHub prereleases for the `main` channel, expects the fixed APK asset name `theoria-codex-main.apk`, validates version metadata/signature, and launches Android's package installer. Debug builds appear as **Theoria Debug**, disable the updater, and use `applicationIdSuffix ".debug"` plus `versionNameSuffix "-debug"`, so debug and release installs have separate app storage. Benchmark, release-acceptance, and baseline-profile targets likewise use `.benchmark`, `.acceptance`, and `.baselineprofile` package identities; connected/install tasks verify their packaged metadata before touching a device.
-
-One retained startup owner manages update choices and downloads. Release history shares a short-lived fetch cache; APK transfers are cancellable, bounded by size and time, and use separate staging files before atomic publication.
-
-Shipping releases enable R8 and resource shrinking. Durable Gson field names are explicit and every release assembly verifies the optimizer mapping against the checked contract manifest. Checked-in baseline/startup profiles cover cold start and all five top-level destinations. The separate `releaseAcceptance` variant keeps the same optimizer behavior but uses a debug key and updater-disabled package identity for non-debuggable device acceptance.
-
-Main-channel releases are deliberate, not made for every push to `main`. A release commit updates `versionName`, its matching SemVer-derived `versionCode`, and `release-notes/v<major>.<minor>.<patch>.md`; pushing the matching annotated `v<major>.<minor>.<patch>` tag starts `.github/workflows/main-prerelease.yml`. The workflow verifies those three pieces agree, signs the APK, and publishes the checked-in user-facing notes. The Android code uses `1_500_000_000 + major * 10_000 + minor * 100 + patch`, preserving the updater’s existing ordering contract.
-
-## Documentation And Plans
-
-- `.docs/PLANS.md`: current ExecPlan authoring standard. New plans should be standalone HTML files in `.docs/exec/`.
-- `.docs/exec/*.html`: current executable planning documents for active/modern implementation work.
-- `.docs/exec/execplans/*.md`: older Markdown ExecPlans. Treat these mostly as decision logs unless intentionally resuming one.
-
-## Local Development
-
-### Copy a personal production profile into Debug
-
-The connected-device copy command imports profiles, collections, Likes, automatic rules, follows,
-favorites, saved searches, preferences, Recents, reading positions, and source credentials into
-`com.theoriacodex.debug`. It selects the copied active profile and preserves existing Debug profiles.
-The same unchanged snapshot reuses its restored identities; a changed snapshot adds a new restored
-set. Downloaded media, runtime caches, device paths, and pending transfers are not copied. The
-existing logical backup's 32 MiB metadata limit applies.
-
-Public builds contain no export bridge. A separate `personalRelease` variant exists only when you
-explicitly supply the SHA-256 fingerprint of the Debug signing certificate. Its provider checks
-the actual calling package and certificate on every request. No Settings feature is added.
-
-First obtain the public certificate fingerprint and build both APKs on the host:
+Use **JDK 21** to run Gradle (Robolectric requires it) and keep JDK 17 installed for the JVM modules.
 
 ```sh
-COPY_DEBUG_CERT="$(python3 scripts/copy_production_to_debug.py --print-debug-certificate)"
-./gradlew :app:assembleDebug :app:assemblePersonalRelease \
-  -Ptheoria.developerCopyCertSha256="$COPY_DEBUG_CERT" --offline
-```
-
-The personal APK is `app/build/outputs/apk/personalRelease/app-personalRelease-unsigned.apk`.
-The **Build personal Debug copy bridge** Actions workflow (`personal-debug-copy.yml`) can sign it
-using the repository's existing production signing secrets. Run that manual workflow on a revision
-containing this implementation, paste the fingerprint printed above, and download the one-day
-`theoria-personal-debug-copy` artifact. It is an Actions artifact, not a public release asset.
-Save its signed APK as `/private/tmp/theoria-personal-signed.apk` for the commands below. Keep the
-downloaded file: connected preflight compares it with the installed APK exactly.
-
-Alternatively, sign locally with the **existing production key**, using the usual signed release path; retain the same
-application ID and a version code at least as high as the installed production app. For local signing,
-set `THEORIA_PERSONAL_KEYSTORE` to your keystore path, `THEORIA_UPLOAD_KEY_ALIAS` to its alias,
-and the existing password environment variables, then use your Android SDK's `apksigner`:
-
-```sh
-apksigner sign --ks "$THEORIA_PERSONAL_KEYSTORE" --ks-key-alias "$THEORIA_UPLOAD_KEY_ALIAS" \
-  --ks-pass env:THEORIA_UPLOAD_STORE_PASSWORD --key-pass env:THEORIA_UPLOAD_KEY_PASSWORD \
-  --out /private/tmp/theoria-personal-signed.apk \
-  app/build/outputs/apk/personalRelease/app-personalRelease-unsigned.apk
-```
-
-Before installing anything, verify both signed APKs without accessing a device:
-
-```sh
-python3 scripts/copy_production_to_debug.py --dry-run \
-  --debug-apk app/build/outputs/apk/debug/app-debug.apk \
-  --personal-apk /private/tmp/theoria-personal-signed.apk
-```
-
-Install the personal production APK once through the verified signed release/update path, and
-install the matching Debug APK through `installDebug`. Open production normally once if it needs
-to finish a store migration or pending recovery, then leave it idle. Do not uninstall or clear it.
-The copy command performs no installation and requires the installed APKs to match the supplied
-files exactly. With your phone connected, run:
-
-```sh
-python3 scripts/copy_production_to_debug.py --serial <device-serial> \
-  --debug-apk app/build/outputs/apk/debug/app-debug.apk \
-  --personal-apk /private/tmp/theoria-personal-signed.apk
-```
-
-The command reads both installed APKs for preflight, stops only Debug, places a short-lived private
-request using `run-as`, and starts the Debug importer. Production export runs in a separate process
-that skips ordinary app initialization, reads live stores without migration/recovery writes, and
-rejects library/settings/account changes during capture. Temporary metadata staging lives only
-in production's disposable cache and is deleted after export. Credentials travel directly through
-an authenticated pipe and are re-encrypted with Debug's Keystore key; they never enter ADB output,
-computer files, or portable profile backups. There are no provider login/refresh requests during copy.
-
-Open **Theoria Debug** after completion. Normal `installDebug` updates keep its imported data and
-accounts. If interrupted, rerun the command: admitted profile restores retain their durable recovery
-journal, and credentials are atomically written only after complete payload validation and profile
-restore. A credential-write failure can leave the profile imported while reporting failure; retry
-finishes the account copy. A normal later public release update removes the personal bridge.
-
-Public release assembly automatically runs `:app:verifyPublicDeveloperCopyAbsent`, checking both
-the merged manifest and R8 mapping. Personal release assembly also runs the usual JSON wire-contract
-verification. Personal connected/install/uninstall tasks are deliberately blocked, and the Baseline
-Profile plugin's two derived personal variants are disabled. Production signing and installation
-remain separate from automated device-test lanes.
-
-From the project root, run the deterministic test lane:
-
-```sh
+./gradlew :app:assembleDebug
 ./gradlew :app:testDebugUnitTest :app-logic:test :core-domain:test :core-data:test \
   :core-data-android:testDebugUnitTest :core-stubs:test :core-sources:test
-python3 -m unittest discover -s scripts/tests -p 'test_*.py'
-python3 -m unittest discover -s deploy/libretranslate -p 'test_*.py'
-./gradlew :app:compileDebugAndroidTestKotlin :core-data-android:compileDebugAndroidTestKotlin
-./gradlew :app:lint :core-data-android:lintDebug --offline
 ```
 
-Run the maintainability lane:
+## More docs
 
-```sh
-npm ci
-npm run audit:quality
-python3 -m unittest discover -s scripts/tests -p 'test_*.py'
-./gradlew :app:detektDebug :app-logic:detektMain :core-data-android:detektDebug \
-  :core-domain:detektMain :core-data:detektMain \
-  :core-sources:detektMain :core-stubs:detektMain
-./gradlew :koverXmlReport :koverVerify
-```
-
-Gradle configuration cache is enabled repository-wide in strict fail mode. Gradle Actions 6.4.0 uses its enhanced cache provider for downloaded dependencies and build state; this does not disable local configuration-cache reuse. Trusted CI runs also save and restore encrypted configuration-cache entries using the repository’s `GRADLE_ENCRYPTION_KEY` secret. Fork and Dependabot PRs without that secret still run every check and use local configuration-cache reuse; they skip encrypted transfer. CI creates an isolated
-cache entry and immediately reuses it; when diagnosing build logic, keep
-`--configuration-cache-problems=fail` enabled rather than allowing incompatible tasks to fall back
-silently. Use `--no-configuration-cache` only for an intentional comparison or diagnosis.
-
-CI holds total line coverage at 55% and requires at least 60% changed-line coverage in the core
-modules, `app-logic`, and app-owned ViewModels, coordinators, workflows, repositories, services,
-stores, translators and probes. The reviewed `config/quality/coverage-boundaries.json` selects app ownership packages with narrow
-rendering-only exclusions; logic eligibility does not depend on filename suffixes, and the gate
-does not apply a JVM threshold to every Composable. Missing eligible report
-entries fail the gate. Pass `--working-tree` to `scripts/check_changed_coverage.py` for a local
-pre-commit check that includes untracked production files. Test-only fixture packages are excluded
-from production coverage. Hotspot, duplication and non-growing Detekt debt budgets remain enforced.
-
-The fixture-backed device journeys use actual screens, navigation, owners, Room and DataStore.
-They cover grouped Search, Viewer return, Activity recreation, cold graph reopen, exact Multi-Search
-and FYP Recents replay, collection actions, Undo, related shelves and Creator navigation. Cold graph
-reopen creates fresh application dependencies over the same files; it is distinct from killing the
-instrumented process. External provider responses and local media are controlled. Structural tests
-are reserved for narrow architecture and packaged-artifact boundaries, not counted as feature proof.
-
-Build before installing or running on a device/emulator:
-
-```sh
-./gradlew :app:installDebug --dry-run
-./gradlew :app:assembleDebug
-python3 scripts/verify_device_apk.py app/build/outputs/apk/debug/app-debug.apk \
-  --package com.theoriacodex.debug
-./gradlew :app:installDebug
-```
-
-Compile the device journeys and platform tests when app behavior changes:
-
-```sh
-./gradlew :app:compileDebugAndroidTestKotlin
-```
-
-The canonical connected lane builds, verifies every APK, and runs app and data tests serially:
-
-```sh
-ANDROID_SERIAL=YOUR_DEVICE_SERIAL scripts/verify_debug_device.sh all
-# Focus a failure without repeating the other owner:
-ANDROID_SERIAL=YOUR_DEVICE_SERIAL DEVICE_TEST_CLASS=com.theoriacodex.app.journeys.SearchNavigationJourneyTest \
-  scripts/verify_debug_device.sh app
-```
-
-Use `data` to run only the Room device owner. The wrapper retains its task graph and build log under
-`build/reports/device-preflight/` and delegates all packaged checks to `scripts/verify_device_apk.py`.
-
-For limited benchmark storage, set `BENCHMARK_SCENARIO` to a method from
-`python3 scripts/benchmark_results.py contract` when running `scripts/verify_performance_device.sh`.
-Calibrate and compare that same workload before proceeding to the next. This preserves its normal
-iterations, metrics, three-run calibration and packaged preflight. The default remains the full suite.
-Raw evidence must remain available through comparison; deleting it afterwards preserves the small
-comparison reports but prevents later trace inspection or independent revalidation of those runs.
-
-Android-related pull requests and main pushes, including `app-logic` changes, run device tests on
-Android 16 and 17 (API 36 and 37), including scheduled/manual runs. Tagged
-releases require both Verify and Device Validation, including isolated minified acceptance. That
-lane verifies package ID, debuggability and the actual debug signing certificate before install,
-then checks startup/callback and persisted JSON data across two separate process launches.
-Provider-live instrumentation remains opt-in. Viewer OCR and translation have been retired.
-
-Physical performance validation has its own evidence-producing command:
-
-```sh
-ANDROID_SERIAL=YOUR_PHONE_SERIAL scripts/verify_performance_device.sh calibrate /path/to/new-baseline-evidence
-ANDROID_SERIAL=YOUR_PHONE_SERIAL scripts/verify_performance_device.sh compare \
-  /path/to/new-baseline-evidence/baseline.json /path/to/new-candidate-evidence
-```
-
-Calibration runs the full workload three times on the same APK/device. Comparison requires a new
-complete run with the same fixture code/assets, runner, device, OS and compilation mode. It fails on
-regressed startup, frame-tail, peak-memory, player-churn or transport metrics, and rejects incomplete
-or incompatible evidence. Limits derive from observed baseline dispersion, not a fixed percentage.
-Keep each complete evidence directory, including all Perfetto traces, for future comparisons. See
-[macrobenchmark/README.md](macrobenchmark/README.md) for workload and metric meanings.
-
-Opt-in live provider health report:
-
-```sh
-./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true
-```
-
-Target only Hitomi's live provider probes:
-
-```sh
-./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true -Ptheoria.liveSources.sources=HITOMI
-```
-
-Strict live provider health report:
-
-```sh
-./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true -Ptheoria.liveSources.strict=true
-```
-
-Opt-in live app source-route smoke:
-
-```sh
-./gradlew :app:testDebugUnitTest -Ptheoria.liveSources=true --tests '*LiveSearchCoordinatorRouteTest*'
-```
-
-Target only the Hitomi app route and media-header smoke:
-
-```sh
-./gradlew :app:testDebugUnitTest -Ptheoria.liveSources=true -Ptheoria.liveSources.sources=HITOMI --tests '*LiveSearchCoordinatorRouteTest*'
-```
-
-Override provider probe seeds when needed:
-
-```sh
-./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true -Ptheoria.providerProbeCases=/absolute/path/to/cases.json
-```
-
-Tag store update helper:
-
-```sh
-python3 scripts/update_tag_store.py --source PIXIV --input /path/to/tags.txt
-python3 scripts/update_tag_store.py --source PIXIV --pixiv-tags-url
-python3 scripts/update_tag_store.py --source PIXIV --pixiv-tags-html /path/to/pixiv-tags-page.html
-```
-
-## Source And Watching Controls
-
-- Search failure chips open source details with account setup, provider website, and an isolated retry that preserves successful results.
-- Viewer offers Auto, Data saver, Best available, and provider-supplied video resolutions. Quality switches retain the current position. Settings has independent playback/download quality and metered/roaming download preferences.
-- Creator pages offer local Follow/Following. The Followed tile in the Codex library opens the saved list and a cancellable manual check for new posts in each creator's latest page.
-- Playback settings offer Loop, Play once, and Next in queue. The queue follows the current gallery and loaded Viewer post stream and stops at its end.
-- Video Viewer offers Picture-in-picture from More actions and accepts headset play/pause commands. Ordinary backgrounding pauses playback; external controls end when Viewer stops.
-- Wide windows use a labeled navigation rail, additional bounded media-grid columns, constrained Settings content, and a Viewer Info side panel.
+- [.docs/DEVELOPMENT.md](.docs/DEVELOPMENT.md): architecture, storage layout, releases, device and performance testing, live provider checks, and copying a personal profile into Debug
+- [CHANGELOG.md](CHANGELOG.md): user-facing changes
+- [.docs/PLANS.md](.docs/PLANS.md): ExecPlan standard (plans live in `.docs/exec/`)
