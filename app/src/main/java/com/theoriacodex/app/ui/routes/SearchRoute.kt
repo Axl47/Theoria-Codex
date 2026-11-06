@@ -351,6 +351,13 @@ private fun SearchRouteContent(
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
     callbacks: SearchRouteCallbacks,
 ) {
+    // Capture only what each callback reads, so keystrokes and paging leave result cards untouched.
+    val appliedQueryHash = state.query.appliedQueryHash
+    val resolvePostById: suspend (PostId) -> Post? = remember(coordinator, appliedQueryHash) {
+        { id -> coordinator.resolvePostForSearch(id, appliedQueryHash) }
+    }
+    val autocomplete = state.suggestions.autocomplete
+    val trending = state.suggestions.trending
     SearchScreen(
         state = state,
         oldSearchBar = config.settings.oldSearchBar,
@@ -358,18 +365,10 @@ private fun SearchRouteContent(
         onOpenSavedSearch = callbacks.onOpenSavedSearch,
         creatorBrowsingSources = config.creatorBrowsingSources,
         onAction = owner::onAction,
-        resolvePostById = { id -> coordinator.resolvePostForSearch(id, state.query.appliedQueryHash) },
+        resolvePostById = resolvePostById,
         recoverPostMedia = coordinator::recoverPostMedia,
-        tagVideoCountProvider = { source, tag ->
-            coordinator.tagVideoCount(
-                source, tag, state.suggestions.autocomplete, state.suggestions.trending,
-            )
-        },
-        fetchTagVideoCounts = { source, tags ->
-            coordinator.fetchTagVideoCounts(
-                source, tags, state.suggestions.autocomplete, state.suggestions.trending,
-            )
-        },
+        tagVideoCountProvider = { source, tag -> coordinator.tagVideoCount(source, tag, autocomplete, trending) },
+        fetchTagVideoCounts = { source, tags -> coordinator.fetchTagVideoCounts(source, tags, autocomplete, trending) },
         pixivUgoiraClient = pixivUgoiraClient,
         likedPostIds = config.likedPostIds,
         pendingLikePostIds = config.pendingLikePostIds,

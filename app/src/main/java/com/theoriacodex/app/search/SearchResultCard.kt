@@ -22,6 +22,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -309,8 +310,10 @@ private fun SearchCardContent(
         imageDeliveryPlan, progress, decodeSize, effectivePost, playbackActive, resolution, recoverPostMedia,
     )
     val scope = rememberCoroutineScope()
-    LaunchedEffect(effectivePost.id, videoRef?.url, videoRef?.localPath, resolvePostById) {
-        if (videoRef == null && resolution.resolvedPost == null) resolution.requestPreview(scope, resolvePostById)
+    // A new resolver instance must not restart the request; only gaining one at all should.
+    val currentResolvePostById by rememberUpdatedState(resolvePostById)
+    LaunchedEffect(effectivePost.id, videoRef?.url, videoRef?.localPath, resolvePostById != null) {
+        if (videoRef == null && resolution.resolvedPost == null) resolution.requestPreview(scope, currentResolvePostById)
     }
     val titleBelowMedia = showTitle && supportingContent.showTitleFooter
     Box(

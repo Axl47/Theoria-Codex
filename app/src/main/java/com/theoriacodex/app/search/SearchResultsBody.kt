@@ -129,6 +129,9 @@ private fun SearchResultsGrid(
     onAction: (SearchAction) -> Unit,
     openPostActions: (Post) -> Unit,
 ) {
+    // Cards capture this rather than the whole state, which changes on every keystroke and page.
+    val showSourceBadge = state.query.appliedSourceScope !is SearchSourceScope.Single
+    val relatedPosts = state.relatedPosts
     TwoColumnProjectedPostStaggeredGrid(
         projection = feed.related.projection,
         state = gridState,
@@ -145,7 +148,7 @@ private fun SearchResultsGrid(
                 post = post,
                 environment = cards,
                 showWatchHistory = true,
-                showSourceBadge = state.query.appliedSourceScope !is SearchSourceScope.Single,
+                showSourceBadge = showSourceBadge,
                 resolvePostById = resolvePostById,
                 recoverPostMedia = recoverPostMedia,
                 onClick = {
@@ -162,7 +165,7 @@ private fun SearchResultsGrid(
         },
         shelfContent = {
             FeedRelatedPostsShelf(
-                state = state.relatedPosts,
+                state = relatedPosts,
                 presentation = feed.related,
                 environment = cards,
                 recoverPostMedia = recoverPostMedia,
