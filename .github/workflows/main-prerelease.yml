@@ -117,11 +117,12 @@ jobs:
     with:
       release-acceptance-only: true
 
-  build-and-publish:
-    needs: [preflight, release-acceptance]
+  # Builds and signs in parallel with acceptance; nothing is published until both succeed.
+  build-release:
+    name: Build signed release APK
+    needs: preflight
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -160,6 +161,32 @@ jobs:
       - name: Normalize update asset name
         run: |
           cp "${{ steps.sign_app.outputs.signedReleaseFile }}" theoria-codex-main.apk
+
+      # Short retention: an unpublished signed APK should not outlive the release attempt.
+      - name: Hand the signed APK to the publish job
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: signed-release-apk
+          path: theoria-codex-main.apk
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish prerelease
+    needs: [preflight, release-acceptance, build-release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout release notes
+        uses: actions/checkout@v7.0.1
+
+      - name: Download signed APK
+        uses: actions/download-artifact@v8.0.2
+        with:
+          name: signed-release-apk
 
       - name: Publish prerelease
         uses: softprops/action-gh-release@v3.0.3

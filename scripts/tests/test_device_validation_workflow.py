@@ -54,6 +54,15 @@ class DeviceValidationWorkflowTest(unittest.TestCase):
         self.assertIn("if: ${{ !inputs.release-acceptance-only }}", self.workflow)
         self.assertIn("if: inputs.release-acceptance-only ||", self.workflow)
 
+    def test_tag_publishes_only_after_acceptance_and_parallel_build(self) -> None:
+        release = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+        build = release.split("  build-release:", 1)[1].split("\n  publish:", 1)[0]
+        self.assertIn("needs: preflight", build)
+        self.assertIn(":app:assembleRelease", build)
+        self.assertIn("needs: [preflight, release-acceptance, build-release]", release)
+        self.assertEqual(1, release.count("softprops/action-gh-release"))
+        self.assertIn("softprops/action-gh-release", release.split("\n  publish:", 1)[1])
+
 
 if __name__ == "__main__":
     unittest.main()
