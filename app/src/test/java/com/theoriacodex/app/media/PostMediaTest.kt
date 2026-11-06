@@ -64,10 +64,18 @@ class PostMediaTest {
             listOf(
                 MediaDeliveryActivation.PRIMARY,
                 MediaDeliveryActivation.QUALITY_UPGRADE,
-                MediaDeliveryActivation.QUALITY_UPGRADE,
+                MediaDeliveryActivation.FAILURE_FALLBACK,
                 MediaDeliveryActivation.FAILURE_FALLBACK,
             ),
             plan.candidates.map { it.activation },
+        )
+        assertEquals(listOf(1), plan.upgradeIndicesAfter(0))
+        assertEquals(emptyList<Int>(), plan.upgradeIndicesAfter(1))
+        assertEquals(
+            listOf(MediaDeliveryActivation.QUALITY_UPGRADE),
+            viewerMediaDeliveryPlan(pixivPost, full).candidates
+                .filter { it.location == "https://example.test/original.jpg" }
+                .map { it.activation },
         )
     }
 
@@ -105,7 +113,7 @@ class PostMediaTest {
     }
 
     @Test
-    fun `gelbooru preview can upgrade through known sample and full media`() {
+    fun `gelbooru preview upgrades to its sample but leaves the original to the Viewer`() {
         val full = ref("full.jpg", "image/jpeg").copy(
             progressiveUrls = listOf("https://example.test/sample.jpg"),
         )
@@ -125,9 +133,15 @@ class PostMediaTest {
             listOf(
                 MediaDeliveryActivation.PRIMARY,
                 MediaDeliveryActivation.QUALITY_UPGRADE,
-                MediaDeliveryActivation.QUALITY_UPGRADE,
+                MediaDeliveryActivation.FAILURE_FALLBACK,
             ),
             plan.candidates.map { it.activation },
+        )
+
+        val withoutSample = previewMediaDeliveryPlan(post(SourceKey.GELBOORU, ref("full.jpg", "image/jpeg")))
+        assertEquals(
+            listOf(MediaDeliveryActivation.PRIMARY, MediaDeliveryActivation.QUALITY_UPGRADE),
+            withoutSample.candidates.map { it.activation },
         )
     }
 

@@ -115,6 +115,9 @@ fun postMediaItems(post: Post): List<ImageRef> {
 /**
  * Orders what a feed card shows. Remote animated images must download completely before their first
  * frame, so the card paints its poster first and swaps to the animation once that is ready.
+ *
+ * Feed cards render at most half the screen wide, so quality upgrades stop at the largest downscaled
+ * rendition (Gelbooru sample, Pixiv large); originals stay failure fallbacks and are left to the Viewer.
  */
 fun previewMediaDeliveryPlan(post: Post): MediaDeliveryPlan {
     val animatedFull = post.full?.takeIf(::isAnimatedImageMediaRef)
@@ -137,8 +140,15 @@ fun previewMediaDeliveryPlan(post: Post): MediaDeliveryPlan {
         },
         preferredUrlFirst = preferred,
         animationUpgradeRef = animationUpgrade,
+        nonUpgradeLocations = feedOriginalLocations(post),
     )
 }
+
+/** Originals that have a smaller rendition; a feed card never downloads them just to downsample. */
+private fun feedOriginalLocations(post: Post): Set<String> =
+    listOfNotNull(post.full, post.media.firstOrNull())
+        .filter { ref -> ref.progressiveUrls.any(String::isNotBlank) }
+        .mapNotNullTo(hashSetOf()) { ref -> normalizeMediaUrl(post.id.source, ref.url) }
 
 fun viewerMediaDeliveryPlan(post: Post, media: ImageRef): MediaDeliveryPlan {
     val mediaIndex = post.media.indexOf(media)
@@ -161,6 +171,7 @@ private fun mediaDeliveryPlan(
     qualityUpgradeRefs: Set<ImageRef>,
     preferredUrlFirst: ImageRef?,
     animationUpgradeRef: ImageRef? = null,
+    nonUpgradeLocations: Set<String> = emptySet(),
 ): MediaDeliveryPlan {
     val seen = linkedSetOf<String>()
     val candidates = buildList {
@@ -179,7 +190,9 @@ private fun mediaDeliveryPlan(
                 val activation = mediaDeliveryActivation(
                     isFirstCandidate = isEmpty(),
                     isAnimationUpgrade = isAnimationUpgrade,
-                    isQualityUpgrade = ref in qualityUpgradeRefs && normalizedRef.localPath.isNullOrBlank(),
+                    isQualityUpgrade = ref in qualityUpgradeRefs &&
+                        normalizedRef.localPath.isNullOrBlank() &&
+                        location !in nonUpgradeLocations,
                 )
                 add(
                     MediaDeliveryCandidate(
