@@ -58,25 +58,21 @@ Proceed only after the user approves the version and release-note wording.
 2. Add `release-notes/vX.Y.Z.md` using the approved user-facing text.
 3. Move the entries being released from `[Unreleased]` into a dated `[X.Y.Z]` section at the top of root `CHANGELOG.md`, directly below the now-empty `[Unreleased]` section. Preserve existing release history and entries outside this release. Include this changelog archive in the release-preparation diff and commit; do not wait until publication.
 4. Refresh the baseline profile so startup and the main journeys stay compiled ahead of time. With a supported API 36 or 37 emulator as the only selected target, run `ANDROID_SERIAL=<emulator-serial> ./gradlew :app:generateReleaseBaselineProfile` and include the changed profiles in the release diff. It uses the offline fixture app in an isolated package; if no emulator is available, report that the profile was not refreshed.
-5. Run the host validation batch:
+5. Run the host checks CI cannot run for you:
 
    ```sh
    previous_release_tag="$(git describe --tags --abbrev=0 --match 'v[0-9]*')"
    python3 scripts/check_hotspots.py --base "$previous_release_tag"
-   ./gradlew :app:detektDebug --stacktrace
-   ./gradlew :app:compileDebugAndroidTestKotlin --stacktrace
-   ./gradlew :app:testDebugUnitTest
-   ./gradlew \
-     :app:assembleRelease \
-     :app:verifyReleaseJsonContracts \
-     :app:verifyReleaseAcceptanceJsonContracts \
-     --stacktrace
+   version_name="$(sed -nE 's/^[[:space:]]*versionName[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' app/build.gradle.kts | head -n 1)"
+   version_code="$(sed -nE 's/^[[:space:]]*versionCode[[:space:]]*=[[:space:]]*([0-9_]+).*/\1/p' app/build.gradle.kts | head -n 1 | tr -d _)"
+   IFS=. read -r major minor patch <<< "$version_name"
+   test "$version_code" -eq $((1500000000 + 10#$major * 10000 + 10#$minor * 100 + 10#$patch))
+   test "$version_name" != "${previous_release_tag#v}"
+   test "$(printf '%s\n' "${previous_release_tag#v}" "$version_name" | sort -V | tail -n 1)" = "$version_name"
+   test -s "release-notes/v$version_name.md"
    ```
 
-   If a supported API 36 or 37 target is already available and the packaged application IDs and signing lanes have been proven safe, also run `./gradlew :app:connectedDebugAndroidTest --stacktrace`. Otherwise report the local connected lane as unavailable; do not substitute another API level or personal device. The merged commit's GitHub `Device Validation` workflow must pass before tagging, so local unit/build success never replaces instrumentation coverage.
-
-   Confirm the hotspot/Detekt debt gate and Detekt report no new issues before continuing.
-   Confirm `app/build/outputs/apk/release/output-metadata.json` reports the same name and code. Also confirm the working tree contains only intended release changes and the new version is greater than the prior release.
+   The hotspot check spans the whole release rather than one PR; the version checks mirror the tag workflow's preflight without a release build. Detekt, unit tests, androidTest compilation, the R8 release build and its JSON contracts, and connected tests run in GitHub `Verify` and `Device Validation` on the release PR and again on the merged commit; those runs are the authority, so do not repeat them locally. Confirm the working tree contains only intended release changes.
 
 6. Show the final diff, the exact commit message, and the exact tag that would be created.
 7. Create a release branch and the release-preparation commit only after the user explicitly approves that final diff.
@@ -89,7 +85,7 @@ chore(release): prepare vX.Y.Z
 
 8. With explicit authorization for external Git actions, push the branch and open a PR targeting `main`; link it in T3 Code. Do not create the release tag yet.
 9. Watch the PR with T3 Code's `watch_pull_request` tool and end the turn while checks run. Verify `Verify` and `Device Validation` passed for the current PR revision and tested merge result; PR workflows may run on GitHub's synthetic merge commit rather than the branch head. Investigate missing, failed, or cancelled checks and push repairs; the existing watch persists across pushes. Dependency Submission runs on `main`, not on PRs.
-10. Merge only with explicit authorization. Record the actual merged commit SHA on `main`; a squash or merge commit can differ from the PR head. Confirm every workflow triggered for that exact merged SHA completed successfully, including `Verify`, `Device Validation`, and `Dependency Submission`. Match the full `headSha`, not an older PR or main run. If any is missing, fails, is cancelled, or cannot run, stop before tagging and repair through a new PR. Do not treat host or PR success as a substitute for this gate. Stop the PR watch when it is no longer needed.
+10. Merge only with explicit authorization. Record the actual merged commit SHA on `main`; a squash or merge commit can differ from the PR head. Confirm every workflow triggered for that exact merged SHA completed successfully, including `Verify`, `Device Validation`, and `Dependency Submission`. Match the full `headSha`, not an older PR or main run. If any is missing, fails, is cancelled, or cannot run, stop before tagging and repair through a new PR. Do not treat host or PR success as a substitute for this gate; the tag workflow's preflight enforces the same rule and refuses to publish without it. Stop the PR watch when it is no longer needed.
 
 ## Publish An Approved Release
 
@@ -111,7 +107,7 @@ Publish only when the user explicitly asks to publish the named version.
    ```
 
 5. Push only that exact tag; `main` must already be synchronized from the preparation phase.
-6. Monitor the tag-triggered `Main Prerelease` workflow to completion. If it fails, report the immutable release failure and prepare a newer patch version for any repair; never move or recreate the tag.
+6. Monitor the tag-triggered `Main Prerelease` workflow to completion. It does not re-run `Verify` or the debug connected tests. Its `Release preflight` job validates the tag, version, annotation, and notes, then requires successful push-to-main runs of `Verify`, `Device Validation`, and `Dependency Submission` for the tagged SHA. Next, R8 release acceptance on API 36 and 37 runs in parallel with building and signing the release APK, and `Publish prerelease` runs only after both succeed. If any job fails, report the immutable release failure and prepare a newer patch version for any repair; never move or recreate the tag.
 7. Confirm the GitHub prerelease exists, is not a draft, uses the expected tag and notes, and contains the uploaded `theoria-codex-main.apk` asset before reporting publication complete.
 8. Confirm root `CHANGELOG.md` already records the release directly below a clean `[Unreleased]` section, as archived in the release PR. Do not create a separate post-publication changelog cleanup commit or alter the release tag.
 
