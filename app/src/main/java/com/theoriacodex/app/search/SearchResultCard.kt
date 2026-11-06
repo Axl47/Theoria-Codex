@@ -26,6 +26,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInWindow
@@ -36,6 +37,9 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
 import androidx.lifecycle.Lifecycle
@@ -101,7 +105,7 @@ fun SearchResultCard(
     val viewerReturn = LocalViewerReturnTransition.current
     val viewerReturnGrid = LocalViewerReturnGrid.current
     val viewerReturnShelf = LocalViewerReturnShelf.current
-    var viewerMediaCoordinates by remember(post.id) { mutableStateOf<LayoutCoordinates?>(null) }
+    val mediaGeometry = remember(post.id) { SearchCardMediaGeometry() }
     var isInViewport by remember(post.id) { mutableStateOf(false) }
     val playbackActive = shouldFeedMediaPlay(
         isInViewport = isInViewport,
@@ -113,7 +117,6 @@ fun SearchResultCard(
             if (isInViewport) onViewportChanged(false)
         }
     }
-    var mediaCorners by remember { mutableStateOf(ViewerReturnCorners()) }
     val cardShape = CardDefaults.elevatedShape
     val layoutDirection = LocalLayoutDirection.current
     val cardDensity = LocalDensity.current
@@ -125,9 +128,9 @@ fun SearchResultCard(
                 onClick = {
                     viewerReturn?.openedFrom(
                         viewerReturnGrid,
-                        viewerMediaCoordinates?.takeIf { it.isAttached }?.boundsInWindow(clipBounds = false),
+                        mediaGeometry.coordinates?.takeIf { it.isAttached }?.boundsInWindow(clipBounds = false),
                         shelfId = viewerReturnShelf,
-                        corners = mediaCorners,
+                        corners = mediaGeometry.corners(cardShape, layoutDirection, cardDensity),
                     )
                     onClick()
                 },
@@ -139,12 +142,16 @@ fun SearchResultCard(
             viewedMediaNumber, showWatchHistory, mediaAspectRatio, showTitle, liked, onToggleLike, resolvePostById,
             recoverPostMedia, refreshOnPreviewError, playbackDiagnosticsEnabled, onAuthoritativeDurationKnown,
             // A visible caption must not retain autoplay demand for media outside the window.
+            // Runs every scrolled frame: keep it to the visibility check unless a Viewer return is landing here.
             onMediaPositioned = { coordinates, titleBelowMedia ->
-                viewerMediaCoordinates = coordinates
-                mediaCorners = viewerReturnCorners(
-                    cardShape.createOutline(coordinates.size.toSize(), layoutDirection, cardDensity), titleBelowMedia,
-                )
-                viewerReturn?.recordBounds(viewerReturnGrid, post.id, coordinates.boundsInWindow(clipBounds = false), viewerReturnShelf, mediaCorners)
+                mediaGeometry.coordinates = coordinates
+                mediaGeometry.titleBelowMedia = titleBelowMedia
+                if (viewerReturn?.request != null) {
+                    viewerReturn.recordBounds(
+                        viewerReturnGrid, post.id, coordinates.boundsInWindow(clipBounds = false), viewerReturnShelf,
+                        mediaGeometry.corners(cardShape, layoutDirection, cardDensity),
+                    )
+                }
                 val visible = coordinates.isAttached &&
                     isVisibleFeedBounds(coordinates.boundsInWindow(clipBounds = true))
                 if (isInViewport != visible) {
@@ -153,6 +160,26 @@ fun SearchResultCard(
                 }
             },
         )
+    }
+}
+
+/** The media slot's latest placement; its corners are rebuilt only when its size or caption changes. */
+private class SearchCardMediaGeometry {
+    var coordinates: LayoutCoordinates? = null
+    var titleBelowMedia = false
+    private var cornersSize = IntSize.Zero
+    private var cornersTitleBelowMedia = false
+    private var cachedCorners: ViewerReturnCorners? = null
+
+    fun corners(shape: Shape, layoutDirection: LayoutDirection, density: Density): ViewerReturnCorners {
+        val size = coordinates?.size ?: IntSize.Zero
+        val cached = cachedCorners
+        if (cached != null && size == cornersSize && titleBelowMedia == cornersTitleBelowMedia) return cached
+        return viewerReturnCorners(shape.createOutline(size.toSize(), layoutDirection, density), titleBelowMedia).also {
+            cachedCorners = it
+            cornersSize = size
+            cornersTitleBelowMedia = titleBelowMedia
+        }
     }
 }
 
