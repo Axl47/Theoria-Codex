@@ -9,11 +9,15 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 
-/** Reuse is scoped to one active observation, not a process cache that thrashes on large scans. */
+/**
+ * Keeps the Posts published by the previous projection so unchanged payloads are not decoded again.
+ * Only the latest projection is retained; callers that share one instance must project the same rows.
+ */
 internal class RetainedPostPayloads(private val decode: (PostEntity) -> Post) {
     private var previous = emptyMap<Pair<String, String>, Snapshot>()
     private val digest = MessageDigest.getInstance("SHA-256")
 
+    @Synchronized
     fun project(rows: List<PostEntity>): List<Post> {
         val next = HashMap<Pair<String, String>, Snapshot>(rows.size)
         val posts = rows.map { row ->
