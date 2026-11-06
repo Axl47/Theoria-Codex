@@ -106,6 +106,12 @@ abstract class AppJourneyFixture {
         node.performSemanticsAction(SemanticsActions.OnClick)
     }
 
+    /** Long-press a control once it has loaded, through its semantics action rather than injected touch. */
+    protected fun longPress(node: SemanticsNodeInteraction) {
+        compose.waitUntil(10_000) { node.isDisplayed() }
+        node.performSemanticsAction(SemanticsActions.OnLongClick)
+    }
+
     protected fun <T> io(block: suspend () -> T): T = runBlocking(Dispatchers.IO) { block() }
 
     @After

@@ -6,7 +6,6 @@ import android.view.View
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
@@ -48,7 +47,7 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
         }
         launch()
         tab("Codex")
-        compose.onNodeWithText("Offline collection").performTouchInput { longClick() }
+        longPress(compose.onNodeWithText("Offline collection"))
         activate(compose.onNodeWithText("Make available offline"))
         val offline = requireNotNull(container.features.offlineMedia)
         compose.waitUntil(10_000) { offline.store.snapshot.value.postCount == 2 }
