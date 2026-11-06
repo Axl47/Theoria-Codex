@@ -59,6 +59,7 @@ class PixivSourceAdapter(
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val minRequestIntervalMs: Long = 350L,
     private val languageTag: String = Locale.getDefault().toLanguageTag(),
+    private val ugoiraMetadataCache: PixivUgoiraMetadataCache = PixivUgoiraMetadataCache(),
 ) : SourceAdapter, CreatorPostsSourceAdapter, RelatedPostsSourceAdapter, DurationMetadataSourceAdapter {
     override val sourceKey: SourceKey = SourceKey.PIXIV
 
@@ -335,11 +336,11 @@ class PixivSourceAdapter(
     }
 
     private suspend fun fetchUgoiraDurationMs(postId: String): Long? {
-        val response = authorizedGet(
+        val response = ugoiraMetadataCache.get(postId) ?: authorizedGet(
             url = "$PIXIV_API_BASE/v1/ugoira/metadata",
             query = mapOf("illust_id" to postId),
             pacer = durationPacer,
-        )
+        ).also { body -> ugoiraMetadataCache.put(postId, body) }
         val root = parseJsonObject(response, gson, "Pixiv")
         val metadata = root.optionalJsonObject("ugoira_metadata") ?: return null
         val frames = metadata.optionalJsonArray("frames").elementsOrEmpty()

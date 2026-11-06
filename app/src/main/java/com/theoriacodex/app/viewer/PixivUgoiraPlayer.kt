@@ -17,6 +17,7 @@ import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.pixiv.PixivAuthApi
 import com.theoriacodex.sources.pixiv.PixivTokenCoordinator
+import com.theoriacodex.sources.pixiv.PixivUgoiraMetadataCache
 import java.io.File
 import java.io.FileDescriptor
 import java.io.IOException
@@ -62,6 +63,7 @@ class PixivUgoiraClient internal constructor(
     private val decode: UgoiraFrameDecoder = ::decodeUgoiraFrames,
     private val operationTimeoutMs: Long = 30_000L,
     private val offlineArchiveLookup: suspend (String) -> File? = { null },
+    private val metadataCache: PixivUgoiraMetadataCache = PixivUgoiraMetadataCache(),
 ) {
     private val transport = PixivUgoiraTransport()
     private val cacheLock = Any()
@@ -308,6 +310,9 @@ class PixivUgoiraClient internal constructor(
         postId: String,
         initialTokens: PixivAuthTokens,
     ): Pair<ParsedMetadata, PixivAuthTokens> {
+        metadataCache.get(postId)
+            ?.let { body -> runCatching { parseMetadata(body) }.getOrNull() }
+            ?.let { cached -> return cached to initialTokens }
         var tokens = initialTokens
         var didRefreshAfterAuthFailure = false
 
@@ -323,7 +328,9 @@ class PixivUgoiraClient internal constructor(
             }
             when {
                 metadataResponse.statusCode in 200..299 -> {
-                    return parseMetadata(metadataResponse.body) to tokens
+                    val parsed = parseMetadata(metadataResponse.body)
+                    metadataCache.put(postId, metadataResponse.body)
+                    return parsed to tokens
                 }
 
                 metadataResponse.statusCode == 401 || metadataResponse.statusCode == 403 -> {

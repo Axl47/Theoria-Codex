@@ -80,6 +80,7 @@ import com.theoriacodex.sources.http.DefaultSourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.pixiv.PixivAuthApi
 import com.theoriacodex.sources.pixiv.PixivTokenCoordinator
+import com.theoriacodex.sources.pixiv.PixivUgoiraMetadataCache
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -187,6 +188,7 @@ internal class DefaultTheoriaAppContainer(
         credentialsProvider = accountStore,
         sessionStore = AndroidPixivPkceSessionStore(appContext),
     )
+    private val pixivUgoiraMetadataCache = PixivUgoiraMetadataCache()
     private val pixivUgoiraClient = PixivUgoiraClient(
         credentialsProvider = accountStore,
         httpClient = sourceHttpClient,
@@ -195,12 +197,14 @@ internal class DefaultTheoriaAppContainer(
         offlineArchiveLookup = { id ->
             offlineStore.find(PostId(SourceKey.PIXIV, id))?.full?.localPath?.let(::File)
         },
+        metadataCache = pixivUgoiraMetadataCache,
     )
     private val allPotentialSourceRegistry = RealAdapterRegistry(
         credentialsProvider = accountStore,
         httpClient = sourceHttpClient,
         exposedSources = exposedRealSources(rule34XxxConfigured = true),
         pixivTokenCoordinator = pixivTokenCoordinator,
+        pixivUgoiraMetadataCache = pixivUgoiraMetadataCache,
     )
     private val sourceRegistry = AvailabilityAwareSourceAdapterRegistry(
         delegate = allPotentialSourceRegistry,

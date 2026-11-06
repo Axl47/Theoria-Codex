@@ -47,4 +47,38 @@ class PixivRequestPacingTest {
         assertEquals(0L, testScheduler.currentTime)
         assertEquals(2, httpClient.requests.size)
     }
+
+    @Test
+    fun `duration lookups reuse ugoira metadata another consumer already fetched`() = runTest {
+        val credentials = FakeCredentialsProvider().apply {
+            pixivTokens = PixivAuthTokens("access", "refresh", Long.MAX_VALUE)
+        }
+        val httpClient = QueueHttpClient()
+        val cache = PixivUgoiraMetadataCache().apply {
+            put("12345", """{"ugoira_metadata":{"frames":[{"delay":80},{"delay":120}]}}""")
+        }
+        val adapter = PixivSourceAdapter(
+            httpClient = httpClient,
+            credentialsProvider = credentials,
+            ugoiraMetadataCache = cache,
+        )
+        val ugoira = Post(
+            id = PostId(SourceKey.PIXIV, "12345"),
+            preview = ImageRef(url = "https://i.pximg.net/p.jpg", localPath = null, mime = null),
+            full = ImageRef(url = "https://i.pximg.net/f", localPath = null, mime = PIXIV_UGOIRA_MIME),
+            pageUrl = null,
+            width = null,
+            height = null,
+            canonicalTags = emptyList(),
+            rawTags = emptyList(),
+            authorName = null,
+            createdAtEpochMs = null,
+        )
+
+        assertEquals(
+            com.theoriacodex.domain.adapter.DurationMetadataSourceResult.Known(200L),
+            adapter.resolveDurationMetadata(ugoira),
+        )
+        assertEquals(0, httpClient.requests.size)
+    }
 }
