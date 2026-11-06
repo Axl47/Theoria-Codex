@@ -55,7 +55,7 @@ class RoomCodexLikesRepository(
     private val postCodec = LocalPostPayloadCodec(gson)
     private val sharedPostPayloads = SharedPostPayloadWriter(dao, LocalPostPayloadCodec(gson))
     private val retainedPayloads = RetainedPostPayloadCache(postCodec::decode)
-    private val summaries = RoomCodexSummaryQueries(dao, LocalPostPayloadCodec(gson))
+    private val summaries = RoomCodexSummaryQueries(dao, retainedPayloads)
 
     override suspend fun cleanCodex(request: CodexCleaningRequest): CodexCleaningSnapshot = database.withTransaction {
         writeGuard.requireProfileWritable(request.profileId)
