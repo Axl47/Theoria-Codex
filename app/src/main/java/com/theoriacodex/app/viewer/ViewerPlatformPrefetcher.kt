@@ -21,10 +21,12 @@ internal suspend fun prefetchViewerMedia(
     videoQuality: VideoQuality,
 ): ViewerPrefetchResult {
     if (media.kind == ViewerMediaKind.VIDEO) {
+        val metered = context.isMediaNetworkMetered()
         return prefetchViewerVideoMedia(
             context,
-            media.ref.viewerPlaybackLocation(videoQuality, context.isMediaNetworkMetered()),
+            media.ref.viewerPlaybackLocation(videoQuality, metered),
             media.key.postId.source.requestHeaders(),
+            maxBytes = if (metered) VIEWER_METERED_VIDEO_PREFETCH_BYTES else VIEWER_VIDEO_PREFETCH_BYTES,
         )
     }
 
@@ -53,10 +55,11 @@ private suspend fun prefetchViewerVideoMedia(
     context: Context,
     playbackLocation: String?,
     headers: Map<String, String>,
+    maxBytes: Long,
 ): ViewerPrefetchResult {
     val location = playbackLocation ?: return ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED)
     if (location.startsWith("http://", true) || location.startsWith("https://", true)) {
-        return context.videoPlaybackInfrastructure().prefetch(location, headers)
+        return context.videoPlaybackInfrastructure().prefetch(location, headers, maxBytes)
     }
     if (location.startsWith("content://", true)) {
         return ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED)

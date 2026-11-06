@@ -35,6 +35,9 @@ import kotlinx.coroutines.withContext
 
 internal const val VIDEO_PLAYBACK_CACHE_MAX_BYTES = 256L * 1024L * 1024L
 internal const val VIEWER_VIDEO_PREFETCH_BYTES = 24L * 1024L * 1024L
+
+/** Metered networks warm only the opening seconds of a neighbour video. */
+internal const val VIEWER_METERED_VIDEO_PREFETCH_BYTES = 4L * 1024L * 1024L
 internal const val FEED_PREVIEW_TARGET_BUFFER_BYTES = 2 * 1024 * 1024
 internal const val FEED_PREVIEW_MIN_BUFFER_MS = 6_000
 internal const val FEED_PREVIEW_MAX_BUFFER_MS = 12_000
@@ -153,9 +156,11 @@ internal class VideoPlaybackInfrastructure(
             .setLoadControl(VideoLoadControlFactory.create(profile))
     }
 
+    /** Caches at most [maxBytes] from the start of [location] into the shared video cache. */
     internal suspend fun prefetch(
         location: String,
         headers: Map<String, String>,
+        maxBytes: Long = VIEWER_VIDEO_PREFETCH_BYTES,
     ): ViewerPrefetchResult {
         if (!isHttpVideoLocation(location)) {
             return ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED)
@@ -166,7 +171,7 @@ internal class VideoPlaybackInfrastructure(
             val dataSpec = DataSpec.Builder()
                 .setUri(videoLocationToUri(location))
                 .setKey(cacheKey)
-                .setLength(VIEWER_VIDEO_PREFETCH_BYTES)
+                .setLength(maxBytes)
                 .setFlags(DataSpec.FLAG_ALLOW_CACHE_FRAGMENTATION)
                 .build()
             val dataSource = cacheDataSourceFactory(bound, headers, blockOnCache = true).createDataSource()
@@ -176,7 +181,7 @@ internal class VideoPlaybackInfrastructure(
             val cachedBytes = bound.sharedResource.cache.getCachedBytes(
                 cacheKey,
                 0L,
-                VIEWER_VIDEO_PREFETCH_BYTES,
+                maxBytes,
             )
             if (cachedBytes > 0L) {
                 ViewerPrefetchResult(
