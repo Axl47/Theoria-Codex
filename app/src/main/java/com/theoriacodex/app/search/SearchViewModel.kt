@@ -284,16 +284,29 @@ internal class SearchViewModel(
         }
     }
 
+    /**
+     * Switches the draft to [mode]'s last search. Once results are on screen, that search also runs,
+     * so the source, terms, filters, and results always describe the same search.
+     */
     private fun selectMode(mode: QueryMode) {
         cancelAutocomplete()
-        mutableState.value = SearchDraftReducer.selectMode(
+        val current = SearchDraftReducer.selectMode(
             state = mutableState.value,
             mode = mode,
             context = draftContext(),
             supportedScopes = coordinator::supportedSearchScopes,
         ).state
+        mutableState.value = current
         persistDraftQuery()
         refreshTrending()
+        if (current.content.hasExecutedSearch && current.hasPendingChanges) {
+            launchRootSearch(
+                kind = SearchRequestKind.REPLACE,
+                query = current.query.draft,
+                sourceScope = current.query.draftSourceScope,
+                persistAcceptedResult = true,
+            )
+        }
     }
 
     private fun toggleTemporarySource(source: SourceKey) {
