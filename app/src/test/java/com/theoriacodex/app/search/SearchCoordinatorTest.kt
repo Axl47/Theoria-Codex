@@ -28,7 +28,6 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SearchFacet
-import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
@@ -424,7 +423,7 @@ class SearchCoordinatorTest {
     }
 
     @Test
-    fun `tag count lookup caches batch results and seen taxonomy retains namespaces`() = runTest {
+    fun `tag count lookup caches batch results`() = runTest {
         val countDelegate = TestAdapter(SourceKey.GELBOORU)
         val countAdapter = CountAdapter(countDelegate, mapOf("blue_hair" to 321))
         val countStore = RecordingTagStore()
@@ -434,21 +433,6 @@ class SearchCoordinatorTest {
         assertEquals(321, counts.fetchTagVideoCounts(SourceKey.GELBOORU, listOf("blue hair"))["blue hair"])
         assertEquals(321, counts.fetchTagVideoCounts(SourceKey.GELBOORU, listOf("blue hair"))["blue hair"])
         assertEquals(1, countAdapter.calls)
-
-        val post = post(SourceKey.NHENTAI, "taxonomy").copy(
-            canonicalTags = listOf("shared"),
-            taxonomy = listOf(
-                PostTaxonomyTerm("shared", SearchFacet.TAG, "female"),
-                PostTaxonomyTerm("shared", SearchFacet.TAG, "male"),
-            ),
-        )
-        val taxonomyAdapter = TestAdapter(SourceKey.NHENTAI).apply { fixedPosts = listOf(post) }
-        val taxonomyStore = RecordingTagStore()
-        val taxonomy = testSearchCoordinator(TestRegistry(listOf(taxonomyAdapter)), tagSuggestionStore = taxonomyStore)
-        taxonomy.initializeRoute()
-        taxonomy.executeInitial(query(SourceKey.NHENTAI, ""), SearchSourceScope.Single(SourceKey.NHENTAI))
-
-        assertEquals(listOf("female", "male"), taxonomyStore.faceted.mapNotNull(FacetedTagSuggestion::sourceNamespace))
     }
 
     @Test

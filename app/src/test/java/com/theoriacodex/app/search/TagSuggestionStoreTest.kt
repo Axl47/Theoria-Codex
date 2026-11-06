@@ -292,8 +292,8 @@ class TagSuggestionStoreTest {
             ),
             artists,
         )
-        assertTrue(storeFile.readText().contains("\"facet\": \"ARTIST\""))
-        assertTrue(storeFile.readText().contains("\"sourceNamespace\": \"artist\""))
+        assertTrue(storeFile.readText().contains("\"facet\":\"ARTIST\""))
+        assertTrue(storeFile.readText().contains("\"sourceNamespace\":\"artist\""))
         reopenedStore.close()
     }
 
