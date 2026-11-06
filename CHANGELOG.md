@@ -10,6 +10,10 @@
 - Recents' All view now groups each day's searches in one row at the top of that day, above the posts you viewed.
 - Searches in Recents read like the search editor: "or" alternatives are muted and excluded tags are red, with the source and time beside each search.
 
+### Fixed
+
+- Switching source in Search now shows that source's last search, so the results and the filter button always match the source you picked.
+
 ## [1.3.0] - 2026-11-06
 
 ### Added
