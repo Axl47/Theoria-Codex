@@ -22,7 +22,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
                 MediaDurationEntity.class,
                 ViewerTranslationCacheEntity.class
         },
-        version = 9,
+        version = 10,
         exportSchema = true
 )
 public abstract class TheoriaRoomDatabase extends RoomDatabase {
@@ -84,6 +84,12 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             database.execSQL("CREATE INDEX IF NOT EXISTS `index_liked_posts_source_source_post_id` ON `liked_posts` (`source`, `source_post_id`)");
         }
     };
+    public static final Migration MIGRATION_9_10 = new Migration(9, 10) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("DROP INDEX IF EXISTS `index_codex_items_codex_id`");
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_codex_items_codex_id_saved_at_epoch_ms` ON `codex_items` (`codex_id`, `saved_at_epoch_ms`)");
+        }
+    };
     public static final Migration[] MIGRATIONS = new Migration[] {
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -92,7 +98,8 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             MIGRATION_5_6,
             MIGRATION_6_7,
             MIGRATION_7_8,
-            MIGRATION_8_9
+            MIGRATION_8_9,
+            MIGRATION_9_10
     };
 
     public abstract CodexLikesDao codexLikesDao();
