@@ -281,6 +281,9 @@ class ViewerReturnTransitionTest {
         val projection = RelatedFeedProjection(entries)
         var origin: String? = null
         var viewport = Rect.Zero
+        val environment = FeedCardEnvironment(
+            null, mutableStateOf(emptySet()), mutableStateOf(emptyMap()), noMediaDurationStateForPost, {}, { _, _ -> }, { _, _ -> },
+        )
         compose.setContent {
             CompositionLocalProvider(LocalViewerReturnTransition provides transition) {
                 TwoColumnProjectedPostStaggeredGrid(
@@ -296,7 +299,7 @@ class ViewerReturnTransitionTest {
                     shelfContent = {
                         RelatedPostsShelf(
                             state = loaded, posts = related,
-                            environment = FeedCardEnvironment(null, mutableStateOf(emptySet()), mutableStateOf(emptyMap()), noMediaDurationStateForPost, {}, { _, _ -> }, { _, _ -> }),
+                            environment = environment,
                             onOpenPost = { _, _ -> }, onLongPress = {}, onDismiss = {},
                             onRetry = {}, onPreviousPage = {}, onNextPage = {},
                         )

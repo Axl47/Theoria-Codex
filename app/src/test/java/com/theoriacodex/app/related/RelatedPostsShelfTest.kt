@@ -37,13 +37,16 @@ class RelatedPostsShelfTest {
         val empty = secondLoading.complete(secondLoading.request, emptyList(), emptySet())
         val failed = secondLoading.fail(secondLoading.request, "Could not load related posts")
         val state = mutableStateOf(empty)
+        val environment = FeedCardEnvironment(
+            null, mutableStateOf(emptySet()), mutableStateOf(emptyMap()), noMediaDurationStateForPost, {}, { _, _ -> }, { _, _ -> },
+        )
         compose.setContent {
             MaterialTheme {
                 RelatedPostsShelf(
                     state = state.value,
                     // Filtered cards keep this navigation test independent of media loading.
                     posts = emptyList(),
-                    environment = FeedCardEnvironment(null, mutableStateOf(emptySet()), mutableStateOf(emptyMap()), noMediaDurationStateForPost, {}, { _, _ -> }, { _, _ -> }),
+                    environment = environment,
                     onOpenPost = { _, _ -> },
                     onLongPress = {},
                     onDismiss = {},
