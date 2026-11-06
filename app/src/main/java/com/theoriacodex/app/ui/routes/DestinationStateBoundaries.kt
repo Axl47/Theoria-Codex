@@ -408,9 +408,11 @@ internal fun SettingsDestinationStateBoundary(
         com.theoriacodex.app.search.state.SearchSourceScope.GlobalUnified -> query.unifiedSources
         else -> scope.explicitSources.toSet()
     }
+    // Subscribing here keeps statistics collection scoped to a visible Settings destination.
+    val statistics = owner.statistics.collectAsStateWithLifecycle()
     DestinationStateBoundary(state) {
         SettingsScreen(
-            state = it, onAction = owner::onAction,
+            state = it, onAction = owner::onAction, statistics = statistics.value,
             searchSources = selectedSources.intersect(it.availableSources.toSet()),
             storageSummary = storageSummary, storageTools = storageTools,
         )

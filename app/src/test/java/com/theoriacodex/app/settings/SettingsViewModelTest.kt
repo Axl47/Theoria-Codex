@@ -1,6 +1,12 @@
 package com.theoriacodex.app.settings
 
+import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.app.sourceauth.CredentialStoreRecoveryState
+import com.theoriacodex.data.repository.CodexRepository
+import com.theoriacodex.data.repository.InMemoryCodexRepository
+import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
 import com.theoriacodex.data.storage.CorruptionRecovery
@@ -9,6 +15,7 @@ import com.theoriacodex.sources.credentials.GelbooruCredentials
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -18,6 +25,25 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SettingsViewModelTest {
+    @Test
+    fun `library statistics are read only while a statistics surface subscribes`() = runTest {
+        val library = InMemoryCodexRepository()
+        var librarySubscriptions = 0
+        val counted = object : CodexRepository by library {
+            override fun observeLibraryPosts(codexIds: Set<String>) =
+                library.observeLibraryPosts(codexIds).onStart { librarySubscriptions++ }
+        }
+        val codex = library.ensureCodex(profileScopedCodexId("profile-main", "saved"), "Saved here")
+        val owner = settingsOwner(codexRepository = counted)
+        runCurrent()
+        library.addItem(codex.codexId, ownerPost("first"))
+        runCurrent()
+        assertEquals(0, librarySubscriptions)
+
+        assertEquals(1L, owner.statistics.first { it.savedPostCount == 1L }.savedPostCount)
+        assertEquals(1, librarySubscriptions)
+    }
+
     @Test
     fun `source accounts request opens the Accounts page and navigates to Settings`() = runTest {
         val owner = settingsOwner()
@@ -205,4 +231,16 @@ class SettingsViewModelTest {
         assertEquals("", owner.state.value.accounts.rule34XxxUserIdInput)
     }
 
+    private fun ownerPost(id: String) = Post(
+        id = PostId(SourceKey.PIXIV, id),
+        preview = ImageRef(url = null, localPath = null, mime = null),
+        full = null,
+        pageUrl = null,
+        width = null,
+        height = null,
+        canonicalTags = listOf("saved"),
+        rawTags = listOf("saved"),
+        authorName = null,
+        createdAtEpochMs = null,
+    )
 }
