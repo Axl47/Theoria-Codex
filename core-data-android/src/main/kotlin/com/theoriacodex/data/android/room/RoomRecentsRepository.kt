@@ -117,13 +117,13 @@ class RoomRecentsRepository(
     ) {
         database.withTransaction {
             val normalizedMediaNumber = viewedMediaNumber.coerceAtLeast(1)
-            val updated = dao.updateWatchedMediaProgress(
+            val raised = dao.raiseWatchedMediaProgress(
                 post.id.source.name,
                 post.id.sourcePostId,
                 section.name,
                 normalizedMediaNumber,
             )
-            if (updated == 0) {
+            if (raised == 0 && dao.watched(post.id.source.name, post.id.sourcePostId, section.name) == null) {
                 sharedPostPayloads.upsert(post)
                 dao.upsertWatched(
                     RecentWatchedEntity(
