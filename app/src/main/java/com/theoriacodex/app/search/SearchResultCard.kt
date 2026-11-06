@@ -1,30 +1,17 @@
 package com.theoriacodex.app.search
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -38,7 +25,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInWindow
@@ -48,11 +34,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
@@ -75,8 +56,6 @@ import com.theoriacodex.app.media.postMediaItems
 import com.theoriacodex.app.media.postPlaybackMediaCandidate
 import com.theoriacodex.app.media.previewMediaDeliveryPlan
 import com.theoriacodex.app.post.displayTitleOrNull
-import com.theoriacodex.app.source.SourceLogo
-import com.theoriacodex.app.source.isRule34Family
 import com.theoriacodex.app.viewer.LocalViewerReturnGrid
 import com.theoriacodex.app.viewer.LocalViewerReturnShelf
 import com.theoriacodex.app.viewer.LocalViewerReturnTransition
@@ -347,7 +326,7 @@ private fun SearchCardContent(
             resolvePostById, recoverPostMedia, refreshOnPreviewError, playbackDiagnosticsEnabled, onAuthoritativeDurationKnown,
         )
         SearchCardBadges(
-            effectivePost, watch, liked, onToggleLike, metadataLabel, showSourceBadge,
+            effectivePost, watch.viewedMediaNumber, watch.watchedDescription, liked, onToggleLike, metadataLabel, showSourceBadge,
             supportingContent.showPreviewContext, animatedDurationLabel(effectivePost, acquiredDurationMs),
         )
     }
@@ -375,42 +354,6 @@ private fun rememberSearchCardImageModel(
                     candidate.activation == MediaDeliveryActivation.ANIMATION_UPGRADE
                 },
             )
-        }
-    }
-}
-
-/** Everything over the media: count, like, watch and source context, and duration. */
-@Composable
-private fun BoxScope.SearchCardBadges(
-    post: Post,
-    watch: SearchCardWatch,
-    liked: Boolean,
-    onToggleLike: (() -> Unit)?,
-    metadataLabel: String?,
-    showSourceBadge: Boolean,
-    showPreviewContext: Boolean,
-    durationLabel: String?,
-) {
-    val mediaCount = postMediaCount(post)
-    if (mediaCount > 1) {
-        com.theoriacodex.app.ui.components.MediaCountBadge(
-            text = imageCountBadgeLabel(mediaCount, watch.viewedMediaNumber),
-            description = if (watch.viewedMediaNumber == null) "Image count" else "Watched media progress",
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(8.dp),
-        )
-    }
-    if (onToggleLike != null) SearchCardLikeButton(liked, onToggleLike, Modifier.align(Alignment.TopStart))
-    if (showPreviewContext) {
-        SearchCardPreviewContext(
-            metadataLabel, watch.watchedDescription, showSourceBadge, post.id.source,
-            Modifier.align(Alignment.BottomEnd),
-        )
-    }
-    if (durationLabel != null) {
-        Box(modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)) {
-            PreviewMetadataLabel(durationLabel)
         }
     }
 }
@@ -617,60 +560,6 @@ private fun handleSearchCardImageError(
     }
 }
 
-@Composable
-private fun SearchCardLikeButton(liked: Boolean, onToggleLike: () -> Unit, modifier: Modifier) {
-    Box(
-        modifier = modifier
-            .padding(8.dp)
-            .size(48.dp)
-            .likeSemantics(liked)
-            .clickable(role = Role.Checkbox, onClick = onToggleLike),
-        contentAlignment = Alignment.TopStart,
-    ) {
-        Surface(
-            modifier = Modifier
-                .size(30.dp)
-                .testTag("Search like visual"),
-            color = Color.Black.copy(alpha = 0.55f),
-            shape = CircleShape,
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = if (liked) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
-                    contentDescription = null,
-                    tint = if (liked) MaterialTheme.colorScheme.error else Color.White,
-                    modifier = Modifier.size(16.dp),
-                )
-            }
-        }
-    }
-}
-
-private fun Modifier.likeSemantics(liked: Boolean): Modifier = semantics {
-    contentDescription = if (liked) "Unlike post" else "Like post"
-    selected = liked
-    stateDescription = if (liked) "Liked" else "Not liked"
-}
-
-@Composable
-private fun SearchCardPreviewContext(
-    metadataLabel: String?,
-    watchedDescription: String?,
-    showSourceBadge: Boolean,
-    source: SourceKey,
-    modifier: Modifier,
-) {
-    Row(
-        modifier = modifier.padding(8.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (metadataLabel != null) PreviewMetadataLabel(metadataLabel)
-        if (watchedDescription != null) PreviewWatchedBadge(watchedDescription)
-        if (showSourceBadge) SourceBadge(source = source)
-    }
-}
-
 internal data class SearchCardSupportingContent(
     val showTitleFooter: Boolean,
     val showPreviewContext: Boolean,
@@ -686,41 +575,6 @@ internal fun searchCardSupportingContent(
         showTitleFooter = title != null,
         showPreviewContext = metadataLabel != null || showWatchedBadge || showSourceBadge,
     )
-}
-
-@Composable
-private fun PreviewMetadataLabel(label: String) {
-    Surface(
-        color = Color.Black.copy(alpha = 0.55f),
-        shape = RoundedCornerShape(6.dp),
-        shadowElevation = 0.dp,
-        tonalElevation = 0.dp,
-    ) {
-        Text(
-            text = label,
-            color = Color.White,
-            style = MaterialTheme.typography.labelSmall,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
-        )
-    }
-}
-
-/** Marks a previously watched post; when it was watched is left to screen readers and Recents. */
-@Composable
-private fun PreviewWatchedBadge(description: String) {
-    Surface(
-        color = Color.Black.copy(alpha = 0.55f),
-        shape = RoundedCornerShape(6.dp),
-    ) {
-        Icon(
-            imageVector = Icons.Default.Visibility,
-            contentDescription = description,
-            tint = Color.White,
-            modifier = Modifier.padding(4.dp).size(14.dp),
-        )
-    }
 }
 
 internal fun imageCountBadgeLabel(count: Int, viewedMediaNumber: Int?): String {
@@ -744,37 +598,6 @@ private fun resolveCardVideoRef(post: Post): ImageRef? {
 
 internal fun allowsInlineAutoplayInSearch(post: Post): Boolean {
     return post.id.source != SourceKey.IWARA && post.id.source != SourceKey.HITOMI
-}
-
-@Composable
-private fun SourceBadge(
-    source: SourceKey,
-    modifier: Modifier = Modifier,
-) {
-    val labelHeight = with(LocalDensity.current) {
-        MaterialTheme.typography.labelSmall.lineHeight.toDp()
-    }
-    Surface(
-        modifier = modifier.height(labelHeight + 8.dp),
-        color = if (source.isRule34Family()) {
-            Color.Transparent
-        } else {
-            Color.Black.copy(alpha = 0.55f)
-        },
-        shape = RoundedCornerShape(6.dp),
-        shadowElevation = 0.dp,
-        tonalElevation = 0.dp,
-    ) {
-        Box(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            SourceLogo(
-                source = source,
-                size = if (source.isRule34Family()) 0.dp else 12.dp,
-            )
-        }
-    }
 }
 
 internal fun previewAspectRatio(post: Post): Float {

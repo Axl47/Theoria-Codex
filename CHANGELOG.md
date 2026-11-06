@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Post cards show their like, count, duration, time and source as plain marks over soft edge shading instead of separate badges, so more of each post stays visible.
+- Galleries you have partly viewed show how far you got as a thin line along the bottom of the card.
+
 ## [1.3.0] - 2026-11-06
 
 ### Added
