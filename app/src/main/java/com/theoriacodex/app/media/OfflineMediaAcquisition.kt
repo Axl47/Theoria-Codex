@@ -5,6 +5,7 @@ import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.PIXIV_UGOIRA_MIME
 import com.theoriacodex.domain.model.Post
@@ -51,12 +52,24 @@ class OfflineMediaAcquisition(
             }
             return
         }
+        if (media.mime != PIXIV_UGOIRA_MIME && copyFromImageCache(post, media, destination)) return
         checkNetwork()
         if (media.mime == PIXIV_UGOIRA_MIME) {
             ugoira.copyArchiveForOffline(post.id.sourcePostId, destination)
         } else {
             val url = media.url?.takeIf(String::isNotBlank) ?: throw IOException("No full media URL is available")
             downloadMediaFile(url, post.id.source.requestHeaders(), destination)
+        }
+    }
+
+    /** Reuses the exact bytes Coil already downloaded for this URL; no network policy applies to a copy. */
+    private suspend fun copyFromImageCache(post: Post, media: ImageRef, destination: File): Boolean {
+        val url = media.url?.takeIf(String::isNotBlank) ?: return false
+        return withContext(Dispatchers.IO) {
+            runCatchingPreservingCancellation {
+                copyCachedMediaBytes(context, post.id.source, url, destination) &&
+                    run { validateOfflineMediaFile(destination); true }
+            }.getOrDefault(false)
         }
     }
 
