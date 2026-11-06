@@ -800,9 +800,7 @@ internal class SearchViewModel(
         val requestId = mutableState.value.execution.activeRequestId
         activeRequestJob?.cancel(CancellationException("Search route request cancelled"))
         activeRequestJob = null
-        if (requestId != null) {
-            reduce(SearchStateChange.RequestCancelled(requestId))
-        }
+        requestId?.let { reduce(SearchStateChange.RequestCancelled(it)) }
     }
     private fun cancelRequestIfCurrent(requestId: Long) {
         if (mutableState.value.execution.activeRequestId == requestId) {
