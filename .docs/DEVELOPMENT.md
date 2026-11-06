@@ -160,7 +160,7 @@ python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 ./gradlew :app:detektDebug :app-logic:detektMain :core-data-android:detektDebug \
   :core-domain:detektMain :core-data:detektMain \
   :core-sources:detektMain :core-stubs:detektMain
-./gradlew :koverXmlReport :koverVerify
+./gradlew :koverXmlReportQuality :koverVerifyQuality
 ```
 
 Gradle configuration cache is enabled repository-wide in strict fail mode. Gradle Actions 6.4.0 uses its enhanced cache provider for downloaded dependencies and build state; this does not disable local configuration-cache reuse. Trusted CI runs also save and restore encrypted configuration-cache entries using the repository’s `GRADLE_ENCRYPTION_KEY` secret. Fork and Dependabot PRs without that secret still run every check and use local configuration-cache reuse; they skip encrypted transfer. CI creates an isolated
