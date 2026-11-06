@@ -53,12 +53,13 @@ internal fun resolveNamedCodexCoverCandidates(
     storageDirectory: File,
     name: String,
     cacheRevision: Long = 0L,
+    thumbnailFiles: List<File> = storageDirectory.resolve("cache/thumbnails").listFiles().orEmpty().toList(),
 ): List<CodexCoverCandidate> {
     val thumbnailDirectory = storageDirectory.resolve("cache/thumbnails")
     return SourceKey.entries.flatMap { source ->
         val key = "${name}_${source.name}"
         buildList {
-            thumbnailDirectory.listFiles().orEmpty()
+            thumbnailFiles
                 .firstOrNull { file ->
                     file.isFile && file.name.startsWith("$key.") && file.extension != "url"
                 }
