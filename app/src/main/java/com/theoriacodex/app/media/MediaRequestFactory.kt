@@ -1,10 +1,13 @@
 package com.theoriacodex.app.media
 
 import android.content.Context
+import coil.annotation.ExperimentalCoilApi
+import coil.imageLoader
 import coil.request.ImageRequest
 import coil.size.Precision
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.domain.model.SourceKey
+import java.io.File
 
 object MediaRequestFactory {
     fun imageRequest(
@@ -39,6 +42,28 @@ object MediaRequestFactory {
         }
         return builder.build()
     }
+}
+
+/**
+ * Copies Coil's raw disk-cache entry for [url] to [destination] without decoding or networking. Entries are
+ * keyed by the normalized URL that [MediaRequestFactory.imageRequest] loads. Never writes Coil metadata.
+ * Returns false when no entry of 1..[maxBytes] bytes is cached.
+ */
+@OptIn(ExperimentalCoilApi::class)
+internal fun copyCachedMediaBytes(
+    context: Context,
+    sourceKey: SourceKey,
+    url: String,
+    destination: File,
+    maxBytes: Long = Long.MAX_VALUE,
+): Boolean {
+    val key = normalizeMediaUrl(sourceKey, url) ?: url
+    return context.imageLoader.diskCache?.openSnapshot(key)?.use { snapshot ->
+        val cached = snapshot.data.toFile()
+        if (cached.length() !in 1..maxBytes) return@use false
+        cached.copyTo(destination, overwrite = true)
+        true
+    } ?: false
 }
 
 internal fun ImageRequest.Builder.staticAnimatedWebPFrame(enabled: Boolean): ImageRequest.Builder {
