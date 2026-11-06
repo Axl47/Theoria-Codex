@@ -351,7 +351,7 @@ class ViewerViewModelTest {
         val owner = ViewerViewModel(
             savedStateHandle = SavedStateHandle(),
             postResolver = ViewerPostResolver { _, _ -> resolved },
-            mediaPrefetcher = ViewerMediaPrefetcher { _, _ ->
+            mediaPrefetcher = ViewerMediaPrefetcher { _, _, _ ->
                 ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED)
             },
             scopeOverride = this,
@@ -517,7 +517,7 @@ class ViewerViewModelTest {
         val cancelledKeys = mutableListOf<com.theoriacodex.app.viewer.state.ViewerMediaKey>()
         val owner = ViewerViewModel(
             savedStateHandle = SavedStateHandle(),
-            mediaPrefetcher = ViewerMediaPrefetcher { _, media ->
+            mediaPrefetcher = ViewerMediaPrefetcher { _, media, _ ->
                 val current = active.incrementAndGet()
                 peak.updateAndGet { previous -> maxOf(previous, current) }
                 synchronized(startedKeys) { startedKeys += media.key }

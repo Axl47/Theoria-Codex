@@ -2,6 +2,7 @@ package com.theoriacodex.app.viewer
 
 import android.content.Context
 import coil.imageLoader
+import coil.request.CachePolicy
 import coil.request.SuccessResult
 import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.app.media.isMediaNetworkMetered
@@ -14,11 +15,15 @@ import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
 import com.theoriacodex.domain.model.VideoQuality
 import java.io.File
 
-/** Android transport/cache seam injected into the route owner; no platform handle enters state. */
+/**
+ * Android transport/cache seam injected into the route owner; no platform handle enters state.
+ * [keepDecodedInMemory] keeps a prefetched image in Coil's memory cache; otherwise only its disk copy is warmed.
+ */
 internal suspend fun prefetchViewerMedia(
     context: Context,
     media: ViewerMediaState,
     videoQuality: VideoQuality,
+    keepDecodedInMemory: Boolean = true,
 ): ViewerPrefetchResult {
     if (media.kind == ViewerMediaKind.VIDEO) {
         val metered = context.isMediaNetworkMetered()
@@ -43,7 +48,10 @@ internal suspend fun prefetchViewerMedia(
         url = location,
         sourceKey = media.key.postId.source,
         crossfade = false,
-    )
+    ).let { request ->
+        // A far neighbour may reuse an existing memory entry but never adds one.
+        if (keepDecodedInMemory) request else request.newBuilder().memoryCachePolicy(CachePolicy.READ_ONLY).build()
+    }
     return if (context.imageLoader.execute(request) is SuccessResult) {
         ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED)
     } else {
