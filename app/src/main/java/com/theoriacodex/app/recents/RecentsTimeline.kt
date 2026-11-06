@@ -3,18 +3,17 @@ package com.theoriacodex.app.recents
 import com.theoriacodex.data.repository.RecentActivityEntry
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentSearchEntry
-import com.theoriacodex.domain.model.Query
 import java.time.LocalDate
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/** One row of the All tab: a day heading, a run of consecutive posts, a search, or the related shelf. */
+/** One row of the All tab: a day heading, that day's searches, that day's posts, or the related shelf. */
 internal sealed interface RecentsTimelineItem {
     data class Day(val date: LocalDate, val label: String) : RecentsTimelineItem
-    data class Posts(val entries: List<RecentPostEntry>) : RecentsTimelineItem
-    data class Search(val entry: RecentSearchEntry) : RecentsTimelineItem
+    data class Searches(val date: LocalDate, val entries: List<RecentSearchEntry>) : RecentsTimelineItem
+    data class Posts(val date: LocalDate, val entries: List<RecentPostEntry>) : RecentsTimelineItem
     data object RelatedShelf : RecentsTimelineItem
 }
 
@@ -32,36 +31,25 @@ internal fun recentsDayLabel(epochMs: Long, now: Long, zone: ZoneId = ZoneId.sys
     }
 }
 
-/** Groups newest-first activity by day, keeping consecutive posts together as one shelf. */
+/**
+ * Groups newest-first activity by day. Each day shows its searches as one row above one shelf of its
+ * posts; how searches and views interleaved within a day is deliberately not shown.
+ */
 internal fun recentsTimeline(
     activity: List<RecentActivityEntry>,
     now: Long,
     zone: ZoneId = ZoneId.systemDefault(),
-): List<RecentsTimelineItem> = buildList {
-    var day: LocalDate? = null
-    var posts = mutableListOf<RecentPostEntry>()
-    fun flushPosts() {
-        if (posts.isNotEmpty()) add(RecentsTimelineItem.Posts(posts))
-        posts = mutableListOf()
+): List<RecentsTimelineItem> = activity
+    .groupBy { recentsDay(it.occurredAtEpochMs, zone) }
+    .flatMap { (date, entries) ->
+        val searches = entries.filterIsInstance<RecentActivityEntry.Search>().map { it.entry }
+        val posts = entries.filterIsInstance<RecentActivityEntry.Watched>().map { it.entry }
+        listOfNotNull(
+            RecentsTimelineItem.Day(date, recentsDayLabel(entries.first().occurredAtEpochMs, now, zone)),
+            searches.takeIf { it.isNotEmpty() }?.let { RecentsTimelineItem.Searches(date, it) },
+            posts.takeIf { it.isNotEmpty() }?.let { RecentsTimelineItem.Posts(date, it) },
+        )
     }
-    activity.forEach { entry ->
-        val label = recentsDayLabel(entry.occurredAtEpochMs, now, zone)
-        val date = recentsDay(entry.occurredAtEpochMs, zone)
-        if (date != day) {
-            flushPosts()
-            add(RecentsTimelineItem.Day(date, label))
-            day = date
-        }
-        when (entry) {
-            is RecentActivityEntry.Watched -> posts += entry.entry
-            is RecentActivityEntry.Search -> {
-                flushPosts()
-                add(RecentsTimelineItem.Search(entry.entry))
-            }
-        }
-    }
-    flushPosts()
-}
 
 /** One cell of a post grid: a full-width day heading, a post at its index in the visible list, or the related shelf. */
 internal sealed interface RecentsGridRow {
@@ -79,10 +67,3 @@ internal fun recentsGridRows(
     .flatMap { (day, entries) ->
         listOf(RecentsGridRow.Day(day, recentsDayLabel(entries.first().value.viewedAtEpochMs, now, zone))) + entries.map { (index, entry) -> RecentsGridRow.Post(index, entry) }
     }
-
-/** A search's one-line name: its required tags, "or" alternatives, then exclusions. */
-internal fun recentSearchRowTitle(query: Query): String {
-    val required = query.effectiveIncludeTermGroups.map { group -> group.terms.joinToString(" or ") { it.value } }
-    return (required + query.excludeTags.map { "-$it" }).joinToString(", ").ifBlank { "No tags" }
-}
-

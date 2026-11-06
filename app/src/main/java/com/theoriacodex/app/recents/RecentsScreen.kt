@@ -9,12 +9,9 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.BookmarkBorder
-import com.theoriacodex.app.source.SourceIcon
 import com.theoriacodex.app.ui.components.ActionMenuRow
 import com.theoriacodex.app.ui.components.ActionMenuSheet
 import com.theoriacodex.app.ui.components.AdaptivePostGrid
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,13 +29,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -52,7 +49,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.noMediaDurationStateForPost
@@ -79,7 +75,6 @@ import com.theoriacodex.data.repository.MAX_SAVED_SEARCH_NAME_LENGTH
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.app.search.relativeTimeLabel
@@ -558,10 +553,12 @@ private fun SearchHistoryList(
         val days = remember(searches, now) { searches.groupBy { recentsDay(it.searchedAtEpochMs) } }
         val list = rememberLazyListState()
         ScrollToTopOnTabReselect(TopLevelDestination.Recents) { list.animateScrollToItem(0) }
-        LazyColumn(Modifier.fillMaxSize(), state = list, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), state = list) {
             days.forEach { (day, entries) ->
                 item(key = "day:$day") { RecentsDayHeading(recentsDayLabel(entries.first().searchedAtEpochMs, now)) }
-                items(entries, key = { entry -> "${entry.kind}:${entry.queryHash}" }) { entry ->
+                itemsIndexed(entries, key = { _, entry -> "${entry.kind}:${entry.queryHash}" }) { index, entry ->
+                    // Dividers start under the text, past the source mark.
+                    if (index > 0) HorizontalDivider(Modifier.padding(start = 48.dp), color = MaterialTheme.colorScheme.outlineVariant)
                     RecentSearchRow(entry, now, onClick = { onOpenSearch(entry) }, onPin = onPinSearch?.let { pin -> { pin(entry) } })
                 }
             }
@@ -631,14 +628,16 @@ private fun ActivityList(
                 }
                 }
                 }
-                is RecentsTimelineItem.Search -> RecentSearchRow(
-                    entry = item.entry,
-                    now = now,
-                    onClick = {
-                        if (item.entry.kind == RecentSearchKind.FYP) onOpenFypSearch(item.entry) else onOpenSearch(item.entry)
-                    },
-                    onPin = onPinSearch?.let { pin -> { pin(item.entry) } },
-                )
+                is RecentsTimelineItem.Searches -> LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(item.entries, key = { entry -> "${entry.kind}:${entry.queryHash}" }) { entry ->
+                        RecentSearchTile(
+                            entry = entry,
+                            now = now,
+                            onClick = { if (entry.kind == RecentSearchKind.FYP) onOpenFypSearch(entry) else onOpenSearch(entry) },
+                            onPin = onPinSearch?.let { pin -> { pin(entry) } },
+                        )
+                    }
+                }
             }
         }
     }
@@ -654,8 +653,8 @@ private fun RecentsTimelineItem.holdsReturn(request: ViewerReturnRequest, shelfS
 
 private fun timelineKey(index: Int, item: RecentsTimelineItem): String = when (item) {
     is RecentsTimelineItem.Day -> "day:${item.date}"
-    is RecentsTimelineItem.Posts -> "posts:$index:${item.entries.first().viewedAtEpochMs}"
-    is RecentsTimelineItem.Search -> "search:${item.entry.queryHash}:${item.entry.searchedAtEpochMs}"
+    is RecentsTimelineItem.Searches -> "searches:${item.date}"
+    is RecentsTimelineItem.Posts -> "posts:${item.date}"
     RecentsTimelineItem.RelatedShelf -> "related-shelf"
 }
 
@@ -677,61 +676,6 @@ private fun openRecentPost(
         RecentPostSection.WATCHED -> onOpenWatchedPost(index)
         RecentPostSection.CODEX -> onOpenCodexPost(index)
         RecentPostSection.FYP -> Unit
-    }
-}
-
-@Composable
-private fun RecentSearchRow(
-    entry: RecentSearchEntry,
-    now: Long,
-    onClick: () -> Unit,
-    onPin: (() -> Unit)?,
-) {
-    val source = when (entry.kind) {
-        RecentSearchKind.SOURCE -> (entry.query.mode as? QueryMode.Source)?.source
-        RecentSearchKind.FYP -> entry.sources.singleOrNull()
-        else -> null
-    }
-    val context = listOfNotNull(
-        "For You".takeIf { entry.kind == RecentSearchKind.FYP },
-        recentSearchPresentation(entry).subtitle,
-        relativeTimeLabel(now, entry.searchedAtEpochMs),
-    ).joinToString(" · ")
-    Card(
-        modifier = Modifier
-            .testTag("Recent search:${entry.queryHash}")
-            .fillMaxWidth()
-            .combinedClickable(onClick = onClick, onLongClickLabel = "Save search", onLongClick = onPin),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 14.dp, top = 6.dp, bottom = 6.dp, end = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (source != null) {
-                SourceIcon(source)
-            } else {
-                Icon(Icons.Default.Search, if (entry.kind == RecentSearchKind.MULTI_SEARCH) "Multi-Search" else "Unified search")
-            }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    recentSearchRowTitle(entry.query),
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    context,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            onPin?.let { pin ->
-                IconButton(onClick = pin) { Icon(Icons.Default.BookmarkBorder, "Save search", tint = MaterialTheme.colorScheme.primary) }
-            }
-        }
     }
 }
 
