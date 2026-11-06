@@ -159,15 +159,14 @@ jobs:
             exit 1
           fi
 
-      - name: Verify custom Android artifact tasks are configuration-cache compatible
+      # Release JSON contracts finalize assembleRelease in the android job; release-acceptance
+      # contracts finalize assembleReleaseAcceptance in Device Validation. Strict configuration
+      # cache is the gradle.properties default, so these owners run under it too.
+      - name: Verify benchmark and macrobenchmark runner artifacts
         run: >-
           ./gradlew
           :app:verifyBenchmarkFixtureArtifact
-          :app:verifyReleaseJsonContracts
-          :app:verifyReleaseAcceptanceJsonContracts
           :macrobenchmark:verifyMacrobenchmarkRunnerArtifact
-          --configuration-cache
-          --configuration-cache-problems=fail
 
       - name: Setup Node
         uses: actions/setup-node@v7.1.0
