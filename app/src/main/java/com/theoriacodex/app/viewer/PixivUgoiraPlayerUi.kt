@@ -175,7 +175,7 @@ private fun UgoiraLoadedPlayer(
             modifier = Modifier.fillMaxSize().then(mediaModifier),
             contentScale = contentScale,
         )
-        if (!showProgressBar) ViewerPassiveProgressBar(animation.positionMs, totalDurationMs, Modifier.align(Alignment.BottomCenter))
+        if (!showProgressBar) AnimationPassiveProgressBar(animation, totalDurationMs, Modifier.align(Alignment.BottomCenter))
         ViewerChromeVisibility(showProgressBar, Modifier.align(Alignment.BottomCenter)) {
             ViewerTimelineVeil {
                 ViewerPlaybackFooter {

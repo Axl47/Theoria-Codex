@@ -155,8 +155,17 @@ private fun ViewerGifMovie(
         ViewerChromeVisibility(controls.showControls, Modifier.align(Alignment.BottomCenter)) {
             ViewerTimelineVeil { ViewerGifTimeline(movie, animation, duration, controls, events) { scrubbing = it } }
         }
-        if (controls.showPassiveProgress) ViewerPassiveProgressBar(animation.positionMs, duration, Modifier.align(Alignment.BottomCenter))
+        if (controls.showPassiveProgress) AnimationPassiveProgressBar(animation, duration, Modifier.align(Alignment.BottomCenter))
     }
+}
+
+/**
+ * The passive bar for a frame-clock animation. Its position changes every display frame, so it is read in
+ * this scope alone: a read in the player's scope would recompose the whole player 60-120 times a second.
+ */
+@Composable
+internal fun AnimationPassiveProgressBar(animation: AnimationPlaybackState, durationMs: Long, modifier: Modifier) {
+    ViewerPassiveProgressBar(animation.positionMs, durationMs, modifier)
 }
 
 @Composable
