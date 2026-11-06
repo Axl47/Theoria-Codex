@@ -20,6 +20,10 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ApplicationProvider
+import coil.Coil
+import coil.ImageLoader
+import coil.intercept.Interceptor
+import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.state.createViewerUiState
 import com.theoriacodex.app.viewer.state.reduceViewerState
@@ -28,7 +32,10 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
+import kotlinx.coroutines.awaitCancellation
+import org.junit.After
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -43,6 +50,17 @@ import java.io.File
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ViewerFirstFramesTest {
     @get:Rule val compose = createComposeRule()
+    private lateinit var state: androidx.compose.runtime.MutableState<com.theoriacodex.app.viewer.state.ViewerUiState>
+
+    /** Requests for [STALLED] never finish, so media can stay loading for as long as a test watches. */
+    @Before fun stallImages() {
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        Coil.setImageLoader(ImageLoader.Builder(context).components {
+            add(Interceptor { chain -> if (chain.request.data == STALLED) awaitCancellation() else chain.proceed(chain.request) })
+        }.build())
+    }
+
+    @After fun resetImages() = Coil.reset()
 
     private fun png(name: String, width: Int, height: Int, color: Color): String {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -62,7 +80,7 @@ class ViewerFirstFramesTest {
     }
 
     private fun show(posts: List<Post>) {
-        val state = mutableStateOf(createViewerUiState(ViewerSessionIdentity("frames"), posts, requiresResolution = { false }))
+        state = mutableStateOf(createViewerUiState(SESSION, posts, requiresResolution = { false }))
         compose.mainClock.autoAdvance = false
         compose.setContent {
             MaterialTheme {
@@ -85,7 +103,7 @@ class ViewerFirstFramesTest {
     }
 
     @Test fun `a preview of another shape stays inside the media instead of filling the screen`() {
-        show(listOf(post("tall", png("tall", 100, 300, Color.Blue), "/missing/full.png")))
+        show(listOf(post("tall", png("tall", 100, 300, Color.Blue), STALLED)))
         var frame = nextFrame()
         var attempts = 0
         while (frame[200, 400] != Color.Blue && attempts++ < 80) frame = nextFrame()
@@ -111,5 +129,26 @@ class ViewerFirstFramesTest {
             painted = painted || visible
         }
         assertTrue("The incoming page should have painted", painted)
+    }
+
+    @Test fun `a resolving gallery keeps its cover on screen while its first page loads`() {
+        val cover = post("gallery", png("cover", 100, 50, Color.Blue), STALLED).copy(media = emptyList(), full = null)
+        show(listOf(cover))
+        var attempts = 0
+        while (nextFrame()[SAMPLE_X, SAMPLE_Y] != Color.Blue && attempts++ < 80) Unit
+        val resolved = cover.copy(media = listOf(ImageRef(STALLED, null, "image/png")))
+        state.value = reduceViewerState(state.value, ViewerAction.ResolutionCompleted(SESSION, resolved)).state
+        repeat(40) {
+            val pixel = nextFrame()[SAMPLE_X, SAMPLE_Y]
+            assertEquals("The cover gave way to $pixel before the first page painted", Color.Blue, pixel)
+        }
+    }
+
+    private companion object {
+        val SESSION = ViewerSessionIdentity("frames")
+        const val STALLED = "https://stalled.test/full.png"
+        // Inside the 2:1 media band, clear of the centered loading indicator.
+        const val SAMPLE_X = 80
+        const val SAMPLE_Y = 400
     }
 }
