@@ -627,8 +627,7 @@ private fun ActivityList(
                                     openRecentPost(entry, watchedPosts, codexPosts, onOpenWatchedPost, onOpenCodexPost)
                                 },
                                 onLongPress = { onLongPress(entry.post, entry.section) },
-                                mediaAspectRatio = POST_SHELF_MEDIA_ASPECT_RATIO,
-                                showTitle = false,
+                                mediaAspectRatio = POST_SHELF_MEDIA_ASPECT_RATIO, showTitle = false,
                             )
                         }
                     }
