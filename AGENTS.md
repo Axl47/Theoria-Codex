@@ -6,6 +6,8 @@ Keep Detekt's own `parallel` setting disabled: concurrent Kotlin 2.4 FIR/PSI tra
 
 Robolectric tests need Java 21 or newer because the Android SDK 36 sandbox refuses older JVMs, failing at class setup with `UnsupportedOperationException`. Set `JAVA_HOME` to a compatible JDK before running them; on the Mac, the default JDK is 19 and Homebrew's works: `JAVA_HOME=/opt/homebrew/Cellar/openjdk/26.0.2.1/libexec/openjdk.jdk/Contents/Home`.
 
+Fresh git worktrees lack the gitignored `local.properties`, so Android Gradle tasks fail with "SDK location not found"; copy it from the main checkout or set `ANDROID_HOME` first.
+
 *Smallest sufficient implementation:* Prefer the simplest design that satisfies the stated requirements. Do not expand architecture or scope without a concrete requirement.
 
 *First-pass convergence:* Before the initial patch, identify the required data flow, UI states, error paths, acceptance checks, and validation plan. Prefer one coherent implementation pass over speculative partial patches.
