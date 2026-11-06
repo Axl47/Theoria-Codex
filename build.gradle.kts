@@ -77,6 +77,8 @@ subprojects {
             if (test.javaVersion >= JavaVersion.VERSION_26) test.jvmArgs("--enable-final-field-mutation=ALL-UNNAMED")
         }
         if (plugins.hasPlugin("com.android.application") || plugins.hasPlugin("com.android.library")) {
+            // Robolectric suites are CPU-bound and run serially in one JVM by default.
+            maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceIn(1, 3)
             // Robolectric's Android 16+ runtime accesses JDK internals on Java 21.
             jvmArgs(
                 "--add-opens=java.base/java.lang=ALL-UNNAMED",
