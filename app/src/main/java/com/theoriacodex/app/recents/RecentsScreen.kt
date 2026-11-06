@@ -77,6 +77,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.app.search.rememberPostWatchEntry
 import com.theoriacodex.app.search.relativeTimeLabel
 import kotlinx.coroutines.flow.Flow
 
@@ -513,7 +514,7 @@ private fun RecentPostCard(
         showSourceBadge = true,
         metadataLabel = relativeTimeLabel(
             now,
-            com.theoriacodex.app.search.LocalPostWatchPresentation.current.value.positions[post.id]?.lastViewedAt
+            rememberPostWatchEntry(post.id).value.position?.lastViewedAt
                 ?: entry.viewedAtEpochMs,
         ),
         viewedMediaNumber = viewedMediaNumber,

@@ -237,16 +237,15 @@ private fun rememberSearchCardWatch(
     metadataLabel: String?,
     viewedMediaNumber: Int?,
 ): SearchCardWatch {
-    val watchPresentation = LocalPostWatchPresentation.current.value
-    val lastPosition = watchPresentation.positions[post.id]
+    val (lastPosition, watchedHistoryEntry) = rememberPostWatchEntry(post.id).value
     val lastMediaNumber = lastPosition?.mediaNumber
-    val watchedEntry = watchPresentation.watched[post.id].takeIf { showWatchHistory }
+    val watchedEntry = watchedHistoryEntry.takeIf { showWatchHistory }
     // A bare "2h ago" over a result reads as its upload date, so watch history gets its own mark.
     val watchedDescription = watchedEntry?.takeIf { metadataLabel == null }?.let {
         val watchedAt = relativeTimeLabel(System.currentTimeMillis(), lastPosition?.lastViewedAt ?: it.viewedAtEpochMs)
         "Watched ${watchedAt.lowercase(Locale.US)}"
     }
-    val watchedPost = watchPresentation.watched[post.id]?.post
+    val watchedPost = watchedHistoryEntry?.post
     val previewPost = remember(effectivePost, watchedPost, lastMediaNumber) {
         val previewSource = if (lastMediaNumber != null && lastMediaNumber > postMediaItems(effectivePost).size && watchedPost != null) {
             mergeResolvedPostForPresentation(original = effectivePost, resolved = watchedPost)
