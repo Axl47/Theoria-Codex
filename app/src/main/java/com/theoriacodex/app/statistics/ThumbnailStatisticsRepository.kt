@@ -8,6 +8,7 @@ import coil.request.SuccessResult
 import com.theoriacodex.app.media.normalizeMediaUrl
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.app.media.MediaRequestFactory
+import com.theoriacodex.data.repository.CodexStatistics
 import com.theoriacodex.data.repository.LifetimeStatistics
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.data.repository.StatisticsThumbnailStore
@@ -35,18 +36,26 @@ internal class ThumbnailStatisticsRepository(
     init {
         scope.launch { delegate.observeStatistics().collect { events.send(ThumbnailEvent.Snapshot(it)) } }
         scope.launch {
+            var codexStatistics: Map<String, CodexStatistics>? = null
             var promotions = emptySet<StatisticsPostPromotion>()
             var promoted = emptySet<String>()
+            var reconciled = false
             // Only metadata for recently available posts is needed; no provider lookup is ever performed.
             val available = linkedMapOf<String, Post>()
             for (event in events) {
                 val retry = when (event) {
                     is ThumbnailEvent.Snapshot -> {
+                        // Most snapshots change only counters outside Codex post rankings.
+                        if (reconciled && event.statistics.codexStatistics == codexStatistics) continue
+                        codexStatistics = event.statistics.codexStatistics
                         val next = statisticsPostPromotions(event.statistics)
-                        (next - promotions).mapTo(linkedSetOf()) { it.postKey }.also {
-                            promotions = next
-                            promoted = next.mapTo(linkedSetOf()) { it.postKey }
-                        }
+                        val nextKeys = next.mapTo(linkedSetOf()) { it.postKey }
+                        val retry = (next - promotions).mapTo(linkedSetOf()) { it.postKey }
+                        val unchanged = reconciled && nextKeys == promoted && retry.isEmpty()
+                        promotions = next
+                        promoted = nextKeys
+                        if (unchanged) continue
+                        retry
                     }
                     is ThumbnailEvent.Available -> {
                         val key = statisticsPostKey(event.post.id)
@@ -65,6 +74,7 @@ internal class ThumbnailStatisticsRepository(
                             withTimeoutOrNull(15_000L) { fetch(post, file) } ?: false
                         } }
                     }.toMap())
+                    reconciled = true
                 }
             }
         }
