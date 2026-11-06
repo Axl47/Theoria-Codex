@@ -1,5 +1,6 @@
 package com.theoriacodex.app.viewer
 
+import androidx.compose.runtime.mutableStateOf
 import android.app.Application
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -295,7 +296,7 @@ class ViewerReturnTransitionTest {
                     shelfContent = {
                         RelatedPostsShelf(
                             state = loaded, posts = related,
-                            environment = FeedCardEnvironment(null, emptySet(), emptyMap(), noMediaDurationStateForPost, {}, { _, _ -> }, { _, _ -> }),
+                            environment = FeedCardEnvironment(null, mutableStateOf(emptySet()), mutableStateOf(emptyMap()), noMediaDurationStateForPost, {}, { _, _ -> }, { _, _ -> }),
                             onOpenPost = { _, _ -> }, onLongPress = {}, onDismiss = {},
                             onRetry = {}, onPreviousPage = {}, onNextPage = {},
                         )

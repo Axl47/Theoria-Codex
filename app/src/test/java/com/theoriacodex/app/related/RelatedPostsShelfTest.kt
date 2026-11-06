@@ -43,7 +43,7 @@ class RelatedPostsShelfTest {
                     state = state.value,
                     // Filtered cards keep this navigation test independent of media loading.
                     posts = emptyList(),
-                    environment = FeedCardEnvironment(null, emptySet(), emptyMap(), noMediaDurationStateForPost, {}, { _, _ -> }, { _, _ -> }),
+                    environment = FeedCardEnvironment(null, mutableStateOf(emptySet()), mutableStateOf(emptyMap()), noMediaDurationStateForPost, {}, { _, _ -> }, { _, _ -> }),
                     onOpenPost = { _, _ -> },
                     onLongPress = {},
                     onDismiss = {},
