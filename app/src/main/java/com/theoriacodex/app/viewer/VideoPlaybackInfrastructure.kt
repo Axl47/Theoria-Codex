@@ -270,14 +270,18 @@ internal suspend fun copyFullyCachedVideo(cache: Cache, cacheKey: String, destin
     }.also { cacheOnly.close() }.getOrDefault(false)
 }
 
-/** Playback bypasses occupied cache ranges; only background writers may wait for another writer. */
+/**
+ * Playback bypasses occupied cache ranges; only background writers may wait for another writer. Every writer
+ * locks at most one chunk of a stream at a time ([BoundedLockCache]), so readers ahead of it still cache.
+ */
 internal fun videoCacheDataSourceFactory(
     cache: Cache,
     upstream: DataSource.Factory,
     blockOnCache: Boolean = false,
+    chunkBytes: Long = VIDEO_CACHE_CHUNK_BYTES,
 ): CacheDataSource.Factory = CacheDataSource.Factory()
-    .setCache(cache)
-    .setUpstreamDataSourceFactory(upstream)
+    .setCache(BoundedLockCache(cache, chunkBytes))
+    .setUpstreamDataSourceFactory(RangeRecordingDataSource.Factory(upstream, cache))
     .setFlags(
         CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR or
             (if (blockOnCache) CacheDataSource.FLAG_BLOCK_ON_CACHE else 0),
