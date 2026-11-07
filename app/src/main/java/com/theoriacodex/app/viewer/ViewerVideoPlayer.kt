@@ -377,17 +377,14 @@ private fun ViewerVideoTimeline(
     controls: ViewerRendererControls,
     events: ViewerRendererEvents,
 ) {
+    val previews = rememberViewerScrubPreviews(state.player, source)
     ViewerPlaybackFooter {
         MediaTimelineBar(
             positionMs = { state.position }, durationMs = state.duration,
             onSeekStarted = { state.scrubbing = true },
             onSeekFinished = state::seek,
             onSeekCancelled = { state.scrubbing = false },
-            preview = { target ->
-                state.player?.currentMediaItem?.localConfiguration?.uri?.toString()?.let { location ->
-                    ViewerVideoScrubPreview(location, source, target)
-                }
-            },
+            preview = { target -> previews?.let { ViewerVideoScrubPreview(it, target) } },
             onInteractionActiveChanged = events.onTimelineInteractionActiveChanged,
             playbackRate = controls.playbackRate,
             leading = {
