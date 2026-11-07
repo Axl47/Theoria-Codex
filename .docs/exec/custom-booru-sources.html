@@ -54,15 +54,15 @@
     <h1>ExecPlan: Custom Booru Sources</h1>
     <p>When the four-step project is complete, a user can open Settings, type the address of a booru site Theoria does not ship with, and add it. Theoria checks which known booru API the site speaks (Danbooru or Gelbooru 0.2 in this pass), locks that in, and from then on the site works like any built-in source: Search, Unified search, the Viewer, Likes, Codex, Recents, backups and For You. New sites start switched off for Unified and For You. This plan has two jobs. It specifies <strong>step 2</strong>, the critical-path refactor that opens source identity so a user-added site can exist at all. It also fixes the <strong>contracts</strong> steps 3 and 4 build against.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: B0 done; B1 waits for sign-off on D2–D6 and D8</span>
+      <span class="pill">Status: B1 in progress (decisions signed off 2026-11-07)</span>
       <span class="pill">Owner: Claude (step 2 thread)</span>
-      <span class="pill">Branch: feat/source-identity (main 1ac37a9d merged in at ab4c0fa4)</span>
+      <span class="pill">Branch: feat/source-identity (main merged at ab4c0fa4; step 1 merged at f3739edb)</span>
       <span class="pill">Created: 2026-11-07</span>
       <span class="pill">Updated: 2026-11-07</span>
       <span class="pill">Plan file: .docs/exec/custom-booru-sources.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Wait for the user's sign-off on the decisions in <a href="#decisions">Decisions</a>, relayed by the orchestrator. Then B1, starting with the golden characterization commit before the type swap. Steps 3 and 4 branch from the B0 commit, with step 1 merged in.</div>
+      <div class="card"><strong>Next Action</strong>B1 type swap: make <code>SourceKey</code> a value class and migrate every call site, keeping the golden files untouched. Steps 3 and 4 are running on <code>feat/custom-sites-base</code> (B0 plus step 1).</div>
       <div class="card"><strong>Main Risk</strong>A source id that drifts or fails to parse anywhere would orphan likes and Codex items. Mitigated by keeping built-in ids byte-identical, adding golden tests written against today's enum before the swap, and making parsing total for well-formed ids.</div>
       <div class="card"><strong>Validation</strong>Host-only: JVM and Robolectric tests, golden JSON characterization tests, a Room schema-export diff, Detekt, and offline lint. Device acceptance belongs to the orchestrator.</div>
       <div class="card"><strong>Affected Areas</strong>183 main-source files across 7 modules reference <code>SourceKey</code>; nearly all changes are mechanical. Substantive edits: <code>core-domain</code> identity and tag rules, <code>core-data</code> settings, weights and backups, and the app's source catalog.</div>
@@ -690,7 +690,10 @@ sealed interface CustomSiteMutation {
         <li>[x] 2026-11-07: Sol-loop review, round 2. Standard review: S1–S5 confirmed resolved; S6 (the "headers never stale" claim) and S7 (step 1's parameter name) fixed. Adversarial review (8 findings): A1 accepted as endpoint-derived ids plus explicit reconnect (tombstones declined); A2, A3, A4, A6, A7 and A8 accepted; A5 declined (claim already corrected; stale requests live only while their screen is visible). Revised. The two requested rounds are complete.</li>
         <li>[x] 2026-11-07: Merged main (<code>1ac37a9d</code>, PR #48) into this branch as <code>ab4c0fa4</code>, on the orchestrator's authorization.</li>
         <li>[x] 2026-11-07: B0 contracts. Added <code>core-domain/.../domain/source/CustomSites.kt</code> (C1 and <code>SiteProbeResult</code>), <code>core-data/.../repository/SiteProfileRecords.kt</code> and <code>SiteProfileRepository.kt</code> (C2, with <code>InMemorySiteProfileRepository</code> as the reference behavior), <code>app-logic/.../app/customsites/CustomSitesController.kt</code> (C9), and the R8 rule and contract line for <code>SiteProfileRecord</code>. Tests: <code>CustomSitesTest</code> (6) and <code>SiteProfileRecordsTest</code> (4). Module suites green (core-domain, core-data, app-logic), <code>GsonWireContractTest</code> 3/3, and Detekt clean on all three modules.</li>
-        <li>[ ] Sign-off on the six relayed decisions (D2–D6, D8). [ ] B1 golden characterization commit, then the type swap. [ ] B2 traits. [ ] B3 catalog. [ ] B4 backups. [ ] B5 close-out.</li>
+        <li>[x] 2026-11-07: The user signed off on D2 (address-based ids), D3 (library data kept), D4 (one Unified/For You switch), D5 (tag rules), D6 (backup v2) and D8 (no downgrade once used).</li>
+        <li>[x] 2026-11-07: Merged <code>feat/gelbooru-family</code> (step 1) as <code>f3739edb</code>, on the orchestrator's authorization. The tree now equals <code>feat/custom-sites-base</code>.</li>
+        <li>[x] 2026-11-07: B1 golden characterization tests (<code>SourceIdentityGoldenTest</code>, 4 cases) captured on the enum. They cover default and multi-source settings files, a multi-source backup (built-in ordering of automatic tags and weights, weight-combination keys, source-keyed statistics) and the reflective offline manifest. Golden files live in <code>core-data/src/test/resources/golden/source-identity/</code>.</li>
+        <li>[ ] B1 type swap. [ ] B2 traits. [ ] B3 catalog. [ ] B4 backups. [ ] B5 close-out.</li>
       </ul>
       <h3>Step 3 log</h3>
       <ul><li>Not started.</li></ul>
@@ -733,6 +736,7 @@ sealed interface CustomSiteMutation {
         <li>Decision: every backup after B4 is v2. Rationale: a clear refusal on older apps in all cases, instead of fragile detection of custom data. Date/Author: 2026-11-07 / Claude.</li>
         <li>Decision: ids include a non-default port (<code>__p</code>) and a hashed install path (<code>__h</code>); reusing an id that already has library data needs explicit confirmation; removed profiles are not retained. Rationale: closes the snapshot-overwrite path with one cheap query instead of a new persisted tombstone state. Date/Author: 2026-11-07 / Claude (after adversarial round 2).</li>
         <li>Decision: the probe result, not the UI, carries whether credentials are required; restore merging may exceed the site limit rather than fail after journaling; step 3 owns new core-domain capability contracts after B1; an R8 mapping gate guards the release format of reflective manifests. Rationale: adversarial round 2, A3/A4/A6/A8. Date/Author: 2026-11-07 / Claude.</li>
+        <li>Decision: D2, D3, D4, D5, D6 and D8 accepted as written. Date/Author: 2026-11-07 / the user (sign-off).</li>
         <li>Decision: availability requires keys when the site needs them; the runtime rebuilds on credential changes; the presentation catalog stays global and is published in a fixed order relative to adapters. Rationale: matches how existing screens consume availability, without rewriting every <code>displayName()</code> caller. Date/Author: 2026-11-07 / Claude.</li>
       </ul>
 
