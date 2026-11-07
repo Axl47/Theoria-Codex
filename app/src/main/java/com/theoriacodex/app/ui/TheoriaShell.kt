@@ -64,7 +64,9 @@ import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsViewModel
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.parseExternalCreatorDeepLink
+import com.theoriacodex.app.source.parseCustomSitePostDeepLink
 import com.theoriacodex.app.source.parseExternalPostDeepLink
+import com.theoriacodex.app.source.unaddedBooruPostHost
 import com.theoriacodex.app.source.ExternalPostDeepLink
 import com.theoriacodex.app.ui.components.FeedFabRestoreRegistry
 import com.theoriacodex.app.ui.components.rememberFeedFabRestoreRegistry
@@ -566,14 +568,22 @@ internal class TheoriaShell(
 
     /** Opens a shared link as a creator profile or a one-post Viewer session, or says why it cannot. */
     suspend fun openExternalContent(uri: Uri) {
-        val deepLink = parseExternalPostDeepLink(uri)
+        val customSites = container.customSites.sites.value
+        val deepLink = parseExternalPostDeepLink(uri) ?: parseCustomSitePostDeepLink(uri.toString(), customSites)
         if (deepLink != null) {
             openExternalPost(deepLink)
             return
         }
         val creatorDeepLink = parseExternalCreatorDeepLink(uri)
         if (creatorDeepLink == null) {
-            toast("Unsupported URL format")
+            // A post on a booru that isn't added yet: offer the Sites setup with its address filled in.
+            val unaddedHost = unaddedBooruPostHost(uri.toString(), customSites)
+            if (unaddedHost != null) {
+                container.customSites.requestSetup(unaddedHost)
+                owners.settings.onAction(SettingsAction.OpenCustomSites)
+            } else {
+                toast("Unsupported URL format")
+            }
             return
         }
         val creator = creatorOpening.fromDeepLink(creatorDeepLink, sources.availableSources.value)
