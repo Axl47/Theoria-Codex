@@ -28,6 +28,7 @@ object RecommendationTagNormalization {
         return when (source) {
             SourceKey.GELBOORU,
             SourceKey.AIBOORU,
+            SourceKey.DANBOORU,
             SourceKey.IWARA,
             SourceKey.RULE34XXX,
             -> cleaned.replace(' ', '_')

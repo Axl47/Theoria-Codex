@@ -384,6 +384,7 @@ private val DEFAULT_SOURCE_WEIGHTS: Map<SourceKey, Double> = mapOf(
     SourceKey.IWARA to 0.08,
     SourceKey.RULE34VIDEO to 0.07,
     SourceKey.RULE34GEN to 0.07,
+    SourceKey.DANBOORU to 0.12,
     SourceKey.AIBOORU to 0.03,
 ).let { ratios ->
     val total = ratios.values.sum()

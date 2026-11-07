@@ -4,6 +4,15 @@ import com.theoriacodex.domain.model.SourceKey
 
 private val SOURCE_TAG_WHITESPACE_REGEX = Regex("\\s+")
 
+/** Booru-style sources whose tags join words with underscores. */
+private val UNDERSCORE_TAG_SOURCES = setOf(
+    SourceKey.GELBOORU, SourceKey.AIBOORU, SourceKey.DANBOORU, SourceKey.IWARA, SourceKey.RULE34XXX,
+)
+
+/** The provider spelling of typed input, used as an autocomplete prefix. */
+fun sourceAutocompletePrefix(source: SourceKey, input: String): String =
+    if (source in UNDERSCORE_TAG_SOURCES) normalizeGelbooruToken(input) else input
+
 fun normalizeMatchToken(value: String): String {
     return value
         .trim()
@@ -23,14 +32,14 @@ fun normalizeFavoriteTagForStorage(source: SourceKey, tag: String): String {
     val normalized = tag.trim()
     if (normalized.isBlank()) return ""
     return when (source) {
-        SourceKey.GELBOORU, SourceKey.IWARA, SourceKey.RULE34XXX -> normalizeGelbooruToken(normalized)
+        in UNDERSCORE_TAG_SOURCES -> normalizeGelbooruToken(normalized)
         else -> normalized
     }
 }
 
 fun sourceTagKey(source: SourceKey, tag: String): String {
     return when (source) {
-        SourceKey.GELBOORU, SourceKey.IWARA, SourceKey.RULE34XXX -> normalizeGelbooruToken(tag)
+        in UNDERSCORE_TAG_SOURCES -> normalizeGelbooruToken(tag)
         SourceKey.PIXIV,
         SourceKey.NHENTAI,
         SourceKey.HITOMI,
@@ -47,7 +56,7 @@ fun sourceTagsMatch(source: SourceKey, left: String, right: String): Boolean {
     val normalizedRight = right.trim()
     if (normalizedLeft.isBlank() || normalizedRight.isBlank()) return false
     return when (source) {
-        SourceKey.GELBOORU, SourceKey.IWARA, SourceKey.RULE34XXX ->
+        in UNDERSCORE_TAG_SOURCES ->
             normalizeGelbooruToken(normalizedLeft) == normalizeGelbooruToken(normalizedRight)
         SourceKey.PIXIV,
         SourceKey.NHENTAI,

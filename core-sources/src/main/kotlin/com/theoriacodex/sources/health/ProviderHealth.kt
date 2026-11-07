@@ -120,6 +120,12 @@ object ProviderProbeCases {
             strictTagEcho = true,
         ),
         ProviderProbeCase(
+            source = SourceKey.DANBOORU,
+            includeTags = listOf("1girl"),
+            autocompletePrefix = "1g",
+            strictTagEcho = true,
+        ),
+        ProviderProbeCase(
             source = SourceKey.NHENTAI,
             includeTags = listOf("english"),
             autocompletePrefix = "eng",

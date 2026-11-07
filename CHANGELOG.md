@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Danbooru is now a search source, with artists available as creators you can follow.
+- AIBooru is now available as a search source.
+- Danbooru and AIBooru share one "Booru" entry in the source picker, like the R34 sites, so the picker stays compact.
+- The search editor warns when Danbooru will only get the first two tags of a Unified search, since guests can search at most two tags there.
+- A Danbooru-only search with more tags than Danbooru allows is stopped with an explanation instead of failing at the provider; ranked sorts allow one tag, because the sort uses the other.
+
 ### Changed
 
 - Post cards show their like, count, duration, time and source as plain marks over soft edge shading instead of separate badges, so more of each post stays visible.

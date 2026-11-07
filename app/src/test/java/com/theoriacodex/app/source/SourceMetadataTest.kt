@@ -1,6 +1,7 @@
 package com.theoriacodex.app.source
 
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.http.THEORIA_SOURCE_USER_AGENT
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -21,8 +22,8 @@ class SourceMetadataTest {
         assertTrue(SourceKey.RULE34PAHEAL in hidden)
         assertTrue(SourceKey.RULE34VIDEO in hidden)
         assertTrue(SourceKey.RULE34GEN in hidden)
-        assertFalse(SourceKey.AIBOORU in hidden)
-        assertFalse(SourceKey.AIBOORU in visible)
+        assertTrue(SourceKey.DANBOORU in hidden)
+        assertTrue(SourceKey.AIBOORU in hidden)
     }
 
     @Test
@@ -42,11 +43,12 @@ class SourceMetadataTest {
                 SourceKey.RULE34PAHEAL,
                 SourceKey.RULE34VIDEO,
                 SourceKey.RULE34GEN,
+                SourceKey.DANBOORU,
                 SourceKey.AIBOORU,
             ),
             presentations.map { it.source },
         )
-        assertEquals(SourceExposure.ADAPTER_ONLY, SourceKey.AIBOORU.presentation().exposure)
+        assertEquals(SourcePresentationGroup.DANBOORU, SourceKey.AIBOORU.presentation().group)
         assertEquals(SourceExposure.CREDENTIAL_GATED, SourceKey.RULE34XXX.presentation().exposure)
         assertEquals(SourcePresentationGroup.RULE34, SourceKey.RULE34VIDEO.presentation().group)
         assertTrue(SourceKey.RULE34VIDEO.isRule34Family())
@@ -62,5 +64,7 @@ class SourceMetadataTest {
         assertEquals("Iwara", SourceKey.IWARA.displayName())
         assertEquals("https://hitomi.la/", SourceKey.HITOMI.requestHeaders()["Referer"])
         assertEquals("Hitomi", SourceKey.HITOMI.displayName())
+        // Danbooru's Cloudflare challenges the generic browser agent on its media CDN.
+        assertEquals(THEORIA_SOURCE_USER_AGENT, SourceKey.DANBOORU.requestHeaders()["User-Agent"])
     }
 }

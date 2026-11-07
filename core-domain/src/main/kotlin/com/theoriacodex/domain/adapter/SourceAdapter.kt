@@ -8,6 +8,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.query.SearchTermLimit
 
 interface SourceAdapter {
     val sourceKey: SourceKey
@@ -157,6 +158,8 @@ data class SourceCapabilities(
     val supportsMinScoreServerSide: Boolean,
     val requiresCredentials: Boolean,
     val supportsGroupedIncludeTagsServerSide: Boolean = false,
+    /** Null when the provider accepts any number of terms per request. */
+    val searchTermLimit: SearchTermLimit? = null,
 )
 
 enum class QuickQueryKind {

@@ -41,7 +41,8 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.source.SourceIcon
 import com.theoriacodex.app.source.SourceLetterIcon
 import com.theoriacodex.app.source.displayName
-import com.theoriacodex.app.source.isRule34Family
+import com.theoriacodex.app.source.SourcePresentationGroup
+import com.theoriacodex.app.source.presentation
 import com.theoriacodex.domain.model.SourceKey
 
 /** Shared source dropdown; null selects the route's combined view. */
@@ -115,8 +116,9 @@ internal fun SourceScopeIndicator(source: SourceKey?, combinedSourceCount: Int) 
 }
 
 /**
- * Source choices as floating icon chips, with the Rule34 family folded into a labeled submenu.
- * A null option is the combined view; [onLongPress] enables a secondary action per source.
+ * Source choices as floating icon chips. Groups with a folder label (Rule34, the Danbooru sites) fold
+ * into one labeled chip that opens their titled submenu. A null option is the combined view;
+ * [onLongPress] enables a secondary action per source.
  */
 @Composable
 internal fun SourceIconMenu(
@@ -128,17 +130,18 @@ internal fun SourceIconMenu(
     onSelect: (SourceKey?) -> Unit,
     onLongPress: ((SourceKey) -> Unit)? = null,
 ) {
-    var r34Expanded by remember(expanded) { mutableStateOf(false) }
+    var openFolder by remember(expanded) { mutableStateOf<SourcePresentationGroup?>(null) }
+    val folderOpen = openFolder != null
     DropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismiss,
-        containerColor = if (r34Expanded) MaterialTheme.colorScheme.surfaceContainer else Color.Transparent,
-        shadowElevation = if (r34Expanded) 8.dp else 0.dp,
+        containerColor = if (folderOpen) MaterialTheme.colorScheme.surfaceContainer else Color.Transparent,
+        shadowElevation = if (folderOpen) 8.dp else 0.dp,
         tonalElevation = 0.dp,
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(if (r34Expanded) 0.dp else 6.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(if (folderOpen) 0.dp else 6.dp)) {
             SourceMenuChoices(
-                options, highlightedSources, combinedLabel, r34Expanded, { r34Expanded = it }, onSelect, onLongPress,
+                options, highlightedSources, combinedLabel, openFolder, { openFolder = it }, onSelect, onLongPress,
             )
         }
     }
@@ -149,27 +152,34 @@ private fun SourceMenuChoices(
     options: List<SourceKey?>,
     highlightedSources: Collection<SourceKey>,
     combinedLabel: String,
-    r34Expanded: Boolean,
-    onR34ExpandedChange: (Boolean) -> Unit,
+    openFolder: SourcePresentationGroup?,
+    onOpenFolder: (SourcePresentationGroup?) -> Unit,
     onSelect: (SourceKey?) -> Unit,
     onLongPress: ((SourceKey) -> Unit)?,
 ) {
-    val r34Options = options.filter { it?.isRule34Family() == true }
-    if (r34Expanded) {
-        IconButton(onClick = { onR34ExpandedChange(false) }) {
+    // Options arrive in presentation order, so folders follow their first source's position.
+    val folders = options.filterNotNull().groupBy { it.presentation().group }.filterKeys { it.folderLabel != null }
+    if (openFolder != null) {
+        IconButton(onClick = { onOpenFolder(null) }) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to sources")
         }
+        folders[openFolder].orEmpty().forEach { source ->
+            SourceMenuOption(source, combinedLabel, source in highlightedSources, true, onSelect, onLongPress)
+        }
+        return
     }
-    (if (r34Expanded) r34Options else options - r34Options.toSet()).forEach { source ->
-        SourceMenuOption(source, combinedLabel, source in highlightedSources, r34Expanded, onSelect, onLongPress)
+    val folded = folders.values.flatten().toSet()
+    (options - folded).forEach { source ->
+        SourceMenuOption(source, combinedLabel, source in highlightedSources, false, onSelect, onLongPress)
     }
-    if (!r34Expanded && r34Options.isNotEmpty()) {
-        R34MenuChip(highlightedSources.any { it.isRule34Family() }) { onR34ExpandedChange(true) }
+    folders.keys.forEach { group ->
+        val label = requireNotNull(group.folderLabel)
+        SourceFolderChip(label, highlightedSources.any { it.presentation().group == group }) { onOpenFolder(group) }
     }
 }
 
 @Composable
-private fun R34MenuChip(selected: Boolean, onClick: () -> Unit) {
+private fun SourceFolderChip(label: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .size(width = 64.dp, height = 48.dp)
@@ -177,12 +187,12 @@ private fun R34MenuChip(selected: Boolean, onClick: () -> Unit) {
             .background(sourceChipColor(selected))
             .clickable(onClick = onClick)
             .semantics {
-                contentDescription = "R34"
+                contentDescription = label
                 this.selected = selected
             },
         contentAlignment = Alignment.Center,
     ) {
-        SourceLetterIcon("R34")
+        SourceLetterIcon(label)
     }
 }
 

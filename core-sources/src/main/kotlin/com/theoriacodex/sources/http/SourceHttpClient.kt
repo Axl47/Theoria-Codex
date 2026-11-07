@@ -29,6 +29,12 @@ class SourceHttpBodyTooLargeException(
     val maxBodyBytes: Int,
 ) : IllegalStateException("Source HTTP response exceeded the $maxBodyBytes byte limit")
 
+/**
+ * Identifies the app to providers. Danbooru's Cloudflare challenges generic browser agents such as
+ * `Mozilla/5.0` on its API and CDN, so its requests and media loads must send this instead.
+ */
+const val THEORIA_SOURCE_USER_AGENT: String = "TheoriaCodex/1.0 (Android source adapter)"
+
 const val DEFAULT_MAX_SOURCE_TEXT_BODY_BYTES: Int = 8 * 1024 * 1024
 const val DEFAULT_MAX_SOURCE_BINARY_BODY_BYTES: Int = 8 * 1024 * 1024
 

@@ -4,8 +4,9 @@ import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
-import com.theoriacodex.sources.aibooru.AibooruSourceAdapter
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
+import com.theoriacodex.sources.danbooru.DanbooruSite
+import com.theoriacodex.sources.danbooru.DanbooruSourceAdapter
 import com.theoriacodex.sources.gelbooru.GelbooruSourceAdapter
 import com.theoriacodex.sources.http.DefaultSourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpClient
@@ -35,7 +36,8 @@ class RealAdapterRegistry(
             credentialsProvider = credentialsProvider,
             tokenCoordinator = pixivTokenCoordinator,
         ),
-        SourceKey.AIBOORU to AibooruSourceAdapter(httpClient = httpClient),
+        SourceKey.AIBOORU to DanbooruSourceAdapter(DanbooruSite.AIBOORU, httpClient),
+        SourceKey.DANBOORU to DanbooruSourceAdapter(DanbooruSite.DANBOORU, httpClient),
         SourceKey.GELBOORU to GelbooruSourceAdapter(
             httpClient = httpClient,
             credentialsProvider = credentialsProvider,

@@ -1,0 +1,17 @@
+{
+  "nextPageToken": null,
+  "items": [
+    {
+      "sourcePostId": "db_3002",
+      "previewUrl": "https://example.com/danbooru/thumb/3002.jpg",
+      "fullUrl": "https://example.com/danbooru/full/3002.jpg",
+      "pageUrl": "https://example.com/danbooru/post/3002",
+      "width": 1440,
+      "height": 1080,
+      "canonicalTags": ["landscape"],
+      "rawTags": ["landscape"],
+      "authorName": "db_artist_2",
+      "createdAtEpochMs": 1700000006000
+    }
+  ]
+}

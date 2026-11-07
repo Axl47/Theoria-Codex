@@ -318,6 +318,7 @@ private fun ComposerEditorBody(
             input = input,
             target = target,
             validationMessage = state.query.validationMessage,
+            limitNotices = state.query.termLimitNotices,
             canCommit = state.suggestions.canCommitInput,
             inputRequester = inputRequester,
             onToggleTarget = onToggleTarget,
@@ -375,6 +376,7 @@ private fun ComposerField(
     input: String,
     target: ComposerAddTarget,
     validationMessage: String?,
+    limitNotices: List<SearchTermLimitNotice>,
     canCommit: Boolean,
     inputRequester: FocusRequester,
     onToggleTarget: () -> Unit,
@@ -398,8 +400,10 @@ private fun ComposerField(
             onValueChange = onValueChange,
             shape = RoundedCornerShape(28.dp),
             singleLine = true,
-            isError = validationMessage != null,
-            supportingText = validationMessage?.let { message -> { Text(message) } },
+            // A source's tag cap shows here while tags are added, before Search can be pressed.
+            isError = validationMessage != null || limitNotices.any(SearchTermLimitNotice::blocksSearch),
+            supportingText = (validationMessage ?: limitNotices.takeIf { it.isNotEmpty() }
+                ?.joinToString(" ") { it.message() })?.let { message -> { Text(message) } },
             placeholder = {
                 Text(
                     when (target) {

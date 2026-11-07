@@ -2,26 +2,24 @@ package com.theoriacodex.app.source
 
 import com.theoriacodex.app.R
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.http.THEORIA_SOURCE_USER_AGENT
 
-/** Product-facing grouping used to keep source ordering and presentation out of route code. */
-enum class SourcePresentationGroup {
+/**
+ * Product-facing grouping used to keep source ordering and presentation out of route code. A group
+ * with a [folderLabel] folds its sources behind one source-picker chip so they don't crowd it.
+ */
+enum class SourcePresentationGroup(val folderLabel: String? = null) {
     ILLUSTRATION,
     GALLERY,
     VIDEO,
-    RULE34,
+    RULE34(folderLabel = "R34"),
+    DANBOORU(folderLabel = "Booru"),
 }
 
-/**
- * Whether a live adapter is exposed as a user-selectable source.
- *
- * [ADAPTER_ONLY] keeps compatibility for saved/imported posts and diagnostics without advertising
- * the provider as a live app feature. AIBooru deliberately remains in that state until it has a
- * product-owned enablement decision and route coverage.
- */
+/** Whether a live adapter is exposed as a user-selectable source. */
 enum class SourceExposure {
     USER_VISIBLE,
     CREDENTIAL_GATED,
-    ADAPTER_ONLY,
 }
 
 sealed interface SourceLogoAsset {
@@ -40,12 +38,15 @@ data class SourcePresentation(
     val group: SourcePresentationGroup,
     val order: Int,
     val logo: SourceLogoAsset,
+    /** Short letter mark for compact source icons, used when the logo is unreadable at that size. */
+    val mark: String? = null,
+    /** Media requests' User-Agent; Danbooru's CDN challenges generic browser agents. */
+    val userAgent: String = BROWSER_USER_AGENT,
 ) {
     fun isUserExposed(rule34XxxConfigured: Boolean): Boolean {
         return when (exposure) {
             SourceExposure.USER_VISIBLE -> true
             SourceExposure.CREDENTIAL_GATED -> rule34XxxConfigured
-            SourceExposure.ADAPTER_ONLY -> false
         }
     }
 }
@@ -72,13 +73,25 @@ object SourcePresentationCatalog {
             logo = SourceLogoAsset.RawSvg(R.raw.gelbooru_logo),
         ),
         SourcePresentation(
+            source = SourceKey.DANBOORU,
+            label = "Danbooru",
+            referer = "https://danbooru.donmai.us/",
+            exposure = SourceExposure.USER_VISIBLE,
+            group = SourcePresentationGroup.DANBOORU,
+            order = 9,
+            logo = SourceLogoAsset.Text,
+            mark = "DB",
+            userAgent = THEORIA_SOURCE_USER_AGENT,
+        ),
+        SourcePresentation(
             source = SourceKey.AIBOORU,
             label = "AIBooru",
             referer = "https://aibooru.online/",
-            exposure = SourceExposure.ADAPTER_ONLY,
-            group = SourcePresentationGroup.ILLUSTRATION,
-            order = 9,
+            exposure = SourceExposure.USER_VISIBLE,
+            group = SourcePresentationGroup.DANBOORU,
+            order = 10,
             logo = SourceLogoAsset.Text,
+            mark = "AI",
         ),
         SourcePresentation(
             source = SourceKey.NHENTAI,
@@ -106,6 +119,7 @@ object SourcePresentationCatalog {
             group = SourcePresentationGroup.VIDEO,
             order = 4,
             logo = SourceLogoAsset.Text,
+            mark = "I",
         ),
         SourcePresentation(
             source = SourceKey.RULE34XXX,
@@ -115,6 +129,7 @@ object SourcePresentationCatalog {
             group = SourcePresentationGroup.RULE34,
             order = 5,
             logo = SourceLogoAsset.Text,
+            mark = "R34",
         ),
         SourcePresentation(
             source = SourceKey.RULE34PAHEAL,
@@ -124,6 +139,7 @@ object SourcePresentationCatalog {
             group = SourcePresentationGroup.RULE34,
             order = 6,
             logo = SourceLogoAsset.Text,
+            mark = "R34",
         ),
         SourcePresentation(
             source = SourceKey.RULE34VIDEO,
@@ -133,6 +149,7 @@ object SourcePresentationCatalog {
             group = SourcePresentationGroup.RULE34,
             order = 7,
             logo = SourceLogoAsset.Text,
+            mark = "R34",
         ),
         SourcePresentation(
             source = SourceKey.RULE34GEN,
@@ -142,6 +159,7 @@ object SourcePresentationCatalog {
             group = SourcePresentationGroup.RULE34,
             order = 8,
             logo = SourceLogoAsset.Text,
+            mark = "R34",
         ),
     ).sortedBy(SourcePresentation::order)
 
@@ -183,7 +201,7 @@ fun SourceKey.displayName(): String = presentation().label
 fun SourceKey.requestHeaders(): Map<String, String> {
     return mapOf(
         "Referer" to referer(),
-        "User-Agent" to "Mozilla/5.0",
+        "User-Agent" to presentation().userAgent,
     )
 }
 
@@ -194,3 +212,5 @@ fun SourceKey.isRule34Family(): Boolean = presentation().group == SourcePresenta
 fun exposedRealSources(rule34XxxConfigured: Boolean): Set<SourceKey> {
     return SourcePresentationCatalog.exposedSources(rule34XxxConfigured)
 }
+
+private const val BROWSER_USER_AGENT = "Mozilla/5.0"

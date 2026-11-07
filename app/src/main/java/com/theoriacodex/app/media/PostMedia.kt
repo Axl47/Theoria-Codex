@@ -283,4 +283,6 @@ private val STATIC_IMAGE_EXTENSIONS = setOf("png", "jpg", "jpeg", "bmp")
 private val QUALITY_UPGRADE_IMAGE_SOURCES = setOf(
     SourceKey.PIXIV,
     SourceKey.GELBOORU,
+    SourceKey.DANBOORU,
+    SourceKey.AIBOORU,
 )

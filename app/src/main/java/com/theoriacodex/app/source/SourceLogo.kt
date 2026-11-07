@@ -73,11 +73,7 @@ fun SourceLogo(
 /** Compact source selector mark; sources without a legible small logo use a letter mark. */
 @Composable
 fun SourceIcon(source: SourceKey) {
-    when {
-        source == SourceKey.IWARA -> SourceLetterIcon("I")
-        source.isRule34Family() -> SourceLetterIcon("R34")
-        else -> SourceLogo(source, size = 18.dp)
-    }
+    source.presentation().mark?.let { SourceLetterIcon(it) } ?: SourceLogo(source, size = 18.dp)
 }
 
 /** Letter marks share the white, bold treatment of Hitomi's icon. */

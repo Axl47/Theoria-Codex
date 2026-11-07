@@ -3,7 +3,13 @@ package com.theoriacodex.data.repository
 import com.google.gson.annotations.SerializedName
 import com.theoriacodex.domain.model.SourceKey
 
-internal const val SHARED_SOURCE_CATALOG_VERSION = 2
+internal const val SHARED_SOURCE_CATALOG_VERSION = 3
+
+/** Sources each catalog version introduced; older stored selections gain them once on read. */
+private val SOURCES_ADDED_BY_CATALOG_VERSION = mapOf(
+    2 to setOf(SourceKey.HITOMI),
+    3 to setOf(SourceKey.DANBOORU, SourceKey.AIBOORU),
+)
 
 /**
  * The legacy settings JSON schema shared by the atomic-file repository and the one-time
@@ -60,11 +66,9 @@ internal data class LegacySettingsStoreRecord(
         val storedEnabledSources = enabledSources
             .mapNotNull { runCatching { SourceKey.valueOf(it) }.getOrNull() }
             .toSet()
-        val migratedEnabledSources = if (requiresSourceCatalogMigration()) {
-            storedEnabledSources + SourceKey.HITOMI
-        } else {
-            storedEnabledSources
-        }
+        val migratedEnabledSources = storedEnabledSources + SOURCES_ADDED_BY_CATALOG_VERSION
+            .filterKeys { version -> version > sourceSchemaVersion() }
+            .values.flatten()
         val runtime = SourceRuntimeSettings(
             enabledSources = migratedEnabledSources,
             sourceWeights = sourceWeights.mapNotNull { (key, value) ->
@@ -123,10 +127,6 @@ internal data class LegacySettingsStoreRecord(
                 runCatching { SourceKey.valueOf(name) }.getOrNull()?.let { it to weight }
             }.toMap()
         }
-
-    fun requiresSourceCatalogMigration(): Boolean {
-        return sourceSchemaVersion() < SHARED_SOURCE_CATALOG_VERSION
-    }
 
     private fun toCacheSettings() = CacheSettings(
         cacheFullImageOnSave = cacheFullImageOnSave,

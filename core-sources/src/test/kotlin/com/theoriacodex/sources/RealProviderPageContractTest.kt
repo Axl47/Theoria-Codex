@@ -67,7 +67,9 @@ class RealProviderPageContractTest {
             "<item><link>https://rule34.paheal.net/post/view/$id</link><title>Post</title></item>"
         }
         return listOf(
-            Fixture(SourceKey.AIBOORU, booru, "2"),
+            // Danbooru sites page newest-first searches before the lowest post id.
+            Fixture(SourceKey.AIBOORU, booru, "b42"),
+            Fixture(SourceKey.DANBOORU, booru, "b42"),
             Fixture(SourceKey.GELBOORU, booru, "1"),
             Fixture(SourceKey.RULE34XXX, booru, "1"),
             Fixture(SourceKey.PIXIV, pixiv, "30"),

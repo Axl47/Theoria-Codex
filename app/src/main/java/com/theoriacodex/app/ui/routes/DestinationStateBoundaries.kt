@@ -403,11 +403,7 @@ internal fun SettingsDestinationStateBoundary(
     val state = owner.state.collectAsStateWithLifecycle()
     val emptySearch = remember { MutableStateFlow(com.theoriacodex.app.search.state.SearchUiState()) }
     val searchState = (searchOwner?.state ?: emptySearch).collectAsStateWithLifecycle()
-    val query = searchState.value.query
-    val selectedSources = if (searchOwner == null) emptySet() else when (val scope = query.draftSourceScope) {
-        com.theoriacodex.app.search.state.SearchSourceScope.GlobalUnified -> query.unifiedSources
-        else -> scope.explicitSources.toSet()
-    }
+    val selectedSources = if (searchOwner == null) emptySet() else searchState.value.query.draftSources
     DestinationStateBoundary(state) {
         SettingsScreen(
             state = it, onAction = owner::onAction,

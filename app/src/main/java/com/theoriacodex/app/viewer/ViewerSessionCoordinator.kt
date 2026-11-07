@@ -37,6 +37,7 @@ private val LAZY_MEDIA_RESOLUTION_SOURCES = setOf(
 
 private val REFRESHABLE_REMOTE_MEDIA_SOURCES = setOf(
     SourceKey.AIBOORU,
+    SourceKey.DANBOORU,
     SourceKey.GELBOORU,
     SourceKey.HITOMI,
     SourceKey.IWARA,

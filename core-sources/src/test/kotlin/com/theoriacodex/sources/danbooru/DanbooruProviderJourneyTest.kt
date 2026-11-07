@@ -1,4 +1,4 @@
-package com.theoriacodex.sources.aibooru
+package com.theoriacodex.sources.danbooru
 
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
@@ -16,7 +16,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Test
 
-class AibooruProviderJourneyTest {
+/** Journeys through AIBooru, one of the sites served by the shared Danbooru adapter. */
+class DanbooruProviderJourneyTest {
     @Test
     fun `filtered scored search keeps paging after duplicates and can retry a failed detail request`() = runTest {
         val query = query()
@@ -27,7 +28,7 @@ class AibooruProviderJourneyTest {
             enqueueGet("$BASE/posts/42.json", statusCode = 503, body = "temporarily unavailable")
             enqueueGet("$BASE/posts/42.json", body = postJson(42))
         }
-        val adapter = AibooruSourceAdapter(http)
+        val adapter = DanbooruSourceAdapter(DanbooruSite.AIBOORU, http)
         val first = adapter.search(query, null)
         assertEquals(listOf("41", "42"), first.items.map { it.id.sourcePostId })
         assertEquals("2", first.nextPageToken)
@@ -53,7 +54,7 @@ class AibooruProviderJourneyTest {
             enqueueGet("$BASE/tags.json", mapOf("limit" to "50", "search[order]" to "count"), body = tags)
             enqueueGet("$BASE/tags.json", mapOf("limit" to "30", "search[name_matches]" to "sky*", "search[order]" to "count"), body = tags)
         }
-        val adapter = AibooruSourceAdapter(http)
+        val adapter = DanbooruSourceAdapter(DanbooruSite.AIBOORU, http)
         val trending = adapter.trendingTags(80)
         val suggestions = adapter.autocompleteTags(" sky ", 80)
         assertEquals(listOf("sky" to 80, "sky_blue" to 20), trending.map { it.text to it.count })
@@ -72,7 +73,7 @@ class AibooruProviderJourneyTest {
             enqueueGet("$BASE/posts.json", searchParams("1"), statusCode = 429)
             enqueueGet("$BASE/posts.json", searchParams("1"), failure = cancellation)
         }
-        val adapter = AibooruSourceAdapter(http)
+        val adapter = DanbooruSourceAdapter(DanbooruSite.AIBOORU, http)
         for (reason in listOf(SourceFailureReason.PARSE, SourceFailureReason.NETWORK, SourceFailureReason.RATE_LIMITED)) {
             val failure = runCatching { adapter.search(query(), null) }.exceptionOrNull()
             assertEquals(reason, (failure as SourceAdapterException).reason)

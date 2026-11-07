@@ -18,6 +18,7 @@ import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.query.CapabilityExclusionReason
+import com.theoriacodex.domain.query.SearchTermLimit
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.currentTime
@@ -39,6 +40,25 @@ class UnifiedSearchOrchestratorTest {
         val continued = orchestrator.search(query, setOf(adapter.sourceKey), emptyMap(), emptyMap(), initial.queriesBySource)
         assertEquals(listOf("allowed"), continued.items.map { it.id.sourcePostId })
         assertEquals(listOf("blocked"), continued.queriesBySource[adapter.sourceKey]?.excludeTags)
+    }
+
+    @Test
+    fun `a source with a term cap receives only the leading terms it accepts`() = runTest {
+        val capped = FakeAdapter(SourceKey.DANBOORU,
+            supportedCapabilities().copy(searchTermLimit = SearchTermLimit(maxTerms = 2)), emptyList())
+        val unlimited = FakeAdapter(SourceKey.GELBOORU, supportedCapabilities(), emptyList())
+        val query = sampleQuery().copy(
+            includeTermGroups = listOf("landscape", "sky", "cloud").map { SearchTermGroup.single(SearchTerm(it)) },
+            excludeTerms = listOf(SearchTerm("comic")),
+        )
+
+        UnifiedSearchOrchestrator(mapOf(capped.sourceKey to capped, unlimited.sourceKey to unlimited))
+            .search(query, setOf(capped.sourceKey, unlimited.sourceKey), emptyMap(), emptyMap())
+
+        assertEquals(listOf("landscape", "sky"), capped.lastSearchQuery?.includeTags)
+        assertEquals(emptyList<String>(), capped.lastSearchQuery?.excludeTags)
+        assertEquals(listOf("landscape", "sky", "cloud"), unlimited.lastSearchQuery?.includeTags)
+        assertEquals(listOf("comic"), unlimited.lastSearchQuery?.excludeTags)
     }
 
     @Test

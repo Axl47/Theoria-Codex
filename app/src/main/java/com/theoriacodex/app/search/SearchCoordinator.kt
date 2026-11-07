@@ -38,8 +38,9 @@ import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 import com.theoriacodex.domain.orchestration.SourceWeightNormalization
 import com.theoriacodex.domain.query.QueryHash
+import com.theoriacodex.domain.query.SearchTermLimit
 import com.theoriacodex.domain.tags.normalizeFavoriteTagForStorage
-import com.theoriacodex.domain.tags.normalizeGelbooruToken
+import com.theoriacodex.domain.tags.sourceAutocompletePrefix
 import com.theoriacodex.domain.tags.normalizeMatchToken
 import com.theoriacodex.domain.tags.sourceTagKey
 import com.theoriacodex.domain.tags.sourceTagsMatch
@@ -141,8 +142,12 @@ class SearchCoordinator(
         val current = registry.availableSources()
         val sourcesChanged = current != availableSourcesSnapshot
         availableSourcesSnapshot = current
-        return SearchEnvironmentChange(settingsChanged, sourcesChanged, current.inPresentationOrder())
+        return SearchEnvironmentChange(settingsChanged, sourcesChanged, current.inPresentationOrder(), sourceTermLimits())
     }
+
+    private fun sourceTermLimits(): Map<SourceKey, SearchTermLimit> = registry.availableSources().mapNotNull { source ->
+        registry.adapterFor(source)?.capabilities?.searchTermLimit?.let { source to it }
+    }.toMap()
 
     internal fun supportedSearchScopes(mode: QueryMode): List<FacetedSearchScope> {
         val source = (mode as? QueryMode.Source)?.source ?: return emptyList()
@@ -275,6 +280,10 @@ class SearchCoordinator(
             )
         }
         val adapter = requireNotNull(registry.adapterFor(mode.source)) { "No adapter for ${mode.source}" }
+        // Every route into a single-source search passes here, so this is where its term cap is enforced.
+        searchTermLimitNotices(query, listOf(mode.source), sourceTermLimits()).firstOrNull()?.let { notice ->
+            return SearchExecutionResult.Failure(executionKey, query, sourceScope, emptyList(), notice.message())
+        }
         val page = registry.unifiedOrchestrator().searchSource(adapter, query, null)
         currentCoroutineContext().ensureActive()
         rememberSeenTags(page.items)
@@ -787,9 +796,6 @@ class SearchCoordinator(
 
     private fun autocompletePrefixForSource(source: SourceKey, input: String): String {
         val normalized = parseScopedInput(input).value
-        return when (source) {
-            SourceKey.GELBOORU, SourceKey.IWARA, SourceKey.RULE34XXX -> normalizeGelbooruToken(normalized)
-            else -> normalized
-        }
+        return sourceAutocompletePrefix(source, normalized)
     }
 }

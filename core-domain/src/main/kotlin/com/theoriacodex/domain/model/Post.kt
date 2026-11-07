@@ -7,6 +7,7 @@ enum class SourceKey {
     PIXIV,
     GELBOORU,
     AIBOORU,
+    DANBOORU,
     NHENTAI,
     HITOMI,
     IWARA,

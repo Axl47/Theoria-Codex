@@ -16,7 +16,7 @@ You search across sources (one at a time or all together), open posts in a full-
 
 ## Sources
 
-Pixiv · Gelbooru · NHentai · Hitomi · Iwara · Rule34 Paheal · Rule34 Video · Rule34 Gen · Rule34.xxx (needs an API key in Settings)
+Pixiv · Gelbooru · Danbooru (guests can search two tags at a time) · AIBooru · NHentai · Hitomi · Iwara · Rule34 Paheal · Rule34 Video · Rule34 Gen · Rule34.xxx (needs an API key in Settings)
 
 ## Platform
 

@@ -661,7 +661,7 @@ private fun Query.directNhentaiGalleryIdCandidate(): String? {
 }
 
 private val SUGGESTION_CANONICALIZATION_SOURCES = setOf(
-    SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.NHENTAI, SourceKey.HITOMI,
+    SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.AIBOORU, SourceKey.DANBOORU, SourceKey.NHENTAI, SourceKey.HITOMI,
     SourceKey.IWARA, SourceKey.RULE34XXX, SourceKey.RULE34PAHEAL,
     SourceKey.RULE34VIDEO, SourceKey.RULE34GEN,
 )

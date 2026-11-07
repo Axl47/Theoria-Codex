@@ -101,7 +101,11 @@ class DataStoreRepositoriesTest {
 
         val settings = repository.observeSettings().first()
 
-        assertEquals(setOf(SourceKey.PIXIV, SourceKey.GELBOORU), settings.runtime.enabledSources)
+        // Catalog version 2 predates the Danbooru sites, so the import adds them once.
+        assertEquals(
+            setOf(SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.DANBOORU, SourceKey.AIBOORU),
+            settings.runtime.enabledSources,
+        )
         assertTrue(settings.cache.cacheFullImageOnSave)
         assertTrue(settings.viewer.invertMultiImageScrollDirection)
         assertFalse(settings.viewer.automaticTextTranslationEnabled)
@@ -198,7 +202,7 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
-    fun `minimal pre-catalog settings migrate hitomi and retain legacy defaults`() = runTest {
+    fun `minimal pre-catalog settings gain every later source and retain legacy defaults`() = runTest {
         val directory = tempFolder.newFolder("settings-pre-catalog")
         directory.resolve("settings_store.json").writeText(
             """{"enabledSources":["PIXIV"],"cacheFullImageOnSave":true}"""
@@ -208,7 +212,10 @@ class DataStoreRepositoriesTest {
 
         val settings = repository.observeSettings().first()
 
-        assertEquals(setOf(SourceKey.PIXIV, SourceKey.HITOMI), settings.runtime.enabledSources)
+        assertEquals(
+            setOf(SourceKey.PIXIV, SourceKey.HITOMI, SourceKey.DANBOORU, SourceKey.AIBOORU),
+            settings.runtime.enabledSources,
+        )
         assertEquals(settings.runtime.enabledSources, settings.runtime.sourceWeights.keys)
         assertTrue(settings.cache.cacheFullImageOnSave)
         assertFalse(settings.contentFilters.resolveUnknownAnimatedDurations)
