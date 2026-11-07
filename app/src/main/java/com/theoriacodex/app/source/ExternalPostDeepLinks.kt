@@ -1,10 +1,12 @@
 package com.theoriacodex.app.source
 
 import android.net.Uri
+import com.theoriacodex.app.customsites.CustomSiteSummary
 import com.theoriacodex.domain.encoding.decodePercentEncodedUtf8Strict
 import com.theoriacodex.domain.model.HITOMI_ARTIST_IDENTITY_MAX_CODE_POINTS
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.canonicalHitomiArtistIdentity
+import com.theoriacodex.domain.source.ProtocolFamily
 import java.net.URI
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -279,3 +281,41 @@ private val HITOMI_GALLERY_PATH = Regex(
     "^/(?:anime|cg|doujinshi|manga|artistcg|gamecg|imageset)/[^/]+-(\\d+)\\.html/?$",
 )
 private val HITOMI_ARTIST_PATH = Regex("^/artist/([^/]+)-all\\.html/?$")
+
+/**
+ * A post link on a user-added site, matched by host (a `www.` twin counts) and install path. Each
+ * family's post page: Gelbooru 0.2 `index.php?page=post&s=view&id=N`, Danbooru `/posts/N`.
+ */
+fun parseCustomSitePostDeepLink(rawUrl: String, sites: List<CustomSiteSummary>): ExternalPostDeepLink? {
+    val uri = parseExternalUri(rawUrl) ?: return null
+    return sites.firstNotNullOfOrNull { site ->
+        val source = SourceKey.parse(site.sourceId) ?: return@firstNotNullOfOrNull null
+        val base = runCatching { URI(site.baseUrl) }.getOrNull()
+            ?.takeIf { siteHost(it.host.orEmpty()) == siteHost(uri.host) } ?: return@firstNotNullOfOrNull null
+        val installPath = base.rawPath.orEmpty().trimEnd('/')
+        if (!uri.encodedPath.startsWith(installPath)) return@firstNotNullOfOrNull null
+        familyPostId(site.family, uri, uri.encodedPath.removePrefix(installPath))
+            ?.let { ExternalPostDeepLink(source = source, sourceLabel = site.label, postId = it) }
+    }
+}
+
+/** The host of a link shaped like a booru post page on a site that isn't added yet, for setup. */
+fun unaddedBooruPostHost(rawUrl: String, sites: List<CustomSiteSummary>): String? {
+    val uri = parseExternalUri(rawUrl)?.takeIf { it.scheme == "https" } ?: return null
+    if (sites.any { siteHost(runCatching { URI(it.baseUrl).host }.getOrNull().orEmpty()) == siteHost(uri.host) }) return null
+    val looksLikePost = ProtocolFamily.entries.any { familyPostId(it, uri, uri.encodedPath) != null }
+    return uri.host.takeIf { looksLikePost }
+}
+
+private fun familyPostId(family: ProtocolFamily?, uri: ParsedExternalUri, pathUnderInstall: String): String? = when (family) {
+    ProtocolFamily.GELBOORU_02 -> uri.queryParameters["id"]?.takeIf {
+        pathUnderInstall in setOf("", "/", "/index.php") &&
+            uri.queryParameters["page"]?.lowercase() == "post" &&
+            uri.queryParameters["s"]?.lowercase() == "view" &&
+            it.isDigitsOnly()
+    }
+    ProtocolFamily.DANBOORU -> Regex("^/posts/(\\d+)/?$").matchEntire(pathUnderInstall)?.groupValues?.get(1)
+    null -> null
+}
+
+private fun siteHost(host: String): String = host.lowercase().removePrefix("www.")

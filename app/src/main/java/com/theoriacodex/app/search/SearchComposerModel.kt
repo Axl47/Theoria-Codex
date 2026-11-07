@@ -2,6 +2,7 @@ package com.theoriacodex.app.search
 
 import com.theoriacodex.app.post.PostTagSelection
 import com.theoriacodex.app.search.state.SearchAction
+import com.theoriacodex.app.source.presentation
 import com.theoriacodex.app.search.state.SearchDraftReducer
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.tags.TagChipState
@@ -10,6 +11,7 @@ import com.theoriacodex.app.tags.chipState
 import com.theoriacodex.app.tags.isGeneralPostTag
 import com.theoriacodex.app.tags.tagTapEffect
 import com.theoriacodex.data.repository.FavoriteTagEntry
+import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -110,17 +112,48 @@ internal fun FavoriteTagEntry.tapActions(draft: Query, targetIndex: Int): List<S
 internal fun savedGroupTapLabel(label: String, state: TagChipState): String =
     if (state == TagChipState.NONE) "Include $label in Search" else "Remove $label from Search"
 
+/** Saved searches as the composer sees them, and how to run, save and manage them. */
+internal class ComposerSavedSearches(
+    val entries: List<SavedSearchEntry> = emptyList(),
+    /** The search on screen, to highlight its saved entry; null before any search. */
+    private val currentQueryHash: String? = null,
+    val onOpen: (SavedSearchEntry) -> Unit = {},
+    /** Saves the search on screen under a name; null when there is nothing to save. */
+    val onSaveCurrent: ((String) -> Unit)? = null,
+    val suggestedName: String = "",
+    val onManage: () -> Unit = {},
+) {
+    val canSaveCurrent: Boolean get() = onSaveCurrent != null
+
+    fun isCurrent(entry: SavedSearchEntry): Boolean = currentQueryHash != null && entry.search.queryHash == currentQueryHash
+}
+
+/** The source's built-in "Animated" saved group, or null when it has no animated tags. */
+internal fun animatedSavedGroup(source: SourceKey?): FavoriteTagEntry? =
+    source?.presentation()?.animatedSearchTags?.takeIf { it.isNotEmpty() }?.let { FavoriteTagEntry(source, it, "Animated") }
+
 /** Saved tags as the composer's tag menus see them, and how to change them. */
 internal class ComposerSavedTags(
+    /** The user's saved tags; only these can be removed. */
     val entries: List<FavoriteTagEntry>,
     /** Where a new save goes; null when the composer has no source to save under. */
     val saveSource: SourceKey? = null,
     /** Saves tags under a source; a group may carry a name. */
     val onSave: (SourceKey, List<String>, String?) -> Unit = { _, _, _ -> },
     val onRemove: (SourceKey, List<String>) -> Unit = { _, _ -> },
+    /** Names a saved "or" group; a blank name shows it by its alternatives. */
+    val onRename: (SourceKey, List<String>, String) -> Unit = { _, _, _ -> },
+    /** App-provided groups, such as "Animated", shown after the user's own and never stored. */
+    builtIn: List<FavoriteTagEntry> = emptyList(),
 ) {
+    /** Everything the chips show: the user's entries, then built-ins they haven't saved themselves. */
+    val all: List<FavoriteTagEntry> = entries + builtIn.filterNot { group -> entries.any { it.tags == group.tags } }
+
     /** The saved entry that is exactly [terms], whichever source it was saved under. */
     fun entryFor(terms: List<SearchTerm>): FavoriteTagEntry? = entries.firstOrNull { it.matches(terms) }
+
+    /** Only the user's own entries can be renamed or removed; built-ins have no hold menu. */
+    fun isEditable(entry: FavoriteTagEntry): Boolean = entry in entries
 
     /** Only general tags can be saved, so a typed tag, or a group of them, offers no save. */
     fun canSave(terms: List<SearchTerm>): Boolean = terms.isNotEmpty() && terms.all(SearchTerm::isGeneralPostTag)

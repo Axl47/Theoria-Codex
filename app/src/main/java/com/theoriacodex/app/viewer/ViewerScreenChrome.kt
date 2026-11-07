@@ -15,10 +15,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.LocalContentColor
+import com.theoriacodex.app.ui.motion.LikedHeartColor
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.MoreHoriz
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -50,6 +54,7 @@ import com.theoriacodex.app.creator.creatorProfileActions
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.tags.LocalPostTagSearchActions
 import com.theoriacodex.app.tags.PostTagActionSection
+import com.theoriacodex.app.ui.components.HeaderLink
 import com.theoriacodex.app.ui.components.PostActionHeader
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.viewer.state.ViewerAction
@@ -205,6 +210,7 @@ internal fun ViewerInfoSheet(
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)?,
     onGoToSearch: () -> Unit,
     onOpenCreatorFallback: ((Post) -> Unit)?,
+    liked: Boolean = false,
 ) {
     val post = selection.post
     val searchActions = LocalPostTagSearchActions.current
@@ -212,7 +218,7 @@ internal fun ViewerInfoSheet(
     AdaptiveViewerInfo(onDismiss = { controls.setInfoSheetVisible(false) }) {
         PostTagActionSection(
             header = {
-                ViewerInfoActions(selection, controls, creatorBrowsingSources, onAction, onOpenInBrowser, onGoToSearch, onOpenCreatorFallback)
+                ViewerInfoActions(selection, liked, controls, creatorBrowsingSources, onAction, onOpenInBrowser, onGoToSearch, onOpenCreatorFallback)
             },
             post = post,
             tagVideoCountProvider = tagVideoCountProvider,
@@ -238,10 +244,14 @@ internal fun ViewerInfoSheet(
     }
 }
 
-/** Identifies the post above a compact action row, so its tags stay near the top of the sheet. */
+/**
+ * Identifies the post, links its creator, and offers a compact action row, so its tags stay near the
+ * top of the sheet. Liking stays in the sheet; the other actions close it.
+ */
 @Composable
 private fun ViewerInfoActions(
     selection: ViewerSelection,
+    liked: Boolean,
     controls: ViewerControls,
     creatorBrowsingSources: Set<SourceKey>,
     onAction: (ViewerAction) -> Unit,
@@ -260,29 +270,36 @@ private fun ViewerInfoActions(
         creator.profile?.let { onAction(ViewerAction.OpenCreator(it)) } ?: onOpenCreatorFallback?.invoke(post)
     }
     Column {
-        PostActionHeader(post, showPostId = true)
+        PostActionHeader(
+            post,
+            showPostId = true,
+            creator = creators.firstOrNull()?.let { creator -> HeaderLink(creator.label) { openCreator(creator) } },
+        )
         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), Arrangement.SpaceEvenly) {
+            ViewerLikeAction(liked) { onAction(ViewerAction.ToggleLike) }
             ViewerInfoAction(Icons.Default.BookmarkAdd, "Codex", "Save to Codex") { closeThen { onAction(ViewerAction.Save) } }
             ViewerInfoAction(Icons.Default.Download, "Device", "Save to device", selection.canDownload) {
                 closeThen { onAction(ViewerAction.Download) }
-            }
-            creators.firstOrNull()?.let { creator ->
-                ViewerInfoAction(Icons.Default.Person, "Creator", creator.label) { openCreator(creator) }
             }
             ViewerInfoAction(Icons.Default.Share, "Share", "Share") { closeThen { onAction(ViewerAction.Share) } }
             ViewerInfoMoreActions(
                 otherCreators = creators.drop(1),
                 onOpenCreator = ::openCreator,
-                onGoToSearch = {
-                    closeThen {
-                        controls.setPlaybackEnabled(false)
-                        onGoToSearch()
-                    }
-                },
+                onGoToSearch = { closeThen { controls.setPlaybackEnabled(false); onGoToSearch() } },
                 onOpenInBrowser = if (post.pageUrl.isNullOrBlank()) null else ({ closeThen { onOpenInBrowser(post) } }),
             )
         }
         HorizontalDivider()
+    }
+}
+
+/** Like stays in the sheet, so its label and heart follow the post's liked state. */
+@Composable
+private fun ViewerLikeAction(liked: Boolean, onToggle: () -> Unit) {
+    if (liked) {
+        ViewerInfoAction(Icons.Default.Favorite, "Liked", "Unlike post", tint = LikedHeartColor, onClick = onToggle)
+    } else {
+        ViewerInfoAction(Icons.Outlined.FavoriteBorder, "Like", "Like post", onClick = onToggle)
     }
 }
 
@@ -312,6 +329,7 @@ private fun ViewerInfoAction(
     label: String,
     description: String,
     enabled: Boolean = true,
+    tint: Color? = null,
     onClick: () -> Unit,
 ) {
     Column(
@@ -324,7 +342,7 @@ private fun ViewerInfoAction(
             .clearAndSetSemantics { contentDescription = description },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(icon, null)
+        Icon(icon, null, tint = tint ?: LocalContentColor.current)
         Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
     }
 }

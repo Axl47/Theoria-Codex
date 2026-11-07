@@ -430,7 +430,7 @@ internal class SearchViewModel(
             SearchEffect.OpenViewer(
                 posts = action.visibleResults.toList(),
                 context = ViewerLaunchContext(
-                    queryHash = "related:${request.seed.id.source.name}:${request.seed.id.sourcePostId}",
+                    queryHash = "related:${request.seed.id.source.id}:${request.seed.id.sourcePostId}",
                     startIndex = action.index,
                     streamSource = ViewerStreamSource.RELATED,
                     scrollOffsetHint = 0,
@@ -444,11 +444,7 @@ internal class SearchViewModel(
         val previous = latestEnvironmentSettings
         latestEnvironmentSettings = settings
         if (!coordinator.isInitialized) return
-        val query = mutableState.value.query
-        val selectedSources = when (val scope = query.draftSourceScope) {
-            SearchSourceScope.GlobalUnified -> query.unifiedSources
-            else -> scope.explicitSources.toSet()
-        }
+        val selectedSources = mutableState.value.query.draftSources
         val weightsChanged = previous != null && selectedSources.size > 1 &&
             com.theoriacodex.data.repository.SourceWeightSettings.weightsFor(previous.runtime, selectedSources) !=
             com.theoriacodex.data.repository.SourceWeightSettings.weightsFor(settings.runtime, selectedSources)
@@ -482,6 +478,7 @@ internal class SearchViewModel(
                 modeOptions = listOf(QueryMode.Unified) + change.availableSources.map(QueryMode::Source),
                 enabledSourceCount = enabledCount,
                 unifiedSources = settings.runtime.enabledSources.intersect(available),
+                sourceTermLimits = change.sourceTermLimits,
                 supportedScopes = scopes,
                 selectedScope = current.query.selectedScope.takeIf { it in scopes }
                     ?: com.theoriacodex.domain.adapter.FacetedSearchScope.All,

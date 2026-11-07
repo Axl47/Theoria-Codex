@@ -54,7 +54,7 @@ object SourceWeightSettings {
         require(source in weights && weights.size > 1)
         val selectedUnits = (value.coerceIn(0.0, 1.0) * 20).roundToInt()
         val remaining = 20 - selectedUnits
-        val others = weights.keys.filter { it != source }.sortedBy { it.name }
+        val others = weights.keys.filter { it != source }.sortedBy { it.id }
         val total = others.sumOf { weights.getValue(it) }
         val shares = others.associateWith {
             remaining * if (total > 0.0) weights.getValue(it) / total else 1.0 / others.size
@@ -69,5 +69,5 @@ object SourceWeightSettings {
     }
 
     private fun configurationKey(sources: Set<SourceKey>): String =
-        sources.map(SourceKey::name).sorted().joinToString(",")
+        sources.map(SourceKey::id).sorted().joinToString(",")
 }

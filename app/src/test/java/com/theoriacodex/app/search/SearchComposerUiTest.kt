@@ -72,7 +72,7 @@ class SearchComposerUiTest {
                 SearchComposer(
                     state = state, onAction = { actions += it }, sourcePicker = {}, onApply = {}, onReset = {},
                     onUndo = {}, onManageSavedTags = onManageSavedTags, onOpenSourceAccounts = {}, onDigitsCommitted = {}, onDismiss = {},
-                    savedSearches = saved, onOpenSavedSearch = onOpenSaved, savedTags = savedTags,
+                    savedSearches = ComposerSavedSearches(saved, onOpen = onOpenSaved), savedTags = savedTags,
                 )
             }
         }
@@ -86,7 +86,8 @@ class SearchComposerUiTest {
         )
         var opened: SavedSearchEntry? = null
         open(SourceKey.GELBOORU, emptyList(), listOf(entry), onOpenSaved = { opened = it })
-        compose.onNodeWithText("Saved").assertExists()
+        compose.onNodeWithText("Saved searches").assertExists()
+        compose.onNodeWithText("Tap to run").assertExists()
         compose.onNodeWithText("My landscapes").performClick()
         compose.runOnIdle { assertEquals(entry, opened) }
     }
@@ -97,7 +98,8 @@ class SearchComposerUiTest {
             SourceKey.GELBOORU, emptyList(), onManageSavedTags = { managed = true },
             savedTags = ComposerSavedTags(listOf(FavoriteTagEntry(SourceKey.GELBOORU, "blue_hair"), FavoriteTagEntry(SourceKey.GELBOORU, "sketch"))),
         )
-        compose.onNodeWithText("Saved").assertExists()
+        compose.onNodeWithText("Saved tags").assertExists()
+        compose.onNodeWithText("Tap to add to your search").assertExists()
         val label = compose.onNodeWithText("blue_hair", useUnmergedTree = true).getUnclippedBoundsInRoot()
         assertTrue("The scrolling row must leave the label room", label.right > label.left)
         compose.onNodeWithText("blue_hair").performClick()

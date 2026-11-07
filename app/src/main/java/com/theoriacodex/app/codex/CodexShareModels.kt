@@ -14,6 +14,7 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.tags.withRecoveredPixivTranslations
 
 internal data class CodexShareFile(
     @field:SerializedName("version")
@@ -88,6 +89,8 @@ internal data class CodexShareTaxonomyTerm(
     val facet: String? = null,
     @field:SerializedName("sourceNamespace")
     val sourceNamespace: String? = null,
+    @field:SerializedName("translation")
+    val translation: String? = null,
 )
 
 internal data class CodexShareCreatorProfile(
@@ -109,7 +112,7 @@ internal fun buildCodexShareFile(title: String, posts: List<Post>): CodexShareFi
         title = title,
         posts = posts.map { post ->
             CodexSharePost(
-                source = post.id.source.name,
+                source = post.id.source.id,
                 sourcePostId = post.id.sourcePostId,
                 snapshot = portablePostSnapshot(post).toCodexShareSnapshot(),
             )
@@ -144,7 +147,7 @@ internal fun codexSharePostId(post: CodexSharePost): PostId? {
     val source = post.source
         ?.trim()
         ?.uppercase()
-        ?.let { value -> runCatching { SourceKey.valueOf(value) }.getOrNull() }
+        ?.let { value -> SourceKey.parse(value) }
         ?: return null
     val sourcePostId = post.sourcePostId?.trim().orEmpty()
     if (sourcePostId.isBlank() || sourcePostId.length > 512 || sourcePostId.any { it.isISOControl() }) return null
@@ -193,7 +196,7 @@ internal fun codexSharePostSnapshot(post: CodexSharePost): Post? {
         creatorProfiles = creatorProfiles,
         durationMs = snapshot.durationMs?.takeIf { it >= 0L },
         mediaCount = snapshot.mediaCount?.takeIf { it > 0 },
-    ))
+    ).withRecoveredPixivTranslations())
 }
 
 internal fun selectCodexShareEntries(
@@ -202,7 +205,7 @@ internal fun selectCodexShareEntries(
     val selectedById = linkedMapOf<String, Pair<CodexSharePost, PostId>>()
     posts.forEach { entry ->
         val postId = codexSharePostId(entry) ?: return@forEach
-        val key = "${postId.source.name}:${postId.sourcePostId}"
+        val key = "${postId.source.id}:${postId.sourcePostId}"
         val existing = selectedById[key]
         if (
             existing == null ||
@@ -281,6 +284,7 @@ private fun PostTaxonomyTerm.toCodexShareTaxonomyTerm(): CodexShareTaxonomyTerm 
         value = value,
         facet = facet.name,
         sourceNamespace = sourceNamespace,
+        translation = translation,
     )
 }
 
@@ -294,12 +298,13 @@ private fun CodexShareTaxonomyTerm.toPostTaxonomyTerm(): PostTaxonomyTerm? {
         value = normalizedValue,
         facet = normalizedFacet,
         sourceNamespace = sourceNamespace.normalizedOptionalString(),
+        translation = translation.normalizedOptionalString(),
     )
 }
 
 private fun CreatorProfile.toCodexShareCreatorProfile(): CodexShareCreatorProfile {
     return CodexShareCreatorProfile(
-        source = source.name,
+        source = source.id,
         displayName = displayName,
         profileId = profileId,
         profileUrl = profileUrl,
@@ -313,7 +318,7 @@ private fun CodexShareCreatorProfile.toCreatorProfile(defaultSource: SourceKey):
     val normalizedSource = if (sourceName == null) {
         defaultSource
     } else {
-        runCatching { SourceKey.valueOf(sourceName.uppercase()) }.getOrNull() ?: return null
+        SourceKey.parse(sourceName.uppercase()) ?: return null
     }
     return CreatorProfile(
         source = normalizedSource,
@@ -389,6 +394,7 @@ private fun JsonObject.toCodexShareTaxonomyTerm(): CodexShareTaxonomyTerm {
         value = stringOrNull("value"),
         facet = stringOrNull("facet"),
         sourceNamespace = stringOrNull("sourceNamespace"),
+        translation = stringOrNull("translation"),
     )
 }
 

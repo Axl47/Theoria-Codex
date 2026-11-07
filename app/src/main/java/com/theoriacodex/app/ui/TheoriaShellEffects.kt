@@ -85,7 +85,10 @@ internal fun ShellOwnerHosts(shell: TheoriaShell) {
             owners.settings.onAction(SettingsAction.SettingsEntered)
         }
     }
-    CodexImportHost(owners.codexImports, snackbarHostState)
+    CodexImportHost(owners.codexImports, snackbarHostState) { host ->
+        shell.container.customSites.requestSetup(host)
+        owners.settings.onAction(SettingsAction.OpenCustomSites)
+    }
 }
 
 /** Runs startup once its updater allows it, and acts on what the updater asks of the platform. */

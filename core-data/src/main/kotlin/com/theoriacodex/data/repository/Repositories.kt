@@ -388,6 +388,7 @@ private val DEFAULT_SOURCE_WEIGHTS: Map<SourceKey, Double> = mapOf(
     SourceKey.IWARA to 0.08,
     SourceKey.RULE34VIDEO to 0.07,
     SourceKey.RULE34GEN to 0.07,
+    SourceKey.DANBOORU to 0.12,
     SourceKey.AIBOORU to 0.03,
 ).let { ratios ->
     val total = ratios.values.sum()
@@ -395,9 +396,9 @@ private val DEFAULT_SOURCE_WEIGHTS: Map<SourceKey, Double> = mapOf(
 }
 
 data class SourceRuntimeSettings(
-    val enabledSources: Set<SourceKey> = SourceKey.entries.toSet(),
+    val enabledSources: Set<SourceKey> = SourceKey.builtIns.toSet(),
     val sourceWeights: Map<SourceKey, Double> = DEFAULT_SOURCE_WEIGHTS,
-    /** Normalized weights keyed by the sorted names of an exact enabled-source combination. */
+    /** Normalized weights keyed by the sorted ids of an exact enabled-source combination. */
     val sourceWeightsByConfiguration: Map<String, Map<SourceKey, Double>> = emptyMap(),
 )
 
@@ -635,4 +636,13 @@ interface UiRestoreRepository {
     suspend fun getFeedFabRestoreStates(): Map<String, FeedFabRestoreState>
     fun observeViewerLaunchContext(): Flow<ViewerLaunchContext?>
     suspend fun setViewerLaunchContext(context: ViewerLaunchContext?)
+}
+
+/**
+ * Whether this device already holds library data for a source. Adding a custom site whose derived
+ * id answers true asks the user before reconnecting (plan D2). Likes, Codex items and Recents all
+ * reference stored posts, so the posts table answers for all of them.
+ */
+fun interface SourceLibraryPresence {
+    suspend fun hasLibraryData(source: SourceKey): Boolean
 }

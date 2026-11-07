@@ -31,7 +31,7 @@ internal fun UnifiedSourceSettings(
         style = MaterialTheme.typography.bodySmall,
     )
     if (sources.size > 1) {
-        sources.sortedBy { it.ordinal }.forEach { source ->
+        sources.sorted().forEach { source ->
             val weight = weights.getValue(source).toFloat()
             Text(source.displayName())
             Slider(

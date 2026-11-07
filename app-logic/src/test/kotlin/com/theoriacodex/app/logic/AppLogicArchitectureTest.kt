@@ -124,8 +124,9 @@ class AppLogicArchitectureTest {
             .substringAfter("fun viewerMediaDeliveryPlan")
             .substringBefore("private fun mediaDeliveryPlan")
 
-        assertTrue("QUALITY_UPGRADE_IMAGE_SOURCES" in previewPlan)
-        assertTrue("QUALITY_UPGRADE_IMAGE_SOURCES" in viewerPlan)
+        assertTrue("upgradesImageQuality()" in previewPlan)
+        assertTrue("upgradesImageQuality()" in viewerPlan)
+        assertTrue("private fun SourceKey.upgradesImageQuality(): Boolean = this in QUALITY_UPGRADE_IMAGE_SOURCES" in postMedia)
         assertTrue("private val QUALITY_UPGRADE_IMAGE_SOURCES = setOf(" in postMedia)
     }
 

@@ -19,6 +19,7 @@ import com.theoriacodex.sources.common.asStringOrNull
 import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.isSuccessful
+import com.theoriacodex.sources.common.normalizeBooruTag
 import com.theoriacodex.sources.common.parseJsonArray
 import com.theoriacodex.sources.common.sourceNetworkFailure
 import com.theoriacodex.sources.http.SourceHttpClient
@@ -48,7 +49,7 @@ class Rule34PahealSourceAdapter(
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> {
         val normalizedQuery = query.includeTags
-            .map(::normalizeRule34BooruTag)
+            .map(::normalizeBooruTag)
             .filter(String::isNotBlank)
             .joinToString(" ")
 

@@ -2,26 +2,31 @@ package com.theoriacodex.app.source
 
 import com.theoriacodex.app.R
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.app.search.DANBOORU_ANIMATED_SEARCH_TAGS
+import com.theoriacodex.app.search.GELBOORU_ANIMATED_SEARCH_TAGS
+import com.theoriacodex.domain.source.CustomSourceIds
+import com.theoriacodex.domain.source.ProtocolFamily
+import com.theoriacodex.sources.http.THEORIA_SOURCE_USER_AGENT
 
-/** Product-facing grouping used to keep source ordering and presentation out of route code. */
-enum class SourcePresentationGroup {
+/**
+ * Product-facing grouping used to keep source ordering and presentation out of route code. A group
+ * with a [folderLabel] folds its sources behind one source-picker chip so they don't crowd it.
+ */
+enum class SourcePresentationGroup(val folderLabel: String? = null) {
     ILLUSTRATION,
     GALLERY,
     VIDEO,
-    RULE34,
+    RULE34(folderLabel = "R34"),
+    DANBOORU(folderLabel = "Booru"),
+
+    /** User-added sites. */
+    CUSTOM(folderLabel = "Custom"),
 }
 
-/**
- * Whether a live adapter is exposed as a user-selectable source.
- *
- * [ADAPTER_ONLY] keeps compatibility for saved/imported posts and diagnostics without advertising
- * the provider as a live app feature. AIBooru deliberately remains in that state until it has a
- * product-owned enablement decision and route coverage.
- */
+/** Whether a live adapter is exposed as a user-selectable source. */
 enum class SourceExposure {
     USER_VISIBLE,
     CREDENTIAL_GATED,
-    ADAPTER_ONLY,
 }
 
 sealed interface SourceLogoAsset {
@@ -30,6 +35,9 @@ sealed interface SourceLogoAsset {
     data class RawSvg(val resourceId: Int) : SourceLogoAsset
 
     data object Text : SourceLogoAsset
+
+    /** A user-added site's own icon (declared on its home page, else `/favicon.ico`); a fallback shows while it loads or if it fails. */
+    data class Favicon(val url: String) : SourceLogoAsset
 }
 
 data class SourcePresentation(
@@ -40,12 +48,17 @@ data class SourcePresentation(
     val group: SourcePresentationGroup,
     val order: Int,
     val logo: SourceLogoAsset,
+    /** Short letter mark for compact source icons, used when the logo is unreadable at that size. */
+    val mark: String? = null,
+    /** Media requests' User-Agent; Danbooru's CDN challenges generic browser agents. */
+    val userAgent: String = BROWSER_USER_AGENT,
+    /** Tags for the built-in "Animated" saved group; empty when the source has no animated tags. */
+    val animatedSearchTags: List<String> = emptyList(),
 ) {
     fun isUserExposed(rule34XxxConfigured: Boolean): Boolean {
         return when (exposure) {
             SourceExposure.USER_VISIBLE -> true
             SourceExposure.CREDENTIAL_GATED -> rule34XxxConfigured
-            SourceExposure.ADAPTER_ONLY -> false
         }
     }
 }
@@ -70,15 +83,30 @@ object SourcePresentationCatalog {
             group = SourcePresentationGroup.ILLUSTRATION,
             order = 0,
             logo = SourceLogoAsset.RawSvg(R.raw.gelbooru_logo),
+            animatedSearchTags = GELBOORU_ANIMATED_SEARCH_TAGS,
+        ),
+        SourcePresentation(
+            source = SourceKey.DANBOORU,
+            label = "Danbooru",
+            referer = "https://danbooru.donmai.us/",
+            exposure = SourceExposure.USER_VISIBLE,
+            group = SourcePresentationGroup.DANBOORU,
+            order = 9,
+            logo = SourceLogoAsset.Text,
+            mark = "DB",
+            userAgent = THEORIA_SOURCE_USER_AGENT,
+            animatedSearchTags = DANBOORU_ANIMATED_SEARCH_TAGS,
         ),
         SourcePresentation(
             source = SourceKey.AIBOORU,
             label = "AIBooru",
             referer = "https://aibooru.online/",
-            exposure = SourceExposure.ADAPTER_ONLY,
-            group = SourcePresentationGroup.ILLUSTRATION,
-            order = 9,
+            exposure = SourceExposure.USER_VISIBLE,
+            group = SourcePresentationGroup.DANBOORU,
+            order = 10,
             logo = SourceLogoAsset.Text,
+            mark = "AI",
+            animatedSearchTags = DANBOORU_ANIMATED_SEARCH_TAGS,
         ),
         SourcePresentation(
             source = SourceKey.NHENTAI,
@@ -106,6 +134,7 @@ object SourcePresentationCatalog {
             group = SourcePresentationGroup.VIDEO,
             order = 4,
             logo = SourceLogoAsset.Text,
+            mark = "I",
         ),
         SourcePresentation(
             source = SourceKey.RULE34XXX,
@@ -115,6 +144,8 @@ object SourcePresentationCatalog {
             group = SourcePresentationGroup.RULE34,
             order = 5,
             logo = SourceLogoAsset.Text,
+            mark = "R34",
+            animatedSearchTags = GELBOORU_ANIMATED_SEARCH_TAGS,
         ),
         SourcePresentation(
             source = SourceKey.RULE34PAHEAL,
@@ -124,6 +155,7 @@ object SourcePresentationCatalog {
             group = SourcePresentationGroup.RULE34,
             order = 6,
             logo = SourceLogoAsset.Text,
+            mark = "R34",
         ),
         SourcePresentation(
             source = SourceKey.RULE34VIDEO,
@@ -133,6 +165,7 @@ object SourcePresentationCatalog {
             group = SourcePresentationGroup.RULE34,
             order = 7,
             logo = SourceLogoAsset.Text,
+            mark = "R34",
         ),
         SourcePresentation(
             source = SourceKey.RULE34GEN,
@@ -142,13 +175,18 @@ object SourcePresentationCatalog {
             group = SourcePresentationGroup.RULE34,
             order = 8,
             logo = SourceLogoAsset.Text,
+            mark = "R34",
         ),
     ).sortedBy(SourcePresentation::order)
 
     private val bySource = entries.associateBy(SourcePresentation::source)
 
+    /** User-added sites, replaced as a whole by [installCustom]; read without locking. */
+    @Volatile
+    private var custom: CustomPresentations = CustomPresentations(emptyList())
+
     init {
-        check(bySource.keys == SourceKey.entries.toSet()) {
+        check(bySource.keys == SourceKey.builtIns.toSet()) {
             "Source presentation catalog must cover every SourceKey exactly once"
         }
         check(entries.map(SourcePresentation::order).distinct().size == entries.size) {
@@ -156,9 +194,39 @@ object SourcePresentationCatalog {
         }
     }
 
-    fun presentation(source: SourceKey): SourcePresentation = bySource.getValue(source)
+    /**
+     * Built-in, then installed custom, then a fallback for a custom id with no profile (a removed or
+     * not-yet-restored site), so data from such a site still renders with a readable label.
+     */
+    fun presentation(source: SourceKey): SourcePresentation =
+        bySource[source] ?: custom.bySource[source] ?: customSourcePresentation(source, CustomSourceIds.hostLabel(source.id))
 
-    fun orderedPresentations(): List<SourcePresentation> = entries
+    /** Built-ins in presentation order, followed by installed custom sites. */
+    fun orderedPresentations(): List<SourcePresentation> = entries + custom.ordered
+
+    fun orderedSources(): List<SourceKey> = orderedPresentations().map(SourcePresentation::source)
+
+    /** Installed custom sites in their presentation order. */
+    fun customSources(): List<SourceKey> = custom.ordered.map(SourcePresentation::source)
+
+    /**
+     * Replaces every custom entry in one write. Called only by the custom-site runtime, which installs
+     * presentations before their adapters become visible and withdraws them after.
+     */
+    fun installCustom(presentations: List<SourcePresentation>) {
+        require(presentations.all { it.source.isCustom }) { "Only custom sources can be installed" }
+        require(presentations.map(SourcePresentation::source).distinct().size == presentations.size) {
+            "Each custom source can be installed once"
+        }
+        custom = CustomPresentations(presentations)
+    }
+
+    private class CustomPresentations(presentations: List<SourcePresentation>) {
+        val ordered: List<SourcePresentation> = presentations.sortedWith(
+            compareBy<SourcePresentation> { it.order }.thenBy { it.source.id },
+        )
+        val bySource: Map<SourceKey, SourcePresentation> = ordered.associateBy(SourcePresentation::source)
+    }
 
     fun exposedSources(rule34XxxConfigured: Boolean): Set<SourceKey> {
         return entries
@@ -171,10 +239,46 @@ object SourcePresentationCatalog {
 
 fun SourceKey.presentation(): SourcePresentation = SourcePresentationCatalog.presentation(this)
 
+/** First presentation order for custom sites; built-ins use 0 through 10. */
+const val CUSTOM_PRESENTATION_ORDER_START = 100
+
+/**
+ * Presentation for a user-added site. A null [referer] uses the site root ([baseUrl], or the host
+ * encoded in the id); a null [userAgent] uses the browser agent media requests already send.
+ */
+fun customSourcePresentation(
+    source: SourceKey,
+    label: String,
+    baseUrl: String? = null,
+    referer: String? = null,
+    userAgent: String? = null,
+    order: Int = Int.MAX_VALUE,
+    family: ProtocolFamily? = null,
+    iconUrl: String? = null,
+): SourcePresentation {
+    require(source.isCustom) { "Built-in sources have catalog entries" }
+    return SourcePresentation(
+        source = source,
+        label = label,
+        referer = referer ?: "${baseUrl ?: "https://${CustomSourceIds.hostLabel(source.id)}"}/",
+        exposure = SourceExposure.USER_VISIBLE,
+        group = SourcePresentationGroup.CUSTOM,
+        order = order,
+        logo = SourceLogoAsset.Favicon(iconUrl ?: "${baseUrl ?: "https://${CustomSourceIds.hostLabel(source.id)}"}/favicon.ico"),
+        mark = label.firstOrNull(Char::isLetterOrDigit)?.uppercase() ?: "?",
+        userAgent = userAgent ?: BROWSER_USER_AGENT,
+        animatedSearchTags = when (family) {
+            ProtocolFamily.GELBOORU_02 -> GELBOORU_ANIMATED_SEARCH_TAGS
+            ProtocolFamily.DANBOORU -> DANBOORU_ANIMATED_SEARCH_TAGS
+            null -> emptyList()
+        },
+    )
+}
+
 fun Iterable<SourceKey>.inPresentationOrder(): List<SourceKey> {
     return distinct().sortedWith(
         compareBy<SourceKey> { source -> source.presentation().order }
-            .thenBy(SourceKey::name),
+            .thenBy(SourceKey::id),
     )
 }
 
@@ -183,7 +287,7 @@ fun SourceKey.displayName(): String = presentation().label
 fun SourceKey.requestHeaders(): Map<String, String> {
     return mapOf(
         "Referer" to referer(),
-        "User-Agent" to "Mozilla/5.0",
+        "User-Agent" to presentation().userAgent,
     )
 }
 
@@ -194,3 +298,5 @@ fun SourceKey.isRule34Family(): Boolean = presentation().group == SourcePresenta
 fun exposedRealSources(rule34XxxConfigured: Boolean): Set<SourceKey> {
     return SourcePresentationCatalog.exposedSources(rule34XxxConfigured)
 }
+
+private const val BROWSER_USER_AGENT = "Mozilla/5.0"

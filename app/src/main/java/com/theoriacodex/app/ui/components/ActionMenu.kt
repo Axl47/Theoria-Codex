@@ -25,6 +25,10 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -63,6 +67,8 @@ internal fun ActionMenuHeader(
     title: String,
     image: @Composable (Modifier) -> Unit,
     details: @Composable () -> Unit,
+    /** Makes the title a [HeaderLink] to the creator, instead of plain text. */
+    titleLink: HeaderLink? = null,
 ) {
     Row(
         modifier = Modifier.padding(bottom = 12.dp),
@@ -74,12 +80,37 @@ internal fun ActionMenuHeader(
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         )
         Column {
-            Text(
-                title, style = MaterialTheme.typography.titleMedium,
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
+            if (titleLink != null) {
+                HeaderLinkText(titleLink, MaterialTheme.typography.titleMedium)
+            } else {
+                Text(
+                    title, style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
             details()
         }
+    }
+}
+
+/** A creator name that opens their profile. */
+internal class HeaderLink(val label: String, val onClick: () -> Unit)
+
+/** Accent color, a person mark and a chevron say the name opens a profile. */
+@Composable
+internal fun HeaderLinkText(link: HeaderLink, style: TextStyle) {
+    val accent = MaterialTheme.colorScheme.primary
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(role = Role.Button, onClickLabel = "Open creator", onClick = link.onClick)
+            .clearAndSetSemantics { contentDescription = "Open ${link.label}'s profile" },
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Default.Person, null, Modifier.size(16.dp), tint = accent)
+        Text(link.label, style = style, color = accent, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, Modifier.size(16.dp), tint = accent)
     }
 }
 

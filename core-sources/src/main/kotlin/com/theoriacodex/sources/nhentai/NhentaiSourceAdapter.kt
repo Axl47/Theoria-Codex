@@ -42,6 +42,7 @@ import com.theoriacodex.sources.common.parseJsonObject as parseSourceJsonObject
 import com.theoriacodex.sources.common.sourceNetworkFailure
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
+import com.theoriacodex.sources.http.THEORIA_SOURCE_USER_AGENT
 import com.theoriacodex.sources.media.mimeFromFileExt
 import java.io.IOException
 import java.net.URLEncoder
@@ -769,7 +770,7 @@ private val NHENTAI_METADATA_MIRROR_BASES = listOf(
 internal const val NHENTAI_SEARCH_PAGE_SIZE = 25
 private const val NHENTAI_V2_SEARCH_ALL_QUERY = "*"
 private val NHENTAI_DEFAULT_HEADERS = mapOf(
-    "User-Agent" to "TheoriaCodex/1.0 (Android source adapter)",
+    "User-Agent" to THEORIA_SOURCE_USER_AGENT,
     "Referer" to "https://nhentai.net/",
     "Accept" to "application/json, text/plain, */*",
 )

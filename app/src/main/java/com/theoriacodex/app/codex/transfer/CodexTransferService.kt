@@ -3,6 +3,7 @@ package com.theoriacodex.app.codex.transfer
 import com.google.gson.Gson
 import com.theoriacodex.app.codex.buildCodexShareFile
 import com.theoriacodex.app.codex.parseCodexShareFile
+import com.theoriacodex.domain.source.CustomSourceIds
 import com.theoriacodex.app.codex.resolveCodexShareImportPost
 import com.theoriacodex.app.codex.sanitizeCodexExportName
 import com.theoriacodex.app.codex.selectCodexShareEntries
@@ -45,6 +46,8 @@ sealed interface CodexImportResult {
         val codexId: String,
         val imported: Int,
         val skipped: Int,
+        /** Hosts of custom sites in the file that aren't usable here, so the user can set them up. */
+        val missingSiteHosts: List<String> = emptyList(),
     ) : CodexImportResult
 }
 
@@ -130,6 +133,9 @@ class CodexTransferService internal constructor(
             codexId = committed.codex.codexId,
             imported = committed.acceptedPosts,
             skipped = entries.size - resolvedPosts.size,
+            missingSiteHosts = entries.map { (_, postId) -> postId.source }.distinct()
+                .filter { it.isCustom && sourceRegistry.adapterFor(it) == null }
+                .map { CustomSourceIds.hostLabel(it.id) },
         )
     }
 

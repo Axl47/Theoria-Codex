@@ -1,5 +1,6 @@
 package com.theoriacodex.app.creator
 
+import com.theoriacodex.app.source.displayName
 import com.theoriacodex.data.repository.CreatorFollowsRepository
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.Page
@@ -25,7 +26,7 @@ class CreatorProfileCoordinator(
 
     override suspend fun load(creator: CreatorProfile, pageToken: String?): Page<Post> {
         val adapter = requireNotNull(adapterFor(creator)) {
-            "Creator browsing is not available for ${creator.source.name.lowercase()}."
+            "Creator browsing is not available for ${creator.source.displayName()}."
         }
         return withTimeoutOrNull(SOURCE_TIMEOUT_MS) {
             adapter.searchCreatorPosts(creator, pageToken)

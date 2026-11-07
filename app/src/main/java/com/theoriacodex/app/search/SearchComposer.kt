@@ -25,12 +25,16 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import com.theoriacodex.app.recents.SavedSearchNameDialog
+import androidx.compose.material.icons.filled.BookmarkAdd
+import com.theoriacodex.app.ui.components.NameEntryDialog
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -110,8 +114,7 @@ internal fun SearchComposer(
     onOpenSourceAccounts: () -> Unit,
     onDigitsCommitted: () -> Unit,
     onDismiss: () -> Unit,
-    savedSearches: List<SavedSearchEntry> = emptyList(),
-    onOpenSavedSearch: (SavedSearchEntry) -> Unit = {},
+    savedSearches: ComposerSavedSearches = ComposerSavedSearches(),
     savedTags: ComposerSavedTags = ComposerSavedTags(emptyList()),
 ) {
     Dialog(
@@ -122,7 +125,7 @@ internal fun SearchComposer(
             SearchComposerContent(
                 state, onAction, sourcePicker, onApply, onReset, onUndo,
                 onManageSavedTags, onOpenSourceAccounts, onDigitsCommitted, onDismiss,
-                savedSearches, onOpenSavedSearch, savedTags,
+                savedSearches, savedTags,
             )
         }
     }
@@ -140,8 +143,7 @@ private fun SearchComposerContent(
     onOpenSourceAccounts: () -> Unit,
     onDigitsCommitted: () -> Unit,
     onDismiss: () -> Unit,
-    savedSearches: List<SavedSearchEntry>,
-    onOpenSavedSearch: (SavedSearchEntry) -> Unit,
+    savedSearches: ComposerSavedSearches,
     savedTags: ComposerSavedTags,
 ) {
     val input = state.suggestions.input
@@ -162,7 +164,7 @@ private fun SearchComposerContent(
         else -> ComposerAddTarget.Required
     }
     // A narrowed scope asks for one tag type, and saved tags are general tags.
-    val savedTagMatches = savedTags.entries.takeIf { state.query.selectedScope.isAll || state.query.selectedScope.facet == SearchFacet.TAG }.orEmpty()
+    val savedTagMatches = savedTags.all.takeIf { state.query.selectedScope.isAll || state.query.selectedScope.facet == SearchFacet.TAG }.orEmpty()
     val suggestions = composerSuggestions(target, state.suggestions.facetedAutocomplete, state.suggestions.autocomplete)
         .withSavedTags(target, input, savedTagMatches, draft)
     val liveSelection = selection?.takeIf { selected ->
@@ -203,7 +205,7 @@ private fun SearchComposerContent(
 
     ComposerEditorBody(
         state, target, targetIndex, terms, suggestions, liveSelection, inputRequester, snackbars,
-        sourcePicker, savedSearches, onOpenSavedSearch, savedTags, queryActions, onAction, onOpenSourceAccounts,
+        sourcePicker, savedSearches, savedTags, queryActions, onAction, onOpenSourceAccounts,
         onUndo, onReset, onManageSavedTags, onApply, onDismiss,
         onCommit = ::commitTyped,
         onToggleTarget = {
@@ -267,8 +269,7 @@ private fun ComposerEditorBody(
     inputRequester: FocusRequester,
     snackbars: SnackbarHostState,
     sourcePicker: @Composable () -> Unit,
-    savedSearches: List<SavedSearchEntry>,
-    onOpenSavedSearch: (SavedSearchEntry) -> Unit,
+    savedSearches: ComposerSavedSearches,
     savedTags: ComposerSavedTags,
     queryActions: ComposerQueryActions,
     onAction: (SearchAction) -> Unit,
@@ -286,7 +287,7 @@ private fun ComposerEditorBody(
     val queryScroll = rememberScrollState()
     @Composable
     fun query(compact: Boolean, modifier: Modifier) = ComposerTagList(
-        state, terms, targetIndex, liveSelection, compact, queryScroll, savedSearches, onOpenSavedSearch, savedTags,
+        state, terms, targetIndex, liveSelection, compact, queryScroll, savedSearches, savedTags,
         onManageSavedTags, queryActions, onOpenSourceAccounts, onAction, modifier,
     )
     Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
@@ -318,6 +319,7 @@ private fun ComposerEditorBody(
             input = input,
             target = target,
             validationMessage = state.query.validationMessage,
+            limitNotices = state.query.termLimitNotices,
             canCommit = state.suggestions.canCommitInput,
             inputRequester = inputRequester,
             onToggleTarget = onToggleTarget,
@@ -375,6 +377,7 @@ private fun ComposerField(
     input: String,
     target: ComposerAddTarget,
     validationMessage: String?,
+    limitNotices: List<SearchTermLimitNotice>,
     canCommit: Boolean,
     inputRequester: FocusRequester,
     onToggleTarget: () -> Unit,
@@ -398,8 +401,10 @@ private fun ComposerField(
             onValueChange = onValueChange,
             shape = RoundedCornerShape(28.dp),
             singleLine = true,
-            isError = validationMessage != null,
-            supportingText = validationMessage?.let { message -> { Text(message) } },
+            // A source's tag cap shows here while tags are added, before Search can be pressed.
+            isError = validationMessage != null || limitNotices.any(SearchTermLimitNotice::blocksSearch),
+            supportingText = (validationMessage ?: limitNotices.takeIf { it.isNotEmpty() }
+                ?.joinToString(" ") { it.message() })?.let { message -> { Text(message) } },
             placeholder = {
                 Text(
                     when (target) {
@@ -562,8 +567,7 @@ private fun ComposerTagList(
     selection: SelectedTerm?,
     compact: Boolean,
     scroll: ScrollState,
-    savedSearches: List<SavedSearchEntry>,
-    onOpenSavedSearch: (SavedSearchEntry) -> Unit,
+    savedSearches: ComposerSavedSearches,
     savedTags: ComposerSavedTags,
     onManageSavedTags: () -> Unit,
     queryActions: ComposerQueryActions,
@@ -586,7 +590,7 @@ private fun ComposerTagList(
                 modifier = Modifier.padding(vertical = 8.dp),
             )
         }
-        ComposerSavedSection(savedSearches, onOpenSavedSearch, savedTags, state.query.draft, targetIndex, onManageSavedTags, onAction)
+        ComposerSavedSection(savedSearches, savedTags, state.query.draft, targetIndex, onManageSavedTags, onAction)
         if (
             state.query.appliedSourceScope !is SearchSourceScope.Single &&
             visibleSourceStatusChipStatuses(state.content.statuses).isNotEmpty()
@@ -596,38 +600,93 @@ private fun ComposerTagList(
     }
 }
 
-/** Saved searches and saved tags share one section, each keeping its own row and icon. */
+/**
+ * Saved searches and saved tags, split by a divider because they act differently: a saved search
+ * replaces the search and runs it, while a saved tag adds to the search being built. Each part has
+ * its own Manage, and searches can be saved from here.
+ */
 @Composable
 private fun ComposerSavedSection(
-    savedSearches: List<SavedSearchEntry>,
-    onOpenSavedSearch: (SavedSearchEntry) -> Unit,
+    savedSearches: ComposerSavedSearches,
     savedTags: ComposerSavedTags,
     draft: Query,
     targetIndex: Int,
     onManageSavedTags: () -> Unit,
     onAction: (SearchAction) -> Unit,
 ) {
-    if (savedSearches.isEmpty() && savedTags.entries.isEmpty()) return
-    Row {
-        ComposerSectionTitle("Saved", Modifier.weight(1f).alignByBaseline())
+    val showSearches = savedSearches.entries.isNotEmpty() || savedSearches.canSaveCurrent
+    if (showSearches) {
+        var naming by remember { mutableStateOf(false) }
+        SavedPartHeader("Saved searches", "Tap to run") {
+            savedSearches.onSaveCurrent?.let {
+                TextButton(onClick = { naming = true }) {
+                    Icon(Icons.Default.BookmarkAdd, null, Modifier.size(18.dp))
+                    Text("Save", Modifier.padding(start = 4.dp))
+                }
+            }
+            if (savedSearches.entries.isNotEmpty()) {
+                TextButton(
+                    onClick = savedSearches.onManage,
+                    modifier = Modifier.semantics { contentDescription = "Manage saved searches" },
+                ) { Text("Manage") }
+            }
+        }
+        if (savedSearches.entries.isNotEmpty()) {
+            SavedSearchChips(savedSearches)
+        } else {
+            SavedPartHint("Save this search to run it again in one tap.")
+        }
+        if (naming) {
+            SavedSearchNameDialog(
+                initialName = savedSearches.suggestedName,
+                renaming = false,
+                onDismiss = { naming = false },
+                onConfirm = { name ->
+                    savedSearches.onSaveCurrent?.invoke(name)
+                    naming = false
+                },
+            )
+        }
+    }
+    if (savedTags.all.isEmpty()) return
+    if (showSearches) HorizontalDivider(Modifier.padding(top = 8.dp))
+    SavedPartHeader("Saved tags", "Tap to add to your search") {
         if (savedTags.entries.isNotEmpty()) {
             TextButton(
                 onClick = onManageSavedTags,
-                modifier = Modifier.alignByBaseline().semantics { contentDescription = "Manage saved tags" },
+                modifier = Modifier.semantics { contentDescription = "Manage saved tags" },
             ) { Text("Manage") }
         }
     }
-    if (savedSearches.isNotEmpty()) SavedSearchChips(savedSearches, onOpenSavedSearch)
-    if (savedTags.entries.isNotEmpty()) SavedTagChips(savedTags.entries, draft, targetIndex, onAction)
+    SavedTagChips(savedTags, draft, targetIndex, onAction)
+}
+
+/** A part's title with what tapping its chips does, and its buttons at the end. */
+@Composable
+private fun SavedPartHeader(title: String, tapHint: String, actions: @Composable () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            ComposerSectionTitle(title)
+            Text(tapHint, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        actions()
+    }
+}
+
+@Composable
+private fun SavedPartHint(text: String) {
+    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 /** One tap reruns a saved search, replacing the current draft. */
 @Composable
-private fun SavedSearchChips(searches: List<SavedSearchEntry>, onOpen: (SavedSearchEntry) -> Unit) {
+private fun SavedSearchChips(savedSearches: ComposerSavedSearches) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(searches, key = SavedSearchEntry::id) { entry ->
-            AssistChip(
-                onClick = { onOpen(entry) },
+        items(savedSearches.entries, key = SavedSearchEntry::id) { entry ->
+            // The search on screen is highlighted, so a tap that just ran it shows which one it was.
+            FilterChip(
+                selected = savedSearches.isCurrent(entry),
+                onClick = { savedSearches.onOpen(entry) },
                 label = { Text(entry.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 leadingIcon = { Icon(Icons.Default.Bookmark, null, Modifier.size(16.dp)) },
             )
@@ -640,23 +699,65 @@ private fun SavedSearchChips(searches: List<SavedSearchEntry>, onOpen: (SavedSea
  * applies. A saved "or" group is added as one group, and its next tap removes it.
  */
 @Composable
-private fun SavedTagChips(tags: List<FavoriteTagEntry>, draft: Query, targetIndex: Int, onAction: (SearchAction) -> Unit) {
+private fun SavedTagChips(savedTags: ComposerSavedTags, draft: Query, targetIndex: Int, onAction: (SearchAction) -> Unit) {
+    var menuFor by remember { mutableStateOf<FavoriteTagEntry?>(null) }
+    var renaming by remember { mutableStateOf<FavoriteTagEntry?>(null) }
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(tags, key = FavoriteTagEntry::key) { tag ->
+        items(savedTags.all, key = FavoriteTagEntry::key) { tag ->
             val chipState = tag.state(draft)
             val group = tag.tags.size > 1
-            TagPickerChip(
-                label = tag.label,
-                count = null,
-                state = chipState,
-                enabled = tag.canTap(draft, targetIndex),
-                tapLabel = if (group) savedGroupTapLabel(tag.label, chipState) else tagTapLabel(tag.label, chipState),
-                onTap = { tag.tapActions(draft, targetIndex).forEach(onAction) },
-                leadingIcon = Icons.Default.Star,
-                reserveCountSlot = false,
-                // A scrolling row offers unbounded width, which would leave the chip's label none.
-                modifier = Modifier.widthIn(max = SAVED_TAG_MAX_WIDTH),
-            )
+            val editable = savedTags.isEditable(tag)
+            Box {
+                TagPickerChip(
+                    label = tag.label,
+                    count = null,
+                    state = chipState,
+                    enabled = tag.canTap(draft, targetIndex),
+                    tapLabel = if (group) savedGroupTapLabel(tag.label, chipState) else tagTapLabel(tag.label, chipState),
+                    onTap = { tag.tapActions(draft, targetIndex).forEach(onAction) },
+                    leadingIcon = Icons.Default.Star,
+                    reserveCountSlot = false,
+                    // A scrolling row offers unbounded width, which would leave the chip's label none.
+                    modifier = Modifier.widthIn(max = SAVED_TAG_MAX_WIDTH),
+                    onLongPress = if (editable) ({ menuFor = tag }) else null,
+                    longPressLabel = if (editable) "Edit ${tag.label}" else null,
+                )
+                SavedTagMenu(
+                    expanded = menuFor == tag,
+                    canRename = group,
+                    onDismiss = { menuFor = null },
+                    onRename = { menuFor = null; renaming = tag },
+                    onRemove = { menuFor = null; savedTags.onRemove(tag.source, tag.tags) },
+                )
+            }
         }
+    }
+    renaming?.let { entry ->
+        NameEntryDialog(
+            title = "Name “or” group",
+            initialName = entry.name.orEmpty(),
+            optional = true,
+            hint = "Leave blank to show it as ${entry.alternativesText}.",
+            onDismiss = { renaming = null },
+            onSave = { name ->
+                savedTags.onRename(entry.source, entry.tags, name)
+                renaming = null
+            },
+        )
+    }
+}
+
+/** A held saved tag's menu: Rename for "or" groups, and Remove. */
+@Composable
+private fun SavedTagMenu(expanded: Boolean, canRename: Boolean, onDismiss: () -> Unit, onRename: () -> Unit, onRemove: () -> Unit) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        if (canRename) {
+            DropdownMenuItem(text = { Text("Rename") }, leadingIcon = { Icon(Icons.Default.Edit, null) }, onClick = onRename)
+        }
+        DropdownMenuItem(
+            text = { Text("Remove from saved tags") },
+            leadingIcon = { Icon(Icons.Default.Delete, null) },
+            onClick = onRemove,
+        )
     }
 }

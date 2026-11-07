@@ -35,4 +35,4 @@ fun settleFeedContinuations(
 
 fun mergeFeedStatuses(previous: List<SourceRunStatus>, incoming: List<SourceRunStatus>): List<SourceRunStatus> =
     (previous.associateBy(SourceRunStatus::source) + incoming.associateBy(SourceRunStatus::source))
-        .values.sortedBy { it.source.name }
+        .values.sortedBy { it.source.id }

@@ -60,11 +60,14 @@ import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.related.LikeToggleOutcome
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchSourceScope
+import com.theoriacodex.app.codex.SearchSaveMemory
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsViewModel
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.parseExternalCreatorDeepLink
+import com.theoriacodex.app.source.parseCustomSitePostDeepLink
 import com.theoriacodex.app.source.parseExternalPostDeepLink
+import com.theoriacodex.app.source.unaddedBooruPostHost
 import com.theoriacodex.app.source.ExternalPostDeepLink
 import com.theoriacodex.app.ui.components.FeedFabRestoreRegistry
 import com.theoriacodex.app.ui.components.rememberFeedFabRestoreRegistry
@@ -200,6 +203,9 @@ internal class HomeNavigation(
 /** Posts on their way into a Codex, and what the save sheet should offer for them. */
 @Stable
 internal class PendingCodexSave {
+    /** Save targets per search this session, so the picker suggests where this search's posts went. */
+    val searchSaves = SearchSaveMemory()
+
     var visible by mutableStateOf(false)
         private set
     var posts by mutableStateOf<List<Post>>(emptyList())
@@ -566,14 +572,22 @@ internal class TheoriaShell(
 
     /** Opens a shared link as a creator profile or a one-post Viewer session, or says why it cannot. */
     suspend fun openExternalContent(uri: Uri) {
-        val deepLink = parseExternalPostDeepLink(uri)
+        val customSites = container.customSites.sites.value
+        val deepLink = parseExternalPostDeepLink(uri) ?: parseCustomSitePostDeepLink(uri.toString(), customSites)
         if (deepLink != null) {
             openExternalPost(deepLink)
             return
         }
         val creatorDeepLink = parseExternalCreatorDeepLink(uri)
         if (creatorDeepLink == null) {
-            toast("Unsupported URL format")
+            // A post on a booru that isn't added yet: offer the Sites setup with its address filled in.
+            val unaddedHost = unaddedBooruPostHost(uri.toString(), customSites)
+            if (unaddedHost != null) {
+                container.customSites.requestSetup(unaddedHost)
+                owners.settings.onAction(SettingsAction.OpenCustomSites)
+            } else {
+                toast("Unsupported URL format")
+            }
             return
         }
         val creator = creatorOpening.fromDeepLink(creatorDeepLink, sources.availableSources.value)
@@ -603,7 +617,7 @@ internal class TheoriaShell(
             return
         }
         val context = ViewerLaunchContext(
-            queryHash = "${deepLink.source.name.lowercase()}-deeplink:${deepLink.postId}",
+            queryHash = "${deepLink.source.id.lowercase()}-deeplink:${deepLink.postId}",
             startIndex = 0,
             streamSource = ViewerStreamSource.SEARCH,
             scrollOffsetHint = 0,
@@ -685,7 +699,7 @@ internal class TheoriaShell(
 
     /** Opens a related shelf no feed owner pages, such as a live Codex's; like other related streams it is not restored. */
     fun openRelatedViewer(seed: Post, shelfPosts: List<Post>, index: Int) {
-        val queryHash = "related:${seed.id.source.name}:${seed.id.sourcePostId}"
+        val queryHash = "related:${seed.id.source.id}:${seed.id.sourcePostId}"
         openStaticViewer(shelfPosts, queryHash, index, ViewerStreamSource.RELATED, persistContext = false)
     }
 

@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Cross-Source Tag Affinity</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f7f4; --surface: #ffffff; --text: #202124; --muted: #5f6368; --border: #d7d7d0;
+      --accent: #0f766e; --accent-soft: #dff3ef; --risk: #9a3412; --risk-soft: #ffedd5; --code: #111827;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #151716; --surface: #202321; --text: #f0f2ef; --muted: #b8beb7; --border: #3a403c;
+        --accent: #5eead4; --accent-soft: #123b37; --risk: #fdba74; --risk-soft: #43230f; --code: #0b0f0d;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+    header, main { max-width: 1180px; margin: 0 auto; padding: 24px; }
+    header { padding-top: 36px; }
+    h1, h2, h3 { line-height: 1.15; margin: 0 0 12px; }
+    h1 { font-size: clamp(2rem, 4vw, 3.25rem); }
+    h2 { margin-top: 36px; font-size: 1.55rem; }
+    h3 { margin-top: 24px; font-size: 1.1rem; }
+    p { margin: 0 0 14px; }
+    a { color: var(--accent); }
+    nav { position: sticky; top: 0; z-index: 10; border-block: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(10px); }
+    nav ul { display: flex; gap: 6px; max-width: 1180px; margin: 0 auto; padding: 8px 24px; list-style: none; overflow-x: auto; }
+    nav a { display: block; padding: 6px 10px; border-radius: 6px; text-decoration: none; white-space: nowrap; }
+    nav a:hover { background: var(--accent-soft); }
+    section { padding: 22px; margin: 18px 0; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.95rem; }
+    th, td { padding: 9px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-weight: 650; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }
+    pre { overflow-x: auto; padding: 14px; border-radius: 8px; background: var(--code); color: #f8fafc; }
+    details { margin: 12px 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: color-mix(in srgb, var(--surface) 88%, var(--bg)); }
+    summary { cursor: pointer; font-weight: 700; }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; color: var(--muted); }
+    .pill { padding: 4px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); }
+    .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin: 18px 0 0; }
+    .card { padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+    .card strong { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.82rem; letter-spacing: 0.02em; text-transform: uppercase; }
+    .callout { margin: 14px 0; padding: 12px 14px; border-left: 4px solid var(--accent); background: var(--accent-soft); border-radius: 6px; }
+    .risk { border-left-color: var(--risk); background: var(--risk-soft); }
+    .status-table td:first-child { width: 180px; color: var(--muted); font-weight: 650; }
+    @media print { nav { position: static; } section, .card { break-inside: avoid; } body { background: #fff; color: #000; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ExecPlan: Cross-Source Tag Affinity</h1>
+    <p>When this plan is complete, a Like on one source teaches For You about the same interest on the other tag-compatible sources. Liking a Pixiv post tagged <code>初音ミク</code> (translated by Pixiv as "Hatsune Miku") makes <code>hatsune_miku</code> a candidate seed on Danbooru, Gelbooru, AIBooru and Rule34.xxx. Liking a Gelbooru post tagged <code>hatsune_miku</code> can likewise seed Pixiv with <code>初音ミク</code>. Pixiv tag chips show the English translation beside the native tag, and still search the native tag.</p>
+    <div class="meta" aria-label="Plan metadata">
+      <span class="pill">Status: Validating (device checks pending)</span>
+      <span class="pill">Owner: Claude</span>
+      <span class="pill">Created: 2026-11-06</span>
+      <span class="pill">Updated: 2026-11-07</span>
+      <span class="pill">Plan file: .docs/exec/cross-source-tag-affinity.html</span>
+    </div>
+    <div class="dashboard">
+      <div class="card"><strong>Next Action</strong>Once benchmarks finish, run the manual device checks in Validation on the dev install.</div>
+      <div class="card"><strong>Main Risk</strong>Live provider behavior (Pixiv English translations, Gelbooru escaped tags) can only be confirmed on a device. Device use is paused for benchmarks, so these remain manual checks.</div>
+      <div class="card"><strong>Validation</strong>Focused JVM and Robolectric tests in <code>core-domain</code>, <code>core-sources</code>, <code>core-data</code>, <code>app-logic</code> and <code>app</code>. No device or emulator.</div>
+      <div class="card"><strong>Affected Areas</strong>Pixiv adapter, post taxonomy and storage, the tag suggestion store, post tag chips, the Gelbooru/Rule34 adapters, and For You seed generation.</div>
+    </div>
+  </header>
+
+  <nav aria-label="Plan sections">
+    <ul>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#context">Context</a></li>
+      <li><a href="#research">Research</a></li>
+      <li><a href="#phases">Phases</a></li>
+      <li><a href="#validation">Validation</a></li>
+      <li><a href="#living-log">Living Log</a></li>
+      <li><a href="#recovery">Recovery</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <section id="purpose">
+      <h2>Purpose / Big Picture</h2>
+      <p>For You currently learns each source separately. <code>ForYouCoordinator.buildSeedBySource</code> groups Likes by source, so a source the user never liked anything on gets no personalized seed at all. The same person's taste is spread across sources, and the strongest bridge already exists: Pixiv sends an English <code>translated_name</code> for many tags, and the booru sources use English underscore tags. Once that bridge is used, Likes anywhere improve recommendations everywhere it can map.</p>
+      <p>To see it working, like several Pixiv posts that share a translated tag, with no Danbooru Likes. Open For You with Danbooru enabled: Danbooru gets a seed built from the shared English tag instead of only trending tags.</p>
+    </section>
+
+    <section id="context">
+      <h2>Context And Orientation</h2>
+      <p><strong>Terms.</strong> A <em>source</em> is a provider adapter (<code>SourceKey</code>). <em>Taxonomy</em> is the typed tag list on a <code>Post</code> (<code>PostTaxonomyTerm</code>: value, facet, namespace, count); tag chips are built from it. <em>Training tags</em> are the tags stored with a Like (<code>LikedPost.tags</code>), computed by <code>trainingTagsFor</code>. For Pixiv these are deliberately native tags only, so a native tag and its translation never count twice. A <em>seed</em> is the 1–2 tags For You searches per source. A <em>concept key</em> (new) is a source-neutral spelling used only to compare tags across sources.</p>
+      <table>
+        <thead><tr><th>File</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr><td><code>core-sources/.../pixiv/PixivSourceAdapter.kt</code></td><td><code>parsePixivTags</code> flattens native tags and translations into one <code>canonicalTags</code> list, which loses the pairing. Accept-Language follows the device locale, so translations are not reliably English. <code>compileTagQuery</code> strips trailing <code>(…)</code> and underscores from every tag, including native Pixiv tags.</td></tr>
+          <tr><td><code>core-domain/.../model/Post.kt</code></td><td><code>PostTaxonomyTerm</code>. Taxonomy defaults to <code>canonicalTags</code>, so Pixiv posts currently get one chip for the Japanese tag and another for the English one.</td></tr>
+          <tr><td><code>core-data/.../storage/PostStorageRecords.kt</code></td><td>Post payload JSON codec, used by Room and DataStore storage.</td></tr>
+          <tr><td><code>app/.../codex/CodexShareModels.kt</code></td><td>Codex share payloads carry taxonomy terms too.</td></tr>
+          <tr><td><code>app/.../search/TagSuggestionStore.kt</code></td><td>Persisted per-source tag cache with <code>alternateText</code>. Search results feed it through <code>SearchCoordinator.rememberSeenTags</code> via <code>putFaceted</code>, but <code>FacetedTagSuggestion</code> has no <code>alternateText</code>, so translations are dropped.</td></tr>
+          <tr><td><code>app/.../tags/PostTagActionSection.kt</code></td><td>Post tag chips (the Viewer's info sheet). The label is <code>term.value</code>.</td></tr>
+          <tr><td><code>app-logic/.../search/state/SearchDraftReducer.kt</code></td><td><code>resolveCommittedInput</code> swaps typed text for a matching autocomplete value but ignores <code>alternateText</code>, so typing "Hatsune Miku" and pressing Enter searches English on Pixiv.</td></tr>
+          <tr><td><code>app/.../search/SearchCoordinator.kt</code></td><td><code>resolvePixivCompatibilityTags</code> duplicates the adapter's Pixiv token normalization for unified search.</td></tr>
+          <tr><td><code>core-sources/.../gelbooru/GelbooruSourceAdapter.kt</code>, <code>.../rule34/Rule34XxxSourceAdapter.kt</code></td><td>Split the post <code>tags</code> string as-is. Gelbooru returns HTML-escaped tags (<code>&amp;#039;</code>).</td></tr>
+          <tr><td><code>core-domain/.../recommendation/*</code>, <code>app/.../recommend/ForYouCoordinator.kt</code>, <code>ForYouSections.kt</code>, <code>app-logic/.../recommend/ForYouInterests.kt</code></td><td>Per-source normalization, affinity, seed generation and interest sections.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="research">
+      <h2>Research: Pixiv vs. Booru Tag Data</h2>
+      <table>
+        <thead><tr><th>Aspect</th><th>Pixiv</th><th>Danbooru / AIBooru</th><th>Gelbooru / Rule34.xxx</th></tr></thead>
+        <tbody>
+          <tr><td>Who tags</td><td>The artist (and sometimes viewers). Free-form, mostly Japanese, spaces allowed.</td><td>A curated community with aliases and implications.</td><td>Community; less curated.</td></tr>
+          <tr><td>Spelling</td><td>Mixed case and full-width or half-width forms. Native qualifiers use parentheses, e.g. <code>ラム(リゼロ)</code>.</td><td>Lowercase, ASCII, underscores. Qualifiers like <code>saber_(fate)</code>.</td><td>Same as Danbooru, but the API returns HTML entities (<code>&amp;#039;</code>, <code>&amp;amp;</code>).</td></tr>
+          <tr><td>Categories</td><td>None in the API.</td><td>Typed strings (<code>tag_string_general/character/copyright/artist/meta</code>). The adapter reads only the untyped <code>tag_string</code>.</td><td>Only via the tag API; posts are untyped.</td></tr>
+          <tr><td>Translation</td><td><code>translated_name</code> in the <code>Accept-Language</code> language, when Pixiv has one.</td><td>Wiki <code>other_names</code> hold Japanese names. Danbooru's own Pixiv import uses them.</td><td>None.</td></tr>
+          <tr><td>Markers</td><td><code>NNNusers入り</code> popularity, <code>R-18</code>/<code>R-18G</code> rating, <code>オリジナル</code>.</td><td>Meta tags such as <code>highres</code>, <code>absurdres</code>, <code>commentary_request</code>.</td><td>Similar metadata tags.</td></tr>
+        </tbody>
+      </table>
+      <p><strong>How Danbooru maps Pixiv tags</strong> (from <code>danbooru/danbooru</code> source): apply NFKC to the Pixiv tag, collapse whitespace to <code>_</code> and lowercase it, strip <code>\d+users入り</code>, then look it up in wiki <code>other_names</code>. Failing that, it falls back to the normalized name plus alias resolution. This plan copies the NFKC + whitespace + lowercase part for concept keys.</p>
+      <div class="callout"><strong>Findings that change code here:</strong> (1) translations are lost on posts, and the translation language follows the device locale; (2) the Pixiv search token rewriting is lossy for native tags; (3) Gelbooru/Rule34 tags keep HTML entities, which breaks chips, search, Codex automatic tags and cross-source matching for tags like <code>jojo's_bizarre_adventure</code>; (4) typed English plus Enter on Pixiv doesn't use the translated suggestion. <strong>Recorded but not changed:</strong> Danbooru meta tags and Pixiv <code>R-18</code> markers enter training. Changing that alters existing For You behavior and deserves its own decision. <code>animated</code>, itself a Danbooru meta tag, matters to this app.</div>
+    </section>
+
+    <section id="phases">
+      <h2>Phases</h2>
+
+      <article>
+        <h3>Phase 1: Keep Pixiv translations paired</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Each Pixiv taxonomy term is a native tag with an optional English <code>translation</code>. One chip shows "Hatsune Miku · 初音ミク" and searches <code>初音ミク</code>. The suggestion store learns the pairs from every Pixiv result page.</td></tr>
+          <tr><td>Edits</td><td>
+            <ol>
+              <li><code>PostTaxonomyTerm.translation: String? = null</code> (display/learning only; never searched).</li>
+              <li>New <code>core-domain/.../tags/PixivTags.kt</code>:
+                <ul>
+                  <li><code>pixivSearchToken(raw)</code>: the single shared Pixiv token normalizer. It strips <code>-</code>, and for ASCII-only (booru-style) tokens also replaces <code>_</code> with a space and strips trailing <code>(…)</code> qualifiers. Native tags pass through untouched.</li>
+                  <li><code>withRecoveredPixivTranslations(post)</code>: legacy upgrade for payloads written before this change. The adapter always appended each translation right after its native tag in <code>canonicalTags</code>, so the pairs are recovered from that order.</li>
+                </ul>
+              </li>
+              <li><code>PixivSourceAdapter</code>: build taxonomy from native tags with translations. Keep <code>canonicalTags</code> unchanged (native + translation) so Codex automatic tags, clipboard and Codex search options keep matching English. Always request <code>Accept-Language: en-US</code>. Use <code>pixivSearchToken</code>.</li>
+              <li>Storage: <code>PostTaxonomyTermStorageRecord.translation</code>, with the legacy recovery applied on decode. Codex share taxonomy gets the same field and recovery.</li>
+              <li><code>FacetedTagSuggestion.alternateText</code>; <code>CachedSuggestion.fromFacetedSuggestion</code> keeps it; <code>rememberSeenTags</code> passes <code>term.translation</code>.</li>
+              <li>Chip label shows the translation first and the native tag second.</li>
+              <li><code>resolveCommittedInput</code> also matches a suggestion's <code>alternateText</code>.</li>
+              <li><code>SearchCoordinator.resolvePixivCompatibilityTags</code> calls <code>pixivSearchToken</code>.</li>
+            </ol></td></tr>
+          <tr><td>Acceptance</td><td>Adapter, storage, share-codec, store, reducer and chip tests pass. A legacy Pixiv payload decodes into paired terms.</td></tr>
+        </tbody></table>
+      </article>
+
+      <article>
+        <h3>Phase 2: Decode HTML-escaped booru tags</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Gelbooru and Rule34.xxx tags arrive as real tag names (<code>jojo's_bizarre_adventure</code>). Already stored escaped tags still match.</td></tr>
+          <tr><td>Edits</td><td>
+            <ul>
+              <li><code>decodeHtmlEntities(value)</code> in <code>core-domain/.../tags/SourceTagNormalization.kt</code> (named and numeric entities; a no-op without <code>&amp;</code>).</li>
+              <li>Apply it in Gelbooru and Rule34.xxx post and tag-suggestion parsing.</li>
+              <li><code>sourceTagKey</code>/<code>sourceTagsMatch</code> and <code>RecommendationTagNormalization</code> decode for underscore sources, so legacy escaped Likes and automatic tags compare equal.</li>
+            </ul></td></tr>
+          <tr><td>Acceptance</td><td>Adapter and normalization tests pass. Decoding is idempotent for ordinary tags.</td></tr>
+        </tbody></table>
+      </article>
+
+      <article>
+        <h3>Phase 3: Cross-source affinity in For You</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Tag-compatible sources (Pixiv, Danbooru, AIBooru, Gelbooru, Rule34.xxx) train on each other's Likes. Other sources are unchanged.</td></tr>
+          <tr><td>Edits</td><td>New <code>core-domain/.../recommendation/CrossSourceTags.kt</code>:
+            <ul>
+              <li><code>crossSourceTagKey(tag)</code>: decode entities, NFKC, lowercase, <code>_</code>/whitespace → single space.</li>
+              <li><code>PixivTagDictionary</code>: built from Pixiv suggestions with <code>alternateText</code> in the store. Maps native → concept key, and concept key → the first native tag in store order (the store keeps the most recently seen entries first).</li>
+              <li><code>CrossSourceTags.trainingDocuments(target, likes, dictionary)</code>: the target's native documents first, then other compatible sources' documents translated into the target's vocabulary. Booru targets use the <code>key.replace(' ', '_')</code> spelling; the Pixiv target uses a dictionary lookup. Tags that can't be mapped are dropped, and so are empty documents. Most recent first, capped at <code>max(nativeCount, 24)</code> foreign documents, so native Likes stay at least half of the evidence once there are 24 or more.</li>
+            </ul>
+            <code>ForYouCoordinator.buildSeedBySource</code> and <code>ForYouSectionsLoader.generatedSeeds</code> both use it. Sections already drop tags whose provider count is 0, which filters mapped tags that don't exist on the target.</td></tr>
+          <tr><td>Acceptance</td><td>Coordinator test: Pixiv-only Likes with Danbooru enabled yield a Danbooru seed with the mapped tag. Booru Likes yield a Pixiv seed only through the dictionary. Native-only behavior is unchanged when no foreign documents map.</td></tr>
+        </tbody></table>
+      </article>
+    </section>
+
+    <section id="validation">
+      <h2>Validation And Acceptance</h2>
+      <p>Run from the repository root. Robolectric needs Java 21+: <code>export JAVA_HOME=/opt/homebrew/Cellar/openjdk/26.0.2.1/libexec/openjdk.jdk/Contents/Home</code>.</p>
+      <table>
+        <thead><tr><th>Check</th><th>Command</th><th>Expected</th></tr></thead>
+        <tbody>
+          <tr><td>Domain + sources + data</td><td><code>./gradlew :core-domain:test :core-sources:test :core-data:test</code></td><td>All pass.</td></tr>
+          <tr><td>App logic</td><td><code>./gradlew :app-logic:test</code></td><td>All pass.</td></tr>
+          <tr><td>Focused app tests</td><td><code>./gradlew :app:testDebugUnitTest --tests '*ForYou*' --tests '*TagSuggestionStore*' --tests '*PostTag*' --tests '*CodexShare*' --tests '*SearchCoordinator*'</code></td><td>All pass.</td></tr>
+          <tr><td>Static analysis</td><td><code>./gradlew detekt</code></td><td>No new findings.</td></tr>
+          <tr><td>Manual (device, later)</td><td>On the dev install: open a Pixiv post's tags; type "hatsune miku" in Pixiv search and press Enter; open a Gelbooru post tagged with an apostrophe and tap the tag; with only Pixiv Likes, enable Danbooru and open For You.</td><td>A paired chip that searches the native tag; a native-tag search; a working apostrophe tag search; a Danbooru seed from translated Pixiv tags.</td></tr>
+        </tbody>
+      </table>
+      <div class="callout risk">Device and emulator checks are paused while benchmarks run (user instruction, 2026-11-06). Live Pixiv translations, Gelbooru escaping and the For You result are not established by host tests.</div>
+    </section>
+
+    <section id="living-log">
+      <h2>Living Log</h2>
+      <h3>Progress</h3>
+      <ul>
+        <li>[x] 2026-11-06 Research and plan.</li>
+        <li>[x] 2026-11-07 Phase 1: Pixiv translation pairing. Evidence: <code>:core-domain:test :core-sources:test :core-data:test :app-logic:test</code> pass; focused <code>:app:testDebugUnitTest</code> (TagSuggestionStore, PostTag*, CodexShare*, SearchCoordinator*, TrainingTags) pass; detekt clean for touched modules. Pixiv tag tests moved to <code>PixivTagsAdapterTest</code> to keep <code>PixivSourceAdapterTest</code> under detekt's class-size limit.</li>
+        <li>[x] 2026-11-07 Phase 2: booru entity decoding. Decoding lives in <code>normalizeGelbooruToken</code>, so search keys, favorites, autocomplete prefixes and recommendation keys all see real names. Evidence: <code>:core-domain:test :core-sources:test :core-data:test :app-logic:test</code> pass; <code>:app:testDebugUnitTest</code> Search/Codex/ForYou/Tag filters ran 383 tests, 0 failures, 3 skipped; detekt clean for core modules.</li>
+        <li>[x] 2026-11-07 Phase 3: cross-source affinity. <code>CrossSourceTraining</code> translates each Like at most once, and only for source pairs that can map, so the existing read-once test still holds. Evidence: <code>:core-domain:test</code> (incl. 5 <code>CrossSourceTagsTest</code> cases), <code>:app-logic:test</code>, <code>:app:testDebugUnitTest --tests '*ForYou*' --tests '*TrainingTags*'</code> (incl. 15 <code>ForYouCoordinatorTest</code> cases) pass; <code>:core-domain:detekt</code> clean; <code>:app:detekt</code> reports only the finding that predates this plan.</li>
+        <li>[ ] Manual device checks (paused while benchmarks run).</li>
+      </ul>
+      <h3>Surprises And Discoveries</h3>
+      <ul>
+        <li>Pixiv Likes were already de-duplicated for training (<code>recommendationTaxonomyFor</code> prefers <code>rawTags</code> for Pixiv). Evidence: <code>app-logic/.../TrainingTagsTest.kt</code>.</li>
+        <li>Untyped booru taxonomy means characters and series do train For You on Danbooru and Gelbooru. They are the strongest cross-source bridge.</li>
+        <li><code>:app:detekt</code> already fails on <code>main</code> with a LongMethod finding in <code>app/src/test/.../tags/PostTagActionLazyLayoutTest.kt</code>, a file this plan does not touch. Left as is.</li>
+        <li>Danbooru was down for maintenance during research, so its behavior was confirmed from its source code instead (<code>WikiPage.normalize_other_name</code>, <code>TagNormalizer</code>, <code>Source::Extractor#translate_tag</code>).</li>
+      </ul>
+      <h3>Decision Log</h3>
+      <ul>
+        <li>Decision: build the translation dictionary from the existing tag suggestion store, not from liked post payloads or a new Likes column. Rationale: no Room migration and no payload decoding per For You run, and it grows as the user browses Pixiv. Trade-off: a liked Pixiv tag maps only once its pair has been seen. Date/Author: 2026-11-06 / Claude.</li>
+        <li>Decision: request Pixiv translations in English regardless of device locale. Rationale: the booru vocabulary is English, and chips show one consistent language. Date/Author: 2026-11-06 / Claude.</li>
+        <li>Decision: keep Pixiv <code>canonicalTags</code> unchanged. Rationale: Codex automatic tags, clipboard and Codex search options already match English names there. Date/Author: 2026-11-06 / Claude.</li>
+        <li>Decision: cap foreign documents at <code>max(native, 24)</code>. Rationale: they bridge cold starts but never outweigh what the user liked on that source. Date/Author: 2026-11-06 / Claude.</li>
+        <li>Decision: exact concept-key matching only; no qualifier stripping, alias tables or the HuggingFace dataset. Rationale: smallest design that covers characters, series and common general tags. Date/Author: 2026-11-06 / Claude.</li>
+      </ul>
+      <h3>Outcomes And Retrospective</h3>
+      <p>All three phases are implemented and covered by host tests. A Pixiv Like now yields a seed on Gelbooru (<code>hatsune_miku</code> from <code>初音ミク</code>) once the pair is in the suggestion store, and booru Likes reach Pixiv through the same dictionary. Not yet proven: live Pixiv English translations, Gelbooru's escaped-tag behavior, and the For You result on a device. Future agents: the dictionary only grows as Pixiv results, autocomplete or trending are seen, so existing Pixiv Likes map gradually rather than immediately.</p>
+      <h3>Follow-ups (not in scope)</h3>
+      <ul>
+        <li>Unified search could send booru tags to Pixiv as dictionary-mapped native tags instead of stripped English.</li>
+        <li>Decide whether Danbooru meta tags and Pixiv rating markers should be excluded from training.</li>
+      </ul>
+    </section>
+
+    <section id="recovery">
+      <h2>Idempotence And Recovery</h2>
+      <p>No destructive operations or schema migrations. The new JSON fields are optional: old payloads decode as before plus the recovered pairs, and older app versions ignore the field. Each phase is its own commit; revert one with <code>git revert &lt;sha&gt;</code>. Gradle test commands are safe to rerun.</p>
+    </section>
+  </main>
+</body>
+</html>

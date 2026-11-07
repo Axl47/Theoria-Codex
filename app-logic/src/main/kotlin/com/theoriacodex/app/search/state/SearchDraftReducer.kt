@@ -571,13 +571,17 @@ object SearchDraftReducer {
         val trimmed = input.trim()
         val source = (state.query.draft.mode as? QueryMode.Source)?.source ?: return trimmed
         if (state.query.supportedScopes.isNotEmpty()) return trimmed
-        if (source !in SUGGESTION_CANONICALIZATION_SOURCES) return trimmed
+        if (source !in SUGGESTION_CANONICALIZATION_SOURCES && !source.isCustom) return trimmed
         val parsed = parseScopedInput(trimmed)
         if (parsed.explicitScope != null) return trimmed
+        // A typed translation ("Hatsune Miku") commits the native tag it labels (初音ミク).
         val matched = state.suggestions.autocomplete.firstOrNull { suggestion ->
             sourceTagsMatch(source, suggestion.text, parsed.value)
-        }?.text?.trim().orEmpty().ifBlank { parsed.value }
-        return if (parsed.isExclude) "-$matched" else matched
+        }?.text ?: state.suggestions.autocomplete.firstOrNull { suggestion ->
+            suggestion.alternateText?.let { sourceTagsMatch(source, it, parsed.value) } == true
+        }?.text
+        val committed = matched?.trim().orEmpty().ifBlank { parsed.value }
+        return if (parsed.isExclude) "-$committed" else committed
     }
 
     private fun resolveInputTerm(state: SearchUiState, input: ParsedScopedInput): SearchTerm? {
@@ -600,7 +604,7 @@ object SearchDraftReducer {
 
 fun modeKey(mode: QueryMode): String = when (mode) {
     QueryMode.Unified -> "unified"
-    is QueryMode.Source -> "source:${mode.source.name}"
+    is QueryMode.Source -> "source:${mode.source.id}"
 }
 
 fun QueryMode.isAvailable(sources: Set<SourceKey>): Boolean = when (this) {
@@ -661,7 +665,7 @@ private fun Query.directNhentaiGalleryIdCandidate(): String? {
 }
 
 private val SUGGESTION_CANONICALIZATION_SOURCES = setOf(
-    SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.NHENTAI, SourceKey.HITOMI,
+    SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.AIBOORU, SourceKey.DANBOORU, SourceKey.NHENTAI, SourceKey.HITOMI,
     SourceKey.IWARA, SourceKey.RULE34XXX, SourceKey.RULE34PAHEAL,
     SourceKey.RULE34VIDEO, SourceKey.RULE34GEN,
 )

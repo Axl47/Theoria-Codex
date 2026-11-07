@@ -3,19 +3,6 @@ package com.theoriacodex.domain.model
 /** Canonical wire MIME emitted for Pixiv Ugoira animation archives. */
 const val PIXIV_UGOIRA_MIME: String = "image/ugoira"
 
-enum class SourceKey {
-    PIXIV,
-    GELBOORU,
-    AIBOORU,
-    NHENTAI,
-    HITOMI,
-    IWARA,
-    RULE34XXX,
-    RULE34PAHEAL,
-    RULE34VIDEO,
-    RULE34GEN,
-}
-
 data class PostId(
     val source: SourceKey,
     val sourcePostId: String,
@@ -48,6 +35,8 @@ data class PostTaxonomyTerm(
     val facet: SearchFacet = SearchFacet.TAG,
     val sourceNamespace: String? = null,
     val count: Int? = null,
+    /** Provider-supplied translation of [value] (Pixiv's English name). Shown and learned, never searched. */
+    val translation: String? = null,
 ) {
     fun toSearchTerm(): SearchTerm {
         return SearchTerm(

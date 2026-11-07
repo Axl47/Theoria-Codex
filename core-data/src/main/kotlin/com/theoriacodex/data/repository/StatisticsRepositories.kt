@@ -69,7 +69,7 @@ internal data class StatisticsStoreRecord(
     fun toDomain(): LifetimeStatistics {
         val tags = linkedMapOf<StatisticsTagKey, Long>()
         watchedByTag.forEach { record ->
-            val source = runCatching { SourceKey.valueOf(record.source) }.getOrNull() ?: return@forEach
+            val source = SourceKey.parse(record.source) ?: return@forEach
             val tag = record.tag.trim().takeIf(String::isNotBlank) ?: return@forEach
             if (record.count <= 0L) return@forEach
             val key = StatisticsTagKey(source, tag)
@@ -145,8 +145,8 @@ internal data class StatisticsStoreRecord(
                 watchedPostCount = normalized.watchedPostCount,
                 watchedBySource = normalized.watchedBySource.encodeSourceCounts(),
                 watchedByTag = normalized.watchedByTag.entries
-                    .sortedWith(compareBy({ it.key.source.name }, { it.key.tag }))
-                    .map { (key, count) -> StatisticsTagCountRecord(key.source.name, key.tag, count) },
+                    .sortedWith(compareBy({ it.key.source.id }, { it.key.tag }))
+                    .map { (key, count) -> StatisticsTagCountRecord(key.source.id, key.tag, count) },
                 searchCount = normalized.searchCount,
                 searchesBySource = normalized.searchesBySource.encodeSourceCounts(),
                 forYouSearchCount = normalized.forYouSearchCount,
@@ -508,14 +508,14 @@ internal fun Long.saturatingAdd(delta: Long): Long {
 
 private fun Map<String, Long>.decodeSourceCounts(): Map<SourceKey, Long> {
     return entries.mapNotNull { (name, count) ->
-        val source = runCatching { SourceKey.valueOf(name) }.getOrNull() ?: return@mapNotNull null
+        val source = SourceKey.parse(name) ?: return@mapNotNull null
         val normalizedCount = count.takeIf { it > 0L } ?: return@mapNotNull null
         source to normalizedCount
     }.toMap()
 }
 
 private fun Map<SourceKey, Long>.encodeSourceCounts(): Map<String, Long> {
-    return entries.sortedBy { it.key.name }.associate { (source, count) -> source.name to count }
+    return entries.sortedBy { it.key.id }.associate { (source, count) -> source.id to count }
 }
 
 private fun Map<SourceKey, Long>.normalizeCounts(): Map<SourceKey, Long> {

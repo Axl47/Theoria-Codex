@@ -24,9 +24,9 @@ class RealProviderPageContractTest {
                 mode = QueryMode.Source(fixture.source), includeTags = emptyList(), excludeTags = emptyList(),
                 sort = SortMode.NEWEST, dateRange = null, minScore = null,
             ), null)
-            assertEquals(fixture.source.name, listOf("42", "43"), page.items.map { it.id.sourcePostId })
-            assertEquals(fixture.source.name, fixture.continuation, page.nextPageToken)
-            assertEquals(fixture.source.name, setOf(fixture.source), page.items.map { it.id.source }.toSet())
+            assertEquals(fixture.source.id, listOf("42", "43"), page.items.map { it.id.sourcePostId })
+            assertEquals(fixture.source.id, fixture.continuation, page.nextPageToken)
+            assertEquals(fixture.source.id, setOf(fixture.source), page.items.map { it.id.source }.toSet())
         }
     }
 
@@ -37,8 +37,8 @@ class RealProviderPageContractTest {
             val page = adapter.searchCreatorPosts(CreatorProfile(
                 source = fixture.source, displayName = "Creator", profileId = "7", uploadsQuery = "7", profileUrl = null,
             ), null)
-            assertEquals(fixture.source.name, listOf("42", "43"), page.items.map { it.id.sourcePostId })
-            assertEquals(fixture.source.name, fixture.continuation, page.nextPageToken)
+            assertEquals(fixture.source.id, listOf("42", "43"), page.items.map { it.id.sourcePostId })
+            assertEquals(fixture.source.id, fixture.continuation, page.nextPageToken)
         }
     }
 
@@ -67,7 +67,9 @@ class RealProviderPageContractTest {
             "<item><link>https://rule34.paheal.net/post/view/$id</link><title>Post</title></item>"
         }
         return listOf(
-            Fixture(SourceKey.AIBOORU, booru, "2"),
+            // Danbooru sites page newest-first searches before the lowest post id.
+            Fixture(SourceKey.AIBOORU, booru, "b42"),
+            Fixture(SourceKey.DANBOORU, booru, "b42"),
             Fixture(SourceKey.GELBOORU, booru, "1"),
             Fixture(SourceKey.RULE34XXX, booru, "1"),
             Fixture(SourceKey.PIXIV, pixiv, "30"),

@@ -8,6 +8,7 @@ import com.theoriacodex.app.backup.AutoBackupWorkflow
 import com.theoriacodex.app.backup.SharedPreferencesAutoBackupStore
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.creator.CreatorProfileCoordinator
+import com.theoriacodex.app.customsites.CustomSitesController
 import com.theoriacodex.app.media.BoundedMediaDurationProbe
 import com.theoriacodex.app.media.MediaDurationAcquisitionEngine
 import com.theoriacodex.app.media.MediaDurationCoordinator
@@ -45,6 +46,7 @@ import com.theoriacodex.data.repository.CodexLikesTransactions
 import com.theoriacodex.data.repository.FileBackedCacheRepository
 import com.theoriacodex.data.repository.FileBackedQueryRepository
 import com.theoriacodex.data.repository.DataStoreSettingsRepository
+import com.theoriacodex.data.repository.DataStoreSiteProfileRepository
 import com.theoriacodex.data.repository.DataStoreStatisticsRepository
 import com.theoriacodex.data.repository.DataStoreUiRestoreRepository
 import com.theoriacodex.data.repository.LikesRepository
@@ -77,6 +79,10 @@ import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.sources.RealAdapterRegistry
+import com.theoriacodex.sources.custom.CustomSiteHttpClient
+import com.theoriacodex.sources.http.HostOutageTracker
+import com.theoriacodex.sources.custom.SiteFamilyRegistry
+import com.theoriacodex.sources.custom.SiteProber
 import com.theoriacodex.sources.http.DefaultSourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.pixiv.PixivAuthApi
@@ -88,8 +94,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 
 data class DataDependencies(
     val storageDirectory: File,
@@ -117,6 +126,8 @@ data class SourceDependencies(
     val availableSources: StateFlow<Set<SourceKey>>,
     val networkOnline: StateFlow<Boolean> = kotlinx.coroutines.flow.MutableStateFlow(true),
     val pixivTokens: PixivTokenCoordinator = PixivTokenCoordinator(accounts, pixivAuthApi),
+    /** Hosts known to be down this session; shared by the built-in and custom-site clients. */
+    val outages: HostOutageTracker = HostOutageTracker(),
 )
 
 data class UpdateDependencies(
@@ -150,6 +161,9 @@ interface TheoriaAppContainer {
     val updates: UpdateDependencies
     val features: FeatureDependencies
     val workflows: WorkflowDependencies
+
+    /** Settings → Sites: user-added booru sites. */
+    val customSites: CustomSitesController
 }
 
 interface TheoriaAppContainerOwner {
@@ -175,10 +189,11 @@ internal class DefaultTheoriaAppContainer(
         seedData = loadSeedTagSuggestions(appContext),
         recoveryRegistry = legacyJsonRecoveryRegistry,
     )
-    private val sourceHttpClient = DefaultSourceHttpClient()
-    private val accountStore = ObservableSourceAccountStore(
-        delegate = AndroidSecureSourceCredentialsStore(appContext),
-    )
+    private val networkOnline = NetworkMonitor(appContext).online
+    private val hostOutages = HostOutageTracker(isOnline = { networkOnline.value })
+    private val sourceHttpClient = DefaultSourceHttpClient(outages = hostOutages)
+    private val credentialStore = AndroidSecureSourceCredentialsStore(appContext)
+    private val accountStore = ObservableSourceAccountStore(delegate = credentialStore)
     private val pixivAuthApi = PixivAuthApi(sourceHttpClient)
     private val pixivTokenCoordinator = PixivTokenCoordinator(
         credentialsProvider = accountStore,
@@ -207,10 +222,27 @@ internal class DefaultTheoriaAppContainer(
         pixivTokenCoordinator = pixivTokenCoordinator,
         pixivUgoiraMetadataCache = pixivUgoiraMetadataCache,
     )
-    private val sourceRegistry = AvailabilityAwareSourceAdapterRegistry(
-        delegate = allPotentialSourceRegistry,
-        availableSourceState = accountStore.availableSources,
+    private val siteProfiles = DataStoreSiteProfileRepository(baseDirectory = storageDirectory, scope = durableStoreScope)
+    private val siteFamilies = SiteFamilyRegistry.default()
+    private val customSourceRuntime = CustomSourceRuntime(
+        profiles = siteProfiles,
+        credentials = credentialStore,
+        families = siteFamilies,
+        http = CustomSiteHttpClient(readTimeoutMs = CUSTOM_SITE_READ_TIMEOUT_MS, outages = hostOutages),
+        scope = durableStoreScope,
     )
+    private val sourceRegistry = CompositeSourceAdapterRegistry(
+        builtIn = AvailabilityAwareSourceAdapterRegistry(
+            delegate = allPotentialSourceRegistry,
+            availableSourceState = accountStore.availableSources,
+        ),
+        potentialBuiltIns = allPotentialSourceRegistry,
+        custom = customSourceRuntime.snapshot,
+    )
+    /** Built-ins the account store allows plus usable custom sites; Settings intersects saves with it. */
+    private val availableSources: StateFlow<Set<SourceKey>> =
+        combine(accountStore.availableSources, customSourceRuntime.snapshot) { builtIns, custom -> builtIns + custom.adapters.keys }
+            .stateIn(durableStoreScope, SharingStarted.Eagerly, accountStore.availableSources.value)
     private val contentDatabase = TheoriaRoomDatabase.create(appContext)
     private val mediaDurationRepository = RoomMediaDurationRepository(contentDatabase)
     private val boundedMediaDurationProbe = BoundedMediaDurationProbe(sourceHttpClient)
@@ -275,6 +307,7 @@ internal class DefaultTheoriaAppContainer(
         journalFile = File(storageDirectory, "pending_profile_restore.json"),
         statistics = statisticsStore,
         writeGuard = profileWriteGuard,
+        siteProfiles = siteProfiles,
     )
     private val autoBackup = AutoBackupWorkflow(
         store = SharedPreferencesAutoBackupStore(appContext),
@@ -337,9 +370,10 @@ internal class DefaultTheoriaAppContainer(
         pixivAuthController = pixivAuthController,
         pixivUgoiraClient = pixivUgoiraClient,
         registry = sourceRegistry,
-        availableSources = accountStore.availableSources,
-        networkOnline = NetworkMonitor(appContext).online,
+        availableSources = availableSources,
+        networkOnline = networkOnline,
         pixivTokens = pixivTokenCoordinator,
+        outages = hostOutages,
     )
 
     override val updates = UpdateDependencies(
@@ -394,6 +428,16 @@ internal class DefaultTheoriaAppContainer(
         profileDeletion = profileDeletion,
     )
 
+    override val customSites: CustomSitesController = CustomSitesControllerImpl(
+        profiles = siteProfiles,
+        credentials = credentialStore,
+        prober = SiteProber(siteFamilies, CustomSiteHttpClient()),
+        runtime = customSourceRuntime.snapshot,
+        settings = settingsRepository,
+        library = contentRepository,
+        scope = durableStoreScope,
+    )
+
     /** Complete typed-store migration before any route can observe default placeholder state. */
     suspend fun awaitDurableStores() = coroutineScope {
         val settingsReady = async { settingsRepository.awaitReady() }
@@ -416,3 +460,6 @@ internal class DefaultTheoriaAppContainer(
         awaitProfileLibraryStores(contentDatabase, storageDirectory, legacyJsonRecoveryRegistry)
     }
 }
+
+/** Matches the built-in client's read timeout; probes keep the custom client's 10 s default. */
+private const val CUSTOM_SITE_READ_TIMEOUT_MS = 20_000

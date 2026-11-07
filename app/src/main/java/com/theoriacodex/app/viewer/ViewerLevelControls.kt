@@ -23,13 +23,33 @@ internal data class ViewerLevelFeedback(
     val available: Boolean = true,
 )
 
-/** Owns real display/media levels for one Viewer session, independently of player lifetimes. */
-internal class ViewerLevelControls(context: Context, private val window: Window?) {
+/**
+ * Levels set in the fullscreen Viewer. [App] lives as long as the app process, so every Viewer opened
+ * in the same app session starts where the last one left off.
+ */
+internal class ViewerSessionLevels {
+    var brightness: Float? = null
+    var volume: Int? = null
+
+    companion object {
+        val App = ViewerSessionLevels()
+    }
+}
+
+/**
+ * Owns real display/media levels while the Viewer is fullscreen, independently of player lifetimes.
+ * Entering applies this app session's Viewer levels. Leaving restores the display brightness; the
+ * media volume stays where the user put it, as the system volume always does.
+ */
+internal class ViewerLevelControls(
+    context: Context,
+    private val window: Window?,
+    private val session: ViewerSessionLevels = ViewerSessionLevels(),
+) {
     private val resolver = context.contentResolver
     private val audio = context.getSystemService(AudioManager::class.java)
     private var enabled = false
     private var previousBrightness = -1f
-    private var viewerBrightness: Float? = null
     private var gesture: LevelGesture? = null
     var feedback by mutableStateOf<ViewerLevelFeedback?>(null)
         private set
@@ -41,7 +61,10 @@ internal class ViewerLevelControls(context: Context, private val window: Window?
         enabled = value
         if (value) {
             previousBrightness = window?.attributes?.screenBrightness ?: -1f
-            viewerBrightness?.let(::writeBrightness)
+            session.brightness?.let(::writeBrightness)
+            session.volume?.let { remembered ->
+                runCatching { if (currentVolume() != remembered) audio?.setStreamVolume(AudioManager.STREAM_MUSIC, remembered, 0) }
+            }
         } else {
             writeBrightness(previousBrightness)
             end()
@@ -72,7 +95,7 @@ internal class ViewerLevelControls(context: Context, private val window: Window?
                 ViewerLevelControl.Brightness -> {
                     check(window != null)
                     writeBrightness(fraction)
-                    viewerBrightness = fraction
+                    session.brightness = fraction
                 }
                 ViewerLevelControl.Volume -> {
                     check(audio != null && !audio.isVolumeFixed)
@@ -84,6 +107,7 @@ internal class ViewerLevelControls(context: Context, private val window: Window?
                         // Respect safe-volume caps and device policies instead of displaying a fictitious level.
                         val actual = readVolume()
                         if (actual.label != target.toString()) current.fraction = actual.fraction
+                        session.volume = currentVolume()
                     }
                 }
             }
@@ -102,6 +126,11 @@ internal class ViewerLevelControls(context: Context, private val window: Window?
 
     private fun writeBrightness(value: Float) {
         window?.let { it.attributes = it.attributes.apply { screenBrightness = value } }
+    }
+
+    private fun currentVolume(): Int {
+        check(audio != null && !audio.isVolumeFixed)
+        return audio.getStreamVolume(AudioManager.STREAM_MUSIC)
     }
 
     private fun readVolume(): ViewerLevelFeedback {
@@ -130,7 +159,7 @@ internal class ViewerLevelControls(context: Context, private val window: Window?
 internal fun rememberViewerLevelControls(enabled: Boolean): ViewerLevelControls {
     val context = LocalContext.current
     val window = context.findActivity()?.window
-    val controls = remember(context, window) { ViewerLevelControls(context, window) }
+    val controls = remember(context, window) { ViewerLevelControls(context, window, ViewerSessionLevels.App) }
     DisposableEffect(controls, enabled) {
         controls.setEnabled(enabled)
         onDispose { controls.setEnabled(false) }

@@ -1,0 +1,34 @@
+{
+  "baseUrl": "https://booru.challenge-gate.example",
+  "capturedOn": "2026-11-07",
+  "routes": [
+    {
+      "path": "/counts/posts.json",
+      "query": {},
+      "status": 200,
+      "contentType": "text/html; charset=utf-8",
+      "body": "verification_challenge_200.html"
+    },
+    {
+      "path": "/index.php",
+      "query": {
+        "page": "dapi",
+        "s": "post",
+        "q": "index",
+        "limit": "1"
+      },
+      "status": 200,
+      "contentType": "text/html; charset=utf-8",
+      "body": "verification_challenge_200.html"
+    },
+    {
+      "path": "/post.json",
+      "query": {
+        "limit": "1"
+      },
+      "status": 200,
+      "contentType": "text/html; charset=utf-8",
+      "body": "verification_challenge_200.html"
+    }
+  ]
+}

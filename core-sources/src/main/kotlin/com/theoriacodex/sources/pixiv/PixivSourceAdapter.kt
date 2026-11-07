@@ -18,9 +18,11 @@ import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.tags.pixivSearchToken
 import com.theoriacodex.sources.common.asLongOrNull
 import com.theoriacodex.sources.common.asStringOrNull
 import com.theoriacodex.sources.common.canonicalPostPage
@@ -42,7 +44,6 @@ import java.io.IOException
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -58,7 +59,6 @@ class PixivSourceAdapter(
     private val gson: Gson = Gson(),
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val minRequestIntervalMs: Long = 350L,
-    private val languageTag: String = Locale.getDefault().toLanguageTag(),
     private val ugoiraMetadataCache: PixivUgoiraMetadataCache = PixivUgoiraMetadataCache(),
 ) : SourceAdapter, CreatorPostsSourceAdapter, RelatedPostsSourceAdapter, DurationMetadataSourceAdapter {
     override val sourceKey: SourceKey = SourceKey.PIXIV
@@ -266,12 +266,11 @@ class PixivSourceAdapter(
         return response.body
     }
 
-    private fun authorizedHeaders(accessToken: String): Map<String, String> = buildMap {
-        put("Authorization", "Bearer $accessToken")
-        languageTag.trim().takeIf(String::isNotBlank)?.let { tag ->
-            put("Accept-Language", tag)
-        }
-    }
+    /** Translations are always requested in English so they line up with the booru vocabulary. */
+    private fun authorizedHeaders(accessToken: String): Map<String, String> = mapOf(
+        "Authorization" to "Bearer $accessToken",
+        "Accept-Language" to PIXIV_TRANSLATION_LANGUAGE,
+    )
 
     private fun parseTagSuggestion(tag: JsonObject, type: String): TagSuggestion? {
         val name = tag.stringValue("name")?.trim().orEmpty()
@@ -309,6 +308,7 @@ class PixivSourceAdapter(
             height = raw.intValue("height"),
             canonicalTags = tags.canonical,
             rawTags = tags.raw,
+            taxonomy = tags.taxonomy,
             authorName = userName,
             createdAtEpochMs = createdAt,
             title = title,
@@ -406,26 +406,13 @@ private fun mapHttpFailure(statusCode: Int): SourceFailureReason {
 
 private fun compileTagQuery(query: Query): String {
     val include = query.includeTags
-        .map(::normalizePixivTagToken)
+        .map(::pixivSearchToken)
         .filter { it.isNotBlank() }
     val exclude = query.excludeTags
-        .map(::normalizePixivTagToken)
+        .map(::pixivSearchToken)
         .filter { it.isNotBlank() }
         .map { "-$it" }
     return (include + exclude).joinToString(" ")
-}
-
-private fun normalizePixivTagToken(raw: String): String {
-    var normalized = raw
-        .trim()
-        .removePrefix("-")
-        .replace('_', ' ')
-        .replace(PIXIV_TAG_WHITESPACE_REGEX, " ")
-        .trim()
-    while (normalized.isNotBlank() && PIXIV_TRAILING_PARENTHESIS_REGEX.containsMatchIn(normalized)) {
-        normalized = normalized.replace(PIXIV_TRAILING_PARENTHESIS_REGEX, "").trim()
-    }
-    return normalized
 }
 
 private fun parseIsoInstant(value: String?): Long? {
@@ -440,12 +427,19 @@ private fun formatEpochDate(value: Long): String {
 }
 
 private const val PIXIV_API_BASE: String = "https://app-api.pixiv.net"
+private const val PIXIV_TRANSLATION_LANGUAGE: String = "en-US"
 const val PIXIV_UGOIRA_MIME: String = com.theoriacodex.domain.model.PIXIV_UGOIRA_MIME
-private val PIXIV_TRAILING_PARENTHESIS_REGEX = Regex("\\s*\\([^)]*\\)\\s*$")
-private val PIXIV_TAG_WHITESPACE_REGEX = Regex("\\s+")
 
 private data class ParsedPixivMedia(val preview: ImageRef, val full: ImageRef?, val pages: List<ImageRef>)
-private data class ParsedPixivTags(val raw: List<String>, val canonical: List<String>)
+/**
+ * [canonical] keeps each translation right after its native tag (Codex automatic tags and the
+ * clipboard match English there); [taxonomy] pairs them so chips and learning see one tag.
+ */
+private data class ParsedPixivTags(
+    val raw: List<String>,
+    val canonical: List<String>,
+    val taxonomy: List<PostTaxonomyTerm>,
+)
 
 private fun parsePixivMedia(raw: JsonObject): ParsedPixivMedia {
     val isUgoira = raw.stringValue("type") == "ugoira"
@@ -513,21 +507,27 @@ private fun parsePixivPages(raw: JsonObject): List<ImageRef> {
 }
 
 private fun parsePixivTags(raw: JsonObject): ParsedPixivTags {
-    val rawTags = mutableListOf<String>()
+    val translationsByNative = linkedMapOf<String, String?>()
     val canonicalTags = linkedSetOf<String>()
     raw.optionalJsonArray("tags").elementsOrEmpty().forEach { tagElement ->
         val tagObject = tagElement.takeIf { it.isJsonObject }?.asJsonObject ?: return@forEach
         val name = tagObject.stringValue("name")?.trim().orEmpty()
-        if (name.isNotBlank()) {
-            rawTags += name
-            canonicalTags += name
-        }
         val translatedName = tagObject.get("translated_name").asStringOrNull()
             ?.trim()
-            .orEmpty()
-        if (translatedName.isNotBlank()) {
-            canonicalTags += translatedName
+            ?.takeIf { it.isNotBlank() && !it.equals(name, ignoreCase = true) }
+        if (name.isNotBlank()) {
+            canonicalTags += name
+            if (name !in translationsByNative || translationsByNative[name] == null) {
+                translationsByNative[name] = translatedName
+            }
         }
+        translatedName?.let { canonicalTags += it }
     }
-    return ParsedPixivTags(raw = rawTags.distinct(), canonical = canonicalTags.toList())
+    return ParsedPixivTags(
+        raw = translationsByNative.keys.toList(),
+        canonical = canonicalTags.toList(),
+        taxonomy = translationsByNative.map { (name, translation) ->
+            PostTaxonomyTerm(value = name, translation = translation)
+        },
+    )
 }

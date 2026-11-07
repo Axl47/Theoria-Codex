@@ -233,7 +233,7 @@ private fun CreatorDestination(shell: TheoriaShell) {
     BrowsingDestinationStateBoundary(shell.data, shell.sources) { state ->
         val creator = shell.pendingCreatorProfile ?: return@BrowsingDestinationStateBoundary
         val creatorIdentity = creator.profileId ?: creator.uploadsQuery ?: creator.displayName
-        val fabContext = creatorFeedFabContext(creator.source.name, creatorIdentity)
+        val fabContext = creatorFeedFabContext(creator.source.id, creatorIdentity)
         val fabRestoreState = shell.feedFabRestoreRegistry.state(fabContext) ?: return@BrowsingDestinationStateBoundary
         CreatorRoute(
             coordinator = shell.features.creatorProfile,

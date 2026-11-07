@@ -39,6 +39,7 @@ import com.theoriacodex.app.di.SourceDependencies
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsScreen
+import com.theoriacodex.app.settings.SettingsSitesEntry
 import com.theoriacodex.app.settings.SettingsViewModel
 import com.theoriacodex.app.source.creatorBrowsingSources
 import com.theoriacodex.app.ui.findActivity
@@ -398,23 +399,20 @@ internal fun SettingsDestinationStateBoundary(
     owner: SettingsViewModel,
     searchOwner: SearchRouteOwnerHandle?,
     storageSummary: String? = null,
+    sites: SettingsSitesEntry? = null,
     storageTools: (@Composable () -> Unit)? = null,
 ) {
     val state = owner.state.collectAsStateWithLifecycle()
     val emptySearch = remember { MutableStateFlow(com.theoriacodex.app.search.state.SearchUiState()) }
     val searchState = (searchOwner?.state ?: emptySearch).collectAsStateWithLifecycle()
-    val query = searchState.value.query
-    val selectedSources = if (searchOwner == null) emptySet() else when (val scope = query.draftSourceScope) {
-        com.theoriacodex.app.search.state.SearchSourceScope.GlobalUnified -> query.unifiedSources
-        else -> scope.explicitSources.toSet()
-    }
+    val selectedSources = if (searchOwner == null) emptySet() else searchState.value.query.draftSources
     // Subscribing here keeps statistics collection scoped to a visible Settings destination.
     val statistics = owner.statistics.collectAsStateWithLifecycle()
     DestinationStateBoundary(state) {
         SettingsScreen(
             state = it, onAction = owner::onAction, statistics = statistics.value,
             searchSources = selectedSources.intersect(it.availableSources.toSet()),
-            storageSummary = storageSummary, storageTools = storageTools,
+            storageSummary = storageSummary, sites = sites, storageTools = storageTools,
         )
     }
 }

@@ -65,7 +65,7 @@ class CreatorProfileViewModelTest {
 
         assertEquals(replacement, viewModel.state.value.creator)
         assertEquals(listOf("new"), viewModel.state.value.results.map { it.id.sourcePostId })
-        assertEquals(SourceKey.IWARA.name, savedState.get<String>(CreatorProfileViewModel.KEY_SOURCE))
+        assertEquals(SourceKey.IWARA.id, savedState.get<String>(CreatorProfileViewModel.KEY_SOURCE))
         assertEquals("second", savedState.get<String>(CreatorProfileViewModel.KEY_PROFILE_ID))
     }
 
@@ -294,7 +294,7 @@ class CreatorProfileViewModelTest {
     private fun savedCreator(creator: CreatorProfile): SavedStateHandle {
         return SavedStateHandle(
             mapOf(
-                CreatorProfileViewModel.KEY_SOURCE to creator.source.name,
+                CreatorProfileViewModel.KEY_SOURCE to creator.source.id,
                 CreatorProfileViewModel.KEY_DISPLAY_NAME to creator.displayName,
                 CreatorProfileViewModel.KEY_PROFILE_ID to creator.profileId,
                 CreatorProfileViewModel.KEY_PROFILE_URL to creator.profileUrl,

@@ -2,7 +2,9 @@ package com.theoriacodex.app.search.state
 
 import com.theoriacodex.app.search.NhentaiLanguageFilter
 import com.theoriacodex.app.search.DateRangePreset
+import com.theoriacodex.app.search.SearchTermLimitNotice
 import com.theoriacodex.app.search.SearchVisibilityFilters
+import com.theoriacodex.app.search.searchTermLimitNotices
 import com.theoriacodex.app.related.LikeToggleOutcome
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.data.repository.SearchScrollState
@@ -20,6 +22,7 @@ import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunStatus
+import com.theoriacodex.domain.query.SearchTermLimit
 
 /** Platform-free state rendered by the future Search route. */
 data class SearchUiState(
@@ -72,7 +75,7 @@ sealed interface SearchSourceScope {
     ) : SearchSourceScope {
         init {
             require(sources.size >= 2) { "Temporary source scope requires at least two sources" }
-            require(sources == sources.distinct().sortedBy { it.name }) {
+            require(sources == sources.distinct().sortedBy { it.id }) {
                 "Temporary source scope sources must be canonical and distinct"
             }
         }
@@ -89,7 +92,7 @@ sealed interface SearchSourceScope {
         }
 
         fun fromSources(sources: Iterable<SourceKey>): SearchSourceScope {
-            val canonical = sources.distinct().sortedBy { it.name }
+            val canonical = sources.distinct().sortedBy { it.id }
             return when (canonical.size) {
                 0 -> GlobalUnified
                 1 -> Single(canonical.single())
@@ -114,7 +117,19 @@ data class SearchQueryUiState(
     val validationMessage: String? = null,
     val nhentaiLanguageFilter: NhentaiLanguageFilter = NhentaiLanguageFilter.ANY,
     val nhentaiFullColorFilter: Boolean = false,
-)
+    /** Per-request term caps of the available sources that have one. */
+    val sourceTermLimits: Map<SourceKey, SearchTermLimit> = emptyMap(),
+) {
+    /** Sources the draft would search: the picked source, a temporary mix, or every Unified source. */
+    val draftSources: Set<SourceKey>
+        get() = when (val scope = draftSourceScope) {
+            SearchSourceScope.GlobalUnified -> unifiedSources
+            else -> scope.explicitSources.toSet()
+        }
+
+    val termLimitNotices: List<SearchTermLimitNotice>
+        get() = searchTermLimitNotices(draft, draftSources.sorted(), sourceTermLimits)
+}
 
 data class SearchContentUiState(
     val results: List<Post> = emptyList(),

@@ -1,6 +1,8 @@
 package com.theoriacodex.app.source
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.LocalContentColor
@@ -8,7 +10,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -19,6 +26,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.theoriacodex.domain.model.SourceKey
@@ -57,25 +65,88 @@ fun SourceLogo(
             )
         }
 
-        SourceLogoAsset.Text -> {
-            Text(
-                text = presentation.label,
-                modifier = modifier,
-                style = MaterialTheme.typography.labelMedium,
-                color = if (source.isRule34Family()) Color.White else LocalContentColor.current,
-                maxLines = 1,
-                overflow = TextOverflow.Clip,
-            )
+        is SourceLogoAsset.Favicon -> FaviconImage(logo, presentation, modifier.size(size)) {
+            FittedLetter(presentation.mark.orEmpty(), size)
         }
+
+        SourceLogoAsset.Text -> SourceLabelText(source, presentation.label, modifier)
     }
+}
+
+@Composable
+private fun SourceLabelText(source: SourceKey, label: String, modifier: Modifier) {
+    Text(
+        text = label,
+        modifier = modifier,
+        style = MaterialTheme.typography.labelMedium,
+        color = if (source.isRule34Family()) Color.White else LocalContentColor.current,
+        maxLines = 1,
+        overflow = TextOverflow.Clip,
+    )
+}
+
+/**
+ * A letter that fills a [size] box exactly: no font padding and a line box trimmed to the glyph, so
+ * it centers on the same line as neighboring icons instead of sitting low.
+ */
+@Composable
+private fun FittedLetter(mark: String, size: Dp) {
+    val fontSize = with(LocalDensity.current) { (size * 0.9f).toSp() }
+    Text(
+        text = mark,
+        color = Color.White,
+        fontWeight = FontWeight.Bold,
+        style = TextStyle(
+            fontSize = fontSize,
+            lineHeight = fontSize,
+            platformStyle = PlatformTextStyle(includeFontPadding = false),
+            lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
+        ),
+        maxLines = 1,
+    )
+}
+
+/**
+ * A site icon; [fallback] shows while it loads and when the site has none. It is requested with the
+ * site's media headers, so a browser-verified site's clearance (bound to its User-Agent) applies.
+ */
+@Composable
+private fun FaviconImage(
+    logo: SourceLogoAsset.Favicon,
+    presentation: SourcePresentation,
+    modifier: Modifier,
+    fallback: @Composable () -> Unit,
+) {
+    val context = LocalContext.current
+    val request = remember(context, logo.url, presentation.userAgent, presentation.referer) {
+        ImageRequest.Builder(context)
+            .data(logo.url)
+            .addHeader("User-Agent", presentation.userAgent)
+            .addHeader("Referer", presentation.referer)
+            .build()
+    }
+    SubcomposeAsyncImage(
+        model = request,
+        contentDescription = presentation.label,
+        modifier = modifier,
+        contentScale = ContentScale.Fit,
+        // The slots don't center their content, so a letter fallback would sit at the top start.
+        loading = { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { fallback() } },
+        error = { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { fallback() } },
+    )
 }
 
 /** Compact source selector mark; sources without a legible small logo use a letter mark. */
 @Composable
 fun SourceIcon(source: SourceKey) {
+    val presentation = source.presentation()
+    val logo = presentation.logo
+    val mark = presentation.mark
     when {
-        source == SourceKey.IWARA -> SourceLetterIcon("I")
-        source.isRule34Family() -> SourceLetterIcon("R34")
+        logo is SourceLogoAsset.Favicon -> FaviconImage(logo, presentation, Modifier.size(24.dp)) {
+            SourceLetterIcon(mark.orEmpty())
+        }
+        mark != null -> SourceLetterIcon(mark)
         else -> SourceLogo(source, size = 18.dp)
     }
 }

@@ -1,6 +1,7 @@
 package com.theoriacodex.data.repository
 
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.source.SiteProfile
 
 import com.google.gson.annotations.SerializedName
 import com.theoriacodex.data.storage.LegacyImportProof
@@ -140,7 +141,7 @@ internal fun normalizeUiRestoreState(state: PersistedUiRestoreState): PersistedU
             sortMode = restoreState.sortMode?.trim()?.takeIf(String::isNotBlank),
             source = restoreState.source?.trim()?.takeIf(String::isNotBlank),
             excludedSavedSearches = restoreState.excludedSavedSearches.filter(String::isNotBlank).distinct().take(MAX_SAVED_SEARCHES),
-            followedSources = restoreState.followedSources.distinct().take(SourceKey.entries.size),
+            followedSources = restoreState.followedSources.distinct().take(SourceKey.builtIns.size + SiteProfile.MAX_CUSTOM_SITES),
             followedAuthors = restoreState.followedAuthors.distinct().take(MAX_FOLLOWED_CREATORS),
             language = restoreState.language?.trim()?.takeIf(String::isNotBlank),
         )

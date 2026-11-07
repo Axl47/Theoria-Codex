@@ -1,0 +1,37 @@
+{
+  "baseUrl": "https://sakugabooru.com",
+  "capturedOn": "2026-11-07",
+  "routes": [
+    {
+      "path": "/counts/posts.json",
+      "query": {},
+      "status": 301,
+      "contentType": "text/html",
+      "body": "danbooru_counts.html",
+      "location": "https://www.sakugabooru.com/counts/posts.json"
+    },
+    {
+      "path": "/index.php",
+      "query": {
+        "page": "dapi",
+        "s": "post",
+        "q": "index",
+        "limit": "1"
+      },
+      "status": 301,
+      "contentType": "text/html",
+      "body": "dapi_xml.html",
+      "location": "https://www.sakugabooru.com/index.php?page=dapi&s=post&q=index&limit=1"
+    },
+    {
+      "path": "/post.json",
+      "query": {
+        "limit": "1"
+      },
+      "status": 301,
+      "contentType": "text/html",
+      "body": "moebooru_post.html",
+      "location": "https://www.sakugabooru.com/post.json?limit=1"
+    }
+  ]
+}

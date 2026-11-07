@@ -17,6 +17,7 @@ import java.nio.charset.StandardCharsets
 import java.util.Base64
 import com.theoriacodex.domain.query.CapabilityExclusionReason
 import com.theoriacodex.domain.query.SourceCapabilityGate
+import com.theoriacodex.domain.query.withinTermLimit
 import com.theoriacodex.domain.coroutines.mapConcurrent
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.withTimeoutOrNull
@@ -82,7 +83,9 @@ class UnifiedSearchOrchestrator(
             .filterKeys { source -> source !in hardExcluded }
             .map { (source, adapter) ->
                 async {
+                    // A source with a term cap receives only the leading terms it accepts.
                     val sourceBaseQuery = sourceBaseQuery(query, portableQuery, queryOverridesBySource[source])
+                        .withinTermLimit(adapter.capabilities.searchTermLimit)
                     source to runCatchingPreservingCancellation {
                         searchPreparedSource(
                             source, adapter, sourceBaseQuery, source in clientSideExcludeSources,
@@ -138,7 +141,7 @@ class UnifiedSearchOrchestrator(
         return UnifiedSearchResult(
             items = interleaved,
             nextPageTokens = succeededPages.mapValues { it.value.nextPageToken },
-            statuses = statuses.sortedBy { it.source.name },
+            statuses = statuses.sortedBy { it.source.id },
             queriesBySource = preparedQueries.toMap(),
         )
     }
@@ -224,7 +227,7 @@ class UnifiedSearchOrchestrator(
         weightsBySource: Map<SourceKey, Double>,
     ): List<Post> {
         val queues = pagesBySource.mapValues { (_, page) -> ArrayDeque(page.items) }.toMutableMap()
-        val sources = queues.keys.toList().sortedBy { it.name }
+        val sources = queues.keys.toList().sortedBy { it.id }
         if (sources.isEmpty()) return emptyList()
 
         val normalizedWeights = SourceWeightNormalization.normalize(sources, weightsBySource)

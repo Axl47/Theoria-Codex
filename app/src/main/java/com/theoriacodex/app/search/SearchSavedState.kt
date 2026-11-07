@@ -61,13 +61,13 @@ internal object SearchSavedQueryCodec {
     private fun encodeMode(mode: QueryMode): String {
         return when (mode) {
             QueryMode.Unified -> "u"
-            is QueryMode.Source -> "s:${mode.source.name}"
+            is QueryMode.Source -> "s:${mode.source.id}"
         }
     }
 
     private fun decodeMode(encoded: String): QueryMode {
         if (encoded == "u") return QueryMode.Unified
-        return QueryMode.Source(SourceKey.valueOf(encoded.removePrefix("s:")))
+        return QueryMode.Source(SourceKey.parseOrThrow(encoded.removePrefix("s:")))
     }
 
     private fun encodeTerms(terms: List<SearchTerm>): String {

@@ -35,7 +35,10 @@ import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 import com.theoriacodex.domain.orchestration.SourceWeightNormalization
 import com.theoriacodex.domain.query.QueryHash
-import com.theoriacodex.domain.tags.normalizeGelbooruToken
+import com.theoriacodex.domain.query.SearchTermLimit
+import com.theoriacodex.domain.tags.pixivSearchToken
+import com.theoriacodex.domain.tags.normalizeFavoriteTagForStorage
+import com.theoriacodex.domain.tags.sourceAutocompletePrefix
 import com.theoriacodex.domain.tags.normalizeMatchToken
 import com.theoriacodex.domain.tags.sourceTagsMatch
 import java.util.LinkedHashMap
@@ -141,8 +144,12 @@ class SearchCoordinator(
         val current = registry.availableSources()
         val sourcesChanged = current != availableSourcesSnapshot
         availableSourcesSnapshot = current
-        return SearchEnvironmentChange(settingsChanged, sourcesChanged, current.inPresentationOrder())
+        return SearchEnvironmentChange(settingsChanged, sourcesChanged, current.inPresentationOrder(), sourceTermLimits())
     }
+
+    private fun sourceTermLimits(): Map<SourceKey, SearchTermLimit> = registry.availableSources().mapNotNull { source ->
+        registry.adapterFor(source)?.capabilities?.searchTermLimit?.let { source to it }
+    }.toMap()
 
     internal fun supportedSearchScopes(mode: QueryMode): List<FacetedSearchScope> {
         val source = (mode as? QueryMode.Source)?.source ?: return emptyList()
@@ -275,6 +282,10 @@ class SearchCoordinator(
             )
         }
         val adapter = requireNotNull(registry.adapterFor(mode.source)) { "No adapter for ${mode.source}" }
+        // Every route into a single-source search passes here, so this is where its term cap is enforced.
+        searchTermLimitNotices(query, listOf(mode.source), sourceTermLimits()).firstOrNull()?.let { notice ->
+            return SearchExecutionResult.Failure(executionKey, query, sourceScope, emptyList(), notice.message())
+        }
         val page = registry.unifiedOrchestrator().searchSource(adapter, query, null)
         currentCoroutineContext().ensureActive()
         seenTags.record(page.items)
@@ -638,12 +649,7 @@ class SearchCoordinator(
     private fun resolvePixivCompatibilityTags(tags: List<String>): List<String> {
         val seen = mutableSetOf<String>()
         return tags.mapNotNull { raw ->
-            var value = raw.trim().removePrefix("-").replace('_', ' ')
-                .replace(WHITESPACE_REGEX, " ").trim()
-            while (value.isNotBlank() && PIXIV_TRAILING_PARENTHESIS_REGEX.containsMatchIn(value)) {
-                value = value.replace(PIXIV_TRAILING_PARENTHESIS_REGEX, "").trim()
-            }
-            value.takeIf { it.isNotBlank() && seen.add(normalizeMatchToken(it)) }
+            pixivSearchToken(raw).takeIf { it.isNotBlank() && seen.add(normalizeMatchToken(it)) }
         }
     }
 
@@ -709,7 +715,7 @@ class SearchCoordinator(
     private fun mergeStatuses(
         first: List<SourceRunStatus>,
         second: List<SourceRunStatus>,
-    ): List<SourceRunStatus> = (first + second).associateBy { it.source }.values.sortedBy { it.source.name }
+    ): List<SourceRunStatus> = (first + second).associateBy { it.source }.values.sortedBy { it.source.id }
 
     private fun unifiedFailureMessage(posts: List<Post>, statuses: List<SourceRunStatus>): String =
         if (isPixivUnknownFailure(posts, statuses)) PIXIV_UNKNOWN_RETRY_MESSAGE else
@@ -733,7 +739,7 @@ class SearchCoordinator(
     private fun executionKey(query: Query, scope: SearchSourceScope): String {
         val queryHash = QueryHash.from(query)
         val temporary = scope as? SearchSourceScope.Temporary ?: return queryHash
-        return "$queryHash|temporary-sources:${temporary.sources.joinToString(",") { it.name }}"
+        return "$queryHash|temporary-sources:${temporary.sources.joinToString(",") { it.id }}"
     }
 
     private fun continuation(
@@ -765,9 +771,6 @@ class SearchCoordinator(
 
     private fun autocompletePrefixForSource(source: SourceKey, input: String): String {
         val normalized = parseScopedInput(input).value
-        return when (source) {
-            SourceKey.GELBOORU, SourceKey.IWARA, SourceKey.RULE34XXX -> normalizeGelbooruToken(normalized)
-            else -> normalized
-        }
+        return sourceAutocompletePrefix(source, normalized)
     }
 }

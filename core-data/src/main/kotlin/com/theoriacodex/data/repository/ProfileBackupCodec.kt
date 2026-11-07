@@ -8,8 +8,15 @@ import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.source.SiteProfile
 
 const val PROFILE_BACKUP_MAX_BYTES = 32 * 1024 * 1024
+
+/** 2 added the optional `customSources` list; older apps refuse it with their "newer version" message. */
+private const val PROFILE_BACKUP_VERSION = 2
+
+/** A sanity bound; a device allows [SiteProfile.MAX_CUSTOM_SITES] plus any added during a restore. */
+private const val MAX_BACKUP_SITE_PROFILES = 256
 
 /** Versioned, bounded metadata document; no reflected backup-specific models or device files. */
 class ProfileBackupCodec(private val gson: Gson = Gson()) {
@@ -17,7 +24,7 @@ class ProfileBackupCodec(private val gson: Gson = Gson()) {
         validate(backup)
         return backupObject {
             addProperty("format", "theoria-profile-backup")
-            addProperty("version", 1)
+            addProperty("version", PROFILE_BACKUP_VERSION)
             addProperty("createdAt", backup.createdAtEpochMs)
             add("settings", gson.toJsonTree(LegacySettingsStoreRecord.fromDomain(portableSettings(backup.settings))))
             add("library", encodeLibrary(backup.library))
@@ -34,6 +41,9 @@ class ProfileBackupCodec(private val gson: Gson = Gson()) {
                 addProperty("lastViewedAt", entry.lastViewedAt)
             } })
             backup.statistics?.let { add("statistics", gson.toJsonTree(StatisticsStoreRecord.fromDomain(it))) }
+            if (backup.customSources.isNotEmpty()) {
+                add("customSources", backupArray(backup.customSources) { gson.toJsonTree(SiteProfileRecord.fromDomain(it)) })
+            }
         }.toString().toByteArray(Charsets.UTF_8).also {
             require(it.size <= PROFILE_BACKUP_MAX_BYTES) { "Backup exceeds the 32 MiB metadata limit" }
         }
@@ -45,7 +55,7 @@ class ProfileBackupCodec(private val gson: Gson = Gson()) {
         checkDocumentDepth(raw)
         val root = JsonParser.parseString(raw).asJsonObject
         require(root.backupString("format") == "theoria-profile-backup") { "This is not a Theoria profile backup" }
-        require(root.backupInt("version") == 1) { "This backup needs a newer version of Theoria" }
+        require(root.backupInt("version") in 1..PROFILE_BACKUP_VERSION) { "This backup needs a newer version of Theoria" }
         return ProfileBackup(
             createdAtEpochMs = root.backupLong("createdAt"),
             settings = decodeSettings(requireNotNull(root.getAsJsonObject("settings"))),
@@ -61,7 +71,18 @@ class ProfileBackupCodec(private val gson: Gson = Gson()) {
             statistics = root.getAsJsonObject("statistics")?.let { record ->
                 gson.fromJson(record, StatisticsStoreRecord::class.java).also(StatisticsStoreRecord::validate).toDomain()
             },
+            customSources = decodeCustomSources(root),
         ).also(::validate)
+    }
+
+    /** Strict, like the rest of the codec: one invalid profile rejects the backup before anything is written. */
+    private fun decodeCustomSources(root: JsonObject): List<SiteProfile> {
+        if (!root.has("customSources")) return emptyList()
+        return root.backupObjects("customSources", MAX_BACKUP_SITE_PROFILES).map { record ->
+            requireNotNull(gson.fromJson(record, SiteProfileRecord::class.java).toDomainOrNull()) {
+                "Backup contains an invalid site"
+            }
+        }
     }
 
     private fun encodeLibrary(library: BackupLibrary): JsonObject = backupObject {
@@ -70,7 +91,7 @@ class ProfileBackupCodec(private val gson: Gson = Gson()) {
             addProperty("name", codex.name)
             addProperty("createdAt", codex.createdAtEpochMs)
             add("automaticTags", backupArray(codex.automaticTags) { tag -> backupObject {
-                addProperty("source", tag.source.name)
+                addProperty("source", tag.source.id)
                 addProperty("tag", tag.tag)
                 addProperty("group", tag.groupIndex)
             } })
@@ -105,7 +126,7 @@ class ProfileBackupCodec(private val gson: Gson = Gson()) {
             codices = root.backupObjects("codices", 10_000).map { codex ->
                 Codex(codex.backupString("id"), codex.backupString("name"), codex.backupLong("createdAt"),
                     codex.backupObjects("automaticTags", 10_000).map { tag ->
-                        CodexAutomaticTag(SourceKey.valueOf(tag.backupString("source")),
+                        CodexAutomaticTag(SourceKey.parseOrThrow(tag.backupString("source")),
                             tag.backupString("tag"), tag.backupInt("group"))
                     })
             },
@@ -178,4 +199,8 @@ private fun validate(backup: ProfileBackup) {
     require(backup.savedSearches.all { it.id.isNotBlank() && it.name.isNotBlank() && it.name.length <= MAX_SAVED_SEARCH_NAME_LENGTH })
     require(backup.readingPositions.size <= MAX_READING_POSITIONS)
     require(backup.readingPositions.distinctBy { it.postId to it.section }.size == backup.readingPositions.size)
+    require(backup.customSources.size <= MAX_BACKUP_SITE_PROFILES)
+    require(backup.customSources.distinctBy(SiteProfile::sourceId).size == backup.customSources.size) {
+        "Backup contains duplicate sites"
+    }
 }

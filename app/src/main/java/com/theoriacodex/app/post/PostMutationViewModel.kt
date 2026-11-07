@@ -59,9 +59,10 @@ internal class PostMutationViewModel(
         updateFavorites {
             if (add) {
                 val added = settings.addFavoriteTag(profileId, source, tags, name)
-                feedback.add(if (added) "Added to favorite tags" else "Already in favorite tags")
+                feedback.add(if (added) "Added to saved tags" else "Already in saved tags")
             } else {
                 settings.removeFavoriteTag(profileId, source, tags)
+                feedback.add("Removed from saved tags")
             }
         }
     }

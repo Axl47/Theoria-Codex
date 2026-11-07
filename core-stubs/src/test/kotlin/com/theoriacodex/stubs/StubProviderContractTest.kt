@@ -22,7 +22,7 @@ class StubProviderContractTest {
     fun `every stub source satisfies search identity media tag and paging contracts`() = runTest {
         val registry = StubAdapterRegistry(runtime = StubRuntime(StubScenarioPreset.NORMAL))
 
-        SourceKey.entries.forEach { source ->
+        SourceKey.builtIns.forEach { source ->
             val adapter = requireNotNull(registry.adapterFor(source)) { "Missing adapter for $source" }
             val firstPage = adapter.search(sampleQuery(source), pageToken = null)
 
@@ -45,7 +45,7 @@ class StubProviderContractTest {
     fun `every stub source resolves own ids and ignores foreign ids`() = runTest {
         val registry = StubAdapterRegistry(runtime = StubRuntime(StubScenarioPreset.NORMAL))
 
-        SourceKey.entries.forEach { source ->
+        SourceKey.builtIns.forEach { source ->
             val adapter = requireNotNull(registry.adapterFor(source))
             val firstPost = adapter.search(sampleQuery(source), pageToken = null).items.first()
 
@@ -60,7 +60,7 @@ class StubProviderContractTest {
     fun `every stub source exposes shaped trending autocomplete and quick queries`() = runTest {
         val registry = StubAdapterRegistry(runtime = StubRuntime(StubScenarioPreset.NORMAL))
 
-        SourceKey.entries.forEach { source ->
+        SourceKey.builtIns.forEach { source ->
             val adapter = requireNotNull(registry.adapterFor(source))
             val trending = adapter.trendingTags(limit = 3)
             assertTrue("Expected trending tags for $source", trending.isNotEmpty())
@@ -117,7 +117,7 @@ class StubProviderContractTest {
     }
 
     private fun foreignSource(source: SourceKey): SourceKey {
-        return SourceKey.entries.first { it != source }
+        return SourceKey.builtIns.first { it != source }
     }
 
     private fun sampleQuery(source: SourceKey): Query {

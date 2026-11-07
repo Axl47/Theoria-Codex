@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.map
 import java.util.UUID
 
 /** Canonical provider identity; display names are never identity. */
-fun CreatorProfile.followKey(): String = "${source.name}:${profileId?.takeIf(String::isNotBlank)
+fun CreatorProfile.followKey(): String = "${source.id}:${profileId?.takeIf(String::isNotBlank)
     ?: uploadsQuery?.takeIf(String::isNotBlank) ?: profileUrl.orEmpty()}"
 
 data class FollowedCreator(
