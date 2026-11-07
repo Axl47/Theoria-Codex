@@ -47,10 +47,13 @@
 - Videos next to the one you're watching preload only their opening seconds on every network, so watching one video no longer downloads up to about 48 MB of videos you may never open.
 - Seeking a video past what it has loaded, and letting go after scrubbing, resume playback sooner: the abandoned download is dropped at once instead of being read out first.
 - Scrub previews appear sooner when you drag a video's timeline, most of all on a second drag, and stop downloading as soon as you let go.
+- Letting go after scrubbing a video starts playback on the frame the preview showed, and much sooner when you scrub to a part of the video that hasn't loaded yet.
+- Videos in the Viewer start, and resume after a seek, once half a second has loaded instead of a full second. A video that has already had to stop and load waits for the full second again, so a slow connection doesn't stall more often.
 
 ### Fixed
 
 - R34V videos play again in feeds and the Viewer; they previously failed to load on every Android device.
+- Videos are requested with the same User-Agent as the site's images, including a custom site's own User-Agent, so sites that check it serve their videos too.
 - A R34V or R34G search with excluded tags now shows its results when one post's details can't be read, instead of failing the whole page.
 - Switching source in Search now shows that source's last search, so the results and the filter button always match the source you picked.
 - Opening an nhentai or Hitomi gallery in the Viewer keeps its cover on screen until the first page loads, instead of flashing to black.
