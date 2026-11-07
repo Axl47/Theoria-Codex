@@ -36,7 +36,7 @@ sealed interface SourceLogoAsset {
 
     data object Text : SourceLogoAsset
 
-    /** A user-added site's own icon, loaded from [url]; the letter mark shows while it loads or if it fails. */
+    /** A user-added site's own icon (declared on its home page, else `/favicon.ico`); a fallback shows while it loads or if it fails. */
     data class Favicon(val url: String) : SourceLogoAsset
 }
 
@@ -254,6 +254,7 @@ fun customSourcePresentation(
     userAgent: String? = null,
     order: Int = Int.MAX_VALUE,
     family: ProtocolFamily? = null,
+    iconUrl: String? = null,
 ): SourcePresentation {
     require(source.isCustom) { "Built-in sources have catalog entries" }
     return SourcePresentation(
@@ -263,7 +264,7 @@ fun customSourcePresentation(
         exposure = SourceExposure.USER_VISIBLE,
         group = SourcePresentationGroup.CUSTOM,
         order = order,
-        logo = SourceLogoAsset.Favicon("${baseUrl ?: "https://${CustomSourceIds.hostLabel(source.id)}"}/favicon.ico"),
+        logo = SourceLogoAsset.Favicon(iconUrl ?: "${baseUrl ?: "https://${CustomSourceIds.hostLabel(source.id)}"}/favicon.ico"),
         mark = label.firstOrNull(Char::isLetterOrDigit)?.uppercase() ?: "?",
         userAgent = userAgent ?: BROWSER_USER_AGENT,
         animatedSearchTags = when (family) {

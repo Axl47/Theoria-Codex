@@ -107,4 +107,5 @@ private fun CustomSiteState.presentation(order: Int): SourcePresentation = custo
     userAgent = profile.headers.userAgent,
     order = order,
     family = profile.family,
+    iconUrl = profile.iconUrl,
 )

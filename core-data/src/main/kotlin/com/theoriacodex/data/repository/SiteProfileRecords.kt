@@ -22,6 +22,7 @@ internal data class SiteProfileRecord(
     @field:SerializedName("credentialsRequired") val credentialsRequired: Boolean = false,
     @field:SerializedName("addedAt") val addedAt: Long? = null,
     @field:SerializedName("verifiedAt") val verifiedAt: Long? = null,
+    @field:SerializedName("iconUrl") val iconUrl: String? = null,
 ) {
     /**
      * Null for an invalid record. The local store skips such records so one bad entry cannot lock
@@ -39,6 +40,7 @@ internal data class SiteProfileRecord(
             credentialsRequired = credentialsRequired,
             addedAtEpochMs = addedAt ?: return null,
             verifiedAtEpochMs = verifiedAt,
+            iconUrl = iconUrl?.takeIf { it.startsWith("https://") },
         )
     }.getOrNull()
 
@@ -51,6 +53,7 @@ internal data class SiteProfileRecord(
             searchTermLimit = profile.searchTermLimit,
             userAgent = profile.headers.userAgent,
             referer = profile.headers.referer,
+            iconUrl = profile.iconUrl,
             credentialsRequired = profile.credentialsRequired,
             addedAt = profile.addedAtEpochMs,
             verifiedAt = profile.verifiedAtEpochMs,

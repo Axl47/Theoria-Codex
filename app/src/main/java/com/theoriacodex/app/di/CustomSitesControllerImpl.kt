@@ -79,6 +79,7 @@ internal class CustomSitesControllerImpl(
             credentialsRequired = draft.probe.credentialsRequired,
             addedAtEpochMs = now,
             verifiedAtEpochMs = now,
+            iconUrl = draft.probe.iconUrl,
         )
         val source = SourceKey.of(profile)
         if (find(profile.sourceId) != null) return CustomSiteMutation.DuplicateHost(profile.sourceId)
@@ -106,7 +107,8 @@ internal class CustomSitesControllerImpl(
         val result = prober.probe(profile.address.baseUrl, credentials.get(sourceId), profile.headers)
         // A different family is reported to the user, never adopted (remove and re-add to switch).
         if (result is SiteProbeResult.Supported && result.family == profile.family) {
-            profiles.update(sourceId) { it.copy(verifiedAtEpochMs = clock()) }
+            // Re-testing also picks up an icon the site declared since, or one missed before.
+            profiles.update(sourceId) { it.copy(verifiedAtEpochMs = clock(), iconUrl = result.iconUrl ?: it.iconUrl) }
         }
         return result
     }

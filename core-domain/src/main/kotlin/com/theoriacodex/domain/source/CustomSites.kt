@@ -202,6 +202,8 @@ data class SiteProfile(
     val credentialsRequired: Boolean = false,
     val addedAtEpochMs: Long,
     val verifiedAtEpochMs: Long? = null,
+    /** The site's own icon from its home page; null falls back to `/favicon.ico`. */
+    val iconUrl: String? = null,
 ) {
     init {
         require(CustomSourceIds.isValid(sourceId)) { "Invalid custom source id" }
@@ -231,6 +233,8 @@ sealed interface SiteProbeResult {
         val suggestedLabel: String,
         val searchTermLimit: Int?,
         val credentialsRequired: Boolean,
+        /** The largest raster icon the home page declares, if any. */
+        val iconUrl: String? = null,
     ) : SiteProbeResult
 
     /** The family answered but refused this access; [rejected] when supplied credentials failed. */

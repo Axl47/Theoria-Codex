@@ -58,7 +58,7 @@ fun SourceLogo(
             )
         }
 
-        is SourceLogoAsset.Favicon -> FaviconImage(logo, presentation.label, modifier.size(size)) {
+        is SourceLogoAsset.Favicon -> FaviconImage(logo, presentation, modifier.size(size)) {
             SourceLabelText(source, presentation.label, modifier)
         }
 
@@ -78,12 +78,28 @@ private fun SourceLabelText(source: SourceKey, label: String, modifier: Modifier
     )
 }
 
-/** A site icon; [fallback] shows while it loads and when the site has none. */
+/**
+ * A site icon; [fallback] shows while it loads and when the site has none. It is requested with the
+ * site's media headers, so a browser-verified site's clearance (bound to its User-Agent) applies.
+ */
 @Composable
-private fun FaviconImage(logo: SourceLogoAsset.Favicon, label: String, modifier: Modifier, fallback: @Composable () -> Unit) {
+private fun FaviconImage(
+    logo: SourceLogoAsset.Favicon,
+    presentation: SourcePresentation,
+    modifier: Modifier,
+    fallback: @Composable () -> Unit,
+) {
+    val context = LocalContext.current
+    val request = remember(context, logo.url, presentation.userAgent, presentation.referer) {
+        ImageRequest.Builder(context)
+            .data(logo.url)
+            .addHeader("User-Agent", presentation.userAgent)
+            .addHeader("Referer", presentation.referer)
+            .build()
+    }
     SubcomposeAsyncImage(
-        model = logo.url,
-        contentDescription = label,
+        model = request,
+        contentDescription = presentation.label,
         modifier = modifier,
         contentScale = ContentScale.Fit,
         loading = { fallback() },
@@ -98,7 +114,7 @@ fun SourceIcon(source: SourceKey) {
     val logo = presentation.logo
     val mark = presentation.mark
     when {
-        logo is SourceLogoAsset.Favicon -> FaviconImage(logo, presentation.label, Modifier.size(24.dp)) {
+        logo is SourceLogoAsset.Favicon -> FaviconImage(logo, presentation, Modifier.size(24.dp)) {
             SourceLetterIcon(mark.orEmpty())
         }
         mark != null -> SourceLetterIcon(mark)

@@ -32,8 +32,9 @@ class SiteProberTest {
                 "https://aibooru.online/counts/posts.json",
                 "https://aibooru.online/profile.json",
                 "https://aibooru.online/posts.json?limit=40&page=1&tags=",
-                // The home page, for the site's name; with no fixture for it the host stays the label.
+                // The home page and touch icon, for the name and icon; with no fixtures the host stays the label.
                 "https://aibooru.online/",
+                "https://aibooru.online/apple-touch-icon.png",
             ),
             transport.requested,
         )
@@ -44,7 +45,7 @@ class SiteProberTest {
         val result = prober.probe("https://safebooru.org/index.php?page=post&s=list&tags=sky")
 
         assertEquals(supported("https://safebooru.org", ProtocolFamily.GELBOORU_02, "safebooru.org", termLimit = null), result)
-        assertEquals(4, transport.requested.size)
+        assertEquals(5, transport.requested.size)
     }
 
     @Test
@@ -164,6 +165,18 @@ class SiteProberTest {
         assertEquals("Moebooru Fans", siteNameFromHtml("""<meta property="og:site_name" content="Moebooru Fans"><title>x | y</title>"""))
         assertEquals("Gelbooru", siteNameFromHtml("<title>Gelbooru | Anime and Hentai Imageboard</title>"))
         assertEquals(null, siteNameFromHtml("<title>  </title>"))
+    }
+
+    @Test
+    fun `site icon is the largest declared raster icon, resolved against the page`() {
+        val html = """
+            <link rel="icon" href="/favicon.ico">
+            <link rel="icon" type="image/svg+xml" href="/logo.svg">
+            <link rel="apple-touch-icon" href="/touch.png">
+            <link rel="icon" sizes="32x32" href="https://cdn.example/32.png">
+        """
+        assertEquals("https://booru.example/touch.png", parseHomePage(html, "https://booru.example/").iconUrl)
+        assertEquals(null, parseHomePage("<title>x</title>", "https://booru.example/").iconUrl)
     }
 
     private fun supported(url: String, family: ProtocolFamily, label: String, termLimit: Int?) =

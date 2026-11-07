@@ -31,6 +31,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -174,12 +176,12 @@ private fun SourceMenuChoices(
     }
     folders.keys.forEach { group ->
         val label = requireNotNull(group.folderLabel)
-        SourceFolderChip(label, highlightedSources.any { it.presentation().group == group }) { onOpenFolder(group) }
+        SourceFolderChip(label, group.folderIcon, highlightedSources.any { it.presentation().group == group }) { onOpenFolder(group) }
     }
 }
 
 @Composable
-private fun SourceFolderChip(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun SourceFolderChip(label: String, icon: ImageVector?, selected: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .size(width = 64.dp, height = 48.dp)
@@ -192,9 +194,13 @@ private fun SourceFolderChip(label: String, selected: Boolean, onClick: () -> Un
             },
         contentAlignment = Alignment.Center,
     ) {
-        SourceLetterIcon(label)
+        if (icon != null) Icon(icon, contentDescription = null, tint = Color.White) else SourceLetterIcon(label)
     }
 }
+
+/** Folders whose name doesn't fit as a letter mark; Custom matches the Sites row in Settings. */
+private val SourcePresentationGroup.folderIcon: ImageVector?
+    get() = if (this == SourcePresentationGroup.CUSTOM) Icons.Default.Public else null
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable

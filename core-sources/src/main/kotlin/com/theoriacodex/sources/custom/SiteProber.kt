@@ -17,6 +17,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import kotlinx.coroutines.withTimeoutOrNull
 import org.jsoup.Jsoup
+import org.jsoup.nodes.Document
 
 /**
  * Finds which supported protocol family a typed address speaks (plan C3, "Probe algorithm"). Read
@@ -81,20 +82,26 @@ class SiteProber(
         family: ProtocolFamily,
         match: FamilyProbe.Match,
         keyed: Boolean,
-    ) =
-        SiteProbeResult.Supported(
+    ): SiteProbeResult.Supported {
+        val home = homePage(address, context)
+        return SiteProbeResult.Supported(
             address = address,
             family = family,
-            suggestedLabel = match.suggestedLabel ?: homePageName(address, context) ?: defaultLabel(address),
+            suggestedLabel = match.suggestedLabel ?: home?.name ?: defaultLabel(address),
             searchTermLimit = match.searchTermLimit,
             credentialsRequired = keyed,
+            iconUrl = home?.iconUrl,
         )
+    }
 
     companion object {
         const val DEADLINE_MS = 30_000L
 
-        /** Worst case is 6: two families refusing then retried with keys, a signature or adapter page, and the home page. */
-        const val MAX_REQUESTS = 7
+        /**
+         * Worst case is 7: two families refusing then retried with keys, a signature or adapter page,
+         * the home page, and the conventional touch icon.
+         */
+        const val MAX_REQUESTS = 8
 
         /** Shipped booru sites, from the family presets, including separate API hosts. */
         val BUILT_IN_SITE_HOSTS: Map<String, String> = buildMap {
@@ -114,19 +121,65 @@ class SiteProber(
     }
 }
 
-/** The site's own name from its home page, best effort: any failure leaves the host as the label. */
-private suspend fun homePageName(address: SiteAddress, context: SiteRequestContext): String? =
-    runCatchingPreservingCancellation {
+/** What the home page says about the site; either part may be missing. [iconSize] is in pixels. */
+internal data class HomePage(val name: String?, val iconUrl: String?, val iconSize: Int = 0)
+
+/**
+ * Best effort: any failure leaves the host as the label and `/favicon.ico` as the icon. When the
+ * declared icon is small, tries the conventional `/apple-touch-icon.png` (180px), which many sites
+ * serve without declaring it.
+ */
+private suspend fun homePage(address: SiteAddress, context: SiteRequestContext): HomePage? {
+    val home = runCatchingPreservingCancellation {
         val response = context.get(address, "/")
-        response.body.takeIf { response.statusCode == 200 }?.let(::siteNameFromHtml)
+        response.body.takeIf { response.statusCode == 200 }?.let { parseHomePage(it, "${address.baseUrl}/") }
     }.getOrNull()
+    if (home != null && home.iconSize >= LARGE_ICON_PX) return home
+    val touchIcon = runCatchingPreservingCancellation {
+        val response = context.get(address, APPLE_TOUCH_ICON_PATH)
+        val type = response.headers.entries.firstOrNull { it.key.equals("Content-Type", ignoreCase = true) }?.value?.firstOrNull()
+        "${address.baseUrl}$APPLE_TOUCH_ICON_PATH".takeIf { response.statusCode == 200 && type?.startsWith("image/") == true }
+    }.getOrNull()
+    return when {
+        touchIcon != null -> (home ?: HomePage(null, null)).copy(iconUrl = touchIcon, iconSize = APPLE_TOUCH_ICON_PX)
+        else -> home
+    }
+}
+
+internal fun parseHomePage(html: String, pageUrl: String): HomePage {
+    val document = Jsoup.parse(html, pageUrl)
+    val icon = siteIcon(document)
+    return HomePage(siteName(document), icon?.first, icon?.second ?: 0)
+}
+
+private const val APPLE_TOUCH_ICON_PATH = "/apple-touch-icon.png"
+private const val APPLE_TOUCH_ICON_PX = 180
+private const val LARGE_ICON_PX = 64
+
+/**
+ * The largest declared raster icon over HTTPS. Apple touch icons are 180px when unsized; a sizeless
+ * `icon` is assumed small. SVG is skipped because media loads don't decode it.
+ */
+private fun siteIcon(document: Document): Pair<String, Int>? =
+    document.select("link[rel~=(?i)^(icon|shortcut icon|apple-touch-icon|apple-touch-icon-precomposed)$][href]")
+        .mapNotNull { link ->
+            val url = link.absUrl("href").takeIf { it.startsWith("https://") } ?: return@mapNotNull null
+            if (url.substringBefore('?').endsWith(".svg", ignoreCase = true) || link.attr("type").contains("svg")) {
+                return@mapNotNull null
+            }
+            val declared = link.attr("sizes").split(' ').mapNotNull { it.lowercase().substringBefore('x').toIntOrNull() }.maxOrNull()
+            val size = declared ?: if (link.attr("rel").contains("apple", ignoreCase = true)) 180 else 16
+            url to size
+        }
+        .maxByOrNull { it.second }
 
 /**
  * `og:site_name` when present, else the `<title>` up to its first separator ("Gelbooru | Anime and
  * Hentai Imageboard" → "Gelbooru"). Null when neither gives a usable name.
  */
-internal fun siteNameFromHtml(html: String): String? {
-    val document = Jsoup.parse(html)
+internal fun siteNameFromHtml(html: String): String? = siteName(Jsoup.parse(html))
+
+private fun siteName(document: Document): String? {
     val ogName = document.selectFirst("meta[property=og:site_name]")?.attr("content")
     val title = document.title().split(" | ", " - ", " – ", " — ", " :: ").first()
     return listOf(ogName, title).firstNotNullOfOrNull { candidate ->
