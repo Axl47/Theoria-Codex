@@ -15,6 +15,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.LocalContentColor
+import com.theoriacodex.app.ui.motion.LikedHeartColor
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.MoreHoriz
@@ -205,6 +213,7 @@ internal fun ViewerInfoSheet(
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)?,
     onGoToSearch: () -> Unit,
     onOpenCreatorFallback: ((Post) -> Unit)?,
+    liked: Boolean = false,
 ) {
     val post = selection.post
     val searchActions = LocalPostTagSearchActions.current
@@ -212,7 +221,7 @@ internal fun ViewerInfoSheet(
     AdaptiveViewerInfo(onDismiss = { controls.setInfoSheetVisible(false) }) {
         PostTagActionSection(
             header = {
-                ViewerInfoActions(selection, controls, creatorBrowsingSources, onAction, onOpenInBrowser, onGoToSearch, onOpenCreatorFallback)
+                ViewerInfoActions(selection, liked, controls, creatorBrowsingSources, onAction, onOpenInBrowser, onGoToSearch, onOpenCreatorFallback)
             },
             post = post,
             tagVideoCountProvider = tagVideoCountProvider,
@@ -238,10 +247,14 @@ internal fun ViewerInfoSheet(
     }
 }
 
-/** Identifies the post above a compact action row, so its tags stay near the top of the sheet. */
+/**
+ * Identifies the post, links its creator, and offers a compact action row, so its tags stay near the
+ * top of the sheet. Liking stays in the sheet; the other actions close it.
+ */
 @Composable
 private fun ViewerInfoActions(
     selection: ViewerSelection,
+    liked: Boolean,
     controls: ViewerControls,
     creatorBrowsingSources: Set<SourceKey>,
     onAction: (ViewerAction) -> Unit,
@@ -261,13 +274,17 @@ private fun ViewerInfoActions(
     }
     Column {
         PostActionHeader(post, showPostId = true)
+        creators.firstOrNull()?.let { creator -> ViewerCreatorLink(creator.label) { openCreator(creator) } }
         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), Arrangement.SpaceEvenly) {
+            ViewerInfoAction(
+                icon = if (liked) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
+                label = if (liked) "Liked" else "Like",
+                description = if (liked) "Unlike post" else "Like post",
+                tint = if (liked) LikedHeartColor else null,
+            ) { onAction(ViewerAction.ToggleLike) }
             ViewerInfoAction(Icons.Default.BookmarkAdd, "Codex", "Save to Codex") { closeThen { onAction(ViewerAction.Save) } }
             ViewerInfoAction(Icons.Default.Download, "Device", "Save to device", selection.canDownload) {
                 closeThen { onAction(ViewerAction.Download) }
-            }
-            creators.firstOrNull()?.let { creator ->
-                ViewerInfoAction(Icons.Default.Person, "Creator", creator.label) { openCreator(creator) }
             }
             ViewerInfoAction(Icons.Default.Share, "Share", "Share") { closeThen { onAction(ViewerAction.Share) } }
             ViewerInfoMoreActions(
@@ -306,12 +323,33 @@ private fun ViewerInfoMoreActions(
     }
 }
 
+/** The creator's name as a link: accent color, a person mark and a chevron say it opens their profile. */
+@Composable
+private fun ViewerCreatorLink(name: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(role = Role.Button, onClickLabel = "Open creator", onClick = onClick)
+            .sizeIn(minHeight = 48.dp)
+            .padding(horizontal = 4.dp)
+            .clearAndSetSemantics { contentDescription = "Open $name's profile" },
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val accent = MaterialTheme.colorScheme.primary
+        Icon(Icons.Default.Person, null, Modifier.size(18.dp), tint = accent)
+        Text(name, style = MaterialTheme.typography.titleSmall, color = accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, Modifier.size(18.dp), tint = accent)
+    }
+}
+
 @Composable
 private fun ViewerInfoAction(
     icon: ImageVector,
     label: String,
     description: String,
     enabled: Boolean = true,
+    tint: Color? = null,
     onClick: () -> Unit,
 ) {
     Column(
@@ -324,7 +362,7 @@ private fun ViewerInfoAction(
             .clearAndSetSemantics { contentDescription = description },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(icon, null)
+        Icon(icon, null, tint = tint ?: LocalContentColor.current)
         Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
     }
 }
