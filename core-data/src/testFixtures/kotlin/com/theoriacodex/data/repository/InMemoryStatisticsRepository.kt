@@ -28,9 +28,11 @@ class InMemoryStatisticsRepository(
         StatisticsPolicies.addUsage(current, delta)
     }
 
-    override suspend fun recordWatchedPost(source: SourceKey, tags: Set<String>) = mutate { current ->
-        StatisticsPolicies.recordWatched(current, source, tags)
-    }
+    override suspend fun recordWatchedPost(source: SourceKey, tags: Set<String>, codexOpen: CodexPostOpen?) =
+        mutate { current ->
+            val watched = StatisticsPolicies.recordWatched(current, source, tags)
+            codexOpen?.let { StatisticsPolicies.recordCodexPostOpen(watched, it.codexId, it.postKey, it.label) } ?: watched
+        }
 
     override suspend fun recordSearch(sources: Set<SourceKey>) = mutate { current ->
         StatisticsPolicies.recordSearch(current, sources)
