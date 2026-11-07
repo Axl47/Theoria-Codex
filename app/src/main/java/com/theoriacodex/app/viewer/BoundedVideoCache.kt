@@ -22,10 +22,12 @@ private const val RANGES_IGNORED_METADATA = "theoria-ranges-ignored"
 
 /**
  * Bounds how much of a stream one cache writer locks. Media3 lets one writer at a time fill a cache range, and a
- * progressive request otherwise locks from its position to the end of the file, so every other reader ahead of it
- * (a scrub preview, a seek, the player of a video still being prefetched) reads around the cache and its bytes are
- * never kept. With bounded holes each request covers at most [chunkBytes]; when it ends, `CacheDataSource` commits
- * what it wrote and opens the next request.
+ * progressive request otherwise locks from its position to the next cached span or the end of the file, so another
+ * reader ahead of it reads around the cache and cannot read what it wrote until a 5 MB fragment fills. Feed cards
+ * (behind the Viewer) and neighbour prefetch (behind a swipe) use it: each request covers at most [chunkBytes];
+ * when it ends, `CacheDataSource` commits what it wrote and opens the next request. The Viewer's own player and scrub
+ * previews keep unbounded requests: bounding them only added request gaps and a preview read-ahead into the
+ * player's open chunk, which cost later preview frames about 150 ms.
  *
  * Requests never start at the end of a file: a hole is bounded only while more than a chunk of the file is known
  * to remain, or for a file's first request, whose response records the file's length ([RangeRecordingDataSource]).

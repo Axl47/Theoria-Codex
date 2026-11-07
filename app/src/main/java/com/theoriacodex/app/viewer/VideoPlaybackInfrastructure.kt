@@ -138,13 +138,20 @@ internal class VideoPlaybackInfrastructure(
         if (feedPlayers.isInitialized()) feedPlayers.value.stopForViewer()
     }
 
+    /**
+     * Binds a player's media to [location]. [boundedLocks] is for players that keep loading while another reader
+     * may want the same stream (a feed card behind the Viewer): each of their requests locks at most a chunk of it.
+     */
     internal fun bind(
         location: String,
         headers: Map<String, String>,
+        boundedLocks: Boolean = false,
     ): BoundVideoPlaybackRequest {
         val bound = resourcePool.bind(location, headers)
         val mediaSourceFactory = if (isHttpVideoLocation(location)) {
-            DefaultMediaSourceFactory(cacheDataSourceFactory(bound, headers))
+            DefaultMediaSourceFactory(
+                cacheDataSourceFactory(bound, headers, lockChunkBytes = VIDEO_CACHE_CHUNK_BYTES.takeIf { boundedLocks }),
+            )
         } else {
             localMediaSourceFactory
         }
@@ -184,7 +191,10 @@ internal class VideoPlaybackInfrastructure(
                 .setLength(maxBytes)
                 .setFlags(DataSpec.FLAG_ALLOW_CACHE_FRAGMENTATION)
                 .build()
-            val dataSource = cacheDataSourceFactory(bound, headers, blockOnCache = true).createDataSource()
+            // The swiped-to player reads what a still-running prefetch has committed, a chunk at a time.
+            val dataSource = cacheDataSourceFactory(
+                bound, headers, blockOnCache = true, lockChunkBytes = VIDEO_CACHE_CHUNK_BYTES,
+            ).createDataSource()
             val writer = CacheWriter(dataSource, dataSpec, null, null)
             writer.cacheCancellable()
             currentCoroutineContext().ensureActive()
@@ -239,12 +249,13 @@ internal class VideoPlaybackInfrastructure(
         bound: BoundVideoResource<SharedVideoFactories>,
         headers: Map<String, String>,
         blockOnCache: Boolean = false,
+        lockChunkBytes: Long? = null,
     ): CacheDataSource.Factory {
         val immutableHeaders = headers.toMap()
         val requestScopedUpstream = ResolvingDataSource.Factory(bound.sharedResource.http) { dataSpec ->
             dataSpec.withAdditionalHeaders(immutableHeaders)
         }
-        return videoCacheDataSourceFactory(bound.sharedResource.cache, requestScopedUpstream, blockOnCache)
+        return videoCacheDataSourceFactory(bound.sharedResource.cache, requestScopedUpstream, blockOnCache, lockChunkBytes)
     }
 }
 
@@ -273,16 +284,18 @@ internal suspend fun copyFullyCachedVideo(cache: Cache, cacheKey: String, destin
 }
 
 /**
- * Playback bypasses occupied cache ranges; only background writers may wait for another writer. Every writer
- * locks at most one chunk of a stream at a time ([BoundedLockCache]), so readers ahead of it still cache.
+ * Playback bypasses occupied cache ranges; only background writers may wait for another writer. With
+ * [lockChunkBytes], each request locks at most that much of a stream ([BoundedLockCache]), so another reader of it
+ * can read what was committed and cache past the lock; without it, a request locks to the next cached span or the
+ * end of the file, which keeps the reader that matters on one request.
  */
 internal fun videoCacheDataSourceFactory(
     cache: Cache,
     upstream: DataSource.Factory,
     blockOnCache: Boolean = false,
-    chunkBytes: Long = VIDEO_CACHE_CHUNK_BYTES,
+    lockChunkBytes: Long? = null,
 ): CacheDataSource.Factory = CacheDataSource.Factory()
-    .setCache(BoundedLockCache(cache, chunkBytes))
+    .setCache(lockChunkBytes?.let { BoundedLockCache(cache, it) } ?: cache)
     .setUpstreamDataSourceFactory(RangeRecordingDataSource.Factory(upstream, cache))
     .setFlags(
         CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR or

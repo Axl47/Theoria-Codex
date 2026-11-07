@@ -43,7 +43,7 @@ class BoundedVideoCacheTest {
 
     @Test fun `a reader ahead of a playing request still caches what it reads`() {
         val origin = FakeOrigin(Random(1).nextBytes(10 * CHUNK.toInt()))
-        val factory = videoCacheDataSourceFactory(cache, origin, chunkBytes = CHUNK)
+        val factory = videoCacheDataSourceFactory(cache, origin, lockChunkBytes = CHUNK)
         val player = factory.createDataSource()
         player.open(spec(0L))
         player.read(ByteArray(10), 0, 10)
@@ -61,7 +61,7 @@ class BoundedVideoCacheTest {
             val content = Random(size).nextBytes(size.toInt())
             val origin = FakeOrigin(content)
             val key = "video-$size"
-            val read = videoCacheDataSourceFactory(cache, origin, chunkBytes = CHUNK).createDataSource()
+            val read = videoCacheDataSourceFactory(cache, origin, lockChunkBytes = CHUNK).createDataSource()
                 .readAndClose(spec(0L, key = key), Int.MAX_VALUE)
 
             assertArrayEquals(content, read)
@@ -77,7 +77,7 @@ class BoundedVideoCacheTest {
     @Test fun `a server that ignores ranges is read unbounded after its first response`() {
         val content = Random(3).nextBytes(5 * CHUNK.toInt())
         val origin = FakeOrigin(content, honorsRanges = false)
-        val read = videoCacheDataSourceFactory(cache, origin, chunkBytes = CHUNK).createDataSource()
+        val read = videoCacheDataSourceFactory(cache, origin, lockChunkBytes = CHUNK).createDataSource()
             .readAndClose(spec(0L), Int.MAX_VALUE)
 
         assertArrayEquals(content, read)
@@ -88,7 +88,7 @@ class BoundedVideoCacheTest {
     @Test fun `a prefetch longer than the file stops at its end`() {
         val content = Random(4).nextBytes((3 * CHUNK + 7).toInt())
         val origin = FakeOrigin(content)
-        val source = videoCacheDataSourceFactory(cache, origin, blockOnCache = true, chunkBytes = CHUNK).createDataSource()
+        val source = videoCacheDataSourceFactory(cache, origin, blockOnCache = true, lockChunkBytes = CHUNK).createDataSource()
         CacheWriter(source, spec(0L).buildUpon().setLength(20 * CHUNK).build(), null, null).cache()
 
         assertTrue(cache.isCached(KEY, 0L, content.size.toLong()))
