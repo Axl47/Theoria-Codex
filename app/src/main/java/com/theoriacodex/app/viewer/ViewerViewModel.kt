@@ -72,6 +72,8 @@ internal class ViewerViewModel(
     private val recordedVisiblePosts = mutableSetOf<PostId>()
     private val prefetchSemaphore = Semaphore(VIEWER_PREFETCH_MAX_CONCURRENCY)
     private var desiredPrefetchKeys = emptySet<ViewerMediaKey>()
+    /** Whether this session has shown its first media; speculative loads wait for it (see [awaitFirstMediaShown]). */
+    private val firstMediaShown = MutableStateFlow(false)
     private var restoredPageIndex = savedStateHandle[ViewerSavedStateKeys.PAGE_INDEX] ?: 0
     private var restoredMediaIndex = savedStateHandle[ViewerSavedStateKeys.MEDIA_INDEX] ?: 0
 
@@ -102,7 +104,10 @@ internal class ViewerViewModel(
     override fun onAction(action: ViewerAction) {
         val reduction = synchronized(lock) {
             if (action is ViewerAction.ReplaceSession) {
-                if (action.session != mutableState.value.session) recordedVisiblePosts.clear()
+                if (action.session != mutableState.value.session) {
+                    recordedVisiblePosts.clear()
+                    firstMediaShown.value = false
+                }
                 cancelSessionJobs()
             }
             val restoresSavedSelection = action is ViewerAction.ReplaceSession &&
@@ -124,6 +129,7 @@ internal class ViewerViewModel(
             result.also {
                 mutableState.value = result.state
                 persist(result.state)
+                if (result.state.currentMedia?.ready == true || result.state.mediaError != null) firstMediaShown.value = true
             }
         }
         reduction.effects.forEach(::handleEffect)
@@ -205,6 +211,7 @@ internal class ViewerViewModel(
         synchronized(lock) {
             cancelSessionJobs()
             recordedVisiblePosts.clear()
+            firstMediaShown.value = false
             mutableSession.value = null
             mutableState.value = if (retainPresentation) ViewerUiState(
                 pages = mutableState.value.pages,
@@ -317,7 +324,7 @@ internal class ViewerViewModel(
             ?: return
         val distance = viewerPrefetchDistance(state.value.pages, state.value.currentMedia?.key, mediaKey) ?: Int.MAX_VALUE
         launchSessionJob(ViewerWorkKey.Prefetch(mediaKey)) {
-            awaitCurrentMediaShown()
+            awaitFirstMediaShown()
             prefetchSemaphore.withPermit {
                 coroutineContext.ensureActive()
                 synchronized(lock) {
@@ -337,14 +344,13 @@ internal class ViewerViewModel(
     }
 
     /**
-     * Speculative loads wait until the media on screen is ready, so they never split the link with its first
-     * load: a gallery's first page or a video's first frame. A failed or slow current media releases them after
-     * [VIEWER_PREFETCH_READY_WAIT_MS].
+     * Speculative loads wait until the session's first media is on screen, so opening the Viewer never splits
+     * the link between what was tapped (a gallery's first page, a video's first frame) and its neighbours. A
+     * failed or slow first media releases them after [VIEWER_PREFETCH_READY_WAIT_MS]. Later pages do not wait:
+     * someone skimming faster than pages load is better served by neighbours loading ahead.
      */
-    private suspend fun awaitCurrentMediaShown() {
-        withTimeoutOrNull(VIEWER_PREFETCH_READY_WAIT_MS) {
-            state.first { current -> current.currentMedia?.ready != false || current.mediaError != null }
-        }
+    private suspend fun awaitFirstMediaShown() {
+        withTimeoutOrNull(VIEWER_PREFETCH_READY_WAIT_MS) { firstMediaShown.first { shown -> shown } }
     }
 
     private fun reconcilePrefetch(

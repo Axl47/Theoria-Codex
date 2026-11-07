@@ -511,7 +511,7 @@ class ViewerViewModelTest {
     }
 
     @Test
-    fun `neighbors wait for the media on screen, or until the wait runs out`() = runTest {
+    fun `neighbors wait for the first media on screen, or until the wait runs out`() = runTest {
         val started = mutableListOf<com.theoriacodex.app.viewer.state.ViewerMediaKey>()
         val owner = ViewerViewModel(
             savedStateHandle = SavedStateHandle(),
@@ -530,15 +530,21 @@ class ViewerViewModelTest {
         owner.onAction(ViewerAction.MediaReady(requireNotNull(owner.state.value.session), keys[0], 0L))
         runCurrent()
         assertEquals(listOf(keys[1]), started)
-
+        // Later pages do not wait for the page on screen.
         owner.onAction(ViewerAction.SelectMedia(2))
         owner.onAction(ViewerAction.QueuePrefetch(listOf(keys[3])))
-        advanceTimeBy(VIEWER_PREFETCH_READY_WAIT_MS - 1)
-        runCurrent()
-        assertEquals(listOf(keys[1]), started)
-        advanceTimeBy(1)
         runCurrent()
         assertEquals(listOf(keys[1], keys[3]), started)
+
+        owner.replaceSession(session("prefetch-gate-slow", listOf(post("slow", media = (0..1).map { image("slow-$it.jpg") }))))
+        val slow = owner.state.value.currentPage?.media.orEmpty().last().key
+        owner.onAction(ViewerAction.QueuePrefetch(listOf(slow)))
+        advanceTimeBy(VIEWER_PREFETCH_READY_WAIT_MS - 1)
+        runCurrent()
+        assertTrue(slow !in started)
+        advanceTimeBy(1)
+        runCurrent()
+        assertEquals(slow, started.last())
     }
 
     @Test
