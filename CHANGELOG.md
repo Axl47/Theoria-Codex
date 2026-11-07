@@ -9,6 +9,7 @@
 - Danbooru and AIBooru share one "Booru" entry in the source picker, like the R34 sites, so the picker stays compact.
 - The search editor warns when Danbooru will only get the first two tags of a Unified search, since guests can search at most two tags there.
 - A Danbooru-only search with more tags than Danbooru allows is stopped with an explanation instead of failing at the provider; ranked sorts allow one tag, because the sort uses the other.
+- For You learns across Pixiv, Danbooru, AIBooru, Gelbooru and Rule34.xxx: Likes on one source now suggest the same interests on the others, even sources you haven't liked anything on yet.
 
 ### Changed
 
@@ -17,12 +18,17 @@
 - Liking a post from a card now gives the same haptic tick, heart pop and pink heart as liking it in the Viewer.
 - Recents' All view now groups each day's searches in one row at the top of that day, above the posts you viewed.
 - Searches in Recents read like the search editor: "or" alternatives are muted and excluded tags are red, with the source and time beside each search.
+- Pixiv tags show their English name beside the Japanese tag on one chip, and tapping it searches the Japanese tag.
+- Pixiv tag translations are always shown in English, whatever language your phone uses.
 
 ### Fixed
 
 - Switching source in Search now shows that source's last search, so the results and the filter button always match the source you picked.
 - Opening an nhentai or Hitomi gallery in the Viewer keeps its cover on screen until the first page loads, instead of flashing to black.
 - When a post's full image fails to load in the Viewer, its preview now takes its place instead of spinning indefinitely.
+- Typing a tag's English name in Pixiv search and pressing Enter now searches the matching Japanese tag instead of the English text.
+- Pixiv searches keep tags that include parentheses, such as ラム(リゼロ), instead of cutting them short.
+- Gelbooru and Rule34.xxx tags with apostrophes or ampersands, such as jojo's_bizarre_adventure, now display correctly and find their posts.
 
 ## [1.3.0] - 2026-11-06
 
