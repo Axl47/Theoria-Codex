@@ -1,6 +1,7 @@
 package com.theoriacodex.data.repository
 
 import com.theoriacodex.domain.model.SourceKey
+import kotlin.math.abs
 import com.theoriacodex.domain.tags.normalizeFavoriteTagForStorage
 import com.theoriacodex.domain.tags.sourceTagKey
 
@@ -94,6 +95,8 @@ internal object RepositoryPolicies {
             val rawWeight = rawWeights[source] ?: defaults[source] ?: 1.0
             rawWeight.takeIf(Double::isFinite)?.coerceAtLeast(0.0) ?: 0.0
         }
+        // Already-normalized weights pass through, so normalizing again never drifts in the last bit.
+        if (abs(safeWeights.values.sum() - 1.0) <= NORMALIZED_WEIGHT_TOLERANCE) return safeWeights
         val largestWeight = safeWeights.values.maxOrNull().orZero()
         if (largestWeight <= 0.0) {
             val uniformWeight = 1.0 / orderedSources.size.toDouble()
@@ -345,4 +348,5 @@ internal object RepositoryPolicies {
 }
 
 private const val MAX_FAVORITE_TAG_NAME_LENGTH = 60
+private const val NORMALIZED_WEIGHT_TOLERANCE = 1e-9
 private val LINE_BREAK_REGEX = Regex("\\s*[\\r\\n]+\\s*")
