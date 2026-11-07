@@ -14,6 +14,7 @@ import com.theoriacodex.app.related.retainedLikedPostIds
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.search.filterSearchResults
+import com.theoriacodex.app.search.markInputs
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
@@ -42,23 +43,21 @@ fun rememberRelatedFeedPresentation(
     })
     val relatedPosts = relatedState.loadedPosts
     val durationMetadata = rememberDurationFilterMetadata(relatedPosts, durationStates, durationFilterActive)
+    val marks = visibilityFilters.markInputs(likedPostIds, savedPostIds, watchedPostIds, retainedLikedPostIds)
     val visiblePosts = remember(
         relatedPosts,
         visibilityFilters,
-        likedPostIds,
-        retainedLikedPostIds,
-        savedPostIds,
-        watchedPostIds,
+        marks,
         unknownAnimatedDurationPolicy,
         durationMetadata.knownDurationMsByPostId,
     ) {
         filterSearchResults(
             results = relatedPosts,
             filters = visibilityFilters,
-            likedPostIds = likedPostIds,
-            retainedLikedPostIds = retainedLikedPostIds,
-            savedPostIds = savedPostIds,
-            watchedPostIds = watchedPostIds,
+            likedPostIds = marks.liked,
+            retainedLikedPostIds = marks.retained,
+            savedPostIds = marks.saved,
+            watchedPostIds = marks.watched,
             unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
             knownDurationMsByPostId = durationMetadata.knownDurationMsByPostId,
         )
