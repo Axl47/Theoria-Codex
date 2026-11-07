@@ -54,3 +54,4 @@ com.theoriacodex.data.repository.FollowedCreatorRecord|source,name,profileId,pro
 com.theoriacodex.data.repository.CodexStatistics|browsingMs,watchingMs,posts
 com.theoriacodex.data.repository.CodexPostStatistics|label,opens,videoMs,imageMs
 com.theoriacodex.data.repository.DailyActivity|appOpenCount,totalForegroundMs,browsingMs,watchingMs,codexMs,watchedPostCount,searchCount
+com.theoriacodex.data.repository.SiteProfileRecord|sourceId,baseUrl,label,family,searchTermLimit,userAgent,referer,credentialsRequired,addedAt,verifiedAt
