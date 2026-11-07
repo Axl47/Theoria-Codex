@@ -35,6 +35,12 @@
 - Pixiv animations fetch their frame details once and share them between the card and the Viewer.
 - Settings statistics now update only while you're looking at them, instead of in the background.
 - The Codex library and its covers open faster on large collections.
+- Opening a video in the Viewer stops the feed cards behind it, so they no longer keep downloading while hidden and the Viewer starts playing sooner.
+- A clip opened from the feed is kept on your device as it plays, so looping it does not download it again.
+- Images already on your device show straight away instead of first checking back with the site, so gallery pages Theoria preloaded appear without a delay.
+- The next gallery page is prepared before you turn to it, so it appears immediately.
+- Preloading pages further ahead uses less processing and memory.
+- Opening a post loads what you tapped first, before preloading the pages and posts around it.
 
 ### Fixed
 
