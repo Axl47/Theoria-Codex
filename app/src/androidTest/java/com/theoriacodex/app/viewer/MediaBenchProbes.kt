@@ -90,19 +90,27 @@ internal class PlayerProbe(val player: ExoPlayer, private val surface: Surface) 
     /** Elapsed-realtime clock value at which playback first started. */
     suspend fun awaitPlayingAt(): Long = withTimeout(PLAYER_TIMEOUT_MS) { playing.await() }
 
+    /** Where the player was when its latest timed seek became ready. Read on main. */
+    var seekReadyPositionMs = -1L
+        private set
+
     /** Milliseconds from the seek request until the player is ready to play at [positionMs]. */
-    suspend fun seekAndAwaitReady(positionMs: Long): Long {
+    suspend fun seekAndAwaitReady(positionMs: Long): Long =
+        awaitReady(withContext(Dispatchers.Main) { startSeek { player.seekTo(positionMs) } })
+
+    /** Runs [seek] as a timed seek, on main; [awaitReady] waits for it. */
+    fun startSeek(seek: () -> Unit): TimedSeek {
         val ready = CompletableDeferred<Long>()
-        val started = withContext(Dispatchers.Main) {
-            seekReady = ready
-            SystemClock.elapsedRealtime().also { now ->
-                seekStartedAt = now
-                seekEvents += mutableListOf("at${now - attachedAt}")
-                player.seekTo(positionMs)
-            }
-        }
-        return withTimeout(PLAYER_TIMEOUT_MS) { ready.await() } - started
+        seekReady = ready
+        val now = SystemClock.elapsedRealtime()
+        seekStartedAt = now
+        seekEvents += mutableListOf("at${now - attachedAt}")
+        seek()
+        return TimedSeek(now, ready)
     }
+
+    /** Milliseconds from [seek]'s request until the player was ready. */
+    suspend fun awaitReady(seek: TimedSeek): Long = withTimeout(PLAYER_TIMEOUT_MS) { seek.ready.await() } - seek.startedAt
 
     private fun log(eventTime: EventTime, event: String) {
         if (seekStartedAt >= 0L) seekEvents.last() += "$event+${eventTime.realtimeMs - seekStartedAt}"
@@ -123,7 +131,10 @@ internal class PlayerProbe(val player: ExoPlayer, private val surface: Surface) 
                 if (bufferingSince >= 0L) rebufferMs += now - bufferingSince
                 bufferingSince = -1L
                 readyOnce = true
-                seekReady?.complete(now)
+                seekReady?.let { ready ->
+                    seekReadyPositionMs = player.currentPosition
+                    ready.complete(now)
+                }
                 seekReady = null
             }
             Player.STATE_BUFFERING -> if (readyOnce && seekReady == null && player.playWhenReady) {
@@ -134,6 +145,9 @@ internal class PlayerProbe(val player: ExoPlayer, private val surface: Surface) 
         }
     }
 }
+
+/** A seek [PlayerProbe.startSeek] issued at [startedAt] (elapsed realtime); [ready] completes when it is ready. */
+internal class TimedSeek(val startedAt: Long, val ready: CompletableDeferred<Long>)
 
 /** A decoder output that drops every frame, standing in for the card's or Viewer's texture view. */
 internal class BenchSurface : AutoCloseable {
@@ -151,9 +165,15 @@ internal class BenchSurface : AutoCloseable {
 
 /**
  * One timeline drag through the page's scrub previews, as the popup drives it: the finger rests on each target
- * until its frame is published. Returns, per target, when the finger moved there and when its frame arrived.
+ * until its frame is published. With [release], the finger then lifts on the last target: as in the timeline, the
+ * release runs on main while the popup still follows the drag, which stops right after. Returns, per target, when
+ * the finger moved there and when its frame arrived.
  */
-internal suspend fun ViewerScrubPreviews.drag(targets: List<Long>, frameLog: PreviewFrameLog): List<DragFrame> = coroutineScope {
+internal suspend fun ViewerScrubPreviews.drag(
+    targets: List<Long>,
+    frameLog: PreviewFrameLog,
+    release: ((Long) -> Unit)? = null,
+): List<DragFrame> = coroutineScope {
     val positions = MutableStateFlow(targets.first())
     val published = Channel<Pair<Long, Long>>(Channel.UNLIMITED)
     var movedAt = SystemClock.elapsedRealtime()
@@ -174,6 +194,7 @@ internal suspend fun ViewerScrubPreviews.drag(targets: List<Long>, frameLog: Pre
             DragFrame(movedAt, frame.second)
         }
     }
+    release?.let { lift -> withContext(Dispatchers.Main) { lift(targets.last()) } }
     following.cancelAndJoin()
     elapsed
 }

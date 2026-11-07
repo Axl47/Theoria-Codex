@@ -171,8 +171,9 @@ class MediaBufferingBenchmarkTest {
 
     /**
      * A long video opened directly: cold first frame, four seeks past the buffer, then two timeline drags through
-     * the page's scrub previews. The first drag rests on three targets past the buffer and releases, seeking to the
-     * last one; the second, after playback settles, rests on one target and is cancelled.
+     * the page's scrub previews. The first drag rests on three targets past the buffer and releases on the last one,
+     * seeking as the timeline does; the second, after playback settles, rests on one target and is cancelled. Stalls
+     * while playing, seeks excluded, are counted over the whole session.
      */
     @Test
     fun viewerSeekAndScrub() = runBlocking {
@@ -189,6 +190,7 @@ class MediaBufferingBenchmarkTest {
             } to lease
         }
         val firstFrame = probe.awaitFirstFrame()
+        val coldPlaying = probe.awaitPlaying()
         delay(SEEK_SETTLE_MS)
         val duration = onMain { probe.player.duration }
         val seeks = SEEK_FRACTIONS.map { fraction ->
@@ -207,19 +209,23 @@ class MediaBufferingBenchmarkTest {
             )
         }
         val frameLog = PreviewFrameLog(File(context.cacheDir, "media-bench-preview.png"))
-        val firstDrag = previews.drag(SCRUB_FRACTIONS.map { (duration * it).toLong() }, frameLog)
+        var afterScrub: ServerStats? = null
+        var release: TimedSeek? = null
+        val firstDrag = previews.drag(SCRUB_FRACTIONS.map { (duration * it).toLong() }, frameLog) { target ->
+            afterScrub = serverStats()
+            release = probe.startSeek { probe.player.seekTo(target) }
+        }
         val scrubFrames = firstDrag.map(DragFrame::elapsedMs)
-        val afterScrub = serverStats()
-        // Lifting the finger ends the drag and seeks the player to the last previewed position.
-        val releasedAt = SystemClock.elapsedRealtime() - scrubStartedAt
-        val releaseSeek = probe.seekAndAwaitReady((duration * SCRUB_FRACTIONS.last()).toLong())
+        val releaseSeek = probe.awaitReady(checkNotNull(release))
+        val releasedAt = checkNotNull(release).startedAt - scrubStartedAt
+        val releaseLanding = onMain { probe.seekReadyPositionMs }
         delay(SEEK_SETTLE_MS)
         val secondDrag = previews.drag(listOf((duration * SECOND_DRAG_FRACTION).toLong()), frameLog)
         frameLog.saveLatest()
         val dragEvents = JSONArray((firstDrag + secondDrag).map { "${it.movedAt - scrubStartedAt}->${it.publishedAt - scrubStartedAt}" })
         val scrubTimeline = server.timeline("/long_1.mp4", scrubStartedAt)
         val seekTimeline = server.timeline("/long_1.mp4", probe.attachedAt)
-        val seekEvents = onMain { JSONArray(probe.seekEvents.map(::JSONArray)) }
+        val (seekEvents, stalls) = onMain { JSONArray(probe.seekEvents.map(::JSONArray)) to (probe.rebufferCount to probe.rebufferMs) }
         val end = serverStats()
         onMain {
             previews.close()
@@ -233,15 +239,18 @@ class MediaBufferingBenchmarkTest {
             "viewerSeekAndScrub",
             JSONObject()
                 .put("viewer_ttff_cold_ms", firstFrame)
+                .put("viewer_time_to_playing_cold_ms", coldPlaying)
                 .put("seek_to_resume_ms", median(seeks))
                 .put("seek_to_resume_max_ms", seeks.max())
                 .put("seeks_ms", JSONArray(seeks))
+                .put("seek_rebuffer_count", stalls.first)
+                .put("seek_rebuffer_ms", stalls.second)
                 .put("scrub_first_frame_ms", scrubFrames.first())
                 .put("scrub_frame_ms", median(scrubFrames))
                 .put("scrub_frames_ms", JSONArray(scrubFrames))
                 .put(
                     "scrub_bytes_mb",
-                    megabytes(afterScrub.path("/long_1.mp4").optLong("bytes") - beforeScrub.path("/long_1.mp4").optLong("bytes")),
+                    megabytes(checkNotNull(afterScrub).path("/long_1.mp4").optLong("bytes") - beforeScrub.path("/long_1.mp4").optLong("bytes")),
                 )
                 .put("seek_after_scrub_ms", releaseSeek)
                 .put("scrub_second_drag_first_frame_ms", secondDrag.first().elapsedMs)
@@ -251,6 +260,7 @@ class MediaBufferingBenchmarkTest {
                 .put(
                     "diagnostics",
                     JSONObject().put("scrubTimeline", scrubTimeline).put("dragEvents", dragEvents).put("releasedAt", releasedAt)
+                        .put("releaseTargetMs", (duration * SCRUB_FRACTIONS.last()).toLong()).put("releaseLandedMs", releaseLanding)
                         .put("seekEvents", seekEvents).put("seekTimeline", seekTimeline).put("frames", JSONArray(frameLog.frames)),
                 ),
         )
