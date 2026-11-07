@@ -1,0 +1,14 @@
+{
+  "baseUrl": "https://sakugabooru.com",
+  "capturedOn": "2026-11-07",
+  "routes": [
+    {
+      "path": "/counts/posts.json",
+      "query": {},
+      "status": 301,
+      "contentType": "text/html",
+      "body": "danbooru_counts.html",
+      "location": "https://www.sakugabooru.com/counts/posts.json"
+    }
+  ]
+}
