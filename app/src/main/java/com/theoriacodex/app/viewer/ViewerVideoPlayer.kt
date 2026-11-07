@@ -132,7 +132,10 @@ private class ViewerVideoState {
         scrubbing = false
     }
 
-    /** A drag released on [target]; [previews] may land it on the frame their popup shows. */
+    /**
+     * A drag's seek to [target]: on release, where [previews] may land it on the frame their popup shows, or on every
+     * move with instant seek, where no popup shows and the seek is exact.
+     */
     fun release(target: Long, previews: ViewerScrubPreviews?) {
         if (previews == null) return seek(target)
         position = runCatching { previews.seekReleased(target) }.getOrDefault(target)
