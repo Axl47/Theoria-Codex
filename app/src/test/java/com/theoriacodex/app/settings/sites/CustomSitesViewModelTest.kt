@@ -305,4 +305,22 @@ class CustomSitesViewModelTest {
         runCurrent()
         assertEquals("This site is no longer in your list.", owner.state.value.notice)
     }
+
+    @Test fun `a pasted key snippet in either field fills both`() = runTest {
+        val owner = owner()
+        owner.onAction(CustomSitesAction.StartAdd)
+        owner.onAction(CustomSitesAction.SetApiKey("login=alice&api_key=k3y"))
+        assertEquals("alice" to "k3y", owner.add.fields.user to owner.add.fields.apiKey)
+        owner.onAction(CustomSitesAction.SetUser("https://g.example/index.php?page=account&api_key=abc&user_id=42"))
+        assertEquals("42" to "abc", owner.add.fields.user to owner.add.fields.apiKey)
+        owner.onAction(CustomSitesAction.SetUser("7"))
+        assertEquals("7" to "abc", owner.add.fields.user to owner.add.fields.apiKey)
+    }
+
+    @Test fun `user hint names the family and flags a Gelbooru username`() {
+        assertNull(userFieldHint(null, "x"))
+        assertFalse(userFieldHint(ProtocolFamily.DANBOORU, "12")!!.error)
+        assertFalse(userFieldHint(ProtocolFamily.GELBOORU_02, " 42 ")!!.error)
+        assertTrue(userFieldHint(ProtocolFamily.GELBOORU_02, "alice")!!.error)
+    }
 }

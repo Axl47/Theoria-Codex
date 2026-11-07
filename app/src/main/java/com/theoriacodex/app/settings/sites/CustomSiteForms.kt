@@ -196,6 +196,8 @@ private fun CredentialFields(
         value = fields.user,
         onValueChange = { onAction(CustomSitesAction.SetUser(it)) },
         label = { Text(userFieldLabel(family)) },
+        supportingText = { Text(userFieldHint(family, fields.user)?.text ?: "Or paste the key snippet from your account page.") },
+        isError = userFieldHint(family, fields.user)?.error == true,
         singleLine = true,
         enabled = enabled,
     )

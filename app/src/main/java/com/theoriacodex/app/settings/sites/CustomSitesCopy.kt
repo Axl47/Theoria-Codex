@@ -59,6 +59,25 @@ internal fun userFieldLabel(family: ProtocolFamily?): String = when (family) {
     null -> "User ID or username"
 }
 
+/**
+ * Helper under the user field once the family is known. Gelbooru 0.2 user IDs are numeric, so a
+ * non-numeric entry is flagged ([UserFieldHint.error]); Danbooru logins can be anything.
+ */
+internal fun userFieldHint(family: ProtocolFamily?, user: String): UserFieldHint? = when (family) {
+    ProtocolFamily.DANBOORU -> UserFieldHint("Danbooru sites use your username, not a numeric ID.", error = false)
+    ProtocolFamily.GELBOORU_02 -> {
+        val wrong = user.isNotBlank() && !user.trim().all(Char::isDigit)
+        UserFieldHint(
+            if (wrong) "Gelbooru sites need your numeric user ID, not your username."
+            else "Your numeric user ID, shown with the API key on the site's account options page.",
+            error = wrong,
+        )
+    }
+    null -> null
+}
+
+internal data class UserFieldHint(val text: String, val error: Boolean)
+
 /** The inline line shown under a row after re-testing it. Never suggests the profile changed. */
 internal fun retestStatus(site: CustomSiteSummary, result: SiteProbeResult): RetestStatus.Done {
     val answeredFamily = when (result) {

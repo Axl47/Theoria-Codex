@@ -11,6 +11,7 @@ import com.theoriacodex.app.customsites.CustomSiteEdit
 import com.theoriacodex.app.customsites.CustomSiteMutation
 import com.theoriacodex.app.customsites.CustomSitesController
 import com.theoriacodex.app.di.TheoriaAppContainer
+import com.theoriacodex.app.sourceauth.parseCredentialSnippet
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.source.ProbeFailure
 import com.theoriacodex.domain.source.SiteCredentials
@@ -63,8 +64,8 @@ internal class CustomSitesViewModel(
             CustomSitesAction.CloseForm -> closeForm()
             is CustomSitesAction.SetAddress -> setAddress(action.value)
             is CustomSitesAction.SetLabel -> setFields(ProbeReset.NEVER) { copy(label = action.value) }
-            is CustomSitesAction.SetUser -> setFields(ProbeReset.IF_KEYS_VERIFIED) { copy(user = action.value) }
-            is CustomSitesAction.SetApiKey -> setFields(ProbeReset.IF_KEYS_VERIFIED) { copy(apiKey = action.value) }
+            is CustomSitesAction.SetUser -> setCredentialField(action.value) { copy(user = it) }
+            is CustomSitesAction.SetApiKey -> setCredentialField(action.value) { copy(apiKey = it) }
             is CustomSitesAction.SetUserAgent -> setFields(ProbeReset.ALWAYS) { copy(userAgent = action.value) }
             is CustomSitesAction.SetReferer -> setFields(ProbeReset.ALWAYS) { copy(referer = action.value) }
             is CustomSitesAction.SetIncludeInUnifiedAndForYou ->
@@ -138,6 +139,14 @@ internal class CustomSitesViewModel(
                 null -> null
             }
             current.copy(form = form)
+        }
+    }
+
+    /** A pasted snippet (`user_id=…&api_key=…` or `login=…&api_key=…`) in either field fills both. */
+    private fun setCredentialField(value: String, assign: SiteFields.(String) -> SiteFields) {
+        val snippet = parseCredentialSnippet(value)
+        setFields(ProbeReset.IF_KEYS_VERIFIED) {
+            snippet?.let { copy(user = it.user, apiKey = it.apiKey) } ?: assign(value)
         }
     }
 
