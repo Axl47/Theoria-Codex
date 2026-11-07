@@ -5,6 +5,7 @@ import android.util.AtomicFile
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -23,7 +24,7 @@ class BenchmarkLibrarySeedActivity : ComponentActivity() {
         val directory = externalMediaDirs.first()
         lifecycleScope.launch {
             val status = withContext(Dispatchers.IO) {
-                runCatching {
+                runCatchingPreservingCancellation {
                     val snapshot = File(directory, SNAPSHOT_FILE)
                     val bytes = snapshot.readBytes().also { snapshot.delete() }
                     val owner = application as TheoriaAppContainerOwner

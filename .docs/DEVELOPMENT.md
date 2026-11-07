@@ -277,9 +277,10 @@ ANDROID_SERIAL=YOUR_PHONE_SERIAL scripts/verify_performance_device.sh compare \
 Benchmarks serve fixture media from the app, so they cannot show network savings. To measure data use,
 debug builds count downloaded bytes per media stack, and an opt-in session browses For You, Search and the
 Viewer on Theoria Debug's real accounts. It reports the app's total network use, with image, video and
-Pixiv animation bytes, image cache sources, and video played from cache. Live feeds change between runs, so
-compare medians of several runs per build on the same network. Both commands update Debug in place and keep
-its data.
+Pixiv animation bytes, GIF and offline downloads, provider API and video-length probe traffic, image cache
+sources, and video read from cache. Each run first clears Debug's disposable media caches, as Settings does,
+so runs start alike; `DATA_USAGE_KEEP_CACHES=1` keeps them. Live feeds change between runs, so compare medians
+of several runs per build on the same network. Both commands update Debug in place and keep its data.
 
 ```sh
 ANDROID_SERIAL=YOUR_PHONE_SERIAL DATA_USAGE_RUNS=3 scripts/real_data_device.sh data-usage /path/to/new-usage-dir
