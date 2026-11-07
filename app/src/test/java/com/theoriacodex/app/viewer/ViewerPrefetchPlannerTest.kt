@@ -76,6 +76,17 @@ class ViewerPrefetchPlannerTest {
         )
     }
 
+    @Test
+    fun `only images next to the current media are marked for decoding`() {
+        val pages = pages(mediaCounts = listOf(4, 1, 1), videoPosts = setOf(1))
+        val flattened = pages.flatMap { page -> page.media.map { media -> media.key } }
+
+        val action = viewerPrefetchAction(pages, current = flattened[3], swipeTarget = null)
+
+        assertEquals(listOf(flattened[4], flattened[5], flattened[2], flattened[1], flattened[0]), action.mediaKeys)
+        assertEquals(setOf(flattened[2]), action.decodeKeys)
+    }
+
     private fun pages(mediaCounts: List<Int>, videoPosts: Set<Int> = emptySet()): List<ViewerPageState> {
         return mediaCounts.mapIndexed { postIndex, mediaCount ->
             val video = postIndex in videoPosts

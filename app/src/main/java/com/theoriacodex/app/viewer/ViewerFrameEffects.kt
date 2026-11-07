@@ -217,7 +217,7 @@ private fun ViewerNavigationEffects(
         val targetKey = swipeLoadTarget?.let { target ->
             pages.getOrNull(target.postIndex)?.media?.getOrNull(target.mediaIndex)?.key
         }
-        onAction(ViewerAction.QueuePrefetch(viewerPrefetchQueue(pages, uiState.currentMedia?.key, targetKey)))
+        onAction(viewerPrefetchAction(pages, uiState.currentMedia?.key, targetKey))
     }
     LaunchedEffect(navigation.originalPosts.size, navigation.stripAnchorIndex, canLoadMoreFromSource, loadingMoreFromSource) {
         if (loadingMoreFromSource || !canLoadMoreFromSource) return@LaunchedEffect

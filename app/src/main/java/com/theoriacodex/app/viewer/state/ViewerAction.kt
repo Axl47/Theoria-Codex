@@ -56,7 +56,11 @@ internal sealed interface ViewerAction {
         val recoverable: Boolean,
     ) : ViewerAction
 
-    data class QueuePrefetch(val mediaKeys: List<ViewerMediaKey>) : ViewerAction
+    /** [decodeKeys]: images among [mediaKeys] close enough to the current media to keep decoded in memory. */
+    data class QueuePrefetch(
+        val mediaKeys: List<ViewerMediaKey>,
+        val decodeKeys: Set<ViewerMediaKey> = emptySet(),
+    ) : ViewerAction
     data class PrefetchStarted(
         val session: ViewerSessionIdentity,
         val mediaKey: ViewerMediaKey,

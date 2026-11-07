@@ -353,7 +353,7 @@ class MediaBufferingBenchmarkTest {
     }
 
     private fun ViewerViewModel.queueAdjacentPrefetch() {
-        onAction(ViewerAction.QueuePrefetch(viewerPrefetchQueue(state.value.pages, state.value.currentMedia?.key, null)))
+        onAction(viewerPrefetchAction(state.value.pages, state.value.currentMedia?.key, null))
     }
 
     private fun ViewerViewModel.selectAndPrefetch(mediaIndex: Int) {

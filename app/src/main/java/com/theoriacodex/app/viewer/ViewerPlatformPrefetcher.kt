@@ -59,7 +59,10 @@ internal suspend fun prefetchViewerMedia(
         if (keepDecodedInMemory) request else request.newBuilder().memoryCachePolicy(CachePolicy.READ_ONLY).build()
     }
     return if (context.imageLoader.execute(request) is SuccessResult) {
-        ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED)
+        ViewerPrefetchResult(
+            ViewerPrefetchOutcome.WARMED,
+            decoded = keepDecodedInMemory && media.kind == ViewerMediaKind.IMAGE,
+        )
     } else {
         ViewerPrefetchResult(ViewerPrefetchOutcome.FAILED)
     }

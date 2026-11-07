@@ -108,10 +108,12 @@ internal data class ViewerOverviewState(
     val available: Boolean = false,
 )
 
+/** [decoded] is the subset of [warmed] images that were decoded into memory rather than only downloaded. */
 internal data class ViewerPrefetchState(
     val queued: Set<ViewerMediaKey> = emptySet(),
     val inFlight: Set<ViewerMediaKey> = emptySet(),
     val warmed: Map<ViewerMediaKey, Long> = emptyMap(),
+    val decoded: Set<ViewerMediaKey> = emptySet(),
     val skipped: Set<ViewerMediaKey> = emptySet(),
     val failed: Set<ViewerMediaKey> = emptySet(),
 )
@@ -122,14 +124,16 @@ internal enum class ViewerPrefetchOutcome {
     FAILED,
 }
 
+/** [decoded]: the image now sits decoded in memory, not only on disk. */
 internal data class ViewerPrefetchResult(
     val outcome: ViewerPrefetchOutcome,
     val bytesCached: Long = 0L,
+    val decoded: Boolean = false,
 ) {
     init {
         require(bytesCached >= 0L) { "Viewer prefetch cached bytes must not be negative" }
-        require(outcome == ViewerPrefetchOutcome.WARMED || bytesCached == 0L) {
-            "Only warmed Viewer media may report cached bytes"
+        require(outcome == ViewerPrefetchOutcome.WARMED || bytesCached == 0L && !decoded) {
+            "Only warmed Viewer media may report cached bytes or a decoded image"
         }
     }
 }
