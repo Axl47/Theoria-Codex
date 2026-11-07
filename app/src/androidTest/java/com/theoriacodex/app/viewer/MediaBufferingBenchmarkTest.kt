@@ -256,6 +256,7 @@ class MediaBufferingBenchmarkTest {
     /**
      * Three 90 s videos in one post, opened on the middle one: it plays while the Viewer owner warms its two
      * neighbours, then a swipe leases the right neighbour (the pager's swipe target), makes it current and plays it.
+     * The middle video plays for 20 s, or `mediaBenchSwipeWatchMs`.
      */
     @Test
     fun viewerSwipe() = runBlocking {
@@ -291,7 +292,7 @@ class MediaBufferingBenchmarkTest {
         }
         current.first.awaitFirstFrame()
         onMain { viewer.markShown(1) }
-        delay(SWIPE_WATCH_MS)
+        delay(arguments.getString("mediaBenchSwipeWatchMs")?.toLong() ?: SWIPE_WATCH_MS)
 
         // The swipe's target page leases its player as the drag starts; it plays once the pager settles on it.
         val beforeSwipe = serverStats()

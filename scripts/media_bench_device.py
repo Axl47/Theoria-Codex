@@ -160,13 +160,15 @@ def push_media(serial: str) -> None:
     (MEDIA / "manifest.txt").unlink()
 
 
-def instrument(serial: str, scenario: str, rate_mbps: float, ttfb_ms: int) -> dict:
+def instrument(serial: str, scenario: str, rate_mbps: float, ttfb_ms: int, swipe_watch_ms: int | None = None) -> dict:
+    extras = ["-e", "mediaBenchSwipeWatchMs", str(swipe_watch_ms)] if swipe_watch_ms is not None else []
     output = adb(
         serial, "shell", "am", "instrument", "-w", "-r",
         "-e", "class", f"{TEST_CLASS}#{scenario}",
         "-e", "mediaBench", "true",
         "-e", "mediaBenchRateMbps", str(rate_mbps),
         "-e", "mediaBenchTtfbMs", str(ttfb_ms),
+        *extras,
         RUNNER, capture=True,
     )
     payloads = [line[len(STATUS_PREFIX):] for line in output.splitlines() if line.startswith(STATUS_PREFIX)]
@@ -209,7 +211,7 @@ def command_run(args: argparse.Namespace) -> None:
             if name in variants:
                 install(args.serial, variants[name])
             for scenario in args.scenarios:
-                result = instrument(args.serial, scenario, args.rate_mbps, args.ttfb_ms)
+                result = instrument(args.serial, scenario, args.rate_mbps, args.ttfb_ms, args.swipe_watch_ms)
                 samples[name][scenario].append(result["metrics"])
                 printable = {k: v for k, v in result["metrics"].items() if k not in ("server", "diagnostics")}
                 print(f"run {run_index} {name} {scenario}: {json.dumps(printable)}", flush=True)
@@ -225,6 +227,7 @@ def command_run(args: argparse.Namespace) -> None:
             "commit": git_head() if name == "current" else str(variants[name]),
             "device": adb(args.serial, "shell", "getprop", "ro.product.model", capture=True).strip(),
             "network": {"rate_mbps": args.rate_mbps, "ttfb_ms": args.ttfb_ms, "transport": "in-process loopback"},
+            "swipe_watch_ms": args.swipe_watch_ms,
             "runs": args.runs,
             "interleaved_with": [other for other in samples if other != name],
             "summary": summarize(per_run),
@@ -273,6 +276,7 @@ def main() -> None:
     run_parser.add_argument("--scenarios", nargs="+", choices=SCENARIOS, default=list(SCENARIOS))
     run_parser.add_argument("--rate-mbps", type=float, default=16.0)
     run_parser.add_argument("--ttfb-ms", type=int, default=100)
+    run_parser.add_argument("--swipe-watch-ms", type=int, help="how long viewerSwipe plays the middle video (default 20000)")
     run_parser.add_argument("--skip-build", action="store_true")
     run_parser.add_argument("--skip-install", action="store_true")
     run_parser.add_argument("--variant", action="append", default=[], metavar="NAME=DIR",
