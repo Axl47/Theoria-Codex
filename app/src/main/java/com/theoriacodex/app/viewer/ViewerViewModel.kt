@@ -104,13 +104,7 @@ internal class ViewerViewModel(
 
     override fun onAction(action: ViewerAction) {
         val reduction = synchronized(lock) {
-            if (action is ViewerAction.ReplaceSession) {
-                if (action.session != mutableState.value.session) {
-                    recordedVisiblePosts.clear()
-                    firstMediaShown.value = false
-                }
-                cancelSessionJobs()
-            }
+            if (action is ViewerAction.ReplaceSession) resetSessionWork(action)
             val restoresSavedSelection = action is ViewerAction.ReplaceSession &&
                 mutableState.value.pages.isEmpty() &&
                 mutableState.value.session == action.session
@@ -130,12 +124,26 @@ internal class ViewerViewModel(
             result.also {
                 mutableState.value = result.state
                 persist(result.state)
-                if (result.state.currentMedia?.ready == true || result.state.mediaError != null) firstMediaShown.value = true
+                noteFirstMediaShown(result.state)
             }
         }
         reduction.effects.forEach(::handleEffect)
         if (action is ViewerAction.SelectPage || action is ViewerAction.ReplaceSession ||
             action is ViewerAction.PlaybackCompleted) reconcileResolutionLookahead()
+    }
+
+    /** A replacement cancels the old session's work; a new session also waits again for its first media. */
+    private fun resetSessionWork(action: ViewerAction.ReplaceSession) {
+        if (action.session != mutableState.value.session) {
+            recordedVisiblePosts.clear()
+            firstMediaShown.value = false
+        }
+        cancelSessionJobs()
+    }
+
+    /** The current media became ready, or failed: speculative loads may start (see [awaitFirstMediaShown]). */
+    private fun noteFirstMediaShown(state: ViewerUiState) {
+        if (state.currentMedia?.ready == true || state.mediaError != null) firstMediaShown.value = true
     }
 
     /** Bridges the existing process-local shell handoff into the route contract. */
