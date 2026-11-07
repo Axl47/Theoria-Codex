@@ -170,10 +170,12 @@ class MediaBufferingBenchmarkTest {
     }
 
     /**
-     * A long video opened directly: cold first frame, four seeks past the buffer, then two timeline drags through
+     * A long video opened directly: cold first frame, four seeks past the buffer, then three timeline drags through
      * the page's scrub previews. The first drag rests on three targets past the buffer and releases on the last one,
-     * seeking as the timeline does; the second, after playback settles, rests on one target and is cancelled. Stalls
-     * while playing, seeks excluded, are counted over the whole session.
+     * seeking as the timeline does; the second, after playback settles, rests on one target and is cancelled; the
+     * third rests between two keyframes in a stretch nothing has loaded and releases there. (The first release lands
+     * just past an earlier seek's cached stretch, so only the third needs bytes from before its target.) Stalls while
+     * playing, seeks excluded, are counted over the whole session.
      */
     @Test
     fun viewerSeekAndScrub() = runBlocking {
@@ -222,7 +224,17 @@ class MediaBufferingBenchmarkTest {
         delay(SEEK_SETTLE_MS)
         val secondDrag = previews.drag(listOf((duration * SECOND_DRAG_FRACTION).toLong()), frameLog)
         frameLog.saveLatest()
-        val dragEvents = JSONArray((firstDrag + secondDrag).map { "${it.movedAt - scrubStartedAt}->${it.publishedAt - scrubStartedAt}" })
+        delay(SEEK_SETTLE_MS)
+        var coldRelease: TimedSeek? = null
+        val thirdDrag = previews.drag(listOf((duration * COLD_RELEASE_FRACTION).toLong()), frameLog) { target ->
+            coldRelease = probe.startSeek { previews.seekReleased(target) }
+        }
+        val coldReleaseSeek = probe.awaitReady(checkNotNull(coldRelease))
+        val coldLanding = onMain { probe.seekReadyPositionMs }
+        delay(SEEK_SETTLE_MS)
+        val dragEvents = JSONArray(
+            (firstDrag + secondDrag + thirdDrag).map { "${it.movedAt - scrubStartedAt}->${it.publishedAt - scrubStartedAt}" },
+        )
         val scrubTimeline = server.timeline("/long_1.mp4", scrubStartedAt)
         val seekTimeline = server.timeline("/long_1.mp4", probe.attachedAt)
         val (seekEvents, stalls) = onMain { JSONArray(probe.seekEvents.map(::JSONArray)) to (probe.rebufferCount to probe.rebufferMs) }
@@ -254,6 +266,7 @@ class MediaBufferingBenchmarkTest {
                 )
                 .put("seek_after_scrub_ms", releaseSeek)
                 .put("scrub_second_drag_first_frame_ms", secondDrag.first().elapsedMs)
+                .put("seek_after_cold_scrub_ms", coldReleaseSeek)
                 .put("long_bytes_mb", megabytes(path.optLong("bytes")))
                 .put("long_duplicate_mb", megabytes(path.optLong("duplicateBytes")))
                 .put("server", end.json)
@@ -261,6 +274,7 @@ class MediaBufferingBenchmarkTest {
                     "diagnostics",
                     JSONObject().put("scrubTimeline", scrubTimeline).put("dragEvents", dragEvents).put("releasedAt", releasedAt)
                         .put("releaseTargetMs", (duration * SCRUB_FRACTIONS.last()).toLong()).put("releaseLandedMs", releaseLanding)
+                        .put("coldReleaseTargetMs", (duration * COLD_RELEASE_FRACTION).toLong()).put("coldReleaseLandedMs", coldLanding)
                         .put("seekEvents", seekEvents).put("seekTimeline", seekTimeline).put("frames", JSONArray(frameLog.frames)),
                 ),
         )
@@ -657,6 +671,9 @@ private const val SEEK_SETTLE_MS = 1_500L
 private val SEEK_FRACTIONS = listOf(0.50, 0.85, 0.25, 0.65)
 private val SCRUB_FRACTIONS = listOf(0.40, 0.72, 0.93)
 private const val SECOND_DRAG_FRACTION = 0.10
+
+/** 15.3 s into the 90 s video: between the 14 s and 16 s keyframes, where no seek or playback has loaded. */
+private const val COLD_RELEASE_FRACTION = 0.17
 private val SWIPE_VIDEOS = listOf("long_2.mp4", "long_1.mp4", "long_3.mp4")
 private const val SWIPE_WATCH_MS = 20_000L
 private const val SWIPE_SETTLE_MS = 300L
