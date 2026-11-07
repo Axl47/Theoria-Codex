@@ -510,7 +510,7 @@ internal fun hiddenTagsSummary(state: SettingsUiState): String {
 internal fun sourceMixSummary(state: SettingsUiState, sources: Set<SourceKey>): String {
     if (sources.size < 2) return "Hold sources in Search to combine them"
     val weights = SourceWeightSettings.weightsFor(state.settings.runtime, sources)
-    return sources.sortedBy { it.ordinal }.joinToString(" · ") { source ->
+    return sources.sorted().joinToString(" · ") { source ->
         "${source.displayName()} ${(weights.getValue(source) * 100).toInt()}%"
     }
 }

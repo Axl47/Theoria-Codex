@@ -349,7 +349,7 @@ internal class MediaDurationRouteViewModel(
 
     private fun demandIdentity(lane: DemandLane, key: MediaDurationKey): String {
         return "$routeIdentity:${contentIdentity.orEmpty()}:${lane.name}:" +
-            "${key.postId.source.name}:${key.postId.sourcePostId}:${key.mediaFingerprint}"
+            "${key.postId.source.id}:${key.postId.sourcePostId}:${key.mediaFingerprint}"
     }
 
     private suspend fun publishObservedStates(allStates: Map<MediaDurationKey, MediaDurationState>) {

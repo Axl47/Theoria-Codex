@@ -62,4 +62,20 @@ class CrossSourceTagsTest {
         assertEquals(listOf(listOf("big breasts")), training.documentsFor(SourceKey.NHENTAI))
         assertEquals(listOf(listOf("big_breasts")), training.documentsFor(SourceKey.DANBOORU))
     }
+
+    @Test
+    fun `custom sites share the booru vocabulary in both directions`() {
+        val custom = requireNotNull(SourceKey.parse("custom_safebooru_org"))
+        val training = CrossSourceTraining(
+            likes = listOf(
+                LikedTagDocument(SourceKey.DANBOORU, listOf("hatsune_miku")),
+                LikedTagDocument(custom, listOf("cat_ears")),
+            ),
+            dictionary = dictionary,
+        )
+
+        assertEquals(listOf(listOf("cat_ears"), listOf("hatsune_miku")), training.documentsFor(custom))
+        assertEquals(listOf(listOf("hatsune_miku"), listOf("cat_ears")), training.documentsFor(SourceKey.DANBOORU))
+        assertEquals("cat_ears", RecommendationTagNormalization.normalize(custom, "Cat Ears"))
+    }
 }

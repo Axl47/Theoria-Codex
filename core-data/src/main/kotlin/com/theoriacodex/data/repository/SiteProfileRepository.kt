@@ -49,46 +49,26 @@ class InMemorySiteProfileRepository(initial: List<SiteProfile> = emptyList()) : 
     override fun observeProfiles(): Flow<List<SiteProfile>> = profiles.asStateFlow()
 
     override suspend fun add(profile: SiteProfile): SiteProfileAddResult = mutex.withLock {
-        val current = profiles.value
-        when {
-            current.any { it.sourceId == profile.sourceId } -> SiteProfileAddResult.Duplicate(profile.sourceId)
-            current.size >= SiteProfile.MAX_CUSTOM_SITES -> SiteProfileAddResult.LimitReached
-            else -> {
-                profiles.value = current + profile
-                SiteProfileAddResult.Added
-            }
-        }
+        val (next, result) = SiteProfileListPolicy.add(profiles.value, profile)
+        profiles.value = next
+        result
     }
 
     override suspend fun update(sourceId: String, transform: (SiteProfile) -> SiteProfile): Boolean = mutex.withLock {
-        val current = profiles.value
-        val index = current.indexOfFirst { it.sourceId == sourceId }
-        if (index < 0) return@withLock false
-        val updated = transform(current[index])
-        require(updated.sourceId == sourceId && updated.address == current[index].address) {
-            "A site's id and address cannot change"
-        }
-        profiles.value = current.toMutableList().apply { set(index, updated) }
+        val next = SiteProfileListPolicy.update(profiles.value, sourceId, transform) ?: return@withLock false
+        profiles.value = next
         true
     }
 
     override suspend fun remove(sourceId: String): Boolean = mutex.withLock {
-        val current = profiles.value
-        val remaining = current.filterNot { it.sourceId == sourceId }
-        profiles.value = remaining
-        remaining.size != current.size
+        val next = SiteProfileListPolicy.remove(profiles.value, sourceId) ?: return@withLock false
+        profiles.value = next
+        true
     }
 
     override suspend fun mergeRestored(profiles: List<SiteProfile>): SiteProfileMergeResult = mutex.withLock {
-        val stored = this.profiles.value.associateBy(SiteProfile::sourceId)
-        val imported = profiles.distinctBy(SiteProfile::sourceId)
-        val added = imported.filter { it.sourceId !in stored }
-        val kept = imported.mapNotNull { profile ->
-            stored[profile.sourceId]
-                ?.takeIf { it.address != profile.address || it.familyId != profile.familyId }
-                ?.sourceId
-        }
-        this.profiles.value += added
-        SiteProfileMergeResult(added = added.size, keptExisting = kept)
+        val (next, result) = SiteProfileListPolicy.mergeRestored(this.profiles.value, profiles)
+        this.profiles.value = next
+        result
     }
 }

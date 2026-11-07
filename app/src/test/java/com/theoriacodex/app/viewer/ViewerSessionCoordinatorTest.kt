@@ -112,6 +112,20 @@ class ViewerSessionCoordinatorTest {
     }
 
     @Test
+    fun `custom booru posts in the library refresh their remote media like built-in boorus`() {
+        val custom = requireNotNull(SourceKey.parse("custom_safebooru_org"))
+        val stalePost = samplePost(
+            source = custom,
+            full = ImageRef(url = "https://safebooru.org/images/1.jpg", localPath = null, mime = "image/jpeg"),
+            media = emptyList(),
+        )
+
+        assertTrue(requiresViewerPostResolution(stalePost, ViewerStreamSource.CODEX))
+        assertFalse(requiresViewerPostResolution(stalePost, ViewerStreamSource.SEARCH))
+        assertFalse(requiresViewerPostResolution(stalePost.copy(id = stalePost.id.copy(source = SourceKey.PIXIV)), ViewerStreamSource.CODEX))
+    }
+
+    @Test
     fun `codex remote source posts refresh without trusting stale media shape`() {
         val staleGelbooruPost = samplePost(
             source = SourceKey.GELBOORU,

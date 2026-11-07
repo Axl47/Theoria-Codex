@@ -1,0 +1,47 @@
+{
+  "baseUrl": "https://api.rule34.xxx",
+  "capturedOn": "2026-11-07",
+  "routes": [
+    {
+      "path": "/counts/posts.json",
+      "query": {},
+      "status": 404,
+      "contentType": "text/html",
+      "body": "danbooru_counts.html"
+    },
+    {
+      "path": "/index.php",
+      "query": {
+        "page": "dapi",
+        "s": "post",
+        "q": "index",
+        "limit": "1"
+      },
+      "status": 200,
+      "contentType": "text/xml; charset=utf-8",
+      "body": "dapi_xml.xml"
+    },
+    {
+      "path": "/index.php",
+      "query": {
+        "page": "dapi",
+        "s": "post",
+        "q": "index",
+        "json": "1",
+        "limit": "1"
+      },
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "body": "dapi_json.json"
+    },
+    {
+      "path": "/post.json",
+      "query": {
+        "limit": "1"
+      },
+      "status": 404,
+      "contentType": "text/html",
+      "body": "moebooru_post.html"
+    }
+  ]
+}

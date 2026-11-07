@@ -87,13 +87,20 @@ internal object RepositoryPolicies {
         enabledSources: Set<SourceKey>,
         rawWeights: Map<SourceKey, Double>,
     ): Map<SourceKey, Double> {
-        val orderedSources = SourceKey.entries.filter { source -> source in enabledSources }
+        val orderedSources = enabledSources.sorted()
         if (orderedSources.isEmpty()) return emptyMap()
 
         val defaults = SourceRuntimeSettings().sourceWeights
+        val knownWeights = orderedSources.associateWith { source -> rawWeights[source] ?: defaults[source] }
+            .mapValues { (_, weight) -> weight?.takeIf(Double::isFinite)?.coerceAtLeast(0.0) }
+        // A source with no stored or default weight (a newly opted-in custom site) gets the others'
+        // mean, an even share, rather than a raw 1.0 that would dominate already-normalized weights.
+        val fallbackWeight = knownWeights.values.filterNotNull().takeIf { it.isNotEmpty() }?.average() ?: 1.0
         val safeWeights = orderedSources.associateWith { source ->
-            val rawWeight = rawWeights[source] ?: defaults[source] ?: 1.0
-            rawWeight.takeIf(Double::isFinite)?.coerceAtLeast(0.0) ?: 0.0
+            when {
+                source !in rawWeights && source !in defaults -> fallbackWeight
+                else -> knownWeights[source] ?: 0.0
+            }
         }
         // Already-normalized weights pass through, so normalizing again never drifts in the last bit.
         if (abs(safeWeights.values.sum() - 1.0) <= NORMALIZED_WEIGHT_TOLERANCE) return safeWeights

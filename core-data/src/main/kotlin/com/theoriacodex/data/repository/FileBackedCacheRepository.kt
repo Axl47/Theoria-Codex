@@ -54,7 +54,7 @@ class FileBackedCacheRepository(
     }
 
     override suspend fun cacheNamedThumbnail(name: String, post: Post) {
-        cacheThumbnail(post, "${name}_${post.id.source.name}", replacePrefix = "${name}_")
+        cacheThumbnail(post, "${name}_${post.id.source.id}", replacePrefix = "${name}_")
     }
 
     private suspend fun cacheThumbnail(post: Post, key: String, replacePrefix: String? = null) {
@@ -142,7 +142,7 @@ class FileBackedCacheRepository(
 
     private fun currentSnapshot() = CacheSnapshot(thumbnails.count, fullImages.count, thumbnails.bytes, fullImages.bytes)
 
-    private fun cacheKey(postId: PostId): String = "${postId.source.name}_${postId.sourcePostId}"
+    private fun cacheKey(postId: PostId): String = "${postId.source.id}_${postId.sourcePostId}"
 }
 
 /** One first-use scan; writes reconcile only the affected files, including deletion failures. */

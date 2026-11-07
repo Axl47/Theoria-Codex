@@ -151,7 +151,7 @@ class DurationDemandScheduler(
         val ENTRY_COMPARATOR = compareBy<QueueEntry>(
             { entry -> entry.effectivePriority().ordinal },
             QueueEntry::effectiveSequence,
-            { entry -> entry.key.postId.source.ordinal },
+            { entry -> entry.key.postId.source },
             { entry -> entry.key.postId.sourcePostId },
             { entry -> entry.key.mediaFingerprint },
         )

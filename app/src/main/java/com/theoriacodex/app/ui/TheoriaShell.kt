@@ -603,7 +603,7 @@ internal class TheoriaShell(
             return
         }
         val context = ViewerLaunchContext(
-            queryHash = "${deepLink.source.name.lowercase()}-deeplink:${deepLink.postId}",
+            queryHash = "${deepLink.source.id.lowercase()}-deeplink:${deepLink.postId}",
             startIndex = 0,
             streamSource = ViewerStreamSource.SEARCH,
             scrollOffsetHint = 0,
@@ -685,7 +685,7 @@ internal class TheoriaShell(
 
     /** Opens a related shelf no feed owner pages, such as a live Codex's; like other related streams it is not restored. */
     fun openRelatedViewer(seed: Post, shelfPosts: List<Post>, index: Int) {
-        val queryHash = "related:${seed.id.source.name}:${seed.id.sourcePostId}"
+        val queryHash = "related:${seed.id.source.id}:${seed.id.sourcePostId}"
         openStaticViewer(shelfPosts, queryHash, index, ViewerStreamSource.RELATED, persistContext = false)
     }
 

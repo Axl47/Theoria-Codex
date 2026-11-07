@@ -430,7 +430,7 @@ internal class SearchViewModel(
             SearchEffect.OpenViewer(
                 posts = action.visibleResults.toList(),
                 context = ViewerLaunchContext(
-                    queryHash = "related:${request.seed.id.source.name}:${request.seed.id.sourcePostId}",
+                    queryHash = "related:${request.seed.id.source.id}:${request.seed.id.sourcePostId}",
                     startIndex = action.index,
                     streamSource = ViewerStreamSource.RELATED,
                     scrollOffsetHint = 0,

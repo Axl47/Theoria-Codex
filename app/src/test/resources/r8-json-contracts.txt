@@ -34,7 +34,8 @@ com.theoriacodex.data.android.room.LegacyCodexItemRecord|codexId,source,sourcePo
 com.theoriacodex.data.android.room.LegacyLikesStoreFile|likes
 com.theoriacodex.data.android.room.LegacyLikedPostRecord|profileId,profile,source,sourcePostId,likedAtEpochMs,tags
 com.theoriacodex.app.sourceauth.CredentialEnvelopeRecord|formatVersion,keyVersion,iv,ciphertext
-com.theoriacodex.app.sourceauth.CredentialPayloadRecord|schemaVersion,pixivAccessToken,pixivRefreshToken,pixivExpiresAtEpochMs,gelbooruUserId,gelbooruApiKey,rule34XxxUserId,rule34XxxApiKey
+com.theoriacodex.app.sourceauth.CredentialPayloadRecord|schemaVersion,pixivAccessToken,pixivRefreshToken,pixivExpiresAtEpochMs,gelbooruUserId,gelbooruApiKey,rule34XxxUserId,rule34XxxApiKey,customSites
+com.theoriacodex.app.sourceauth.CustomSiteCredentialRecord|user,apiKey
 com.theoriacodex.app.update.UpdateStateSnapshot|lastSeenReleaseId,pendingInstallReleaseId,pendingInstallVersionCode,ignoredReleaseId,remindLaterReleaseId,remindLaterUntilEpochMs,pendingPostInstallChangelog,lastInstalledChangelog
 com.theoriacodex.app.update.PendingPostInstallChangelog|releaseId,fromVersionCode,versionCode,tagName,commitShaShort,releaseName,changelogMarkdown,changelogSections
 com.theoriacodex.app.update.ChangelogSection|title,bullets
@@ -55,3 +56,4 @@ com.theoriacodex.data.repository.CodexStatistics|browsingMs,watchingMs,posts
 com.theoriacodex.data.repository.CodexPostStatistics|label,opens,videoMs,imageMs
 com.theoriacodex.data.repository.DailyActivity|appOpenCount,totalForegroundMs,browsingMs,watchingMs,codexMs,watchedPostCount,searchCount
 com.theoriacodex.data.repository.SiteProfileRecord|sourceId,baseUrl,label,family,searchTermLimit,userAgent,referer,credentialsRequired,addedAt,verifiedAt
+com.theoriacodex.data.repository.SiteProfileStoreFile|schemaVersion,sites

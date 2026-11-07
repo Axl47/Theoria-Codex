@@ -39,7 +39,7 @@ class InMemoryMediaDurationRepository(
             .sortedWith(
                 compareByDescending<Map.Entry<StoredMediaDurationKey, Record>> { entry ->
                     entry.value.updatedAtEpochMs
-                }.thenBy { entry -> entry.key.postId.source.name }
+                }.thenBy { entry -> entry.key.postId.source.id }
                     .thenBy { entry -> entry.key.postId.sourcePostId }
                     .thenBy { entry -> entry.key.mediaFingerprint },
             )

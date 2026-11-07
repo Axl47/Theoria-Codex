@@ -1,5 +1,6 @@
 package com.theoriacodex.app.codex
 
+import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.recommend.forYouSourceQuery
 import com.theoriacodex.app.search.SearchContinuation
 import com.theoriacodex.app.search.SearchCoordinator
@@ -138,7 +139,7 @@ internal class SavedSearchFeedLoader(
     private fun failures(previous: Map<SourceKey, String>, statuses: List<SourceRunStatus>): Map<SourceKey, String> {
         val successful = statuses.filter { it.state == SourceRunState.SUCCESS }.map { it.source }.toSet()
         return (previous - successful) + statuses.filter { it.state == SourceRunState.FAILED }.associate {
-            it.source to (it.errorMessage ?: "${it.source.name} could not load")
+            it.source to (it.errorMessage ?: "${it.source.displayName()} could not load")
         }
     }
 }

@@ -1,11 +1,14 @@
 package com.theoriacodex.app.sourceauth
 
+import com.theoriacodex.domain.source.SiteCredentials
 import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.credentials.PixivAuthTokens
 import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -235,6 +238,40 @@ class VersionedSourceCredentialsStoreTest {
         // again rather than serving a potentially stale snapshot indefinitely.
         assertNull(store.getPixivTokens())
         assertEquals(CredentialStoreRecoveryState.Ready, store.recoveryState.value)
+    }
+
+    @Test
+    fun `custom site keys are stored per source id beside built-in keys`() = runTest {
+        val envelope = FakeEnvelopeStore(
+            initialReadResult = CredentialEnvelopeReadResult.Success(populatedSnapshot()),
+            snapshot = populatedSnapshot(),
+        )
+        val store = createStore(envelope, FakeLegacyCredentialStore())
+        val changes = mutableListOf<Unit>()
+        val collector = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { store.changes.toList(changes) }
+
+        store.save("custom_safebooru_org", SiteCredentials("42", "key"))
+
+        assertEquals(SiteCredentials("42", "key"), store.get("custom_safebooru_org"))
+        assertNull(store.get("custom_other_example"))
+        assertEquals(populatedSnapshot().gelbooruCredentials(), envelope.snapshot?.gelbooruCredentials())
+        store.clear("custom_safebooru_org")
+        assertNull(store.get("custom_safebooru_org"))
+        assertEquals(populatedSnapshot(), envelope.snapshot)
+        assertEquals("initial value, save and clear", 3, changes.size)
+        collector.cancel()
+    }
+
+    @Test
+    fun `custom site keys need a custom source id and survive built-in key changes`() = runTest {
+        val envelope = FakeEnvelopeStore()
+        val store = createStore(envelope, FakeLegacyCredentialStore())
+
+        assertTrue(runCatching { store.save("GELBOORU", SiteCredentials("1", "k")) }.isFailure)
+        store.save("custom_booru_example", SiteCredentials("alice", "k1"))
+        store.saveGelbooruCredentials(GelbooruCredentials("gel", "gk"))
+
+        assertEquals(SiteCredentials("alice", "k1"), store.get("custom_booru_example"))
     }
 
     private fun kotlinx.coroutines.test.TestScope.createStore(

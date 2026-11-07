@@ -396,9 +396,9 @@ private val DEFAULT_SOURCE_WEIGHTS: Map<SourceKey, Double> = mapOf(
 }
 
 data class SourceRuntimeSettings(
-    val enabledSources: Set<SourceKey> = SourceKey.entries.toSet(),
+    val enabledSources: Set<SourceKey> = SourceKey.builtIns.toSet(),
     val sourceWeights: Map<SourceKey, Double> = DEFAULT_SOURCE_WEIGHTS,
-    /** Normalized weights keyed by the sorted names of an exact enabled-source combination. */
+    /** Normalized weights keyed by the sorted ids of an exact enabled-source combination. */
     val sourceWeightsByConfiguration: Map<String, Map<SourceKey, Double>> = emptyMap(),
 )
 

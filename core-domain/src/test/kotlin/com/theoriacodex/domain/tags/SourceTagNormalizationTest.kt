@@ -20,4 +20,19 @@ class SourceTagNormalizationTest {
         assertTrue(sourceTagsMatch(SourceKey.GELBOORU, "jojo&#039;s_bizarre_adventure", "jojo's bizarre adventure"))
         assertEquals("jojo's_bizarre_adventure", sourceTagKey(SourceKey.RULE34XXX, "jojo&#039;s_bizarre_adventure"))
     }
+
+    @Test
+    fun `custom sources spell tags the booru way`() {
+        val custom = requireNotNull(SourceKey.parse("custom_safebooru_org"))
+
+        assertEquals(TagDialect.UNDERSCORE, custom.tagDialect)
+        assertEquals("cat_ears", sourceTagKey(custom, " Cat Ears "))
+        assertEquals("cat_ears", sourceAutocompletePrefix(custom, "Cat Ears"))
+        assertEquals("cat_ears", normalizeFavoriteTagForStorage(custom, "Cat Ears"))
+        assertTrue(sourceTagsMatch(custom, "cat ears", "CAT_EARS"))
+        assertEquals(
+            listOf(TagDialect.SPACED, TagDialect.UNDERSCORE, TagDialect.UNDERSCORE, TagDialect.SPACED),
+            listOf(SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.IWARA, SourceKey.RULE34PAHEAL).map { it.tagDialect },
+        )
+    }
 }

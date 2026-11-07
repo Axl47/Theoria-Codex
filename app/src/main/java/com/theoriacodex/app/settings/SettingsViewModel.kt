@@ -205,7 +205,7 @@ internal class SettingsViewModel(
                         activeProfileBlacklist = settings.forYouBlacklistByProfile[activeProfile.profileId]
                             .orEmpty()
                             .sortedWith(
-                                compareBy<com.theoriacodex.data.repository.ForYouBlacklistEntry> { it.source.name }
+                                compareBy<com.theoriacodex.data.repository.ForYouBlacklistEntry> { it.source.id }
                                     .thenBy { it.tags.joinToString("+") },
                             ),
                     )

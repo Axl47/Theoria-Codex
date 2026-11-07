@@ -715,7 +715,7 @@ class SearchCoordinator(
     private fun mergeStatuses(
         first: List<SourceRunStatus>,
         second: List<SourceRunStatus>,
-    ): List<SourceRunStatus> = (first + second).associateBy { it.source }.values.sortedBy { it.source.name }
+    ): List<SourceRunStatus> = (first + second).associateBy { it.source }.values.sortedBy { it.source.id }
 
     private fun unifiedFailureMessage(posts: List<Post>, statuses: List<SourceRunStatus>): String =
         if (isPixivUnknownFailure(posts, statuses)) PIXIV_UNKNOWN_RETRY_MESSAGE else
@@ -739,7 +739,7 @@ class SearchCoordinator(
     private fun executionKey(query: Query, scope: SearchSourceScope): String {
         val queryHash = QueryHash.from(query)
         val temporary = scope as? SearchSourceScope.Temporary ?: return queryHash
-        return "$queryHash|temporary-sources:${temporary.sources.joinToString(",") { it.name }}"
+        return "$queryHash|temporary-sources:${temporary.sources.joinToString(",") { it.id }}"
     }
 
     private fun continuation(

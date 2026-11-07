@@ -21,10 +21,12 @@ import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.tags.decodeHtmlEntities
 import com.theoriacodex.sources.common.ambiguousDurationFieldMs
 import com.theoriacodex.sources.common.asStringOrNull
+import com.theoriacodex.sources.common.autocompleteTagCounts
 import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.durationFieldMs
 import com.theoriacodex.sources.common.firstDurationMs
+import com.theoriacodex.sources.common.httpsMediaUrl
 import com.theoriacodex.sources.common.intValue
 import com.theoriacodex.sources.common.isSuccessful
 import com.theoriacodex.sources.common.longValue
@@ -36,7 +38,8 @@ import com.theoriacodex.sources.common.parseJsonElement
 import com.theoriacodex.sources.common.sourceNetworkFailure
 import com.theoriacodex.sources.common.sourceQuickQuery
 import com.theoriacodex.sources.common.stringValue
-import com.theoriacodex.sources.credentials.UserApiKeyCredentials
+import com.theoriacodex.sources.credentials.ApiKeyUse
+import com.theoriacodex.sources.credentials.UserApiKeyCredentialLookup
 import com.theoriacodex.sources.http.SourceHttpClient
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
@@ -46,9 +49,6 @@ import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
-/** Reads the credentials saved for one site; a site without saved credentials returns null. */
-typealias GelbooruCredentialLookup = suspend () -> UserApiKeyCredentials?
-
 /**
  * Builds the adapter for any [GelbooruSite]. The app discovers creator and related posts with `is`
  * checks, so the returned adapter implements those interfaces only when the profile enables them.
@@ -57,7 +57,7 @@ typealias GelbooruCredentialLookup = suspend () -> UserApiKeyCredentials?
 fun GelbooruSourceAdapter(
     site: GelbooruSite,
     httpClient: SourceHttpClient,
-    credentials: GelbooruCredentialLookup = { null },
+    credentials: UserApiKeyCredentialLookup = { null },
 ): GelbooruFamilySourceAdapter {
     val core = GelbooruFamilyAdapter(site, httpClient, credentials)
     return when {
@@ -78,7 +78,7 @@ interface GelbooruFamilySourceAdapter : SourceAdapter, TagCountLookupSourceAdapt
 private class GelbooruFamilyAdapter(
     private val site: GelbooruSite,
     private val httpClient: SourceHttpClient,
-    private val credentials: GelbooruCredentialLookup,
+    private val credentials: UserApiKeyCredentialLookup,
     private val gson: Gson = Gson(),
 ) : GelbooruFamilySourceAdapter, CreatorPostsSourceAdapter, RelatedPostsSourceAdapter {
     override val sourceKey = site.source
@@ -91,7 +91,7 @@ private class GelbooruFamilyAdapter(
         supportsExcludeTagsServerSide = true,
         supportsDateRangeServerSide = false,
         supportsMinScoreServerSide = false,
-        requiresCredentials = site.credentials == GelbooruCredentialUse.REQUIRED,
+        requiresCredentials = site.credentials == ApiKeyUse.REQUIRED,
         supportsGroupedIncludeTagsServerSide = site.orGroup != null,
     )
 
@@ -105,51 +105,58 @@ private class GelbooruFamilyAdapter(
     }
 
     override suspend fun trendingTags(limit: Int): List<TagSuggestion> {
-        val response = requestApi(
-            "s" to "tag",
-            "q" to "index",
+        val items = requestTagList(
             "orderby" to "count",
             "order" to "desc",
             "limit" to limit.coerceIn(1, 50).toString(),
         )
-        return parseItems(response, TAG_ENVELOPE).mapNotNull { parseTag(it, "trending") }
+        return items.orEmpty().mapNotNull { parseTag(it, "trending") }
     }
 
     override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> {
         val normalized = prefix.trim()
         if (normalized.isBlank()) return emptyList()
-        site.autocompleteUrl?.let { url ->
-            val response = request(url, mapOf("q" to normalized))
-            return parseAutocompleteSuggestions(response, gson, site.label).take(limit)
-        }
-        val response = requestApi(
-            "s" to "tag",
-            "q" to "index",
+        site.autocompleteUrl?.let { url -> return autocompleteFrom(url, normalized, limit) }
+        val items = requestTagList(
             "name_pattern" to "$normalized%",
             "orderby" to "count",
             "order" to "desc",
             "limit" to limit.coerceIn(1, 30).toString(),
-        )
-        return parseItems(response, TAG_ENVELOPE).mapNotNull { parseTag(it, "tag") }
+        ) ?: return autocompleteFrom("${site.siteUrl}/autocomplete.php", normalized, limit)
+        return items.mapNotNull { parseTag(it, "tag") }
     }
 
     override suspend fun fetchTagCounts(tags: List<String>): Map<String, Int> {
         val normalizedTags = tags.map(::normalizeBooruTag).filter(String::isNotBlank).distinct()
         val countsByName = linkedMapOf<String, Int>()
         normalizedTags.chunked(TAG_COUNT_BATCH_SIZE).forEach { chunk ->
-            val response = requestApi(
-                "s" to "tag",
-                "q" to "index",
-                "names" to chunk.joinToString(" "),
-                "limit" to chunk.size.toString(),
-            )
-            parseItems(response, TAG_ENVELOPE).forEach { raw ->
+            val items = requestTagList("names" to chunk.joinToString(" "), "limit" to chunk.size.toString())
+                ?: return autocompleteTagCounts(sourceKey, normalizedTags, ::autocompleteTags)
+            items.forEach { raw ->
                 val tag = parseTag(raw, "tag") ?: return@forEach
                 tag.count?.let { count -> countsByName.putIfAbsent(tag.text, count) }
             }
         }
         return countsByName
     }
+
+    /** Set once a [GelbooruTagList.DETECT] site answers the tag list in XML; never reset. */
+    @Volatile
+    private var tagListIgnoresJson = false
+
+    /** Tag-list rows, or null when this site's tag list ignores `json=1` (see [GelbooruTagList.DETECT]). */
+    private suspend fun requestTagList(vararg entries: Pair<String, String>): List<JsonObject>? {
+        if (tagListIgnoresJson) return null
+        val body = requestApi("s" to "tag", "q" to "index", *entries)
+        if (site.tagList == GelbooruTagList.DETECT && body.trimStart().startsWith('<')) {
+            tagListIgnoresJson = true
+            return null
+        }
+        return parseItems(body, TAG_ENVELOPE)
+    }
+
+    private suspend fun autocompleteFrom(url: String, prefix: String, limit: Int): List<TagSuggestion> =
+        parseAutocompleteSuggestions(request(url, mapOf("q" to prefix)), gson, site.label).take(limit)
 
     override suspend fun quickQuery(kind: QuickQueryKind): Query = sourceQuickQuery(source = sourceKey, kind = kind)
 
@@ -221,7 +228,7 @@ private class GelbooruFamilyAdapter(
     /** DAPI call with the site's credentials; a site that requires them fails before the request. */
     private suspend fun requestApi(vararg entries: Pair<String, String>): String {
         val saved = credentials()
-        if (saved == null && site.credentials == GelbooruCredentialUse.REQUIRED) {
+        if (saved == null && site.credentials == ApiKeyUse.REQUIRED) {
             throw SourceAdapterException(
                 reason = SourceFailureReason.AUTH_REQUIRED,
                 message = "${site.label} credentials required",
@@ -250,13 +257,13 @@ private class GelbooruFamilyAdapter(
                 reason = classifyHttpFailure(
                     statusCode = response.statusCode,
                     body = response.body,
-                    authBlockedBody = ::looksLikeAuthFailure,
+                    authBlockedBody = ::looksLikeGelbooruAuthFailure,
                 ),
                 message = "${site.label} request failed (${response.statusCode})",
             )
         }
         // Sites report a missing or bad key in a successful response body.
-        if (looksLikeAuthFailure(response.body)) {
+        if (looksLikeGelbooruAuthFailure(response.body)) {
             throw SourceAdapterException(
                 reason = SourceFailureReason.AUTH_REQUIRED,
                 message = "${site.label} credentials are missing or invalid",
@@ -340,11 +347,12 @@ private class GelbooruFamilyAdapter(
     }
 }
 
-/** Gelbooru's numbered video CDN hosts serve invalid certificates; the main host serves the same paths. */
-fun normalizeGelbooruMediaUrl(rawUrl: String?): String? {
-    val url = rawUrl?.trim()?.takeIf(String::isNotBlank) ?: return null
-    return url.replaceFirst(GELBOORU_NUMBERED_VIDEO_CDN_PREFIX, "https://gelbooru.com/")
-}
+/**
+ * Media URLs load over HTTPS only. Gelbooru's numbered video CDN hosts serve invalid certificates;
+ * the main host serves the same paths.
+ */
+fun normalizeGelbooruMediaUrl(rawUrl: String?): String? =
+    httpsMediaUrl(rawUrl)?.replaceFirst(GELBOORU_NUMBERED_VIDEO_CDN_PREFIX, "https://gelbooru.com/")
 
 /** Parses `autocomplete.php` rows such as `{"label": "landscape (9927)", "value": "landscape"}`. */
 internal fun parseAutocompleteSuggestions(body: String, gson: Gson, siteLabel: String): List<TagSuggestion> =
@@ -378,7 +386,7 @@ private fun parseDurationMs(raw: JsonObject): Long? = firstDurationMs(
 )
 
 /** Missing-key replies from Gelbooru (`API key required`, `Access denied`) and rule34.xxx. */
-private fun looksLikeAuthFailure(body: String): Boolean {
+internal fun looksLikeGelbooruAuthFailure(body: String): Boolean {
     val lowered = body.lowercase()
     return "access denied" in lowered ||
         ("api key" in lowered && "required" in lowered) ||

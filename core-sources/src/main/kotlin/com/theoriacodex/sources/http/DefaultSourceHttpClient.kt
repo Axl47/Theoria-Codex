@@ -139,56 +139,75 @@ class DefaultSourceHttpClient(
         headers: Map<String, String>,
         body: ByteArray?,
         maxBodyBytes: Int,
-    ): SourceByteResponse {
-        val connection = URL(url).openConnection() as HttpURLConnection
-        return executeCancellableHttpConnection(connection) {
-            executeBlockingRequest(connection, method, headers, body, maxBodyBytes)
-        }
-    }
-
-    private fun executeBlockingRequest(
-        connection: HttpURLConnection,
-        method: String,
-        headers: Map<String, String>,
-        body: ByteArray?,
-        maxBodyBytes: Int,
-    ): SourceByteResponse {
-        connection.requestMethod = method
-        connection.connectTimeout = connectTimeoutMs
-        connection.readTimeout = readTimeoutMs
-        connection.instanceFollowRedirects = true
-        connection.useCaches = false
-        headers.forEach { (key, value) ->
-            connection.setRequestProperty(key, value)
-        }
-
-        if (body != null) {
-            connection.doOutput = true
-            connection.outputStream.use { output ->
-                output.write(body)
-            }
-        }
-
-        val status = connection.responseCode
-        val contentLength = connection.contentLengthLong
-        if (contentLength > maxBodyBytes.toLong()) {
-            throw SourceHttpBodyTooLargeException(maxBodyBytes)
-        }
-        val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-        val bodyBytes = stream?.use { it.readBoundedBytes(maxBodyBytes) } ?: ByteArray(0)
-        val headersMap = connection.headerFields
-            .filterKeys { it != null }
-            .mapKeys { (key, _) -> requireNotNull(key) }
-
-        return SourceByteResponse(
-            statusCode = status,
-            body = bodyBytes,
-            headers = headersMap,
-        )
-    }
+    ): SourceByteResponse = executeHttpRequest(
+        HttpRequestSpec(
+            method = method,
+            url = url,
+            headers = headers,
+            body = body,
+            maxBodyBytes = maxBodyBytes,
+            connectTimeoutMs = connectTimeoutMs,
+            readTimeoutMs = readTimeoutMs,
+            followRedirects = true,
+        ),
+    )
 }
 
-private fun SourceByteResponse.toTextResponse(): SourceHttpResponse {
+/** One HTTP exchange as [executeHttpRequest] performs it; shared by every [SourceHttpClient]. */
+internal class HttpRequestSpec(
+    val method: String,
+    val url: String,
+    val headers: Map<String, String>,
+    val body: ByteArray?,
+    val maxBodyBytes: Int,
+    val connectTimeoutMs: Int,
+    val readTimeoutMs: Int,
+    /** False returns a 3xx as-is, so the caller can vet `Location` before following it. */
+    val followRedirects: Boolean,
+)
+
+/** Performs one cancellable request with a bounded body; no retries. */
+internal suspend fun executeHttpRequest(spec: HttpRequestSpec): SourceByteResponse {
+    val connection = URL(spec.url).openConnection() as HttpURLConnection
+    return executeCancellableHttpConnection(connection) { executeBlockingRequest(connection, spec) }
+}
+
+private fun executeBlockingRequest(connection: HttpURLConnection, spec: HttpRequestSpec): SourceByteResponse {
+    connection.requestMethod = spec.method
+    connection.connectTimeout = spec.connectTimeoutMs
+    connection.readTimeout = spec.readTimeoutMs
+    connection.instanceFollowRedirects = spec.followRedirects
+    connection.useCaches = false
+    spec.headers.forEach { (key, value) ->
+        connection.setRequestProperty(key, value)
+    }
+
+    if (spec.body != null) {
+        connection.doOutput = true
+        connection.outputStream.use { output ->
+            output.write(spec.body)
+        }
+    }
+
+    val status = connection.responseCode
+    val contentLength = connection.contentLengthLong
+    if (contentLength > spec.maxBodyBytes.toLong()) {
+        throw SourceHttpBodyTooLargeException(spec.maxBodyBytes)
+    }
+    val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+    val bodyBytes = stream?.use { it.readBoundedBytes(spec.maxBodyBytes) } ?: ByteArray(0)
+    val headersMap = connection.headerFields
+        .filterKeys { it != null }
+        .mapKeys { (key, _) -> requireNotNull(key) }
+
+    return SourceByteResponse(
+        statusCode = status,
+        body = bodyBytes,
+        headers = headersMap,
+    )
+}
+
+internal fun SourceByteResponse.toTextResponse(): SourceHttpResponse {
     return SourceHttpResponse(
         statusCode = statusCode,
         body = body.toString(Charsets.UTF_8),
@@ -213,7 +232,7 @@ private fun InputStream.readBoundedBytes(maxBodyBytes: Int): ByteArray {
     return output.toByteArray()
 }
 
-private fun buildUrl(base: String, query: Map<String, String>): String {
+internal fun buildUrl(base: String, query: Map<String, String>): String {
     if (query.isEmpty()) return base
     val separator = if ("?" in base) "&" else "?"
     return base + separator + encodeForm(query)

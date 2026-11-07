@@ -274,3 +274,16 @@ private fun scaleDurationMs(value: Double, multiplier: Long): Long? {
     if (!scaled.isFinite() || scaled <= 0.0 || scaled >= Long.MAX_VALUE.toDouble()) return null
     return scaled.toLong().takeIf { it > 0L }
 }
+
+/**
+ * Trims a provider media URL and loads it over HTTPS: protocol-relative (`//cdn…`) and `http://`
+ * URLs are rewritten, never fetched in cleartext. Blank input is null.
+ */
+internal fun httpsMediaUrl(rawUrl: String?): String? {
+    val url = rawUrl?.trim()?.takeIf(String::isNotBlank) ?: return null
+    return when {
+        url.startsWith("//") -> "https:$url"
+        url.startsWith("http://", ignoreCase = true) -> "https://" + url.substring("http://".length)
+        else -> url
+    }
+}

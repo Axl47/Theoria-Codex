@@ -1,0 +1,47 @@
+{
+  "baseUrl": "https://gelbooru.com",
+  "capturedOn": "2026-11-07",
+  "routes": [
+    {
+      "path": "/counts/posts.json",
+      "query": {},
+      "status": 404,
+      "contentType": "text/html",
+      "body": "danbooru_counts.html"
+    },
+    {
+      "path": "/index.php",
+      "query": {
+        "page": "dapi",
+        "s": "post",
+        "q": "index",
+        "limit": "1"
+      },
+      "status": 401,
+      "contentType": "text/html; charset=UTF-8",
+      "body": "dapi_xml.txt"
+    },
+    {
+      "path": "/index.php",
+      "query": {
+        "page": "dapi",
+        "s": "post",
+        "q": "index",
+        "json": "1",
+        "limit": "1"
+      },
+      "status": 401,
+      "contentType": "text/html; charset=UTF-8",
+      "body": "dapi_json.txt"
+    },
+    {
+      "path": "/post.json",
+      "query": {
+        "limit": "1"
+      },
+      "status": 404,
+      "contentType": "text/html",
+      "body": "moebooru_post.html"
+    }
+  ]
+}

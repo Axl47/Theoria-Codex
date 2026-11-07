@@ -75,7 +75,7 @@ sealed interface SearchSourceScope {
     ) : SearchSourceScope {
         init {
             require(sources.size >= 2) { "Temporary source scope requires at least two sources" }
-            require(sources == sources.distinct().sortedBy { it.name }) {
+            require(sources == sources.distinct().sortedBy { it.id }) {
                 "Temporary source scope sources must be canonical and distinct"
             }
         }
@@ -92,7 +92,7 @@ sealed interface SearchSourceScope {
         }
 
         fun fromSources(sources: Iterable<SourceKey>): SearchSourceScope {
-            val canonical = sources.distinct().sortedBy { it.name }
+            val canonical = sources.distinct().sortedBy { it.id }
             return when (canonical.size) {
                 0 -> GlobalUnified
                 1 -> Single(canonical.single())
@@ -128,7 +128,7 @@ data class SearchQueryUiState(
         }
 
     val termLimitNotices: List<SearchTermLimitNotice>
-        get() = searchTermLimitNotices(draft, draftSources.sortedBy(SourceKey::ordinal), sourceTermLimits)
+        get() = searchTermLimitNotices(draft, draftSources.sorted(), sourceTermLimits)
 }
 
 data class SearchContentUiState(

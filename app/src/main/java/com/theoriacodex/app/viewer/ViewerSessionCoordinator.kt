@@ -47,13 +47,16 @@ private val REFRESHABLE_REMOTE_MEDIA_SOURCES = setOf(
     SourceKey.RULE34GEN,
 )
 
+/** Every custom source is a booru family, whose media links are refreshed like the built-in boorus'. */
+private fun SourceKey.hasRefreshableRemoteMedia(): Boolean = this in REFRESHABLE_REMOTE_MEDIA_SOURCES || isCustom
+
 internal fun requiresViewerPostResolution(post: Post, streamSource: ViewerStreamSource): Boolean {
     if (requiresLazyMediaResolution(post)) return true
     if (
         streamSource == ViewerStreamSource.CODEX ||
         streamSource == ViewerStreamSource.RECENTS
     ) {
-        return post.id.source in REFRESHABLE_REMOTE_MEDIA_SOURCES &&
+        return post.id.source.hasRefreshableRemoteMedia() &&
             hasRemoteViewerMedia(post)
     }
     return false
@@ -81,7 +84,7 @@ internal fun requiresLazyMediaResolution(post: Post): Boolean {
         post.full?.let { add(it) }
     }
     if (
-        post.id.source in REFRESHABLE_REMOTE_MEDIA_SOURCES &&
+        post.id.source.hasRefreshableRemoteMedia() &&
         mediaRefs.any { ref -> isVideoMediaRef(ref) && ref.localPath.isNullOrBlank() && !ref.url.isNullOrBlank() }
     ) {
         return true
@@ -122,10 +125,10 @@ internal fun mergeViewerPosts(current: List<Post>, incoming: List<Post>): List<P
     if (incoming.isEmpty()) return current
     if (current.isEmpty()) return incoming
     val seen = current
-        .mapTo(mutableSetOf()) { post -> "${post.id.source.name}:${post.id.sourcePostId}" }
+        .mapTo(mutableSetOf()) { post -> "${post.id.source.id}:${post.id.sourcePostId}" }
     val merged = current.toMutableList()
     incoming.forEach { post ->
-        val key = "${post.id.source.name}:${post.id.sourcePostId}"
+        val key = "${post.id.source.id}:${post.id.sourcePostId}"
         if (seen.add(key)) {
             merged += post
         }

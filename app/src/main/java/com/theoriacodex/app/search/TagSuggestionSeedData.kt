@@ -14,7 +14,7 @@ internal fun loadSeedTagSuggestions(context: Context): Map<SourceKey, List<TagSu
         ?: return emptyMap()
     val sources = root.getAsJsonObject("sources") ?: return emptyMap()
     return sources.entrySet().mapNotNull outer@{ (sourceName, value) ->
-        val source = runCatching { SourceKey.valueOf(sourceName) }.getOrNull() ?: return@outer null
+        val source = SourceKey.parse(sourceName) ?: return@outer null
         val tags = value.takeIf { it.isJsonArray }?.asJsonArray
             ?.mapNotNull inner@{ element ->
                 val obj = element.takeIf { it.isJsonObject }?.asJsonObject ?: return@inner null

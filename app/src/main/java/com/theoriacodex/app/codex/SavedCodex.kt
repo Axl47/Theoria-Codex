@@ -25,7 +25,7 @@ internal fun savedCodexLibraryEntries(codices: List<Codex>, likesCodexId: String
 internal fun FeedFabRestoreState.savedCollectionFilters() = CodexCollectionFilters(
     animatedOnly = animatedOnly,
     animatedDurationRange = AnimatedDurationRange(durationMinBucket, durationMaxBucket),
-    source = SourceKey.entries.firstOrNull { it.name == source },
+    source = source?.let(SourceKey::parse),
     language = CodexLanguageFilter.entries.firstOrNull { it.name == language } ?: CodexLanguageFilter.ANY,
     fullColorOnly = fullColorOnly,
 )
