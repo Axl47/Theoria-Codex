@@ -185,12 +185,13 @@ private fun Modifier.timelineScrubGestures(
                 if (event.changes.size != 1) break
                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
                 if (change.isConsumed) break
-                onMove(change.position.x)
                 change.consume()
+                // A drag lands where the finger last moved, the spot its preview shows, not where it slips as it lifts.
                 if (!change.pressed) {
                     released = true
                     break
                 }
+                onMove(change.position.x)
             }
         } finally {
             onEnd(released)

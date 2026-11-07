@@ -132,6 +132,13 @@ private class ViewerVideoState {
         scrubbing = false
     }
 
+    /** A drag released on [target]; [previews] may land it on the frame their popup shows. */
+    fun release(target: Long, previews: ViewerScrubPreviews?) {
+        if (previews == null) return seek(target)
+        position = runCatching { previews.seekReleased(target) }.getOrDefault(target)
+        scrubbing = false
+    }
+
     fun jump(deltaMs: Long) {
         val active = player ?: return
         runCatching {
@@ -382,7 +389,7 @@ private fun ViewerVideoTimeline(
         MediaTimelineBar(
             positionMs = { state.position }, durationMs = state.duration,
             onSeekStarted = { state.scrubbing = true },
-            onSeekFinished = state::seek,
+            onSeekFinished = { target -> state.release(target, previews) },
             onSeekCancelled = { state.scrubbing = false },
             preview = { target -> previews?.let { ViewerVideoScrubPreview(it, target) } },
             onInteractionActiveChanged = events.onTimelineInteractionActiveChanged,

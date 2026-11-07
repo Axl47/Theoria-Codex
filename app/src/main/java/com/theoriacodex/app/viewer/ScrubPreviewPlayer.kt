@@ -61,13 +61,13 @@ internal class ScrubPreviewPlayer(
     request: BoundVideoPlaybackRequest,
     widthPx: Int,
     heightPx: Int,
-) : AutoCloseable {
+) : ScrubFrameSource {
     private val main = Handler(Looper.getMainLooper())
     private val mediaItem = request.mediaItem
-    private val frames = ScrubFrameMatcher<Bitmap>()
+    private val frames = ScrubFrameMatcher<ScrubFrame>()
     private var released = false
     private var attached = true
-    private var pending: CompletableDeferred<Bitmap>? = null
+    private var pending: CompletableDeferred<ScrubFrame>? = null
 
     private val listener = object : Player.Listener {
         override fun onTimelineChanged(timeline: Timeline, reason: Int) {
@@ -107,7 +107,9 @@ internal class ScrubPreviewPlayer(
                     Presentation.createForWidthAndHeight(widthPx, heightPx, Presentation.LAYOUT_SCALE_TO_FIT),
                     // glReadPixels reads rows bottom-up.
                     MatrixTransformation { Matrix().apply { setScale(1f, -1f) } },
-                    FrameGrabber { frameMs, bitmap -> main.post { if (!released) frames.onFrame(frameMs, bitmap)?.let(::deliver) } },
+                    FrameGrabber { frameMs, bitmap ->
+                        main.post { if (!released) frames.onFrame(frameMs, ScrubFrame(frameMs, bitmap))?.let(::deliver) }
+                    },
                 ),
             )
             playWhenReady = false
@@ -115,10 +117,9 @@ internal class ScrubPreviewPlayer(
             prepare()
         }
 
-    /** The frame of the keyframe nearest [positionMs]. A newer call replaces a pending one, which is cancelled. */
-    suspend fun frameAt(positionMs: Long): Bitmap {
+    override suspend fun frameAt(positionMs: Long): ScrubFrame {
         check(!released) { "Preview player released" }
-        val frame = CompletableDeferred<Bitmap>()
+        val frame = CompletableDeferred<ScrubFrame>()
         pending?.cancel()
         pending = frame
         if (!attached) {
@@ -137,7 +138,7 @@ internal class ScrubPreviewPlayer(
     }
 
     /** Stops loading until the next [frameAt], keeping the decoder; the shown frame is gone with the stream. */
-    fun idle() {
+    override fun idle() {
         if (released || !attached) return
         pending?.cancel()
         pending = null
@@ -154,16 +155,28 @@ internal class ScrubPreviewPlayer(
         player.release()
     }
 
-    private fun act(next: ScrubFrameMatcher.Next<Bitmap>) = when (next) {
+    private fun act(next: ScrubFrameMatcher.Next<ScrubFrame>) = when (next) {
         is ScrubFrameMatcher.Next.Seek -> player.seekTo(next.positionMs)
         is ScrubFrameMatcher.Next.Answer -> deliver(next.frame)
         ScrubFrameMatcher.Next.Wait -> Unit
     }
 
-    private fun deliver(bitmap: Bitmap) {
-        pending?.complete(bitmap)
+    private fun deliver(frame: ScrubFrame) {
+        pending?.complete(frame)
         pending = null
     }
+}
+
+/** A preview frame and the position, in whole milliseconds, of the keyframe it shows. */
+internal class ScrubFrame(val positionMs: Long, val bitmap: Bitmap)
+
+/** Where a Viewer page's scrub previews come from ([ScrubPreviewPlayer]); use it on the main thread. */
+internal interface ScrubFrameSource : AutoCloseable {
+    /** The frame of the keyframe nearest [positionMs]. A newer call replaces a pending one, which is cancelled. */
+    suspend fun frameAt(positionMs: Long): ScrubFrame
+
+    /** Stops loading between drags; the next [frameAt] resumes. */
+    fun idle()
 }
 
 /** A keyframe needs little more than itself; a second covers decoders that hold frames for reordering. */

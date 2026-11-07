@@ -48,7 +48,8 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import kotlin.math.roundToInt
-import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.SeekParameters
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.CancellationException
@@ -118,7 +119,7 @@ internal fun ViewerScrubPreview(positionMs: Long, deltaMs: Long, progress: Float
  * keeps one while its timeline is composed; each drag's popup follows it through [ViewerVideoScrubPreview].
  */
 @Composable
-internal fun rememberViewerScrubPreviews(player: Player?, source: SourceKey): ViewerScrubPreviews? {
+internal fun rememberViewerScrubPreviews(player: ExoPlayer?, source: SourceKey): ViewerScrubPreviews? {
     val context = LocalContext.current
     // Extract at the size actually shown: fixed small frames were enlarged about threefold on high-density screens.
     val frameSize = viewerScrubFrameSize(LocalViewerMediaAspectRatio.current)
@@ -164,20 +165,26 @@ internal fun ViewerVideoScrubPreview(previews: ViewerScrubPreviews, positionMs: 
 /** Video encoders and effects expect even dimensions. */
 private fun Int.even(): Int = this and 1.inv()
 
+/** Scrub previews of [player]'s stream from [source], read by a [ScrubPreviewPlayer] at [widthPx] × [heightPx]. */
+internal fun ViewerScrubPreviews(context: Context, player: ExoPlayer, source: SourceKey, widthPx: Int, heightPx: Int): ViewerScrubPreviews =
+    ViewerScrubPreviews(player) { location ->
+        ScrubPreviewPlayer(context, context.videoPlaybackInfrastructure().bind(location, source.requestHeaders()), widthPx, heightPx)
+    }
+
 /**
  * A Viewer page's scrub previews. [follow] serves one drag: one pending frame, and only the newest target may
- * publish. Every drag reads from the page's one [ScrubPreviewPlayer], built on the first drag and kept, idle
- * between drags, until [close], or until a drag fails, so the next one starts afresh. Build, follow and close on
- * the main thread.
+ * publish. Every drag reads from the page's one frame source ([openFrames] for the stream's location: a
+ * [ScrubPreviewPlayer]), built on the first drag and kept, idle between drags, until [close], or until a drag fails,
+ * so the next one starts afresh. When a drag is released, [seekReleased] seeks [player]. Use it on the main thread.
  */
 internal class ViewerScrubPreviews(
-    private val context: Context,
-    private val player: Player,
-    private val source: SourceKey,
-    private val widthPx: Int,
-    private val heightPx: Int,
+    private val player: ExoPlayer,
+    private val openFrames: (location: String) -> ScrubFrameSource,
 ) : AutoCloseable {
-    private var preview: Pair<String, ScrubPreviewPlayer>? = null
+    private var preview: Pair<String, ScrubFrameSource>? = null
+
+    /** While a drag is followed: the target whose frame was last published, and that frame's keyframe position. */
+    private var shown: Pair<Long, Long>? = null
 
     /** Publishes a frame for the newest of [targets] until cancelled (see [followScrubTargets]). */
     suspend fun follow(targets: StateFlow<Long>, publish: (Long, Bitmap) -> Unit) {
@@ -185,7 +192,10 @@ internal class ViewerScrubPreviews(
         val frames = previewPlayer(location)
         var healthy = true
         try {
-            followScrubTargets(targets, { positionMs -> withTimeout(SCRUB_FRAME_TIMEOUT_MS) { frames.frameAt(positionMs) } }, publish)
+            followScrubTargets(targets, { positionMs -> withTimeout(SCRUB_FRAME_TIMEOUT_MS) { frames.frameAt(positionMs) } }) { requested, frame ->
+                shown = requested to frame.positionMs
+                publish(requested, frame.bitmap)
+            }
         } catch (timeout: TimeoutCancellationException) {
             healthy = false
             throw timeout
@@ -195,9 +205,30 @@ internal class ViewerScrubPreviews(
             healthy = false
             throw error
         } finally {
+            shown = null
             // A drag that ended keeps the player, idle; a failed or stuck one is replaced on the next drag.
             if (healthy) frames.idle() else close()
         }
+    }
+
+    /**
+     * Seeks [player] for a drag released on [targetMs], while [follow] still serves it, and returns where playback
+     * lands. When the last published frame is [targetMs]'s, playback lands on that frame's keyframe: the frame the user
+     * saw, which the preview already downloaded, where an exact seek decodes from the keyframe before [targetMs] and
+     * needs bytes the preview never fetched. Otherwise the seek is exact.
+     */
+    fun seekReleased(targetMs: Long): Long {
+        val keyframeMs = shown?.takeIf { (shownTargetMs, _) -> shownTargetMs == targetMs }?.second
+        // The drag is over. Its preview stops before the player seeks: until its request closes, what it read is
+        // uncommitted and its cache lock makes the player download those bytes again.
+        preview?.second?.idle()
+        if (keyframeMs == null) return targetMs.also(player::seekTo)
+        // The keyframe's time is truncated to milliseconds; an exact seek there would decode from the keyframe before.
+        val exactness = player.seekParameters
+        player.setSeekParameters(SeekParameters.CLOSEST_SYNC)
+        player.seekTo(keyframeMs)
+        player.setSeekParameters(exactness)
+        return keyframeMs
     }
 
     override fun close() {
@@ -205,11 +236,10 @@ internal class ViewerScrubPreviews(
         preview = null
     }
 
-    private fun previewPlayer(location: String): ScrubPreviewPlayer {
+    private fun previewPlayer(location: String): ScrubFrameSource {
         preview?.let { (boundLocation, frames) -> if (boundLocation == location) return frames }
         close()
-        val request = context.videoPlaybackInfrastructure().bind(location, source.requestHeaders())
-        return ScrubPreviewPlayer(context, request, widthPx, heightPx).also { preview = location to it }
+        return openFrames(location).also { preview = location to it }
     }
 }
 

@@ -213,7 +213,7 @@ class MediaBufferingBenchmarkTest {
         var release: TimedSeek? = null
         val firstDrag = previews.drag(SCRUB_FRACTIONS.map { (duration * it).toLong() }, frameLog) { target ->
             afterScrub = serverStats()
-            release = probe.startSeek { probe.player.seekTo(target) }
+            release = probe.startSeek { previews.seekReleased(target) }
         }
         val scrubFrames = firstDrag.map(DragFrame::elapsedMs)
         val releaseSeek = probe.awaitReady(checkNotNull(release))
