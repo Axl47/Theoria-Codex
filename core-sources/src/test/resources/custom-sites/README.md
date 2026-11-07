@@ -10,7 +10,9 @@ Redaction: post tags, hashes, sources, uploader names and media URLs are replace
 `redacted`, `https://<host>/redacted/media.<ext>`). Ids, counts and field names are original, so
 the response shapes are real. `aibooru/invalid_api_key_401.json` and
 `aibooru/access_denied_403.json` are Danbooru's error envelope for a bad key and for a
-members-only endpoint (backtraces emptied); they are standalone evidence, not routes. HTML interstitials keep their first 2 KB without scripts or styles.
+members-only endpoint (backtraces emptied); `safebooru/tag_list_ignores_json.xml` is Safebooru's
+answer to `s=tag&q=index&json=1&limit=1&orderby=count` (XML, filters ignored). These are
+standalone evidence, not routes. HTML interstitials keep their first 2 KB without scripts or styles.
 Bodies are evidence of protocol shape only; no media was fetched.
 
 | Folder | Evidence |
