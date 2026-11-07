@@ -11,8 +11,8 @@ lane (`scripts/verify_device_apk.py`) before installing them, copies the media i
 `cache/media-bench` (through `run-as`), and runs each `MediaBufferingBenchmarkTest` scenario once per run in a
 fresh app process. The test serves that media from a throttled loopback server inside the app process. The
 summary is the median of every metric across runs. With `--variant NAME=DIR` (APK pairs saved from earlier
-builds), each run installs and measures every variant in turn, so variants share the phone's thermal and
-network conditions; one results file is written per variant. `record` writes a summary into
+builds), each run installs and measures every variant in turn, swapping their order every run, so variants share
+the phone's thermal and network conditions; one results file is written per variant. `record` writes a summary into
 `.docs/exec/media-buffering-metrics.json` as one round entry.
 
 Only `com.theoriacodex.debug` and its test package are installed; no provider media is involved.
@@ -207,7 +207,9 @@ def command_run(args: argparse.Namespace) -> None:
     push_media(args.serial)
     samples = {name: {scenario: [] for scenario in args.scenarios} for name in variants or {"current": None}}
     for run_index in range(1, args.runs + 1):
-        for name in samples:
+        # The phone warms through a run, so whichever variant goes second is a little slower: swap every run.
+        order = list(samples) if run_index % 2 else list(reversed(samples))
+        for name in order:
             if name in variants:
                 install(args.serial, variants[name])
             for scenario in args.scenarios:
