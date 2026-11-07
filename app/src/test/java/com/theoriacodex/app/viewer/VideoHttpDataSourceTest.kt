@@ -4,6 +4,10 @@ package com.theoriacodex.app.viewer
 
 import android.net.Uri
 import androidx.media3.datasource.DataSpec
+import com.theoriacodex.app.source.SourcePresentationCatalog
+import com.theoriacodex.app.source.customSourcePresentation
+import com.theoriacodex.app.source.requestHeaders
+import com.theoriacodex.domain.model.SourceKey
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.util.concurrent.CopyOnWriteArrayList
@@ -37,17 +41,22 @@ class VideoHttpDataSourceTest {
         assertTrue("the origin saw its connection end", origin.disconnected.await(1, TimeUnit.SECONDS))
     }
 
-    @Test fun `requests send the video agent once, with the stream's other headers`() {
+    @Test fun `a custom site's video sends the agent its images do, once, with its other headers`() {
+        val site = requireNotNull(SourceKey.parse("custom_booru_example"))
+        SourcePresentationCatalog.installCustom(
+            listOf(customSourcePresentation(site, "Booru", "https://booru.example", userAgent = "SiteAgent/2")),
+        )
         val source = AbandoningHttpDataSourceFactory(videoHttpClient()).createDataSource()
-        val spec = DataSpec.Builder().setUri(origin.url)
-            .setHttpRequestHeaders(mapOf("Referer" to "https://example.org/", "User-Agent" to "TheoriaSource/1"))
-            .build()
-        source.open(spec)
-        source.close()
+        try {
+            source.open(DataSpec.Builder().setUri(origin.url).setHttpRequestHeaders(site.requestHeaders()).build())
+            source.close()
+        } finally {
+            SourcePresentationCatalog.installCustom(emptyList())
+        }
 
         val headers = origin.requestHeaders.single()
-        assertEquals(listOf("Mozilla/5.0"), headers.valuesOf("user-agent"))
-        assertEquals(listOf("https://example.org/"), headers.valuesOf("referer"))
+        assertEquals(listOf("SiteAgent/2"), headers.valuesOf("user-agent"))
+        assertEquals(listOf("https://booru.example/"), headers.valuesOf("referer"))
         assertEquals(listOf("identity"), headers.valuesOf("accept-encoding"))
     }
 
