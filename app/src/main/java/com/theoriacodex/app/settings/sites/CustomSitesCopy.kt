@@ -1,0 +1,122 @@
+package com.theoriacodex.app.settings.sites
+
+import com.theoriacodex.app.customsites.CustomSiteAvailability
+import com.theoriacodex.app.customsites.CustomSiteMutation
+import com.theoriacodex.app.customsites.CustomSiteSummary
+import com.theoriacodex.domain.source.ProbeFailure
+import com.theoriacodex.domain.source.ProtocolFamily
+import com.theoriacodex.domain.source.SiteAddressError
+import com.theoriacodex.domain.source.SiteHeaders
+import com.theoriacodex.domain.source.SiteProbeResult
+import com.theoriacodex.domain.source.SiteProfile
+
+// User-facing copy for Settings → Sites. Pure functions so every outcome is covered by host tests.
+
+/** Explains a probe result that can't be saved as is. Null for [SiteProbeResult.Supported]. */
+internal fun probeMessage(result: SiteProbeResult): String? = when (result) {
+    is SiteProbeResult.Supported -> null
+    is SiteProbeResult.CredentialsRequired -> if (result.rejected) {
+        "Those keys didn't work. Check them and try again."
+    } else {
+        "${result.address.host} needs a ${userFieldLabel(result.family).lowercase()} and API key."
+    }
+    is SiteProbeResult.UnsupportedFamily ->
+        "This looks like a ${result.familyName} site, which Theoria can't use yet."
+    is SiteProbeResult.NotABooru -> "${result.address.host} doesn't answer like a supported booru."
+    is SiteProbeResult.AlreadyBuiltIn -> "This site is already built into Theoria."
+    is SiteProbeResult.Unreachable -> unreachableMessage(result.address.host, result.reason)
+    is SiteProbeResult.InvalidAddress -> invalidAddressMessage(result.error)
+}
+
+internal fun unreachableMessage(host: String, reason: ProbeFailure): String = when (reason) {
+    ProbeFailure.DNS -> "Couldn't find $host. Check the address."
+    ProbeFailure.TLS -> "Couldn't connect securely to $host."
+    ProbeFailure.TIMEOUT -> "$host took too long to answer. Try again."
+    ProbeFailure.HTTP_ERROR -> "$host answered with an error. Try again later."
+    ProbeFailure.BLOCKED -> "$host blocked the check, possibly with a browser challenge."
+    ProbeFailure.INSECURE_REDIRECT -> "$host redirected to an insecure address."
+    ProbeFailure.CROSS_HOST_REDIRECT -> "$host redirected to a different site."
+}
+
+internal fun invalidAddressMessage(error: SiteAddressError): String = when (error) {
+    SiteAddressError.MALFORMED -> "Enter a site address, like safebooru.org."
+    SiteAddressError.NOT_HTTPS -> "Only HTTPS sites can be added."
+    SiteAddressError.UNSUPPORTED_HOST -> "Use the site's domain name, not an IP address."
+    SiteAddressError.TOO_LONG -> "That address is too long."
+}
+
+/** Danbooru signs in with a login name, Gelbooru 0.2 with a numeric user ID. */
+internal fun userFieldLabel(family: ProtocolFamily?): String = when (family) {
+    ProtocolFamily.DANBOORU -> "Username"
+    ProtocolFamily.GELBOORU_02 -> "User ID"
+    null -> "User ID or username"
+}
+
+/** The inline line shown under a row after re-testing it. Never suggests the profile changed. */
+internal fun retestStatus(site: CustomSiteSummary, result: SiteProbeResult): RetestStatus.Done {
+    val answeredFamily = when (result) {
+        is SiteProbeResult.Supported -> result.family
+        is SiteProbeResult.CredentialsRequired -> result.family
+        else -> null
+    }
+    return when {
+        answeredFamily != null && answeredFamily != site.family -> RetestStatus.Done(
+            "This site now answers as ${answeredFamily.displayName}. Remove it and add it again to switch.",
+            ok = false,
+        )
+        result is SiteProbeResult.Supported -> RetestStatus.Done("Working", ok = true)
+        result is SiteProbeResult.CredentialsRequired -> RetestStatus.Done(
+            if (result.rejected) "The saved keys were rejected." else "Needs an API key.",
+            ok = false,
+        )
+        else -> RetestStatus.Done(probeMessage(result).orEmpty(), ok = false)
+    }
+}
+
+/** Explains a save, edit or removal that didn't happen. Null for [CustomSiteMutation.Success]. */
+internal fun mutationMessage(result: CustomSiteMutation): String? = when (result) {
+    CustomSiteMutation.Success -> null
+    is CustomSiteMutation.DuplicateHost -> "This site is already in your list."
+    is CustomSiteMutation.ReconnectConfirmationNeeded -> "Confirm reconnecting ${result.hostLabel} first."
+    CustomSiteMutation.LimitReached ->
+        "You can add up to ${SiteProfile.MAX_CUSTOM_SITES} sites. Remove one first."
+    CustomSiteMutation.NotFound -> "This site is no longer in your list."
+    CustomSiteMutation.CredentialStoreUnavailable -> "Secure key storage isn't available right now. Try again."
+    is CustomSiteMutation.InvalidLabel -> "Use a name of 1 to ${result.maxLength} characters."
+}
+
+/** Status words for a row. Always text, so state never depends on color alone. */
+internal fun availabilityLabel(availability: CustomSiteAvailability): String = when (availability) {
+    CustomSiteAvailability.AVAILABLE -> "Ready"
+    CustomSiteAvailability.NEEDS_CREDENTIALS -> "Needs API key"
+    CustomSiteAvailability.UNSUPPORTED_FAMILY -> "Unsupported in this version"
+}
+
+/** Second line of a row: host, then [siteStatusSummary]. */
+internal fun siteRowSummary(site: CustomSiteSummary): String = "${site.host} · ${siteStatusSummary(site)}"
+
+/** Family and status, plus the Unified/For You opt-in when on. */
+internal fun siteStatusSummary(site: CustomSiteSummary): String = buildList {
+    add(site.family?.displayName ?: "Unknown type")
+    add(availabilityLabel(site.availability))
+    if (site.includedInUnifiedAndForYou) add("In Unified and For You")
+}.joinToString(" · ")
+
+/** The Settings home row's value. */
+internal fun customSitesSummary(sites: List<CustomSiteSummary>): String {
+    if (sites.isEmpty()) return "Add a booru by its address"
+    val count = "${sites.size} ${if (sites.size == 1) "site" else "sites"}"
+    val needingKeys = sites.count { it.availability == CustomSiteAvailability.NEEDS_CREDENTIALS }
+    return if (needingKeys == 0) count else "$count · $needingKeys need an API key"
+}
+
+internal fun removeConfirmationText(label: String): String =
+    "Remove $label? Likes, Codex items and history from this site stay in your library, " +
+        "but can't be opened or refreshed until you add the site again."
+
+internal fun reconnectConfirmationText(hostLabel: String): String =
+    "Reconnect your existing likes and history from $hostLabel? Only do this if it is the same site."
+
+internal val HEADER_ERROR_MESSAGE = "Header values must be a single line of up to ${SiteHeaders.MAX_HEADER_LENGTH} characters."
+internal const val PARTIAL_CREDENTIALS_MESSAGE = "Enter both the user and the API key, or leave both blank."
+internal const val UNEXPECTED_FAILURE_MESSAGE = "Something went wrong. Try again."

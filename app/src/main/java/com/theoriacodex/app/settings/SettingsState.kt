@@ -1,5 +1,6 @@
 package com.theoriacodex.app.settings
 
+import androidx.compose.runtime.Composable
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.CacheSnapshot
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
@@ -9,7 +10,13 @@ import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.domain.model.SourceKey
 
 /** Pages inside the Settings tab; held by the owner so Search can open Accounts directly. */
-enum class SettingsPage { HOME, ACCOUNTS, HIDDEN_TAGS, STORAGE, STATS }
+enum class SettingsPage { HOME, ACCOUNTS, SITES, HIDDEN_TAGS, STORAGE, STATS }
+
+/**
+ * Settings → Sites, supplied by the app shell so Settings stays independent of the sites owner.
+ * [summary] is the home row's value; [page] renders the page and calls its `onBack` to return home.
+ */
+class SettingsSitesEntry(val summary: String, val page: @Composable (onBack: () -> Unit) -> Unit)
 
 data class SettingsAccountUiState(
     val pixivStatusLabel: String = "Not connected",

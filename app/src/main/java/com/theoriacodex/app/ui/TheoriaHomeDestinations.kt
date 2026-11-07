@@ -16,6 +16,7 @@ import com.theoriacodex.app.search.state.SearchEffect
 import com.theoriacodex.app.recents.RecentsRelatedViewModel
 import com.theoriacodex.app.recents.RecentsScreen
 import com.theoriacodex.app.settings.SettingsAction
+import com.theoriacodex.app.settings.sites.rememberCustomSitesEntry
 import com.theoriacodex.app.source.creatorBrowsingSources
 import com.theoriacodex.app.ui.components.FOR_YOU_FEED_FAB_CONTEXT
 import com.theoriacodex.app.ui.components.SEARCH_FEED_FAB_CONTEXT
@@ -58,7 +59,10 @@ internal fun HomePager(shell: TheoriaShell) {
             TopLevelDestination.Recents -> RecentsDestination(shell)
             TopLevelDestination.Codex -> CodexLibraryDestination(shell, actionCodexId = null)
             TopLevelDestination.Settings -> {
-                SettingsDestinationStateBoundary(shell.owners.settings, shell.routes.searchOwner, libraryStorageSummary(shell.transfers)) {
+                SettingsDestinationStateBoundary(
+                    shell.owners.settings, shell.routes.searchOwner, libraryStorageSummary(shell.transfers),
+                    sites = rememberCustomSitesEntry(shell.container),
+                ) {
                     LibraryTransferSettings(shell.transfers)
                 }
             }

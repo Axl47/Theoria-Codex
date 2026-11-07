@@ -1,0 +1,137 @@
+package com.theoriacodex.app.settings.sites
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.customsites.CustomSiteSummary
+import com.theoriacodex.app.settings.SettingsGroup
+import com.theoriacodex.app.settings.SettingsHeader
+import com.theoriacodex.app.settings.SettingsPageColumn
+import com.theoriacodex.app.settings.SettingsRow
+import com.theoriacodex.app.settings.SettingsRowDivider
+
+/** Settings → Sites: the list of user-added boorus, or the add/edit form while one is open. */
+@Composable
+internal fun CustomSitesScreen(state: CustomSitesUiState, onAction: (CustomSitesAction) -> Unit, onBack: () -> Unit) {
+    BackHandler(enabled = state.form != null) { onAction(CustomSitesAction.CloseForm) }
+    when (val form = state.form) {
+        null -> SitesListPage(state, onAction, onBack)
+        is SiteForm.Add -> AddSitePage(form, onAction)
+        is SiteForm.Edit -> state.sites.firstOrNull { it.sourceId == form.sourceId }?.let { site ->
+            EditSitePage(form, site, onAction)
+        }
+    }
+    RemoveSiteDialog(state, onAction)
+    ReconnectDialog(state.form, onAction)
+}
+
+@Composable
+private fun SitesListPage(state: CustomSitesUiState, onAction: (CustomSitesAction) -> Unit, onBack: () -> Unit) {
+    SettingsPageColumn {
+        SettingsHeader("Sites", onBack) {
+            IconButton(onClick = { onAction(CustomSitesAction.StartAdd) }) { Icon(Icons.Default.Add, "Add site") }
+        }
+        state.notice?.let { AnnouncedText(it, Modifier.padding(horizontal = 4.dp), error = true) }
+        if (state.sites.isEmpty()) {
+            Text(
+                "Add a booru by its address, like safebooru.org. Theoria checks which kind of site it is " +
+                    "and adds it as a source.",
+                modifier = Modifier.padding(horizontal = 4.dp),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Button(onClick = { onAction(CustomSitesAction.StartAdd) }) { Text("Add site") }
+        } else {
+            SettingsGroup(null) {
+                state.sites.forEachIndexed { index, site ->
+                    if (index > 0) SettingsRowDivider()
+                    SiteRow(site, state.retests[site.sourceId], onAction)
+                }
+            }
+        }
+        Text(
+            "New sites stay out of Unified and For You until you turn that on.",
+            modifier = Modifier.padding(horizontal = 4.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun SiteRow(site: CustomSiteSummary, retest: RetestStatus?, onAction: (CustomSitesAction) -> Unit) {
+    Column {
+        SettingsRow(
+            title = site.label,
+            summary = siteRowSummary(site),
+            onClick = { onAction(CustomSitesAction.StartEdit(site.sourceId)) },
+            trailing = {
+                if (retest == RetestStatus.Running) {
+                    CircularProgressIndicator(
+                        Modifier.padding(12.dp).size(24.dp).semantics { contentDescription = "Checking ${site.label}" },
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    IconButton(onClick = { onAction(CustomSitesAction.Retest(site.sourceId)) }) {
+                        Icon(Icons.Default.Refresh, "Re-test ${site.label}")
+                    }
+                }
+            },
+        )
+        if (retest is RetestStatus.Done) {
+            AnnouncedText(
+                retest.message,
+                Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+                error = !retest.ok,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RemoveSiteDialog(state: CustomSitesUiState, onAction: (CustomSitesAction) -> Unit) {
+    val site = state.removeTarget ?: return
+    AlertDialog(
+        onDismissRequest = { onAction(CustomSitesAction.DismissRemove) },
+        title = { Text("Remove site?") },
+        text = { Text(removeConfirmationText(site.label)) },
+        dismissButton = {
+            TextButton(onClick = { onAction(CustomSitesAction.DismissRemove) }, enabled = !state.removing) {
+                Text("Cancel")
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onAction(CustomSitesAction.ConfirmRemove) }, enabled = !state.removing) {
+                Text("Remove", color = MaterialTheme.colorScheme.error)
+            }
+        },
+    )
+}
+
+@Composable
+private fun ReconnectDialog(form: SiteForm?, onAction: (CustomSitesAction) -> Unit) {
+    val stage = (form as? SiteForm.Add)?.stage as? AddStage.Reconnect ?: return
+    AlertDialog(
+        onDismissRequest = { onAction(CustomSitesAction.DismissReconnect) },
+        title = { Text("Reconnect site?") },
+        text = { Text(reconnectConfirmationText(stage.hostLabel)) },
+        dismissButton = { TextButton(onClick = { onAction(CustomSitesAction.DismissReconnect) }) { Text("Cancel") } },
+        confirmButton = { TextButton(onClick = { onAction(CustomSitesAction.ConfirmReconnect) }) { Text("Reconnect") } },
+    )
+}

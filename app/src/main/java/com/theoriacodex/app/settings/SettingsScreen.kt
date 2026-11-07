@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Tune
@@ -64,6 +65,7 @@ fun SettingsScreen(
     statistics: StatisticsSummary = StatisticsSummary(),
     searchSources: Set<SourceKey> = emptySet(),
     storageSummary: String? = null,
+    sites: SettingsSitesEntry? = null,
     storageTools: (@Composable () -> Unit)? = null,
 ) {
     val openHome = { onAction(SettingsAction.OpenPage(SettingsPage.HOME)) }
@@ -74,8 +76,9 @@ fun SettingsScreen(
         label = "Settings page",
     ) { page ->
         when (page) {
-            SettingsPage.HOME -> SettingsHome(state, statistics, onAction, searchSources, storageSummary)
+            SettingsPage.HOME -> SettingsHome(state, statistics, onAction, searchSources, storageSummary, sites)
             SettingsPage.ACCOUNTS -> AccountsPage(state, onAction, openHome)
+            SettingsPage.SITES -> sites?.page?.invoke(openHome)
             SettingsPage.HIDDEN_TAGS -> HiddenTagsPage(state, onAction, openHome)
             SettingsPage.STORAGE -> StoragePage(state, onAction, storageTools, openHome)
             SettingsPage.STATS -> StatsScreen(statistics, openHome)
@@ -91,6 +94,7 @@ private fun SettingsHome(
     onAction: (SettingsAction) -> Unit,
     searchSources: Set<SourceKey>,
     storageSummary: String?,
+    sites: SettingsSitesEntry?,
 ) {
     var sheet by rememberSaveable { mutableStateOf<SettingsSheet?>(null) }
     var showAddProfile by remember { mutableStateOf(false) }
@@ -104,7 +108,7 @@ private fun SettingsHome(
                 open(SettingsPage.STATS)
             })
         }
-        SettingsHomeGroups(state, onAction, searchSources, storageSummary, { sheet = it }, open)
+        SettingsHomeGroups(state, onAction, searchSources, storageSummary, sites, { sheet = it }, open)
         if (state.showDeveloperScenarios) DeveloperScenarios(state, onAction)
     }
     if (showAddProfile) {
@@ -140,6 +144,7 @@ private fun SettingsHomeGroups(
     onAction: (SettingsAction) -> Unit,
     searchSources: Set<SourceKey>,
     storageSummary: String?,
+    sites: SettingsSitesEntry?,
     onSheet: (SettingsSheet) -> Unit,
     open: (SettingsPage) -> Unit,
 ) {
@@ -156,6 +161,10 @@ private fun SettingsHomeGroups(
         SettingsRow("Accounts", sourceAccountsSummary(state.accounts), Icons.Default.AccountCircle, onClick = {
             open(SettingsPage.ACCOUNTS)
         })
+        if (sites != null) {
+            SettingsRowDivider()
+            SettingsRow("Sites", sites.summary, Icons.Default.Public, onClick = { open(SettingsPage.SITES) })
+        }
         SettingsRowDivider()
         OpenLinksRow()
     }
