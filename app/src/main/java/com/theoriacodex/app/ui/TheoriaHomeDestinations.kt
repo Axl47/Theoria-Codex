@@ -88,6 +88,8 @@ private fun SearchDestination(shell: TheoriaShell) {
                     if (saved.search.kind == RecentSearchKind.FYP) shell.openHistoricalForYouSearch(saved.search)
                     else shell.openHistoricalSearch(saved.search)
                 },
+                onSaveSearch = shell.owners.savedSearches::save,
+                onManageSavedSearches = { shell.overlays.showSavedSearchManagement = true },
                 onOpenSourceAccounts = { shell.owners.settings.onAction(SettingsAction.OpenSourceAccounts) },
                 onOpenViewer = { effect -> shell.openSearchViewer(effect) },
                 onShowMessage = { message -> Toast.makeText(shell.appContext, message, Toast.LENGTH_SHORT).show() },

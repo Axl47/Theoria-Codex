@@ -116,6 +116,15 @@ internal fun FavoriteTagSheet(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Saved tags", style = MaterialTheme.typography.titleLarge)
+            // What each kind does, since saved searches (which run) sit beside these in the composer.
+            Text(
+                "Saved tags add to the search you're building. A single tag is added on its own; an " +
+                    "“or” group matches posts with any of its tags, and can be named. Save a tag by " +
+                    "holding it in a post's info, or a group from the composer. Some sites also offer " +
+                    "a built-in Animated group.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             if (sections.isEmpty()) {
                 Text(emptyMessage, style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)

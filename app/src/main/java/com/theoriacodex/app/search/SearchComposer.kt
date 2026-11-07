@@ -25,6 +25,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import com.theoriacodex.app.recents.SavedSearchNameDialog
+import androidx.compose.material.icons.filled.BookmarkAdd
 import com.theoriacodex.app.ui.components.NameEntryDialog
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -33,7 +35,6 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -113,8 +114,7 @@ internal fun SearchComposer(
     onOpenSourceAccounts: () -> Unit,
     onDigitsCommitted: () -> Unit,
     onDismiss: () -> Unit,
-    savedSearches: List<SavedSearchEntry> = emptyList(),
-    onOpenSavedSearch: (SavedSearchEntry) -> Unit = {},
+    savedSearches: ComposerSavedSearches = ComposerSavedSearches(),
     savedTags: ComposerSavedTags = ComposerSavedTags(emptyList()),
 ) {
     Dialog(
@@ -125,7 +125,7 @@ internal fun SearchComposer(
             SearchComposerContent(
                 state, onAction, sourcePicker, onApply, onReset, onUndo,
                 onManageSavedTags, onOpenSourceAccounts, onDigitsCommitted, onDismiss,
-                savedSearches, onOpenSavedSearch, savedTags,
+                savedSearches, savedTags,
             )
         }
     }
@@ -143,8 +143,7 @@ private fun SearchComposerContent(
     onOpenSourceAccounts: () -> Unit,
     onDigitsCommitted: () -> Unit,
     onDismiss: () -> Unit,
-    savedSearches: List<SavedSearchEntry>,
-    onOpenSavedSearch: (SavedSearchEntry) -> Unit,
+    savedSearches: ComposerSavedSearches,
     savedTags: ComposerSavedTags,
 ) {
     val input = state.suggestions.input
@@ -206,7 +205,7 @@ private fun SearchComposerContent(
 
     ComposerEditorBody(
         state, target, targetIndex, terms, suggestions, liveSelection, inputRequester, snackbars,
-        sourcePicker, savedSearches, onOpenSavedSearch, savedTags, queryActions, onAction, onOpenSourceAccounts,
+        sourcePicker, savedSearches, savedTags, queryActions, onAction, onOpenSourceAccounts,
         onUndo, onReset, onManageSavedTags, onApply, onDismiss,
         onCommit = ::commitTyped,
         onToggleTarget = {
@@ -270,8 +269,7 @@ private fun ComposerEditorBody(
     inputRequester: FocusRequester,
     snackbars: SnackbarHostState,
     sourcePicker: @Composable () -> Unit,
-    savedSearches: List<SavedSearchEntry>,
-    onOpenSavedSearch: (SavedSearchEntry) -> Unit,
+    savedSearches: ComposerSavedSearches,
     savedTags: ComposerSavedTags,
     queryActions: ComposerQueryActions,
     onAction: (SearchAction) -> Unit,
@@ -289,7 +287,7 @@ private fun ComposerEditorBody(
     val queryScroll = rememberScrollState()
     @Composable
     fun query(compact: Boolean, modifier: Modifier) = ComposerTagList(
-        state, terms, targetIndex, liveSelection, compact, queryScroll, savedSearches, onOpenSavedSearch, savedTags,
+        state, terms, targetIndex, liveSelection, compact, queryScroll, savedSearches, savedTags,
         onManageSavedTags, queryActions, onOpenSourceAccounts, onAction, modifier,
     )
     Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
@@ -569,8 +567,7 @@ private fun ComposerTagList(
     selection: SelectedTerm?,
     compact: Boolean,
     scroll: ScrollState,
-    savedSearches: List<SavedSearchEntry>,
-    onOpenSavedSearch: (SavedSearchEntry) -> Unit,
+    savedSearches: ComposerSavedSearches,
     savedTags: ComposerSavedTags,
     onManageSavedTags: () -> Unit,
     queryActions: ComposerQueryActions,
@@ -593,7 +590,7 @@ private fun ComposerTagList(
                 modifier = Modifier.padding(vertical = 8.dp),
             )
         }
-        ComposerSavedSection(savedSearches, onOpenSavedSearch, savedTags, state.query.draft, targetIndex, onManageSavedTags, onAction)
+        ComposerSavedSection(savedSearches, savedTags, state.query.draft, targetIndex, onManageSavedTags, onAction)
         if (
             state.query.appliedSourceScope !is SearchSourceScope.Single &&
             visibleSourceStatusChipStatuses(state.content.statuses).isNotEmpty()
@@ -603,38 +600,93 @@ private fun ComposerTagList(
     }
 }
 
-/** Saved searches and saved tags share one section, each keeping its own row and icon. */
+/**
+ * Saved searches and saved tags, split by a divider because they act differently: a saved search
+ * replaces the search and runs it, while a saved tag adds to the search being built. Each part has
+ * its own Manage, and searches can be saved from here.
+ */
 @Composable
 private fun ComposerSavedSection(
-    savedSearches: List<SavedSearchEntry>,
-    onOpenSavedSearch: (SavedSearchEntry) -> Unit,
+    savedSearches: ComposerSavedSearches,
     savedTags: ComposerSavedTags,
     draft: Query,
     targetIndex: Int,
     onManageSavedTags: () -> Unit,
     onAction: (SearchAction) -> Unit,
 ) {
-    if (savedSearches.isEmpty() && savedTags.all.isEmpty()) return
-    Row {
-        ComposerSectionTitle("Saved", Modifier.weight(1f).alignByBaseline())
-        if (savedTags.all.isNotEmpty()) {
+    val showSearches = savedSearches.entries.isNotEmpty() || savedSearches.canSaveCurrent
+    if (showSearches) {
+        var naming by remember { mutableStateOf(false) }
+        SavedPartHeader("Saved searches", "Tap to run") {
+            savedSearches.onSaveCurrent?.let {
+                TextButton(onClick = { naming = true }) {
+                    Icon(Icons.Default.BookmarkAdd, null, Modifier.size(18.dp))
+                    Text("Save", Modifier.padding(start = 4.dp))
+                }
+            }
+            if (savedSearches.entries.isNotEmpty()) {
+                TextButton(
+                    onClick = savedSearches.onManage,
+                    modifier = Modifier.semantics { contentDescription = "Manage saved searches" },
+                ) { Text("Manage") }
+            }
+        }
+        if (savedSearches.entries.isNotEmpty()) {
+            SavedSearchChips(savedSearches)
+        } else {
+            SavedPartHint("Save this search to run it again in one tap.")
+        }
+        if (naming) {
+            SavedSearchNameDialog(
+                initialName = savedSearches.suggestedName,
+                renaming = false,
+                onDismiss = { naming = false },
+                onConfirm = { name ->
+                    savedSearches.onSaveCurrent?.invoke(name)
+                    naming = false
+                },
+            )
+        }
+    }
+    if (savedTags.all.isEmpty()) return
+    if (showSearches) HorizontalDivider(Modifier.padding(top = 8.dp))
+    SavedPartHeader("Saved tags", "Tap to add to your search") {
+        if (savedTags.entries.isNotEmpty()) {
             TextButton(
                 onClick = onManageSavedTags,
-                modifier = Modifier.alignByBaseline().semantics { contentDescription = "Manage saved tags" },
+                modifier = Modifier.semantics { contentDescription = "Manage saved tags" },
             ) { Text("Manage") }
         }
     }
-    if (savedSearches.isNotEmpty()) SavedSearchChips(savedSearches, onOpenSavedSearch)
-    if (savedTags.all.isNotEmpty()) SavedTagChips(savedTags, draft, targetIndex, onAction)
+    SavedTagChips(savedTags, draft, targetIndex, onAction)
+}
+
+/** A part's title with what tapping its chips does, and its buttons at the end. */
+@Composable
+private fun SavedPartHeader(title: String, tapHint: String, actions: @Composable () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            ComposerSectionTitle(title)
+            Text(tapHint, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        actions()
+    }
+}
+
+@Composable
+private fun SavedPartHint(text: String) {
+    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 /** One tap reruns a saved search, replacing the current draft. */
 @Composable
-private fun SavedSearchChips(searches: List<SavedSearchEntry>, onOpen: (SavedSearchEntry) -> Unit) {
+private fun SavedSearchChips(savedSearches: ComposerSavedSearches) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(searches, key = SavedSearchEntry::id) { entry ->
-            AssistChip(
-                onClick = { onOpen(entry) },
+        items(savedSearches.entries, key = SavedSearchEntry::id) { entry ->
+            // The search on screen is highlighted, so a tap that just ran it shows which one it was.
+            FilterChip(
+                selected = savedSearches.isCurrent(entry),
+                onClick = { savedSearches.onOpen(entry) },
                 label = { Text(entry.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 leadingIcon = { Icon(Icons.Default.Bookmark, null, Modifier.size(16.dp)) },
             )

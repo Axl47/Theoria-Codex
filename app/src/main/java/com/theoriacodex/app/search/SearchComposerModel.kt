@@ -11,6 +11,7 @@ import com.theoriacodex.app.tags.chipState
 import com.theoriacodex.app.tags.isGeneralPostTag
 import com.theoriacodex.app.tags.tagTapEffect
 import com.theoriacodex.data.repository.FavoriteTagEntry
+import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -110,6 +111,22 @@ internal fun FavoriteTagEntry.tapActions(draft: Query, targetIndex: Int): List<S
 /** What tapping a saved group's chip does: a group is only ever added or removed. */
 internal fun savedGroupTapLabel(label: String, state: TagChipState): String =
     if (state == TagChipState.NONE) "Include $label in Search" else "Remove $label from Search"
+
+/** Saved searches as the composer sees them, and how to run, save and manage them. */
+internal class ComposerSavedSearches(
+    val entries: List<SavedSearchEntry> = emptyList(),
+    /** The search on screen, to highlight its saved entry; null before any search. */
+    private val currentQueryHash: String? = null,
+    val onOpen: (SavedSearchEntry) -> Unit = {},
+    /** Saves the search on screen under a name; null when there is nothing to save. */
+    val onSaveCurrent: ((String) -> Unit)? = null,
+    val suggestedName: String = "",
+    val onManage: () -> Unit = {},
+) {
+    val canSaveCurrent: Boolean get() = onSaveCurrent != null
+
+    fun isCurrent(entry: SavedSearchEntry): Boolean = currentQueryHash != null && entry.search.queryHash == currentQueryHash
+}
 
 /** The source's built-in "Animated" saved group, or null when it has no animated tags. */
 internal fun animatedSavedGroup(source: SourceKey?): FavoriteTagEntry? =

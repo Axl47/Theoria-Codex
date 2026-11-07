@@ -53,6 +53,12 @@ import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.app.ui.components.NameEntryDialog
 import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.data.repository.SavedSearchEntry
+import com.theoriacodex.app.search.state.SearchSourceScope
+import com.theoriacodex.app.recents.recentSearchPresentation
+import com.theoriacodex.data.repository.MAX_SAVED_SEARCH_NAME_LENGTH
+import com.theoriacodex.data.repository.defaultRecentSearchSources
+import com.theoriacodex.data.repository.RecentSearchKind
+import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.DateRange
@@ -107,6 +113,8 @@ fun SearchScreen(
     oldSearchBar: Boolean = false,
     savedSearches: List<SavedSearchEntry> = emptyList(),
     onOpenSavedSearch: (SavedSearchEntry) -> Unit = {},
+    onSaveSearch: (String, RecentSearchEntry) -> Unit = { _, _ -> },
+    onManageSavedSearches: () -> Unit = {},
 ) {
     val composerOpen = rememberSaveable { mutableStateOf(false) }
     val chrome = remember(composerOpen) { SearchChromeState(composerOpen) }
@@ -153,7 +161,11 @@ fun SearchScreen(
         )
     }
     if (chrome.composerOpen) {
-        SearchComposerDialog(state, feed, chrome, gridState, sourcePicker, applyDraft, onAction, onOpenSourceAccounts, savedSearches, onOpenSavedSearch,
+        val composerSavedSearches = composerSavedSearches(state, savedSearches, onSaveSearch, onManageSavedSearches) { entry ->
+            chrome.closeComposer(onAction)
+            onOpenSavedSearch(entry)
+        }
+        SearchComposerDialog(state, feed, chrome, gridState, sourcePicker, applyDraft, onAction, onOpenSourceAccounts, composerSavedSearches,
             favoriteTags, onAddFavoriteTag, onRemoveFavoriteTag, onRenameFavoriteTag)
     }
     if (chrome.showFavoriteTagSheet) {
@@ -273,8 +285,7 @@ private fun SearchComposerDialog(
     applyDraft: () -> Unit,
     onAction: (SearchAction) -> Unit,
     onOpenSourceAccounts: () -> Unit,
-    savedSearches: List<SavedSearchEntry>,
-    onOpenSavedSearch: (SavedSearchEntry) -> Unit,
+    savedSearches: ComposerSavedSearches,
     favoriteTags: List<FavoriteTagEntry>,
     onAddFavoriteTag: (SourceKey, List<String>, String?) -> Unit,
     onRemoveFavoriteTag: (SourceKey, List<String>) -> Unit,
@@ -301,10 +312,6 @@ private fun SearchComposerDialog(
         onDigitsCommitted = { resetScroll() },
         onDismiss = { chrome.closeComposer(onAction) },
         savedSearches = savedSearches,
-        onOpenSavedSearch = { entry ->
-            chrome.closeComposer(onAction)
-            onOpenSavedSearch(entry)
-        },
         savedTags = ComposerSavedTags(
             // The same tag can be a favorite on several sources, but it reads as one chip here.
             entries = favoriteSections.flatMap(FavoriteTagSection::entries).distinctBy(FavoriteTagEntry::key),
@@ -545,6 +552,43 @@ private fun SearchUiState.sourceDisplayOrder(): List<SourceKey> =
  * Where a tag saved from the composer goes. Saved tags belong to a source, so a search across
  * several saves under the first one it covers; every saved tag shows while searching them all.
  */
+/**
+ * Saved searches for the composer. "Save" saves the search on screen (applied, not the draft being
+ * edited), recorded the way Recents records it so the saved entry reopens the same scope.
+ */
+private fun composerSavedSearches(
+    state: SearchUiState,
+    entries: List<SavedSearchEntry>,
+    onSave: (String, RecentSearchEntry) -> Unit,
+    onManage: () -> Unit,
+    onOpen: (SavedSearchEntry) -> Unit,
+): ComposerSavedSearches {
+    val query = state.query
+    val current = query.appliedQueryHash.takeIf { it.isNotBlank() && query.applied.includeTermGroups.isNotEmpty() }
+        ?.let { hash ->
+            val scope = query.appliedSourceScope
+            RecentSearchEntry(
+                query = query.applied,
+                queryHash = hash,
+                searchedAtEpochMs = System.currentTimeMillis(),
+                kind = when (scope) {
+                    SearchSourceScope.GlobalUnified -> RecentSearchKind.UNIFIED
+                    is SearchSourceScope.Single -> RecentSearchKind.SOURCE
+                    is SearchSourceScope.Temporary -> RecentSearchKind.MULTI_SEARCH
+                },
+                sources = scope.explicitSources.ifEmpty { query.applied.defaultRecentSearchSources() },
+            )
+        }
+    return ComposerSavedSearches(
+        entries = entries,
+        currentQueryHash = current?.queryHash,
+        onOpen = onOpen,
+        onSaveCurrent = current?.let { entry -> { name: String -> onSave(name, entry) } },
+        suggestedName = current?.let { recentSearchPresentation(it).title.take(MAX_SAVED_SEARCH_NAME_LENGTH) }.orEmpty(),
+        onManage = onManage,
+    )
+}
+
 private fun savedTagSource(state: SearchUiState): SourceKey? =
     (state.query.draft.mode as? QueryMode.Source)?.source
         ?: state.query.draftSourceScope.explicitSources.firstOrNull()
