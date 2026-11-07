@@ -276,12 +276,7 @@ private fun ViewerInfoActions(
             creator = creators.firstOrNull()?.let { creator -> HeaderLink(creator.label) { openCreator(creator) } },
         )
         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), Arrangement.SpaceEvenly) {
-            ViewerInfoAction(
-                icon = if (liked) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
-                label = if (liked) "Liked" else "Like",
-                description = if (liked) "Unlike post" else "Like post",
-                tint = if (liked) LikedHeartColor else null,
-            ) { onAction(ViewerAction.ToggleLike) }
+            ViewerLikeAction(liked) { onAction(ViewerAction.ToggleLike) }
             ViewerInfoAction(Icons.Default.BookmarkAdd, "Codex", "Save to Codex") { closeThen { onAction(ViewerAction.Save) } }
             ViewerInfoAction(Icons.Default.Download, "Device", "Save to device", selection.canDownload) {
                 closeThen { onAction(ViewerAction.Download) }
@@ -290,16 +285,21 @@ private fun ViewerInfoActions(
             ViewerInfoMoreActions(
                 otherCreators = creators.drop(1),
                 onOpenCreator = ::openCreator,
-                onGoToSearch = {
-                    closeThen {
-                        controls.setPlaybackEnabled(false)
-                        onGoToSearch()
-                    }
-                },
+                onGoToSearch = { closeThen { controls.setPlaybackEnabled(false); onGoToSearch() } },
                 onOpenInBrowser = if (post.pageUrl.isNullOrBlank()) null else ({ closeThen { onOpenInBrowser(post) } }),
             )
         }
         HorizontalDivider()
+    }
+}
+
+/** Like stays in the sheet, so its label and heart follow the post's liked state. */
+@Composable
+private fun ViewerLikeAction(liked: Boolean, onToggle: () -> Unit) {
+    if (liked) {
+        ViewerInfoAction(Icons.Default.Favorite, "Liked", "Unlike post", tint = LikedHeartColor, onClick = onToggle)
+    } else {
+        ViewerInfoAction(Icons.Outlined.FavoriteBorder, "Like", "Like post", onClick = onToggle)
     }
 }
 

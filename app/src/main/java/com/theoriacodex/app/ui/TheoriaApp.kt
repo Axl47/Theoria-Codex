@@ -72,6 +72,25 @@ import com.theoriacodex.app.viewer.ViewerReturnTransition
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 
+/** Ranks Codices for "Save to Codex" from the saved library. */
+@Composable
+private fun rememberCodexSaveRelevanceLoader(shell: TheoriaShell): CodexSaveRelevanceLoader = remember(shell) {
+    val source = CodexCollectionSource(shell.data.codexRepository, shell.data.storageDirectory, shell.data.cacheRepository)
+    CodexSaveRelevanceLoader(shell.data.codexRepository, shell.scope, observeLibrary = source::observeSavedLibrary)
+}
+
+/** The active profile's single saved tags, for the star in post sheets, and how to unsave one. */
+@Composable
+private fun rememberPostTagSavedTags(shell: TheoriaShell): PostTagSavedTags = remember(shell) {
+    PostTagSavedTags(
+        saved = shell.data.settingsRepository.observeSettings().map { settings ->
+            settings.favoriteTagsByProfile[settings.activeRecommendationProfile().profileId].orEmpty()
+                .mapNotNullTo(mutableSetOf()) { entry -> entry.tags.singleOrNull()?.let { entry.source to it } }
+        }.distinctUntilChanged(),
+        remove = { source, tag -> shell.removeFavoriteTags(source, listOf(tag)) },
+    )
+}
+
 /** Renderable app-shell boundary with dependencies supplied by the application owner. */
 @Composable
 internal fun TheoriaAppContent(
@@ -103,25 +122,14 @@ internal fun TheoriaAppContent(
         settingsRepository = shell.data.settingsRepository,
         onProfileChanged = { profile -> shell.workflows.likesCodexSync.ensureProfileCodex(profile) },
     )
-    val saveRelevanceLoader = remember(shell) {
-        val source = CodexCollectionSource(shell.data.codexRepository, shell.data.storageDirectory, shell.data.cacheRepository)
-        CodexSaveRelevanceLoader(shell.data.codexRepository, shell.scope, observeLibrary = source::observeSavedLibrary)
-    }
+    val saveRelevanceLoader = rememberCodexSaveRelevanceLoader(shell)
     val watchPresentation = com.theoriacodex.app.search.rememberPostWatchPresentation(
         shell.data.readingPositions, shell.data.recentsRepository,
     )
     val viewerReturnTransition = remember { ViewerReturnTransition() }
     val relatedPostsSupport = remember(shell) { shell.features.relatedPosts::supports }
     val sourceHealth = rememberSourceHealth(shell)
-    val savedTags = remember(shell) {
-        PostTagSavedTags(
-            saved = shell.data.settingsRepository.observeSettings().map { settings ->
-                settings.favoriteTagsByProfile[settings.activeRecommendationProfile().profileId].orEmpty()
-                    .mapNotNullTo(mutableSetOf()) { entry -> entry.tags.singleOrNull()?.let { entry.source to it } }
-            }.distinctUntilChanged(),
-            remove = { source, tag -> shell.removeFavoriteTags(source, listOf(tag)) },
-        )
-    }
+    val savedTags = rememberPostTagSavedTags(shell)
     CompositionLocalProvider(
         com.theoriacodex.app.search.LocalPostWatchPresentation provides watchPresentation,
         LocalCodexSaveRelevanceLoader provides saveRelevanceLoader,

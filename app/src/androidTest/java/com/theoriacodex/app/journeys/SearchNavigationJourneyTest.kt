@@ -78,7 +78,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         }
         launch()
         activate(compose.onNodeWithTag("Search bar"))
-        compose.onNodeWithText("Saved").assertIsDisplayed()
+        compose.onNodeWithText("Saved tags").assertIsDisplayed()
         activate(compose.onNode(hasText("journeytag") and hasClickLabel("Include journeytag in Search")))
         activate(compose.onNode(hasText("journeytag") and hasClickLabel("Exclude journeytag from Search")))
         compose.onNodeWithText("Excluded").assertIsDisplayed()
