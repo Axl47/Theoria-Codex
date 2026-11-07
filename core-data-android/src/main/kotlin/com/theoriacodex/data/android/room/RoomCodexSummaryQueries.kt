@@ -50,7 +50,7 @@ internal class RoomCodexSummaryQueries(
         if (codexIds.isEmpty()) return flowOf(emptySet())
         return dao.observeSavedPostIds(codexIds.sorted()).map { rows ->
             rows.mapNotNullTo(linkedSetOf()) { row ->
-                runCatching { SourceKey.valueOf(row.source) }.getOrNull()?.let { source ->
+                SourceKey.parse(row.source)?.let { source ->
                     PostId(source, row.sourcePostId)
                 }
             }

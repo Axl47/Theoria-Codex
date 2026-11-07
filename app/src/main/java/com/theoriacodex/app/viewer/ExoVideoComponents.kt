@@ -93,7 +93,7 @@ internal fun playbackDiagnosticsSemantics(
 }
 
 internal fun PostId.mediaTestTagPart(): String {
-    val sourcePart = source.name.lowercase()
+    val sourcePart = source.id.lowercase()
     val postPart = sourcePostId.lowercase().map { character ->
         if (character.isLetterOrDigit() || character == '_') character else '_'
     }.joinToString(separator = "")

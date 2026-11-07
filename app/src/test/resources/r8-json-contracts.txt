@@ -2,7 +2,7 @@
 # app/proguard-rules.pro. Transient in-process fields are intentionally absent.
 com.theoriacodex.data.storage.LegacyImportProof|sourceFileName,sourceSchemaVersion,destinationSchemaVersion,sourceSha256,sourceByteCount,importedCounts
 com.theoriacodex.data.storage.PostStorageRecord|source,sourcePostId,previewUrl,previewLocalPath,previewMime,previewProgressiveUrls,previewIsAnimated,fullUrl,fullLocalPath,fullMime,fullProgressiveUrls,fullIsAnimated,fullVideoVariants,pageUrl,width,height,canonicalTags,rawTags,authorName,createdAtEpochMs,media,title,creatorProfile,durationMs,mediaCount,taxonomy,creatorProfiles,schemaVersion
-com.theoriacodex.data.storage.PostTaxonomyTermStorageRecord|value,facet,sourceNamespace,count
+com.theoriacodex.data.storage.PostTaxonomyTermStorageRecord|value,facet,sourceNamespace,count,translation
 com.theoriacodex.data.storage.CreatorProfileStorageRecord|source,displayName,profileId,profileUrl,uploadsQuery
 com.theoriacodex.data.storage.ImageRefStorageRecord|url,localPath,mime,progressiveUrls,isAnimated,videoVariants
 com.theoriacodex.data.repository.SettingsDataStoreFile|schemaVersion,settings,legacyImports
@@ -34,7 +34,8 @@ com.theoriacodex.data.android.room.LegacyCodexItemRecord|codexId,source,sourcePo
 com.theoriacodex.data.android.room.LegacyLikesStoreFile|likes
 com.theoriacodex.data.android.room.LegacyLikedPostRecord|profileId,profile,source,sourcePostId,likedAtEpochMs,tags
 com.theoriacodex.app.sourceauth.CredentialEnvelopeRecord|formatVersion,keyVersion,iv,ciphertext
-com.theoriacodex.app.sourceauth.CredentialPayloadRecord|schemaVersion,pixivAccessToken,pixivRefreshToken,pixivExpiresAtEpochMs,gelbooruUserId,gelbooruApiKey,rule34XxxUserId,rule34XxxApiKey
+com.theoriacodex.app.sourceauth.CredentialPayloadRecord|schemaVersion,pixivAccessToken,pixivRefreshToken,pixivExpiresAtEpochMs,gelbooruUserId,gelbooruApiKey,rule34XxxUserId,rule34XxxApiKey,customSites
+com.theoriacodex.app.sourceauth.CustomSiteCredentialRecord|user,apiKey
 com.theoriacodex.app.update.UpdateStateSnapshot|lastSeenReleaseId,pendingInstallReleaseId,pendingInstallVersionCode,ignoredReleaseId,remindLaterReleaseId,remindLaterUntilEpochMs,pendingPostInstallChangelog,lastInstalledChangelog
 com.theoriacodex.app.update.PendingPostInstallChangelog|releaseId,fromVersionCode,versionCode,tagName,commitShaShort,releaseName,changelogMarkdown,changelogSections
 com.theoriacodex.app.update.ChangelogSection|title,bullets
@@ -44,7 +45,7 @@ com.theoriacodex.app.codex.CodexShareFile|version,title,posts
 com.theoriacodex.app.codex.CodexSharePost|source,sourcePostId,snapshot
 com.theoriacodex.app.codex.CodexSharePostSnapshot|preview,full,media,pageUrl,width,height,canonicalTags,rawTags,taxonomy,authorName,createdAtEpochMs,title,creatorProfile,creatorProfiles,durationMs,mediaCount
 com.theoriacodex.app.codex.CodexShareImageRef|url,mime,progressiveUrls,isAnimated
-com.theoriacodex.app.codex.CodexShareTaxonomyTerm|value,facet,sourceNamespace
+com.theoriacodex.app.codex.CodexShareTaxonomyTerm|value,facet,sourceNamespace,translation
 com.theoriacodex.app.codex.CodexShareCreatorProfile|source,displayName,profileId,profileUrl,uploadsQuery
 com.theoriacodex.sources.hitomi.HitomiPageToken|version,queryHash,primaryKey,primaryOffset,randomSeed,randomSnapshotFingerprint,randomPermutationVersion,globalIndexVersion
 
@@ -54,3 +55,5 @@ com.theoriacodex.data.repository.FollowedCreatorRecord|source,name,profileId,pro
 com.theoriacodex.data.repository.CodexStatistics|browsingMs,watchingMs,posts
 com.theoriacodex.data.repository.CodexPostStatistics|label,opens,videoMs,imageMs
 com.theoriacodex.data.repository.DailyActivity|appOpenCount,totalForegroundMs,browsingMs,watchingMs,codexMs,watchedPostCount,searchCount
+com.theoriacodex.data.repository.SiteProfileRecord|sourceId,baseUrl,label,family,searchTermLimit,userAgent,referer,credentialsRequired,addedAt,verifiedAt
+com.theoriacodex.data.repository.SiteProfileStoreFile|schemaVersion,sites

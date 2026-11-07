@@ -183,7 +183,7 @@ private fun RelatedPostsRow(
         ) {
             itemsIndexed(
                 items = posts,
-                key = { _, post -> "related-card:${post.id.source.name}:${post.id.sourcePostId}" },
+                key = { _, post -> "related-card:${post.id.source.id}:${post.id.sourcePostId}" },
             ) { index, post ->
                 Box(modifier = Modifier.width(cardWidth)) {
                     FeedPostCard(

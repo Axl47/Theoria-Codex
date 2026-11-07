@@ -21,12 +21,12 @@ internal fun <T> viewerRestorationWindow(items: List<T>, selectedIndex: Int): Li
     return items.subList(start, (start + VIEWER_RESTORATION_POST_LIMIT).coerceAtMost(items.size))
 }
 
-internal fun encodeViewerPostId(postId: PostId): String = "${postId.source.name}:${postId.sourcePostId}"
+internal fun encodeViewerPostId(postId: PostId): String = "${postId.source.id}:${postId.sourcePostId}"
 
 internal fun decodeViewerPostId(encoded: String?): PostId? {
     val pieces = encoded?.split(':', limit = 2) ?: return null
     if (pieces.size != 2 || pieces[1].isBlank()) return null
-    val source = SourceKey.entries.firstOrNull { it.name == pieces[0] } ?: return null
+    val source = SourceKey.parse(pieces[0]) ?: return null
     return PostId(source, pieces[1])
 }
 

@@ -2,6 +2,7 @@ package com.theoriacodex.app.source
 
 import com.theoriacodex.app.R
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.source.CustomSourceIds
 import com.theoriacodex.sources.http.THEORIA_SOURCE_USER_AGENT
 
 /**
@@ -14,6 +15,9 @@ enum class SourcePresentationGroup(val folderLabel: String? = null) {
     VIDEO,
     RULE34(folderLabel = "R34"),
     DANBOORU(folderLabel = "Booru"),
+
+    /** User-added sites, each shown as its own choice. */
+    CUSTOM,
 }
 
 /** Whether a live adapter is exposed as a user-selectable source. */
@@ -165,8 +169,12 @@ object SourcePresentationCatalog {
 
     private val bySource = entries.associateBy(SourcePresentation::source)
 
+    /** User-added sites, replaced as a whole by [installCustom]; read without locking. */
+    @Volatile
+    private var custom: CustomPresentations = CustomPresentations(emptyList())
+
     init {
-        check(bySource.keys == SourceKey.entries.toSet()) {
+        check(bySource.keys == SourceKey.builtIns.toSet()) {
             "Source presentation catalog must cover every SourceKey exactly once"
         }
         check(entries.map(SourcePresentation::order).distinct().size == entries.size) {
@@ -174,9 +182,39 @@ object SourcePresentationCatalog {
         }
     }
 
-    fun presentation(source: SourceKey): SourcePresentation = bySource.getValue(source)
+    /**
+     * Built-in, then installed custom, then a fallback for a custom id with no profile (a removed or
+     * not-yet-restored site), so data from such a site still renders with a readable label.
+     */
+    fun presentation(source: SourceKey): SourcePresentation =
+        bySource[source] ?: custom.bySource[source] ?: customSourcePresentation(source, CustomSourceIds.hostLabel(source.id))
 
-    fun orderedPresentations(): List<SourcePresentation> = entries
+    /** Built-ins in presentation order, followed by installed custom sites. */
+    fun orderedPresentations(): List<SourcePresentation> = entries + custom.ordered
+
+    fun orderedSources(): List<SourceKey> = orderedPresentations().map(SourcePresentation::source)
+
+    /** Installed custom sites in their presentation order. */
+    fun customSources(): List<SourceKey> = custom.ordered.map(SourcePresentation::source)
+
+    /**
+     * Replaces every custom entry in one write. Called only by the custom-site runtime, which installs
+     * presentations before their adapters become visible and withdraws them after.
+     */
+    fun installCustom(presentations: List<SourcePresentation>) {
+        require(presentations.all { it.source.isCustom }) { "Only custom sources can be installed" }
+        require(presentations.map(SourcePresentation::source).distinct().size == presentations.size) {
+            "Each custom source can be installed once"
+        }
+        custom = CustomPresentations(presentations)
+    }
+
+    private class CustomPresentations(presentations: List<SourcePresentation>) {
+        val ordered: List<SourcePresentation> = presentations.sortedWith(
+            compareBy<SourcePresentation> { it.order }.thenBy { it.source.id },
+        )
+        val bySource: Map<SourceKey, SourcePresentation> = ordered.associateBy(SourcePresentation::source)
+    }
 
     fun exposedSources(rule34XxxConfigured: Boolean): Set<SourceKey> {
         return entries
@@ -189,10 +227,39 @@ object SourcePresentationCatalog {
 
 fun SourceKey.presentation(): SourcePresentation = SourcePresentationCatalog.presentation(this)
 
+/** First presentation order for custom sites; built-ins use 0 through 10. */
+const val CUSTOM_PRESENTATION_ORDER_START = 100
+
+/**
+ * Presentation for a user-added site. A null [referer] uses the site root ([baseUrl], or the host
+ * encoded in the id); a null [userAgent] uses the browser agent media requests already send.
+ */
+fun customSourcePresentation(
+    source: SourceKey,
+    label: String,
+    baseUrl: String? = null,
+    referer: String? = null,
+    userAgent: String? = null,
+    order: Int = Int.MAX_VALUE,
+): SourcePresentation {
+    require(source.isCustom) { "Built-in sources have catalog entries" }
+    return SourcePresentation(
+        source = source,
+        label = label,
+        referer = referer ?: "${baseUrl ?: "https://${CustomSourceIds.hostLabel(source.id)}"}/",
+        exposure = SourceExposure.USER_VISIBLE,
+        group = SourcePresentationGroup.CUSTOM,
+        order = order,
+        logo = SourceLogoAsset.Text,
+        mark = label.firstOrNull(Char::isLetterOrDigit)?.uppercase() ?: "?",
+        userAgent = userAgent ?: BROWSER_USER_AGENT,
+    )
+}
+
 fun Iterable<SourceKey>.inPresentationOrder(): List<SourceKey> {
     return distinct().sortedWith(
         compareBy<SourceKey> { source -> source.presentation().order }
-            .thenBy(SourceKey::name),
+            .thenBy(SourceKey::id),
     )
 }
 

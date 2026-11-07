@@ -141,7 +141,7 @@ class UnifiedSearchOrchestrator(
         return UnifiedSearchResult(
             items = interleaved,
             nextPageTokens = succeededPages.mapValues { it.value.nextPageToken },
-            statuses = statuses.sortedBy { it.source.name },
+            statuses = statuses.sortedBy { it.source.id },
             queriesBySource = preparedQueries.toMap(),
         )
     }
@@ -227,7 +227,7 @@ class UnifiedSearchOrchestrator(
         weightsBySource: Map<SourceKey, Double>,
     ): List<Post> {
         val queues = pagesBySource.mapValues { (_, page) -> ArrayDeque(page.items) }.toMutableMap()
-        val sources = queues.keys.toList().sortedBy { it.name }
+        val sources = queues.keys.toList().sortedBy { it.id }
         if (sources.isEmpty()) return emptyList()
 
         val normalizedWeights = SourceWeightNormalization.normalize(sources, weightsBySource)

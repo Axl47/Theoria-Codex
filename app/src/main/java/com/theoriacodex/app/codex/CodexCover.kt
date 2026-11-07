@@ -56,8 +56,16 @@ internal fun resolveNamedCodexCoverCandidates(
     thumbnailFiles: List<File> = storageDirectory.resolve("cache/thumbnails").listFiles().orEmpty().toList(),
 ): List<CodexCoverCandidate> {
     val thumbnailDirectory = storageDirectory.resolve("cache/thumbnails")
-    return SourceKey.entries.flatMap { source ->
-        val key = "${name}_${source.name}"
+    val prefix = "${name}_"
+    // Named covers are files `<name>_<source id>.<ext>`; source ids never contain '.'. Built-ins are
+    // always checked; custom sources are found in the listing.
+    val customSources = thumbnailFiles.asSequence()
+        .filter { file -> file.name.startsWith(prefix) }
+        .mapNotNull { file -> SourceKey.parse(file.name.removePrefix(prefix).substringBefore('.')) }
+        .filter(SourceKey::isCustom)
+    val sources = (SourceKey.builtIns.asSequence() + customSources).distinct().sorted().toList()
+    return sources.flatMap { source ->
+        val key = "$prefix${source.id}"
         buildList {
             thumbnailFiles
                 .firstOrNull { file ->
@@ -78,7 +86,7 @@ private fun MutableList<CodexCoverCandidate>.addPostCoverCandidates(
     thumbnailDirectory: File,
     thumbnailFiles: List<File>,
 ) {
-    val key = "${post.id.source.name}_${post.id.sourcePostId}"
+    val key = "${post.id.source.id}_${post.id.sourcePostId}"
     thumbnailFiles
         .firstOrNull { file ->
             file.isFile && file.name.startsWith("$key.") && !file.name.endsWith(".url")

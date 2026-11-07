@@ -70,7 +70,7 @@ class ForYouCoordinatorTest {
         val settings = InMemorySettingsRepository()
         val saved = com.theoriacodex.data.repository.InMemorySavedSearchRepository()
         val service = testForYouCoordinator(registryOf(adapter), settingsRepository = settings,
-            likesRepository = liked(SourceKey.GELBOORU), savedSearches = saved)
+            likesRepository = liked(listOf(SourceKey.GELBOORU)), savedSearches = saved)
         val section = service.loadSections(request(service)).single()
         assertEquals(mapOf(SourceKey.GELBOORU to listOf("cloud")), section.feed.seed)
         assertEquals(listOf("cloud"), section.feed.continuation?.queriesBySource?.get(SourceKey.GELBOORU)?.includeTags)
@@ -89,7 +89,7 @@ class ForYouCoordinatorTest {
     @Test fun `overview source selection constrains pins and generated sections without history writes`() = runTest {
         val recents = InMemoryRecentsRepository()
         val service = testForYouCoordinator(registryOf(FakeAdapter(SourceKey.GELBOORU, "g"), FakeAdapter(SourceKey.PIXIV, "p")),
-            likesRepository = liked(SourceKey.GELBOORU, SourceKey.PIXIV), recentsRepository = recents)
+            likesRepository = liked(listOf(SourceKey.GELBOORU, SourceKey.PIXIV)), recentsRepository = recents)
         val sections = service.loadSections(request(service).copy(selectedSource = SourceKey.PIXIV))
         assertEquals(setOf(SourceKey.PIXIV), sections.flatMap { it.feed.seed.keys }.toSet())
         assertTrue(recents.observeSearches().first().isEmpty())
@@ -98,7 +98,7 @@ class ForYouCoordinatorTest {
     @Test
     fun `cold fallback acquisition overlaps while seed order remains deterministic`() = runTest {
         val adapters = listOf(SourceKey.PIXIV, SourceKey.GELBOORU).map { source ->
-            object : SourceAdapter by FakeAdapter(source, source.name) {
+            object : SourceAdapter by FakeAdapter(source, source.id) {
                 override suspend fun trendingTags(limit: Int): List<TagSuggestion> {
                     delay(1_000L)
                     return listOf(TagSuggestion("favorite", "tag", 1))
@@ -160,7 +160,7 @@ class ForYouCoordinatorTest {
         val adapter = FakeAdapter(SourceKey.PIXIV, "p").apply {
             trendingCancellation = CancellationException("unused fallback")
         }
-        val likes = liked(SourceKey.PIXIV)
+        val likes = liked(listOf(SourceKey.PIXIV))
         var seedReads = 0
         val service = testForYouCoordinator(registryOf(adapter), likesRepository = likes, seedSource = { seedReads++; 42L })
         assertTrue(service.execute(request(service).copy(shuffle = true)).page.items.isNotEmpty())
@@ -175,7 +175,7 @@ class ForYouCoordinatorTest {
         val adapter = FakeAdapter(SourceKey.PIXIV, "p")
         val recents = InMemoryRecentsRepository()
         val statistics = InMemoryStatisticsRepository()
-        val service = testForYouCoordinator(registryOf(adapter), likesRepository = liked(SourceKey.PIXIV),
+        val service = testForYouCoordinator(registryOf(adapter), likesRepository = liked(listOf(SourceKey.PIXIV)),
             recentsRepository = recents, statisticsRepository = statistics)
         val result = service.execute(request(service))
         assertTrue(recents.observeSearches().first().isEmpty())
@@ -213,7 +213,7 @@ class ForYouCoordinatorTest {
     fun `source selection and continuation carry their original queries independently of later roots`() = runTest {
         val pixiv = FakeAdapter(SourceKey.PIXIV, "p")
         val gelbooru = FakeAdapter(SourceKey.GELBOORU, "g")
-        val service = testForYouCoordinator(registryOf(pixiv, gelbooru), likesRepository = liked(SourceKey.PIXIV, SourceKey.GELBOORU))
+        val service = testForYouCoordinator(registryOf(pixiv, gelbooru), likesRepository = liked(listOf(SourceKey.PIXIV, SourceKey.GELBOORU)))
         val selected = service.execute(request(service).copy(selectedSource = SourceKey.PIXIV, sortMode = SortMode.TOP))
         val unified = service.execute(request(service))
         val page = service.loadPage(requireNotNull(selected.continuation), setOf(SourceKey.PIXIV))
@@ -228,7 +228,7 @@ class ForYouCoordinatorTest {
     @Test
     fun `blacklisting the only personalized seed returns an honest empty result`() = runTest {
         val adapter = FakeAdapter(SourceKey.PIXIV, "p")
-        val service = testForYouCoordinator(registryOf(adapter), likesRepository = liked(SourceKey.PIXIV))
+        val service = testForYouCoordinator(registryOf(adapter), likesRepository = liked(listOf(SourceKey.PIXIV)))
         val change = service.updateBlacklist(defaultRecommendationProfiles().first().profileId,
             listOf(com.theoriacodex.data.repository.ForYouBlacklistEntry(SourceKey.PIXIV, listOf("cloud"))), true)
         val result = service.execute(request(service, change.settings))
@@ -242,7 +242,7 @@ class ForYouCoordinatorTest {
     fun `failed first page retains null retry token without discarding healthy provider`() = runTest {
         val healthy = FakeAdapter(SourceKey.PIXIV, "p")
         val failing = FakeAdapter(SourceKey.GELBOORU, "g", failSearch = true)
-        val service = testForYouCoordinator(registryOf(healthy, failing), likesRepository = liked(SourceKey.PIXIV, SourceKey.GELBOORU))
+        val service = testForYouCoordinator(registryOf(healthy, failing), likesRepository = liked(listOf(SourceKey.PIXIV, SourceKey.GELBOORU)))
         val result = service.execute(request(service))
         val continuation = requireNotNull(result.continuation)
         assertEquals(listOf(SourceKey.PIXIV), result.page.items.map { it.id.source })
@@ -259,7 +259,7 @@ class ForYouCoordinatorTest {
         val healthy = FakeAdapter(SourceKey.PIXIV, "p")
         val failing = FakeAdapter(SourceKey.GELBOORU, "g", failPaging = true)
         val statistics = InMemoryStatisticsRepository()
-        val service = testForYouCoordinator(registryOf(healthy, failing), likesRepository = liked(SourceKey.PIXIV, SourceKey.GELBOORU), statisticsRepository = statistics)
+        val service = testForYouCoordinator(registryOf(healthy, failing), likesRepository = liked(listOf(SourceKey.PIXIV, SourceKey.GELBOORU)), statisticsRepository = statistics)
         val owner = ForYouViewModel(engine = service, savedStateHandle = SavedStateHandle(), coroutineScope = this)
         owner.synchronizeEnvironment(AppSettings(), 2)
         advanceUntilIdle()
@@ -305,7 +305,7 @@ class ForYouCoordinatorTest {
         val capabilities = MutableStateFlow(setOf(SourceKey.PIXIV, SourceKey.RULE34XXX))
         val recents = InMemoryRecentsRepository()
         val service = testForYouCoordinator(mutableRegistryOf(capabilities, pixiv, rule34),
-            likesRepository = liked(SourceKey.PIXIV, SourceKey.RULE34XXX), recentsRepository = recents)
+            likesRepository = liked(listOf(SourceKey.PIXIV, SourceKey.RULE34XXX)), recentsRepository = recents)
         val owner = ForYouViewModel(engine = service, savedStateHandle = SavedStateHandle(), coroutineScope = this)
         owner.synchronizeEnvironment(AppSettings(), 2)
         runCurrent()
@@ -323,7 +323,7 @@ class ForYouCoordinatorTest {
         settings, service.availableSources(settings), null, SortMode.NEWEST, false, 0,
     )
 
-    private suspend fun liked(vararg sources: SourceKey): LikesRepository = InMemoryLikesRepository().also { likes ->
+    private suspend fun liked(sources: List<SourceKey>): LikesRepository = InMemoryLikesRepository().also { likes ->
         sources.forEach { likes.toggleLike(defaultRecommendationProfiles().first().profileId, PostId(it, "liked"), listOf("cloud")) }
     }
 

@@ -424,7 +424,7 @@ internal class FileBackedTagSuggestionStore(
         var pruned = false
         synchronized(lock) {
             snapshot.sources.orEmpty().forEach { (sourceName, entries) ->
-                val source = runCatching { SourceKey.valueOf(sourceName) }.getOrNull() ?: return@forEach
+                val source = SourceKey.parse(sourceName) ?: return@forEach
                 val parsed = entries.orEmpty().mapNotNull(CachedSuggestion::fromStoreEntry)
                     .take(maxEntriesPerSource)
                 val current = inMemory[source].orEmpty()
@@ -485,7 +485,7 @@ internal class FileBackedTagSuggestionStore(
                 .maxWithOrNull(
                     compareBy<Map.Entry<SourceKey, MutableList<CachedSuggestion>>> { (_, values) ->
                         values.size
-                    }.thenBy { (source, _) -> source.name },
+                    }.thenBy { (source, _) -> source.id },
                 )
                 ?.key
                 ?: break
@@ -512,9 +512,9 @@ internal class FileBackedTagSuggestionStore(
         val sources = inMemory.entries
             .asSequence()
             .filter { (_, values) -> values.isNotEmpty() }
-            .sortedBy { (source, _) -> source.name }
+            .sortedBy { (source, _) -> source.id }
             .associate { (source, values) ->
-                source.name to values.map(CachedSuggestion::toStoreEntry)
+                source.id to values.map(CachedSuggestion::toStoreEntry)
             }
         return TagStoreSnapshot(sources = sources)
     }
@@ -564,7 +564,7 @@ internal class FileBackedTagSuggestionStore(
     }
 
     private fun sourceEstimatedOverhead(source: SourceKey): Int {
-        return source.name.toByteArray(Charsets.UTF_8).size + SOURCE_ESTIMATED_OVERHEAD_BYTES
+        return source.id.toByteArray(Charsets.UTF_8).size + SOURCE_ESTIMATED_OVERHEAD_BYTES
     }
 }
 

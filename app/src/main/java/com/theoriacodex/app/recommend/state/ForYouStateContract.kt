@@ -413,7 +413,7 @@ private fun ForYouUiState.openRelatedResult(action: ForYouAction.OpenRelatedResu
             effect = ForYouEffect.OpenViewer(
                 posts = action.visibleResults.toList(),
                 context = ViewerLaunchContext(
-                    queryHash = "related:${request.seed.id.source.name}:${request.seed.id.sourcePostId}",
+                    queryHash = "related:${request.seed.id.source.id}:${request.seed.id.sourcePostId}",
                     startIndex = action.index,
                     streamSource = ViewerStreamSource.RELATED,
                     scrollOffsetHint = 0,

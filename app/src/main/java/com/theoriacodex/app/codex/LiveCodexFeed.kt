@@ -21,7 +21,7 @@ internal fun sortLiveCodexPosts(posts: List<Post>, sort: CodexSortMode): List<Po
 private fun liveCodexOrder(sort: CodexSortMode): Comparator<Post> = when (sort) {
     CodexSortMode.NEWEST_SAVED -> compareByDescending { it.createdAtEpochMs }
     CodexSortMode.OLDEST_SAVED -> compareBy { it.createdAtEpochMs }
-    CodexSortMode.BY_SOURCE -> compareBy { it.id.source.ordinal }
+    CodexSortMode.BY_SOURCE -> compareBy { it.id.source }
 }
 
 internal data class LiveCodexFeedState(

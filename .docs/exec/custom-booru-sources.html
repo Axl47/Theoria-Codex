@@ -1,0 +1,841 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Custom Booru Sources (Open Source Identity)</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f7f4; --surface: #ffffff; --text: #202124; --muted: #5f6368; --border: #d7d7d0;
+      --accent: #0f766e; --accent-soft: #dff3ef; --risk: #9a3412; --risk-soft: #ffedd5; --code: #111827;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #151716; --surface: #202321; --text: #f0f2ef; --muted: #b8beb7; --border: #3a403c;
+        --accent: #5eead4; --accent-soft: #123b37; --risk: #fdba74; --risk-soft: #43230f; --code: #0b0f0d;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+    header, main { max-width: 1180px; margin: 0 auto; padding: 24px; }
+    header { padding-top: 36px; }
+    h1, h2, h3 { line-height: 1.15; margin: 0 0 12px; }
+    h1 { font-size: clamp(2rem, 4vw, 3.25rem); }
+    h2 { margin-top: 36px; font-size: 1.55rem; }
+    h3 { margin-top: 24px; font-size: 1.1rem; }
+    p { margin: 0 0 14px; }
+    a { color: var(--accent); }
+    nav { position: sticky; top: 0; z-index: 10; border-block: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(10px); }
+    nav ul { display: flex; gap: 6px; max-width: 1180px; margin: 0 auto; padding: 8px 24px; list-style: none; overflow-x: auto; }
+    nav a { display: block; padding: 6px 10px; border-radius: 6px; text-decoration: none; white-space: nowrap; }
+    nav a:hover { background: var(--accent-soft); }
+    section { padding: 22px; margin: 18px 0; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.95rem; }
+    th, td { padding: 9px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-weight: 650; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }
+    pre { overflow-x: auto; padding: 14px; border-radius: 8px; background: var(--code); color: #f8fafc; }
+    details { margin: 12px 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: color-mix(in srgb, var(--surface) 88%, var(--bg)); }
+    summary { cursor: pointer; font-weight: 700; }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; color: var(--muted); }
+    .pill { padding: 4px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); }
+    .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin: 18px 0 0; }
+    .card { padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+    .card strong { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.82rem; letter-spacing: 0.02em; text-transform: uppercase; }
+    .callout { margin: 14px 0; padding: 12px 14px; border-left: 4px solid var(--accent); background: var(--accent-soft); border-radius: 6px; }
+    .risk { border-left-color: var(--risk); background: var(--risk-soft); }
+    .status-table td:first-child { width: 180px; color: var(--muted); font-weight: 650; }
+    @media print { nav { position: static; } section, .card { break-inside: avoid; } body { background: #fff; color: #000; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ExecPlan: Custom Booru Sources</h1>
+    <p>When the four-step project is complete, a user can open Settings, type the address of a booru site Theoria does not ship with, and add it. Theoria checks which known booru API the site speaks (Danbooru or Gelbooru 0.2 in this pass), locks that in, and from then on the site works like any built-in source: Search, Unified search, the Viewer, Likes, Codex, Recents, backups and For You. New sites start switched off for Unified and For You. This plan has two jobs. It specifies <strong>step 2</strong>, the critical-path refactor that opens source identity so a user-added site can exist at all. It also fixes the <strong>contracts</strong> steps 3 and 4 build against.</p>
+    <div class="meta" aria-label="Plan metadata">
+      <span class="pill">Status: Step 2 complete (B0–B5); steps 3 and 4 in progress</span>
+      <span class="pill">Owner: Claude (step 2 thread)</span>
+      <span class="pill">Branch: feat/source-identity (main merged at ab4c0fa4; step 1 merged at f3739edb)</span>
+      <span class="pill">Created: 2026-11-07</span>
+      <span class="pill">Updated: 2026-11-07</span>
+      <span class="pill">Plan file: .docs/exec/custom-booru-sources.html</span>
+    </div>
+    <div class="dashboard">
+      <div class="card"><strong>Next Action</strong>The orchestrator merges this branch; step 3 builds the runtime on <code>installCustom</code>. Device acceptance (Validation → Device acceptance) runs on the releaseAcceptance APK after merging. Steps 3 and 4 are running on <code>feat/custom-sites-base</code> (B0 plus step 1).</div>
+      <div class="card"><strong>Main Risk</strong>A source id that drifts or fails to parse anywhere would orphan likes and Codex items. Mitigated by keeping built-in ids byte-identical, adding golden tests written against today's enum before the swap, and making parsing total for well-formed ids.</div>
+      <div class="card"><strong>Validation</strong>Host-only: JVM and Robolectric tests, golden JSON characterization tests, a Room schema-export diff, Detekt, and offline lint. Device acceptance belongs to the orchestrator.</div>
+      <div class="card"><strong>Affected Areas</strong>183 main-source files across 7 modules reference <code>SourceKey</code>; nearly all changes are mechanical. Substantive edits: <code>core-domain</code> identity and tag rules, <code>core-data</code> settings, weights and backups, and the app's source catalog.</div>
+    </div>
+  </header>
+
+  <nav aria-label="Plan sections">
+    <ul>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#decisions">Decisions</a></li>
+      <li><a href="#context">Context</a></li>
+      <li><a href="#identity">Identity design</a></li>
+      <li><a href="#migration">Call-site migration</a></li>
+      <li><a href="#stores">Stores</a></li>
+      <li><a href="#unavailable">Unavailable sites</a></li>
+      <li><a href="#contracts">Contracts</a></li>
+      <li><a href="#ownership">Ownership</a></li>
+      <li><a href="#coordination">Coordination</a></li>
+      <li><a href="#phases">Phases</a></li>
+      <li><a href="#validation">Validation</a></li>
+      <li><a href="#living-log">Living Log</a></li>
+      <li><a href="#recovery">Recovery</a></li>
+      <li><a href="#appendix">Appendix</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <section id="purpose">
+      <h2>Purpose / Big Picture</h2>
+      <p>Today every source is a constant of the Kotlin enum <code>SourceKey</code>. That enum is the identity of a source everywhere: posts, likes, Codex items, Recents, source weights, settings, backups, credentials and the presentation catalog. A site the user types in at runtime cannot be an enum constant, so before anything else can happen, source identity has to open up.</p>
+      <p>Step 2 (this thread) turns <code>SourceKey</code> into an open identity type. It keeps all eleven built-in ids byte-identical (<code>PIXIV</code>, <code>GELBOORU</code>, ...) and adds a stable form for user-added sites (<code>custom_safebooru_org</code>). Nothing user-visible changes in step 2. The observable proof is that existing likes, Codex items, Recents, settings, offline saves and backups load exactly as before, and that data keyed by a custom id survives every store round trip even when its site is not configured.</p>
+      <p>The four-step project:</p>
+      <table>
+        <thead><tr><th>Step</th><th>Branch / owner</th><th>Delivers</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td><code>feat/gelbooru-family</code></td><td>Gelbooru and Rule34.xxx served by one Gelbooru-family adapter with site presets, mirroring <code>DanbooruSite</code>.</td></tr>
+          <tr><td>2</td><td><code>feat/source-identity</code> (this plan)</td><td>Open source identity plus the shared contracts. No new UI.</td></tr>
+          <tr><td>3</td><td>Medium-effort thread</td><td>Site profiles store, family registry, probe-and-lock, runtime adapter registration, per-site headers and credentials, HTTPS policy, and family-aware behaviors.</td></tr>
+          <tr><td>4</td><td>Medium-effort thread</td><td>The Settings UI to list, add, re-test, edit and remove sites.</td></tr>
+        </tbody>
+      </table>
+      <p>Out of scope for the whole project in this pass: Moebooru, Shimmie, Philomena and Szurubooru support (Moebooru is <em>detected</em> and reported as unsupported), deep links into custom sites, health-check CLI coverage of custom sites, and any remote bookmarks or follows (AGENTS.md: likes and follows stay local).</p>
+    </section>
+
+    <section id="decisions">
+      <h2>Decisions Needing Sign-off</h2>
+      <p>Each line is a recommendation. Items marked <strong>durable</strong> become part of persisted data and are expensive to change after users have custom sites.</p>
+      <table>
+        <thead><tr><th>#</th><th>Decision</th><th>Consequence</th></tr></thead>
+        <tbody>
+          <tr><td>D1</td><td><strong>Open identity, no data migration.</strong> <code>SourceKey</code> becomes a Kotlin <code>@JvmInline value class</code> wrapping the persisted id string. Built-in ids stay exactly as today.</td><td>No Room schema change and no DataStore schema or catalog-version bump. Existing rows are read unchanged. All 288 hard-coded <code>SourceKey.X</code> references still compile.</td></tr>
+          <tr><td>D2</td><td><strong>Durable; the main decision.</strong> Custom ids are derived from the site's normalized address when it is first added: <code>custom_&lt;host&gt;</code> with dots written as underscores, e.g. <code>custom_safebooru_org</code>. A leading <code>www.</code> is dropped. A non-default port adds <code>__p&lt;port&gt;</code> and an install path adds <code>__h&lt;8 hex of SHA-256(path)&gt;</code>, so <code>/board-a</code> and <code>/board-b</code> on one host are different sites, while root installs keep the plain form. The id is stored and, from then on, authoritative; it is never re-derived. That keeps a later "change this site's address" feature possible without touching identity (not in this pass). <strong>Reconnecting is explicit:</strong> when a newly added address derives an id that already has library data on this device, the add flow asks "Reconnect your existing likes and history from &lt;host&gt;?" before reusing it.<br><em>Alternative considered (adversarial review):</em> an opaque random id such as <code>custom_k3v9…</code>. It survives domain moves, allows two installs on one host, and never reconnects a different dataset by accident. But the same site added on two devices gets two ids, so restoring a backup creates a duplicate site unless restore remaps identities. Data from a removed site would also lose its readable label.</td><td>Address-derived ids give convergence across devices and backups, reconnection on re-add (after confirmation), and a readable label for orphaned data. Accepted limits: a domain move needs the future address-change feature. If the user confirms a reconnect for an address that now serves a different booru, new posts with matching numbers can overwrite the stored snapshots of old ones (the shared post payload is keyed by source and post id, <code>SharedPostPayloadWriter.kt:17-32</code>). The confirmation exists to prevent exactly that. <code>www.</code> stripping assumes <code>www.x</code> and <code>x</code> are the same site. Character set: a <code>:</code> breaks the Viewer restoration decoder (it splits on <code>:</code>), a <code>.</code> makes named Codex cover files ambiguous (prefix matching on <code>"$key."</code>), and a <code>/</code> is illegal in cache file names. <code>[a-z0-9_-]</code> is safe in every existing encoding (see <a href="#identity">Identity design</a>).</td></tr>
+          <tr><td>D3</td><td><strong>Missing sites keep their data.</strong> Posts, likes, Codex items and history from a custom id with no profile (removed, or not restored) stay in the library and show a host label such as "safebooru.org". The source counts as unavailable, the same way Rule34.xxx does today without credentials. Re-adding the same host reconnects everything.</td><td>Removing a site never deletes library data. Network actions on those posts show the existing "… is unavailable" message. A configured site whose required keys are missing (for example right after a restore) is also unavailable until keys are entered.</td></tr>
+          <tr><td>D4</td><td><strong>One opt-in for Unified and For You.</strong> Both already read the single <code>runtime.enabledSources</code> set, so a custom site joins both or neither. New sites start off.</td><td>No new setting. Separate toggles would mean a new persisted set, which is a scope change.</td></tr>
+          <tr><td>D5</td><td>Two separate rules. <strong>Spelling (durable):</strong> custom sites spell tags the booru way (lowercase, underscore-joined). <strong>Vocabulary (not durable):</strong> by default, custom sites join the shared English vocabulary that cross-source For You uses.</td><td>Persisted tag keys (Codex automatic tags, saved tags) depend on the spelling rule, so it is fixed per site. Every family we know (Danbooru, Gelbooru, Moebooru) already spells this way. Vocabulary sharing is computed when For You builds a feed and nothing persists it, so the default can change later, or become a per-site setting, without migrating data. A probe cannot prove a site uses English tags; the default bets on Danbooru-style conventions.</td></tr>
+          <tr><td>D6</td><td><strong>Durable format.</strong> Backups carry site profiles in an optional top-level <code>customSources</code> array and never carry keys. Every backup written after B4 is <code>version: 2</code>; the body is otherwise unchanged. Readers accept versions 1 and 2.</td><td>An older app refuses every new backup with its existing, clear "needs a newer version" message, and nothing is written. <em>Alternative:</em> keep writing v1 when the document is legacy-compatible. That needs a reliable "contains any custom id" check across settings, library, searches and statistics, and a missed field would produce a v1 backup that older apps reject with a raw technical error. Rejected as more code for a rare path (restoring a new backup on an outdated app).</td></tr>
+          <tr><td>D7</td><td>Per-site credentials go into the existing encrypted credential payload as an additive <code>customSites</code> map, with the same payload schema version (step 3).</td><td>On a downgrade, the older app keeps Pixiv, Gelbooru and R34X keys. It drops custom-site keys the next time it writes credentials.</td></tr>
+          <tr><td>D8</td><td><strong>Irreversible once used.</strong> After any custom-site row exists, rolling back to a pre-identity build is unsupported: two strict readers in today's code throw on unknown ids. The way out is forward fixes, not reverts.</td><td>Android already blocks versionCode downgrades for normal installs. The risk is limited to dev and debug copies. Reverting step 2 is safe until step 3 ships custom sites to a device.</td></tr>
+          <tr><td>D9</td><td>Merge order: the B0 contract commit (new files only), then step 1, step 2, step 3, step 4. PR #48 is already on local main (<code>1ac37a9d</code>). B1 is built on current main, not on this branch's old base.</td><td>The orchestrator merges main into <code>feat/source-identity</code> before B1, or authorizes this thread to do it. Conflicts are resolved semantically, not by taking one side. See <a href="#coordination">Coordination</a>.</td></tr>
+          <tr><td>D10</td><td>Requirement on step 1: its Gelbooru-family site model accepts any <code>SourceKey</code> and base URL, plus a per-site credentials supplier. <strong>Already met</strong> by <code>feat/gelbooru-family</code> commit <code>9f8599f1</code>: <code>GelbooruSite(source, label, siteUrl, apiUrl, autocompleteUrl, headers, credentials, …)</code> and <code>GelbooruSourceAdapter(site, httpClient, credentials: GelbooruCredentialLookup)</code> (a suspend lookup returning <code>UserApiKeyCredentials?</code>).</td><td>Step 3 builds custom Gelbooru-family adapters from these unchanged. Danbooru will need a similar credentials and headers extension in step 3.</td></tr>
+        </tbody>
+      </table>
+      <p>Limits proposed for step 3: at most 32 custom sites, and labels of 1–40 characters.</p>
+    </section>
+
+    <section id="context">
+      <h2>Context And Orientation</h2>
+      <h3>Terms</h3>
+      <table>
+        <tbody>
+          <tr><td><strong>Source</strong></td><td>A content provider Theoria browses (Pixiv, Gelbooru, …). Every post, like and setting is keyed by its source.</td></tr>
+          <tr><td><strong>Source id</strong></td><td>The persisted string form of a source: <code>PIXIV</code> for built-ins, <code>custom_safebooru_org</code> for user-added sites.</td></tr>
+          <tr><td><strong>Built-in source</strong></td><td>One of the eleven shipped sources. They cannot be removed.</td></tr>
+          <tr><td><strong>Custom source / site</strong></td><td>A booru site the user added by URL. It is backed by a site profile.</td></tr>
+          <tr><td><strong>Protocol family</strong></td><td>One booru API dialect served by one adapter class: Danbooru (<code>/posts.json</code>) or Gelbooru 0.2 DAPI (<code>/index.php?page=dapi&amp;s=post&amp;q=index</code>).</td></tr>
+          <tr><td><strong>Site profile</strong></td><td>Data describing one custom site: base URL, label, locked family, term limit, optional headers. Credentials are stored separately, in encrypted storage.</td></tr>
+          <tr><td><strong>Adapter</strong></td><td>An implementation of <code>SourceAdapter</code> (<code>core-domain/src/main/kotlin/com/theoriacodex/domain/adapter/SourceAdapter.kt</code>) that searches and resolves posts for one source.</td></tr>
+          <tr><td><strong>Registry</strong></td><td><code>SourceAdapterRegistry</code>: maps a source to its adapter and reports which sources are <em>available</em> right now.</td></tr>
+          <tr><td><strong>Available / unavailable</strong></td><td>A source is available when the registry has a usable adapter for it. Credential-gated Rule34.xxx without keys is the existing example of an unavailable source with library data.</td></tr>
+          <tr><td><strong>Presentation catalog</strong></td><td><code>SourcePresentationCatalog</code> in <code>app/src/main/java/com/theoriacodex/app/source/SourceMetadata.kt</code>: the app's labels, Referer/User-Agent headers, ordering, grouping and logos per source.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>How identity flows today</h3>
+      <p><code>SourceKey</code> is declared in <code>core-domain/src/main/kotlin/com/theoriacodex/domain/model/Post.kt</code>. Module graph: <code>core-domain</code> ← <code>core-data</code>, <code>core-sources</code>, <code>core-stubs</code>; <code>app-logic</code> (domain + data); <code>core-data-android</code> (Room); <code>app</code> sees everything. Every persisted form is a <em>string</em>, converted in Kotlin:</p>
+      <ul>
+        <li><strong>Room</strong>: entities are Java classes with <code>String source</code> columns (<code>PostEntity</code>, <code>LikedPostEntity</code>, <code>CodexItemEntity</code>, <code>CodexAutomaticTagEntity</code>, <code>RecentWatchedEntity</code>, <code>MediaDurationEntity</code>, …). There are no type converters, no CHECK constraints, and no SQL literals naming a source. Kotlin writes <code>source.name</code> and reads with <code>SourceKey.valueOf(...)</code>. Schema version 9 on main; PR #48 makes it 10.</li>
+        <li><strong>JSON stores</strong> (settings DataStore <code>settings_store_v3.json</code>, UI restore, statistics, recents, recent searches, tag suggestions, download and offline job stores, reading positions): explicit records with <code>String</code> source fields, read with <code>valueOf</code>. Unknown values are dropped (<code>runCatching</code>) or rejected, depending on the site.</li>
+        <li><strong>Offline manifests</strong> (<code>core-data/src/main/kotlin/com/theoriacodex/data/repository/OfflineMediaStore.kt</code>, <code>writeManifest</code>/<code>readRecord</code>): the domain <code>Post</code> is serialized <em>reflectively</em> by Gson, so <code>PostId.source</code> is written as an enum name.</li>
+        <li><strong>Backups</strong> (<code>ProfileBackupCodec.kt</code>, <code>ProfileBackupJson.kt</code>, <code>ProfileBackupSettingsValidation.kt</code>): strict <code>SourceKey.valueOf</code> validation, so unknown ids reject the whole backup before anything is written.</li>
+        <li><strong>Saved state</strong>: <code>SavedStateHandle</code> and the <code>rememberSaveable</code> savers store <code>source.name</code> strings, never the enum object.</li>
+        <li><strong>Credentials</strong>: an encrypted envelope (<code>app/src/main/java/com/theoriacodex/app/sourceauth/CredentialEnvelopeStore.kt</code>, payload schema 1) with fixed fields per built-in (Pixiv tokens, Gelbooru and R34X user/key).</li>
+        <li><strong>Catalog versioning</strong>: <code>SHARED_SOURCE_CATALOG_VERSION = 3</code> in <code>core-data/src/main/kotlin/com/theoriacodex/data/repository/RepositoryStoreRecords.kt</code> adds newly shipped built-ins to an existing user's <code>enabledSources</code> once (v2: Hitomi, v3: Danbooru and AIBooru).</li>
+      </ul>
+
+      <h3>Size of the change (main source sets)</h3>
+      <table>
+        <thead><tr><th>Measure</th><th>Count</th><th>What happens</th></tr></thead>
+        <tbody>
+          <tr><td>Files referencing <code>SourceKey</code></td><td>183 main, 242 test</td><td>Most need nothing, or a one-word rename.</td></tr>
+          <tr><td><code>entries</code> / <code>valueOf</code> / <code>ordinal</code> on SourceKey</td><td>64 lines</td><td>Each is classified in <a href="#appendix">Appendix A</a>.</td></tr>
+          <tr><td>Hard-coded <code>SourceKey.X</code></td><td>288 (app 92, core-sources 88, core-domain 42, app-logic 27, core-data 17, core-data-android 11, core-stubs 11)</td><td>Compile unchanged, because the constants move to the companion object.</td></tr>
+          <tr><td><code>.name</code> on a source</td><td>~146 main, ~26 test</td><td>Rename to <code>.id</code>. User-visible uses switch to <code>displayName()</code>.</td></tr>
+          <tr><td>Exhaustive <code>when</code> over SourceKey without <code>else</code></td><td>Known: <code>RecommendationTagNormalization.normalize</code>. The compiler lists the rest.</td><td>Replaced by the tag-dialect rule, or given an <code>else</code> under the category rules below.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="identity">
+      <h2>Identity Design</h2>
+      <h3>The type</h3>
+<pre><code>// core-domain/src/main/kotlin/com/theoriacodex/domain/model/SourceKey.kt (same package, so imports are unchanged)
+/**
+ * Stable identity of a content source. [id] is the persisted form everywhere (Room `source` columns,
+ * JSON stores, backups, credentials) and never changes for a source. Built-ins keep their historical
+ * enum names; user-added sites use [CustomSourceIds] (`custom_safebooru_org`).
+ */
+@JvmInline
+value class SourceKey private constructor(val id: String) : Comparable&lt;SourceKey&gt; {
+    val isCustom: Boolean get() = id.startsWith(CustomSourceIds.PREFIX)
+
+    /** Built-ins first in their historical declaration order (the old `ordinal`), then custom ids alphabetically. */
+    override fun compareTo(other: SourceKey): Int = ...
+
+    override fun toString(): String = id   // enum toString() returned the name; keep interpolations identical
+
+    companion object {
+        val PIXIV = SourceKey("PIXIV")
+        val GELBOORU = SourceKey("GELBOORU")
+        val AIBOORU = SourceKey("AIBOORU")
+        val DANBOORU = SourceKey("DANBOORU")
+        val NHENTAI = SourceKey("NHENTAI")
+        val HITOMI = SourceKey("HITOMI")
+        val IWARA = SourceKey("IWARA")
+        val RULE34XXX = SourceKey("RULE34XXX")
+        val RULE34PAHEAL = SourceKey("RULE34PAHEAL")
+        val RULE34VIDEO = SourceKey("RULE34VIDEO")
+        val RULE34GEN = SourceKey("RULE34GEN")
+
+        /** Shipped sources in historical enum order. Replaces `entries` where it meant "every shipped source". */
+        val builtIns: List&lt;SourceKey&gt; = listOf(PIXIV, GELBOORU, AIBOORU, DANBOORU, NHENTAI, HITOMI, IWARA,
+            RULE34XXX, RULE34PAHEAL, RULE34VIDEO, RULE34GEN)
+
+        /**
+         * Parses a persisted id. Built-in ids match exactly (as `valueOf` did). A well-formed custom id
+         * parses whether or not a profile exists, so data from a removed site is never dropped. Input
+         * is trimmed, and custom ids are lowercased. Returns null for anything else.
+         */
+        fun parse(raw: String): SourceKey?
+
+        /** Identity for a stored site profile; the profile's stored id is authoritative. */
+        fun of(profile: SiteProfile): SourceKey
+    }
+}</code></pre>
+      <p>Why a value class rather than a sealed interface (built-in enum plus custom data class):</p>
+      <ul>
+        <li><strong>Persisted bytes stay identical without new code.</strong> A non-null value-class property compiles to a JVM field of the underlying <code>String</code>. Gson's reflective offline manifests therefore keep writing <code>"source":"PIXIV"</code>, and old manifests still read. A sealed interface field cannot be deserialized by Gson at all (it has no constructor), which would break offline saves.</li>
+        <li><strong>Least churn.</strong> <code>SourceKey.PIXIV</code> keeps compiling in all 288 places and in step 1's and PR #48's new code. Implementing <code>Comparable</code> in the old ordinal order keeps every <code>sorted()</code> and <code>compareBy { it.source }</code> identical for built-ins.</li>
+        <li><strong>Cost:</strong> a <code>when</code> over sources loses compiler-checked exhaustiveness. This matters less than it looks. Behavior that custom sites should share moves to explicit traits (tag dialect, family), and the remaining built-in quirks already default with <code>else</code>. A catalog test still forces every built-in to have a presentation.</li>
+      </ul>
+      <p>Why <code>id</code> and not <code>name</code>: the rename makes the compiler visit every use. That surfaces the half-dozen places that show <code>source.name</code> to users (for example <code>ViewerRouteWorkflow.kt:95</code>, <code>"${postId.source.name} is unavailable"</code>, and <code>CreatorProfileCoordinator.kt:28</code>), which would show <code>custom_safebooru_org</code>. Those switch to <code>displayName()</code>.</p>
+
+      <h3>Custom id derivation</h3>
+<pre><code>// core-domain/src/main/kotlin/com/theoriacodex/domain/source/CustomSites.kt (B0)
+object CustomSourceIds {
+    const val PREFIX = "custom_"
+    const val MAX_LENGTH = 96          // keeps "custom_&lt;id&gt;_&lt;postId&gt;.webp" cache names far below 255 bytes
+    /**
+     * [host] is SiteAddress.host: lowercase ASCII (IDNA), validated DNS labels. [port] is null for 443.
+     * [path] is the normalized install path without a trailing '/', or "" for a root install.
+     */
+    fun fromAddress(host: String, port: Int?, path: String): String =
+        PREFIX + host.removePrefix("www.").replace('.', '_') +
+            (port?.let { "__p$it" } ?: "") +
+            (if (path.isEmpty()) "" else "__h" + sha256Hex(path).take(8))
+    /** `custom_` + DNS labels ([a-z0-9-], no leading/trailing '-') joined by '_', then optional `__p&lt;digits&gt;` and `__h&lt;8 hex&gt;`; at most [MAX_LENGTH]. */
+    fun isValid(id: String): Boolean
+    /** "custom_safebooru_org" → "safebooru.org", ignoring any `__` suffix; exact for the host since labels never contain '_'. */
+    fun hostLabel(id: String): String
+}</code></pre>
+      <p>The host mapping is injective because validated host labels contain only <code>[a-z0-9-]</code>, so <code>_</code> can only come from a dot, and <code>__</code> can only start a port or path suffix (labels are never empty). The 32-bit path hash is unique enough for a handful of sites per host. Built-in ids are uppercase <code>[A-Z0-9]</code> and custom ids are lowercase with the <code>custom_</code> prefix, so the two namespaces cannot collide, even with a future built-in named <code>CUSTOM…</code>.</p>
+      <table>
+        <thead><tr><th>User input</th><th>Base URL kept in profile</th><th>Source id</th></tr></thead>
+        <tbody>
+          <tr><td><code>safebooru.org</code></td><td><code>https://safebooru.org</code></td><td><code>custom_safebooru_org</code></td></tr>
+          <tr><td><code>https://www.Example-Booru.net/index.php?page=post&amp;s=list</code></td><td><code>https://www.example-booru.net</code></td><td><code>custom_example-booru_net</code></td></tr>
+          <tr><td><code>https://boards.example.com/booru/posts?tags=x</code></td><td><code>https://boards.example.com/booru</code></td><td><code>custom_boards_example_com__h&lt;8 hex of sha256("/booru")&gt;</code></td></tr>
+          <tr><td><code>https://bücher.example</code></td><td><code>https://xn--bcher-kva.example</code></td><td><code>custom_xn--bcher-kva_example</code></td></tr>
+          <tr><td><code>https://booru.example:8443</code></td><td><code>https://booru.example:8443</code></td><td><code>custom_booru_example__p8443</code></td></tr>
+          <tr><td><code>http://safebooru.org</code></td><td colspan="2">Rejected: <code>SiteAddressError.NOT_HTTPS</code>. Nothing is requested.</td></tr>
+          <tr><td><code>https://[::1]/</code></td><td colspan="2">Rejected: <code>SiteAddressError.UNSUPPORTED_HOST</code> (IP literals with <code>:</code>).</td></tr>
+          <tr><td><code>https://danbooru.donmai.us</code></td><td colspan="2">Probe result <code>AlreadyBuiltIn("DANBOORU")</code>. A built-in site cannot be added a second time.</td></tr>
+        </tbody>
+      </table>
+      <p>Address normalization (<code>SiteAddress.parse</code>, B0): trim; prepend <code>https://</code> when no scheme is given; require <code>https</code>; reject user-info; drop query and fragment; lowercase and IDNA-encode the host; truncate the path before the first known page segment (<code>index.php</code>, <code>posts</code>, <code>post</code>, <code>tags</code>, <code>pools</code>, <code>wiki_pages</code>, <code>artists</code>, <code>comments</code>); strip any trailing <code>/</code>; reject when the derived id exceeds <code>MAX_LENGTH</code>.</p>
+
+      <h3>Persisted and backup string forms</h3>
+      <p>The id string is the only form, and it is used identically in Room, every JSON store, backups, credentials and saved state. Backups add no separate encoding.</p>
+    </section>
+
+    <section id="migration">
+      <h2>Call-Site Migration Rules</h2>
+      <p>The type swap is atomic (B1). The compiler finds every site; each follows one rule. <strong>Each site keeps its current strictness</strong>: code that threw on an unknown id still throws, and code that skipped one still skips.</p>
+      <table>
+        <thead><tr><th>Old</th><th>New</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>SourceKey.X</code></td><td>unchanged</td><td>Companion constants.</td></tr>
+          <tr><td><code>SourceKey.valueOf(s)</code> (strict)</td><td><code>requireNotNull(SourceKey.parse(s)) { "Unknown source" }</code></td><td>Backup validation and <code>RoomProfileBackupStore</code> stay strict.</td></tr>
+          <tr><td><code>runCatching { valueOf(s) }.getOrNull()</code>, <code>entries.firstOrNull { it.name == s }</code></td><td><code>SourceKey.parse(s)</code></td><td>Deletes the private <code>toSourceKeyOrNull</code> helpers in <code>LegacyJsonRecords.kt</code>, <code>LocalPostPayloadCodec.kt</code>, <code>RoomCodexLikesRepository.kt</code>, <code>PostStorageRecords.kt</code> and <code>RecentsStorage.kt</code>. One parser for the whole app.</td></tr>
+          <tr><td><code>valueOf(s.uppercase())</code></td><td><code>parse(s.uppercase())</code></td><td>Still works for custom ids, which <code>parse</code> lowercases. Used in <code>CodexShareModels.kt:321</code> and <code>ProviderHealthCheckCli.kt:76</code>.</td></tr>
+          <tr><td><code>.name</code></td><td><code>.id</code> for persistence and keys; <code>displayName()</code> for user-visible text</td><td>User-visible today: <code>ViewerRouteWorkflow.kt:95</code> and <code>:269</code>, <code>CreatorProfileCoordinator.kt:28</code>, <code>SavedSearchFeedLoader.kt:141</code>.</td></tr>
+          <tr><td><code>.ordinal</code>, <code>compareBy { it.source.ordinal }</code></td><td>natural order (<code>compareBy { it.source }</code>, <code>sorted()</code>)</td><td>Same order for built-ins, so <code>CodexLikesPolicy.normalizeAutomaticTags</code> output and backup validation are byte-stable.</td></tr>
+          <tr><td><code>SourceKey.entries</code> meaning "every shipped source"</td><td><code>SourceKey.builtIns</code></td><td>Defaults (<code>SourceRuntimeSettings</code>, <code>LegacySettingsStoreRecord</code>), the health CLI, stubs, and the catalog coverage check.</td></tr>
+          <tr><td><code>SourceKey.entries</code> meaning "sources the user can see"</td><td><code>SourcePresentationCatalog.orderedSources()</code> (built-ins plus installed custom sites)</td><td><code>RecentsScreen.kt:190</code> filter chips.</td></tr>
+          <tr><td><code>SourceKey.entries.associateWith { Mutex() }</code></td><td><code>ConcurrentHashMap&lt;SourceKey, Mutex&gt;</code> with <code>computeIfAbsent</code></td><td><code>TagCountCoordinator.kt:25</code> and <code>SearchTermCountCoordinator.kt:27</code>. <code>getValue</code> would throw for a custom key.</td></tr>
+          <tr><td><code>SourceKey.entries.flatMap</code> over named-cover keys</td><td>List the files starting with <code>"${name}_"</code> and parse the remainder before the extension</td><td><code>CodexCover.kt:58</code>. No list of every key is needed.</td></tr>
+          <tr><td><code>take(SourceKey.entries.size)</code></td><td><code>take(SourceKey.builtIns.size + MAX_CUSTOM_SITES)</code></td><td><code>DataStoreRecords.kt:143</code>.</td></tr>
+          <tr><td><code>SourceKey.entries.filter { it in enabled }</code></td><td><code>enabled.sorted()</code></td><td><code>RepositoryPolicies.normalizeSourceWeights</code>. Today it silently drops anything outside the enum.</td></tr>
+          <tr><td>Exhaustive <code>when</code></td><td>Add <code>else</code> using the category rule below</td><td>Compiler-listed.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>What a custom source does at each hard-coded branch</h3>
+      <table>
+        <thead><tr><th>Category</th><th>Examples</th><th>Custom-source behavior</th><th>Owner</th></tr></thead>
+        <tbody>
+          <tr><td>1. Tag dialect and vocabulary (pure domain functions)</td><td><code>SourceTagNormalization.kt</code> <code>UNDERSCORE_TAG_SOURCES</code>, <code>RecommendationTagNormalization.normalize</code>, <code>CrossSourceTags.SHARED_VOCABULARY_SOURCES</code></td><td>New <code>enum class TagDialect { UNDERSCORE, SPACED }</code> and <code>val SourceKey.tagDialect</code>: a built-in table identical to today, and <code>UNDERSCORE</code> for every custom id. <code>val SourceKey.sharesBooruVocabulary</code>: today's set plus every custom id (D5).</td><td>Step 2 (B2)</td></tr>
+          <tr><td>2. Built-in provider quirks</td><td>Pixiv ugoira and quality rules, Gelbooru CDN URL normalization, nhentai and Hitomi galleries, R34 video players, Iwara</td><td>Falls through to the existing non-quirk <code>else</code>. Built-in behavior is unchanged.</td><td>Step 2 (B1)</td></tr>
+          <tr><td>3. Family behaviors in the app layer</td><td><code>ViewerSessionCoordinator.REFRESHABLE_REMOTE_MEDIA_SOURCES</code>, <code>PostMedia.QUALITY_UPGRADE_IMAGE_SOURCES</code>, <code>DurationRequestPacer.defaultDurationStartIntervalMs</code>, the Gelbooru specials in <code>SearchCoordinator</code> (lines 238, 328) and <code>SearchDraftReducer</code> (192, 524, 551), <code>PortablePostSnapshot.portableBackupPageUrl</code></td><td>Step 2 leaves these alone: there are no custom adapters to exercise yet. Step 3 decides each one as an <em>adapter-declared capability</em>, not a family test: a field on <code>SourceCapabilities</code> or an optional adapter interface in <code>core-domain</code>, read through <code>registry.adapterFor(source)</code>. That is the pattern <code>SourceOperationalCapabilities.creatorBrowsingSources()</code> already uses, and it works from <code>app-logic</code> (which cannot see the app's presentation catalog). Reducers such as <code>SearchDraftReducer</code> get the capability through their existing state. Quirks of one site stay on its preset (step 1 already models them on <code>GelbooruSite</code>), so for example Gelbooru's suggestion-only input does not spread to every Gelbooru-family site. <code>PortablePostSnapshot</code> (core-data) stays as it is; see the known limit in C8.</td><td>Step 3</td></tr>
+          <tr><td>4. Built-in-only integrations</td><td><code>ExternalPostDeepLinks</code>, <code>CreatorOpeningWorkflow.fromDeepLink</code>, <code>ProviderHealth</code> and its CLI, the release-acceptance and benchmark journeys, stub fixtures</td><td>Unchanged. Custom sites are not covered (out of scope).</td><td>Step 2 (B1, mechanical only)</td></tr>
+        </tbody>
+      </table>
+      <p>Behavior added in B2 for unseen sources: <code>RepositoryPolicies.normalizeSourceWeights</code> gives a source with no stored or default weight the <em>mean</em> of the others. Today the fallback is <code>1.0</code>, which would hand a newly opted-in site about half of a normalized mix. Built-ins always have defaults, so their weights do not change.</p>
+    </section>
+
+    <section id="stores">
+      <h2>Every Store Touched</h2>
+      <p>"Downgrade" means an older build reading data written by a newer one. Users cannot install a lower versionCode over a newer one, so this only happens on dev copies and when an older app restores a backup from a newer one.</p>
+      <table>
+        <thead><tr><th>Store</th><th>Before</th><th>After</th><th>Schema change</th><th>Older build reading new data</th></tr></thead>
+        <tbody>
+          <tr><td>Room <code>posts</code>, <code>liked_posts</code>, <code>codex_items</code>, <code>codex_automatic_tags</code>, <code>recent_watched</code>, <code>media_durations</code> (<code>source</code> TEXT)</td><td><code>PIXIV</code></td><td><code>PIXIV</code>; new rows <code>custom_safebooru_org</code></td><td>None. Proven by an unchanged schema export.</td><td>Lenient readers skip custom rows. <code>RoomRecentsRepository.kt:65</code> and <code>RoomProfileBackupStore.kt</code> throw (D8).</td></tr>
+          <tr><td>Settings DataStore <code>settings_store_v3.json</code></td><td><code>"enabledSources":["PIXIV","GELBOORU",…]</code></td><td>Unchanged; an opted-in site appends <code>"custom_safebooru_org"</code></td><td>None (schema 3, catalog version 3 kept)</td><td>Custom entries are dropped on read. The opt-in resets to off.</td></tr>
+          <tr><td>Weights <code>sourceWeights</code>, <code>sourceWeightsByConfiguration</code></td><td>key <code>"AIBOORU,DANBOORU,GELBOORU,…"</code></td><td>Same; combinations with a site gain <code>…,custom_safebooru_org</code> (ASCII sorts uppercase first)</td><td>None</td><td>Dropped entries are renormalized.</td></tr>
+          <tr><td>Saved tags and For You blacklist (in settings)</td><td><code>{"source":"GELBOORU","tag":"…"}</code></td><td>Same shape</td><td>None</td><td>Custom entries are dropped.</td></tr>
+          <tr><td>UI restore, recent searches, saved searches, statistics, tag-suggestion store, reading positions, download job store, offline pending jobs</td><td>id strings</td><td>id strings</td><td>None</td><td>Most drop custom entries; <code>ReadingPositionRepository.kt:112</code> skips the entry. <code>PostDownloadJobStore.kt:37</code> and <code>OfflinePendingJobStore.kt:28</code> reject the whole document through their existing validation, so older builds lose queued custom downloads. B1 keeps each reader's strictness.</td></tr>
+          <tr><td>Offline manifests (<code>manifest.json</code>, reflective Gson <code>Post</code>)</td><td><code>"id":{"source":"PIXIV","sourcePostId":"1"}</code></td><td>Identical (value class unboxes to a String field)</td><td>None. A golden test proves it.</td><td>A custom manifest fails to read and the save is hidden. It is not deleted.</td></tr>
+          <tr><td>Cache files (<code>cache/thumbnails</code>, named covers)</td><td><code>PIXIV_123.webp</code>, <code>codexId_GELBOORU.jpg</code></td><td>Same; new <code>custom_safebooru_org_123.jpg</code></td><td>None</td><td>Unreferenced files are evicted as usual.</td></tr>
+          <tr><td>Saved state (Bundles)</td><td><code>"PIXIV"</code></td><td>id string</td><td>None</td><td>Not persisted across installs.</td></tr>
+          <tr><td>Backups (<code>theoria-profile-backup</code>)</td><td><code>version: 1</code></td><td><code>version: 2</code>, same body plus optional <code>customSources</code> (D6)</td><td>Version bump plus an additive, optional field</td><td>Every new backup is refused with "needs a newer version". Nothing is written.</td></tr>
+          <tr><td>Credentials envelope payload</td><td>fixed built-in fields</td><td>+ <code>"customSites":{"custom_safebooru_org":{"user":"…","apiKey":"…"}}</code> (step 3)</td><td>Additive, same schema 1</td><td>Ignored on read; dropped on the next credential write (D7).</td></tr>
+          <tr><td>Site profiles <code>custom_sites_v1.json</code> (new, step 3)</td><td>n/a</td><td>see <a href="#contracts">Contracts</a></td><td>New file</td><td>Ignored.</td></tr>
+          <tr><td>Presentation catalog and <code>SHARED_SOURCE_CATALOG_VERSION</code></td><td>11 static entries, version 3</td><td>11 static entries plus installed custom entries plus a fallback; version stays 3</td><td>None</td><td>n/a</td></tr>
+        </tbody>
+      </table>
+      <div class="callout"><strong>Why the catalog version does not move:</strong> it exists to switch on newly <em>shipped</em> built-ins once for existing users. Custom sites start off by design (D4), and step 1 merges two adapters without adding a built-in. Bumping it would re-add every built-in a user had switched off.</div>
+      <div class="callout"><strong>Room:</strong> no migration is needed. If a future step needs one, it must be <code>MIGRATION_10_11</code>, after PR #48's schema 10.</div>
+    </section>
+
+    <section id="unavailable">
+      <h2>Data From A Site That No Longer Exists</h2>
+      <p>A custom id with no profile can come from three places: the user removed the site, a backup restored rows whose profile was removed before the backup was made, or an imported Codex share file holds posts from a site this device never added. The behavior matches today's unavailable built-ins (credential-gated Rule34.xxx):</p>
+      <ul>
+        <li><strong>Parsing never drops it.</strong> <code>SourceKey.parse</code> accepts any well-formed custom id. Room rows, JSON entries and backup rows load.</li>
+        <li><strong>Presentation falls back.</strong> <code>SourcePresentationCatalog.presentation(key)</code> returns the installed profile's entry. When there is none, it returns a fallback: label <code>CustomSourceIds.hostLabel(id)</code> ("safebooru.org"), Referer <code>https://&lt;host&gt;/</code>, the browser User-Agent, group <code>CUSTOM</code>, a text logo, and a mark from the first letter of the host. It never throws for a custom id.</li>
+        <li><strong>Registry says unavailable.</strong> No adapter means it is absent from <code>availableSources()</code>, so it is hidden from the Search source picker. It is removed from Unified and For You by their existing <code>enabledSources ∩ availableSources</code> intersection.</li>
+        <li><strong>Library keeps showing it.</strong> Likes, Codex, Recents and statistics render from stored post snapshots, as they do for credential-less R34X. Opening a post that needs network resolution shows the existing toast, now with the label: "safebooru.org source is unavailable" (<code>TheoriaShell.kt:502</code>) or "safebooru.org is unavailable" (<code>ViewerRouteWorkflow.kt:95</code>).</li>
+        <li><strong>Re-adding reconnects, after asking.</strong> The same address derives the same id. Because library data exists for that id, the add flow asks before reusing it; on confirm, everything reappears. The custom label is lost on removal, and the host label shows until the site is re-added.</li>
+      </ul>
+    </section>
+
+    <section id="contracts">
+      <h2>Contracts For Steps 3 And 4</h2>
+      <p>Phase B0 commits only the signatures other threads must share, as compiling Kotlin (new files only, building on today's enum): <strong>C1</strong> (model), <strong>C2</strong>'s record and repository interface, <strong><code>SiteProbeResult</code></strong> and <strong>C9</strong> (the UI controller). Steps 3 and 4 branch from main once B0 is merged. Changing a frozen signature after that requires a plan update and a note to the orchestrator. <strong>C3 (family internals), C4, C6 and C7 are requirements, not frozen signatures</strong>: step 3 owns their code and may shape it differently, provided the requirements and tests hold. Anything that needs the new <code>SourceKey</code> (constructing adapters, the composite registry, installing presentations) waits for B1 to merge. Everything else (model, address parsing, store, probe fingerprints, controller logic, UI) can start immediately against fakes.</p>
+
+      <h3>C1. Site profile model (B0, <code>core-domain/src/main/kotlin/com/theoriacodex/domain/source/CustomSites.kt</code>)</h3>
+<pre><code>/** A booru API dialect served by one adapter. Persisted by [name]; add families by adding entries. */
+enum class ProtocolFamily(val displayName: String) { DANBOORU("Danbooru"), GELBOORU_02("Gelbooru 0.2") }
+
+/** A validated HTTPS site root. See "Address normalization" in Identity Design. */
+class SiteAddress private constructor(val baseUrl: String, val host: String, val port: Int?, val path: String) {
+    /** Id a new profile for this address receives. Stored ids are authoritative afterwards. */
+    val derivedSourceId: String get() = CustomSourceIds.fromAddress(host, port, path)
+    companion object { fun parse(input: String): SiteAddressParse }
+    // equals/hashCode on baseUrl
+}
+sealed interface SiteAddressParse {
+    data class Valid(val address: SiteAddress) : SiteAddressParse
+    data class Invalid(val error: SiteAddressError) : SiteAddressParse
+}
+enum class SiteAddressError { MALFORMED, NOT_HTTPS, UNSUPPORTED_HOST, TOO_LONG }
+
+data class SiteHeaders(val userAgent: String? = null, val referer: String? = null)
+
+/** Danbooru login + api_key, or Gelbooru user_id + api_key. Never logged, persisted in clear, or backed up. */
+class SiteCredentials(val user: String, val apiKey: String) { override fun toString() = "SiteCredentials([REDACTED])" }
+
+data class SiteProfile(
+    val sourceId: String,            // authoritative identity; CustomSourceIds.isValid
+    val address: SiteAddress,
+    val label: String,               // 1..MAX_LABEL_LENGTH, trimmed
+    val familyId: String,            // ProtocolFamily.name; kept raw so a newer app's family round-trips
+    val searchTermLimit: Int? = null,// null = no limit
+    val headers: SiteHeaders = SiteHeaders(),
+    val credentialsRequired: Boolean = false, // the probe answered CredentialsRequired; no keys means unavailable
+    val addedAtEpochMs: Long,
+    val verifiedAtEpochMs: Long? = null,
+) {
+    /** Null when this app version doesn't know the family: the profile is kept and the site is unavailable. */
+    val family: ProtocolFamily? get() = ProtocolFamily.entries.firstOrNull { it.name == familyId }
+    companion object { const val MAX_CUSTOM_SITES = 32; const val MAX_LABEL_LENGTH = 40 }
+}</code></pre>
+
+      <h3>C2. Persisted record and store (B0 record, step 3 store)</h3>
+      <p><code>core-data/src/main/kotlin/com/theoriacodex/data/repository/SiteProfileRecords.kt</code> (B0) holds <code>SiteProfileRecord</code>, the single JSON shape shared by the store file and backups, with <code>fromDomain</code> and <code>toDomainOrNull</code>. The local store skips invalid records so one bad entry cannot lock the user out. Backup decoding is strict, like the rest of the backup codec: an invalid profile rejects the whole backup before anything is written.</p>
+<pre><code>// custom_sites_v1.json  (step 3, written through core-data's existing DataStore JSON storage)
+{"schemaVersion":1,"sites":[{"sourceId":"custom_safebooru_org","baseUrl":"https://safebooru.org",
+  "label":"Safebooru","family":"GELBOORU_02","searchTermLimit":null,"userAgent":null,"referer":null,
+  "credentialsRequired":false,"addedAt":1762500000000,"verifiedAt":1762500000000}]}</code></pre>
+<pre><code>// core-data/src/main/kotlin/com/theoriacodex/data/repository/SiteProfileRepository.kt (B0 interface; step 3 implements)
+interface SiteProfileRepository {
+    /** Profiles in the order they were added. */
+    fun observeProfiles(): Flow&lt;List&lt;SiteProfile&gt;&gt;
+    suspend fun add(profile: SiteProfile): SiteProfileAddResult      // Added | Duplicate(existingSourceId) | LimitReached
+    suspend fun update(sourceId: String, transform: (SiteProfile) -&gt; SiteProfile): Boolean  // sourceId/address immutable
+    suspend fun remove(sourceId: String): Boolean
+    /**
+     * Restore: adds profiles whose sourceId is absent; existing profiles keep their values. Never fails on
+     * the site limit (preflight enforces it), so journal recovery cannot be blocked by a concurrent add.
+     */
+    suspend fun mergeRestored(profiles: List&lt;SiteProfile&gt;): SiteProfileMergeResult   // added, keptExisting (sourceIds whose address or family differ)
+}</code></pre>
+      <p>Step 3 also adds a library-presence query for explicit reconnection: <code>suspend fun hasLibraryData(source: SourceKey): Boolean</code> on a core-data repository, implemented in Room as <code>SELECT EXISTS(SELECT 1 FROM posts WHERE source = :source)</code>. Likes, Codex items and Recents all reference stored posts, so one table answers it.</p>
+
+      <h3>C3. Family registry and probe (step 3, <code>core-sources/src/main/kotlin/com/theoriacodex/sources/custom/</code>)</h3>
+<pre><code>data class SiteRequestContext(val http: SourceHttpClient, val headers: SiteHeaders, val credentials: SiteCredentials?)
+
+interface SiteFamily {
+    val family: ProtocolFamily
+    /** A few bounded, read-only requests; Match rests on the evidence rules below, not on parsing a post. */
+    suspend fun probe(address: SiteAddress, context: SiteRequestContext): FamilyProbe
+    fun createAdapter(profile: SiteProfile, source: SourceKey, context: SiteRequestContext): SourceAdapter
+}
+sealed interface FamilyProbe {
+    data class Match(val suggestedLabel: String?, val searchTermLimit: Int?) : FamilyProbe
+    data object NeedsCredentials : FamilyProbe   // the API answered as this family but refused this access
+    data object NoMatch : FamilyProbe
+    data class Failed(val reason: ProbeFailure) : FamilyProbe
+}
+/** Recognized-but-unsupported APIs; detection only (Moebooru first: GET /post.json?limit=1 → array with md5 and file_url). */
+interface UnsupportedFamilySignature { val displayName: String; suspend fun matches(address: SiteAddress, context: SiteRequestContext): Boolean }
+
+class SiteFamilyRegistry(val families: List&lt;SiteFamily&gt;, val unsupported: List&lt;UnsupportedFamilySignature&gt;)</code></pre>
+      <p>Probe result (B0, <code>core-domain</code>, so the UI contract can name it):</p>
+<pre><code>sealed interface SiteProbeResult {
+    /** [credentialsRequired]: anonymous access was refused and the supplied credentials worked; the saved profile copies it. */
+    data class Supported(val address: SiteAddress, val family: ProtocolFamily, val suggestedLabel: String,
+        val searchTermLimit: Int?, val credentialsRequired: Boolean) : SiteProbeResult
+    data class CredentialsRequired(val address: SiteAddress, val family: ProtocolFamily, val rejected: Boolean) : SiteProbeResult
+    data class UnsupportedFamily(val address: SiteAddress, val familyName: String) : SiteProbeResult   // e.g. "Moebooru"
+    data class NotABooru(val address: SiteAddress) : SiteProbeResult
+    data class AlreadyBuiltIn(val builtInSourceId: String) : SiteProbeResult
+    data class Unreachable(val address: SiteAddress, val reason: ProbeFailure) : SiteProbeResult
+    data class InvalidAddress(val error: SiteAddressError) : SiteProbeResult
+}
+enum class ProbeFailure { DNS, TLS, TIMEOUT, HTTP_ERROR, BLOCKED, INSECURE_REDIRECT, CROSS_HOST_REDIRECT }</code></pre>
+      <p>Evidence rules (step 3): a <code>Match</code> must rest on protocol evidence that also exists on an <em>empty or restricted</em> site. For example, Danbooru answers <code>/counts/posts.json</code> with <code>{"counts":{"posts":N}}</code>, and Gelbooru 0.2 answers the DAPI without <code>json=1</code> with a <code>&lt;posts count="N" …&gt;</code> XML envelope. A readable post is then a second, optional check. Requiring a parsed post is wrong: the Danbooru parser returns null for restricted posts that lack <code>file_url</code> (<code>DanbooruSourceAdapter.kt:163</code>). Before freezing fingerprints, step 3 captures JSON and XML fixtures from danbooru.donmai.us, aibooru.online, safebooru.org, gelbooru.com, rule34.xxx and sakugabooru.com (Moebooru), plus one ordinary HTML site, using host <code>curl</code> on metadata endpoints only, and commits them under <code>core-sources/src/test/resources/custom-sites/</code>.</p>
+      <p>Probe algorithm (<code>SiteProber</code>, step 3):</p>
+      <ol>
+        <li>Parse the address. Built-in hosts come from the family presets (<code>DanbooruSite.DANBOORU</code>, <code>DanbooruSite.AIBOORU</code> and step 1's Gelbooru presets) and give <code>AlreadyBuiltIn</code>.</li>
+        <li>Try each supported family in registry order, Danbooru then Gelbooru 0.2, using that family's evidence requests from the rules above. The first <code>Match</code> wins. Requests go out anonymously first; if a family answers <code>NeedsCredentials</code> and the caller supplied credentials, it is retried once with them, and a match then yields <code>Supported(credentialsRequired = true)</code>. Without credentials, <code>NeedsCredentials</code> is remembered as the fallback answer.</li>
+        <li>Otherwise check unsupported signatures and return <code>UnsupportedFamily</code>. Otherwise return <code>CredentialsRequired</code> if remembered. Return <code>NotABooru</code> only when every attempt got a well-formed HTTP answer that matched nothing; if any attempt failed at the transport level, the probe was inconclusive, so return <code>Unreachable</code> with that failure.</li>
+        <li>Bounds: 10 s per request and a 30 s total deadline, at most 6 requests, no retries, no writes, nothing persisted. This needs the custom-site transport in C7. A probe never changes a stored profile. Re-test keeps the stored family and reports a mismatch without switching; to switch, remove and re-add the site, which reuses the same id.</li>
+        <li>Outcome table: protocol envelope or readable post → <code>Supported</code>. Recognized protocol refusing access (401/403 with the family's auth wording) → <code>CredentialsRequired</code> (<code>rejected = true</code> when supplied keys failed). Unsupported signature → <code>UnsupportedFamily</code>. HTML challenge or interstitial (403/503 with an HTML body) → <code>Unreachable(BLOCKED)</code>. Well-formed answers matching nothing → <code>NotABooru</code>. Any transport failure and no match → <code>Unreachable(reason)</code>. Step 3 confirms each row against the captured fixtures before the B0 enum values are considered final; adding a <code>ProbeFailure</code> value is a plan update.</li>
+        <li>Term limit: the family default unless the probe measures one (Danbooru-family guests: 2, with ranked sorts using a term, as for <code>DanbooruSite.DANBOORU</code>; Gelbooru 0.2: none).</li>
+      </ol>
+      <p>Before B1 merges, step 3 can build and test the probe on fixtures alone. After B1, when the site has a readable post, the probe also runs the family adapter's parser with the would-be <code>SourceKey</code>, so "locked in" means the real adapter can read the site.</p>
+
+      <h3>C4. Profile → registered adapter (step 3, after B1)</h3>
+<pre><code>SiteProfileRepository.observeProfiles() ─┐
+SiteCredentialsStore (encrypted)         ├─► CustomSourceRuntime  (app/src/main/java/com/theoriacodex/app/di/)
+SiteFamilyRegistry                       ─┘     • usable = known family AND (credentialsRequired == false OR keys stored)
+                                                • for each usable profile: family.createAdapter(profile, SourceKey.of(profile), ctx)
+                                                • one immutable CustomSourceSnapshot(revision, adapters, presentations)
+                                                • StateFlow&lt;CustomSourceSnapshot&gt;; rebuilt on profile AND credential changes
+CompositeSourceAdapterRegistry(builtIn = AvailabilityAwareSourceAdapterRegistry(...), custom = runtime)
+    availableSources() = builtIn.availableSources() ∪ custom.adapters.keys
+    adapterFor(k)      = builtIn.adapterFor(k) ?: custom.adapters[k]
+    unifiedOrchestrator() = UnifiedSearchOrchestrator(all potential built-ins + custom), cached per revision
+SourceDependencies.availableSources = combine(accountStore.availableSources, runtime.snapshot) { b, c -&gt; b + c.adapters.keys }</code></pre>
+      <p>Availability has a second consumer besides the registry. <code>SourceDependencies.availableSources</code> (<code>TheoriaAppContainer.kt:332</code>, today <code>accountStore.availableSources</code>) feeds <code>DestinationStateBoundaries.kt:157</code>, and <code>SettingsViewModel.kt:270</code> intersects every Unified-selection save with it. Leaving it built-in-only would hide custom sites and erase their opt-in on the next save. Step 3 therefore publishes the combined flow above and changes only the wiring line. Order of publication: presentations are installed from the snapshot <em>before</em> its adapters become visible, and withdrawn <em>after</em> them, so any available source always has a presentation. Tests cover add, restore without keys, entering keys, clearing keys, and removal, all without restarting the app. Custom adapters must sit <em>outside</em> <code>AvailabilityAwareSourceAdapterRegistry</code>, because that wrapper intersects with the account store's built-in set and would hide them. Callers already call <code>registry.unifiedOrchestrator()</code> per search (<code>SearchCoordinator</code>, <code>ForYouCoordinator</code>), so a per-revision orchestrator takes effect on the next search. <code>TheoriaAppContainer</code> wires this (step 3).</p>
+
+      <h3>C5. Presentation hook (step 2, B3, <code>SourceMetadata.kt</code>)</h3>
+<pre><code>enum class SourcePresentationGroup { ..., CUSTOM }                       // folderLabel null; step 4 may fold
+object SourcePresentationCatalog {
+    /** Replaces all custom entries in one volatile write. Called only by CustomSourceRuntime. Every entry must be custom. */
+    fun installCustom(presentations: List&lt;SourcePresentation&gt;)
+    fun presentation(source: SourceKey): SourcePresentation             // built-in ?: installed ?: fallback (never throws)
+    fun orderedPresentations(): List&lt;SourcePresentation&gt;                // built-ins + installed custom
+    fun orderedSources(): List&lt;SourceKey&gt;
+    fun customSources(): List&lt;SourceKey&gt;                                // installed custom, in order
+}
+const val CUSTOM_PRESENTATION_ORDER_START = 100
+/** Shared by step 3 and the fallback; null referer = site root, null userAgent = browser agent. */
+fun customSourcePresentation(source: SourceKey, label: String, baseUrl: String? = null,
+    referer: String? = null, userAgent: String? = null, order: Int = Int.MAX_VALUE): SourcePresentation</code></pre>
+      <p>Step 3 builds each entry with <code>customSourcePresentation(SourceKey.of(profile), profile.label, profile.address.baseUrl, profile.headers.referer, mediaUserAgent, CUSTOM_PRESENTATION_ORDER_START + index)</code>. As shipped in B3: label from the profile. Referer: <code>headers.referer ?: baseUrl + "/"</code>. User-Agent: <code>headers.userAgent ?: browser default</code> for media, while API requests default to <code>THEORIA_SOURCE_USER_AGENT</code>. Group <code>CUSTOM</code>, order <code>100 + index</code>, text logo, mark from the label's first letter. Presentation carries no protocol behavior (category 3 uses adapter capabilities). The catalog stays a global object, because <code>displayName()</code>, <code>requestHeaders()</code> and <code>referer()</code> are extension functions called from many composables and media loaders, and threading an observable snapshot through all of them would be a large rewrite for one benefit: a renamed label appears at the next recomposition rather than instantly. Headers are copied into each media request when it is built (<code>MediaRequestFactory.kt:37</code>), and a screen can keep a built request while it stays open (<code>ViewerMediaOverview.kt:85</code>). A User-Agent or Referer edit therefore applies to requests built after the edit; reopening a screen picks it up. Header edits are rare, so the plan adds no cache invalidation for them. The Settings list (step 4) reads labels from the controller's observable <code>sites</code> flow.</p>
+
+      <h3>C6. Per-site credentials (step 3)</h3>
+      <p>A new interface, <code>SiteCredentialsStore { suspend fun get(sourceId): SiteCredentials?; suspend fun save(sourceId, credentials); suspend fun clear(sourceId); val changes: Flow&lt;Unit&gt; }</code>, is implemented by <code>VersionedSourceCredentialsStore</code> through an additive <code>customSites</code> map in <code>CredentialPayloadRecord</code> (D7). It is deliberately separate from <code>SourceCredentialsProvider</code>, which step 1 already reshaped around <code>UserApiKeyCredentials</code>. A custom Gelbooru-family adapter receives <code>credentials = { store.get(sourceId)?.asUserApiKey() }</code>. The <code>changes</code> flow lets <code>CustomSourceRuntime</code> rebuild adapters and availability when keys change. Credentials go only to the profile's API host.</p>
+
+      <h3>C7. HTTPS-only policy (step 3)</h3>
+      <ul>
+        <li>Input must be HTTPS. A schemeless input becomes HTTPS, and <code>http://</code> is rejected before any request.</li>
+        <li>API redirects may only go HTTPS→HTTPS on the same host. Anything else is <code>INSECURE_REDIRECT</code> or <code>CROSS_HOST_REDIRECT</code> on a probe, and a request failure in the adapter. This keeps query-string API keys from leaking to another host.</li>
+        <li><strong>Enforcement needs its own transport.</strong> <code>DefaultSourceHttpClient</code> sets <code>instanceFollowRedirects = true</code> (<code>DefaultSourceHttpClient.kt:159</code>), retries, uses a 20 s read timeout, and <code>SourceHttpResponse</code> exposes no final URL. So a wrapper cannot stop a redirect that has already been followed. Step 3 adds a custom-site client in <code>core-sources/.../custom/</code> that implements <code>SourceHttpClient</code> with redirects off, follows at most 3 hops only when they pass the rule above, never retries probes, and honors the probe deadline. Both the probe and custom-site adapters use it. Tests run against local controlled endpoints and prove that a rejected redirect is never requested.</li>
+        <li>Media URLs that are protocol-relative (<code>//cdn…</code>) or <code>http://</code> are rewritten to <code>https://</code>. No cleartext fallback.</li>
+        <li>Only <code>User-Agent</code> and <code>Referer</code> can be customized. Arbitrary headers are out of scope.</li>
+      </ul>
+
+      <h3>C8. Backups (step 2, B4)</h3>
+      <p><code>ProfileBackup</code> gains <code>customSources: List&lt;SiteProfile&gt; = emptyList()</code>. The codec always writes <code>version: 2</code> (D6), adds <code>"customSources":[SiteProfileRecord…]</code> when non-empty, decodes profiles strictly, and reads versions 1 and 2. <code>ProfileBackupService</code> takes a <code>SiteProfileRepository</code> (default: an empty in-memory implementation until step 3 wires the real one). Export snapshots profiles in the same stable-read loop as the library. <code>preflight</code> runs <em>before</em> the journal is written. It rejects the restore when the distinct union of existing and imported <code>sourceId</code>s exceeds <code>MAX_CUSTOM_SITES</code>, with "Restore would exceed the 32-site limit. Remove some sites first." (the same pattern as the pinned-search limit), If a site is added between preflight and <code>finish</code>, <code>mergeRestored</code> may exceed the limit rather than fail, so journal recovery is never blocked. Ordinary adds then return <code>LimitReached</code> until the user is back under 32. A deterministic test adds a site between preflight and <code>finish</code>. On a <code>sourceId</code> conflict, the profile already on the device wins. The same id means the same normalized address when first added, but the family may differ (the site changed software), so the restore result lists kept profiles whose address or family differ, and the Backup screen names them. The user is told; nothing is silently remapped. <code>finish</code> calls <code>mergeRestored</code> before deleting the journal, and the merge is idempotent, so replaying an interrupted restore adds nothing twice. Credentials never enter the backup model. Restored sites have no keys, and re-test reports <code>CredentialsRequired</code> where the site needs them. Known limit: Gelbooru-family page URLs use query strings, so <code>portableBackupPageUrl</code> drops them for custom sites. Step 3 may rebuild them from the profile.</p>
+
+      <h3>C9. Settings UI contract (B0 interface in <code>app-logic</code>; step 3 implements; step 4 consumes)</h3>
+<pre><code>// app-logic/src/main/kotlin/com/theoriacodex/app/customsites/CustomSitesController.kt
+interface CustomSitesController {
+    /** Every stored site in added order, with live availability. */
+    val sites: StateFlow&lt;List&lt;CustomSiteSummary&gt;&gt;
+    /** Add, step 1: validate and probe. Persists nothing. */
+    suspend fun probe(input: String, credentials: SiteCredentials? = null, headers: SiteHeaders = SiteHeaders()): SiteProbeResult
+    /** Add, step 2: save a confirmed Supported result. */
+    suspend fun add(draft: CustomSiteDraft): CustomSiteMutation
+    /** Re-probe the stored base URL; on a same-family success, updates verifiedAt. Never switches family. */
+    suspend fun retest(sourceId: String): SiteProbeResult
+    suspend fun update(sourceId: String, edit: CustomSiteEdit): CustomSiteMutation
+    /** Removes profile, credentials and the Unified/For You opt-in. Library data stays (see Unavailable). */
+    suspend fun remove(sourceId: String): CustomSiteMutation
+}
+data class CustomSiteSummary(
+    val sourceId: String, val label: String, val host: String, val baseUrl: String,
+    val family: ProtocolFamily?, val availability: CustomSiteAvailability, val headers: SiteHeaders,
+    val hasCredentials: Boolean, val includedInUnifiedAndForYou: Boolean, val verifiedAtEpochMs: Long?,
+)
+enum class CustomSiteAvailability { AVAILABLE, NEEDS_CREDENTIALS, UNSUPPORTED_FAMILY }
+/** [headers] are what the probe used; credential requirement comes from [probe]. [confirmReconnect] answers ReconnectConfirmationNeeded. */
+data class CustomSiteDraft(val probe: SiteProbeResult.Supported, val label: String,
+    val credentials: SiteCredentials? = null, val headers: SiteHeaders = SiteHeaders(),
+    val includeInUnifiedAndForYou: Boolean = false, val confirmReconnect: Boolean = false)
+data class CustomSiteEdit(val label: String? = null, val credentials: CredentialEdit = CredentialEdit.Keep,
+    val headers: SiteHeaders? = null, val includeInUnifiedAndForYou: Boolean? = null)
+sealed interface CredentialEdit { data object Keep : CredentialEdit; data object Clear : CredentialEdit
+    data class Replace(val credentials: SiteCredentials) : CredentialEdit }
+sealed interface CustomSiteMutation {
+    data object Success : CustomSiteMutation
+    data class DuplicateHost(val existingSourceId: String) : CustomSiteMutation   // an active profile already uses this id
+    /** The derived id already has library data here (a removed site or restored rows); ask, then retry with confirmReconnect. */
+    data class ReconnectConfirmationNeeded(val hostLabel: String) : CustomSiteMutation
+    data object LimitReached : CustomSiteMutation
+    data object NotFound : CustomSiteMutation
+    data object CredentialStoreUnavailable : CustomSiteMutation
+    data class InvalidLabel(val maxLength: Int) : CustomSiteMutation
+}</code></pre>
+      <p>UI flows step 4 builds, in a new <code>app/src/main/java/com/theoriacodex/app/settings/sites/</code> package with a <code>CustomSitesViewModel(controller)</code>:</p>
+      <table>
+        <thead><tr><th>Flow</th><th>States and copy</th></tr></thead>
+        <tbody>
+          <tr><td>List</td><td>Each row shows label, host, family, and a status: available; "Needs API key" (keys required but missing, for example after a restore); or "Unsupported in this version" (unknown family). Empty state explains adding a booru by its address.</td></tr>
+          <tr><td>Add</td><td>Enter URL → Probing → one of: <em>Supported</em> (confirm form: label prefilled from <code>suggestedLabel</code>, optional credentials, "Include in Unified and For You" off) → Saving → back to the list. If saving returns <em>ReconnectConfirmationNeeded</em>, a dialog asks "Reconnect your existing likes and history from &lt;host&gt;? Only do this if it is the same site." Reconnect retries with <code>confirmReconnect = true</code>; Cancel adds nothing. <em>CredentialsRequired</em> shows credential fields and re-probes. <em>UnsupportedFamily</em>: "This looks like a Moebooru site, which Theoria can't use yet." <em>NotABooru</em>, <em>Unreachable(reason)</em>, <em>InvalidAddress(error)</em> and <em>AlreadyBuiltIn</em> show a message and let the user edit the URL.</td></tr>
+          <tr><td>Re-test</td><td>Per-row action. Shows the result inline. A family mismatch reads "This site now answers as X. Remove it and add it again to switch." The profile is never changed.</td></tr>
+          <tr><td>Edit</td><td>Label, credentials (replace or clear), and the Unified/For You toggle.</td></tr>
+          <tr><td>Remove</td><td>Confirmation: "Remove &lt;label&gt;? Likes, Codex items and history from this site stay in your library, but can't be opened or refreshed until you add the site again."</td></tr>
+        </tbody>
+      </table>
+      <p>For tests and previews, step 4 writes a <code>FakeCustomSitesController</code> in its own test sources. The add and edit forms include an "Advanced" disclosure for User-Agent and Referer; leaving them blank uses the defaults. The real implementation (<code>app/src/main/java/com/theoriacodex/app/di/CustomSitesControllerImpl.kt</code>, step 3) toggles the opt-in through <code>SettingsRepository.setEnabledSources</code>.</p>
+    </section>
+
+    <section id="ownership">
+      <h2>File And Module Ownership</h2>
+      <p>One owner per file. Where two steps must touch the same file, the later step edits only after the earlier one has merged.</p>
+      <table>
+        <thead><tr><th>Area</th><th>Step 2 (this thread)</th><th>Step 3</th><th>Step 4</th></tr></thead>
+        <tbody>
+          <tr><td><code>core-domain</code></td><td><code>model/SourceKey.kt</code> (new), <code>model/Post.kt</code> (enum removed), <code>source/CustomSites.kt</code> (B0 contract), <code>tags/SourceTagNormalization.kt</code>, <code>recommendation/RecommendationTagNormalization.kt</code>, <code>recommendation/CrossSourceTags.kt</code>, every other mechanical call site</td><td>after B1 merges: new capability fields on <code>SourceCapabilities</code> and new optional adapter interfaces in <code>adapter/SourceAdapter.kt</code> (category 3)</td><td>none</td></tr>
+          <tr><td><code>core-data</code></td><td>every SourceKey call site; <code>RepositoryStoreRecords.kt</code>, <code>RepositoryPolicies.kt</code>, <code>SourceWeightSettings.kt</code>, <code>DataStoreRecords.kt</code>; the backup files <code>ProfileBackupCodec.kt</code>, <code>ProfileBackupJson.kt</code>, <code>ProfileBackupSettingsValidation.kt</code>, <code>ProfileBackupModels.kt</code>, <code>ProfileBackupService.kt</code>; B0 <code>SiteProfileRecords.kt</code> and <code>SiteProfileRepository.kt</code></td><td>new <code>DataStoreSiteProfileRepository.kt</code> (store file <code>custom_sites_v1.json</code>); the <code>hasLibraryData</code> repository method</td><td>none</td></tr>
+          <tr><td><code>core-data-android</code></td><td>all SourceKey call sites (mechanical)</td><td>the Room implementation of <code>hasLibraryData</code> (one DAO query)</td><td>none</td></tr>
+          <tr><td><code>core-sources</code></td><td>mechanical call sites only; no Danbooru or Gelbooru adapter internals</td><td>new <code>custom/</code> package (families, registry, prober, Moebooru signature); credential and header extensions of <code>DanbooruSite</code> and step 1's Gelbooru site model, after step 1 merges</td><td>none</td></tr>
+          <tr><td><code>core-stubs</code></td><td>mechanical</td><td>none</td><td>none</td></tr>
+          <tr><td><code>app-logic</code></td><td>mechanical call sites; B0 <code>customsites/CustomSitesController.kt</code></td><td>family predicates in <code>search/state/SearchDraftReducer.kt</code></td><td>none</td></tr>
+          <tr><td><code>app</code></td><td>mechanical call sites; <code>source/SourceMetadata.kt</code> (catalog hook, fallback, family field); display-name fixes</td><td><code>di/TheoriaAppContainer.kt</code>, new <code>di/CompositeSourceAdapterRegistry.kt</code>, <code>di/CustomSourceRuntime.kt</code>, <code>di/CustomSitesControllerImpl.kt</code>; <code>sourceauth/</code> site credentials; family predicates in <code>viewer/ViewerSessionCoordinator.kt</code>, <code>media/PostMedia.kt</code>, <code>media/DurationRequestPacer.kt</code>, <code>search/SearchCoordinator.kt</code></td><td>new <code>settings/sites/*</code>; the entry row in <code>settings/SettingsScreen.kt</code> and <code>settings/SettingsState.kt</code>; the ViewModel factory line reading <code>container.customSites</code></td></tr>
+          <tr><td>Tests</td><td>tests for the files above, plus mechanical updates across the 242 test files</td><td>tests next to its files</td><td>tests next to its files</td></tr>
+          <tr><td>This plan</td><td>owner; records B0 contract changes</td><td>appends its progress under "Step 3 log"</td><td>appends under "Step 4 log"</td></tr>
+        </tbody>
+      </table>
+      <p><code>CHANGELOG.md</code>: step 2 is not user-facing and adds no entry. Steps 3 and 4 add theirs.</p>
+    </section>
+
+    <section id="coordination">
+      <h2>Coordination With Open Work</h2>
+      <h3>PR #48 (<code>perf/audit-fixes</code>): merged into local main</h3>
+      <p>At plan time the PR was open. It has since merged (<code>65cc95bd</code>), and local main is <code>1ac37a9d</code>. This branch still sits on <code>c0b01dee</code>, 66 commits behind. The facts below still describe what B1 has to absorb.</p>
+      <ul>
+        <li>Adds Room schema 10 (<code>MIGRATION_9_10</code>: the <code>codex_items</code> index becomes <code>(codex_id, saved_at_epoch_ms)</code>). Step 2 needs no Room migration, so there is no numbering conflict. Any later migration is <code>10 → 11</code>.</li>
+        <li>Touches 56 files that also reference <code>SourceKey</code> (35 in main sources), including Search, Settings, the Viewer, <code>RoomRecentsRepository</code>, <code>RoomProfileBackupStore</code>, <code>RealAdapterRegistry</code> and <code>TheoriaAppContainer</code>. It adds a few new <code>source.name</code> uses (for example <code>raiseWatchedMediaProgress(id.source.name, …)</code> and <code>gifByteStore(...).warm("${source.name}:$url")</code>).</li>
+        <li>Step 2's edits in those files are single-token changes, so conflicts are small and compiler-guided.</li>
+      </ul>
+      <h3>Step 1 (<code>feat/gelbooru-family</code>)</h3>
+      <p>Two commits so far (<code>9f8599f1</code>, <code>ca339269</code>). They delete <code>Rule34XxxSourceAdapter.kt</code> and <code>Rule34Common.kt</code>, add <code>GelbooruSite.kt</code>, rewrite <code>GelbooruSourceAdapter.kt</code> and <code>RealAdapterRegistry.kt</code>, and introduce <code>UserApiKeyCredentials</code>. D10 is already met. Step 2 touches these files only mechanically (<code>SourceKey.X</code> constants still compile).</p>
+      <h3>Recommended merge sequence</h3>
+      <ol>
+        <li><strong>B0</strong> (contract types, new files only): merge into main right after sign-off. Steps 3 and 4 branch from that main.</li>
+        <li><strong>Bring this branch up to current main</strong> (which already has PR #48) before B1. Either the orchestrator merges, or it authorizes this thread to merge <code>main</code> into <code>feat/source-identity</code>. B1 is then written against the code that will ship, and the call-site counts are re-taken there.</li>
+        <li><strong>Step 1</strong> into main. If it lands during B1, merge it into this branch before B1 is committed.</li>
+        <li><strong>Step 2</strong> B1–B4 into main.</li>
+        <li><strong>Step 3</strong>: its integration phase (adapters, composite registry, presentation install, family predicates, credentials) after steps 1 and 2 are on main.</li>
+        <li><strong>Step 4</strong>: after step 3, swapping its fake for <code>container.customSites</code>.</li>
+      </ol>
+      <p>Steps 3 and 4 can build their pre-B1 parts in parallel: model, address parsing, store, fixtures, transport, controller logic, UI against a fake. Runtime integration has to wait for identity (B1) and step 1.</p>
+      <details open>
+        <summary>Conflict resolution recipe for the orchestrator</summary>
+        <ol>
+          <li>Resolve each hunk <em>semantically</em>: keep the other branch's behavior and re-apply the identity rule to it. Never just take one side; that can compile while silently dropping a weight, fallback or provider change.</li>
+          <li>Identity rules: <code>SourceKey.name</code> → <code>.id</code> (or <code>displayName()</code> if a user reads it); <code>SourceKey.valueOf(x)</code> → <code>SourceKey.parse(x)</code> with the same strictness; <code>SourceKey.entries</code> → <code>SourceKey.builtIns</code> or <code>SourcePresentationCatalog.orderedSources()</code>; <code>.ordinal</code> → natural order; non-exhaustive <code>when</code> → <code>else</code> under the category rules.</li>
+          <li>Compile every module and source set (the "Other source sets compile" row in Validation, plus <code>assembleDebug</code>), then compare each resolved file against both parents (<code>git diff HEAD^1 -- &lt;file&gt;</code> and <code>git diff HEAD^2 -- &lt;file&gt;</code>). Only identity edits may differ from the side whose behavior was kept.</li>
+          <li>Run the focused tests for the conflicted files, then the full validation batch in <a href="#validation">Validation</a>. Compiling alone is not evidence.</li>
+        </ol>
+      </details>
+    </section>
+
+    <section id="phases">
+      <h2>Phases (Step 2 Implementation, After Sign-off)</h2>
+      <p>Run all commands from the worktree root. Robolectric needs JDK 21+. On the Mac: <code>export JAVA_HOME=/opt/homebrew/Cellar/openjdk/26.0.2.1/libexec/openjdk.jdk/Contents/Home</code>. Each phase is one Conventional Commit, or a few commits for a large phase. No emulator, device or adb in this thread.</p>
+
+      <article>
+        <h3>B0: Contract types and characterization tests</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Steps 3 and 4 can compile against the frozen contracts: C1, C2's record and repository interface, <code>SiteProbeResult</code> and C9. Today's byte-level outputs are pinned before the type swap. Nothing from C3 internals, C4, C6 or C7 is frozen here.</td></tr>
+          <tr><td>Edits</td><td>New <code>core-domain/.../domain/source/CustomSites.kt</code> (ProtocolFamily, CustomSourceIds, SiteAddress, SiteAddressParse/Error, SiteHeaders, SiteCredentials, SiteProfile, SiteProbeResult, ProbeFailure). New <code>core-data/.../repository/SiteProfileRecords.kt</code> and <code>SiteProfileRepository.kt</code> (interface, <code>SiteProfileAddResult</code>, and <code>InMemorySiteProfileRepository</code> for the backup default and tests). New <code>app-logic/.../app/customsites/CustomSitesController.kt</code>. R8 keep rule and JSON-contract manifest entry for <code>SiteProfileRecord</code> (<code>app/proguard-rules.pro</code>, <code>app/src/test/resources/r8-json-contracts.txt</code>). The golden characterization tests moved to the first commit of B1, still before the type swap, so the B0 commit holds only the contracts steps 3 and 4 branch from (orchestrator scope, 2026-11-07).</td></tr>
+          <tr><td>Tests</td><td><code>CustomSourceIdsTest</code> and <code>SiteAddressTest</code> (every row of the examples table, including port and path suffixes; IDNA; the length cap; injectivity; <code>hostLabel</code> ignoring suffixes), <code>SiteProfileRecordsTest</code> (round trip, an unknown family kept raw, invalid records skipped by the store but rejected by the strict backup decoder).</td></tr>
+          <tr><td>Commands</td><td><code>./gradlew :core-domain:test :core-data:test :app-logic:test :core-domain:detektMain :core-data:detektMain :app-logic:detektMain --offline</code> and <code>./gradlew :app:testDebugUnitTest --tests '*GsonWireContractTest' --offline</code></td></tr>
+          <tr><td>Acceptance</td><td>Green. Only new files plus the two R8 contract lines. Commit message: <code>feat(sources): add custom site contracts</code>.</td></tr>
+        </tbody></table>
+      </article>
+
+      <article>
+        <h3>B1: Open the identity type (atomic swap)</h3>
+        <p>First commit, before any type change: the characterization tests moved from B0. They cover (a) <code>SettingsDataStoreFile.fromDomain(AppSettings())</code> JSON; (b) <code>ProfileBackupCodec.encode</code> of a fixture with posts from several built-ins, likes, Codex automatic tags, weights, saved tags and recents; (c) the offline manifest <code>Gson().toJsonTree(post)</code> for a post with creator profiles. Golden files live under <code>core-data/src/test/resources/golden/source-identity/</code>, and they must pass on the enum.</p>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td><code>SourceKey</code> is the value class. Every module compiles. Built-in behavior and bytes are unchanged.</td></tr>
+          <tr><td>Edits</td><td>New <code>model/SourceKey.kt</code>; remove the enum from <code>Post.kt</code>; add <code>SourceKey.of(profile)</code>. Apply the <a href="#migration">migration rules</a> to all modules and source sets (main, test, androidTest, sharedTest, testFixtures, testDebug, releaseAcceptance, benchmarkRelease). Fix the user-visible <code>.name</code> uses. Replace the lock maps, named-cover enumeration, <code>take(entries.size)</code> and weight ordering per the rules. Update catalog coverage to <code>SourceKey.builtIns</code>.</td></tr>
+          <tr><td>Tests</td><td><code>SourceKeyTest</code>: <code>parse(id)</code> round-trips every built-in; custom parsing lowercases and trims; garbage returns null; natural order equals the old enum order for built-ins with custom ids after; <code>toString() == id</code>. Custom-key round trips through each store: Room (Robolectric: post, like, Codex item, automatic tag, recent watched, media duration), settings JSON (<code>enabledSources</code>, weights, saved tags, blacklist), recent and saved searches, statistics, tag-suggestion store, reading positions, download and offline job stores, viewer restoration encoding, creator saver. The B0 golden tests pass unmodified.</td></tr>
+          <tr><td>Commands</td><td>Full validation batch (see <a href="#validation">Validation</a>).</td></tr>
+          <tr><td>R8 gate</td><td>Offline manifests are read reflectively in minified builds too (<code>app/build.gradle.kts:180</code>, inherited by <code>releaseAcceptance</code>). Host tests cannot prove the release format, so: run <code>./gradlew :app:assembleReleaseAcceptance --offline</code> before and after B1 and diff the mapping entries for <code>com.theoriacodex.domain.model.Post</code>, <code>PostId</code>, <code>CreatorProfile</code> and <code>SourceKey</code> (use the public mapping artifact the existing JSON-contract verifier consumes). Expect the same field names and types for the source fields. Any difference blocks the merge until a keep rule pins them. Device proof (orchestrator item 4: offline saves from the old APK still listed) remains required.</td></tr>
+          <tr><td>Acceptance</td><td>Golden files unchanged; Room schema export unchanged; R8 gate clean; all suites green. Commit message: <code>refactor(domain): make SourceKey an open source identity</code>.</td></tr>
+        </tbody></table>
+      </article>
+
+      <article>
+        <h3>B2: Identity-derived traits for custom ids</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Pure domain code treats any custom id as a booru (D5). New sites get a fair default weight.</td></tr>
+          <tr><td>Edits</td><td><code>TagDialect</code>, <code>SourceKey.tagDialect</code> and <code>SourceKey.sharesBooruVocabulary</code> in <code>core-domain/.../tags/SourceTagNormalization.kt</code>. Rewrite <code>sourceAutocompletePrefix</code>, <code>normalizeFavoriteTagForStorage</code>, <code>sourceTagKey</code>, <code>sourceTagsMatch</code>, <code>RecommendationTagNormalization.normalize</code> and <code>CrossSourceTags.canMap</code> on top of them. In <code>RepositoryPolicies.normalizeSourceWeights</code>, a missing weight falls back to the mean.</td></tr>
+          <tr><td>Tests</td><td>Built-in outputs equal today's for a table of tags per source. A custom id gets underscore spelling (the durable rule) and, by default, cross-source mapping with Danbooru (the computed rule, kept in its own predicate so it can change without data migration). Weights: adding a custom source to a normalized set gives it 1/n.</td></tr>
+          <tr><td>Acceptance</td><td>Existing tag-normalization and For You tests are unchanged and green. Commit message: <code>feat(domain): treat custom sources as booru-dialect sources</code>.</td></tr>
+        </tbody></table>
+      </article>
+
+      <article>
+        <h3>B3: Presentation catalog hook and fallback</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Any custom id has a safe presentation. Step 3 can install real entries.</td></tr>
+          <tr><td>Edits</td><td><code>SourceMetadata.kt</code> per C5; <code>RecentsScreen.kt</code> offers built-ins plus installed custom sources. Settings lists keep natural order (B1), so built-in order does not change.</td></tr>
+          <tr><td>Tests</td><td>Fallback label "safebooru.org" with Referer <code>https://safebooru.org/</code>. Installed entries override the fallback and order after the built-ins. Installing a built-in key is rejected. A reset between tests prevents global-state leaks.</td></tr>
+          <tr><td>Acceptance</td><td>App unit tests green. Commit message: <code>feat(sources): give custom sources a catalog entry and fallback</code>.</td></tr>
+        </tbody></table>
+      </article>
+
+      <article>
+        <h3>B4: Backups carry site profiles</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>C8: profiles are exported and restored, keys never are. Output is <code>version: 2</code> with a body otherwise identical to today.</td></tr>
+          <tr><td>Edits</td><td><code>ProfileBackupModels.kt</code>, <code>ProfileBackupCodec.kt</code>, <code>ProfileBackupService.kt</code> (repository parameter, export snapshot, restore merge inside the journal), and validation via <code>SourceKey.parse</code>.</td></tr>
+          <tr><td>Tests</td><td>The B0 golden backup differs only in <code>"version":2</code> (B4 updates exactly that field of the golden file). A backup with profiles round-trips. A v1 backup restores. A backup with custom rows but no profiles restores, and those rows load as an unavailable source. An invalid profile rejects the backup. An over-capacity restore is rejected in preflight, before any journal is written, and the next startup recovers normally. A <code>sourceId</code> conflict keeps the device's profile. Interrupted-restore recovery merges profiles once. No credential field appears anywhere in the encoded JSON.</td></tr>
+          <tr><td>Acceptance</td><td>Green. Commit message: <code>feat(backup): include custom site profiles in backups</code>.</td></tr>
+        </tbody></table>
+      </article>
+
+      <article>
+        <h3>B5: Close-out</h3>
+        <p>Full validation batch, plan living-log update, report retention cleanup under <code>build/reports/</code>, and the handoff note to the orchestrator: branch head, merge order and device checks. Commit message: <code>docs(plan): record source identity validation</code>.</p>
+      </article>
+    </section>
+
+    <section id="validation">
+      <h2>Validation And Acceptance</h2>
+      <h3>Host validation batch (step 2; run once after B1 and again at B5)</h3>
+      <table>
+        <thead><tr><th>Check</th><th>Command</th><th>Expected</th></tr></thead>
+        <tbody>
+          <tr><td>Offline preflight</td><td><code>./gradlew help --offline</code></td><td>Resolves. If it fails, run once online before the batch.</td></tr>
+          <tr><td>JVM and Robolectric suites</td><td><code>./gradlew :app:testDebugUnitTest :app-logic:test :core-domain:test :core-data:test :core-data-android:testDebugUnitTest :core-stubs:test :core-sources:test --offline</code></td><td>All green. The counts are recorded in the log.</td></tr>
+          <tr><td>Other source sets compile</td><td><code>./gradlew :app:compileDebugAndroidTestKotlin :core-data-android:compileDebugAndroidTestKotlin :app:compileReleaseAcceptanceKotlin :app:compileBenchmarkReleaseKotlin --offline</code></td><td>Compiles. Device tests are not run here.</td></tr>
+          <tr><td>Room schema unchanged</td><td>After the build: <code>git status --porcelain core-data-android/schemas</code></td><td>Empty output, so no schema change.</td></tr>
+          <tr><td>Golden bytes</td><td>Part of the suites</td><td>B1 through B3 leave the B0 golden files untouched. B4 changes only the backup golden's <code>version</code> field. Check with <code>git log -p -- core-data/src/test/resources/golden</code>.</td></tr>
+          <tr><td>Detekt</td><td><code>./gradlew :app:detektDebug :app-logic:detektMain :core-data-android:detektDebug :core-domain:detektMain :core-data:detektMain :core-sources:detektMain :core-stubs:detektMain --offline</code></td><td>No findings. Detekt's <code>parallel</code> stays off (AGENTS.md).</td></tr>
+          <tr><td>Lint</td><td>After the tests: <code>./gradlew :app:lintDebug --offline --no-daemon</code></td><td>No new issues.</td></tr>
+          <tr><td>R8 mapping gate (after B1)</td><td><code>./gradlew :app:assembleReleaseAcceptance --offline</code>, then compare the mapping entries (see B1)</td><td>Source fields of <code>Post</code>, <code>PostId</code> and <code>CreatorProfile</code> keep the same names and String type as before B1.</td></tr>
+          <tr><td>No stray identity APIs</td><td><code>rg -n "SourceKey\.(entries|valueOf)|source\.ordinal|SourceKey::name" --type kotlin</code></td><td>No matches.</td></tr>
+        </tbody>
+      </table>
+      <h3>Device acceptance (orchestrator, after merging; not run in this thread)</h3>
+      <p>On the <code>releaseAcceptance</code> APK (<code>com.theoriacodex.acceptance</code>) on the <code>theoria-search-test</code> AVD, following the AGENTS.md package and signing preflight. Use accessibility text and logs, not screenshots, wherever provider media shows.</p>
+      <ol>
+        <li>With data from before the upgrade: Likes, every Codex and Recents show the same item counts and source labels as before.</li>
+        <li>Settings → Unified sources lists the same sources in the same order with the same selection. Weights are unchanged.</li>
+        <li>A Unified search and a single-source search load. For You loads.</li>
+        <li>Offline saves are still listed and open offline.</li>
+        <li>Backup export then preview: the counts match the library, and the file reports <code>"version":2</code>.</li>
+        <li>Process death in the Viewer and on a creator page restores the same post or creator.</li>
+      </ol>
+      <p>Only the user can judge items that need live providers or real hardware playback. Step 2 changes no provider behavior.</p>
+    </section>
+
+    <section id="living-log">
+      <h2>Living Log</h2>
+      <h3>Progress</h3>
+      <ul>
+        <li>[x] 2026-11-07: Read AGENTS.md, <code>.docs/PLANS.md</code> and the cognitive profile. Surveyed the 183 main files that use <code>SourceKey</code>, every persistence path, the catalog, the credentials and backups, PR #48's diff (<code>git diff main...perf/audit-fixes</code>), and step 1's branch (no commits yet).</li>
+        <li>[x] 2026-11-07: Drafted this plan (Phase A).</li>
+        <li>[x] 2026-11-07: Sol-loop review, round 1 (GPT-6.1 Sol, high effort): a standard review (5 findings, all accepted) and a parallel adversarial review (11 findings: 9 accepted fully or partly, A1's opaque-id proposal declined and recorded as D2's alternative). Revised.</li>
+        <li>[x] 2026-11-07: Sol-loop review, round 2. Standard review: S1–S5 confirmed resolved; S6 (the "headers never stale" claim) and S7 (step 1's parameter name) fixed. Adversarial review (8 findings): A1 accepted as endpoint-derived ids plus explicit reconnect (tombstones declined); A2, A3, A4, A6, A7 and A8 accepted; A5 declined (claim already corrected; stale requests live only while their screen is visible). Revised. The two requested rounds are complete.</li>
+        <li>[x] 2026-11-07: Merged main (<code>1ac37a9d</code>, PR #48) into this branch as <code>ab4c0fa4</code>, on the orchestrator's authorization.</li>
+        <li>[x] 2026-11-07: B0 contracts. Added <code>core-domain/.../domain/source/CustomSites.kt</code> (C1 and <code>SiteProbeResult</code>), <code>core-data/.../repository/SiteProfileRecords.kt</code> and <code>SiteProfileRepository.kt</code> (C2, with <code>InMemorySiteProfileRepository</code> as the reference behavior), <code>app-logic/.../app/customsites/CustomSitesController.kt</code> (C9), and the R8 rule and contract line for <code>SiteProfileRecord</code>. Tests: <code>CustomSitesTest</code> (6) and <code>SiteProfileRecordsTest</code> (4). Module suites green (core-domain, core-data, app-logic), <code>GsonWireContractTest</code> 3/3, and Detekt clean on all three modules.</li>
+        <li>[x] 2026-11-07: The user signed off on D2 (address-based ids), D3 (library data kept), D4 (one Unified/For You switch), D5 (tag rules), D6 (backup v2) and D8 (no downgrade once used).</li>
+        <li>[x] 2026-11-07: Merged <code>feat/gelbooru-family</code> (step 1) as <code>f3739edb</code>, on the orchestrator's authorization. The tree now equals <code>feat/custom-sites-base</code>.</li>
+        <li>[x] 2026-11-07: B1 golden characterization tests (<code>SourceIdentityGoldenTest</code>, 4 cases) captured on the enum. They cover default and multi-source settings files, a multi-source backup (built-in ordering of automatic tags and weights, weight-combination keys, source-keyed statistics) and the reflective offline manifest. Golden files live in <code>core-data/src/test/resources/golden/source-identity/</code>.</li>
+        <li>[x] 2026-11-07: B1 type swap. <code>SourceKey</code> is a <code>@JvmInline value class</code> (<code>core-domain/.../model/SourceKey.kt</code>) with companion constants, <code>builtIns</code>, <code>parse</code>, <code>parseOrThrow</code>, <code>of(profile)</code> and natural order equal to the old enum order. Migrated across every module and source set (119 files). The private <code>toSourceKeyOrNull</code> helpers were inlined into <code>SourceKey.parse</code>. Fixed a would-be crash: <code>RecentsScreen</code> saved the selected source with <code>rememberSaveable</code>, which only worked because enums are <code>Serializable</code>; it now uses <code>NullableSourceKeySaver</code>. Four user-visible strings switched from ids to <code>displayName()</code>.</li>
+        <li>[x] 2026-11-07: B1 validation. Golden files unchanged and passing; Room schema export unchanged. JVM suites: core-domain 89, core-data 204, core-sources 264, core-stubs 12, app-logic 189 (0 failures). Android unit suites: core-data-android 81, app 1129 (0 failures). The androidTest, releaseAcceptance and benchmarkRelease source sets compile. Detekt is clean on all seven modules. The R8 gate passed (see Surprises). New tests: <code>SourceKeyTest</code>, <code>CustomSourceIdentityTest</code>, <code>SourceIdentityEncodingTest</code>, and a custom-source case in <code>RoomCodexLikesRepositoryTest</code>. The saver test fails without the saver (<code>IllegalStateException … cannot be saved using the current SaveableStateRegistry</code>).</li>
+        <li>[x] 2026-11-07: B2 traits. <code>TagDialect</code> and <code>SourceKey.tagDialect</code> (<code>core-domain/.../tags/SourceTagNormalization.kt</code>): a built-in table identical to before, with <code>UNDERSCORE</code> for every custom id. They drive <code>sourceAutocompletePrefix</code>, <code>normalizeFavoriteTagForStorage</code>, <code>sourceTagKey</code>, <code>sourceTagsMatch</code> and <code>RecommendationTagNormalization.normalize</code>. <code>SourceKey.sharesBooruVocabulary</code> (in <code>CrossSourceTags.kt</code>) replaces <code>CrossSourceTraining.SHARED_VOCABULARY_SOURCES</code> and includes custom ids; it is computed, never persisted. In <code>RepositoryPolicies.normalizeSourceWeights</code>, a source with no stored or default weight gets the mean of the others. Tests: core-domain 91, core-data 205 (goldens unchanged), app-logic 189; Detekt clean.</li>
+        <li>[x] 2026-11-07: B3 catalog. <code>SourcePresentationCatalog.installCustom</code> replaces all custom entries in one volatile write and rejects built-in or duplicate sources. <code>presentation()</code> falls back to a host-labelled entry for a custom id without a profile. Also added: <code>orderedSources()</code>, <code>customSources()</code>, <code>SourcePresentationGroup.CUSTOM</code>, and the shared <code>customSourcePresentation(...)</code> factory with <code>CUSTOM_PRESENTATION_ORDER_START</code>. Recents offers built-ins in their old order plus installed custom sites. Tests: <code>SourceMetadataTest</code> 6 (3 new); app suite 1132 with 0 failures; Detekt clean.</li>
+        <li>[x] 2026-11-07: B4 backups. <code>ProfileBackup.customSources</code>; the codec always writes <code>version: 2</code>, adds <code>customSources</code> (as <code>SiteProfileRecord</code>) only when non-empty, decodes profiles strictly, reads versions 1–2, and rejects duplicate sites. <code>ProfileBackupService</code> takes a <code>SiteProfileRepository</code> (in-memory default until step 3 wires the store). Export reads sites in the same stable-read loop as the library. <code>preflightSites</code> runs only before the journal exists. <code>finish</code> merges sites and reports conflicts as <code>ProfileRestoreResult.keptExistingSites</code>, which the Backup screen names. The golden backup changed only its <code>version</code> token. Tests: <code>ProfileBackupSiteProfilesTest</code> 6 (round trip without credentials, v1 still decodes and v3 is refused, invalid or duplicate sites rejected, capacity rejected before journaling, recovery completing after the device filled up, conflict reported); core-data 211; app backup tests 13; Detekt clean.</li>
+        <li>[x] 2026-11-07: B5 close-out. Full batch on <code>53f9b9b1</code>: unit suites 1980 tests with 0 failures (core-domain 91, core-data 211, core-sources 264, core-stubs 12, app-logic 189, core-data-android 81, app 1132). The androidTest, releaseAcceptance and benchmarkRelease source sets compile. Detekt is clean on all seven modules. <code>:app:lintDebug --offline --no-daemon</code>: "No issues found." <code>:app:assembleReleaseAcceptance</code>: the R8 JSON contract verifier checked 307 fields across 51 classes, including <code>SiteProfileRecord</code>. Room schema export unchanged. No stray <code>valueOf</code>/<code>entries</code>/<code>ordinal</code> uses. Generated <code>build/reports</code> pruned. Not run (no device in this thread): the device acceptance list under Validation.</li>
+      </ul>
+      <h3>Step 3 log</h3>
+      <ul>
+        <li>[x] 2026-11-07: Fixtures first. Captured metadata responses with host <code>curl</code> for the exact requests the prober sends, under <code>core-sources/src/test/resources/custom-sites/</code> (post tags, hashes and media URLs redacted; README lists each folder's evidence). Danbooru was in maintenance (503 HTML "Downbooru"), so AIBooru carries the Danbooru evidence. No media was fetched.</li>
+        <li>[x] Probe outcomes on the fixtures (built-in check disabled so shipped sites exercise the families): <code>aibooru.online</code> → <code>Supported(DANBOORU, termLimit 4)</code>; <code>safebooru.org</code> → <code>Supported(GELBOORU_02)</code>; <code>gelbooru.com</code> (401, empty body) and <code>api.rule34.xxx</code> (200 <code>&lt;error&gt;Missing authentication…</code>) → <code>CredentialsRequired(GELBOORU_02, rejected = false)</code>, and <code>rejected = true</code> when supplied keys are refused again; <code>www.sakugabooru.com</code> and <code>sakugabooru.com</code> (301 to <code>www.</code>) → <code>UnsupportedFamily("Moebooru")</code>; <code>example.com</code> → <code>NotABooru</code>; <code>danbooru.donmai.us</code> in maintenance → <code>Unreachable(BLOCKED)</code>. With the built-in check on, Danbooru, AIBooru, Gelbooru, rule34.xxx and api.rule34.xxx answer <code>AlreadyBuiltIn</code> without any request.</li>
+        <li>[x] <code>core-sources/.../sources/custom/</code>: <code>SiteFamily</code>, <code>FamilyProbe</code>, <code>SiteRequestContext</code>, <code>UnsupportedFamilySignature</code>, <code>SiteFamilyRegistry.default()</code>, <code>DanbooruFamily</code>, <code>GelbooruFamily</code>, <code>MoebooruSignature</code>, <code>SiteProber</code>, evidence fingerprints in <code>ProbeEvidence.kt</code>, and <code>CustomSiteHttpClient</code> (C7). Evidence: Danbooru <code>/counts/posts.json</code> → <code>{"counts":{"posts":N}}</code> or its JSON error envelope on 401/403; Gelbooru DAPI without <code>json=1</code> → <code>&lt;posts count="N"&gt;</code>, or a keyless refusal (empty 401 without <code>WWW-Authenticate</code>; auth wording in a non-HTML body), then the <code>json=1</code> list must answer as JSON or empty; Moebooru <code>/post.json</code> → array of posts with <code>md5</code> and <code>file_url</code>. 403/503 HTML → <code>BLOCKED</code>; 5xx/429 → <code>HTTP_ERROR</code>. Worst case is 5 requests (cap 6, deadline 30 s).</li>
+        <li>[x] Danbooru term limit is measured: anonymous (or keyed) <code>/profile.json</code> carries <code>tag_query_limit</code> (AIBooru guests: 4); default 2 when absent. <code>createAdapter</code> maps it to <code>SearchTermLimit(n, rankedSortUsesTerm = true)</code>.</li>
+        <li>[x] Family plumbing: <code>DanbooruSite</code> gains <code>headers</code> and <code>credentials: ApiKeyUse</code>, and its adapter a key lookup (<code>login</code> + <code>api_key</code>). Step 1's <code>GelbooruCredentialUse</code>/<code>GelbooruCredentialLookup</code> became the shared <code>ApiKeyUse</code>/<code>UserApiKeyCredentialLookup</code>. Both families rewrite protocol-relative and <code>http://</code> media URLs to HTTPS. <code>DefaultSourceHttpClient</code>'s single-request path is shared so the custom client runs it with redirects off.</li>
+        <li>[x] Safebooru's tag list ignores <code>json=1</code> and its filters. Handled by <code>GelbooruTagList.DETECT</code> (custom Gelbooru sites): the first XML answer switches that adapter to <code>autocomplete.php</code> for suggestions and counts and turns trending off. OR groups stay client-expanded for custom sites (<code>orGroup = null</code>), and related posts, uploader pages and samples-first stay off; see Decision Log.</li>
+        <li>[x] <code>core-data</code>: <code>DataStoreSiteProfileRepository</code> (<code>custom_sites_v1.json</code>, schema 1; unreadable records skipped and written back untouched; newer schema refused; corrupt file copied aside). The list rules moved into <code>SiteProfileListPolicy</code>, which <code>InMemorySiteProfileRepository</code> now delegates to. <code>SourceLibraryPresence.hasLibraryData</code> implemented on <code>RoomCodexLikesRepository</code> with one <code>EXISTS</code> DAO query; no schema change. R8 rule and contract line for <code>SiteProfileStoreFile</code>.</li>
+        <li>[x] C6: <code>app/.../sourceauth/SiteCredentialsStore</code>, implemented by <code>VersionedSourceCredentialsStore</code> (and delegated by <code>AndroidSecureSourceCredentialsStore</code>) through an additive <code>customSites</code> map in payload schema 1. Payloads without custom keys are byte-identical; malformed entries are dropped. R8 rule and contract lines updated.</li>
+        <li>[x] Merged <code>feat/source-identity</code> twice: B1 (<code>f2e8c22c</code>, merge <code>04f3b97a</code>, with step 3's two <code>.name</code> → <code>.id</code> fixes folded in) and then B2–B4 (merge <code>632dcb87</code>, no conflicts).</li>
+        <li>[x] Probe second check: after protocol evidence, the family adapter reads the newest page under <code>SourceKey.of</code> the would-be profile. An empty page passes; an unreadable one is <code>NoMatch</code>; auth and transport failures keep their meaning. It replaces the Gelbooru <code>json=1</code> shape check. Fixtures add the AIBooru and Safebooru adapter pages; outcomes are unchanged.</li>
+        <li>[x] Runtime (C4): <code>app/.../di/CustomSourceRuntime.kt</code> (profiles + keys → adapters, rebuilt on either change; usable = known family and keys stored when required), <code>CompositeSourceAdapterRegistry.kt</code> (custom adapters beside the availability-aware built-ins; one orchestrator per custom revision), and <code>CustomSitesControllerImpl.kt</code> (C9). <code>TheoriaAppContainer.customSites</code> is the real controller; <code>SourceDependencies.availableSources</code> is built-ins ∪ usable custom sites. The journey fixture gets the same controller over in-memory stores. <code>InMemorySiteCredentialsStore</code> was added for fixtures and tests.</li>
+        <li>[x] Presentations (C5): installed from the runtime through B3's <code>installCustom</code>; new entries before the snapshot carrying their adapters is published, removed entries withdrawn after. Backups (B4): <code>ProfileBackupService</code> receives the real <code>DataStoreSiteProfileRepository</code>.</li>
+        <li>[x] Category 3: library refresh of remote media (<code>ViewerSessionCoordinator</code>), sample → original upgrades (<code>PostMedia</code>), duration pacing (<code>DurationRequestPacer</code>, 500 ms) and suggestion canonicalization (<code>SearchDraftReducer</code>) treat every custom source as a booru. Gelbooru's suggestion-only input and <code>prepareGelbooru</code> stay specific to its preset; <code>PortablePostSnapshot</code> is unchanged (C8 known limit).</li>
+        <li>[x] Validation after B1–B4 (host only; no emulator, device or adb): core-domain 91, core-sources 289, core-data 216, core-data-android 82, app-logic 189, app 1147 (3 skipped), all green. androidTest, releaseAcceptance and benchmarkRelease compile. Detekt is clean on core-sources, core-data, core-data-android, app-logic and app. <code>:app:lintDebug --offline --no-daemon</code> passes and the Room schema export is unchanged. <code>AppLogicArchitectureTest</code> now checks the shared <code>upgradesImageQuality()</code> helper instead of the bare set. Device acceptance remains with the orchestrator.</li>
+        <li>[x] Validation (host only; no emulator, device or adb): <code>:core-sources:test</code> 288, <code>:core-data:test</code> 201, <code>:core-data-android:testDebugUnitTest</code> 81, <code>:app:testDebugUnitTest</code> 1131 (3 skipped), all green; Detekt clean on core-sources, core-data, core-data-android and app; Room schema export unchanged; <code>:app:lintDebug --offline --no-daemon</code> passed with no new issues.</li>
+      </ul>
+      <h3>Step 4 log</h3>
+      <ul>
+        <li>[x] 2026-11-07: Settings → Sites UI on <code>feat/custom-sites-settings</code>, built against a fake controller. New <code>app/.../settings/sites/</code>: <code>CustomSitesViewModel</code> (form stages, never persists), <code>CustomSitesScreen</code> (list, remove and reconnect dialogs), <code>CustomSiteForms</code> (add and edit pages, masked key fields, "Advanced" User-Agent/Referer disclosure, the single Unified/For You switch, off by default), <code>CustomSitesCopy</code> (every probe, re-test and mutation outcome as plain text) and <code>CustomSitesEntry</code>. Settings gained <code>SettingsPage.SITES</code>, a "Sites" row under Sources, and a <code>SettingsSitesEntry</code> slot passed from <code>TheoriaHomeDestinations</code> through <code>SettingsDestinationStateBoundary</code> (one line each, the same pattern as <code>storageTools</code>).</li>
+        <li>Behavior choices within C9: editing the address or a header after a probe returns to address entry, so a draft's headers are always the probe's; editing keys does the same only when the probe needed them. Declining a reconnect returns to the confirm form and adds nothing. Re-test compares the answered family with the stored one and reports a mismatch without changing anything. Replacing keys in Edit triggers a re-test, because <code>update</code> does not verify keys. Removal is offered from the Edit page.</li>
+        <li>Seam for step 3: <code>CustomSitesEntry.kt</code> declares an extension <code>TheoriaAppContainer.customSites</code> returning a private <code>PendingCustomSitesController</code> (no sites, real address validation, every valid address reported unreachable). Delete both when the container exposes <code>CustomSitesControllerImpl</code>; a member named <code>customSites</code> on <code>TheoriaAppContainer</code> shadows the extension, so <code>CustomSitesViewModel.factory</code> needs no edit if it lands there.</li>
+        <li>Contract notes (no frozen signature changed): <code>AlreadyBuiltIn</code> carries only an id, and resolving a display name needs B1's <code>SourceKey.parse</code>, so the copy is generic ("already built into Theoria"). <code>CustomSiteAvailability</code> has no "saved keys rejected" state; a site with bad keys reads Ready until re-tested.</li>
+        <li>Validation (host only, no device): <code>CustomSitesViewModelTest</code> (15) and <code>CustomSitesScreenTest</code> (3 Robolectric Compose tests: add flow, masked key entry, removal copy) inside the green <code>com.theoriacodex.app.settings.*</code> suite; <code>:app:detektDebug</code> clean; <code>:app:lintDebug --offline --no-daemon</code> passed with no new issues. CHANGELOG Unreleased bullets describe the finished feature and ship only after steps 2 and 3.</li>
+        <li>Device checks left for the orchestrator after step 3 merges: see the step 4 handoff reply.</li>
+        <li>[x] 2026-11-07: Merged <code>feat/custom-site-profiles</code> (<code>3316729b</code>, steps 2 B1–B4 and step 3 runtime) as <code>c62558e0</code>, no conflicts. Deleted the step-3 seam (the <code>TheoriaAppContainer.customSites</code> extension and <code>PendingCustomSitesController</code>); the factory now reads the real member backed by <code>CustomSitesControllerImpl</code>. <code>AlreadyBuiltIn</code> now names the source through <code>SourceKey.parse(id)</code> and <code>displayName()</code> ("Danbooru is already built into Theoria"), with the generic text as fallback. No <code>.name</code>/<code>entries</code>/<code>ordinal</code> fallout in step 4 files.</li>
+        <li>Follow-up (deferred by the orchestrator): <code>CustomSiteAvailability</code> has no "saved keys rejected" state; re-test reports it inline for now.</li>
+        <li>Validation after the merge: full <code>:app:testDebugUnitTest</code> 1165 tests, 0 failures; <code>:app:detektDebug</code> clean; <code>:app:lintDebug --offline --no-daemon</code> "No issues found"; <code>:app:compileReleaseAcceptanceKotlin</code> compiles. No device or emulator used.</li>
+      </ul>
+
+      <h3>Surprises And Discoveries</h3>
+      <ul>
+        <li>Room already stores the source as plain TEXT, converted in Kotlin. There are no type converters, CHECK constraints or SQL literals, so opening identity needs no schema change. Evidence: the <code>*Entity.java</code> files and DAO queries in <code>core-data-android/src/main/java/com/theoriacodex/data/android/room/</code>.</li>
+        <li>Offline manifests serialize the domain <code>Post</code> reflectively with Gson (<code>OfflineMediaStore.kt:258</code> and <code>:235</code>). A value class keeps <code>"source":"PIXIV"</code>; a sealed type could not be deserialized. Related, unverified and out of scope: <code>app/proguard-rules.pro</code> has no keep rule for <code>com.theoriacodex.domain.model.Post</code>, so in minified builds those manifests may use obfuscated field names that change between releases. Recommended as a separate follow-up after checking a release mapping file.</li>
+        <li>The Viewer restoration format <code>"$source:$postId"</code> is decoded with <code>split(':', limit = 2)</code> (<code>ViewerRestoration.kt:24-31</code>). Named covers are matched by the prefix <code>"${name}_${source}."</code> (<code>CodexCover.kt:58-70</code>), and thumbnails are files named <code>"${source}_${postId}"</code> (<code>FileBackedCacheRepository.kt:134</code>). These shaped the custom id alphabet (D2).</li>
+        <li><code>RepositoryPolicies.normalizeSourceWeights</code> orders by <code>SourceKey.entries</code> and falls back to a raw weight of <code>1.0</code>. Left as is, a custom source would be dropped silently, or, once fixed, would take about half the mix.</li>
+        <li>Two strict readers, <code>RoomRecentsRepository.kt:65</code> (<code>observeWatchedPostIds</code>) and <code>RoomProfileBackupStore.kt</code>, call bare <code>valueOf</code>. Older builds would throw on custom rows (D8).</li>
+        <li><code>TagCountCoordinator</code> and <code>SearchTermCountCoordinator</code> prebuild per-source mutex maps, and <code>getValue</code> would throw for a custom key.</li>
+        <li>One <code>runtime.enabledSources</code> set drives both Unified (<code>UnifiedSourceSettings.kt</code>) and For You (<code>ForYouCoordinator.availableSources</code>), which gives D4.</li>
+        <li><code>AvailabilityAwareSourceAdapterRegistry</code> intersects with the account store's built-in set, so custom adapters must be composed outside it (C4).</li>
+        <li>(Review round 1) <code>SourceDependencies.availableSources</code> is a second availability channel. <code>SettingsViewModel.kt:270</code> intersects every Unified-selection save with it, so a built-in-only flow would erase custom opt-ins (C4).</li>
+        <li>(Review round 1) <code>DefaultSourceHttpClient</code> follows redirects internally (<code>DefaultSourceHttpClient.kt:159</code>), and responses carry no final URL, so the HTTPS/same-host policy needs its own transport (C7).</li>
+        <li>(Review round 1) <code>presentation()</code> lives in <code>app</code>. <code>app-logic</code> and <code>core-data</code> cannot read it, so family behavior had to move to adapter capabilities (category 3).</li>
+        <li>(Review round 1) Local main moved to <code>1ac37a9d</code> with PR #48 merged (Room schema 10). Step 1 has commits that already satisfy D10.</li>
+        <li>(Review round 2) Ignoring path and port in ids made a real corruption path. <code>SharedPostPayloadWriter.kt:17-32</code> upserts the shared post payload by (source, post id), so a different booru under a reused id would overwrite stored snapshots of old likes. This led to endpoint-derived ids and explicit reconnection (D2).</li>
+        <li>(B0) <code>GsonWireContractTest</code> was already failing on main. Commit <code>90e55431</code> added a <code>translation</code> field to <code>PostTaxonomyTermStorageRecord</code> and <code>CodexShareTaxonomyTerm</code> without updating <code>app/src/test/resources/r8-json-contracts.txt</code>. Fixed in its own commit before B0. The R8 keep rules already retained the field, so release builds were unaffected.</li>
+        <li>(B1) Release builds already reflect offline manifests with obfuscated field names: R8 maps <code>PostId.source</code> to <code>a</code> and <code>sourcePostId</code> to <code>b</code>, because <code>Post</code> has no keep rule. The R8 gate compared <code>app/build/outputs/mapping/releaseAcceptance/mapping.txt</code> from the pre-swap commit <code>6efcbb8f</code> with the post-swap one. <code>Post</code>, <code>PostId</code>, <code>CreatorProfile</code>, <code>ImageRef</code>, <code>PostTaxonomyTerm</code> and <code>VideoVariant</code> keep identical field names, and <code>source</code> stays field <code>a</code>, its type changing from the enum to <code>String</code>. <code>dexdump</code> of the pre-swap APK shows the enum's <code>&lt;clinit&gt;</code> passing <code>"PIXIV"</code>…<code>"RULE34GEN"</code> to the constructor, so <code>name()</code> (what Gson and Room persisted) was never minified. Release manifests are byte-identical across the swap. The underlying fragility (no keep rule for <code>Post</code>) stays a separate follow-up.</li>
+        <li>(B1) <code>RecentsScreen.kt:125</code> held a <code>SourceKey?</code> in <code>rememberSaveable</code> with no saver. That only worked because enums are <code>Serializable</code>; a value class crashes when state is saved. Found by scanning saveable state after the compiler pass, which cannot see it.</li>
+        <li>(B1) A value class cannot be a <code>vararg</code> type; one test helper (<code>ForYouCoordinatorTest.liked</code>) now takes a <code>List</code>.</li>
+        <li>(Review round 2) Media requests copy headers when built (<code>MediaRequestFactory.kt:37</code>) and screens remember them (<code>ViewerMediaOverview.kt:85</code>, <code>SearchResultCard.kt:345</code>). A header edit applies to requests built afterward.</li>
+        <li>Older apps surface backup decode failures as raw <code>IllegalArgumentException</code> text (<code>BackupViewModel.backupMessage</code>). Gating <code>version: 2</code> on profiles gives the clear "needs a newer version" message in the main case (D6).</li>
+      </ul>
+
+      <h3>Decision Log</h3>
+      <ul>
+        <li>Decision (step 3): a host and its <code>www.</code> twin count as one site for redirects, refining C7's "same host". Rationale: <code>sakugabooru.com</code> 301s to <code>www.</code>, and D2 already treats them as one identity; port and HTTPS are still enforced, so keys never leave the site or travel in cleartext. Date/Author: 2026-11-07 / Claude (step 3).</li>
+        <li>Decision (step 3): Gelbooru-fork quirks are not detected in the probe and stored; custom sites use conservative settings plus runtime learning of the tag-list format. Rationale: <code>SiteProfile</code> has no field for family options, so probe-detected settings could not persist; client-side OR expansion is correct on every fork, and learning the tag list costs one request per adapter lifetime. Persisting server-side OR syntax would need an additive field on <code>SiteProfile</code>, <code>SiteProfileRecord</code> and <code>SiteProbeResult.Supported</code>. Orchestrator ruling: no new field now; app-side OR expansion plus tag-list detection is enough. Persisting a site's server-side OR syntax is an additive follow-up if a site needs it. Date/Author: 2026-11-07 / Claude (step 3).</li>
+        <li>Decision (step 3): category-3 behaviors key on <code>SourceKey.isCustom</code>, not on an adapter capability. Rationale: these checks run on stored posts, often with no adapter at all (removed sites, sites waiting for keys), and every custom source is a booru family, so the identity trait gives the same answer everywhere without threading the registry into media and viewer helpers. Date/Author: 2026-11-07 / Claude (step 3).</li>
+        <li>Decision (step 3): <code>SiteProbeResult.Supported.suggestedLabel</code> is the host without <code>www.</code>; neither family exposes a site title through its API without an extra HTML request. Date/Author: 2026-11-07 / Claude (step 3).</li>
+        <li>Decision: value class over sealed interface for <code>SourceKey</code>. Rationale: identical persisted bytes, including reflective Gson manifests; all hard-coded constants keep compiling; least merge friction with PR #48 and step 1. Date/Author: 2026-11-07 / Claude.</li>
+        <li>Decision: rename <code>name</code> → <code>id</code>. Rationale: forces review of the user-visible uses; persistence and display intent become explicit. Date/Author: 2026-11-07 / Claude.</li>
+        <li>Decision: custom ids use the <code>custom_</code> prefix with an underscore-for-dot host and drop a leading <code>www.</code>; the stored id is authoritative. Rationale: safe in every existing string encoding and file name; injective; stable even if derivation rules change later. Date/Author: 2026-11-07 / Claude (pending sign-off, D2).</li>
+        <li>Decision: no Room, DataStore or catalog-version change. Rationale: all stores are string-based, built-in ids are unchanged, and custom sites start off. Date/Author: 2026-11-07 / Claude.</li>
+        <li>Decision: every call site keeps its current strictness. Rationale: B1 must be a pure identity change, not a policy change; behavior differences would hide among 180 mechanical edits. Date/Author: 2026-11-07 / Claude.</li>
+        <li>Decision: family-specific app behaviors (category 3) move to step 3. Rationale: step 2 stays an identity-only refactor, and these behaviors can only be exercised once custom adapters exist. Date/Author: 2026-11-07 / Claude.</li>
+        <li>Decision: step 2 owns the backup format change (B4). Rationale: it is a persisted-format decision with downgrade consequences, and step 2 already edits those files; keeping it out of step 3 avoids a three-way conflict. Date/Author: 2026-11-07 / Claude.</li>
+        <li>Decision: a B0 contract commit, merged early, freezing only the shared surface (C1, C2 record and interface, <code>SiteProbeResult</code>, C9). Rationale: lets steps 3 and 4 compile in parallel without freezing unproven transport and runtime internals. Date/Author: 2026-11-07 / Claude (narrowed after review round 1).</li>
+        <li>Decision: keep host-derived ids (D2) over opaque ids. Rationale: identical sites converge across devices and backups, re-adding reconnects, and orphaned data keeps a readable label. A stored, authoritative id still allows a future address change. Date/Author: 2026-11-07 / Claude (adversarial alternative recorded for sign-off).</li>
+        <li>Decision: family-specific behavior becomes adapter-declared capabilities, not a presentation-family test. Rationale: module boundaries (<code>app-logic</code> and <code>core-data</code> cannot see the catalog) and per-site quirks (step 1 models them on <code>GelbooruSite</code>). Date/Author: 2026-11-07 / Claude.</li>
+        <li>Decision: split D5 into durable spelling and computed vocabulary. Rationale: only spelling feeds persisted keys; vocabulary sharing is an unproven assumption that should stay revisable. Date/Author: 2026-11-07 / Claude.</li>
+        <li>Decision: every backup after B4 is v2. Rationale: a clear refusal on older apps in all cases, instead of fragile detection of custom data. Date/Author: 2026-11-07 / Claude.</li>
+        <li>Decision: ids include a non-default port (<code>__p</code>) and a hashed install path (<code>__h</code>); reusing an id that already has library data needs explicit confirmation; removed profiles are not retained. Rationale: closes the snapshot-overwrite path with one cheap query instead of a new persisted tombstone state. Date/Author: 2026-11-07 / Claude (after adversarial round 2).</li>
+        <li>Decision: the probe result, not the UI, carries whether credentials are required; restore merging may exceed the site limit rather than fail after journaling; step 3 owns new core-domain capability contracts after B1; an R8 mapping gate guards the release format of reflective manifests. Rationale: adversarial round 2, A3/A4/A6/A8. Date/Author: 2026-11-07 / Claude.</li>
+        <li>Decision: D2, D3, D4, D5, D6 and D8 accepted as written. Date/Author: 2026-11-07 / the user (sign-off).</li>
+        <li>Decision: Settings source lists sort by natural order (the old enum order), not presentation order. Rationale: the earlier B3 note would have reordered built-ins visibly, contradicting "built-in order unchanged". Date/Author: 2026-11-07 / Claude.</li>
+        <li>Decision: add <code>SourceKey.parseOrThrow</code> beside <code>parse</code> for the strict readers (backups, job stores). Rationale: keeps each site's strictness without repeating <code>requireNotNull</code> blocks, and replaces <code>valueOf</code>'s raw enum message with "Unknown source: …". Date/Author: 2026-11-07 / Claude.</li>
+        <li>Decision: named Codex covers always check every built-in and add custom sources found in the thumbnail listing. Rationale: identical lookups for built-ins even when a caller passes a stale listing. Date/Author: 2026-11-07 / Claude.</li>
+        <li>Decision: four user-visible messages show <code>displayName()</code> instead of the id ("Creator browsing is not available for Pixiv.", "Gelbooru is unavailable", the Viewer's fallback title, "Danbooru could not load"). Rationale: custom ids are not readable labels; for built-ins this is a small wording improvement (previously "pixiv" or "GELBOORU"). Date/Author: 2026-11-07 / Claude.</li>
+        <li>Decision: availability requires keys when the site needs them; the runtime rebuilds on credential changes; the presentation catalog stays global and is published in a fixed order relative to adapters. Rationale: matches how existing screens consume availability, without rewriting every <code>displayName()</code> caller. Date/Author: 2026-11-07 / Claude.</li>
+      </ul>
+
+      <h3>Outcomes And Retrospective</h3>
+      <p><strong>Step 2 outcome (2026-11-07).</strong> Source identity is open. <code>SourceKey</code> is a value class whose id is the persisted form everywhere. Built-in ids, settings files, backups (apart from <code>version: 2</code>), offline manifests (debug and release) and the Room schema are byte-identical, proven by golden files, a schema-export diff, and an R8 mapping and <code>dexdump</code> comparison. Data keyed by a custom id survives every store with or without a profile; it renders with a host label and counts as unavailable. Custom ids spell tags the booru way and join the shared vocabulary. The catalog exposes <code>installCustom</code> for step 3. Backups carry site profiles without keys.</p>
+      <p><strong>What future agents should remember.</strong> (1) The compiler finds identity misuse, but not saveable state: <code>rememberSaveable</code> or Bundle writes of a <code>SourceKey</code> need <code>NullableSourceKeySaver</code> or the id. (2) A value class cannot be a <code>vararg</code> type. (3) Release builds reflect <code>Post</code> with obfuscated field names; adding a keep rule for it is a worthwhile follow-up, but would change the release manifest format and needs its own migration plan. (4) Each reader kept its strictness: <code>parseOrThrow</code> marks the strict ones. (5) <code>ProfileBackupService.finish</code> also runs at startup recovery, so nothing it calls may enforce the site limit.</p>
+      <p><strong>Remaining:</strong> steps 3 and 4 per the contracts; device acceptance after merging. Disputed review items for the record: opaque versus address-derived ids (D2, signed off as address-derived), and header-edit staleness (declined A5).</p>
+    </section>
+
+    <section id="recovery">
+      <h2>Idempotence And Recovery</h2>
+      <ul>
+        <li><strong>Commands</strong>: every validation command is read-only against data and safe to rerun. Gradle outputs land in <code>build/</code>. Prune <code>build/reports/</code> after B5.</li>
+        <li><strong>Partial B1</strong>: the swap is atomic. If interrupted, the tree will not compile. Resume by working through the compiler errors with the migration rules, or discard uncommitted work (<code>git restore -SW .</code> inside this worktree only) and restart B1 from B0's commit. Never use bare <code>git stash</code> (the stash is shared across worktrees).</li>
+        <li><strong>Reverting step 2</strong>: safe before step 3 ships custom sites to any device, because no custom-keyed data can exist yet. After that, revert is unsupported (D8). Fix forward.</li>
+        <li><strong>Destructive actions</strong>: none planned. No data is migrated, rewritten or deleted. Removing a site (step 3/4) deletes only its profile, its credentials and its opt-in; library rows stay. Clearing data on any device needs explicit authorization for that exact action.</li>
+        <li><strong>Backups</strong>: the v2 body is the v1 body plus an optional field, and readers accept both versions. A restore is journaled, capacity is checked before the journal is written, and profile merging is idempotent by <code>sourceId</code>, so repeating or recovering a restore adds nothing twice.</li>
+      </ul>
+    </section>
+
+    <section id="appendix">
+      <h2>Appendix</h2>
+      <details open>
+        <summary>A. Classification of the 64 <code>entries</code>/<code>valueOf</code>/<code>ordinal</code> sites</summary>
+        <table>
+          <thead><tr><th>Replacement</th><th>Sites</th></tr></thead>
+          <tbody>
+            <tr><td><code>SourceKey.parse</code> (lenient)</td><td>app: <code>CreatorProfileViewModel:198</code>, <code>CreatorProfileStateSaver:23</code>, <code>ForYouViewModel:89</code>, <code>SavedCodex:28</code>, <code>CodexShareModels:150,321</code>, <code>TagSuggestionStore:426</code>, <code>TagSuggestionSeedData:17</code>, <code>ViewerRestoration:29</code>; core-data-android: <code>RoomCodexSummaryQueries:41</code>, <code>RoomCodexLikesRepository:653</code>, <code>LegacyJsonRecords:62</code>, <code>LocalPostPayloadCodec:202</code>; core-data: <code>ReadingPositionRepository:112</code> (per-entry guard), <code>StatisticsRepositories:72,509</code>, <code>RepositoryStoreRecords:67,75,127,227,277,305</code>, <code>FollowedCreatorRecord:19</code>, <code>RecentSearchPayloadCodec:85,91</code>, <code>PostStorageRecords:300</code>, <code>RecentsStorage:134</code>; core-sources: <code>ProviderHealthCheckCli:76</code>, <code>ProviderHealth:196</code></td></tr>
+            <tr><td><code>requireNotNull(SourceKey.parse(…))</code> (strict)</td><td><code>SearchSavedState:70</code> (inside the decoder's <code>runCatching</code>), <code>PostDownloadJobStore:37</code>, <code>RoomProfileBackupStore:37,42,45,50,60</code>, <code>RoomRecentsRepository:65</code>, <code>ProfileBackupSettingsValidation:9,44,63</code>, <code>ProfileBackupCodec:108</code>, <code>OfflinePendingJobStore:28</code>, <code>ProfileBackupJson:60,87,110</code></td></tr>
+            <tr><td>Natural order</td><td><code>SettingsScreen:502</code>, <code>UnifiedSourceSettings:34</code> (presentation order), <code>LiveCodexFeed:24</code>, <code>RoomProfileBackupStore:38</code>, <code>CodexLikesPolicy:61</code>, <code>DurationDemandScheduler:154</code></td></tr>
+            <tr><td><code>SourceKey.builtIns</code></td><td><code>SourceMetadata:169</code>, <code>Repositories:395</code>, <code>RepositoryStoreRecords:25</code>, <code>ProviderHealthCheckCli:31</code>, <code>StubAdapterRegistry:12</code></td></tr>
+            <tr><td>Catalog <code>orderedSources()</code></td><td><code>RecentsScreen:190</code></td></tr>
+            <tr><td>Lazy per-key map</td><td><code>TagCountCoordinator:25</code>, <code>SearchTermCountCoordinator:27</code></td></tr>
+            <tr><td>File-prefix scan</td><td><code>CodexCover:58</code></td></tr>
+            <tr><td><code>enabled.sorted()</code></td><td><code>RepositoryPolicies:90</code></td></tr>
+            <tr><td>Bounded constant</td><td><code>DataStoreRecords:143</code></td></tr>
+            <tr><td>Not SourceKey (other enums' <code>ordinal</code>)</td><td><code>DurationDemandScheduler:53,152</code></td></tr>
+          </tbody>
+        </table>
+      </details>
+      <details>
+        <summary>B. Commands used to size the change</summary>
+<pre><code>rg -l "SourceKey" --type kotlin | rg -v "/(test|androidTest)/" | wc -l            # 183
+rg -n "SourceKey\.(entries|values\(\)|valueOf)|\.ordinal" --type kotlin | rg -v "/(test|androidTest)/"   # 64
+rg -no "SourceKey\.[A-Z][A-Z0-9_]+" --type kotlin | rg -v "/(test|androidTest)/" | wc -l               # 288
+git diff --name-only main...perf/audit-fixes   # 124 files; 56 also reference SourceKey (35 main)</code></pre>
+      </details>
+      <details>
+        <summary>C. Reference</summary>
+        <p>API shapes across booru forks: <code>https://github.com/red-tails/list-of-boorus</code> (dated, mostly sites the project will not officially support). Moebooru API (detected, unsupported): <code>https://www.sakugabooru.com/help/api</code>.</p>
+      </details>
+    </section>
+  </main>
+</body>
+</html>

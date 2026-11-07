@@ -112,7 +112,7 @@ internal fun buildCodexShareFile(title: String, posts: List<Post>): CodexShareFi
         title = title,
         posts = posts.map { post ->
             CodexSharePost(
-                source = post.id.source.name,
+                source = post.id.source.id,
                 sourcePostId = post.id.sourcePostId,
                 snapshot = portablePostSnapshot(post).toCodexShareSnapshot(),
             )
@@ -147,7 +147,7 @@ internal fun codexSharePostId(post: CodexSharePost): PostId? {
     val source = post.source
         ?.trim()
         ?.uppercase()
-        ?.let { value -> runCatching { SourceKey.valueOf(value) }.getOrNull() }
+        ?.let { value -> SourceKey.parse(value) }
         ?: return null
     val sourcePostId = post.sourcePostId?.trim().orEmpty()
     if (sourcePostId.isBlank() || sourcePostId.length > 512 || sourcePostId.any { it.isISOControl() }) return null
@@ -205,7 +205,7 @@ internal fun selectCodexShareEntries(
     val selectedById = linkedMapOf<String, Pair<CodexSharePost, PostId>>()
     posts.forEach { entry ->
         val postId = codexSharePostId(entry) ?: return@forEach
-        val key = "${postId.source.name}:${postId.sourcePostId}"
+        val key = "${postId.source.id}:${postId.sourcePostId}"
         val existing = selectedById[key]
         if (
             existing == null ||
@@ -304,7 +304,7 @@ private fun CodexShareTaxonomyTerm.toPostTaxonomyTerm(): PostTaxonomyTerm? {
 
 private fun CreatorProfile.toCodexShareCreatorProfile(): CodexShareCreatorProfile {
     return CodexShareCreatorProfile(
-        source = source.name,
+        source = source.id,
         displayName = displayName,
         profileId = profileId,
         profileUrl = profileUrl,
@@ -318,7 +318,7 @@ private fun CodexShareCreatorProfile.toCreatorProfile(defaultSource: SourceKey):
     val normalizedSource = if (sourceName == null) {
         defaultSource
     } else {
-        runCatching { SourceKey.valueOf(sourceName.uppercase()) }.getOrNull() ?: return null
+        SourceKey.parse(sourceName.uppercase()) ?: return null
     }
     return CreatorProfile(
         source = normalizedSource,

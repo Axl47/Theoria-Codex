@@ -39,8 +39,8 @@ internal fun FollowedCodexFilters(
     FilterSection("Source") {
         FilterChoiceChip("All", state.followedSources.isEmpty()) { onChange(state.copy(followedSources = emptyList())) }
         follows.map { it.creator.source }.distinct().forEach { source ->
-            SourceFilterChip(source, source.name in state.followedSources) {
-                onChange(state.copy(followedSources = state.followedSources.toggled(source.name)))
+            SourceFilterChip(source, source.id in state.followedSources) {
+                onChange(state.copy(followedSources = state.followedSources.toggled(source.id)))
             }
         }
     }
@@ -57,7 +57,7 @@ internal fun FollowedCodexFilters(
     }
     val options = remember(follows, state.followedSources, query) {
         follows.filter {
-            (state.followedSources.isEmpty() || it.creator.source.name in state.followedSources) &&
+            (state.followedSources.isEmpty() || it.creator.source.id in state.followedSources) &&
                 it.creator.displayName.contains(query.trim(), ignoreCase = true)
         }
     }

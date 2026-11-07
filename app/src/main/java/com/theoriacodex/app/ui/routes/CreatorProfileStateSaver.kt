@@ -11,7 +11,7 @@ internal val CreatorProfileStateSaver = listSaver<CreatorProfile?, String>(
 )
 
 internal fun encodeCreatorNavigationIdentity(creator: CreatorProfile): List<String> = listOf(
-    creator.source.name,
+    creator.source.id,
     creator.displayName,
     creator.profileId.orEmpty(),
     creator.profileUrl.orEmpty(),
@@ -20,7 +20,7 @@ internal fun encodeCreatorNavigationIdentity(creator: CreatorProfile): List<Stri
 
 internal fun decodeCreatorNavigationIdentity(values: List<String>): CreatorProfile? {
     if (values.size != 5) return null
-    val source = SourceKey.entries.firstOrNull { it.name == values[0] } ?: return null
+    val source = SourceKey.parse(values[0]) ?: return null
     return CreatorProfile(
         source = source,
         displayName = values[1],

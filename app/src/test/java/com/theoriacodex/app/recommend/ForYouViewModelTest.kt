@@ -43,7 +43,7 @@ class ForYouViewModelTest {
         val engine = FakeForYouRouteEngine()
         val saved = SavedStateHandle(mapOf(
             ForYouViewModel.KEY_PROFILE_ID to "profile-main",
-            ForYouViewModel.KEY_SELECTED_SOURCE to SourceKey.PIXIV.name,
+            ForYouViewModel.KEY_SELECTED_SOURCE to SourceKey.PIXIV.id,
             ForYouViewModel.KEY_SORT_MODE to SortMode.TOP.name,
         ))
         val owner = ForYouViewModel(engine, saved, coroutineScope = this)
@@ -139,7 +139,7 @@ class ForYouViewModelTest {
         assertEquals(SortMode.TOP, engine.requests.last().sortMode)
         assertEquals(SourceKey.GELBOORU, engine.requests.last().selectedSource)
         assertEquals(SortMode.TOP.name, saved.get<String>(ForYouViewModel.KEY_SORT_MODE))
-        assertEquals(SourceKey.GELBOORU.name, saved.get<String>(ForYouViewModel.KEY_SELECTED_SOURCE))
+        assertEquals(SourceKey.GELBOORU.id, saved.get<String>(ForYouViewModel.KEY_SELECTED_SOURCE))
     }
 
     @Test

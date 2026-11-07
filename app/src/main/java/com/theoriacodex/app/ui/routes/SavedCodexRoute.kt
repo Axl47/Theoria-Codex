@@ -150,7 +150,7 @@ private fun SavedCodexSection(
             onMore = onLongPress) {
             LazyRow(state = row, modifier = Modifier.height(rowHeight), contentPadding = PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                itemsIndexed(posts, key = { _, post -> "${post.id.source.name}:${post.id.sourcePostId}" }) { index, post ->
+                itemsIndexed(posts, key = { _, post -> "${post.id.source.id}:${post.id.sourcePostId}" }) { index, post ->
                     Box(Modifier.width(cardWidth)) {
                         SearchResultCard(post = post,
                             liked = post.id in state.likedPostIds,

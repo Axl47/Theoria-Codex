@@ -120,7 +120,7 @@ class ViewerRouteRestorationUiTest {
         ) {
             compose.runOnIdle {
                 assertEquals("collection", target?.codexId)
-                assertEquals("${post.id.source.name}:${post.id.sourcePostId}", target?.postKey)
+                assertEquals("${post.id.source.id}:${post.id.sourcePostId}", target?.postKey)
                 assertEquals(false, target?.video)
                 requireNotNull(owner).clearSession()
             }

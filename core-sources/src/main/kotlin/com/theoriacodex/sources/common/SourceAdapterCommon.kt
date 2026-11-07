@@ -207,6 +207,11 @@ internal fun JsonElement.objectList(vararg envelopeKeys: String): List<JsonObjec
         .orEmpty()
 }
 
+/** Booru tags are lowercase and never contain spaces, so typed words join with underscores. */
+internal fun normalizeBooruTag(raw: String): String = raw.trim().replace(BOORU_WHITESPACE_REGEX, "_").lowercase()
+
+private val BOORU_WHITESPACE_REGEX = Regex("\\s+")
+
 internal fun mimeFromUrlOrExt(url: String?, ext: String?): String? {
     return inferMimeFromUrl(url) ?: mimeFromFileExt(ext)
 }
@@ -268,4 +273,17 @@ private fun scaleDurationMs(value: Double, multiplier: Long): Long? {
     val scaled = value * multiplier.toDouble()
     if (!scaled.isFinite() || scaled <= 0.0 || scaled >= Long.MAX_VALUE.toDouble()) return null
     return scaled.toLong().takeIf { it > 0L }
+}
+
+/**
+ * Trims a provider media URL and loads it over HTTPS: protocol-relative (`//cdn…`) and `http://`
+ * URLs are rewritten, never fetched in cleartext. Blank input is null.
+ */
+internal fun httpsMediaUrl(rawUrl: String?): String? {
+    val url = rawUrl?.trim()?.takeIf(String::isNotBlank) ?: return null
+    return when {
+        url.startsWith("//") -> "https:$url"
+        url.startsWith("http://", ignoreCase = true) -> "https://" + url.substring("http://".length)
+        else -> url
+    }
 }

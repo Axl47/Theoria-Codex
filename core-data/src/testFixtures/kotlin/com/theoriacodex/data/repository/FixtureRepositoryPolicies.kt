@@ -37,7 +37,7 @@ internal object FixtureRepositoryPolicies {
             CodexSortMode.NEWEST_SAVED -> pairs.sortedByDescending { it.first.savedAtEpochMs }
             CodexSortMode.OLDEST_SAVED -> pairs.sortedBy { it.first.savedAtEpochMs }
             CodexSortMode.BY_SOURCE -> pairs.sortedWith(
-                compareBy<Pair<CodexItem, Post>> { it.second.id.source.name }
+                compareBy<Pair<CodexItem, Post>> { it.second.id.source.id }
                     .thenByDescending { it.first.savedAtEpochMs }
                     .thenBy { it.second.id.sourcePostId }
             )

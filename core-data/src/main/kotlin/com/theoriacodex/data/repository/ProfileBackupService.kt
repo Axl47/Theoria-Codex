@@ -8,6 +8,7 @@ import java.nio.charset.CodingErrorAction
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption.ATOMIC_MOVE
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
+import com.theoriacodex.domain.source.SiteProfile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -35,6 +36,7 @@ class ProfileBackupService(
     private val writeGuard: ProfileLibraryWriteGuard? = null,
     private val codec: ProfileBackupCodec = ProfileBackupCodec(),
     private val clock: () -> Long = System::currentTimeMillis,
+    private val siteProfiles: SiteProfileRepository = InMemorySiteProfileRepository(),
 ) {
     private val mutex = Mutex()
 
@@ -43,15 +45,17 @@ class ProfileBackupService(
             check(!journalFile.exists()) { "Finish the pending restore before making a backup" }
             repeat(3) {
                 val initialSettings = settings.observeSettings().first()
+                val sites = siteProfiles.observeProfiles().first()
                 val pins = savedSearches.observeSavedSearches().first()
                 val positions = if (includeRecents) readingPositions.snapshot() else emptyList()
                 val library = store.snapshot(includeRecents)
                 if (initialSettings == settings.observeSettings().first() &&
+                    sites == siteProfiles.observeProfiles().first() &&
                     pins == savedSearches.observeSavedSearches().first() &&
                     (!includeRecents || positions == readingPositions.snapshot())
                 ) {
                     return@withLock codec.encode(
-                        ProfileBackup(clock(), initialSettings, library, pins, positions, statisticsFor(includeRecents)),
+                        ProfileBackup(clock(), initialSettings, library, pins, positions, statisticsFor(includeRecents), sites),
                     )
                 }
             }
@@ -82,6 +86,7 @@ class ProfileBackupService(
                 }
                 val pending = PendingRestore(applyPreferences, backup, selectImportedProfile)
                 preflight(backup, applyPreferences)
+                preflightSites(backup)
                 withContext(NonCancellable) {
                     writeJournal(pending)
                     finish(pending)
@@ -105,6 +110,18 @@ class ProfileBackupService(
         }
     }
 
+    /**
+     * Checked only before the journal exists: [finish] also runs during startup recovery, and a site
+     * added since must never make recovery fail. Merging may therefore exceed the limit slightly.
+     */
+    private suspend fun preflightSites(imported: ProfileBackup) {
+        val existing = siteProfiles.observeProfiles().first().mapTo(mutableSetOf(), SiteProfile::sourceId)
+        val added = imported.customSources.map(SiteProfile::sourceId).filterNot(existing::contains)
+        require(added.isEmpty() || existing.size + added.size <= SiteProfile.MAX_CUSTOM_SITES) {
+            "Restore would exceed the ${SiteProfile.MAX_CUSTOM_SITES}-site limit. Remove some sites first."
+        }
+    }
+
     private suspend fun finish(pending: PendingRestore): ProfileRestoreResult = withContext(NonCancellable) {
         try {
             val imported = pending.legacyOperationId?.let(pending.backup::forLegacyRestore) ?: pending.backup
@@ -113,6 +130,7 @@ class ProfileBackupService(
             val collectionsAdded = store.merge(imported.library)
             savedSearches.merge(imported.savedSearches)
             readingPositions.merge(imported.readingPositions)
+            val sites = siteProfiles.mergeRestored(imported.customSources)
             imported.statistics?.let { statistics?.mergeRestored(it) }
             settings.updateSettings {
                 val merged = it.mergeRestoredSettings(imported.settings, pending.applyPreferences)
@@ -125,7 +143,11 @@ class ProfileBackupService(
             // A profile deleted earlier in this process is back, so it must be usable before a restart.
             imported.settings.recommendationProfiles.forEach { writeGuard?.reinstate(it.profileId) }
             check(journalFile.delete() || !journalFile.exists()) { "Could not finish the restore journal" }
-            ProfileRestoreResult(imported.settings.recommendationProfiles.count { it.profileId !in existingProfileIds }, collectionsAdded)
+            ProfileRestoreResult(
+                profilesAdded = imported.settings.recommendationProfiles.count { it.profileId !in existingProfileIds },
+                collectionsAdded = collectionsAdded,
+                keptExistingSites = sites.keptExisting,
+            )
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {

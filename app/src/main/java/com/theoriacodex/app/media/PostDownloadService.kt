@@ -80,7 +80,7 @@ object PostDownloadService {
         val encodedId = URLEncoder.encode(post.id.sourcePostId, Charsets.UTF_8.name())
         val id = encodedId.takeIf { it.length <= 96 } ?: MessageDigest.getInstance("SHA-256")
             .digest(post.id.sourcePostId.toByteArray()).take(16).joinToString("") { "%02x".format(it) }
-        val identity = "${post.id.source.name.lowercase()}_$id"
+        val identity = "${post.id.source.id.lowercase()}_$id"
         val base = title?.let { "${it}_$identity" } ?: identity
         val pageSuffix = if (pageIndex != null && totalPages > 1) "_p${pageIndex + 1}" else ""
         return if (extension.isNotBlank()) {

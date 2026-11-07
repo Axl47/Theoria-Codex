@@ -10,6 +10,11 @@
 - The search editor warns when Danbooru will only get the first two tags of a Unified search, since guests can search at most two tags there.
 - A Danbooru-only search with more tags than Danbooru allows is stopped with an explanation instead of failing at the provider; ranked sorts allow one tag, because the sort uses the other.
 - For You learns across Pixiv, Danbooru, AIBooru, Gelbooru and Rule34.xxx: Likes on one source now suggest the same interests on the others, even sources you haven't liked anything on yet.
+- Add your own booru in Settings → Sites by typing its address. Theoria checks whether it is a Danbooru or Gelbooru 0.2 site and adds it as a source you can search, like and save from.
+- Sites that need an API key ask for one when you add them. Keys stay encrypted on your device and are never included in backups.
+- New sites stay out of Unified search and For You until you turn that on for the site.
+- Each site can be re-tested, renamed, given new keys, or given its own User-Agent and Referer.
+- Removing a site keeps its likes, Codex items and history; they open again when you add the site back.
 
 ### Changed
 
