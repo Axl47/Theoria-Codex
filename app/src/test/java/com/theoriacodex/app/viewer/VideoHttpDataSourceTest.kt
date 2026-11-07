@@ -4,10 +4,6 @@ package com.theoriacodex.app.viewer
 
 import android.net.Uri
 import androidx.media3.datasource.DataSpec
-import com.theoriacodex.app.source.SourcePresentationCatalog
-import com.theoriacodex.app.source.customSourcePresentation
-import com.theoriacodex.app.source.requestHeaders
-import com.theoriacodex.domain.model.SourceKey
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.util.concurrent.CopyOnWriteArrayList
@@ -41,18 +37,13 @@ class VideoHttpDataSourceTest {
         assertTrue("the origin saw its connection end", origin.disconnected.await(1, TimeUnit.SECONDS))
     }
 
+    // SourceMetadataTest covers how a custom site's agent reaches requestHeaders(). The headers are
+    // passed here directly because Robolectric's app start rewrites that shared catalog on its own.
     @Test fun `a custom site's video sends the agent its images do, once, with its other headers`() {
-        val site = requireNotNull(SourceKey.parse("custom_booru_example"))
-        SourcePresentationCatalog.installCustom(
-            listOf(customSourcePresentation(site, "Booru", "https://booru.example", userAgent = "SiteAgent/2")),
-        )
+        val siteHeaders = mapOf("Referer" to "https://booru.example/", "User-Agent" to "SiteAgent/2")
         val source = AbandoningHttpDataSourceFactory(videoHttpClient()).createDataSource()
-        try {
-            source.open(DataSpec.Builder().setUri(origin.url).setHttpRequestHeaders(site.requestHeaders()).build())
-            source.close()
-        } finally {
-            SourcePresentationCatalog.installCustom(emptyList())
-        }
+        source.open(DataSpec.Builder().setUri(origin.url).setHttpRequestHeaders(siteHeaders).build())
+        source.close()
 
         val headers = origin.requestHeaders.single()
         assertEquals(listOf("SiteAgent/2"), headers.valuesOf("user-agent"))
