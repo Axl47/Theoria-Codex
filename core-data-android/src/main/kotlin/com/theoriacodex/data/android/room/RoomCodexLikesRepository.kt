@@ -21,6 +21,7 @@ import com.theoriacodex.data.repository.ProfileLibraryWriteGuard
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.LikedPost
 import com.theoriacodex.data.repository.LikesRepository
+import com.theoriacodex.data.repository.SourceLibraryPresence
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CodexItem
@@ -49,7 +50,7 @@ class RoomCodexLikesRepository(
     private val newId: () -> String = { UUID.randomUUID().toString() },
     gson: Gson = Gson(),
     private val writeGuard: ProfileLibraryWriteGuard = ProfileLibraryWriteGuard(),
-) : CodexRepository, LikesRepository, CodexLikesTransactions {
+) : CodexRepository, LikesRepository, CodexLikesTransactions, SourceLibraryPresence {
     private val dao = database.codexLikesDao()
     private val codec = RoomPayloadCodec(gson)
     private val postCodec = LocalPostPayloadCodec(gson)
@@ -261,6 +262,9 @@ class RoomCodexLikesRepository(
         val ids = codexIds.sorted()
         return dao.observeLibraryPosts(ids).decodePostSnapshots(retainedPayloads, "library:${ids.joinToString("\u0000")}")
     }
+
+    override suspend fun hasLibraryData(source: SourceKey): Boolean =
+        database.withTransaction { dao.hasPosts(source.name) }
 
     override suspend fun getPost(postId: PostId): Post? {
         return database.withTransaction {
