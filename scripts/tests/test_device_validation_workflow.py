@@ -58,6 +58,13 @@ class DeviceValidationWorkflowTest(unittest.TestCase):
         self.assertIn("if: ${{ !startsWith(github.ref, 'refs/tags/') || inputs.connected-tests }}", self.workflow)
         self.assertIn("if: startsWith(github.ref, 'refs/tags/') ||", self.workflow)
 
+    def test_unpublished_signed_apk_is_discarded(self) -> None:
+        release = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+        discard = release.split("  discard-release-apk:", 1)[1]
+        self.assertIn("needs: [build-release, publish]", discard)
+        self.assertIn("needs.publish.result != 'success'", discard)
+        self.assertIn("actions/artifacts/${id}", discard)
+
     def test_tag_publishes_only_after_acceptance_and_parallel_build(self) -> None:
         release = RELEASE_WORKFLOW.read_text(encoding="utf-8")
         build = release.split("  build-release:", 1)[1].split("\n  publish:", 1)[0]
