@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.statistics.statisticsCodexId
 import com.theoriacodex.app.statistics.statisticsPostKey
 import android.content.Context
@@ -93,7 +94,7 @@ internal class ViewerRouteWorkflow(
     suspend fun resolvePost(postId: PostId, streamSource: ViewerStreamSource): Post? {
         offlineMedia?.find(postId)?.let { return it }
         val adapter = checkNotNull(sources.registry.adapterFor(postId.source)) {
-            "${postId.source.name} is unavailable"
+            "${postId.source.displayName()} is unavailable"
         }
         val resolved = withContext(providerDispatcher) { adapter.resolvePost(postId) } ?: return null
         persistResolvedPost(resolved, streamSource)
@@ -266,7 +267,7 @@ internal class ViewerRouteWorkflow(
         val codexOpen = statisticsCodexId(session?.context)?.let { codexId ->
             CodexPostOpen(
                 codexId, statisticsPostKey(post.id),
-                post.title?.takeIf(String::isNotBlank) ?: "${post.id.source.name} ${post.id.sourcePostId}",
+                post.title?.takeIf(String::isNotBlank) ?: "${post.id.source.displayName()} ${post.id.sourcePostId}",
             )
         }
         runCatchingPreservingCancellation {

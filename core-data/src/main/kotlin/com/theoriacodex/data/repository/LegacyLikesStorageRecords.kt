@@ -25,7 +25,7 @@ internal data class LikedPostRecord(
         fun fromDomain(profileId: String, liked: LikedPost): LikedPostRecord {
             return LikedPostRecord(
                 profileId = profileId,
-                source = liked.postId.source.name,
+                source = liked.postId.source.id,
                 sourcePostId = liked.postId.sourcePostId,
                 likedAtEpochMs = liked.likedAtEpochMs,
                 tags = liked.tags,

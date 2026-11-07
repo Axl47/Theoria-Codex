@@ -37,8 +37,8 @@ internal suspend fun crossSourceTraining(likes: List<LikedPost>, store: TagSugge
 internal fun buildForYouSeedId(seed: Map<SourceKey, List<String>>): String {
     if (seed.isEmpty()) return "none"
     return seed.entries
-        .sortedBy { it.key.name }
+        .sortedBy { it.key.id }
         .joinToString(separator = "|") { (source, tags) ->
-            "${source.name}:${tags.joinToString(separator = "+")}"
+            "${source.id}:${tags.joinToString(separator = "+")}"
         }
 }

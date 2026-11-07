@@ -86,7 +86,7 @@ internal fun rememberRecentsRelated(
             RecentsFilter.SEARCHES -> emptyList()
         }
     }
-    val key = "$filter:${source?.name}"
+    val key = "$filter:${source?.id}"
     val currentOnShownPostsChanged by rememberUpdatedState(onShownPostsChanged)
     LaunchedEffect(key, shownPosts) { currentOnShownPostsChanged(key, shownPosts) }
     return rememberRecentsRelatedSlot(binding, shownPosts, cards, onLongPress)

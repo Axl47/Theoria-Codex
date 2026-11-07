@@ -87,7 +87,7 @@ internal object RepositoryPolicies {
         enabledSources: Set<SourceKey>,
         rawWeights: Map<SourceKey, Double>,
     ): Map<SourceKey, Double> {
-        val orderedSources = SourceKey.entries.filter { source -> source in enabledSources }
+        val orderedSources = enabledSources.sorted()
         if (orderedSources.isEmpty()) return emptyMap()
 
         val defaults = SourceRuntimeSettings().sourceWeights

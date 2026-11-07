@@ -79,7 +79,7 @@ internal abstract class LiveSearchCoordinatorRouteTestFixture {
         probeCase: ProviderProbeCase,
         issues: MutableList<String>,
     ): LiveSearchRun? {
-        val coordinator = searchCoordinator(registry, probeCase.source.name.lowercase())
+        val coordinator = searchCoordinator(registry, probeCase.source.id.lowercase())
         coordinator.initializeRoute()
         val query = sourceQuery(
             source = probeCase.source,
@@ -89,7 +89,7 @@ internal abstract class LiveSearchCoordinatorRouteTestFixture {
         val scope = SearchSourceScope.Single(probeCase.source)
         val result = coordinator.executeInitial(query, scope)
         if (result is SearchExecutionResult.Failure) {
-            issues += "${probeCase.source.name}: search error ${result.message}"
+            issues += "${probeCase.source.id}: search error ${result.message}"
             return null
         }
         result as SearchExecutionResult.Success
@@ -97,13 +97,13 @@ internal abstract class LiveSearchCoordinatorRouteTestFixture {
             val seededTerms = (probeCase.includeTerms.map { term ->
                 "${term.sourceNamespace?.let { namespace -> "$namespace:" }.orEmpty()}${term.value}"
             } + probeCase.includeTags).joinToString()
-            issues += "${probeCase.source.name}: seeded search returned no posts for $seededTerms"
+            issues += "${probeCase.source.id}: seeded search returned no posts for $seededTerms"
         }
         val failedStatuses = result.statuses.filter { status ->
             status.errorMessage != null || status.failureReason != null
         }
         if (failedStatuses.isNotEmpty()) {
-            issues += "${probeCase.source.name}: status failures ${failedStatuses.joinToString { it.errorMessage ?: it.failureReason?.name.orEmpty() }}"
+            issues += "${probeCase.source.id}: status failures ${failedStatuses.joinToString { it.errorMessage ?: it.failureReason?.name.orEmpty() }}"
         }
         return LiveSearchRun(coordinator, query, scope, result)
     }
@@ -214,8 +214,7 @@ internal abstract class LiveSearchCoordinatorRouteTestFixture {
             .map(String::trim)
             .filter(String::isNotEmpty)
             .map { raw ->
-                runCatching { SourceKey.valueOf(raw.uppercase()) }
-                    .getOrElse { throw IllegalArgumentException("Unknown live source filter: $raw") }
+                SourceKey.parse(raw.uppercase()) ?: throw IllegalArgumentException("Unknown live source filter: $raw")
             }
             .toSet()
     }

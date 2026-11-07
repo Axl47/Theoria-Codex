@@ -72,7 +72,7 @@ internal class LegacyDataPreparer(
     }
 
     private fun postEntity(post: Post): PostEntity {
-        return PostEntity(post.id.source.name, post.id.sourcePostId, postCodec.encode(post))
+        return PostEntity(post.id.source.id, post.id.sourcePostId, postCodec.encode(post))
     }
 
     private fun prepareItems(
@@ -110,17 +110,17 @@ internal class LegacyDataPreparer(
         val sourceKey = requireSource(value.source, label)
         val sourcePostId = requireNonBlankKey(value.sourcePostId, "$label has no post id")
         if (PostId(sourceKey, sourcePostId) !in postsById) {
-            migrationFailure("$label references missing post '${sourceKey.name}:$sourcePostId'")
+            migrationFailure("$label references missing post '${sourceKey.id}:$sourcePostId'")
         }
         val key = Triple(codexId, sourceKey, sourcePostId)
         if (key in itemsByKey) {
             migrationFailure(
-                "Codex item '${sourceKey.name}:$sourcePostId' appears more than once in '$codexId'"
+                "Codex item '${sourceKey.id}:$sourcePostId' appears more than once in '$codexId'"
             )
         }
         itemsByKey[key] = CodexItemEntity(
             codexId,
-            sourceKey.name,
+            sourceKey.id,
             sourcePostId,
             value.savedAtEpochMs ?: 0L,
         )
@@ -139,13 +139,13 @@ internal class LegacyDataPreparer(
             val key = Triple(profileId, sourceKey, sourcePostId)
             if (key in likesByKey) {
                 migrationFailure(
-                    "Like '${sourceKey.name}:$sourcePostId' appears more than once for profile '$profileId'"
+                    "Like '${sourceKey.id}:$sourcePostId' appears more than once for profile '$profileId'"
                 )
             }
             val tags = normalizedTags(value, index)
             likesByKey[key] = LikedPostEntity(
                 profileId,
-                sourceKey.name,
+                sourceKey.id,
                 sourcePostId,
                 value.likedAtEpochMs ?: clock(),
                 gson.toJson(tags),
@@ -224,7 +224,7 @@ internal class LegacyDataPreparer(
 
     private fun requireSource(raw: String?, label: String): SourceKey {
         val normalized = requireNonBlankKey(raw, "$label has no source")
-        return normalized.toSourceKeyOrNull()
+        return SourceKey.parse(normalized)
             ?: migrationFailure("$label uses unknown source '$normalized'")
     }
 

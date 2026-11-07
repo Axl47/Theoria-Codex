@@ -193,7 +193,7 @@ class InMemoryCodexRepository : CodexRepository {
                 val members = items[codex.codexId].orEmpty()
                 val covers = members.sortedWith(
                     compareByDescending<CodexItem> { it.savedAtEpochMs }
-                        .thenBy { it.postId.source.name }.thenBy { it.postId.sourcePostId },
+                        .thenBy { it.postId.source.id }.thenBy { it.postId.sourcePostId },
                 ).take(coverLimit.coerceAtLeast(0)).mapNotNull { posts[it.postId] }
                 CodexSummary(codex.codexId, members.size, covers)
             }

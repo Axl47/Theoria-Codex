@@ -38,7 +38,7 @@ class SourceWeightNormalizationTest {
     @Test
     fun `invalid weights fail closed and finite positives still total one`() {
         val normalized = SourceWeightNormalization.normalize(
-            sources = SourceKey.entries,
+            sources = SourceKey.builtIns,
             weightsBySource = mapOf(
                 SourceKey.PIXIV to Double.NaN,
                 SourceKey.GELBOORU to Double.POSITIVE_INFINITY,

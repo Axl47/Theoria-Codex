@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import java.util.concurrent.ConcurrentHashMap
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
@@ -24,14 +25,14 @@ internal class SearchTermCountCoordinator(
 ) {
     private data class Decision(val count: Int?, val expiresAt: Long)
     private val decisions = LinkedHashMap<Pair<SourceKey, SearchTerm>, Decision>()
-    private val locks = SourceKey.entries.associateWith { Mutex() }
+    private val locks = ConcurrentHashMap<SourceKey, Mutex>()
 
     suspend fun fetch(source: SourceKey, terms: List<SearchTerm>): Map<SearchTerm, Int?> = withContext(dispatcher) {
         val requested = terms.distinct()
         val adapter = registry.adapterFor(source) as? FacetedSearchSourceAdapter
             ?: return@withContext requested.associateWith { null }
         withTimeoutOrNull(timeoutMs) {
-            locks.getValue(source).withLock {
+            locks.computeIfAbsent(source) { Mutex() }.withLock {
                 requested.mapConcurrent(concurrency = 2) { term ->
                     if (cached(source, term) == null) lookup(source, term, adapter)
                 }

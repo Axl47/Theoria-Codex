@@ -115,7 +115,7 @@ internal class LiveSearchCoordinatorRouteTest : LiveSearchCoordinatorRouteTestFi
                     forceRefresh = true,
                 )
                 if (trending.isEmpty()) {
-                    issues += "${probeCase.source.name}: trending tags returned no tags"
+                    issues += "${probeCase.source.id}: trending tags returned no tags"
                 }
             }
         }
@@ -150,7 +150,7 @@ internal class LiveSearchCoordinatorRouteTest : LiveSearchCoordinatorRouteTestFi
                 trending = emptyList(),
             )
             if (autocomplete.autocomplete.isEmpty()) {
-                issues += "${probeCase.source.name}: ${autocompleteProbe.checkName} returned no tags for prefix $scopedPrefix"
+                issues += "${probeCase.source.id}: ${autocompleteProbe.checkName} returned no tags for prefix $scopedPrefix"
             }
             val expectedFacet = autocompleteProbe.facet
             if (
@@ -160,7 +160,7 @@ internal class LiveSearchCoordinatorRouteTest : LiveSearchCoordinatorRouteTestFi
                         suggestion.sourceNamespace == autocompleteProbe.sourceNamespace
                 }
             ) {
-                issues += "${probeCase.source.name}: ${autocompleteProbe.checkName} lost ${autocompleteProbe.sourceNamespace ?: expectedFacet.name.lowercase()} taxonomy"
+                issues += "${probeCase.source.id}: ${autocompleteProbe.checkName} lost ${autocompleteProbe.sourceNamespace ?: expectedFacet.name.lowercase()} taxonomy"
             }
         }
 

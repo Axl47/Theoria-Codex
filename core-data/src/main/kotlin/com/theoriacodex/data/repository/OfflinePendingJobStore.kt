@@ -25,7 +25,7 @@ class OfflinePendingJobStore(private val file: File, private val store: AtomicJs
             val ids = row.getAsJsonArray("posts").map { item ->
                 require(++count <= 20_000)
                 val post = item.asJsonObject
-                PostId(SourceKey.valueOf(post.get("source").asString), post.get("id").asString.also {
+                PostId(SourceKey.parseOrThrow(post.get("source").asString), post.get("id").asString.also {
                     require(it.isNotBlank() && it.length <= 500)
                 })
             }.distinct()
@@ -40,7 +40,7 @@ class OfflinePendingJobStore(private val file: File, private val store: AtomicJs
             add("owners", JsonArray().apply { requests.forEach { (owner, posts) -> add(JsonObject().apply {
                 addProperty("owner", owner)
                 add("posts", JsonArray().apply { posts.distinct().forEach { id -> add(JsonObject().apply {
-                    addProperty("source", id.source.name)
+                    addProperty("source", id.source.id)
                     addProperty("id", id.sourcePostId)
                 }) } })
             }) } })

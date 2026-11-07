@@ -12,7 +12,7 @@ object QueryHash {
     fun from(query: Query): String {
         val mode = when (val modeValue = query.mode) {
             QueryMode.Unified -> "unified"
-            is QueryMode.Source -> "source:${modeValue.source.name}"
+            is QueryMode.Source -> "source:${modeValue.source.id}"
         }
         val includeGroups = query.effectiveIncludeTermGroups
             .mapNotNull { group ->

@@ -46,7 +46,7 @@ object QueryStorageCodec {
         return QueryStorageRecord(
             schemaVersion = CURRENT_QUERY_STORAGE_SCHEMA_VERSION,
             modeType = if (mode is QueryMode.Source) "source" else "unified",
-            modeSource = (mode as? QueryMode.Source)?.source?.name,
+            modeSource = (mode as? QueryMode.Source)?.source?.id,
             includeTags = query.includeTags,
             excludeTags = query.excludeTags,
             sort = query.sort.name,
@@ -68,7 +68,7 @@ object QueryStorageCodec {
         }
         val mode = when (record.modeType) {
             "unified" -> QueryMode.Unified
-            "source" -> record.modeSource.toSourceKeyOrNull()?.let(QueryMode::Source) ?: QueryMode.Unified
+            "source" -> record.modeSource?.let(SourceKey::parse)?.let(QueryMode::Source) ?: QueryMode.Unified
             else -> QueryMode.Unified
         }
         val includeTerms = record.includeTerms?.mapNotNull { it?.toDomainOrNull() }
@@ -129,9 +129,6 @@ private fun SearchTermStorageRecord.toDomainOrNull(): SearchTerm? {
     }
     return SearchTerm(normalized, resolvedFacet, sourceNamespace?.trim()?.takeIf(String::isNotBlank))
 }
-
-private fun String?.toSourceKeyOrNull(): SourceKey? =
-    this?.trim()?.let { runCatching { SourceKey.valueOf(it) }.getOrNull() }
 
 data class LegacyRecentsStoreFile(
     @field:SerializedName("watchedPosts") val watchedPosts: List<LegacyRecentPostRecord?>? = null,

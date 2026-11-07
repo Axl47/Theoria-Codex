@@ -193,7 +193,7 @@ object ProviderProbeCases {
         val parsed = com.google.gson.Gson().fromJson(json, Array<ProviderProbeCaseRecord>::class.java)
         return parsed.map { record ->
             ProviderProbeCase(
-                source = SourceKey.valueOf(record.source),
+                source = SourceKey.parseOrThrow(record.source),
                 includeTags = record.includeTags.orEmpty(),
                 includeTerms = record.includeTerms.orEmpty().map { term ->
                     SearchTerm(
@@ -260,7 +260,7 @@ class ProviderHealthChecker(
     private val nowProvider: () -> Long = System::currentTimeMillis,
 ) {
     suspend fun checkAll(sources: Collection<SourceKey> = registry.availableSources()): List<ProviderHealthCheckResult> {
-        return sources.sortedBy { it.name }.map { source ->
+        return sources.sortedBy { it.id }.map { source ->
             val adapter = registry.adapterFor(source)
             if (adapter == null) {
                 ProviderHealthCheckResult(
@@ -326,7 +326,7 @@ class ProviderProbeRunner(
     private val credentialedSources: Set<SourceKey> = emptySet(),
 ) {
     suspend fun runAll(cases: List<ProviderProbeCase> = ProviderProbeCases.defaults): List<ProviderProbeStepResult> {
-        return cases.sortedBy { it.source.name }.flatMap { probeCase ->
+        return cases.sortedBy { it.source.id }.flatMap { probeCase ->
             runCase(probeCase)
         }
     }

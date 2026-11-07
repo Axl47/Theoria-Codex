@@ -293,7 +293,7 @@ class OfflineMediaStore(
             folder.walkTopDown().filter(File::isFile).sumOf(File::length))
     }
 
-    private fun postDirectory(id: PostId) = File(directory, digest("${id.source.name}:${id.sourcePostId}"))
+    private fun postDirectory(id: PostId) = File(directory, digest("${id.source.id}:${id.sourcePostId}"))
     private fun digest(value: String) = MessageDigest.getInstance("SHA-256").digest(value.toByteArray())
         .joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
 

@@ -186,7 +186,7 @@ class ForYouCoordinator(
                 val includeTags = selectAllowedSeed(
                     prepared = ForYouTagSetGenerator.prepare(source, emptyList()),
                     fallbackCandidates = fallbackTags,
-                    random = Random(source.name.hashCode()),
+                    random = Random(source.id.hashCode()),
                     blockedKeys = blacklistedSeedKeys[source].orEmpty(),
                 )
                 includeTags.takeIf { it.isNotEmpty() }?.let { tags -> source to tags }

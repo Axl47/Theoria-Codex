@@ -604,7 +604,7 @@ object SearchDraftReducer {
 
 fun modeKey(mode: QueryMode): String = when (mode) {
     QueryMode.Unified -> "unified"
-    is QueryMode.Source -> "source:${mode.source.name}"
+    is QueryMode.Source -> "source:${mode.source.id}"
 }
 
 fun QueryMode.isAvailable(sources: Set<SourceKey>): Boolean = when (this) {

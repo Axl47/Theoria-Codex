@@ -34,13 +34,8 @@ object RecommendationTagNormalization {
             SourceKey.RULE34XXX,
             -> normalizeGelbooruToken(cleaned)
 
-            SourceKey.PIXIV,
-            SourceKey.NHENTAI,
-            SourceKey.HITOMI,
-            SourceKey.RULE34PAHEAL,
-            SourceKey.RULE34VIDEO,
-            SourceKey.RULE34GEN,
-            -> cleaned
+            // Pixiv, NHentai, Hitomi and the spaced Rule34 sources keep the cleaned spelling.
+            else -> cleaned
         }.takeIf(String::isNotBlank)
     }
 
