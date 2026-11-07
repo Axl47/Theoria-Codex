@@ -2,6 +2,7 @@
 
 package com.theoriacodex.app.viewer
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Matrix
@@ -18,6 +19,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
 import androidx.media3.common.VideoFrameProcessingException
+import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.GlUtil
 import androidx.media3.effect.DefaultVideoFrameProcessor
 import androidx.media3.effect.GlEffect
@@ -205,6 +207,11 @@ private class PreviewFrameRenderer(context: Context, handler: Handler, listener:
     private var effects: List<Effect> = emptyList()
     private var rotation: Effect? = null
 
+    // Media3 marks this wrapper library-internal. It is the same setup Media3's FrameExtractor uses to render
+    // decoded frames into an effect chain; the pinned media3 version keeps it stable, and a changed signature
+    // fails compilation on upgrade.
+    @SuppressLint("RestrictedApi")
+    @androidx.annotation.OptIn(ExperimentalApi::class)
     override fun createPlaybackVideoGraphWrapper(context: Context, releaseControl: VideoFrameReleaseControl): PlaybackVideoGraphWrapper =
         PlaybackVideoGraphWrapper.Builder(context, releaseControl)
             .experimentalSetLateThresholdToDropInputUs(C.TIME_UNSET)
