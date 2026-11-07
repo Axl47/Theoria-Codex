@@ -3,6 +3,7 @@ package com.theoriacodex.app.search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.referentialEqualityPolicy
 import androidx.compose.runtime.remember
@@ -34,6 +35,21 @@ internal data class PostWatchPresentation(
  */
 internal val LocalPostWatchPresentation = staticCompositionLocalOf<State<PostWatchPresentation>> {
     mutableStateOf(PostWatchPresentation())
+}
+
+/** One post's slice of [PostWatchPresentation]. */
+internal data class PostWatchEntry(val position: ReadingPosition?, val watched: RecentPostEntry?)
+
+/**
+ * This post's watch history, read through a derived state: every open and reading-position write replaces
+ * the whole history, and a card reading the full map would recompose for every other post's change.
+ */
+@Composable
+internal fun rememberPostWatchEntry(postId: PostId): State<PostWatchEntry> {
+    val presentation = LocalPostWatchPresentation.current
+    return remember(presentation, postId) {
+        derivedStateOf { presentation.value.let { PostWatchEntry(it.positions[postId], it.watched[postId]) } }
+    }
 }
 
 /** Watch history for every card, built off the main thread so opening a post cannot stall on it. */

@@ -54,7 +54,8 @@ class RoomCodexLikesRepository(
     private val codec = RoomPayloadCodec(gson)
     private val postCodec = LocalPostPayloadCodec(gson)
     private val sharedPostPayloads = SharedPostPayloadWriter(dao, LocalPostPayloadCodec(gson))
-    private val summaries = RoomCodexSummaryQueries(dao, LocalPostPayloadCodec(gson))
+    private val retainedPayloads = RetainedPostPayloadCache(postCodec::decode)
+    private val summaries = RoomCodexSummaryQueries(dao, retainedPayloads)
 
     override suspend fun cleanCodex(request: CodexCleaningRequest): CodexCleaningSnapshot = database.withTransaction {
         writeGuard.requireProfileWritable(request.profileId)
@@ -250,12 +251,16 @@ class RoomCodexLikesRepository(
             CodexSortMode.OLDEST_SAVED -> dao.observeCodexPostsOldest(codexId)
             CodexSortMode.BY_SOURCE -> dao.observeCodexPostsBySource(codexId)
         }
+        // Every sort projects the same rows, so sorts share one retained projection per Codex.
         return rows.map { values -> values.map { PostEntity(it.source, it.sourcePostId, it.payloadJson) } }
-            .decodePostSnapshots(postCodec)
+            .decodePostSnapshots(retainedPayloads, "codex:$codexId")
     }
 
-    override fun observeLibraryPosts(codexIds: Set<String>): Flow<List<Post>> =
-        if (codexIds.isEmpty()) flowOf(emptyList()) else dao.observeLibraryPosts(codexIds.sorted()).decodePostSnapshots(postCodec)
+    override fun observeLibraryPosts(codexIds: Set<String>): Flow<List<Post>> {
+        if (codexIds.isEmpty()) return flowOf(emptyList())
+        val ids = codexIds.sorted()
+        return dao.observeLibraryPosts(ids).decodePostSnapshots(retainedPayloads, "library:${ids.joinToString("\u0000")}")
+    }
 
     override suspend fun getPost(postId: PostId): Post? {
         return database.withTransaction {

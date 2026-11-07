@@ -1,6 +1,7 @@
 package com.theoriacodex.app.ui.components
 
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridItemInfo
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -42,9 +43,10 @@ fun rememberFeedPageDemand(
     var continueRevision by remember { mutableIntStateOf(0) }
     var showContinue by remember(owner) { mutableStateOf(false) }
 
+    val visibleIndices = remember(gridState) { VisibleItemIndices() }
     LaunchedEffect(owner, gridState) {
         snapshotFlow {
-            val indices = gridState.layoutInfo.visibleItemsInfo.map { it.index }
+            val indices = visibleIndices.of(gridState.layoutInfo.visibleItemsInfo)
             currentInput.copy(
                 hasLocalFilters = filters.animatedOnly || filters.hideLiked || filters.hideSaved ||
                     filters.hideWatched || !filters.animatedDurationRange.isFullRange ||
@@ -62,6 +64,22 @@ fun rememberFeedPageDemand(
     return FeedPageDemandControl(showContinue) {
         owner.continueLoading()
         continueRevision += 1
+    }
+}
+
+/** The grid's visible item indices, reallocated only when they change rather than on every scrolled frame. */
+private class VisibleItemIndices {
+    private var cached: List<Int> = emptyList()
+
+    fun of(items: List<LazyStaggeredGridItemInfo>): List<Int> {
+        if (matchesCached(items)) return cached
+        return items.map { it.index }.also { cached = it }
+    }
+
+    private fun matchesCached(items: List<LazyStaggeredGridItemInfo>): Boolean {
+        if (items.size != cached.size) return false
+        for (position in 0 until items.size) if (items[position].index != cached[position]) return false
+        return true
     }
 }
 

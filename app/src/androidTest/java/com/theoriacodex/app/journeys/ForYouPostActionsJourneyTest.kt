@@ -10,8 +10,6 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.longClick
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
 import com.theoriacodex.app.codex.likesCodexIdForProfile
@@ -55,15 +53,15 @@ class ForYouPostActionsJourneyTest : AppJourneyFixture() {
         assertEquals(rootsBeforeLike, container.registry.requests.count { it.pageToken == null })
         assertEquals(historyBeforeLike, io { container.data.recentsRepository.observeSearches().first() })
         compose.onNodeWithText("Dismiss").performClick()
-        compose.onNodeWithTag(card).performTouchInput { longClick() }
-        compose.onNodeWithText("Save to Codex").performClick()
+        longPress(compose.onNodeWithTag(card))
+        activate(compose.onNodeWithText("Save to Codex"))
         compose.waitUntil(10_000) { compose.onAllNodesWithText("FYP saved").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("FYP saved").performClick()
         compose.waitUntil(10_000) { io { container.content.observeCodexItems(collection.codexId).first().isNotEmpty() } }
         assertEquals(listOf(first.id), io { container.content.observeCodexItems(collection.codexId).first().map { it.postId } })
         compose.waitUntil(10_000) { io { container.data.statisticsRepository.observeStatistics().first().forYouSaveCount == 1L } }
-        compose.onNodeWithTag(card).performTouchInput { longClick() }
-        compose.onNodeWithText("Journey artist").performClick()
+        longPress(compose.onNodeWithTag(card))
+        activate(compose.onNodeWithText("Journey artist"))
         compose.onNodeWithContentDescription("Back").assertIsDisplayed()
         compose.onNodeWithTag(card).assertIsDisplayed()
         UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()

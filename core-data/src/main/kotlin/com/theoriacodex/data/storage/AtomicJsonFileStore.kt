@@ -1,7 +1,6 @@
 package com.theoriacodex.data.storage
 
 import com.google.gson.Gson
-import com.google.gson.GsonBuilder
 import com.google.gson.JsonParseException
 import java.io.File
 import java.io.FileOutputStream
@@ -26,7 +25,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * Verified recovery for legacy JSON reads and atomic whole-file replacement on an injected IO lane.
- * Store-specific schemas remain owned by callers.
+ * Store-specific schemas remain owned by callers. Writes compact JSON; older pretty-printed files still read.
  */
 class AtomicJsonFileStore private constructor(
     private val ioDispatcher: CoroutineDispatcher,
@@ -35,7 +34,7 @@ class AtomicJsonFileStore private constructor(
 ) {
     constructor(
         ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-        gson: Gson = GsonBuilder().setPrettyPrinting().create(),
+        gson: Gson = Gson(),
     ) : this(
         ioDispatcher = ioDispatcher,
         gson = gson,

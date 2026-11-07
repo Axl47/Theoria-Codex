@@ -10,8 +10,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -27,20 +28,26 @@ class FileBackedCacheRepository(
     private val fullImages = CachedMediaDirectory(fullDir)
     private val namedThumbnailRevision = MutableStateFlow(0L)
     private val snapshotFlow = MutableStateFlow(CacheSnapshot(thumbnailCount = 0, fullImageCount = 0))
-
-    init {
-        snapshotFlow.value = runBlocking {
-            withContext(ioDispatcher) {
-                thumbnails.reconcile()
-                fullImages.reconcile()
-                currentSnapshot()
-            }
-        }
-    }
+    private var reconciled = false
 
     override fun observeNamedThumbnailRevisions(): Flow<Long> = namedThumbnailRevision.asStateFlow()
 
-    override fun observeSnapshot(): Flow<CacheSnapshot> = snapshotFlow
+    /** The first emission always follows the startup scan, so observers never see placeholder counts. */
+    override fun observeSnapshot(): Flow<CacheSnapshot> = flow {
+        mutex.withLock { ensureReconciled() }
+        emitAll(snapshotFlow)
+    }
+
+    /** One directory scan on first use, off the constructing thread; callers hold [mutex]. */
+    private suspend fun ensureReconciled() {
+        if (reconciled) return
+        snapshotFlow.value = withContext(ioDispatcher) {
+            thumbnails.reconcile()
+            fullImages.reconcile()
+            currentSnapshot()
+        }
+        reconciled = true
+    }
 
     override suspend fun cacheThumbnail(post: Post) {
         cacheThumbnail(post, cacheKey(post.id))
@@ -52,6 +59,7 @@ class FileBackedCacheRepository(
 
     private suspend fun cacheThumbnail(post: Post, key: String, replacePrefix: String? = null) {
         mutex.withLock {
+            ensureReconciled()
             snapshotFlow.value = withContext(ioDispatcher) {
                 writeCachedEntry(
                     index = thumbnails,
@@ -72,6 +80,7 @@ class FileBackedCacheRepository(
     override suspend fun cacheFull(post: Post) {
         mutex.withLock {
             val fullImage = post.full ?: return@withLock
+            ensureReconciled()
             snapshotFlow.value = withContext(ioDispatcher) {
                 writeCachedEntry(
                     index = fullImages,
@@ -86,6 +95,7 @@ class FileBackedCacheRepository(
 
     override suspend fun clearThumbnailCache() {
         mutex.withLock {
+            ensureReconciled()
             snapshotFlow.value = withContext(ioDispatcher) {
                 thumbnails.clear()
                 namedThumbnailRevision.update { it + 1 }
@@ -96,6 +106,7 @@ class FileBackedCacheRepository(
 
     override suspend fun clearFullImageCache() {
         mutex.withLock {
+            ensureReconciled()
             snapshotFlow.value = withContext(ioDispatcher) {
                 fullImages.clear()
                 currentSnapshot()
@@ -134,7 +145,7 @@ class FileBackedCacheRepository(
     private fun cacheKey(postId: PostId): String = "${postId.source.name}_${postId.sourcePostId}"
 }
 
-/** One startup scan; writes reconcile only the affected files, including deletion failures. */
+/** One first-use scan; writes reconcile only the affected files, including deletion failures. */
 private class CachedMediaDirectory(val directory: File) {
     private val entries = mutableMapOf<String, MutableMap<File, Long>>()
     var count = 0

@@ -252,6 +252,9 @@ data class LifetimeStatistics(
     val translatedSourceCharacterCount: Long = 0L,
 )
 
+/** A post opened from a Codex, counted under that Codex's statistics. */
+data class CodexPostOpen(val codexId: String, val postKey: String, val label: String)
+
 /** Local-only cumulative statistics. Feature data remains authoritative for current library composition. */
 interface StatisticsRepository {
     /** Supply already available post data; never resolves a post remotely. */
@@ -261,7 +264,8 @@ interface StatisticsRepository {
     suspend fun recordCodexPostOpen(codexId: String, postKey: String, label: String)
     suspend fun recordAppOpen()
     suspend fun addUsageDuration(delta: UsageDurationDelta)
-    suspend fun recordWatchedPost(source: SourceKey, tags: Set<String>)
+    /** Records a viewed post; [codexOpen] also counts it as opened from that Codex in the same write. */
+    suspend fun recordWatchedPost(source: SourceKey, tags: Set<String>, codexOpen: CodexPostOpen? = null)
     suspend fun recordSearch(sources: Set<SourceKey>)
     suspend fun recordForYouSearch()
     suspend fun recordForYouSave()

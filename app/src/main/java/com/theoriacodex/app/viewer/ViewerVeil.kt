@@ -95,7 +95,7 @@ private fun ViewerPageSegments(pageCount: Int, pageIndex: Int) {
     val accent = LocalViewerAccent.current
     val slot = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).height(3.dp).clearAndSetSemantics { }
     if (pageCount > MAX_PAGE_SEGMENTS) {
-        ViewerTimelineTrack((pageIndex + 1f) / pageCount, slot, showHandle = false)
+        ViewerTimelineTrack({ (pageIndex + 1f) / pageCount }, slot, showHandle = false)
         return
     }
     Row(slot, horizontalArrangement = Arrangement.spacedBy(4.dp)) {

@@ -243,8 +243,8 @@ internal fun ViewerRoute(
                     latestDependencies.value.postResolver.resolve(session, postId)
                 override fun requiresResolution(post: Post) = latestDependencies.value.postResolver.requiresResolution(post)
             },
-            mediaPrefetcher = ViewerMediaPrefetcher { session, media ->
-                latestDependencies.value.mediaPrefetcher.prefetch(session, media)
+            mediaPrefetcher = ViewerMediaPrefetcher { session, media, distance ->
+                latestDependencies.value.mediaPrefetcher.prefetch(session, media, distance)
             },
         )
     }

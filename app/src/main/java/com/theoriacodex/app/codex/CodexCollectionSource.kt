@@ -41,11 +41,25 @@ internal class CodexCollectionSource(
         if (codexIds.isEmpty()) return flowOf(emptyMap())
         val relevance = CodexSaveRelevance(posts, searchQuery)
         if (!relevance.hasSignals) return flowOf(emptyMap())
-        return combine(codexIds.sorted().map { id ->
-            repository.observeCodexPosts(id, CodexSortMode.NEWEST_SAVED)
-                .map { saved -> id to relevance.score(saved) }
-                .catch { emit(id to 0.0) }
-        }) { scores -> scores.toMap() }.flowOn(Dispatchers.Default)
+        return observeSavedLibrary(codexIds).map(relevance::scoreEach).flowOn(Dispatchers.Default)
+    }
+
+    /**
+     * Every Codex's saved posts, keyed by Codex ID. Payloads are decoded once per library change, even for
+     * posts saved in several Codices; per-Codex membership comes from ID-only queries.
+     */
+    fun observeSavedLibrary(codexIds: Set<String>): Flow<Map<String, List<Post>>> {
+        if (codexIds.isEmpty()) return flowOf(emptyMap())
+        val memberships = combine(codexIds.sorted().map { id ->
+            repository.observeSavedPostIds(setOf(id))
+                .map { saved -> id to saved }
+                .catch { emit(id to emptySet()) }
+        }) { pairs -> pairs.toMap() }
+        val posts = repository.observeLibraryPosts(codexIds).catch { emit(emptyList()) }
+        return combine(posts, memberships) { saved, members ->
+            val byId = saved.associateBy(Post::id)
+            members.mapValues { (_, ids) -> ids.mapNotNull(byId::get) }
+        }.flowOn(Dispatchers.Default)
     }
 
     /** A completed save target contains the entire incoming selection, matched by source and post ID. */
@@ -62,13 +76,15 @@ internal class CodexCollectionSource(
 
     fun observe(codexIds: Set<String>): Flow<CodexCollectionPresentation> =
         combine(repository.observeCodexSummaries(codexIds), cacheRepository.observeNamedThumbnailRevisions()) { summaries, revision ->
+            // One listing per update serves every cover. The cache exposes no revision for post thumbnails,
+            // so the folder is still listed whenever summaries change.
             val thumbnails = storageDirectory.resolve("cache/thumbnails").listFiles().orEmpty().toList()
             CodexCollectionPresentation(
                 itemCounts = summaries.associate { it.codexId to it.itemCount },
                 coverCandidates = summaries.associate { summary ->
                     summary.codexId to resolveCodexCoverCandidates(storageDirectory, summary.coverPosts, thumbnails)
                 } + listOf(FOLLOWED_CODEX_ID, SAVED_SEARCHES_CODEX_ID).associateWith {
-                    resolveNamedCodexCoverCandidates(storageDirectory, it, revision)
+                    resolveNamedCodexCoverCandidates(storageDirectory, it, revision, thumbnails)
                 },
             )
         }.flowOn(dispatcher)
@@ -83,3 +99,7 @@ internal class CodexCollectionSource(
             )
         }.flowOn(Dispatchers.Default)
 }
+
+/** Scores each Codex of a saved-library snapshot against the incoming selection. */
+internal fun CodexSaveRelevance.scoreEach(library: Map<String, List<Post>>): Map<String, Double> =
+    library.mapValues { (_, saved) -> score(saved) }

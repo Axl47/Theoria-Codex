@@ -78,7 +78,7 @@ internal fun ViewerAnimatedWebPPlayer(
             ViewerTimelineVeil { ViewerWebPFooter(state, controls, events) }
         }
         if (controls.showPassiveProgress && state.frameCount > 1) {
-            ViewerPassiveProgressBar(state.frameIndex.toLong(), state.frameCount - 1L, Modifier.align(Alignment.BottomCenter))
+            ViewerPassiveProgressBar({ state.frameIndex.toLong() }, state.frameCount - 1L, Modifier.align(Alignment.BottomCenter))
         }
     }
 }
@@ -156,7 +156,7 @@ private fun ViewerWebPFooter(state: ViewerWebPState, controls: ViewerRendererCon
                 )
             }
             ViewerTimelineTrack(
-                fraction = if (state.frameCount <= 1) 0f else state.frameIndex.coerceIn(0, state.frameCount - 1).toFloat() / (state.frameCount - 1),
+                fraction = { if (state.frameCount <= 1) 0f else state.frameIndex.coerceIn(0, state.frameCount - 1).toFloat() / (state.frameCount - 1) },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp).height(VIEWER_TIMELINE_TRACK_HEIGHT),
                 showHandle = false,
             )

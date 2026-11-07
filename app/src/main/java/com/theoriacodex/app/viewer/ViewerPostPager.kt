@@ -8,6 +8,8 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -59,6 +61,8 @@ internal fun ViewerPostPagerSurface(
 ) {
     val haptics = LocalHapticFeedback.current
     val selection = frame.selection
+    // Pinches write the transform every pointer event; only crossing the zoomed boundary changes the pager.
+    val zoomed by remember(viewerTransform) { derivedStateOf { viewerTransform.value.isZoomed } }
     val reservedBottom = if (frame.chromeVisible && selection.isAnimated) {
         with(LocalDensity.current) { (VIEWER_TIMELINE_HEIGHT + LocalViewerPostStripInset.current).toPx() }
     } else 0f
@@ -66,7 +70,7 @@ internal fun ViewerPostPagerSurface(
         Modifier.fillMaxSize()
             .viewerGestures(
                 ViewerGestureConfig(
-                    enabled = !viewerTransform.value.isZoomed && !frame.inPictureInPicture && !frame.touchExplorationEnabled &&
+                    enabled = !zoomed && !frame.inPictureInPicture && !frame.touchExplorationEnabled &&
                         !screen.pendingDismiss && !frame.returning && !frame.opening,
                     levels = levelControls.takeIf { selection.media?.let(::isVideoMediaRef) == true },
                     reservedBottomPx = reservedBottom,
@@ -185,7 +189,7 @@ private fun ViewerPostPage(
                 onTimelineInteractionActiveChanged = { controls.onTimelineInteractionChanged(it) },
                 onDurationKnown = { duration -> reportAuthoritativeDuration(post, media, duration, onAuthoritativeDurationKnown) },
             ),
-            transform = viewerTransform.value,
+            transform = viewerTransform,
             onTransformChanged = { viewerTransform.value = it },
             layout = ViewerMediaLayout(frame.isLandscape, frame.inPictureInPicture, frame.touchExplorationEnabled),
             videoOptions = ViewerVideoOptions(quality, qualityHeight, pageState.terminalResolutionMessage(), playbackDiagnosticsEnabled),

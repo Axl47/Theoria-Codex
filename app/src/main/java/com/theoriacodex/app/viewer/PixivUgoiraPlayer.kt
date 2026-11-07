@@ -17,6 +17,7 @@ import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.pixiv.PixivAuthApi
 import com.theoriacodex.sources.pixiv.PixivTokenCoordinator
+import com.theoriacodex.sources.pixiv.PixivUgoiraMetadataCache
 import java.io.File
 import java.io.FileDescriptor
 import java.io.IOException
@@ -62,6 +63,7 @@ class PixivUgoiraClient internal constructor(
     private val decode: UgoiraFrameDecoder = ::decodeUgoiraFrames,
     private val operationTimeoutMs: Long = 30_000L,
     private val offlineArchiveLookup: suspend (String) -> File? = { null },
+    private val metadataCache: PixivUgoiraMetadataCache = PixivUgoiraMetadataCache(),
 ) {
     private val transport = PixivUgoiraTransport()
     private val cacheLock = Any()
@@ -197,7 +199,22 @@ class PixivUgoiraClient internal constructor(
         publish: suspend (UgoiraPlayback) -> Unit,
     ): UgoiraPlayback = withContext(Dispatchers.IO) {
         val archive = archiveFor(postId)
-        decode(archive.file, archive.metadata.frames, sizeBucket, publish)
+        try {
+            decode(archive.file, archive.metadata.frames, sizeBucket, publish)
+        } catch (error: IOException) {
+            forgetCachedArchive(postId, archive.file)
+            throw error
+        }
+    }
+
+    /**
+     * A cached archive that fails to decode loses its validated sidecar, so the next load revalidates
+     * and re-downloads it. Offline archives are user data and are never touched.
+     */
+    private fun forgetCachedArchive(postId: String, file: File) {
+        if (file.parentFile != archiveDirectory) return
+        synchronized(cacheLock) { archiveCache.remove(postId) }
+        ugoiraMetadataFile(file).delete()
     }
 
     private suspend fun archiveFor(postId: String): UgoiraArchive {
@@ -245,7 +262,8 @@ class PixivUgoiraClient internal constructor(
         }
         val archive = File(archiveDirectory, "${postId.safeCacheComponent()}.zip")
         val diskFrames = readUgoiraFrameMetadata(archive)
-        if (diskFrames != null && isValidArchive(archive, diskFrames)) {
+        // The sidecar is written only after full validation; decoding still enforces per-frame limits.
+        if (diskFrames != null && isStructurallyValidArchive(archive, diskFrames)) {
             archive.setLastModified(System.currentTimeMillis())
             writeUgoiraFrameMetadata(archive, diskFrames)
             return UgoiraArchive(ParsedMetadata(zipUrl = "", frames = diskFrames), archive)
@@ -276,6 +294,11 @@ class PixivUgoiraClient internal constructor(
         return UgoiraArchive(metadata = metadata, file = archive)
     }
 
+    private suspend fun isStructurallyValidArchive(archive: File, frames: List<UgoiraFrameSpec>): Boolean =
+        runCatchingPreservingCancellation {
+            runInterruptible(Dispatchers.IO) { checkUgoiraArchiveStructure(archive, frames) }
+        }.isSuccess
+
     private suspend fun isValidArchive(archive: File, frames: List<UgoiraFrameSpec>): Boolean {
         val context = currentCoroutineContext()
         return runCatchingPreservingCancellation {
@@ -287,6 +310,9 @@ class PixivUgoiraClient internal constructor(
         postId: String,
         initialTokens: PixivAuthTokens,
     ): Pair<ParsedMetadata, PixivAuthTokens> {
+        metadataCache.get(postId)
+            ?.let { body -> runCatching { parseMetadata(body) }.getOrNull() }
+            ?.let { cached -> return cached to initialTokens }
         var tokens = initialTokens
         var didRefreshAfterAuthFailure = false
 
@@ -302,7 +328,9 @@ class PixivUgoiraClient internal constructor(
             }
             when {
                 metadataResponse.statusCode in 200..299 -> {
-                    return parseMetadata(metadataResponse.body) to tokens
+                    val parsed = parseMetadata(metadataResponse.body)
+                    metadataCache.put(postId, metadataResponse.body)
+                    return parsed to tokens
                 }
 
                 metadataResponse.statusCode == 401 || metadataResponse.statusCode == 403 -> {
@@ -452,6 +480,8 @@ class PixivUgoiraClient internal constructor(
         drain: () -> Unit,
     ): Long {
         var presentationTimeUs = 0L
+        // One pixel buffer for the whole export; each frame is read once, however often it repeats.
+        val argb = IntArray(width * height)
         playback.frames.forEach { frame ->
             val sizedBitmap = if (frame.bitmap.width != width || frame.bitmap.height != height) {
                 frame.bitmap.scale(width, height, filter = true)
@@ -459,14 +489,15 @@ class PixivUgoiraClient internal constructor(
                 frame.bitmap
             }
             try {
+                sizedBitmap.getPixels(argb, 0, width, 0, 0, width, height)
                 val repeats = delayToFrameRepeat(frame.delayMs)
                 repeat(repeats) {
                     val inputIndex = awaitInputBuffer(codec)
                     val inputImage = codec.getInputImage(inputIndex)
                         ?: throw IOException("Video encoder did not return input image")
                     inputImage.use {
-                        writeBitmapToImage(
-                            bitmap = sizedBitmap,
+                        writeArgbToImage(
+                            argb = argb,
                             image = it,
                             width = width,
                             height = height,
@@ -525,8 +556,8 @@ class PixivUgoiraClient internal constructor(
         }
     }
 
-    private fun writeBitmapToImage(
-        bitmap: Bitmap,
+    private fun writeArgbToImage(
+        argb: IntArray,
         image: Image,
         width: Int,
         height: Int,
@@ -534,9 +565,6 @@ class PixivUgoiraClient internal constructor(
         if (image.planes.size < 3) {
             throw IOException("Video encoder input image is missing YUV planes")
         }
-
-        val argb = IntArray(width * height)
-        bitmap.getPixels(argb, 0, width, 0, 0, width, height)
 
         val yPlane = image.planes[0]
         val uPlane = image.planes[1]

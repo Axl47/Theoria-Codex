@@ -37,6 +37,7 @@ import com.theoriacodex.app.update.StartupUpdater
 import com.theoriacodex.app.update.UpdateFeedClient
 import com.theoriacodex.app.update.UpdateStateStore
 import com.theoriacodex.app.viewer.PixivUgoiraClient
+import com.theoriacodex.app.viewer.videoPlaybackInfrastructure
 import com.theoriacodex.data.repository.CacheRepository
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.app.codex.CodexCleaningService
@@ -80,6 +81,7 @@ import com.theoriacodex.sources.http.DefaultSourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.pixiv.PixivAuthApi
 import com.theoriacodex.sources.pixiv.PixivTokenCoordinator
+import com.theoriacodex.sources.pixiv.PixivUgoiraMetadataCache
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -187,6 +189,7 @@ internal class DefaultTheoriaAppContainer(
         credentialsProvider = accountStore,
         sessionStore = AndroidPixivPkceSessionStore(appContext),
     )
+    private val pixivUgoiraMetadataCache = PixivUgoiraMetadataCache()
     private val pixivUgoiraClient = PixivUgoiraClient(
         credentialsProvider = accountStore,
         httpClient = sourceHttpClient,
@@ -195,12 +198,14 @@ internal class DefaultTheoriaAppContainer(
         offlineArchiveLookup = { id ->
             offlineStore.find(PostId(SourceKey.PIXIV, id))?.full?.localPath?.let(::File)
         },
+        metadataCache = pixivUgoiraMetadataCache,
     )
     private val allPotentialSourceRegistry = RealAdapterRegistry(
         credentialsProvider = accountStore,
         httpClient = sourceHttpClient,
         exposedSources = exposedRealSources(rule34XxxConfigured = true),
         pixivTokenCoordinator = pixivTokenCoordinator,
+        pixivUgoiraMetadataCache = pixivUgoiraMetadataCache,
     )
     private val sourceRegistry = AvailabilityAwareSourceAdapterRegistry(
         delegate = allPotentialSourceRegistry,
@@ -245,7 +250,10 @@ internal class DefaultTheoriaAppContainer(
             com.theoriacodex.app.statistics.fetchStatisticsThumbnail(appContext, post, destination)
         },
     )
-    private val offlineAcquisition = OfflineMediaAcquisition(appContext, sourceRegistry, settingsRepository, pixivUgoiraClient)
+    private val offlineAcquisition = OfflineMediaAcquisition(appContext, sourceRegistry, settingsRepository, pixivUgoiraClient) {
+            url, headers, destination ->
+        appContext.videoPlaybackInfrastructure().copyFullyCached(url, headers, destination)
+    }
     private val offlineMedia = OfflineMediaCoordinator(
         store = offlineStore,
         scope = durableStoreScope,
@@ -392,13 +400,15 @@ internal class DefaultTheoriaAppContainer(
         val statisticsReady = async { statisticsStore.awaitReady() }
         val uiRestoreReady = async { uiRestoreRepository.awaitReady() }
         val contentReady = async { awaitContentStore() }
+        // The offline catalog scan is independent of profile stores; its snapshot must be warm before jobs resume.
+        val offlineCatalogReady = async { offlineStore.load() }
         settingsReady.await()
         statisticsReady.await()
         uiRestoreReady.await()
         contentReady.await()
         profileBackup.recoverPendingRestore()
         profileDeletion.recoverPendingDeletion()
-        offlineStore.load()
+        offlineCatalogReady.await()
         offlineMedia.recoverPendingJobs()
     }
 

@@ -65,13 +65,25 @@ class ViewerPrefetchPlannerTest {
         assertTrue(current !in planned)
     }
 
-    private fun pages(mediaCounts: List<Int>): List<ViewerPageState> {
+    @Test
+    fun `videos are warmed only next to the current media while images keep the full window`() {
+        val pages = pages(mediaCounts = listOf(1, 1, 1, 1, 1, 1, 1), videoPosts = setOf(0, 2, 4, 6))
+        val flattened = pages.flatMap { page -> page.media.map { media -> media.key } }
+
+        assertEquals(
+            listOf(flattened[4], flattened[5], flattened[2], flattened[1]),
+            planAdjacentViewerPrefetch(pages, current = flattened[3]),
+        )
+    }
+
+    private fun pages(mediaCounts: List<Int>, videoPosts: Set<Int> = emptySet()): List<ViewerPageState> {
         return mediaCounts.mapIndexed { postIndex, mediaCount ->
+            val video = postIndex in videoPosts
             val media = (0 until mediaCount).map { mediaIndex ->
                 ImageRef(
-                    url = "https://media.example/$postIndex-$mediaIndex.jpg",
+                    url = "https://media.example/$postIndex-$mediaIndex." + if (video) "mp4" else "jpg",
                     localPath = null,
-                    mime = "image/jpeg",
+                    mime = if (video) "video/mp4" else "image/jpeg",
                 )
             }
             Post(

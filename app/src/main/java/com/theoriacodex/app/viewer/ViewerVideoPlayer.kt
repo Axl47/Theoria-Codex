@@ -367,7 +367,7 @@ private fun ViewerVideoTimelineOverlay(
     ViewerChromeVisibility(controls.showControls, modifier) {
         ViewerTimelineVeil { ViewerVideoTimeline(state, source, controls, events) }
     }
-    if (controls.showPassiveProgress) ViewerPassiveProgressBar(state.position, state.duration, modifier)
+    if (controls.showPassiveProgress) ViewerPassiveProgressBar({ state.position }, state.duration, modifier)
 }
 
 @Composable
@@ -379,7 +379,7 @@ private fun ViewerVideoTimeline(
 ) {
     ViewerPlaybackFooter {
         MediaTimelineBar(
-            positionMs = state.position, durationMs = state.duration,
+            positionMs = { state.position }, durationMs = state.duration,
             onSeekStarted = { state.scrubbing = true },
             onSeekFinished = state::seek,
             onSeekCancelled = { state.scrubbing = false },

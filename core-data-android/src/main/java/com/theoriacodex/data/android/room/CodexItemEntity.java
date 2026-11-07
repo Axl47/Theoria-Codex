@@ -23,7 +23,8 @@ import androidx.room.Index;
                 )
         },
         indices = {
-                @Index(value = "codex_id"),
+                // Leads with codex_id for membership/cascade lookups and serves saved-order Codex queries.
+                @Index(value = {"codex_id", "saved_at_epoch_ms"}),
                 @Index(value = {"source", "source_post_id"})
         }
 )

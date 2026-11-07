@@ -22,6 +22,8 @@ internal fun testSearchCoordinator(
     tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
     clock: () -> Long = System::currentTimeMillis,
     computationDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.Default,
+    seenTagScope: kotlinx.coroutines.CoroutineScope =
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + computationDispatcher),
 ): SearchCoordinator {
     return SearchCoordinator(
         registry = registry,
@@ -33,5 +35,6 @@ internal fun testSearchCoordinator(
         tagSuggestionStore = tagSuggestionStore,
         clock = clock,
         computationDispatcher = computationDispatcher,
+        seenTagScope = seenTagScope,
     )
 }

@@ -40,7 +40,17 @@ interface ReadingPositionRepository {
 const val READING_POSITIONS_FILE_NAME = "reading_positions.json"
 const val MAX_READING_POSITIONS = 2_000
 
-/** Uses explicit wire fields, so release obfuscation cannot change reading-position documents. */
+/**
+ * A repeat of the newest position for the same media inside this window keeps the stored timestamp.
+ * The Viewer reports one swipe through both its visible-post and media-progress callbacks; relative
+ * "watched" labels have minute granularity, so a few seconds of timestamp lag is not visible.
+ */
+internal const val READING_POSITION_COALESCE_MS = 5_000L
+
+/**
+ * Uses explicit wire fields, so release obfuscation cannot change reading-position documents.
+ * The store writes compact JSON because the Viewer rewrites this file on every media change.
+ */
 class FileBackedReadingPositionRepository(
     baseDirectory: File,
     private val store: AtomicJsonFileStore = AtomicJsonFileStore(),
@@ -70,8 +80,15 @@ class FileBackedReadingPositionRepository(
         val current = load()
         val previous = current.firstOrNull { it.postId == position.postId && it.section == position.section }
         if (previous != null && previous.lastViewedAt > position.lastViewedAt) return@writing
-        persist(normalizeReadingPositions(listOf(position) + current, entryLimit))
+        if (previous != null && previous.repeatsNewest(position, current)) return@writing
+        val updated = normalizeReadingPositions(listOf(position) + current, entryLimit)
+        if (updated != current) persist(updated)
     }
+
+    private fun ReadingPosition.repeatsNewest(next: ReadingPosition, current: List<ReadingPosition>): Boolean =
+        mediaNumber == next.mediaNumber &&
+            next.lastViewedAt - lastViewedAt < READING_POSITION_COALESCE_MS &&
+            current.firstOrNull() == this
 
     override suspend fun replace(positions: List<ReadingPosition>) = writing {
         persist(normalizeReadingPositions(positions, entryLimit))

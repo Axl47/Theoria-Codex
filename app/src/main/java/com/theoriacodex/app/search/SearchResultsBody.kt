@@ -17,7 +17,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -129,6 +131,11 @@ private fun SearchResultsGrid(
     onAction: (SearchAction) -> Unit,
     openPostActions: (Post) -> Unit,
 ) {
+    // Cards capture this rather than the whole state, which changes on every keystroke and page.
+    val showSourceBadge = state.query.appliedSourceScope !is SearchSourceScope.Single
+    val relatedPosts = state.relatedPosts
+    // Read at tap time: the filtered list is rebuilt on every like, and cards must not recompose for it.
+    val currentFeed by rememberUpdatedState(feed)
     TwoColumnProjectedPostStaggeredGrid(
         projection = feed.related.projection,
         state = gridState,
@@ -145,16 +152,16 @@ private fun SearchResultsGrid(
                 post = post,
                 environment = cards,
                 showWatchHistory = true,
-                showSourceBadge = state.query.appliedSourceScope !is SearchSourceScope.Single,
+                showSourceBadge = showSourceBadge,
                 resolvePostById = resolvePostById,
                 recoverPostMedia = recoverPostMedia,
                 onClick = {
                     inputFocus.clear()
                     onAction(SearchAction.OpenResult(
                         postId = post.id,
-                        visibleResults = feed.visibleResults,
+                        visibleResults = currentFeed.visibleResults,
                         scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
-                        visibilityFilters = feed.visibilityFilters,
+                        visibilityFilters = currentFeed.visibilityFilters,
                     ))
                 },
                 onLongPress = { openPostActions(post) },
@@ -162,7 +169,7 @@ private fun SearchResultsGrid(
         },
         shelfContent = {
             FeedRelatedPostsShelf(
-                state = state.relatedPosts,
+                state = relatedPosts,
                 presentation = feed.related,
                 environment = cards,
                 recoverPostMedia = recoverPostMedia,

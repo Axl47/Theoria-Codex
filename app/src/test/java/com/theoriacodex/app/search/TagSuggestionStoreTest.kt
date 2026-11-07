@@ -292,8 +292,8 @@ class TagSuggestionStoreTest {
             ),
             artists,
         )
-        assertTrue(storeFile.readText().contains("\"facet\": \"ARTIST\""))
-        assertTrue(storeFile.readText().contains("\"sourceNamespace\": \"artist\""))
+        assertTrue(storeFile.readText().contains("\"facet\":\"ARTIST\""))
+        assertTrue(storeFile.readText().contains("\"sourceNamespace\":\"artist\""))
         reopenedStore.close()
     }
 
@@ -372,6 +372,22 @@ class TagSuggestionStoreTest {
 
         assertEquals(1, writeCount)
         store.close()
+    }
+
+    @Test
+    fun `tags the byte budget drops stop reporting counts`() = runTest {
+        val store = FileBackedTagSuggestionStore(
+            tempDir("tag-store-trim-counts").resolve("tags.json"), maxEntriesPerSource = 100, maxTotalUtf8Bytes = 1_024,
+        )
+        try {
+            val tags = (0 until 40).map { TagSuggestion("tag_${it}_" + "x".repeat(80), "tag", it + 1) }
+            store.put(SourceKey.GELBOORU, tags)
+            val kept = store.get(SourceKey.GELBOORU, Int.MAX_VALUE).map(TagSuggestion::text).toSet()
+            assertTrue("budget should drop some tags", kept.size < tags.size)
+            tags.forEach { tag ->
+                assertEquals(tag.text, tag.count.takeIf { tag.text in kept }, store.getCount(SourceKey.GELBOORU, tag.text))
+            }
+        } finally { store.close() }
     }
 
     @Test

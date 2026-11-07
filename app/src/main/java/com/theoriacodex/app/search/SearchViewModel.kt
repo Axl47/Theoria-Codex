@@ -553,27 +553,7 @@ internal class SearchViewModel(
     }
 
     private suspend fun openDirectNhentaiGallery(galleryId: String) {
-        val resolved = mutableState.value.content.results.firstOrNull { post ->
-            post.id.source == SourceKey.NHENTAI && post.id.sourcePostId == galleryId
-        } ?: coordinator.resolveNhentaiGalleryById(galleryId)
-        if (resolved == null) {
-            effectChannel.send(SearchEffect.ShowMessage("Could not open gallery $galleryId"))
-            return
-        }
-        val context = ViewerLaunchContext(
-            queryHash = "nhentai-search-id:$galleryId",
-            startIndex = 0,
-            streamSource = ViewerStreamSource.SEARCH,
-            scrollOffsetHint = 0,
-        )
-        coordinator.setViewerLaunchContext(context)
-        effectChannel.send(
-            SearchEffect.OpenViewer(
-                posts = listOf(resolved),
-                context = context,
-                liveSearchBinding = false,
-            ),
-        )
+        effectChannel.send(coordinator.directNhentaiGalleryEffect(galleryId, mutableState.value.content.results))
     }
 
     private fun resumeSearchIfNeeded() {

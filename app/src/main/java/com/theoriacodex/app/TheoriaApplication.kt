@@ -4,6 +4,7 @@ import android.app.Application
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.decode.ImageDecoderDecoder
+import coil.disk.DiskCache
 import com.theoriacodex.app.di.DefaultTheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
@@ -80,6 +81,14 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
                 add(AnimatedWebPDecoder.Factory())
                 add(ImageDecoderDecoder.Factory())
             }
+            // Same directory as Coil's default, so the existing cache is kept. Coil's default size
+            // (2% of disk, at most 250 MB) let a few Viewer originals evict the grid's thumbnails.
+            .diskCache {
+                DiskCache.Builder()
+                    .directory(cacheDir.resolve(IMAGE_DISK_CACHE_DIRECTORY))
+                    .maxSizeBytes(IMAGE_DISK_CACHE_MAX_BYTES)
+                    .build()
+            }
             // OkHttp's default of five per host lets a few large GIFs stall every thumbnail behind them.
             .okHttpClient {
                 OkHttpClient.Builder()
@@ -91,6 +100,8 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
 }
 
 private const val IMAGE_MAX_REQUESTS_PER_HOST = 16
+private const val IMAGE_DISK_CACHE_DIRECTORY = "image_cache"
+private const val IMAGE_DISK_CACHE_MAX_BYTES = 512L * 1024L * 1024L
 
 internal fun shouldStartAppContainer(
     benchmarkFixturesEnabled: Boolean,

@@ -78,6 +78,8 @@ fun TwoColumnProjectedPostStaggeredGrid(
                     }
                 }
             },
+            // Single-lane posts and the full-line related shelf must not reuse each other's compositions.
+            contentType = { _, entry -> entry.javaClass },
             span = { _, entry ->
                 if (entry is RelatedFeedEntry.ShelfEntry) {
                     StaggeredGridItemSpan.FullLine
