@@ -3,6 +3,7 @@ package com.theoriacodex.data.repository
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.source.SiteProfile
 
 /** A logical transaction snapshot, independent of Room's tables and database version. */
 data class BackupLibrary(
@@ -28,6 +29,8 @@ data class ProfileBackup(
     val readingPositions: List<ReadingPosition> = emptyList(),
     /** Absent from older backups and from backups made without history. */
     val statistics: LifetimeStatistics? = null,
+    /** User-added sites. Credentials are never part of a backup. */
+    val customSources: List<SiteProfile> = emptyList(),
 ) {
     fun preview() = ProfileBackupPreview(
         createdAtEpochMs = createdAtEpochMs,
@@ -52,4 +55,9 @@ data class ProfileBackupPreview(
     val followedCreatorCount: Int,
 )
 
-data class ProfileRestoreResult(val profilesAdded: Int, val collectionsAdded: Int)
+/** [keptExistingSites]: ids of sites kept as already configured here, though the backup's address or family differed. */
+data class ProfileRestoreResult(
+    val profilesAdded: Int,
+    val collectionsAdded: Int,
+    val keptExistingSites: List<String> = emptyList(),
+)

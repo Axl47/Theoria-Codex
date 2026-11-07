@@ -260,7 +260,7 @@ class ProfileBackupServiceTest {
             byteArrayOf(0xc3.toByte(), 0x28),
             "{}".toByteArray(),
             "[".repeat(65).toByteArray(),
-            codec.encode(backup()).toString(Charsets.UTF_8).replace("\"version\":1", "\"version\":2").toByteArray(),
+            codec.encode(backup()).toString(Charsets.UTF_8).replace("\"version\":2", "\"version\":3").toByteArray(),
             codec.encode(backup()).toString(Charsets.UTF_8).replace("\"PIXIV\"", "\"UNKNOWN\"").toByteArray(),
         )
         invalid.forEach { assertTrue(runCatching { codec.decode(it) }.isFailure) }
