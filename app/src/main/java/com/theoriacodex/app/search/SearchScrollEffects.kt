@@ -7,6 +7,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.snapshots.Snapshot
 import com.theoriacodex.app.related.RelatedFeedProjection
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchRestorationUiState
@@ -66,11 +67,15 @@ internal fun SearchScrollPersistenceEffect(
     val dispatch by rememberUpdatedState(onAction)
     LaunchedEffect(queryHash, restoration.allowsScrollPersistence) {
         if (!restoration.allowsScrollPersistence) return@LaunchedEffect
-        // Filtering can replace the post at an unchanged grid index and offset.
+        // Filtering can replace the post at an unchanged grid index and offset. Each persist writes saved
+        // state, so mid-scroll only a new leading item is reported; the exact offset follows once it settles.
         snapshotFlow {
-            currentProjection.canonicalPositionForGridIndex(
-                gridState.firstVisibleItemIndex, gridState.firstVisibleItemScrollOffset,
-            )
+            val offset = if (gridState.isScrollInProgress) {
+                Snapshot.withoutReadObservation { gridState.firstVisibleItemScrollOffset }
+            } else {
+                gridState.firstVisibleItemScrollOffset
+            }
+            currentProjection.canonicalPositionForGridIndex(gridState.firstVisibleItemIndex, offset)
         }
             .distinctUntilChanged()
             .collect { position ->

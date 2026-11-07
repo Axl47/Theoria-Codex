@@ -129,6 +129,24 @@ class SearchMetadataHydrationTest {
         assertEquals(SourceFailureReason.PARSE, result.statuses.single().failureReason)
     }
 
+    @Test
+    fun `one unparseable detail page drops only that post and keeps the page`() = runTest {
+        val adapter = SparseAdapter(
+            search = { _, _ -> Page(listOf(post("broken"), post("a")), "next") },
+            resolve = { sparse ->
+                if (sparse.id.sourcePostId == "broken") {
+                    throw SourceAdapterException(SourceFailureReason.PARSE, "page missing playable video URL")
+                }
+                post(sparse.id.sourcePostId, "cat", "red")
+            },
+        )
+        val result = UnifiedSearchOrchestrator(mapOf(adapter.sourceKey to adapter))
+            .search(groupedQuery(), setOf(adapter.sourceKey), emptyMap(), emptyMap())
+
+        assertEquals(listOf("a"), result.items.map { it.id.sourcePostId })
+        assertEquals(null, result.statuses.single().failureReason)
+    }
+
     private class SparseAdapter(
         override val sourceKey: SourceKey = SourceKey.RULE34VIDEO,
         private val search: suspend (Query, String?) -> Page<Post>,

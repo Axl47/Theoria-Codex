@@ -37,6 +37,9 @@ class RoomRecentsRepository(
     private val contentDao = database.codexLikesDao()
     private val postCodec = LocalPostPayloadCodec(gson)
     private val sharedPostPayloads = SharedPostPayloadWriter(contentDao, postCodec)
+
+    /** Every watched collector projects the same bounded query, so one retained decode serves them all. */
+    private val watchedPayloads = RetainedPostPayloads(postCodec::decode)
     private val queryGson = gson
 
     init {
@@ -44,8 +47,8 @@ class RoomRecentsRepository(
     }
 
     override fun observeWatchedPosts(): Flow<List<RecentPostEntry>> = dao.observeWatched().map { rows ->
-        rows.map { row ->
-            val post = postCodec.decode(PostEntity(row.source, row.sourcePostId, row.payloadJson))
+        val posts = watchedPayloads.project(rows.map { PostEntity(it.source, it.sourcePostId, it.payloadJson) })
+        rows.zip(posts) { row, post ->
             val origin = runCatching { ViewerStreamSource.valueOf(row.origin) }
                 .getOrElse { error("Invalid recent watched origin ${row.origin}") }
             val section = runCatching { RecentPostSection.valueOf(row.section) }
@@ -59,7 +62,7 @@ class RoomRecentsRepository(
                 maxViewedMediaNumber = row.maxViewedMediaNumber,
             )
         }
-    }.flowOn(Dispatchers.Default)
+    }.distinctUntilChanged().flowOn(Dispatchers.Default)
 
     override fun observeWatchedPostIds(): Flow<Set<PostId>> = dao.observeWatchedPostIds().map { rows ->
         rows.mapTo(linkedSetOf()) { PostId(SourceKey.valueOf(it.source), it.sourcePostId) }
@@ -117,13 +120,13 @@ class RoomRecentsRepository(
     ) {
         database.withTransaction {
             val normalizedMediaNumber = viewedMediaNumber.coerceAtLeast(1)
-            val updated = dao.updateWatchedMediaProgress(
+            val raised = dao.raiseWatchedMediaProgress(
                 post.id.source.name,
                 post.id.sourcePostId,
                 section.name,
                 normalizedMediaNumber,
             )
-            if (updated == 0) {
+            if (raised == 0 && dao.watched(post.id.source.name, post.id.sourcePostId, section.name) == null) {
                 sharedPostPayloads.upsert(post)
                 dao.upsertWatched(
                     RecentWatchedEntity(

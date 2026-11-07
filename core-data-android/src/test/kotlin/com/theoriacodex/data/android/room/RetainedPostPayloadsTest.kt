@@ -6,6 +6,9 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.runTest
 import org.junit.Test
 
 class RetainedPostPayloadsTest {
@@ -43,4 +46,26 @@ class RetainedPostPayloadsTest {
         assertEquals("BB", projection.project(listOf(PostEntity("PIXIV", "1", "BB"))).single().authorName)
         assertEquals(2, decoded)
     }
+
+    @Test fun `returning to a recent Codex reuses its posts while oversized projections are not retained`() = runTest {
+        var decoded = 0
+        val cache = RetainedPostPayloadCache(decode = { row -> decoded++; testPost(row) }, maxRetainedPosts = 3)
+        val small = (0 until 3).map { PostEntity("PIXIV", "s$it", "payload$it") }
+        val large = (0 until 4).map { PostEntity("PIXIV", "l$it", "payload$it") }
+
+        val first = flowOf(small).decodePostSnapshots(cache, "codex:small").first()
+        val returned = flowOf(small).decodePostSnapshots(cache, "codex:small").first()
+        assertEquals(3, decoded)
+        assertSame(first.first(), returned.first())
+
+        flowOf(large).decodePostSnapshots(cache, "codex:large").first()
+        flowOf(large).decodePostSnapshots(cache, "codex:large").first()
+        assertEquals(3 + 8, decoded)
+        flowOf(small).decodePostSnapshots(cache, "codex:small").first()
+        assertEquals(3 + 8, decoded)
+    }
+
+    private fun testPost(row: PostEntity) = Post(PostId(SourceKey.PIXIV, row.sourcePostId), ImageRef(null, null, null),
+        null, pageUrl = null, width = null, height = null, canonicalTags = emptyList(), rawTags = emptyList(),
+        authorName = row.payloadJson, createdAtEpochMs = null)
 }

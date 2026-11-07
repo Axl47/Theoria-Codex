@@ -78,6 +78,22 @@ class ReadingPositionRepositoryTest {
         assertEquals(listOf(position("valid", 3, 5)), FileBackedReadingPositionRepository(directory).snapshot())
     }
 
+    @Test
+    fun `one swipe reported twice writes once and keeps the first timestamp`() = runTest {
+        val directory = temporary.newFolder()
+        val file = directory.resolve(READING_POSITIONS_FILE_NAME)
+        val repository = FileBackedReadingPositionRepository(directory)
+        repository.record(position("book", 4, 1_000))
+        file.setLastModified(0L)
+
+        repository.record(position("book", 4, 1_200))
+        assertEquals(0L, file.lastModified())
+        assertEquals(1_000L, repository.get(id("book"), RecentPostSection.WATCHED)?.lastViewedAt)
+
+        repository.record(position("book", 4, 1_000 + READING_POSITION_COALESCE_MS))
+        assertEquals(1_000L + READING_POSITION_COALESCE_MS, repository.snapshot().single().lastViewedAt)
+    }
+
     private fun id(value: String) = PostId(SourceKey.PIXIV, value)
     private fun position(value: String, page: Int, time: Long, section: RecentPostSection = RecentPostSection.WATCHED) =
         ReadingPosition(id(value), section, page, time)

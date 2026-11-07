@@ -155,7 +155,7 @@ private fun ViewerGifMovie(
         ViewerChromeVisibility(controls.showControls, Modifier.align(Alignment.BottomCenter)) {
             ViewerTimelineVeil { ViewerGifTimeline(movie, animation, duration, controls, events) { scrubbing = it } }
         }
-        if (controls.showPassiveProgress) ViewerPassiveProgressBar(animation.positionMs, duration, Modifier.align(Alignment.BottomCenter))
+        if (controls.showPassiveProgress) ViewerPassiveProgressBar({ animation.positionMs }, duration, Modifier.align(Alignment.BottomCenter))
     }
 }
 
@@ -182,7 +182,7 @@ private fun ViewerGifTimeline(
 ) {
     ViewerPlaybackFooter {
         MediaTimelineBar(
-            positionMs = animation.positionMs, durationMs = duration,
+            positionMs = { animation.positionMs }, durationMs = duration,
             onSeekStarted = { onScrubbing(true) },
             onSeekCancelled = { onScrubbing(false) },
             preview = { target ->

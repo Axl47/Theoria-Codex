@@ -284,16 +284,29 @@ internal class SearchViewModel(
         }
     }
 
+    /**
+     * Switches the draft to [mode]'s last search. Once results are on screen, that search also runs,
+     * so the source, terms, filters, and results always describe the same search.
+     */
     private fun selectMode(mode: QueryMode) {
         cancelAutocomplete()
-        mutableState.value = SearchDraftReducer.selectMode(
+        val current = SearchDraftReducer.selectMode(
             state = mutableState.value,
             mode = mode,
             context = draftContext(),
             supportedScopes = coordinator::supportedSearchScopes,
         ).state
+        mutableState.value = current
         persistDraftQuery()
         refreshTrending()
+        if (current.content.hasExecutedSearch && current.hasPendingChanges) {
+            launchRootSearch(
+                kind = SearchRequestKind.REPLACE,
+                query = current.query.draft,
+                sourceScope = current.query.draftSourceScope,
+                persistAcceptedResult = true,
+            )
+        }
     }
 
     private fun toggleTemporarySource(source: SourceKey) {
@@ -543,27 +556,7 @@ internal class SearchViewModel(
     }
 
     private suspend fun openDirectNhentaiGallery(galleryId: String) {
-        val resolved = mutableState.value.content.results.firstOrNull { post ->
-            post.id.source == SourceKey.NHENTAI && post.id.sourcePostId == galleryId
-        } ?: coordinator.resolveNhentaiGalleryById(galleryId)
-        if (resolved == null) {
-            effectChannel.send(SearchEffect.ShowMessage("Could not open gallery $galleryId"))
-            return
-        }
-        val context = ViewerLaunchContext(
-            queryHash = "nhentai-search-id:$galleryId",
-            startIndex = 0,
-            streamSource = ViewerStreamSource.SEARCH,
-            scrollOffsetHint = 0,
-        )
-        coordinator.setViewerLaunchContext(context)
-        effectChannel.send(
-            SearchEffect.OpenViewer(
-                posts = listOf(resolved),
-                context = context,
-                liveSearchBinding = false,
-            ),
-        )
+        effectChannel.send(coordinator.directNhentaiGalleryEffect(galleryId, mutableState.value.content.results))
     }
 
     private fun resumeSearchIfNeeded() {

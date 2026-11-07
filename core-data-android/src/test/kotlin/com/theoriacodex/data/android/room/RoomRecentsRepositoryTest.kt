@@ -21,6 +21,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -223,6 +224,22 @@ class RoomRecentsRepositoryTest {
             4,
             entries.single { it.section == RecentPostSection.CODEX }.maxViewedMediaNumber,
         )
+        // Swiping back touches no row, so Room does not invalidate every Recents observer.
+        assertEquals(0, database.recentsDao().raiseWatchedMediaProgress("PIXIV", "progress", "WATCHED", 50))
+    }
+
+    @Test fun `progress on one watched post reuses every other decoded post`() = runTest {
+        val repository = RoomRecentsRepository(database, clock = { now++ })
+        repository.recordWatchedPost(recentPost("kept"), ViewerStreamSource.SEARCH, null)
+        repository.recordWatchedPost(recentPost("progress"), ViewerStreamSource.SEARCH, null)
+        val before = repository.observeWatchedPosts().first().single { it.post.id.sourcePostId == "kept" }.post
+
+        repository.recordWatchedMediaProgress(recentPost("progress"), ViewerStreamSource.SEARCH, null,
+            RecentPostSection.WATCHED, 3)
+
+        val after = repository.observeWatchedPosts().first()
+        assertEquals(3, after.single { it.post.id.sourcePostId == "progress" }.maxViewedMediaNumber)
+        assertSame(before, after.single { it.post.id.sourcePostId == "kept" }.post)
     }
 
     @Test fun `restore preserves exact rows and keeps newer activity`() = runTest {

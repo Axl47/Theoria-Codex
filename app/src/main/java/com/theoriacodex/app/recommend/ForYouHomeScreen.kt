@@ -161,9 +161,11 @@ private fun ForYouOverview(
         val coroutineScope = rememberCoroutineScope()
         val hasChips = state.home.sections.isNotEmpty()
         val firstSectionIndex = if (hasChips) 3 else 2
-        val shelfIds = listOf<ViewerReturnShelfId?>(null) + (if (hasChips) listOf(null) else emptyList()) +
-            listOf(ViewerReturnShelfId.ForYou("mixed")) +
-            state.home.sections.map { ViewerReturnShelfId.ForYou(it.id) } + listOf(null)
+        val shelfIds = remember(hasChips, state.home.sections) {
+            listOf<ViewerReturnShelfId?>(null) + (if (hasChips) listOf(null) else emptyList()) +
+                listOf(ViewerReturnShelfId.ForYou("mixed")) +
+                state.home.sections.map { ViewerReturnShelfId.ForYou(it.id) } + listOf(null)
+        }
         ViewerReturnColumn(shelfIds, scroll) {
         LazyColumn(state = scroll, modifier = modifier.fillMaxSize(),
             contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -178,7 +180,8 @@ private fun ForYouOverview(
                 }
             }
             item(key = "mixed") {
-                val posts = filterPosts(state.home.mixedFeed?.page?.items.orEmpty()).take(10)
+                val mixedPosts = state.home.mixedFeed?.page?.items.orEmpty()
+                val posts = remember(filterPosts, mixedPosts) { filterPosts(mixedPosts).take(10) }
                 PostShelfSection("Your mix", null, posts, state.isRefreshing || state.home.mixedLoading,
                     state.errorMessage != null || state.home.mixedFeed?.page?.statuses.orEmpty().any {
                         it.state == com.theoriacodex.domain.orchestration.SourceRunState.FAILED
@@ -192,7 +195,8 @@ private fun ForYouOverview(
             }
             state.home.sections.forEach { section ->
                 item(key = section.id) {
-                    val posts = filterPosts(section.feed.page.items).take(10)
+                    val sectionPosts = section.feed.page.items
+                    val posts = remember(filterPosts, sectionPosts) { filterPosts(sectionPosts).take(10) }
                     PostShelfSection(section.title,
                         null, posts, false, section.feed.page.statuses.any {
                             it.state == com.theoriacodex.domain.orchestration.SourceRunState.FAILED
@@ -359,7 +363,8 @@ private fun ForYouPreviewPosts(
     onToggleLike: (Post) -> Unit, onLongPress: (Post) -> Unit, onOpen: (Int) -> Unit,
 ) {
     val row = rememberLazyListState()
-    ViewerReturnShelf(ViewerReturnShelfId.ForYou(sectionId), posts.map { it.id }, row) {
+    val postIds = remember(posts) { posts.map { it.id } }
+    ViewerReturnShelf(ViewerReturnShelfId.ForYou(sectionId), postIds, row) {
     LazyRow(state = row, modifier = Modifier.height(cardWidth / POST_SHELF_MEDIA_ASPECT_RATIO),
         contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         itemsIndexed(posts, key = { _, post -> "${post.id.source}:${post.id.sourcePostId}" }) { index, post ->

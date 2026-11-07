@@ -432,7 +432,8 @@ internal fun Modifier.viewerReturnMedia(progress: () -> Float, aspectRatio: Floa
     var windowBounds by remember { mutableStateOf(Rect.Zero) }
     val closing = transition.request != null
     val landing = remember(transition.request) { ViewerLandingTarget() }
-    fun geometry(current: Float) = viewerReturnGeometry(
+    val frame = remember { ViewerReturnFrame() }
+    fun geometry(current: Float) = frame.geometry(
         windowBounds,
         landing.resolve(current > 0f, if (closing) transition.targetBounds else transition.openingBounds),
         aspectRatio,
@@ -444,7 +445,7 @@ internal fun Modifier.viewerReturnMedia(progress: () -> Float, aspectRatio: Floa
         .drawWithContent {
             val current = progress()
             val corners = if (closing) transition.targetCorners else transition.openingCorners
-            drawViewerReturnFrame(current, closing, geometry(current).crop, corners)
+            drawViewerReturnFrame(current, closing, geometry(current).crop, corners, frame.clip)
         }
         .graphicsLayer {
             val moved = geometry(progress())
@@ -456,14 +457,44 @@ internal fun Modifier.viewerReturnMedia(progress: () -> Float, aspectRatio: Floa
         }
 }
 
-private fun ContentDrawScope.drawViewerReturnFrame(progress: Float, closing: Boolean, crop: Rect, corners: ViewerReturnCorners) {
+/**
+ * Per-frame state reused across animation frames: the layer and draw passes share one geometry per progress
+ * value, and the clip path is rewound rather than reallocated.
+ */
+private class ViewerReturnFrame {
+    val clip = Path()
+    private var progress = Float.NaN
+    private var source = Rect.Zero
+    private var target: Rect? = null
+    private var aspectRatio: Float? = null
+    private var cached: ViewerReturnGeometry? = null
+
+    fun geometry(source: Rect, target: Rect?, aspectRatio: Float?, progress: Float): ViewerReturnGeometry {
+        val hit = cached
+        if (hit != null && progress == this.progress && source == this.source && target == this.target &&
+            aspectRatio == this.aspectRatio
+        ) return hit
+        return viewerReturnGeometry(source, target, aspectRatio, progress).also {
+            cached = it
+            this.progress = progress
+            this.source = source
+            this.target = target
+            this.aspectRatio = aspectRatio
+        }
+    }
+}
+
+private fun ContentDrawScope.drawViewerReturnFrame(
+    progress: Float, closing: Boolean, crop: Rect, corners: ViewerReturnCorners, clip: Path,
+) {
     if (closing && progress >= 1f) return
     if (progress <= 0f) {
         drawContent()
         return
     }
-    val path = Path().apply { addRoundRect(corners.roundRect(crop, progress)) }
-    clipPath(path) { this@drawViewerReturnFrame.drawContent() }
+    clip.rewind()
+    clip.addRoundRect(corners.roundRect(crop, progress))
+    clipPath(clip) { this@drawViewerReturnFrame.drawContent() }
 }
 
 internal data class ViewerReturnGeometry(val crop: Rect, val scale: Float, val translationX: Float, val translationY: Float)

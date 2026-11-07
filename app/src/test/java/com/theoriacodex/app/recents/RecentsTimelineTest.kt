@@ -1,11 +1,13 @@
 package com.theoriacodex.app.recents
 
+import androidx.compose.ui.graphics.Color
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.related.begin
 import com.theoriacodex.app.search.state.emptySearchQuery
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.RecentActivityEntry
 import com.theoriacodex.data.repository.RecentPostEntry
+import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SearchTermGroup
@@ -19,6 +21,8 @@ class RecentsTimelineTest {
 
     private fun post(at: Long, id: String = "1") = RecentPostEntry(testPost(sourcePostId = id), at, ViewerStreamSource.SEARCH, null)
 
+    private fun search(at: Long) = RecentSearchEntry(emptySearchQuery(), "q$at", at)
+
     private fun shelfFor(entry: RecentPostEntry) =
         RelatedPostsUiState.Idle.begin(entry.post, anchorCanonicalIndex = 0, generation = 1).request
 
@@ -28,21 +32,26 @@ class RecentsTimelineTest {
         assertEquals("Dec 30", recentsDayLabel(now - 2 * day, now, ZoneOffset.UTC))
     }
 
-    @Test fun `consecutive posts share a shelf within each day`() {
+    @Test fun `each day lists its searches above one shelf of its posts`() {
+        val today = recentsDay(now, ZoneOffset.UTC)
+        val yesterday = recentsDay(now - day, ZoneOffset.UTC)
         val first = post(now - 1)
-        val second = post(now - 2)
+        val search = search(now - 2)
+        val second = post(now - 3)
         val older = post(now - day)
-        val timeline = recentsTimeline(
-            listOf(first, second, older).map(RecentActivityEntry::Watched), now, ZoneOffset.UTC,
+        val activity = listOf(
+            RecentActivityEntry.Watched(first), RecentActivityEntry.Search(search),
+            RecentActivityEntry.Watched(second), RecentActivityEntry.Watched(older),
         )
         assertEquals(
             listOf(
-                RecentsTimelineItem.Day(recentsDay(now, ZoneOffset.UTC), "Today"),
-                RecentsTimelineItem.Posts(listOf(first, second)),
-                RecentsTimelineItem.Day(recentsDay(now - day, ZoneOffset.UTC), "Yesterday"),
-                RecentsTimelineItem.Posts(listOf(older)),
+                RecentsTimelineItem.Day(today, "Today"),
+                RecentsTimelineItem.Searches(today, listOf(search)),
+                RecentsTimelineItem.Posts(today, listOf(first, second)),
+                RecentsTimelineItem.Day(yesterday, "Yesterday"),
+                RecentsTimelineItem.Posts(yesterday, listOf(older)),
             ),
-            timeline,
+            recentsTimeline(activity, now, ZoneOffset.UTC),
         )
     }
 
@@ -73,10 +82,10 @@ class RecentsTimelineTest {
         val timeline = recentsTimeline(viewedLater.map(RecentActivityEntry::Watched), now, ZoneOffset.UTC)
             .withRelatedShelf(request)
         val shelf = timeline.indexOf(RecentsTimelineItem.RelatedShelf)
-        assertEquals(RecentsTimelineItem.Posts(listOf(viewedLater[0], seed)), timeline[shelf - 1])
+        assertEquals(RecentsTimelineItem.Posts(recentsDay(now, ZoneOffset.UTC), listOf(viewedLater[0], seed)), timeline[shelf - 1])
     }
 
-    @Test fun `search title shows alternatives and exclusions`() {
+    @Test fun `search query text shows alternatives and exclusions`() {
         val query = emptySearchQuery().copy(
             includeTermGroups = listOf(
                 SearchTermGroup.single(SearchTerm("mika")),
@@ -84,6 +93,6 @@ class RecentsTimelineTest {
             ),
             excludeTerms = listOf(SearchTerm("sketch")),
         )
-        assertEquals("mika, cat or dog, -sketch", recentSearchRowTitle(query))
+        assertEquals("mika, cat or dog, −sketch", recentSearchQueryText(query, Color.Gray, Color.Red).text)
     }
 }

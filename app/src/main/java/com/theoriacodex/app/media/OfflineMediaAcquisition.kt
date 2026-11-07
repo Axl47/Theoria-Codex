@@ -5,6 +5,7 @@ import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.PIXIV_UGOIRA_MIME
 import com.theoriacodex.domain.model.Post
@@ -19,12 +20,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
-/** Provider resolution and network policy are shared by automatic saves and explicit collection downloads. */
+/**
+ * Provider resolution and network policy are shared by automatic saves and explicit collection downloads.
+ * [copyCachedVideo] copies a video the player already cached in full, so saving a watched video skips the download.
+ */
 class OfflineMediaAcquisition(
     private val context: Context,
     private val registry: SourceAdapterRegistry,
     private val settings: SettingsRepository,
     private val ugoira: PixivUgoiraClient,
+    private val copyCachedVideo: suspend (url: String, headers: Map<String, String>, destination: File) -> Boolean,
 ) {
     suspend fun resolve(post: Post): Post {
         checkNetwork()
@@ -51,12 +56,25 @@ class OfflineMediaAcquisition(
             }
             return
         }
+        if (media.mime != PIXIV_UGOIRA_MIME && copyFromMediaCaches(post, media, destination)) return
         checkNetwork()
         if (media.mime == PIXIV_UGOIRA_MIME) {
             ugoira.copyArchiveForOffline(post.id.sourcePostId, destination)
         } else {
             val url = media.url?.takeIf(String::isNotBlank) ?: throw IOException("No full media URL is available")
-            downloadOfflineMedia(url, post.id.source.requestHeaders(), destination)
+            downloadMediaFile(url, post.id.source.requestHeaders(), destination)
+        }
+    }
+
+    /** Reuses the exact bytes Coil or the video player already downloaded for this URL; no network policy applies. */
+    private suspend fun copyFromMediaCaches(post: Post, media: ImageRef, destination: File): Boolean {
+        val url = media.url?.takeIf(String::isNotBlank) ?: return false
+        return withContext(Dispatchers.IO) {
+            runCatchingPreservingCancellation {
+                val copied = copyCachedMediaBytes(context, post.id.source, url, destination) ||
+                    copyCachedVideo(url, post.id.source.requestHeaders(), destination)
+                copied && run { validateOfflineMediaFile(destination); true }
+            }.getOrDefault(false)
         }
     }
 
@@ -68,11 +86,15 @@ class OfflineMediaAcquisition(
     }
 }
 
-/** Stream to a staging file with bounded memory; the store publishes only a complete response. */
-internal suspend fun downloadOfflineMedia(
+/**
+ * Streams a media response to a staging file with bounded memory; callers publish only a complete,
+ * recognized media file. Offline saves use the 2 GiB default; caches pass their own [maxBytes].
+ */
+internal suspend fun downloadMediaFile(
     url: String,
     headers: Map<String, String>,
     destination: File,
+    maxBytes: Long = MAX_OFFLINE_MEDIA_BYTES,
     openConnection: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection },
 ) {
     val parsed = URL(url)
@@ -94,8 +116,8 @@ internal suspend fun downloadOfflineMedia(
             throw IOException("The provider returned a page instead of media")
         }
         val expected = connection.getHeaderFieldLong("Content-Length", -1L)
-        if (expected > MAX_OFFLINE_MEDIA_BYTES) throw IOException("This file exceeds the 2 GiB offline limit")
-        val written = copyOfflineResponse(connection, destination)
+        if (expected > maxBytes) throw mediaTooLarge(maxBytes)
+        val written = copyMediaResponse(connection, destination, maxBytes)
         if (written <= 0 || expected >= 0 && expected != written) {
             throw IOException("The media download was incomplete")
         }
@@ -103,7 +125,7 @@ internal suspend fun downloadOfflineMedia(
     }
 }
 
-private fun copyOfflineResponse(connection: HttpURLConnection, destination: File): Long {
+private fun copyMediaResponse(connection: HttpURLConnection, destination: File, maxBytes: Long): Long {
     var written = 0L
     connection.inputStream.use { input ->
         FileOutputStream(destination).use { output ->
@@ -113,7 +135,7 @@ private fun copyOfflineResponse(connection: HttpURLConnection, destination: File
                 val count = input.read(buffer)
                 if (count < 0) break
                 written += count
-                if (written > MAX_OFFLINE_MEDIA_BYTES) throw IOException("This file exceeds the 2 GiB offline limit")
+                if (written > maxBytes) throw mediaTooLarge(maxBytes)
                 output.write(buffer, 0, count)
             }
             output.fd.sync()
@@ -121,6 +143,10 @@ private fun copyOfflineResponse(connection: HttpURLConnection, destination: File
     }
     return written
 }
+
+private fun mediaTooLarge(maxBytes: Long) = IOException(
+    if (maxBytes == MAX_OFFLINE_MEDIA_BYTES) "This file exceeds the 2 GiB offline limit" else "Media exceeds its byte limit",
+)
 
 /** A successful HTML/error response must never become an apparently available offline image. */
 internal fun validateOfflineMediaFile(file: File) {

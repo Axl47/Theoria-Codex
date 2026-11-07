@@ -40,6 +40,30 @@ data class FavoriteTagSection(
     val entries: List<FavoriteTagEntry>,
 )
 
+/** The liked, saved and watched marks a filter pass actually reads; marks for hide toggles that are off stay empty. */
+data class PostMarkInputs(
+    val liked: Set<PostId>,
+    val saved: Set<PostId>,
+    val watched: Set<PostId>,
+    val retained: Set<PostId>,
+)
+
+/**
+ * Narrows the marks to what these filters use. Feeds key their filter pass on the result, so liking,
+ * saving or watching a post does not refilter the whole feed while the matching hide toggle is off.
+ */
+fun SearchVisibilityFilters.markInputs(
+    liked: Set<PostId>,
+    saved: Set<PostId>,
+    watched: Set<PostId>,
+    retained: Set<PostId>,
+): PostMarkInputs = PostMarkInputs(
+    liked = if (hideLiked) liked else emptySet(),
+    saved = if (hideSaved) saved else emptySet(),
+    watched = if (hideWatched) watched else emptySet(),
+    retained = if (hideLiked || hideSaved || hideWatched) retained else emptySet(),
+)
+
 /** Keep recommendation seeds reachable until dismissal, including after viewing or automatic saving. */
 fun filterSearchResults(
     results: List<Post>,

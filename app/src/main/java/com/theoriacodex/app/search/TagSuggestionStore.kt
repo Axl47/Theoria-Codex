@@ -1,7 +1,6 @@
 package com.theoriacodex.app.search
 
 import com.google.gson.Gson
-import com.google.gson.GsonBuilder
 import com.google.gson.annotations.SerializedName
 import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
@@ -152,7 +151,8 @@ internal class FileBackedTagSuggestionStore(
     private val maxTotalUtf8Bytes: Int = DEFAULT_MAX_TOTAL_UTF8_BYTES,
     private val persistenceDebounceMs: Long = DEFAULT_PERSISTENCE_DEBOUNCE_MS,
     private val workDispatcher: CoroutineDispatcher = Dispatchers.Default,
-    private val gson: Gson = GsonBuilder().setPrettyPrinting().create(),
+    // Compact: the snapshot can reach several MB and is rewritten on every debounced mutation burst.
+    private val gson: Gson = Gson(),
     private val fileStore: AtomicJsonFileStore = AtomicJsonFileStore(gson = gson),
     private val recoveryRegistry: LegacyJsonRecoveryRegistry = LegacyJsonRecoveryRegistry(),
     private val onWriteCompleted: () -> Unit = {},
@@ -161,7 +161,9 @@ internal class FileBackedTagSuggestionStore(
     private val persistenceMutex = Mutex()
     private val scope = CoroutineScope(SupervisorJob() + workDispatcher)
     private val inMemory: MutableMap<SourceKey, MutableList<CachedSuggestion>> = seedInitial()
-    private val countsBySource = inMemory.mapValues { (source, entries) -> indexCounts(source, entries) }.toMutableMap()
+    /** Immutable count index published under [lock], so Compose-driven [getCount] reads never wait on merges. */
+    @Volatile private var countsBySource: Map<SourceKey, Map<String, Int>> =
+        inMemory.mapValues { (source, entries) -> indexCounts(source, entries) }
     private val entryWeights: MutableMap<SourceKey, MutableList<Int>> = mutableMapOf()
     private var estimatedTotalUtf8Bytes = SNAPSHOT_ESTIMATED_OVERHEAD_BYTES
     private var mutationVersion = 0L
@@ -201,9 +203,8 @@ internal class FileBackedTagSuggestionStore(
         }
     }
 
-    override fun getCount(source: SourceKey, tag: String): Int? = synchronized(lock) {
+    override fun getCount(source: SourceKey, tag: String): Int? =
         countsBySource[source]?.get(sourceTagKey(source, tag))
-    }
 
     private fun indexCounts(source: SourceKey, entries: List<CachedSuggestion>): Map<String, Int> =
         entries.filter { it.isRecommendationTag && it.count != null }.associate { entry ->
@@ -476,7 +477,7 @@ internal class FileBackedTagSuggestionStore(
     }
 
     private fun enforceTotalByteBudgetLocked(): Boolean {
-        var pruned = false
+        val trimmedSources = mutableSetOf<SourceKey>()
         while (estimatedTotalUtf8Bytes > maxTotalUtf8Bytes) {
             val sourceToTrim = inMemory.entries
                 .asSequence()
@@ -497,9 +498,14 @@ internal class FileBackedTagSuggestionStore(
                 entryWeights.remove(sourceToTrim)
                 estimatedTotalUtf8Bytes -= sourceEstimatedOverhead(sourceToTrim)
             }
-            pruned = true
+            trimmedSources += sourceToTrim
         }
-        return pruned
+        // Trimmed tags must stop reporting counts, or getCount keeps answering for tags the store dropped.
+        trimmedSources.forEach { source ->
+            val remaining = inMemory[source]
+            countsBySource = if (remaining == null) countsBySource - source else countsBySource + (source to indexCounts(source, remaining))
+        }
+        return trimmedSources.isNotEmpty()
     }
 
     private fun snapshotLocked(): TagStoreSnapshot {
@@ -532,7 +538,7 @@ internal class FileBackedTagSuggestionStore(
 
         if (suggestions.isEmpty()) {
             inMemory.remove(source)
-            countsBySource.remove(source)
+            countsBySource = countsBySource - source
             entryWeights.remove(source)
             return
         }
@@ -547,7 +553,7 @@ internal class FileBackedTagSuggestionStore(
             retainedWeight ?: estimatedEntryBytes(suggestion)
         }
         inMemory[source] = suggestions.toMutableList()
-        countsBySource[source] = indexCounts(source, suggestions)
+        countsBySource = countsBySource + (source to indexCounts(source, suggestions))
         entryWeights[source] = replacementWeights.toMutableList()
         estimatedTotalUtf8Bytes += sourceEstimatedOverhead(source) + replacementWeights.sum()
     }

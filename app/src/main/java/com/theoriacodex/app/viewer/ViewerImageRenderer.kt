@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.imageLoader
+import coil.memory.MemoryCache
 import coil.request.SuccessResult
 import com.theoriacodex.app.media.isAnimatedImageMediaRef
 import com.theoriacodex.app.media.isHttpNotFound
@@ -59,13 +60,18 @@ internal fun ViewerImageRenderer(
     val context = LocalContext.current
     val generation = controls.loadGeneration
     val candidates = remember(post, media, generation) { viewerMediaDeliveryPlan(post, media).candidates }
-    val state = remember(key, generation) { ViewerImageState() }
+    // Readiness belongs to one media: a lazily resolved gallery swaps its cover for page one in place.
+    val state = remember(key, generation, candidates) { ViewerImageState() }
+    // Outlives media swaps so the slot keeps its last painted image until the next one paints.
+    val painted = remember(key) { mutableStateOf<MemoryCache.Key?>(null) }
     val candidate = candidates.getOrNull(state.index)
     val location = candidate?.location
     val model = remember(context, location, post.id.source, generation) {
-        location?.let { buildViewerImageRequest(context, it, post.id.source) }
+        location?.let {
+            buildViewerImageRequest(context, it, post.id.source).newBuilder()
+                .placeholderMemoryCacheKey(painted.value).build()
+        }
     }
-    LaunchedEffect(candidates, generation) { state.index = 0 }
     ViewerImageUpgrade(candidates, state, post.id.source, imageSession)
     val onReady = { state.ready(location, imageSession, events) }
     val onError = { error: Throwable -> state.failed(error, post, key, candidate, candidates.size, imageSession, onRequestMediaRecovery, events) }
@@ -84,7 +90,9 @@ internal fun ViewerImageRenderer(
                 AsyncImage(
                     model = model, contentDescription = post.title ?: post.id.sourcePostId,
                     modifier = Modifier.fillMaxSize().then(mediaModifier), contentScale = ContentScale.Fit,
-                    onLoading = { state.loading = true }, onSuccess = { onReady() }, onError = { onError(it.result.throwable) },
+                    onLoading = { state.loading = true },
+                    onSuccess = { painted.value = it.result.memoryCacheKey; onReady() },
+                    onError = { onError(it.result.throwable) },
                 )
                 if (state.loading && !state.visible) CircularProgressIndicator()
             }

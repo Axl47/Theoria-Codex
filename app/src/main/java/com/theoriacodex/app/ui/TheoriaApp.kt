@@ -87,7 +87,7 @@ internal fun TheoriaAppContent(
     )
     val saveRelevanceLoader = remember(shell) {
         val source = CodexCollectionSource(shell.data.codexRepository, shell.data.storageDirectory, shell.data.cacheRepository)
-        CodexSaveRelevanceLoader(shell.data.codexRepository, shell.scope, source::observeSaveRelevance)
+        CodexSaveRelevanceLoader(shell.data.codexRepository, shell.scope, observeLibrary = source::observeSavedLibrary)
     }
     val watchPresentation = com.theoriacodex.app.search.rememberPostWatchPresentation(
         shell.data.readingPositions, shell.data.recentsRepository,

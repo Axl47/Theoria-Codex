@@ -15,6 +15,7 @@ import com.theoriacodex.sources.nhentai.NhentaiSourceAdapter
 import com.theoriacodex.sources.pixiv.PixivSourceAdapter
 import com.theoriacodex.sources.pixiv.PixivAuthApi
 import com.theoriacodex.sources.pixiv.PixivTokenCoordinator
+import com.theoriacodex.sources.pixiv.PixivUgoiraMetadataCache
 import com.theoriacodex.sources.rule34.Rule34GenSourceAdapter
 import com.theoriacodex.sources.rule34.Rule34PahealSourceAdapter
 import com.theoriacodex.sources.rule34.Rule34VideoSourceAdapter
@@ -28,12 +29,14 @@ class RealAdapterRegistry(
         credentialsProvider = credentialsProvider,
         authApi = PixivAuthApi(httpClient),
     ),
+    pixivUgoiraMetadataCache: PixivUgoiraMetadataCache = PixivUgoiraMetadataCache(),
 ) : SourceAdapterRegistry {
     private val adaptersBySource: Map<SourceKey, SourceAdapter> = mapOf(
         SourceKey.PIXIV to PixivSourceAdapter(
             httpClient = httpClient,
             credentialsProvider = credentialsProvider,
             tokenCoordinator = pixivTokenCoordinator,
+            ugoiraMetadataCache = pixivUgoiraMetadataCache,
         ),
         SourceKey.AIBOORU to AibooruSourceAdapter(httpClient = httpClient),
         SourceKey.GELBOORU to GelbooruSourceAdapter(

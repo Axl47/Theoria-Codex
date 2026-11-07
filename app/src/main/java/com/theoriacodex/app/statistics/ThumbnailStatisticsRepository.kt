@@ -5,9 +5,10 @@ import android.graphics.Bitmap
 import androidx.core.graphics.drawable.toBitmap
 import coil.imageLoader
 import coil.request.SuccessResult
-import com.theoriacodex.app.media.normalizeMediaUrl
+import com.theoriacodex.app.media.copyCachedMediaBytes
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.app.media.MediaRequestFactory
+import com.theoriacodex.data.repository.CodexStatistics
 import com.theoriacodex.data.repository.LifetimeStatistics
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.data.repository.StatisticsThumbnailStore
@@ -35,18 +36,26 @@ internal class ThumbnailStatisticsRepository(
     init {
         scope.launch { delegate.observeStatistics().collect { events.send(ThumbnailEvent.Snapshot(it)) } }
         scope.launch {
+            var codexStatistics: Map<String, CodexStatistics>? = null
             var promotions = emptySet<StatisticsPostPromotion>()
             var promoted = emptySet<String>()
+            var reconciled = false
             // Only metadata for recently available posts is needed; no provider lookup is ever performed.
             val available = linkedMapOf<String, Post>()
             for (event in events) {
                 val retry = when (event) {
                     is ThumbnailEvent.Snapshot -> {
+                        // Most snapshots change only counters outside Codex post rankings.
+                        if (reconciled && event.statistics.codexStatistics == codexStatistics) continue
+                        codexStatistics = event.statistics.codexStatistics
                         val next = statisticsPostPromotions(event.statistics)
-                        (next - promotions).mapTo(linkedSetOf()) { it.postKey }.also {
-                            promotions = next
-                            promoted = next.mapTo(linkedSetOf()) { it.postKey }
-                        }
+                        val nextKeys = next.mapTo(linkedSetOf()) { it.postKey }
+                        val retry = (next - promotions).mapTo(linkedSetOf()) { it.postKey }
+                        val unchanged = reconciled && nextKeys == promoted && retry.isEmpty()
+                        promotions = next
+                        promoted = nextKeys
+                        if (unchanged) continue
+                        retry
                     }
                     is ThumbnailEvent.Available -> {
                         val key = statisticsPostKey(event.post.id)
@@ -65,6 +74,7 @@ internal class ThumbnailStatisticsRepository(
                             withTimeoutOrNull(15_000L) { fetch(post, file) } ?: false
                         } }
                     }.toMap())
+                    reconciled = true
                 }
             }
         }
@@ -85,7 +95,6 @@ private sealed interface ThumbnailEvent {
 }
 
 /** Coil uses its existing memory/disk cache before networking and supplies the usual source headers. */
-@OptIn(coil.annotation.ExperimentalCoilApi::class)
 internal suspend fun fetchStatisticsThumbnail(context: Context, post: Post, destination: File): Boolean {
     val local = post.preview.localPath?.let(::File)?.takeIf(File::isFile)
     if (local != null) {
@@ -93,11 +102,7 @@ internal suspend fun fetchStatisticsThumbnail(context: Context, post: Post, dest
         return true
     }
     val url = post.preview.url ?: return false
-    val cacheKey = normalizeMediaUrl(post.id.source, url) ?: url
-    context.imageLoader.diskCache?.openSnapshot(cacheKey)?.use { cached ->
-        cached.data.toFile().copyTo(destination, overwrite = true)
-        return true
-    }
+    if (copyCachedMediaBytes(context, post.id.source, url, destination)) return true
     val request = MediaRequestFactory.imageRequest(
         context, url, post.id.source, crossfade = false, staticAnimatedWebPFrame = true,
         targetWidthPx = 320, targetHeightPx = 320,

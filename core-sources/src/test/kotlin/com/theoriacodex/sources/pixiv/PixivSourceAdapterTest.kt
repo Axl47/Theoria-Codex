@@ -418,6 +418,7 @@ class PixivSourceAdapterTest {
     }
 
 
+
     @Test
     fun `creator search uses user illustrations endpoint and preserves pagination`() = runTest {
         val credentials = FakeCredentialsProvider().apply {
@@ -663,7 +664,7 @@ class PixivSourceAdapterTest {
     """.trimIndent()
 }
 
-private class QueueHttpClient(
+internal class QueueHttpClient(
     vararg responses: SourceHttpResponse,
 ) : SourceHttpClient {
     private val queue = ArrayDeque(responses.toList())
@@ -687,7 +688,7 @@ private class QueueHttpClient(
     }
 }
 
-private data class RecordedPixivRequest(
+internal data class RecordedPixivRequest(
     val url: String,
     val query: Map<String, String>,
 )

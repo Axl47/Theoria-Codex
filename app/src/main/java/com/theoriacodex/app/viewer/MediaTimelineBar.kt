@@ -28,6 +28,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -53,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
 internal val LocalViewerInstantSeek = staticCompositionLocalOf { false }
@@ -65,10 +67,12 @@ internal val VIEWER_TIMELINE_TRACK_HEIGHT = 34.dp
 
 /**
  * The seekable timeline shared by video, GIF and ugoira. [leading] holds the player's own buttons.
+ * [positionMs] is read while drawing, so playback redraws the track each frame but recomposes only
+ * when the shown second changes.
  */
 @Composable
 fun MediaTimelineBar(
-    positionMs: Long,
+    positionMs: () -> Long,
     durationMs: Long,
     modifier: Modifier = Modifier,
     onSeekStarted: () -> Unit = {},
@@ -81,20 +85,20 @@ fun MediaTimelineBar(
 ) {
     val instantSeek = LocalViewerInstantSeek.current
     val safeDuration = durationMs.coerceAtLeast(1L)
-    val clampedPosition = positionMs.coerceIn(0L, safeDuration)
+    val latestPosition by rememberUpdatedState(positionMs)
     val callbacks = rememberUpdatedState(
         TimelineSeekCallbacks(onSeekStarted, onSeekFinished, onSeekCancelled, onInteractionActiveChanged),
     )
     val scrub = remember { TimelineScrubState(callbacks) }
-    val latestPosition by rememberUpdatedState(clampedPosition)
+    val displayPosition: () -> Long = { if (scrub.active) scrub.positionMs else latestPosition().coerceIn(0L, safeDuration) }
+    val shownSecond by remember(safeDuration) { derivedStateOf { displayPosition() / 1000L } }
 
     DisposableEffect(Unit) { onDispose(scrub::abandon) }
 
-    val displayPosition = if (scrub.active) scrub.positionMs else clampedPosition
-    val fraction = (displayPosition.toDouble() / safeDuration.toDouble()).coerceIn(0.0, 1.0).toFloat()
+    val fraction = { (displayPosition().toDouble() / safeDuration.toDouble()).coerceIn(0.0, 1.0).toFloat() }
     val showingPreview = scrub.active && !instantSeek
 
-    ViewerTimelineLayout(displayPosition, safeDuration, playbackRate, showingPreview, modifier, leading) { trackModifier ->
+    ViewerTimelineLayout(shownSecond * 1000L, safeDuration, playbackRate, showingPreview, modifier, leading) { trackModifier ->
         Box(
             modifier = trackModifier
                 .height(VIEWER_TIMELINE_TRACK_HEIGHT)
@@ -103,7 +107,7 @@ fun MediaTimelineBar(
                 .timelineScrubGestures(
                     safeDuration, instantSeek,
                     onBegin = { x ->
-                        scrub.begin(latestPosition)
+                        scrub.begin(latestPosition().coerceIn(0L, safeDuration))
                         scrub.moveTo(x, safeDuration, instantSeek)
                     },
                     onMove = { x -> scrub.moveTo(x, safeDuration, instantSeek) },
@@ -113,7 +117,7 @@ fun MediaTimelineBar(
         ) {
             ViewerTimelineTrack(fraction, Modifier.fillMaxWidth().height(VIEWER_TIMELINE_TRACK_HEIGHT), emphasized = scrub.active)
             if (showingPreview) {
-                ViewerScrubPreview(scrub.positionMs, scrub.positionMs - scrub.startMs, fraction) { preview(scrub.positionMs) }
+                ViewerScrubPreview(scrub.positionMs, scrub.positionMs - scrub.startMs, fraction()) { preview(scrub.positionMs) }
             }
         }
     }
@@ -263,18 +267,20 @@ private fun ViewerSpeedChip(playbackRate: Float) {
 /**
  * The one progress bar for all animated media. At rest it is thin with a small dot. While [emphasized]
  * it thickens and the dot becomes a handle, showing the drag took hold. Media that cannot seek omits the handle.
+ * [fraction] is read while drawing; semantics follow it in whole percents so playback does not recompose the track.
  */
 @Composable
 internal fun ViewerTimelineTrack(
-    fraction: Float,
+    fraction: () -> Float,
     modifier: Modifier = Modifier,
     emphasized: Boolean = false,
     showHandle: Boolean = true,
 ) {
     val accent = LocalViewerAccent.current
     val emphasis by animateFloatAsState(if (emphasized) 1f else 0f, tween(TheoriaMotion.SHORT_MS), label = "Viewer timeline emphasis")
-    Canvas(modifier.progressSemantics(fraction.coerceIn(0f, 1f))) {
-        val x = size.width * fraction.coerceIn(0f, 1f)
+    val percent by remember { derivedStateOf { (fraction().coerceIn(0f, 1f) * 100f).roundToInt() } }
+    Canvas(modifier.progressSemantics(percent / 100f)) {
+        val x = size.width * fraction().coerceIn(0f, 1f)
         val thickness = lerp(4.dp.toPx(), 10.dp.toPx(), emphasis)
         val gap = if (showHandle) lerp(0f, 6.dp.toPx(), emphasis) else 0f
         drawPill(accent, 0f, center.y, (x - gap).coerceAtLeast(0f), thickness)
@@ -322,13 +328,16 @@ internal fun formatTimelineTime(valueMs: Long): String {
     }
 }
 
-/** Display-only progress at the content edge; gestures pass through to the Viewer. */
+/**
+ * Display-only progress at the content edge; gestures pass through to the Viewer. [positionMs] is read
+ * while drawing, so a position that changes every frame redraws the bar without recomposing its caller.
+ */
 @Composable
-internal fun ViewerPassiveProgressBar(positionMs: Long, durationMs: Long, modifier: Modifier = Modifier) {
+internal fun ViewerPassiveProgressBar(positionMs: () -> Long, durationMs: Long, modifier: Modifier = Modifier) {
     if (durationMs <= 0L) return
     val accent = LocalViewerAccent.current
     Canvas(modifier.fillMaxWidth().height(2.dp)) {
-        val progress = (positionMs.toDouble() / durationMs).coerceIn(0.0, 1.0).toFloat()
+        val progress = (positionMs().toDouble() / durationMs).coerceIn(0.0, 1.0).toFloat()
         drawRect(ViewerVeil.InactiveTrack)
         drawRect(accent, size = Size(size.width * progress, size.height))
     }

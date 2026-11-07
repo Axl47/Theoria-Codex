@@ -167,7 +167,7 @@ class ViewerRouteRestorationUiTest {
                     ViewerRoute(
                         dependencies = ViewerRouteDependencies(
                             retention, ViewerPostResolver { _, _ -> post },
-                            ViewerMediaPrefetcher { _, _ -> ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED) },
+                            ViewerMediaPrefetcher { _, _, _ -> ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED) },
                             durations, restoreSession = { restore() }, onCodexUsageTargetChanged = onUsage,
                         ),
                         renderConfig = ViewerRouteRenderConfig(creatorBrowsingSources = emptySet()),

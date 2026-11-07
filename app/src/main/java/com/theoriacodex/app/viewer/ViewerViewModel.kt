@@ -45,8 +45,9 @@ internal fun interface ViewerPostResolver {
 }
 
 /** Performs bounded media prefetch outside immutable state and platform playback ownership. */
+/** Warms one media item; [distance] is how many media items it sits from the one on screen. */
 internal fun interface ViewerMediaPrefetcher {
-    suspend fun prefetch(session: ViewerSessionIdentity, media: ViewerMediaState): ViewerPrefetchResult
+    suspend fun prefetch(session: ViewerSessionIdentity, media: ViewerMediaState, distance: Int): ViewerPrefetchResult
 }
 
 /**
@@ -313,6 +314,7 @@ internal class ViewerViewModel(
             .flatMap { page -> page.media.asSequence() }
             .firstOrNull { candidate -> candidate.key == mediaKey }
             ?: return
+        val distance = viewerPrefetchDistance(state.value.pages, state.value.currentMedia?.key, mediaKey) ?: Int.MAX_VALUE
         launchSessionJob(ViewerWorkKey.Prefetch(mediaKey)) {
             prefetchSemaphore.withPermit {
                 coroutineContext.ensureActive()
@@ -321,7 +323,7 @@ internal class ViewerViewModel(
                 }
                 onAction(ViewerAction.PrefetchStarted(session, mediaKey))
                 val result = try {
-                    prefetcher.prefetch(session, media).also { coroutineContext.ensureActive() }
+                    prefetcher.prefetch(session, media, distance).also { coroutineContext.ensureActive() }
                 } catch (error: CancellationException) {
                     throw error
                 } catch (_: Throwable) {

@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -76,7 +78,7 @@ internal fun ViewerMediaPage(
     mediaIndex: Int,
     controls: ViewerRendererControls,
     events: ViewerRendererEvents,
-    transform: ViewerTransformState,
+    transform: State<ViewerTransformState>,
     onTransformChanged: (ViewerTransformState) -> Unit,
     layout: ViewerMediaLayout,
     videoOptions: ViewerVideoOptions,
@@ -99,11 +101,15 @@ internal fun ViewerMediaPage(
     val isUgoira = isPixivUgoiraMedia(post, media) && pixivUgoiraClient != null
     val animated = viewerMediaIsAnimated(post, media, pixivUgoiraClient != null)
     val interactions = remember(key) { ViewerMediaInteractions() }
-    val transformModifier = Modifier.graphicsLayer {
-        scaleX = transform.zoom
-        scaleY = transform.zoom
-        translationX = transform.panX
-        translationY = transform.panY
+    // The transform changes every pinch event, so it is read only while drawing, never in composition.
+    val transformModifier = remember(transform) {
+        Modifier.graphicsLayer {
+            val current = transform.value
+            scaleX = current.zoom
+            scaleY = current.zoom
+            translationX = current.panX
+            translationY = current.panY
+        }
     }
     val mediaPadding = if (layout.landscape || animated) 0.dp else 16.dp
     var pageSize by remember { mutableStateOf(IntSize.Zero) }
@@ -187,11 +193,11 @@ private fun viewerAspectRatio(post: Post): Float? {
 private fun ViewerMediaGestureLayer(
     key: ViewerMediaKey, seekable: Boolean, animated: Boolean,
     interactions: ViewerMediaInteractions, controls: ViewerRendererControls,
-    transform: ViewerTransformState, bounds: ViewerTransformBounds, onTransformChanged: (ViewerTransformState) -> Unit,
+    transform: State<ViewerTransformState>, bounds: ViewerTransformBounds, onTransformChanged: (ViewerTransformState) -> Unit,
     layout: ViewerMediaLayout, onAction: (ViewerAction) -> Unit, onInteraction: () -> Unit,
     onToggleChrome: () -> Unit, onPassiveInteraction: () -> Unit,
 ) {
-    val currentTransform by rememberUpdatedState(transform)
+    val zoomed by remember(transform) { derivedStateOf { transform.value.isZoomed } }
     val currentOnTransformChanged by rememberUpdatedState(onTransformChanged)
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
@@ -199,11 +205,11 @@ private fun ViewerMediaGestureLayer(
     val transformState = rememberTransformableState { centroid, zoom, pan, _ ->
         interactions.zoomAnimation?.cancel()
         val focus = centerOffset(centroid)
-        onTransformChanged(transform.transform(zoom, pan.x, pan.y, focus.x, focus.y, bounds))
+        onTransformChanged(transform.value.transform(zoom, pan.x, pan.y, focus.x, focus.y, bounds))
         onPassiveInteraction()
     }
     fun animateZoom(tap: Offset?) {
-        val start = currentTransform
+        val start = transform.value
         val focus = tap?.let(::centerOffset) ?: Offset.Zero
         val target = start.doubleTap(focus.x, focus.y, bounds)
         interactions.zoomAnimation?.cancel()
@@ -215,7 +221,7 @@ private fun ViewerMediaGestureLayer(
     }
     val gestures = Modifier.viewerMediaGestures(
         mediaKey = key, active = controls.isActive && !layout.pictureInPicture, seekable = seekable,
-        zoomed = transform.isZoomed, chromeVisible = controls.showControls, touchExplorationEnabled = layout.touchExploration,
+        zoomed = zoomed, chromeVisible = controls.showControls, touchExplorationEnabled = layout.touchExploration,
         actions = ViewerMediaGestureActions(
             seek = { interactions.seek(it); onPassiveInteraction() },
             zoom = { tap -> animateZoom(tap); onPassiveInteraction() },
@@ -229,7 +235,7 @@ private fun ViewerMediaGestureLayer(
     )
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxWidth()
-            .transformable(transformState, canPan = { transform.isZoomed }).then(gestures))
+            .transformable(transformState, canPan = { transform.value.isZoomed }).then(gestures))
         if (controls.showControls && animated) Spacer(Modifier.fillMaxWidth().height(VIEWER_TIMELINE_HEIGHT + LocalViewerPostStripInset.current))
     }
 }

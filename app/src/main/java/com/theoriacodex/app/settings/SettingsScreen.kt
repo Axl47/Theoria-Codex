@@ -61,6 +61,7 @@ private enum class SettingsSheet { PROFILE, SOURCE_MIX, PLAYBACK, CLASSIC_CONTRO
 fun SettingsScreen(
     state: SettingsUiState,
     onAction: (SettingsAction) -> Unit,
+    statistics: StatisticsSummary = StatisticsSummary(),
     searchSources: Set<SourceKey> = emptySet(),
     storageSummary: String? = null,
     storageTools: (@Composable () -> Unit)? = null,
@@ -73,11 +74,11 @@ fun SettingsScreen(
         label = "Settings page",
     ) { page ->
         when (page) {
-            SettingsPage.HOME -> SettingsHome(state, onAction, searchSources, storageSummary)
+            SettingsPage.HOME -> SettingsHome(state, statistics, onAction, searchSources, storageSummary)
             SettingsPage.ACCOUNTS -> AccountsPage(state, onAction, openHome)
             SettingsPage.HIDDEN_TAGS -> HiddenTagsPage(state, onAction, openHome)
             SettingsPage.STORAGE -> StoragePage(state, onAction, storageTools, openHome)
-            SettingsPage.STATS -> StatsScreen(state.statistics, openHome)
+            SettingsPage.STATS -> StatsScreen(statistics, openHome)
         }
     }
     ProfileDeleteDialog(state, onAction)
@@ -86,6 +87,7 @@ fun SettingsScreen(
 @Composable
 private fun SettingsHome(
     state: SettingsUiState,
+    statistics: StatisticsSummary,
     onAction: (SettingsAction) -> Unit,
     searchSources: Set<SourceKey>,
     storageSummary: String?,
@@ -98,7 +100,7 @@ private fun SettingsHome(
         SettingsHeader("Settings")
         ProfileCard(state, onAction, onAdd = { showAddProfile = true }, onMenu = { sheet = SettingsSheet.PROFILE })
         SettingsGroup(null) {
-            SettingsRow("Your stats", statsSummary(state.statistics), Icons.Default.BarChart, onClick = {
+            SettingsRow("Your stats", statsSummary(statistics), Icons.Default.BarChart, onClick = {
                 open(SettingsPage.STATS)
             })
         }

@@ -3,6 +3,7 @@
 package com.theoriacodex.app.viewer
 
 import android.content.Context
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
@@ -12,6 +13,7 @@ import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.datasource.cache.Cache
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.CacheWriter
+import androidx.media3.datasource.cache.ContentMetadata
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.database.StandaloneDatabaseProvider
@@ -24,6 +26,7 @@ import androidx.media3.exoplayer.source.MediaSource
 import com.theoriacodex.app.TheoriaApplication
 import com.theoriacodex.app.viewer.state.ViewerPrefetchOutcome
 import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import java.io.File
 import java.nio.ByteBuffer
 import java.security.MessageDigest
@@ -35,6 +38,9 @@ import kotlinx.coroutines.withContext
 
 internal const val VIDEO_PLAYBACK_CACHE_MAX_BYTES = 256L * 1024L * 1024L
 internal const val VIEWER_VIDEO_PREFETCH_BYTES = 24L * 1024L * 1024L
+
+/** Metered networks warm only the opening seconds of a neighbour video. */
+internal const val VIEWER_METERED_VIDEO_PREFETCH_BYTES = 4L * 1024L * 1024L
 internal const val FEED_PREVIEW_TARGET_BUFFER_BYTES = 2 * 1024 * 1024
 internal const val FEED_PREVIEW_MIN_BUFFER_MS = 6_000
 internal const val FEED_PREVIEW_MAX_BUFFER_MS = 12_000
@@ -153,9 +159,11 @@ internal class VideoPlaybackInfrastructure(
             .setLoadControl(VideoLoadControlFactory.create(profile))
     }
 
+    /** Caches at most [maxBytes] from the start of [location] into the shared video cache. */
     internal suspend fun prefetch(
         location: String,
         headers: Map<String, String>,
+        maxBytes: Long = VIEWER_VIDEO_PREFETCH_BYTES,
     ): ViewerPrefetchResult {
         if (!isHttpVideoLocation(location)) {
             return ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED)
@@ -166,7 +174,7 @@ internal class VideoPlaybackInfrastructure(
             val dataSpec = DataSpec.Builder()
                 .setUri(videoLocationToUri(location))
                 .setKey(cacheKey)
-                .setLength(VIEWER_VIDEO_PREFETCH_BYTES)
+                .setLength(maxBytes)
                 .setFlags(DataSpec.FLAG_ALLOW_CACHE_FRAGMENTATION)
                 .build()
             val dataSource = cacheDataSourceFactory(bound, headers, blockOnCache = true).createDataSource()
@@ -176,7 +184,7 @@ internal class VideoPlaybackInfrastructure(
             val cachedBytes = bound.sharedResource.cache.getCachedBytes(
                 cacheKey,
                 0L,
-                VIEWER_VIDEO_PREFETCH_BYTES,
+                maxBytes,
             )
             if (cachedBytes > 0L) {
                 ViewerPrefetchResult(
@@ -186,6 +194,18 @@ internal class VideoPlaybackInfrastructure(
             } else {
                 ViewerPrefetchResult(ViewerPrefetchOutcome.FAILED)
             }
+        }
+    }
+
+    /** Copies [location]'s video to [destination] when the shared cache already holds all of it; never networks. */
+    internal suspend fun copyFullyCached(
+        location: String,
+        headers: Map<String, String>,
+        destination: File,
+    ): Boolean {
+        if (!isHttpVideoLocation(location)) return false
+        return withContext(Dispatchers.IO) {
+            copyFullyCachedVideo(sharedFactories.cache, videoPlaybackIdentity(location, headers).cacheKey, destination)
         }
     }
 
@@ -209,6 +229,30 @@ internal class VideoPlaybackInfrastructure(
         }
         return videoCacheDataSourceFactory(bound.sharedResource.cache, requestScopedUpstream, blockOnCache)
     }
+}
+
+/**
+ * Copies the entry at [cacheKey] to [destination] when [cache] holds every byte of it, as after a video was
+ * watched through. Reads the cache only: a gap or a range another writer holds returns false, never a download.
+ */
+internal suspend fun copyFullyCachedVideo(cache: Cache, cacheKey: String, destination: File): Boolean {
+    val length = ContentMetadata.getContentLength(cache.getContentMetadata(cacheKey))
+    if (length <= 0L || !cache.isCached(cacheKey, 0L, length)) return false
+    // Without an upstream, any byte missing from the cache fails the read instead of downloading it.
+    val cacheOnly = CacheDataSource(cache, null)
+    return runCatchingPreservingCancellation {
+        cacheOnly.open(DataSpec.Builder().setUri(cacheKey).setKey(cacheKey).build())
+        destination.outputStream().use { output ->
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (true) {
+                currentCoroutineContext().ensureActive()
+                val read = cacheOnly.read(buffer, 0, buffer.size)
+                if (read == C.RESULT_END_OF_INPUT) break
+                output.write(buffer, 0, read)
+            }
+        }
+        destination.length() == length
+    }.also { cacheOnly.close() }.getOrDefault(false)
 }
 
 /** Playback bypasses occupied cache ranges; only background writers may wait for another writer. */

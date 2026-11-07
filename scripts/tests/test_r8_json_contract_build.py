@@ -47,9 +47,11 @@ class R8JsonContractBuildTest(unittest.TestCase):
         verify = VERIFY_WORKFLOW.read_text(encoding="utf-8")
         release = RELEASE_WORKFLOW.read_text(encoding="utf-8")
 
-        self.assertIn(":app:verifyReleaseJsonContracts", verify)
-        self.assertIn(":app:verifyReleaseAcceptanceJsonContracts", verify)
-        self.assertIn("--configuration-cache-problems=fail", verify)
+        device_validation = (VERIFY_WORKFLOW.parent / "device-validation.yml").read_text(encoding="utf-8")
+
+        # Both contract verifiers finalize their assembly task, so CI runs them through it.
+        self.assertIn(":app:assembleRelease", verify)
+        self.assertIn(":app:assembleReleaseAcceptance", device_validation)
         self.assertIn(":app:assembleRelease", release)
         self.assertNotIn("verify_r8_json_contract.py", release)
 

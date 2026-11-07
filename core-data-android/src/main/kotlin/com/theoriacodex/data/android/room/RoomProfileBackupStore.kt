@@ -113,7 +113,7 @@ class RoomProfileBackupStore(
                     entry.viewedAtEpochMs, recents.nextWatchedSequence(), entry.origin.name, entry.originQueryHash,
                     maxOf(entry.maxViewedMediaNumber, existing?.maxViewedMediaNumber ?: 1)))
             } else {
-                recents.updateWatchedMediaProgress(id.source.name, id.sourcePostId, entry.section.name, entry.maxViewedMediaNumber)
+                recents.raiseWatchedMediaProgress(id.source.name, id.sourcePostId, entry.section.name, entry.maxViewedMediaNumber)
             }
         }
         library.searches.asReversed().forEach { entry ->

@@ -1,7 +1,11 @@
 package com.theoriacodex.app.ui.components
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.related.RelatedPostsUiState
@@ -17,18 +21,21 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
 
-/** What every tile of one feed shares: its player, like state, and duration reporting. */
+/**
+ * What every tile of one feed shares: its player, like state, and duration reporting. Likes and known
+ * durations are held as state so one like or newly acquired duration recomposes only the tile it concerns.
+ */
 internal data class FeedCardEnvironment(
     val pixivUgoiraClient: PixivUgoiraClient?,
-    val likedPostIds: Set<PostId>,
-    val acquiredDurations: Map<PostId, Long>,
+    val likedPostIds: State<Set<PostId>>,
+    val acquiredDurations: State<Map<PostId, Long>>,
     val durationStateForPost: (Post) -> Flow<MediaDurationState?>,
     val onToggleLike: ((Post) -> Unit)?,
     val onViewportChanged: (Post, Boolean) -> Unit,
     val onAuthoritativeDurationKnown: (Post, Long) -> Unit,
 )
 
-/** Keeps one environment while its inputs are unchanged, so visible tiles can skip recomposition. */
+/** Keeps one environment while its callbacks are unchanged, so visible tiles can skip recomposition. */
 @Composable
 internal fun rememberFeedCardEnvironment(
     pixivUgoiraClient: PixivUgoiraClient?,
@@ -38,14 +45,15 @@ internal fun rememberFeedCardEnvironment(
     onToggleLike: ((Post) -> Unit)?,
     onViewportChanged: (Post, Boolean) -> Unit,
     onAuthoritativeDurationKnown: (Post, Long) -> Unit,
-): FeedCardEnvironment = remember(
-    pixivUgoiraClient, likedPostIds, acquiredDurations, durationStateForPost,
-    onToggleLike, onViewportChanged, onAuthoritativeDurationKnown,
-) {
-    FeedCardEnvironment(
-        pixivUgoiraClient, likedPostIds, acquiredDurations, durationStateForPost,
-        onToggleLike, onViewportChanged, onAuthoritativeDurationKnown,
-    )
+): FeedCardEnvironment {
+    val liked = rememberUpdatedState(likedPostIds)
+    val durations = rememberUpdatedState(acquiredDurations)
+    return remember(pixivUgoiraClient, durationStateForPost, onToggleLike, onViewportChanged, onAuthoritativeDurationKnown) {
+        FeedCardEnvironment(
+            pixivUgoiraClient, liked, durations, durationStateForPost,
+            onToggleLike, onViewportChanged, onAuthoritativeDurationKnown,
+        )
+    }
 }
 
 /** One feed tile, showing the best duration known so far and reporting events against its post. */
@@ -62,14 +70,20 @@ internal fun FeedPostCard(
     recoverPostMedia: (suspend (Post, ImageRef) -> Post?)? = null,
 ) {
     val observedDurationMs = observedMediaDurationMs(post, environment.durationStateForPost)
+    val acquiredDurationMs by remember(post.id, environment.acquiredDurations) {
+        derivedStateOf { environment.acquiredDurations.value[post.id] }
+    }
+    val liked by remember(post.id, environment.likedPostIds) {
+        derivedStateOf { post.id in environment.likedPostIds.value }
+    }
     SearchResultCard(
         post = post,
         showWatchHistory = showWatchHistory,
         pixivUgoiraClient = environment.pixivUgoiraClient,
-        acquiredDurationMs = observedDurationMs ?: environment.acquiredDurations[post.id],
+        acquiredDurationMs = observedDurationMs ?: acquiredDurationMs,
         showSourceBadge = showSourceBadge,
         mediaAspectRatio = mediaAspectRatio,
-        liked = post.id in environment.likedPostIds,
+        liked = liked,
         onToggleLike = environment.onToggleLike?.let { toggle -> { toggle(post) } },
         resolvePostById = resolvePostById,
         recoverPostMedia = recoverPostMedia,
@@ -94,9 +108,8 @@ internal fun FeedRelatedPostsShelf(
     onNextPage: () -> Unit,
     recoverPostMedia: (suspend (Post, ImageRef) -> Post?)? = null,
 ) {
-    val shelfEnvironment = remember(environment, presentation.knownDurationMsByPostId) {
-        environment.copy(acquiredDurations = presentation.knownDurationMsByPostId)
-    }
+    val shelfDurations = rememberUpdatedState(presentation.knownDurationMsByPostId)
+    val shelfEnvironment = remember(environment) { environment.copy(acquiredDurations = shelfDurations) }
     RelatedPostsShelf(
         state = state,
         posts = presentation.visiblePosts,
