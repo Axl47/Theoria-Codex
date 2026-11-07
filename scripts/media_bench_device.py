@@ -170,15 +170,20 @@ def push_media(serial: str) -> None:
 
 def instrument(serial: str, scenario: str, rate_mbps: float, ttfb_ms: int, swipe_watch_ms: int | None = None) -> dict:
     extras = ["-e", "mediaBenchSwipeWatchMs", str(swipe_watch_ms)] if swipe_watch_ms is not None else []
-    output = adb(
-        serial, "shell", "am", "instrument", "-w", "-r",
+    command = [
+        "shell", "am", "instrument", "-w", "-r",
         "-e", "class", f"{TEST_CLASS}#{scenario}",
         "-e", "mediaBench", "true",
         "-e", "mediaBenchRateMbps", str(rate_mbps),
         "-e", "mediaBenchTtfbMs", str(ttfb_ms),
         *extras,
-        RUNNER, capture=True,
-    )
+        RUNNER,
+    ]
+    try:
+        output = adb(serial, *command, capture=True)
+    except subprocess.CalledProcessError:
+        # A dropped USB connection ends adb with 255; run the scenario again rather than lose the session.
+        output = adb(serial, *command, capture=True)
     payloads = [line[len(STATUS_PREFIX):] for line in output.splitlines() if line.startswith(STATUS_PREFIX)]
     if not payloads:
         tail = "\n".join(output.splitlines()[-40:])
