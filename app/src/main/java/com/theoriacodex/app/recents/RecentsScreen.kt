@@ -40,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -612,6 +613,9 @@ private fun ActivityList(
                 is RecentsTimelineItem.Posts -> {
                 val row = rememberLazyListState()
                 val postIds = remember(item.entries) { item.entries.map { it.post.id } }
+                // Rows are newest first, but a list keeps its place by key, so a post viewed since would
+                // land off-screen to the left. Show the newest whenever it changes.
+                LaunchedEffect(postIds.firstOrNull()) { if (row.firstVisibleItemIndex != 0) row.scrollToItem(0) }
                 ViewerReturnShelf(ViewerReturnShelfId.RecentsTimeline, postIds, row) {
                 LazyRow(
                     state = row,
