@@ -302,6 +302,7 @@ internal class DefaultTheoriaAppContainer(
         journalFile = File(storageDirectory, "pending_profile_restore.json"),
         statistics = statisticsStore,
         writeGuard = profileWriteGuard,
+        siteProfiles = siteProfiles,
     )
     private val autoBackup = AutoBackupWorkflow(
         store = SharedPreferencesAutoBackupStore(appContext),

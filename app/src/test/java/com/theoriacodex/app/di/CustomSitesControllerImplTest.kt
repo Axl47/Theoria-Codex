@@ -53,11 +53,21 @@ class CustomSitesControllerImplTest {
     private var libraryHasData = false
     private var now = 1_000L
 
+    /** Each install: the custom sources installed, and the sources whose adapters were visible at that moment. */
+    private val installs = mutableListOf<Pair<Set<SourceKey>, Set<SourceKey>>>()
+    private val labels = mutableMapOf<SourceKey, String>()
+
     private class Graph(val controller: CustomSitesControllerImpl, val registry: CompositeSourceAdapterRegistry)
 
     private fun TestScope.graph(): Graph {
         val scope: CoroutineScope = backgroundScope + UnconfinedTestDispatcher(testScheduler)
-        val runtime = CustomSourceRuntime(profiles, keys, families, NoNetwork, scope)
+        // The unconfined collector publishes the first (empty) snapshot during construction.
+        var built: CustomSourceRuntime? = null
+        val runtime = CustomSourceRuntime(profiles, keys, families, NoNetwork, scope) { presentations ->
+            installs += presentations.mapTo(mutableSetOf()) { it.source } to built?.snapshot?.value?.adapters?.keys.orEmpty()
+            presentations.forEach { labels[it.source] = it.label }
+        }
+        built = runtime
         val controller = CustomSitesControllerImpl(
             profiles = profiles,
             credentials = keys,
@@ -84,6 +94,20 @@ class CustomSitesControllerImplTest {
         assertEquals(setOf(SITE), graph.registry.availableSources())
         assertEquals(SITE, graph.registry.adapterFor(SITE)?.sourceKey)
         assertTrue(SITE in settings.observeSettings().first().runtime.enabledSources)
+    }
+
+    @Test
+    fun `presentations are installed before a site's adapter appears and withdrawn after it goes`() = runTest {
+        val graph = graph()
+
+        graph.controller.add(draft())
+        assertTrue("installed while the adapter was still hidden", installs.any { (installed, visible) -> SITE in installed && SITE !in visible })
+        assertEquals("Booru", labels[SITE])
+
+        installs.clear()
+        graph.controller.remove(SITE.id)
+        // Kept while the adapter is still visible; withdrawn once it is gone.
+        assertEquals(listOf(setOf(SITE) to setOf(SITE), emptySet<SourceKey>() to emptySet()), installs)
     }
 
     @Test

@@ -89,6 +89,8 @@ class JourneyAppContainer(
     private val statistics = DataStoreStatisticsRepository(storageDirectory, ownerScope)
     private val durations = RoomMediaDurationRepository(database)
     private val accounts = JourneyAccounts(registry.availableSources())
+    private val siteProfiles = InMemorySiteProfileRepository()
+    private val siteKeys = InMemorySiteCredentialsStore()
     private val auth = PixivAuthApi(httpClient)
     private val tags = FileBackedTagSuggestionStore(storageDirectory.resolve("tags.json"))
     private val updateState = FileBackedUpdateStateStore(storageDirectory.resolve("updates.json"))
@@ -151,10 +153,8 @@ class JourneyAppContainer(
         profileDeletion = ProfileDeletionService(settings, content,
             storageDirectory.resolve("pending_profile_deletion.json"), profileWriteGuard),
         profileBackup = ProfileBackupService(settings, RoomProfileBackupStore(database), data.savedSearches,
-            data.readingPositions, storageDirectory.resolve("pending_profile_restore.json")),
+            data.readingPositions, storageDirectory.resolve("pending_profile_restore.json"), siteProfiles = siteProfiles),
     )
-    private val siteProfiles = InMemorySiteProfileRepository()
-    private val siteKeys = InMemorySiteCredentialsStore()
     /** Real controller over in-memory stores; the fixture registry does not list custom sites. */
     override val customSites: CustomSitesController = CustomSitesControllerImpl(
         profiles = siteProfiles,
