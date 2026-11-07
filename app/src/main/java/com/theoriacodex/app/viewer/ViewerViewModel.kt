@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
@@ -316,6 +317,7 @@ internal class ViewerViewModel(
             ?: return
         val distance = viewerPrefetchDistance(state.value.pages, state.value.currentMedia?.key, mediaKey) ?: Int.MAX_VALUE
         launchSessionJob(ViewerWorkKey.Prefetch(mediaKey)) {
+            awaitCurrentMediaShown()
             prefetchSemaphore.withPermit {
                 coroutineContext.ensureActive()
                 synchronized(lock) {
@@ -331,6 +333,17 @@ internal class ViewerViewModel(
                 }
                 onAction(ViewerAction.PrefetchCompleted(session, mediaKey, result))
             }
+        }
+    }
+
+    /**
+     * Speculative loads wait until the media on screen is ready, so they never split the link with its first
+     * load: a gallery's first page or a video's first frame. A failed or slow current media releases them after
+     * [VIEWER_PREFETCH_READY_WAIT_MS].
+     */
+    private suspend fun awaitCurrentMediaShown() {
+        withTimeoutOrNull(VIEWER_PREFETCH_READY_WAIT_MS) {
+            state.first { current -> current.currentMedia?.ready != false || current.mediaError != null }
         }
     }
 
@@ -450,6 +463,7 @@ internal class ViewerViewModel(
 }
 
 internal const val VIEWER_PREFETCH_MAX_CONCURRENCY = 2
+internal const val VIEWER_PREFETCH_READY_WAIT_MS = 1_500L
 
 internal object ViewerSavedStateKeys {
     const val QUERY_HASH = "viewer_query_hash"
