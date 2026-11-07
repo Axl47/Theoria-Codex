@@ -42,10 +42,7 @@ interface SiteFamily {
     /** A few bounded, read-only requests; transport failures come back as [FamilyProbe.Failed]. */
     suspend fun probe(address: SiteAddress, context: SiteRequestContext): FamilyProbe
 
-    /**
-     * The family adapter for a stored profile. [source] must be the profile's identity; custom
-     * identities exist once the open `SourceKey` lands (plan B1), until then only tests call this.
-     */
+    /** The family adapter for a stored profile; [source] is `SourceKey.of(profile)`. */
     fun createAdapter(profile: SiteProfile, source: SourceKey, context: SiteRequestContext): SourceAdapter
 }
 

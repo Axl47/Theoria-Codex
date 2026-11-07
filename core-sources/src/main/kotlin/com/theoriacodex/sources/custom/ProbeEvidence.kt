@@ -51,10 +51,6 @@ internal fun SourceHttpResponse.isGelbooruAuthRefusal(): Boolean = when {
     else -> looksLikeGelbooruAuthFailure(body)
 }
 
-/** DAPI `json=1`: an array or object (bare or `{"post": …}`), or an empty body for no results. */
-internal fun SourceHttpResponse.isGelbooruJsonList(): Boolean =
-    statusCode == HTTP_OK && (body.isBlank() || jsonBody()?.let { it.isJsonArray || it.isJsonObject } == true)
-
 /** Moebooru `/post.json`: an array of posts carrying `md5` and `file_url`. */
 internal fun SourceHttpResponse.isMoebooruPostList(): Boolean {
     if (statusCode != HTTP_OK) return false

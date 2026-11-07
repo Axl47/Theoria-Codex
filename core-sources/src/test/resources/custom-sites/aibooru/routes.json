@@ -17,6 +17,17 @@
       "body": "danbooru_profile.json"
     },
     {
+      "path": "/posts.json",
+      "query": {
+        "limit": "40",
+        "page": "1",
+        "tags": ""
+      },
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "body": "danbooru_adapter_page.json"
+    },
+    {
       "path": "/index.php",
       "query": {
         "page": "dapi",

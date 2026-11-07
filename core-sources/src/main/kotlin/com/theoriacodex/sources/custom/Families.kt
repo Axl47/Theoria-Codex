@@ -1,8 +1,14 @@
 package com.theoriacodex.sources.custom
 
 import com.theoriacodex.domain.adapter.SourceAdapter
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceFailureReason
+import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.query.SearchTermLimit
+import com.theoriacodex.domain.source.ProbeFailure
 import com.theoriacodex.domain.source.ProtocolFamily
 import com.theoriacodex.domain.source.SiteAddress
 import com.theoriacodex.domain.source.SiteProfile
@@ -17,7 +23,7 @@ import java.io.IOException
 /**
  * Danbooru 2 (`/posts.json`). Evidence: `/counts/posts.json` answers `{"counts":{"posts":N}}`, or
  * the family's JSON error envelope when access is refused. On a match, `/profile.json` measures
- * the search term limit for this access (AIBooru guests: 4).
+ * the search term limit for this access (AIBooru guests: 4), then the adapter reads a page.
  */
 object DanbooruFamily : SiteFamily {
     override val family = ProtocolFamily.DANBOORU
@@ -28,7 +34,8 @@ object DanbooruFamily : SiteFamily {
     override suspend fun probe(address: SiteAddress, context: SiteRequestContext): FamilyProbe = probing {
         val counts = context.get(address, "/counts/posts.json", context.danbooruAuth())
         when {
-            counts.isDanbooruCounts() -> FamilyProbe.Match(suggestedLabel = null, searchTermLimit = measureTermLimit(address, context))
+            counts.isDanbooruCounts() ->
+                verifyWithAdapter(address, context, FamilyProbe.Match(suggestedLabel = null, searchTermLimit = measureTermLimit(address, context)))
             counts.isDanbooruAuthRefusal() -> FamilyProbe.NeedsCredentials
             else -> counts.unclaimed()
         }
@@ -66,7 +73,7 @@ object DanbooruFamily : SiteFamily {
 /**
  * Gelbooru 0.2 DAPI (`index.php?page=dapi`). Evidence: the DAPI without `json=1` answers a
  * `<posts count="N">` envelope, or a keyless refusal in Gelbooru's or rule34.xxx's shape. The
- * adapter reads `json=1`, so a match also needs the JSON list to answer as JSON (or empty).
+ * adapter reads `json=1`, so a match also needs the adapter to read a page.
  */
 object GelbooruFamily : SiteFamily {
     override val family = ProtocolFamily.GELBOORU_02
@@ -77,14 +84,8 @@ object GelbooruFamily : SiteFamily {
         val auth = context.gelbooruAuth()
         val envelope = context.get(address, "/index.php", POST_LIST + ("limit" to "1") + auth)
         when {
-            envelope.isGelbooruPostsEnvelope() -> {
-                val json = context.get(address, "/index.php", POST_LIST + mapOf("json" to "1", "limit" to "1") + auth)
-                when {
-                    json.isGelbooruJsonList() -> FamilyProbe.Match(suggestedLabel = null, searchTermLimit = null)
-                    json.isGelbooruAuthRefusal() -> FamilyProbe.NeedsCredentials
-                    else -> json.unclaimed()
-                }
-            }
+            envelope.isGelbooruPostsEnvelope() ->
+                verifyWithAdapter(address, context, FamilyProbe.Match(suggestedLabel = null, searchTermLimit = null))
             envelope.isGelbooruAuthRefusal() -> FamilyProbe.NeedsCredentials
             else -> envelope.unclaimed()
         }
@@ -121,6 +122,47 @@ object MoebooruSignature : UnsupportedFamilySignature {
         context.get(address, "/post.json", mapOf("limit" to "1")).isMoebooruPostList()
     } catch (_: IOException) {
         false
+    }
+}
+
+/**
+ * The probe's second, optional check (plan C3): the family adapter reads the newest page under the
+ * identity the site would get, so a locked-in family is one the real adapter can read. An empty
+ * page passes (an empty site, or Danbooru hiding restricted posts); an unreadable one is not this
+ * family. Keys in [context] are sent as a saved site would send them.
+ */
+private suspend fun SiteFamily.verifyWithAdapter(
+    address: SiteAddress,
+    context: SiteRequestContext,
+    match: FamilyProbe.Match,
+): FamilyProbe {
+    val profile = SiteProfile(
+        sourceId = address.derivedSourceId,
+        address = address,
+        label = SiteProber.defaultLabel(address),
+        familyId = family.name,
+        searchTermLimit = match.searchTermLimit,
+        addedAtEpochMs = 0,
+    )
+    val source = SourceKey.of(profile)
+    val newest = Query(
+        mode = QueryMode.Source(source),
+        includeTags = emptyList(),
+        excludeTags = emptyList(),
+        sort = SortMode.NEWEST,
+        dateRange = null,
+        minScore = null,
+    )
+    return try {
+        createAdapter(profile, source, context).search(newest, pageToken = null)
+        match
+    } catch (error: SourceAdapterException) {
+        when (error.reason) {
+            SourceFailureReason.AUTH_REQUIRED, SourceFailureReason.AUTH_EXPIRED -> FamilyProbe.NeedsCredentials
+            SourceFailureReason.NETWORK -> FamilyProbe.Failed((error.cause as? IOException)?.let(::probeFailureOf) ?: ProbeFailure.HTTP_ERROR)
+            SourceFailureReason.RATE_LIMITED -> FamilyProbe.Failed(ProbeFailure.HTTP_ERROR)
+            SourceFailureReason.PARSE, SourceFailureReason.UNKNOWN -> FamilyProbe.NoMatch
+        }
     }
 }
 

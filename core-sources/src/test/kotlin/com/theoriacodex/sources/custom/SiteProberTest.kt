@@ -28,7 +28,11 @@ class SiteProberTest {
     fun `AIBooru is Danbooru with its measured guest term limit`() = runTest {
         assertEquals(supported("https://aibooru.online", ProtocolFamily.DANBOORU, "aibooru.online", termLimit = 4), prober.probe("aibooru.online"))
         assertEquals(
-            listOf("https://aibooru.online/counts/posts.json", "https://aibooru.online/profile.json"),
+            listOf(
+                "https://aibooru.online/counts/posts.json",
+                "https://aibooru.online/profile.json",
+                "https://aibooru.online/posts.json?limit=40&page=1&tags=",
+            ),
             transport.requested,
         )
     }
@@ -39,6 +43,22 @@ class SiteProberTest {
 
         assertEquals(supported("https://safebooru.org", ProtocolFamily.GELBOORU_02, "safebooru.org", termLimit = null), result)
         assertEquals(3, transport.requested.size)
+    }
+
+    @Test
+    fun `an envelope the family adapter cannot read is not locked in`() = runTest {
+        val envelopeOnly = object : SourceHttpClient by NoWrites {
+            override suspend fun get(url: String, query: Map<String, String>, headers: Map<String, String>): SourceHttpResponse =
+                when {
+                    query["page"] == "dapi" && "json" !in query -> SourceHttpResponse(200, """<posts count="3" offset="0"></posts>""")
+                    query["page"] == "dapi" -> SourceHttpResponse(200, "<!doctype html><p>not json</p>")
+                    else -> SourceHttpResponse(404, "")
+                }
+        }
+
+        val result = SiteProber(SiteFamilyRegistry.default(), envelopeOnly).probe("booru.example")
+
+        assertEquals(SiteProbeResult.NotABooru(address("https://booru.example")), result)
     }
 
     @Test

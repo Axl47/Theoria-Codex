@@ -83,7 +83,7 @@ class SiteProber(
     companion object {
         const val DEADLINE_MS = 30_000L
 
-        /** Worst case is 5: two families each refusing then retried with keys, plus one signature. */
+        /** Worst case is 5: two families refusing then retried with keys, plus a signature or an adapter page. */
         const val MAX_REQUESTS = 6
 
         /** Shipped booru sites, from the family presets, including separate API hosts. */

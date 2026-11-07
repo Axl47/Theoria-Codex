@@ -35,6 +35,21 @@
       "body": "dapi_json.json"
     },
     {
+      "path": "/index.php",
+      "query": {
+        "page": "dapi",
+        "json": "1",
+        "s": "post",
+        "q": "index",
+        "pid": "0",
+        "limit": "40",
+        "tags": ""
+      },
+      "status": 200,
+      "contentType": "application/json",
+      "body": "gelbooru_adapter_page.json"
+    },
+    {
       "path": "/post.json",
       "query": {
         "limit": "1"

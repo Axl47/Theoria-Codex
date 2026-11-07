@@ -21,17 +21,15 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Adapters built from stored profiles. Built-in keys stand in for custom identities until the open
- * `SourceKey` lands (plan B1).
- */
+/** Adapters built from stored profiles under their custom identities. */
 class FamilyAdapterTest {
     private val http = ScriptedHttpClient()
 
     @Test
     fun `a custom Danbooru site sends its keys, headers and term limit`() = runTest {
         val context = SiteRequestContext(http, SiteHeaders(userAgent = "Custom/1.0", referer = "https://booru.example/"), SiteCredentials("alice", "k1"))
-        val adapter = DanbooruFamily.createAdapter(profile(ProtocolFamily.DANBOORU, termLimit = 4), SourceKey.DANBOORU, context)
+        val profile = profile(ProtocolFamily.DANBOORU, termLimit = 4)
+        val adapter = DanbooruFamily.createAdapter(profile, SourceKey.of(profile), context)
         http.enqueueGet(
             url = "https://booru.example/posts/7.json",
             query = mapOf("login" to "alice", "api_key" to "k1"),
@@ -39,7 +37,7 @@ class FamilyAdapterTest {
             body = """{"id":7,"file_url":"http://cdn.booru.example/7.jpg","large_file_url":"//cdn.booru.example/s/7.jpg","tag_string":"a"}""",
         )
 
-        val post = adapter.resolvePost(PostId(SourceKey.DANBOORU, "7"))!!
+        val post = adapter.resolvePost(PostId(SourceKey.of(profile), "7"))!!
 
         assertEquals(SearchTermLimit(maxTerms = 4, rankedSortUsesTerm = true), adapter.capabilities.searchTermLimit)
         assertEquals("https://cdn.booru.example/7.jpg", post.full?.url)
@@ -50,7 +48,7 @@ class FamilyAdapterTest {
     @Test
     fun `a keyed site without saved keys fails before any request`() = runTest {
         val profile = profile(ProtocolFamily.GELBOORU_02, credentialsRequired = true)
-        val adapter = GelbooruFamily.createAdapter(profile, SourceKey.GELBOORU, SiteRequestContext(http))
+        val adapter = GelbooruFamily.createAdapter(profile, SourceKey.of(profile), SiteRequestContext(http))
 
         val failure = runCatching { adapter.search(query(), null) }.exceptionOrNull()
 
@@ -61,9 +59,10 @@ class FamilyAdapterTest {
 
     @Test
     fun `a custom Gelbooru site expands OR groups client-side and sends keys as user_id`() = runTest {
+        val profile = profile(ProtocolFamily.GELBOORU_02)
         val adapter = GelbooruFamily.createAdapter(
-            profile(ProtocolFamily.GELBOORU_02),
-            SourceKey.GELBOORU,
+            profile,
+            SourceKey.of(profile),
             SiteRequestContext(http, credentials = SiteCredentials("42", "k2")),
         )
         http.enqueueGet(
@@ -84,7 +83,8 @@ class FamilyAdapterTest {
 
     @Test
     fun `an XML-only tag list switches suggestions and counts to autocomplete once`() = runTest {
-        val adapter = GelbooruFamily.createAdapter(profile(ProtocolFamily.GELBOORU_02), SourceKey.GELBOORU, SiteRequestContext(http))
+        val profile = profile(ProtocolFamily.GELBOORU_02)
+        val adapter = GelbooruFamily.createAdapter(profile, SourceKey.of(profile), SiteRequestContext(http))
         val safebooruTagList = FixtureSiteTransport.resource("safebooru/tag_list_ignores_json.xml").decodeToString()
         val autocomplete = """[{"label":"sky (355769)","value":"sky"},{"label":"skyline (2705)","value":"skyline"}]"""
         http.enqueueGet(
