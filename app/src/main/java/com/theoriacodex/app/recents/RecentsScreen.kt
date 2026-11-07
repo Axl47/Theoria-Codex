@@ -1,5 +1,6 @@
 package com.theoriacodex.app.recents
 
+import com.theoriacodex.app.source.SourcePresentationCatalog
 import com.theoriacodex.app.source.NullableSourceKeySaver
 import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
 import androidx.compose.foundation.layout.height
@@ -189,7 +190,7 @@ private fun RecentsSourceSelector(selectedSource: SourceKey?, onSelected: (Sourc
     var expanded by remember { mutableStateOf(false) }
     SourceSelector(
         selectedSource = selectedSource,
-        availableSources = SourceKey.builtIns,
+        availableSources = SourceKey.builtIns + SourcePresentationCatalog.customSources(),
         allSourcesLabel = "All sources",
         accessibilityLabel = "Filter Recents by source",
         enabled = true,
