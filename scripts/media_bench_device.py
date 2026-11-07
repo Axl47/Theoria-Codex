@@ -139,7 +139,11 @@ def install(serial: str, apk_dir: Path | None = None) -> None:
     test_apk = apk_dir / TEST_APK.name if apk_dir else TEST_APK
     for apk, package in ((app_apk, DEBUG_PACKAGE), (test_apk, f"{DEBUG_PACKAGE}.test")):
         run([sys.executable, "scripts/verify_device_apk.py", str(apk), "--package", package])
-        adb(serial, "install", "-r", "-t", str(apk))
+        try:
+            adb(serial, "install", "-r", "-t", str(apk))
+        except subprocess.CalledProcessError:
+            # A streamed install occasionally fails without a reason; one retry keeps a long session going.
+            adb(serial, "install", "-r", "-t", str(apk))
 
 
 def push_media(serial: str) -> None:
