@@ -115,4 +115,26 @@ class ViewerLevelControlsTest {
         controls.clearFeedback()
         assertNull(controls.feedback)
     }
+
+    @Test fun `levels set in one fullscreen visit apply to the next one in the same app session`() {
+        val session = ViewerSessionLevels()
+        val first = ViewerLevelControls(activity, activity.window, session)
+        first.setEnabled(true)
+        first.begin(ViewerLevelControl.Brightness)
+        first.drag(-2f)
+        first.end()
+        first.setEnabled(false)
+        audio.setStreamVolume(AudioManager.STREAM_MUSIC, 3, 0)
+        first.setEnabled(true)
+        first.begin(ViewerLevelControl.Volume)
+        first.drag(1f / audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC))
+        first.end()
+        first.setEnabled(false)
+        audio.setStreamVolume(AudioManager.STREAM_MUSIC, 9, 0)
+
+        val next = ViewerLevelControls(activity, activity.window, session)
+        next.setEnabled(true)
+        assertEquals(0f, activity.window.attributes.screenBrightness, 0f)
+        assertEquals(4, audio.getStreamVolume(AudioManager.STREAM_MUSIC))
+    }
 }
