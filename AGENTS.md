@@ -8,6 +8,8 @@ Robolectric tests need Java 21 or newer because the Android SDK 36 sandbox refus
 
 Fresh git worktrees lack the gitignored `local.properties`, so Android Gradle tasks fail with "SDK location not found"; copy it from the main checkout or set `ANDROID_HOME` first.
 
+Close any T3 `agent-device` session before `am instrument`: its accessibility helper holds UiAutomation, so Compose journey tests fail with "UiAutomationService already registered" or "UiAutomation not connected".
+
 *Smallest sufficient implementation:* Prefer the simplest design that satisfies the stated requirements. Do not expand architecture or scope without a concrete requirement.
 
 *First-pass convergence:* Before the initial patch, identify the required data flow, UI states, error paths, acceptance checks, and validation plan. Prefer one coherent implementation pass over speculative partial patches.
