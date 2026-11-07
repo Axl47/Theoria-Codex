@@ -68,6 +68,7 @@
     "app/src/main/**/viewer/ViewerLoadingPreview.kt",
     "app/src/main/**/viewer/PixivUgoiraPlayerUi.kt",
     "app/src/main/**/viewer/ExoVideoComponents.kt",
+    "app/src/main/**/viewer/ScrubPreviewPlayer.kt",
     "app/src/main/**/viewer/MediaTimelineBar.kt"
   ]
 }
