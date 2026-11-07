@@ -672,8 +672,12 @@ private val SEEK_FRACTIONS = listOf(0.50, 0.85, 0.25, 0.65)
 private val SCRUB_FRACTIONS = listOf(0.40, 0.72, 0.93)
 private const val SECOND_DRAG_FRACTION = 0.10
 
-/** 15.3 s into the 90 s video: between the 14 s and 16 s keyframes, where no seek or playback has loaded. */
-private const val COLD_RELEASE_FRACTION = 0.17
+/**
+ * 41.4 s into the 90 s video, between the 40 s and 42 s keyframes and nearer the later one: nothing loads 37–45 s
+ * (the first drag previews 36 s, the first seek starts at 45 s, and the opening seconds are cached again once the
+ * looping video passes its end).
+ */
+private const val COLD_RELEASE_FRACTION = 0.46
 private val SWIPE_VIDEOS = listOf("long_2.mp4", "long_1.mp4", "long_3.mp4")
 private const val SWIPE_WATCH_MS = 20_000L
 private const val SWIPE_SETTLE_MS = 300L

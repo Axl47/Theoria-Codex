@@ -63,7 +63,7 @@ METRICS = {
     "scrub_bytes_mb": ("MB", "bytes downloaded to show those 3 preview frames"),
     "seek_after_scrub_ms": ("ms", "release seek to the last previewed position until playing"),
     "scrub_second_drag_first_frame_ms": ("ms", "a second drag on the same page, after the release seek settles, to its first frame"),
-    "seek_after_cold_scrub_ms": ("ms", "a third drag rests between two keyframes where nothing has loaded and releases: release seek until playing"),
+    "seek_after_cold_scrub_ms": ("ms", "a third drag rests between two keyframes where nothing has loaded (41.4 s) and releases: release seek until playing"),
     "long_bytes_mb": ("MB", "bytes served for the 90 s video over the seek and scrub session"),
     "long_duplicate_mb": ("MB", "bytes of the 90 s video served more than once"),
     "gallery_open_to_first_page_ms": ("ms", "Viewer session start to page 1 decoded at screen size"),
