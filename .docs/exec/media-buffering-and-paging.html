@@ -57,21 +57,22 @@
       bytes), seeking (seek-to-resume and scrub preview frames), and many-page galleries (open time, per-page load,
       prefetch, memory). Round 1 built a repeatable on-device benchmark, recorded a baseline, and landed five measured
       fixes. Round 2 bounded the video cache's range locks, sped up the first scrub preview of a drag, capped neighbour
-      video prefetch, and added swipe, scroll and two-drag scenarios. Later rounds push to the same branch and append to
-      the same metrics file.</p>
+      video prefetch, and added swipe, scroll and two-drag scenarios. Round 3 cancels abandoned video responses instead of
+      draining them and replaces the per-drag frame extractor with one preview player per page. Later rounds push to the
+      same branch and append to the same metrics file.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: Round 2 complete</span>
-      <span class="pill">Owner: Claude (rounds 1–2)</span>
+      <span class="pill">Status: Round 3 complete</span>
+      <span class="pill">Owner: Claude (rounds 1–3)</span>
       <span class="pill">Created: 2026-11-07</span>
       <span class="pill">Updated: 2026-11-07</span>
       <span class="pill">Branch: perf/media-buffering (stacked on spike/webview-verification)</span>
       <span class="pill">Metrics: .docs/exec/media-buffering-metrics.json</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Round 3, if run: a scrub preview player that starts at the target and survives drags, and closing abandoned HTTP responses without draining them (see <a href="#opportunities">opportunities</a>).</div>
+      <div class="card"><strong>Next Action</strong>Developer decisions: land the release seek on the previewed keyframe, and a shorter start buffer after seeks (see <a href="#opportunities">opportunities</a>). Without them, what is left is small.</div>
       <div class="card"><strong>Main Risk</strong>The benchmark link is a steady loopback; real cellular links vary. Gains in bytes and round trips transfer; absolute latencies do not.</div>
-      <div class="card"><strong>Validation</strong><code>scripts/media_bench_device.py run</code> (n=3, phone), unit tests, detekt, hotspot check.</div>
-      <div class="card"><strong>Affected Areas</strong>Video cache (bounded locks), Viewer prefetch owner and planner, scrub previews, feed and Viewer player pools, Coil image loader, benchmark harness.</div>
+      <div class="card"><strong>Validation</strong><code>scripts/media_bench_device.py run</code> (n=4, phone, order swapped), unit tests, detekt, hotspot check.</div>
+      <div class="card"><strong>Affected Areas</strong>Video HTTP stack (OkHttp, cancel on close), scrub preview player, video cache (bounded locks), Viewer prefetch owner and planner, scrub previews, feed and Viewer player pools, Coil image loader, benchmark harness.</div>
     </div>
   </header>
 
@@ -104,6 +105,9 @@
         from a feed card and the player of a neighbour still being prefetched read what those writers already
         downloaded instead of fetching it again. A drag's first preview frame no longer waits 80 ms, and neighbour
         videos warm only their first 4 MB on every network.</p>
+      <p>After round 3: a seek, preview move or stopped player drops its half-read download at once instead of reading it
+        out for up to 100 ms, and each Viewer page keeps one scrub preview player that seeks straight to the target's
+        keyframe, idle between drags.</p>
     </section>
 
     <section id="context">
@@ -111,12 +115,13 @@
       <table>
         <thead><tr><th>File</th><th>Role</th></tr></thead>
         <tbody>
-          <tr><td><code>app/src/main/java/com/theoriacodex/app/viewer/VideoPlaybackInfrastructure.kt</code></td><td>Process-wide Media3 setup: one <code>SimpleCache</code> (256 MB LRU), the HTTP source, load controls (feed: 6–12 s, 2 MB target; Viewer: Media3 defaults, 1 s to start), neighbour prefetch (<code>CacheWriter</code>, first 4 MB since round 2).</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/viewer/VideoPlaybackInfrastructure.kt</code></td><td>Process-wide Media3 setup: one <code>SimpleCache</code> (256 MB LRU), the HTTP source (since round 3, OkHttp from <code>VideoHttpDataSource.kt</code>), load controls (feed: 6–12 s, 2 MB target; Viewer: Media3 defaults, 1 s to start), neighbour prefetch (<code>CacheWriter</code>, first 4 MB since round 2).</td></tr>
           <tr><td><code>app/src/main/java/com/theoriacodex/app/viewer/BoundedVideoCache.kt</code></td><td>Round 2. <code>BoundedLockCache</code> caps a cache writer's hole at 2 MB (feed cards and neighbour prefetch only); <code>RangeRecordingDataSource</code> records a file's length from its first ranged response (or that the server ignores ranges).</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/viewer/VideoHttpDataSource.kt</code></td><td>Round 3. The video HTTP client (OkHttp, HTTP/1.1, the old stack's timeouts, agent and cookies) and a data source that cancels a half-read response instead of draining it.</td></tr>
           <tr><td><code>app/src/main/java/com/theoriacodex/app/viewer/FeedPreviewPlayerPool.kt</code></td><td>Feed card players: leased per visible card, returned players stay "warm" (prepared, paused) up to 2, then are cooled (stopped).</td></tr>
           <tr><td><code>app/src/main/java/com/theoriacodex/app/viewer/ViewerVideoPlayerPool.kt</code></td><td>Viewer page players.</td></tr>
           <tr><td><code>app/src/main/java/com/theoriacodex/app/search/FeedMediaComponents.kt</code></td><td>Feed card video: leases a player when active, keeps it 1 s after the Viewer opens (release grace) so the card does not blank.</td></tr>
-          <tr><td><code>app/src/main/java/com/theoriacodex/app/viewer/ViewerScrubPreview.kt</code></td><td>Scrub preview popup. Since round 2 a page-level <code>ViewerScrubPreviews</code> serves each drag (<code>followScrubTargets</code>): a Media3 <code>FrameExtractor</code> per drag (<code>ScrubFrameSource</code>), reading through the shared video cache.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/viewer/ViewerScrubPreview.kt</code></td><td>Scrub preview popup. Since round 2 a page-level <code>ViewerScrubPreviews</code> serves each drag (<code>followScrubTargets</code>): since round 3 every drag reads from the page's one <code>ScrubPreviewPlayer</code> (<code>ScrubPreviewPlayer.kt</code>, ordering rules in <code>ScrubFrameMatcher.kt</code>), reading through the shared video cache and stopped between drags. Rounds 1–2 built a Media3 <code>FrameExtractor</code> per drag.</td></tr>
           <tr><td><code>app/src/main/java/com/theoriacodex/app/viewer/ViewerViewModel.kt</code></td><td>Viewer owner. Runs prefetch jobs (2 at a time) for keys queued by the frame effect.</td></tr>
           <tr><td><code>app/src/main/java/com/theoriacodex/app/viewer/ViewerPrefetchPlanner.kt</code></td><td>Which neighbours to prefetch (3 right, then 3 left; videos only 1 away) and, since round 1, which to decode.</td></tr>
           <tr><td><code>app/src/main/java/com/theoriacodex/app/viewer/ViewerPlatformPrefetcher.kt</code></td><td>How one neighbour is warmed: video bytes into the video cache, images through Coil (decoded in memory within 1, disk only beyond).</td></tr>
@@ -153,7 +158,7 @@
         <thead><tr><th>Scenario</th><th>What it does</th></tr></thead>
         <tbody>
           <tr><td><code>feedToViewer</code></td><td>Four feed cards autoplay together for 5 s; the first opens in the Viewer (cards pause, leases return after the 1 s grace), and the clip loops twice (31 s). Since round 1 it then returns to the feed and requires all four cards to play again, also after a Viewer that closes within the grace.</td></tr>
-          <tr><td><code>viewerSeekAndScrub</code></td><td>A 90 s video opens cold; four seeks past the buffer; a drag through the page's scrub previews resting on three targets while it plays; a release seek to the last previewed position; after 1.5 s a second drag on one target (round 2). Reports a request timeline for the drags in <code>diagnostics</code>.</td></tr>
+          <tr><td><code>viewerSeekAndScrub</code></td><td>A 90 s video opens cold; four seeks past the buffer; a drag through the page's scrub previews resting on three targets while it plays; a release seek to the last previewed position; after 1.5 s a second drag on one target (round 2). Reports a request timeline for the drags in <code>diagnostics</code>; since round 3 also each seek's player events (load cancel, load start, first frame, ready), the session's whole request timeline, and each preview frame's size, saving the last one for an orientation check.</td></tr>
           <tr><td><code>viewerSwipe</code></td><td>Round 2. Three 90 s videos in one post open on the middle one through a real <code>ViewerViewModel</code> and prefetcher; it plays 20 s (<code>--swipe-watch-ms</code>), then a swipe leases the right neighbour, makes it current after 300 ms and plays it for 3 s. Uses an nhentai-sourced post: a Gelbooru post's media is repaired to https, which the plain-HTTP server cannot answer.</td></tr>
           <tr><td><code>feedScroll</code></td><td>Round 2. Four cards autoplay for 2 s; two scroll off (pause, return warm after 300 ms) and two come on; after 8 s they scroll back. Every visible card must autoplay.</td></tr>
           <tr><td><code>galleryPaging</code></td><td>An 80-page nhentai-shaped post: open, read 40 pages (1.2 s after each appears), skim 35 pages (200 ms each). Each page is requested the way its <code>AsyncImage</code> resolves it (page location, screen size, inexact, fit).</td></tr>
@@ -170,6 +175,68 @@ scripts/media_bench_device.py record --round &lt;n&gt; build/media-bench/&lt;lab
 
     <section id="results">
       <h2>Results</h2>
+      <h3>Round 3 (final session)</h3>
+      <p>Same phone and link. Round 2 build <code>da41f33d</code> (the code of round 2's head <code>d1177cb0</code>) and round 3
+        build <code>85422e2e</code> were installed alternately on every run, swapping order each run, with the same test APK;
+        median of 4 runs, so each build went first twice. "Round 2, this session" is the fair comparison.
+        <code>swipe_early_*</code> come from a second session with an 8 s watch (n=4).</p>
+      <table>
+        <thead><tr><th>Metric</th><th>Round 0</th><th>Round 1 (recorded)</th><th>Round 2 (recorded)</th><th>Round 2, this session</th><th>Round 3</th><th>Change vs round 2</th><th>One sample measures</th></tr></thead>
+        <tbody>
+          <tr><td><code>feed_preview_ttff_ms</code></td><td class="num">619 ms</td><td class="num">619 ms</td><td class="num">575 ms</td><td class="num">587.5 ms</td><td class="num">601 ms</td><td class="num">+2%</td><td>feed card lease to first rendered frame, median of 4 simultaneous cards</td></tr>
+          <tr><td><code>viewer_ttff_from_feed_ms</code></td><td class="num">676 ms</td><td class="num">408 ms</td><td class="num">237 ms</td><td class="num">176.5 ms</td><td class="num">196.5 ms</td><td class="num">+11%</td><td>Viewer lease to first frame for a clip a feed card was playing</td></tr>
+          <tr><td><code>viewer_time_to_playing_from_feed_ms</code></td><td class="num">1224 ms</td><td class="num">456 ms</td><td class="num">264 ms</td><td class="num">201 ms</td><td class="num">220 ms</td><td class="num">+9%</td><td>Viewer lease to isPlaying for that clip</td></tr>
+          <tr><td><code>viewer_rebuffer_count</code></td><td class="num">0 count</td><td class="num">0 count</td><td class="num">0 count</td><td class="num">0 count</td><td class="num">0 count</td><td class="num">0</td><td>rebuffers while the clip loops twice in the Viewer</td></tr>
+          <tr><td><code>viewer_rebuffer_ms</code></td><td class="num">0 ms</td><td class="num">0 ms</td><td class="num">0 ms</td><td class="num">0 ms</td><td class="num">0 ms</td><td class="num">0</td><td>time spent rebuffering while the clip loops twice</td></tr>
+          <tr><td><code>clip_bytes_per_view_mb</code></td><td class="num">8.15 MB</td><td class="num">7.74 MB</td><td class="num">7.29 MB</td><td class="num">7.33 MB</td><td class="num">7.28 MB</td><td class="num">-1%</td><td>bytes served for the clip: feed autoplay plus two Viewer loops (file 7.3 MB)</td></tr>
+          <tr><td><code>clip_duplicate_mb</code></td><td class="num">0.87 MB</td><td class="num">0.46 MB</td><td class="num">0.01 MB</td><td class="num">0.05 MB</td><td class="num">0.01 MB</td><td class="num">-80%</td><td>bytes of that clip served more than once (re-downloaded ranges)</td></tr>
+          <tr><td><code>feed_bytes_after_viewer_open_mb</code></td><td class="num">10.27 MB</td><td class="num">0.2 MB</td><td class="num">0.28 MB</td><td class="num">0.26 MB</td><td class="num">0.12 MB</td><td class="num">-54%</td><td>bytes the other three feed clips kept downloading after the Viewer opened</td></tr>
+          <tr><td><code>feed_return_all_playing_ms</code></td><td class="num">–</td><td class="num">377 ms</td><td class="num">382 ms</td><td class="num">369.5 ms</td><td class="num">414 ms</td><td class="num">+12%</td><td>Viewer closed: four cards lease again until all four are playing</td></tr>
+          <tr><td><code>feed_resume_after_short_viewer_ms</code></td><td class="num">–</td><td class="num">425 ms</td><td class="num">409 ms</td><td class="num">384 ms</td><td class="num">387 ms</td><td class="num">+1%</td><td>Viewer opened and closed within the release grace: stopped cards resume until all play</td></tr>
+          <tr><td><code>viewer_ttff_cold_ms</code></td><td class="num">401 ms</td><td class="num">425 ms</td><td class="num">471 ms</td><td class="num">385 ms</td><td class="num">379.5 ms</td><td class="num">-1%</td><td>Viewer lease to first frame for a 90 s video nothing had loaded</td></tr>
+          <tr><td><code>seek_to_resume_ms</code></td><td class="num">635 ms</td><td class="num">543 ms</td><td class="num">643 ms</td><td class="num">630 ms</td><td class="num">549 ms</td><td class="num">-13%</td><td>seek past the buffer to playing again, median of 4 seeks</td></tr>
+          <tr><td><code>seek_to_resume_max_ms</code></td><td class="num">843 ms</td><td class="num">738 ms</td><td class="num">769 ms</td><td class="num">784.5 ms</td><td class="num">752.5 ms</td><td class="num">-4%</td><td>slowest of those 4 seeks</td></tr>
+          <tr><td><code>scrub_first_frame_ms</code></td><td class="num">757 ms</td><td class="num">714 ms</td><td class="num">737 ms</td><td class="num">744 ms</td><td class="num">658.5 ms</td><td class="num">-11%</td><td>drag start to its first preview frame, past the buffer, through the page&#x27;s scrub previews</td></tr>
+          <tr><td><code>scrub_frame_ms</code></td><td class="num">519 ms</td><td class="num">488 ms</td><td class="num">479 ms</td><td class="num">534.5 ms</td><td class="num">490 ms</td><td class="num">-8%</td><td>moving to a target past the buffer to its preview frame, median of the drag&#x27;s 3 targets</td></tr>
+          <tr><td><code>scrub_bytes_mb</code></td><td class="num">3.27 MB</td><td class="num">3.17 MB</td><td class="num">2.83 MB</td><td class="num">3.14 MB</td><td class="num">3.04 MB</td><td class="num">-3%</td><td>bytes downloaded to show those 3 preview frames</td></tr>
+          <tr><td><code>seek_after_scrub_ms</code></td><td class="num">472 ms</td><td class="num">495 ms</td><td class="num">501 ms</td><td class="num">482.5 ms</td><td class="num">380 ms</td><td class="num">-21%</td><td>release seek to the last previewed position until playing</td></tr>
+          <tr><td><code>scrub_second_drag_first_frame_ms</code></td><td class="num">–</td><td class="num">811 ms</td><td class="num">662 ms</td><td class="num">611 ms</td><td class="num">455 ms</td><td class="num">-26%</td><td>a second drag on the same page, after the release seek settles, to its first frame</td></tr>
+          <tr><td><code>long_bytes_mb</code></td><td class="num">25.59 MB</td><td class="num">25.19 MB</td><td class="num">26.53 MB</td><td class="num">26.81 MB</td><td class="num">25.8 MB</td><td class="num">-4%</td><td>bytes served for the 90 s video over the seek and scrub session</td></tr>
+          <tr><td><code>long_duplicate_mb</code></td><td class="num">0.67 MB</td><td class="num">0.41 MB</td><td class="num">0.68 MB</td><td class="num">0.79 MB</td><td class="num">0.46 MB</td><td class="num">-42%</td><td>bytes of the 90 s video served more than once</td></tr>
+          <tr><td><code>gallery_open_to_first_page_ms</code></td><td class="num">664 ms</td><td class="num">326 ms</td><td class="num">333 ms</td><td class="num">327 ms</td><td class="num">316 ms</td><td class="num">-3%</td><td>Viewer session start to page 1 decoded at screen size</td></tr>
+          <tr><td><code>page_load_p50_ms</code></td><td class="num">170 ms</td><td class="num">2 ms</td><td class="num">3 ms</td><td class="num">2 ms</td><td class="num">2 ms</td><td class="num">+0%</td><td>page becomes current to decoded, median while reading 40 pages at 1.2 s each</td></tr>
+          <tr><td><code>page_load_p90_ms</code></td><td class="num">175 ms</td><td class="num">4 ms</td><td class="num">6 ms</td><td class="num">4 ms</td><td class="num">3.5 ms</td><td class="num">-12%</td><td>90th percentile of the same</td></tr>
+          <tr><td><code>pages_ready_ahead</code></td><td class="num">1.95 pages</td><td class="num">1.95 pages</td><td class="num">1.95 pages</td><td class="num">1.95 pages</td><td class="num">1.95 pages</td><td class="num">+0%</td><td>of the next 10 pages, how many are on disk when a page opens (higher is better)</td></tr>
+          <tr><td><code>skim_shown_pct</code></td><td class="num">100 %</td><td class="num">100 %</td><td class="num">100 %</td><td class="num">95.71 %</td><td class="num">100 %</td><td class="num">+4%</td><td>pages shown within 200 ms while skimming 35 pages (higher is better)</td></tr>
+          <tr><td><code>skim_shown_p50_ms</code></td><td class="num">157 ms</td><td class="num">39 ms</td><td class="num">49 ms</td><td class="num">34 ms</td><td class="num">36.5 ms</td><td class="num">+7%</td><td>median time to show the skimmed pages that made it</td></tr>
+          <tr><td><code>peak_memory_delta_mb</code></td><td class="num">94.27 MB</td><td class="num">82.36 MB</td><td class="num">78.24 MB</td><td class="num">78.22 MB</td><td class="num">82.63 MB</td><td class="num">+6%</td><td>peak Java plus native heap growth while paging</td></tr>
+          <tr><td><code>peak_memory_mb</code></td><td class="num">195.33 MB</td><td class="num">184.34 MB</td><td class="num">179.65 MB</td><td class="num">179.69 MB</td><td class="num">184.14 MB</td><td class="num">+2%</td><td>peak Java plus native heap while paging</td></tr>
+          <tr><td><code>gallery_bytes_mb</code></td><td class="num">30.75 MB</td><td class="num">30.75 MB</td><td class="num">30.73 MB</td><td class="num">30.77 MB</td><td class="num">30.73 MB</td><td class="num">-0%</td><td>bytes served for gallery pages over the session</td></tr>
+          <tr><td><code>gallery_duplicate_mb</code></td><td class="num">0 MB</td><td class="num">0 MB</td><td class="num">0 MB</td><td class="num">0.23 MB</td><td class="num">0 MB</td><td class="num">-100%</td><td>gallery page bytes served more than once</td></tr>
+          <tr><td><code>swipe_ttff_ms</code></td><td class="num">–</td><td class="num">338 ms</td><td class="num">298 ms</td><td class="num">263.5 ms</td><td class="num">268.5 ms</td><td class="num">+2%</td><td>swipe start to the neighbour video&#x27;s first frame (three 90 s videos, 20 s on the middle one)</td></tr>
+          <tr><td><code>swipe_time_to_playing_ms</code></td><td class="num">–</td><td class="num">359 ms</td><td class="num">368 ms</td><td class="num">340 ms</td><td class="num">340.5 ms</td><td class="num">+0%</td><td>swipe start until the neighbour video plays</td></tr>
+          <tr><td><code>swipe_rebuffer_count</code></td><td class="num">–</td><td class="num">0 count</td><td class="num">0 count</td><td class="num">0 count</td><td class="num">0 count</td><td class="num">0</td><td>rebuffers in the 3 s after the swipe</td></tr>
+          <tr><td><code>swipe_target_bytes_before_mb</code></td><td class="num">–</td><td class="num">12.86 MB</td><td class="num">4 MB</td><td class="num">4 MB</td><td class="num">4 MB</td><td class="num">+0%</td><td>bytes of the swiped-to video downloaded before the swipe (prefetch)</td></tr>
+          <tr><td><code>swipe_unvisited_neighbour_mb</code></td><td class="num">–</td><td class="num">12.45 MB</td><td class="num">4 MB</td><td class="num">4 MB</td><td class="num">4 MB</td><td class="num">+0%</td><td>bytes of the neighbour never visited</td></tr>
+          <tr><td><code>swipe_session_mb</code></td><td class="num">–</td><td class="num">45.13 MB</td><td class="num">45.2 MB</td><td class="num">45.11 MB</td><td class="num">45.03 MB</td><td class="num">-0%</td><td>bytes of all three videos over the swipe session</td></tr>
+          <tr><td><code>feed_scroll_ttff_ms</code></td><td class="num">–</td><td class="num">1035 ms</td><td class="num">933 ms</td><td class="num">906 ms</td><td class="num">858 ms</td><td class="num">-5%</td><td>scroll start to the first frame of the two cards that came on screen, median</td></tr>
+          <tr><td><code>feed_scroll_all_playing_ms</code></td><td class="num">–</td><td class="num">1414 ms</td><td class="num">1390 ms</td><td class="num">1319 ms</td><td class="num">1253.5 ms</td><td class="num">-5%</td><td>scroll start until all four visible cards play</td></tr>
+          <tr><td><code>feed_scrolled_past_mb</code></td><td class="num">–</td><td class="num">0.44 MB</td><td class="num">0.53 MB</td><td class="num">0.53 MB</td><td class="num">0.41 MB</td><td class="num">-23%</td><td>bytes the two scrolled-past clips (2 s on screen) downloaded in the 8 s after leaving it</td></tr>
+          <tr><td><code>feed_scroll_back_playing_ms</code></td><td class="num">–</td><td class="num">547 ms</td><td class="num">594 ms</td><td class="num">566.5 ms</td><td class="num">529 ms</td><td class="num">-7%</td><td>scrolling back until the two returning cards play again</td></tr>
+          <tr><td><code>feed_scroll_session_mb</code></td><td class="num">–</td><td class="num">23.47 MB</td><td class="num">23.28 MB</td><td class="num">23.48 MB</td><td class="num">23.13 MB</td><td class="num">-1%</td><td>bytes of all six clips over the scroll session</td></tr>
+          <tr><td><code>swipe_early_ttff_ms</code></td><td class="num">–</td><td class="num">591 ms</td><td class="num">277 ms</td><td class="num">261.5 ms</td><td class="num">247.5 ms</td><td class="num">-5%</td><td>swipe start to the neighbour video&#x27;s first frame after 8 s on the middle one (prefetch still running)</td></tr>
+          <tr><td><code>swipe_early_time_to_playing_ms</code></td><td class="num">–</td><td class="num">618 ms</td><td class="num">354 ms</td><td class="num">338 ms</td><td class="num">335.5 ms</td><td class="num">-1%</td><td>swipe start until the neighbour plays, after 8 s on the middle one</td></tr>
+          <tr><td><code>swipe_early_unvisited_neighbour_mb</code></td><td class="num">–</td><td class="num">5.2 MB</td><td class="num">4 MB</td><td class="num">4 MB</td><td class="num">4 MB</td><td class="num">+0%</td><td>bytes of the neighbour never visited, 8 s session</td></tr>
+          <tr><td><code>seek_slow_share_pct</code></td><td class="num">–</td><td class="num">37 %</td><td class="num">44 %</td><td class="num">41.7 %</td><td class="num">0 %</td><td class="num">-100%</td><td>pooled over 4 runs: share of seeks 2–4 (each 0.5 s past a keyframe) above 580 ms (n=12); rounds 1–2 from round 2&#x27;s three sessions</td></tr>
+          <tr><td><code>seek_close_slow_share_pct</code></td><td class="num">–</td><td class="num">–</td><td class="num">–</td><td class="num">55 %</td><td class="num">0 %</td><td class="num">-100%</td><td>pooled over 4 runs: share of seeks (4 seeks plus the release) whose abandoned load took over 80 ms to close (n=20)</td></tr>
+        </tbody>
+      </table>
+      <p>Per seek (all four runs): the round 2 build's seeks 2–4 were 516–535 ms or 622–636 ms (5 of 12 slow), and 11 of
+        its 20 seek closes took 120–138 ms; round 3's seeks 2–4 were 518–557 ms (none slow) and every close took 21–42 ms.
+        Each run's first seek lands 1 s past a keyframe (the others 0.5 s), so it decodes and buffers half a second more:
+        743–851 ms for round 2, 749–761 ms for round 3. <code>viewer_ttff_from_feed_ms</code> (+11%),
+        <code>feed_return_all_playing_ms</code> (+12%) and gallery peak memory (+6%, two runs about one decoded page higher)
+        have overlapping ranges and no consistent order effect, and the gallery path did not change.</p>
       <h3>Round 2 (final session)</h3>
       <p>Same phone and link. Round 1 build <code>2ef4ca85</code> (round 1 head plus benchmark commits) and round 2 build
         <code>da41f33d</code> were installed alternately on every run, swapping order each run, with the same test APK;
@@ -348,6 +415,31 @@ scripts/media_bench_device.py record --round &lt;n&gt; build/media-bench/&lt;lab
       <p><code>feedScroll</code> shows two cards scrolled off after 2 s on screen download about 0.25 MB each in the next
         8 s (their 2 MB buffer target is nearly met by then), not the 2–3 MB per clip round 1 estimated from the Viewer
         case. Too small to justify changing warm-player behaviour.</p>
+      <h3>Round 3, Phase 11: Harness – seek events and preview frames (done, <code>052aecf5</code>, <code>928edc8a</code>)</h3>
+      <p>Each seek reports the player's load cancel, load start, first frame and ready times, and the server timeline
+        covers the whole session, so a seek's time splits into closing the old load, first byte, transfer and decode.
+        Published preview frames are described (size, or blank), and the last one is saved to the debug app's cache to
+        check orientation on the generated test pattern. The drag helper moved to <code>MediaBenchProbes.kt</code>, and the
+        server no longer crashes the process when closed mid-response.</p>
+      <h3>Round 3, Phase 12: Video – cancel abandoned responses instead of draining them (done, <code>4cce1e82</code>)</h3>
+      <table class="status-table"><tbody>
+        <tr><td>Finding</td><td>The seek events showed what the slow group waits on. A seek's old load closed in 20–50 ms, or in 115–157 ms, and the server saw the connection end at that moment. Android's <code>HttpURLConnection</code> reads out a half-read response for up to 100 ms to keep its connection; the drain was skipped only when the loader thread still carried the interrupt from its cancel. Every seek, preview move and stopped player closes such a response, on the path to its next request.</td></tr>
+        <tr><td>Change</td><td>Video goes through Media3's <code>OkHttpDataSource</code> (<code>VideoHttpDataSource.kt</code>); each data source cancels its call before closing, a no-op for a call that already finished, so fully read responses keep their connection. The client matches the stack it replaced: HTTP/1.1 only (HTTP/2's 16 MiB stream window would let a paused player buffer far more than a TCP window), 12 s connect and 24 s read timeouts, <code>Mozilla/5.0</code> replacing any agent in the stream's headers (as <code>DefaultHttpDataSource.setUserAgent</code> did), browser-verified sites' cookies through the same <code>BrowserVerifiedSites</code> store, and no per-host request cap. The outage tracker belongs to the source clients and is not involved.</td></tr>
+        <tr><td>Effect</td><td>Seek closes 21–42 ms; seek to resume 630 → 549 ms; release seek 483 → 380 ms; hidden feed cards behind the Viewer 0.26 → 0.12 MB, because a stopped card no longer reads out its response.</td></tr>
+      </tbody></table>
+      <h3>Round 3, Phase 13: Scrub – one preview player per page, seeking straight to the target (done, <code>85422e2e</code>)</h3>
+      <table class="status-table"><tbody>
+        <tr><td>Finding</td><td>A drag's first preview request went out about 300–380 ms after the drag began: <code>FrameExtractor</code> built a new player, decoder and GL pipeline per drag and decoded 0:00 before seeking.</td></tr>
+        <tr><td>Change</td><td><code>ScrubPreviewPlayer</code>: a paused, video-only player the page keeps while its timeline shows. It seeks to the target's nearest keyframe as soon as the stream's index is read and reads the frame through the same effect chain, renderer rules (one frame per position reset), software decoder and HDR/rotation handling as <code>FrameExtractor</code>. Between drags it stops, with foreground mode keeping its decoder; the next drag re-attaches the stream. <code>ScrubFrameMatcher</code> holds the ordering rules (unit-tested). <code>media3-inspector-frame</code> gave way to <code>media3-effect</code>.</td></tr>
+        <tr><td>Found while building it</td><td>Kept prepared between drags, the paused player's open request filled socket buffers (2.8 MB in one run) and slowed the release seek to 919 ms, so it stops between drags. Stopping reports the old stream's timeline once more; the first version took that as the new index and seeked before it, an exact seek to 9.0 s instead of the 8 s keyframe (0.69 MB, second drag 729–927 ms). A hardware decoder made no difference (796/966 vs 808/870 ms); software keeps <code>FrameExtractor</code>'s choice.</td></tr>
+        <tr><td>Effect</td><td>First preview of a drag 744 → 659 ms; second drag's first preview 611 → 455 ms; later preview frames 535 → 490 ms. The saved frame is upright and shows the 8 s keyframe for the second drag's 9 s target.</td></tr>
+        <tr><td>What remains</td><td>On the first drag the player's decoder and GL setup (about 100 ms on its playback thread) runs ahead of the seek, so the target's request waits for it; the rest is first byte plus the keyframe's transfer, shared with the main player's own buffering.</td></tr>
+      </tbody></table>
+      <h3>Round 3: investigated, not changed</h3>
+      <ul>
+        <li><strong>Previews that read the cache but never write it.</strong> A preview's cached piece splits the release seek into two requests (two first-byte delays). Reading straight through instead costs about the same transfer time on this link, so there is nothing to gain here.</li>
+        <li><strong>Warming the preview player when the timeline appears.</strong> The timeline shows at every Viewer open and every tap, so it would build a decoder and GL pipeline (and read the start of the file, which may not be cached yet) far more often than anyone drags, competing with the video's own start.</li>
+      </ul>
     </section>
 
     <section id="validation">
@@ -380,6 +472,20 @@ scripts/media_bench_device.py record --round &lt;n&gt; build/media-bench/&lt;lab
         renderer and pinch zoom on prefetched pages, real provider origins' cache headers, cellular links. Round 2 adds:
         real origins' range support and <code>Content-Range</code> headers (bounded locks turn off for a file whose server
         ignores ranges or omits its size), the scrub popup's look while dragging, and swipes in the real pager.</p>
+      <table>
+        <thead><tr><th>Check (round 3)</th><th>Result (2026-11-07)</th></tr></thead>
+        <tbody>
+          <tr><td><code>./gradlew :app:testDebugUnitTest</code></td><td>1188 tests, 0 failures, 3 skipped, at <code>85422e2e</code>. New: <code>VideoHttpDataSourceTest</code> (a half-read response closes without the 100 ms drain, which fails without the cancel; one video agent and the stream's other headers) and <code>ScrubFrameMatcherTest</code> (index before seek, adjusted keyframe, shown frame, the stopped stream's late timeline).</td></tr>
+          <tr><td><code>python3 -m unittest discover -s scripts/tests -p 'test_*.py'</code></td><td>110 tests OK.</td></tr>
+          <tr><td><code>./gradlew :app:detektDebug</code></td><td>The same 6 base-branch findings; none in round 3's files.</td></tr>
+          <tr><td><code>python3 scripts/check_hotspots.py</code></td><td>The same 2 pre-existing oversized test files.</td></tr>
+          <tr><td>Device benchmark (phone, n=4, interleaved, order swapped)</td><td>All five scenarios pass on both builds, including every autoplay check, plus the 8 s swipe session (n=4). Every preview frame was 784×440 and not blank; the saved frame is upright.</td></tr>
+        </tbody>
+      </table>
+      <p><strong>Round 3 adds to what the benchmark does not verify:</strong> real sites over OkHttp (TLS, redirects, cookies
+        of browser-verified sites, servers that close idle connections), the preview popup's look with real videos
+        (colours from the software decoder, rotated or HDR videos), and cellular links, where a cancelled HTTP/1.1
+        response costs a new TLS connection that the drain also usually lost.</p>
     </section>
 
     <section id="living-log">
@@ -397,6 +503,9 @@ scripts/media_bench_device.py record --round &lt;n&gt; build/media-bench/&lt;lab
         <li>[x] 2026-11-07 Round 2: bounded cache locks, first preview without the settle wait, neighbour video prefetch cap; drag-time loading hold tried and removed.</li>
         <li>[x] 2026-11-07 Round 2 first interleaved session found a scrub regression; a reversed-order session with request timelines traced it to bounding the Viewer's own player and showed the order bias; bounding narrowed to feed cards and prefetch.</li>
         <li>[x] 2026-11-07 Round 2 recorded from a final interleaved session (round 1 build vs round 2 build, n=3, order swapped every run), plus an early-swipe session.</li>
+        <li>[x] 2026-11-07 Round 3: per-seek events traced the bimodal seeks to Android's HTTP drain; video moved to OkHttp with abandoned responses cancelled.</li>
+        <li>[x] 2026-11-07 Round 3: page-level scrub preview player; idle download, early re-attach seek and decoder choice found and settled in A/B runs against the HTTP-only build.</li>
+        <li>[x] 2026-11-07 Round 3 recorded from a final interleaved session (round 2 build vs round 3 build, n=4, order swapped every run), plus an early-swipe session.</li>
       </ul>
       <h3>Surprises And Discoveries</h3>
       <ul>
@@ -414,6 +523,10 @@ scripts/media_bench_device.py record --round &lt;n&gt; build/media-bench/&lt;lab
         <li>Round 2: closing a partly read HTTP response on Android drains it for up to 100 ms before dropping the connection, and every seek and preview move closes one.</li>
         <li>Round 2: the scrub scenario's earlier seeks leave cached islands that bound the playing request's lock, so it cannot show the "open a video and scrub ahead" case where the lock reaches the end of the file.</li>
         <li>Round 2: in interleaved pairs the second variant was consistently a little slower (feed first frame, gallery skimming 91–97% vs 100% on unchanged gallery code); a reversed session moved the penalty to the other build.</li>
+        <li>Round 3: the drain was not always paid. The loader thread's interrupt from the cancel makes Okio abort the drain at once; when something consumed the interrupt first, the full 100 ms drain ran. That is the bimodal ~530/~630 ms seek split.</li>
+        <li>Round 3: the first seek of each run is ~200 ms slower for a different reason: its target sits 1 s past a keyframe, the others 0.5 s, so an exact seek decodes and buffers more.</li>
+        <li>Round 3: an ExoPlayer seek issued before the period is prepared is exact; seek parameters apply only to a prepared period. A preview player must wait for the stream's index before seeking, and stopping a player re-reports its old timeline.</li>
+        <li>Round 3: on the first drag the preview player's decoder and GL setup runs on its playback thread ahead of the queued seek, delaying the target's request by about 100 ms.</li>
       </ul>
       <h3>Decision Log</h3>
       <table>
@@ -430,6 +543,11 @@ scripts/media_bench_device.py record --round &lt;n&gt; build/media-bench/&lt;lab
           <tr><td>Round 2: swap variant order every run.</td><td>The phone warms through a run; in a reversed session the second variant was slower on code neither build changed.</td></tr>
           <tr><td>Round 2: 4 MB neighbour video prefetch on every network.</td><td>Same value metered networks already used. A swipe needs the opening seconds; the rest streams from the network.</td></tr>
           <tr><td>Round 2: keep the release seek exact.</td><td>Seeking to the previewed keyframe would make the release a cache hit, but changes where playback lands by up to half a keyframe interval; left for a product decision.</td></tr>
+          <tr><td>Round 3: OkHttp over HTTP/1.1 only, cancelling on close.</td><td>Media3's OkHttp source exposes the call to cancel; <code>HttpURLConnection</code> hides its connection. HTTP/1.1 keeps parity with Android's stack and its TCP-window bound on paused players; HTTP/2 would buffer up to 16 MiB per paused stream.</td></tr>
+          <tr><td>Round 3: keep the video User-Agent override.</td><td><code>DefaultHttpDataSource.setUserAgent</code> replaced any agent in the stream's headers, so video always sent <code>Mozilla/5.0</code>, even for custom sites with their own agent. Kept as is; changing it is a separate behaviour change (see opportunities).</td></tr>
+          <tr><td>Round 3: own the preview player instead of reusing <code>FrameExtractor</code>.</td><td>Its process-wide player can't be kept per page, refuses requests after a cancel, and always decodes 0:00 first. The renderer and frame read are small and copied from it, so behaviour matches.</td></tr>
+          <tr><td>Round 3: stop the preview player between drags; no warm-up.</td><td>A paused open request downloads into socket buffers at the moment the release seek needs the link. Foreground mode keeps the decoder, so a re-attach costs about 50 ms. A warm-up at timeline show would run on every Viewer open and tap.</td></tr>
+          <tr><td>Round 3: n=4 for the final session.</td><td>With order swapped every run, an even n gives each build the first slot equally often; at n=3 the build measured second twice looked about 60–100 ms slower on first previews.</td></tr>
         </tbody>
       </table>
       <h3>Outcomes And Retrospective</h3>
@@ -448,42 +566,48 @@ scripts/media_bench_device.py record --round &lt;n&gt; build/media-bench/&lt;lab
         order), and a single 4-seek median flips between two modes, so judge seeks on pooled samples. Scrub previews moved
         (first frame 904 → 737 ms, second drag 811 → 662 ms) mostly from skipping the settle wait; what remains is
         <code>FrameExtractor</code>'s setup and the HTTP drain, both listed first below.</p>
+      <p>Round 3: the per-seek event log turned a two-round mystery into one cause. The slow seeks waited on Android's HTTP
+        client reading out the abandoned response; cancelling it instead removed the slow group entirely (5 of 12 seeks
+        to 0) and took 100 ms off the release seek and later preview moves. The preview player removed
+        <code>FrameExtractor</code>'s per-drag setup, most visibly on second drags (611 → 455 ms). Its first version
+        regressed twice (an idle download that slowed the release seek, and an exact seek after re-attaching), both caught
+        by the A/B runs and explained by request timelines and in-player timing logs. The developer's 350–400 ms target for
+        the first preview was not reached (659 ms): what remains is the keyframe's own download shared with the main
+        player (first byte plus about 300 ms here) and about 100 ms of decoder setup on the first drag.</p>
     </section>
 
     <section id="opportunities">
       <h2>Remaining Opportunities (ranked)</h2>
       <p></p>
       <ol>
-        <li><strong>Scrub preview player that starts at the target (high for scrubbing, medium-high effort).</strong> Media3's
-          <code>FrameExtractor</code> builds a player, decoder and GL pipeline per drag and always decodes 0:00 before seeking:
-          about 340 ms of each drag's first frame (737 ms now), plus about 1 MB downloaded when the start of the file is not
-          cached. A page-level hidden <code>ExoPlayer</code> rendering to an <code>ImageReader</code>, prepared at the first target
-          and kept across drags (closing its request when a drag ends), could bring first frames to about 350–400 ms and
-          second drags lower. Risk: device-specific surface and format handling.</li>
-        <li><strong>Close abandoned HTTP responses without draining them (medium-high for seeks and previews, medium effort).</strong>
-          Every seek and every preview move past the buffer closes a partly read response, which Android's
-          <code>HttpURLConnection</code> drains for up to 100 ms first. An HTTP source that cancels instead (for example
-          Media3's <code>OkHttpDataSource</code> on the app's OkHttp client, with an interceptor that cancels unfinished
-          bodies) would save about 100 ms per seek (seek to resume about 540–640 ms now) and per later preview frame, and
-          brings HTTP/2 connection reuse. Needs care with provider headers and cookies.</li>
-        <li><strong>Release on the previewed frame (high for the release seek, product decision).</strong> The preview shows the
-          closest keyframe; the release seeks exactly to the finger and decodes from the keyframe before it, needing bytes
-          the preview never fetched (seek after scrub about 460–500 ms). Seeking to the previewed frame's time would make it
-          a cache hit (estimated 150–200 ms) and land where the preview showed, up to half a keyframe interval from the
-          finger.</li>
-        <li><strong>Shorter start buffer after a seek (medium, robustness call).</strong> Media3 waits for 1 s buffered after a
-          seek; 0.5 s would save about 125 ms per seek at 16 Mbit/s but risks a stall on links near the video's bitrate.</li>
-        <li><strong>Instant seek mode (medium, opt-in setting).</strong> With "instant seek" on, every drag movement issues an
-          exact seek on the main player. Media3 1.11's <code>setScrubbingModeEnabled</code> is designed for this. Needs a
-          scenario of rapid seeks.</li>
+        <li><strong>Release on the previewed frame (high for the release seek, product decision).</strong> The release seek
+          (380 ms now) is exact, so it decodes from the keyframe before the finger and needs bytes the preview never
+          fetched; in this scenario it also makes a second request around the preview's cached piece. Seeking to the
+          previewed keyframe would read the preview's bytes from the cache (estimated 150–250 ms) but lands up to half a
+          keyframe interval from the finger.</li>
+        <li><strong>Shorter start buffer after a seek (medium, robustness call).</strong> Media3 waits for 1 s buffered
+          after a seek; 0.5 s would save about 125 ms per seek on this link (seek to resume 549 ms now) but risks a stall
+          on links near the video's bitrate.</li>
+        <li><strong>First-drag preview setup off the seek's path (small, about 100 ms on a page's first preview).</strong>
+          Prepare the preview player's period at the target's keyframe (a period wrapper that applies closest-keyframe
+          seek parameters to the start position), or defer codec creation until the seek is queued. Both reach into Media3
+          renderer and period internals for a gain on the first drag only.</li>
+        <li><strong>Hold the main player's loading during a drag (small to medium, uncertain).</strong> Previews share the
+          link with the main player's own buffering. Round 2's loading hold showed no gain because socket buffers kept
+          arriving; cancelling the main player's request at drag start would free the link but needs a seek or a source
+          swap, and the release seek restarts loading anyway.</li>
+        <li><strong>Instant seek mode (medium, opt-in setting).</strong> Media3 1.11's <code>setScrubbingModeEnabled</code>
+          lets every drag movement seek the main player. Needs a scenario of rapid seeks.</li>
+        <li><strong>Custom sites' User-Agent for video (correctness, your call).</strong> Video requests always send
+          <code>Mozilla/5.0</code>, before and after round 3, ignoring a custom site's agent override, while clearance
+          cookies are usually bound to the WebView's agent. Letting the stream's agent win is a one-line change in
+          <code>videoHttpClient()</code>.</li>
         <li><strong>Gallery memory (medium for large Pixiv pages, product decision).</strong> Pages next to the current one
           are decoded at original size (sharp pinch zoom). Decoding at screen size, or 2× screen size, would cut peak memory
           for large originals; nhentai pages are already near screen size.</li>
-        <li><strong>Gallery window shape (low on this link).</strong> Skimming is already 100% at 16 Mbit/s. A forward-biased
-          window (more ahead, fewer behind) and a third download slot only matter on slower links or larger pages; test at
-          4–8 Mbit/s before changing.</li>
-        <li><strong>Hidden feed players while scrolling (low).</strong> Measured in round 2: about 0.25 MB per scrolled-past
-          clip, not 2–3 MB.</li>
+        <li><strong>Gallery window shape (low on this link).</strong> Skimming is already 100% at 16 Mbit/s; only slower links
+          or larger pages would show a forward-biased window or a third download slot.</li>
+        <li><strong>Hidden feed players while scrolling (low).</strong> About 0.4 MB per scrolled-past clip pair since round 3.</li>
       </ol>
       <p></p>
     </section>
@@ -494,6 +618,7 @@ scripts/media_bench_device.py record --round &lt;n&gt; build/media-bench/&lt;lab
         <li>The runner is safe to rerun: media generation and the device copy are skipped when unchanged (manifest of names and sizes); each run uses fresh URLs, and each scenario removes its video cache entries and gallery disk entries afterwards.</li>
         <li>Only <code>com.theoriacodex.debug</code> and its test package are installed, after <code>scripts/verify_device_apk.py</code> checks the application ID and debug signing. Production <code>com.theoriacodex</code> is never touched.</li>
         <li>To remove the benchmark media from the phone: <code>adb -s &lt;serial&gt; shell run-as com.theoriacodex.debug rm -rf cache/media-bench</code>.</li>
+        <li>Round 3's comparison APKs: <code>build/media-bench/apks/r2</code> (round 2's app with round 3's test APK) and <code>apks/r3</code> (<code>85422e2e</code>).</li>
         <li>Each change is one commit; revert any of them independently. Phase 3 changes Viewer state shape (<code>ViewerPrefetchState.decoded</code>, <code>QueuePrefetch.decodeKeys</code>); both have defaults.</li>
       </ul>
     </section>
