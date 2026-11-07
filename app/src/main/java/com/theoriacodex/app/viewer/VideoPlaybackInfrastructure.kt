@@ -37,10 +37,12 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 
 internal const val VIDEO_PLAYBACK_CACHE_MAX_BYTES = 256L * 1024L * 1024L
-internal const val VIEWER_VIDEO_PREFETCH_BYTES = 24L * 1024L * 1024L
 
-/** Metered networks warm only the opening seconds of a neighbour video. */
-internal const val VIEWER_METERED_VIDEO_PREFETCH_BYTES = 4L * 1024L * 1024L
+/**
+ * A neighbour video warms only its opening seconds, on every network: enough for a swipe to start from the
+ * cache, while a neighbour that is never shown costs a few megabytes instead of most of its file.
+ */
+internal const val VIEWER_VIDEO_PREFETCH_BYTES = 4L * 1024L * 1024L
 internal const val FEED_PREVIEW_TARGET_BUFFER_BYTES = 2 * 1024 * 1024
 internal const val FEED_PREVIEW_MIN_BUFFER_MS = 6_000
 internal const val FEED_PREVIEW_MAX_BUFFER_MS = 12_000

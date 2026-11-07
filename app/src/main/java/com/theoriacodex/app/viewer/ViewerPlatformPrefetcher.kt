@@ -38,7 +38,7 @@ internal suspend fun prefetchViewerMedia(
             context,
             media.ref.viewerPlaybackLocation(videoQuality, metered),
             media.key.postId.source.requestHeaders(),
-            maxBytes = if (metered) VIEWER_METERED_VIDEO_PREFETCH_BYTES else VIEWER_VIDEO_PREFETCH_BYTES,
+            maxBytes = VIEWER_VIDEO_PREFETCH_BYTES,
         )
     }
 
