@@ -22,6 +22,7 @@
 ### Fixed
 
 - R34V videos play again in feeds and the Viewer; they previously failed to load on every Android device.
+- A R34V or R34G search with excluded tags now shows its results when one post's details can't be read, instead of failing the whole page.
 - Switching source in Search now shows that source's last search, so the results and the filter button always match the source you picked.
 - Opening an nhentai or Hitomi gallery in the Viewer keeps its cover on screen until the first page loads, instead of flashing to black.
 - When a post's full image fails to load in the Viewer, its preview now takes its place instead of spinning indefinitely.
