@@ -7,7 +7,14 @@ import com.theoriacodex.app.creator.CreatorProfileCoordinator
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.di.FeatureDependencies
 import com.theoriacodex.app.di.SourceDependencies
+import com.theoriacodex.app.customsites.CustomSitesController
+import com.theoriacodex.app.di.CustomSitesControllerImpl
+import com.theoriacodex.app.di.CustomSourceRuntime
 import com.theoriacodex.app.di.TheoriaAppContainer
+import com.theoriacodex.app.sourceauth.InMemorySiteCredentialsStore
+import com.theoriacodex.data.repository.InMemorySiteProfileRepository
+import com.theoriacodex.sources.custom.SiteFamilyRegistry
+import com.theoriacodex.sources.custom.SiteProber
 import com.theoriacodex.app.di.UpdateDependencies
 import com.theoriacodex.app.di.WorkflowDependencies
 import com.theoriacodex.app.media.BoundedMediaDurationProbe
@@ -145,6 +152,18 @@ class JourneyAppContainer(
             storageDirectory.resolve("pending_profile_deletion.json"), profileWriteGuard),
         profileBackup = ProfileBackupService(settings, RoomProfileBackupStore(database), data.savedSearches,
             data.readingPositions, storageDirectory.resolve("pending_profile_restore.json")),
+    )
+    private val siteProfiles = InMemorySiteProfileRepository()
+    private val siteKeys = InMemorySiteCredentialsStore()
+    /** Real controller over in-memory stores; the fixture registry does not list custom sites. */
+    override val customSites: CustomSitesController = CustomSitesControllerImpl(
+        profiles = siteProfiles,
+        credentials = siteKeys,
+        prober = SiteProber(SiteFamilyRegistry.default(), httpClient),
+        runtime = CustomSourceRuntime(siteProfiles, siteKeys, SiteFamilyRegistry.default(), httpClient, ownerScope).snapshot,
+        settings = settings,
+        library = content,
+        scope = ownerScope,
     )
     suspend fun awaitReady() {
         settings.awaitReady()
