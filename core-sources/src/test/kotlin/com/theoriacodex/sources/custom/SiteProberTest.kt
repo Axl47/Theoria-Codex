@@ -19,7 +19,7 @@ import org.junit.Test
 /** Probe outcomes against the captured fixtures, through the real redirect policy. */
 class SiteProberTest {
     private val transport = FixtureSiteTransport(*FIXTURE_SITES)
-    private val http = CustomSiteHttpClient(10_000, 10_000, 3, transport::execute)
+    private val http = CustomSiteHttpClient(10_000, 10_000, 3, transport = transport::execute)
 
     /** Built-in hosts are disabled so shipped sites' fixtures exercise the families as if user-added. */
     private val prober = SiteProber(SiteFamilyRegistry.default(), http, builtInHosts = emptyMap())

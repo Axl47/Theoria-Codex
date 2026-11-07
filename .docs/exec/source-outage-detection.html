@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Detect source outages and fail fast</title>
+  <style>
+    :root { color-scheme: light dark; --bg:#f7f7f4; --surface:#fff; --text:#202124; --muted:#5f6368; --border:#d7d7d0; --accent:#0f766e; --code:#111827; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#151716; --surface:#202321; --text:#f0f2ef; --muted:#b8beb7; --border:#3a403c; --accent:#5eead4; --code:#0b0f0d; } }
+    * { box-sizing: border-box; }
+    body { margin:0; font:15px/1.55 ui-sans-serif, system-ui, sans-serif; background:var(--bg); color:var(--text); }
+    main { max-width: 980px; margin: 0 auto; padding: 24px 16px 64px; }
+    h1 { font-size: 2rem; margin: 24px 0 8px; } h2 { margin-top: 32px; font-size: 1.35rem; }
+    section { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; margin-top: 16px; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; }
+    pre { background: var(--code); color: #e5e7eb; padding: 12px; border-radius: 8px; overflow-x: auto; }
+    .muted { color: var(--muted); }
+    li { margin: 4px 0; }
+  </style>
+</head>
+<body>
+<main>
+<h1>ExecPlan: Detect source outages and fail fast</h1>
+<p class="muted">Branch <code>spike/webview-verification</code> (PR #49). Started 2026-11-07.</p>
+
+<section id="purpose">
+<h2>Purpose / Big Picture</h2>
+<p>When a provider is down (Danbooru's "Downbooru" maintenance page, a Cloudflare origin error, a browser
+challenge on a custom site, or a domain that no longer resolves), the app should notice quickly, stop
+hammering it for the rest of the session, show a small red dot on that source in every source dropdown,
+and say what to do: wait for maintenance, verify in the browser, or re-add a moved site. Nothing about
+this may slow app startup.</p>
+</section>
+
+<section id="status">
+<h2>Current Status</h2>
+<p>Implementation in progress. See Progress.</p>
+</section>
+
+<section id="context">
+<h2>Context And Orientation</h2>
+<ul>
+<li><b>Observed failure.</b> During maintenance Danbooru answers every URL with HTTP 503, an HTML body
+titled "Downbooru", and <code>Retry-After: 30</code>. <code>DefaultSourceHttpClient</code>
+(<code>core-sources/.../http/DefaultSourceHttpClient.kt</code>) retries 5xx twice and honors Retry-After
+(capped at 30 s), so each request waits about 60 s before failing. Search, For You, autocomplete and tag
+counts each issue several requests, which is the "retrying constantly" symptom.</li>
+<li><b>Transports.</b> Built-in sources share one <code>DefaultSourceHttpClient</code> created in
+<code>app/.../di/TheoriaAppContainer.kt</code> (<code>sourceHttpClient</code>). User-added sites use
+<code>CustomSiteHttpClient</code> (<code>core-sources/.../custom/CustomSiteHttpClient.kt</code>); the runtime
+instance is created in the same container (the prober keeps its own, untracked instance so it always sees
+raw answers).</li>
+<li><b>Failure reporting.</b> Adapters turn <code>IOException</code> into
+<code>SourceAdapterException(NETWORK)</code> via <code>sourceNetworkFailure</code>
+(<code>core-sources/.../common/SourceAdapterCommon.kt</code>). The search status UI
+(<code>app/.../search/SourceFailureUiText.kt</code>) shows the raw message for NETWORK failures.</li>
+<li><b>Source dropdowns.</b> Every picker renders through <code>SourceIconMenu</code> /
+<code>SourceMenuChoices</code> in <code>app/.../ui/components/SourceSelector.kt</code>.</li>
+<li><b>Terms.</b> <i>Outage</i>: a remembered "this host is down" record with a kind and an expiry.
+<i>Circuit breaker</i>: once an outage is recorded, further requests to that host fail immediately
+without touching the network until the outage expires or is cleared.</li>
+</ul>
+</section>
+
+<section id="phases">
+<h2>Phases</h2>
+<ol>
+<li><b>Transport:</b> <code>HostOutageTracker</code> + <code>HostUnavailableException</code> in
+<code>core-sources/.../http/HostOutageTracker.kt</code>. Both HTTP clients consult it before sending and
+record outages from answers. Long Retry-After no longer causes waits.</li>
+<li><b>App state:</b> map tracked hosts to <code>SourceKey</code>s (by each source's presentation referer
+host), expose <code>sourceIssues</code>, and run a non-blocking background check after startup.</li>
+<li><b>UI:</b> red dot in dropdowns; selecting a down source clears its outage (the search is the check);
+a challenged custom site opens its browser verification instead; messages per kind.</li>
+</ol>
+</section>
+
+<section id="work">
+<h2>Work Plan</h2>
+<ul>
+<li>Outage kinds: <code>MAINTENANCE</code> (502/503/504, 520–530), <code>CHALLENGE</code> (403 with
+<code>cf-mitigated: challenge</code>, or a custom site's API answering with the verification page),
+<code>UNRESOLVED</code> (<code>UnknownHostException</code>, recorded only while the device is online).</li>
+<li>Expiry: 10 minutes, or until <code>clear(host)</code>. 500 is not an outage (often query-specific).</li>
+<li>Retry rule: 5xx is retried only when Retry-After is absent or at most 3 s.</li>
+<li>Messages come from the exception: "Down for maintenance. Try again later.", "Needs browser
+verification. Open Settings → Sites.", "Couldn't find this site. If it moved, remove it and add its new
+address."</li>
+<li>Background check: after the container is ready, wait a few seconds, then GET each enabled source's
+site root sequentially through the tracked clients with a small body limit. Only outage answers matter;
+everything else counts as up. Never awaited by startup.</li>
+</ul>
+</section>
+
+<section id="validation">
+<h2>Validation And Acceptance</h2>
+<pre>cd "Theoria Codex"
+export JAVA_HOME=/opt/homebrew/Cellar/openjdk/26.0.2.1/libexec/openjdk.jdk/Contents/Home
+./gradlew :core-sources:test :app-logic:test :app:testDebugUnitTest :app:assembleDebug</pre>
+<ul>
+<li>Host tests: tracker records/expires/clears; a 503 with Retry-After 30 returns within milliseconds and
+the next request to that host throws without a transport call; online gating for UNRESOLVED.</li>
+<li>Device (while Danbooru is in maintenance): Danbooru shows a red dot in the Search source dropdown
+shortly after launch; searching Danbooru fails at once with the maintenance message; startup is not
+slower. Only the developer can confirm feel on device.</li>
+</ul>
+</section>
+
+<section id="progress">
+<h2>Progress</h2>
+<ul>
+<li>[x] 2026-11-07 Investigated: Danbooru 503 + Retry-After 30 causes ~60 s per request.</li>
+<li>[ ] Transport tracker and client changes, with tests.</li>
+<li>[ ] App mapping, background check, wiring.</li>
+<li>[ ] Dropdown dot, tap behavior, verification hand-off.</li>
+<li>[ ] Validation and device install.</li>
+</ul>
+</section>
+
+<section id="surprises">
+<h2>Surprises And Discoveries</h2>
+<ul><li>The slowness was mostly self-inflicted: honoring a maintenance page's Retry-After for every request.</li></ul>
+</section>
+
+<section id="decisions">
+<h2>Decision Log</h2>
+<ul>
+<li>Track by host in the transport, not by wrapping adapters: adapters implement optional capability
+interfaces (faceted search, related posts) that a decorator would hide, and every request already passes
+the two clients.</li>
+<li>The startup check runs in the background and only feeds the tracker; real requests also trip the
+breaker, so a skipped or slow check costs nothing (developer request: never block startup).</li>
+<li>Tapping a down source clears its outage and lets the real search act as the check, instead of a
+separate probe UI.</li>
+</ul>
+</section>
+
+<section id="outcomes">
+<h2>Outcomes And Retrospective</h2>
+<p class="muted">To be filled in at close.</p>
+</section>
+
+<section id="recovery">
+<h2>Idempotence And Recovery</h2>
+<p>All changes are code-only; no stored data or schema changes. Outages live in memory and vanish on
+restart. Reverting the branch commits restores previous behavior.</p>
+</section>
+</main>
+</body>
+</html>

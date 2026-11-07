@@ -4,6 +4,9 @@ import com.sun.net.httpserver.HttpServer
 import com.theoriacodex.domain.source.ProbeFailure
 import com.theoriacodex.sources.http.HttpRequestSpec
 import com.theoriacodex.sources.http.SourceByteResponse
+import com.theoriacodex.sources.http.HostUnavailableException
+import com.theoriacodex.sources.http.HostOutageTracker
+import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.sources.http.executeHttpRequest
 import java.io.IOException
 import java.net.InetSocketAddress
@@ -115,5 +118,22 @@ class CustomSiteHttpClientTest {
 
         assertEquals(302, response.statusCode)
         assertEquals(0, followedHits)
+    }
+
+    @Test
+    fun `a challenge served instead of the API marks the site and later requests skip the network`() = runTest {
+        val tracker = HostOutageTracker()
+        val challenge = "<!doctype html><html><title>Checking</title><p>Complete the challenge to show you are not a robot.</p></html>"
+        val http = CustomSiteHttpClient(1_000, 1_000, 3, tracker) { spec ->
+            requested += spec.url
+            SourceByteResponse(200, challenge.toByteArray())
+        }
+
+        val first = runCatching { http.get("https://gated.example/index.php", mapOf("page" to "dapi")) }.exceptionOrNull()
+        val second = runCatching { http.get("https://gated.example/index.php", mapOf("page" to "dapi")) }.exceptionOrNull()
+
+        assertEquals(HostOutageKind.CHALLENGE, (first as HostUnavailableException).kind)
+        assertEquals(HostOutageKind.CHALLENGE, (second as HostUnavailableException).kind)
+        assertEquals(1, requested.size)
     }
 }

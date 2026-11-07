@@ -1,6 +1,7 @@
 package com.theoriacodex.sources.common
 
 import com.google.gson.Gson
+import com.theoriacodex.sources.http.HostUnavailableException
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
@@ -74,7 +75,8 @@ internal fun parseJsonElement(body: String, gson: Gson, errorLabel: String): Jso
 internal fun sourceNetworkFailure(siteLabel: String, error: IOException): Nothing {
     throw SourceAdapterException(
         reason = SourceFailureReason.NETWORK,
-        message = "$siteLabel request failed",
+        // A known outage says what to do (wait, verify, re-add) instead of a bare failure.
+        message = (error as? HostUnavailableException)?.message ?: "$siteLabel request failed",
         cause = error,
     )
 }

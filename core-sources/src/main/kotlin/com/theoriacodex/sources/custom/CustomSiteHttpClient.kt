@@ -2,6 +2,9 @@ package com.theoriacodex.sources.custom
 
 import com.theoriacodex.domain.source.ProbeFailure
 import com.theoriacodex.sources.http.DEFAULT_MAX_SOURCE_TEXT_BODY_BYTES
+import com.theoriacodex.sources.http.HostOutageKind
+import com.theoriacodex.sources.http.HostOutageTracker
+import com.theoriacodex.sources.http.HostUnavailableException
 import com.theoriacodex.sources.http.HttpRequestSpec
 import com.theoriacodex.sources.http.SourceByteRange
 import com.theoriacodex.sources.http.SourceByteResponse
@@ -26,13 +29,16 @@ class CustomSiteHttpClient internal constructor(
     private val connectTimeoutMs: Int,
     private val readTimeoutMs: Int,
     private val maxRedirects: Int,
+    /** Set for adapters, never for probes (which must see raw answers); see [HostOutageTracker]. */
+    private val outages: HostOutageTracker? = null,
     private val transport: suspend (HttpRequestSpec) -> SourceByteResponse,
 ) : SourceHttpClient {
-    /** Probes use the 10 s defaults; adapters may pass a longer [readTimeoutMs]. */
+    /** Probes use the 10 s defaults; adapters may pass a longer [readTimeoutMs] and an [outages] tracker. */
     constructor(
         connectTimeoutMs: Int = DEFAULT_TIMEOUT_MS,
         readTimeoutMs: Int = DEFAULT_TIMEOUT_MS,
-    ) : this(connectTimeoutMs, readTimeoutMs, MAX_REDIRECTS, ::executeHttpRequest)
+        outages: HostOutageTracker? = null,
+    ) : this(connectTimeoutMs, readTimeoutMs, MAX_REDIRECTS, outages, ::executeHttpRequest)
 
     override suspend fun get(url: String, query: Map<String, String>, headers: Map<String, String>): SourceHttpResponse =
         getBytes(url, query, headers, range = null, maxBodyBytes = DEFAULT_MAX_SOURCE_TEXT_BODY_BYTES).toTextResponse()
@@ -47,20 +53,23 @@ class CustomSiteHttpClient internal constructor(
         require(maxBodyBytes > 0) { "maxBodyBytes must be positive" }
         var current = parseUri(buildUrl(url, query))
         require(current.scheme.equals("https", ignoreCase = true)) { "Custom sites are requested over HTTPS only" }
+        outages?.ensureAvailable(current.toASCIIString())
         val requestHeaders = headers.withByteRange(range)
         repeat(maxRedirects + 1) {
-            val response = transport(
-                HttpRequestSpec(
-                    method = "GET",
-                    url = current.toASCIIString(),
-                    headers = requestHeaders,
-                    body = null,
-                    maxBodyBytes = maxBodyBytes,
-                    connectTimeoutMs = connectTimeoutMs,
-                    readTimeoutMs = readTimeoutMs,
-                    followRedirects = false,
-                ),
-            )
+            val response = sendTracked(current.toASCIIString()) {
+                transport(
+                    HttpRequestSpec(
+                        method = "GET",
+                        url = current.toASCIIString(),
+                        headers = requestHeaders,
+                        body = null,
+                        maxBodyBytes = maxBodyBytes,
+                        connectTimeoutMs = connectTimeoutMs,
+                        readTimeoutMs = readTimeoutMs,
+                        followRedirects = false,
+                    ),
+                )
+            }
             val location = response.redirectLocation() ?: return response
             current = vetRedirect(from = current, to = current.resolve(parseUri(location)))
         }
@@ -69,6 +78,25 @@ class CustomSiteHttpClient internal constructor(
 
     override suspend fun postForm(url: String, form: Map<String, String>, headers: Map<String, String>): SourceHttpResponse =
         throw UnsupportedOperationException("Custom sites are read-only")
+
+    /**
+     * Sends one hop and records outages: down statuses, a browser challenge served in place of the
+     * API (the same markup the prober reports as blocked), or an unresolvable domain.
+     */
+    private suspend fun sendTracked(url: String, send: suspend () -> SourceByteResponse): SourceByteResponse {
+        val tracker = outages ?: return send()
+        val response = try {
+            send()
+        } catch (error: IOException) {
+            tracker.recordFailure(url, error)
+            throw error
+        }
+        val kind = tracker.recordResponse(url, response.statusCode, response.headers)
+            ?: HostOutageKind.CHALLENGE.takeIf { response.toTextResponse().isVerificationChallenge() }
+                ?.also { tracker.record(url, it) }
+        if (kind != null) throw HostUnavailableException(HostOutageTracker.hostKey(url).orEmpty(), kind)
+        return response
+    }
 
     private companion object {
         const val DEFAULT_TIMEOUT_MS = 10_000

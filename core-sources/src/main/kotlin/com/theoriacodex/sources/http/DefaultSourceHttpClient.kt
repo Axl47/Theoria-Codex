@@ -14,6 +14,8 @@ class DefaultSourceHttpClient(
     private val maxRetries: Int = 2,
     private val retryBaseDelayMs: Long = 300L,
     private val shouldRetryStatus: (url: String, statusCode: Int) -> Boolean = ::defaultShouldRetryStatus,
+    /** When set, known-down hosts fail at once and outage answers throw [HostUnavailableException]. */
+    private val outages: HostOutageTracker? = null,
 ) : SourceHttpClient {
     override suspend fun get(
         url: String,
@@ -103,12 +105,17 @@ class DefaultSourceHttpClient(
         requestUrl: String,
         block: suspend () -> SourceByteResponse,
     ): SourceByteResponse {
+        outages?.ensureAvailable(requestUrl)
         var attempt = 0
         var lastError: Throwable? = null
         while (attempt <= maxRetries) {
             try {
                 val response = block()
-                if (!shouldRetryStatus(requestUrl, response.statusCode) || attempt == maxRetries) {
+                // A maintenance page's Retry-After (Danbooru sends 30 s) is not worth waiting out per request.
+                val retry = shouldRetryStatus(requestUrl, response.statusCode) && !response.headers.retryAfterTooLong()
+                if (!retry || attempt == maxRetries) {
+                    outages?.recordResponse(requestUrl, response.statusCode, response.headers)
+                        ?.let { kind -> throw HostUnavailableException(HostOutageTracker.hostKey(requestUrl).orEmpty(), kind) }
                     return response
                 }
                 attempt += 1
@@ -123,9 +130,12 @@ class DefaultSourceHttpClient(
                         retryBaseDelayMs = retryBaseDelayMs,
                     ),
                 )
+            } catch (error: HostUnavailableException) {
+                throw error
             } catch (error: IOException) {
                 lastError = error
-                if (attempt == maxRetries) throw error
+                outages?.recordFailure(requestUrl, error)
+                if (attempt == maxRetries || error is java.net.UnknownHostException) throw error
                 attempt += 1
                 delay(retryBaseDelayMs * attempt)
             }
