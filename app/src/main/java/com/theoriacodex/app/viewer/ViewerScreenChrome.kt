@@ -15,18 +15,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.foundation.layout.size
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.LocalContentColor
 import com.theoriacodex.app.ui.motion.LikedHeartColor
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.MoreHoriz
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -58,6 +54,7 @@ import com.theoriacodex.app.creator.creatorProfileActions
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.tags.LocalPostTagSearchActions
 import com.theoriacodex.app.tags.PostTagActionSection
+import com.theoriacodex.app.ui.components.HeaderLink
 import com.theoriacodex.app.ui.components.PostActionHeader
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.viewer.state.ViewerAction
@@ -273,8 +270,11 @@ private fun ViewerInfoActions(
         creator.profile?.let { onAction(ViewerAction.OpenCreator(it)) } ?: onOpenCreatorFallback?.invoke(post)
     }
     Column {
-        PostActionHeader(post, showPostId = true)
-        creators.firstOrNull()?.let { creator -> ViewerCreatorLink(creator.label) { openCreator(creator) } }
+        PostActionHeader(
+            post,
+            showPostId = true,
+            creator = creators.firstOrNull()?.let { creator -> HeaderLink(creator.label) { openCreator(creator) } },
+        )
         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), Arrangement.SpaceEvenly) {
             ViewerInfoAction(
                 icon = if (liked) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
@@ -320,26 +320,6 @@ private fun ViewerInfoMoreActions(
             DropdownMenuItem(text = { Text("Go to Search") }, onClick = onGoToSearch)
             onOpenInBrowser?.let { open -> DropdownMenuItem(text = { Text("Open in browser") }, onClick = open) }
         }
-    }
-}
-
-/** The creator's name as a link: accent color, a person mark and a chevron say it opens their profile. */
-@Composable
-private fun ViewerCreatorLink(name: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(role = Role.Button, onClickLabel = "Open creator", onClick = onClick)
-            .sizeIn(minHeight = 48.dp)
-            .padding(horizontal = 4.dp)
-            .clearAndSetSemantics { contentDescription = "Open $name's profile" },
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        val accent = MaterialTheme.colorScheme.primary
-        Icon(Icons.Default.Person, null, Modifier.size(18.dp), tint = accent)
-        Text(name, style = MaterialTheme.typography.titleSmall, color = accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, Modifier.size(18.dp), tint = accent)
     }
 }
 
