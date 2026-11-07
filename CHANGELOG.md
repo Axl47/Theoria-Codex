@@ -41,6 +41,10 @@
 - The next gallery page is prepared before you turn to it, so it appears immediately.
 - Preloading pages further ahead uses less processing and memory.
 - Opening a post loads what you tapped first, before preloading the pages and posts around it.
+- Opening a video from a feed card starts playing sooner, from what the card had already downloaded instead of fetching it again.
+- Swiping to the next video starts from what Theoria preloaded even while that preload is still running.
+- The first scrub preview appears sooner when you start dragging a video's timeline.
+- Videos next to the one you're watching preload only their opening seconds on every network, so watching one video no longer downloads up to about 48 MB of videos you may never open.
 
 ### Fixed
 
