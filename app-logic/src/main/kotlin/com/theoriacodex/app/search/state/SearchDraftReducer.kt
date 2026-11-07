@@ -571,7 +571,7 @@ object SearchDraftReducer {
         val trimmed = input.trim()
         val source = (state.query.draft.mode as? QueryMode.Source)?.source ?: return trimmed
         if (state.query.supportedScopes.isNotEmpty()) return trimmed
-        if (source !in SUGGESTION_CANONICALIZATION_SOURCES) return trimmed
+        if (source !in SUGGESTION_CANONICALIZATION_SOURCES && !source.isCustom) return trimmed
         val parsed = parseScopedInput(trimmed)
         if (parsed.explicitScope != null) return trimmed
         // A typed translation ("Hatsune Miku") commits the native tag it labels (初音ミク).

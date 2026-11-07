@@ -44,7 +44,8 @@ private fun defaultDurationStartIntervalMs(source: SourceKey): Long {
     return when (source) {
         SourceKey.GELBOORU -> 500L
         SourceKey.PIXIV -> 500L
-        else -> 0L
+        // A user-added site's rate limits are unknown; pace it like Gelbooru.
+        else -> if (source.isCustom) 500L else 0L
     }
 }
 

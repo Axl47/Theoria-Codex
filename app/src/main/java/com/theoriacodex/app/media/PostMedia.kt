@@ -133,7 +133,7 @@ fun previewMediaDeliveryPlan(post: Post): MediaDeliveryPlan {
     return mediaDeliveryPlan(
         post = post,
         refs = refs,
-        qualityUpgradeRefs = if (post.id.source in QUALITY_UPGRADE_IMAGE_SOURCES) {
+        qualityUpgradeRefs = if (post.id.source.upgradesImageQuality()) {
             refs.filterTo(linkedSetOf()) { ref -> ref != post.preview || ref == preferred }
         } else {
             emptySet()
@@ -160,7 +160,7 @@ fun viewerMediaDeliveryPlan(post: Post, media: ImageRef): MediaDeliveryPlan {
     return mediaDeliveryPlan(
         post = post,
         refs = listOf(media) + samePageFallbacks,
-        qualityUpgradeRefs = if (post.id.source in QUALITY_UPGRADE_IMAGE_SOURCES) setOf(media) else emptySet(),
+        qualityUpgradeRefs = if (post.id.source.upgradesImageQuality()) setOf(media) else emptySet(),
         preferredUrlFirst = null,
     )
 }
@@ -293,6 +293,9 @@ private fun ImageRef.bestLocation(): String? =
 
 private val IMAGE_EXTENSIONS = setOf("gif", "png", "webp", "jpg", "jpeg", "bmp", "heic", "heif", "avif")
 private val STATIC_IMAGE_EXTENSIONS = setOf("png", "jpg", "jpeg", "bmp")
+/** Custom sources are booru families, which serve a sample before the original like the built-in boorus. */
+private fun SourceKey.upgradesImageQuality(): Boolean = this in QUALITY_UPGRADE_IMAGE_SOURCES || isCustom
+
 private val QUALITY_UPGRADE_IMAGE_SOURCES = setOf(
     SourceKey.PIXIV,
     SourceKey.GELBOORU,
