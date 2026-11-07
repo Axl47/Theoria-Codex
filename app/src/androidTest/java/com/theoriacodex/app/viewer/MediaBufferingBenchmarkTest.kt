@@ -238,6 +238,7 @@ class MediaBufferingBenchmarkTest {
         val scrubTimeline = server.timeline("/long_1.mp4", scrubStartedAt)
         val seekTimeline = server.timeline("/long_1.mp4", probe.attachedAt)
         val (seekEvents, stalls) = onMain { JSONArray(probe.seekEvents.map(::JSONArray)) to (probe.rebufferCount to probe.rebufferMs) }
+        val stallLog = onMain { JSONArray(probe.stalls) }
         val end = serverStats()
         onMain {
             previews.close()
@@ -273,6 +274,7 @@ class MediaBufferingBenchmarkTest {
                 .put(
                     "diagnostics",
                     JSONObject().put("scrubTimeline", scrubTimeline).put("dragEvents", dragEvents).put("releasedAt", releasedAt)
+                        .put("scrubStartedAt", scrubStartedAt - probe.attachedAt).put("stalls", stallLog)
                         .put("releaseTargetMs", (duration * SCRUB_FRACTIONS.last()).toLong()).put("releaseLandedMs", releaseLanding)
                         .put("coldReleaseTargetMs", (duration * COLD_RELEASE_FRACTION).toLong()).put("coldReleaseLandedMs", coldLanding)
                         .put("seekEvents", seekEvents).put("seekTimeline", seekTimeline).put("frames", JSONArray(frameLog.frames)),

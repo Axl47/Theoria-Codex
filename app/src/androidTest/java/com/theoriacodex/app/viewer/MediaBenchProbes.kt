@@ -68,6 +68,9 @@ internal class PlayerProbe(val player: ExoPlayer, private val surface: Surface) 
     var rebufferMs = 0L
         private set
 
+    /** Each stall as "<start>+<duration>", in ms after [attachedAt]. Read on main. */
+    val stalls = mutableListOf<String>()
+
     fun attach() {
         player.addListener(this)
         player.addAnalyticsListener(seekLog)
@@ -128,7 +131,10 @@ internal class PlayerProbe(val player: ExoPlayer, private val surface: Surface) 
         val now = SystemClock.elapsedRealtime()
         when (playbackState) {
             Player.STATE_READY -> {
-                if (bufferingSince >= 0L) rebufferMs += now - bufferingSince
+                if (bufferingSince >= 0L) {
+                    rebufferMs += now - bufferingSince
+                    stalls += "${bufferingSince - attachedAt}+${now - bufferingSince}"
+                }
                 bufferingSince = -1L
                 readyOnce = true
                 seekReady?.let { ready ->
