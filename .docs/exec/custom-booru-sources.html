@@ -695,7 +695,14 @@ sealed interface CustomSiteMutation {
       <h3>Step 3 log</h3>
       <ul><li>Not started.</li></ul>
       <h3>Step 4 log</h3>
-      <ul><li>Not started.</li></ul>
+      <ul>
+        <li>[x] 2026-11-07: Settings → Sites UI on <code>feat/custom-sites-settings</code>, built against a fake controller. New <code>app/.../settings/sites/</code>: <code>CustomSitesViewModel</code> (form stages, never persists), <code>CustomSitesScreen</code> (list, remove and reconnect dialogs), <code>CustomSiteForms</code> (add and edit pages, masked key fields, "Advanced" User-Agent/Referer disclosure, the single Unified/For You switch, off by default), <code>CustomSitesCopy</code> (every probe, re-test and mutation outcome as plain text) and <code>CustomSitesEntry</code>. Settings gained <code>SettingsPage.SITES</code>, a "Sites" row under Sources, and a <code>SettingsSitesEntry</code> slot passed from <code>TheoriaHomeDestinations</code> through <code>SettingsDestinationStateBoundary</code> (one line each, the same pattern as <code>storageTools</code>).</li>
+        <li>Behavior choices within C9: editing the address or a header after a probe returns to address entry, so a draft's headers are always the probe's; editing keys does the same only when the probe needed them. Declining a reconnect returns to the confirm form and adds nothing. Re-test compares the answered family with the stored one and reports a mismatch without changing anything. Replacing keys in Edit triggers a re-test, because <code>update</code> does not verify keys. Removal is offered from the Edit page.</li>
+        <li>Seam for step 3: <code>CustomSitesEntry.kt</code> declares an extension <code>TheoriaAppContainer.customSites</code> returning a private <code>PendingCustomSitesController</code> (no sites, real address validation, every valid address reported unreachable). Delete both when the container exposes <code>CustomSitesControllerImpl</code>; a member named <code>customSites</code> on <code>TheoriaAppContainer</code> shadows the extension, so <code>CustomSitesViewModel.factory</code> needs no edit if it lands there.</li>
+        <li>Contract notes (no frozen signature changed): <code>AlreadyBuiltIn</code> carries only an id, and resolving a display name needs B1's <code>SourceKey.parse</code>, so the copy is generic ("already built into Theoria"). <code>CustomSiteAvailability</code> has no "saved keys rejected" state; a site with bad keys reads Ready until re-tested.</li>
+        <li>Validation (host only, no device): <code>CustomSitesViewModelTest</code> (15) and <code>CustomSitesScreenTest</code> (3 Robolectric Compose tests: add flow, masked key entry, removal copy) inside the green <code>com.theoriacodex.app.settings.*</code> suite; <code>:app:detektDebug</code> clean; <code>:app:lintDebug --offline --no-daemon</code> passed with no new issues. CHANGELOG Unreleased bullets describe the finished feature and ship only after steps 2 and 3.</li>
+        <li>Device checks left for the orchestrator after step 3 merges: see the step 4 handoff reply.</li>
+      </ul>
 
       <h3>Surprises And Discoveries</h3>
       <ul>
