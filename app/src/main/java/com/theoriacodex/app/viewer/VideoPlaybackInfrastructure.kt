@@ -48,6 +48,14 @@ internal const val FEED_PREVIEW_MAX_BUFFER_MS = 12_000
 internal const val FEED_PREVIEW_PLAYBACK_BUFFER_MS = 750
 internal const val FEED_PREVIEW_REBUFFER_MS = 1_500
 
+/**
+ * A Viewer stream starts, or resumes after a seek, once this much is buffered; Media3 waits for 1 s. Both begin with an
+ * empty buffer, so on a link faster than the video this takes half a second of media off the wait (Media3 treats a
+ * seek like a start). After a stall the player still waits for Media3's 2 s, so a link slower than the video does
+ * not stall more often once it has stalled.
+ */
+internal const val VIEWER_START_BUFFER_MS = 500
+
 internal enum class VideoPlaybackProfile {
     FEED_PREVIEW,
     VIEWER,
@@ -97,7 +105,14 @@ internal object VideoLoadControlFactory {
                 .setBackBuffer(0, false)
                 .build()
 
-            VideoPlaybackProfile.VIEWER -> DefaultLoadControl.Builder().build()
+            VideoPlaybackProfile.VIEWER -> DefaultLoadControl.Builder()
+                .setBufferDurationsMsForStreaming(
+                    /* minBufferMs = */ DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
+                    /* maxBufferMs = */ DefaultLoadControl.DEFAULT_MAX_BUFFER_MS,
+                    /* bufferForPlaybackMs = */ VIEWER_START_BUFFER_MS,
+                    /* bufferForPlaybackAfterRebufferMs = */ DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
+                )
+                .build()
         }
     }
 }
