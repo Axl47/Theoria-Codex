@@ -5,7 +5,7 @@ import android.graphics.Bitmap
 import androidx.core.graphics.drawable.toBitmap
 import coil.imageLoader
 import coil.request.SuccessResult
-import com.theoriacodex.app.media.normalizeMediaUrl
+import com.theoriacodex.app.media.copyCachedMediaBytes
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.data.repository.CodexStatistics
@@ -95,7 +95,6 @@ private sealed interface ThumbnailEvent {
 }
 
 /** Coil uses its existing memory/disk cache before networking and supplies the usual source headers. */
-@OptIn(coil.annotation.ExperimentalCoilApi::class)
 internal suspend fun fetchStatisticsThumbnail(context: Context, post: Post, destination: File): Boolean {
     val local = post.preview.localPath?.let(::File)?.takeIf(File::isFile)
     if (local != null) {
@@ -103,11 +102,7 @@ internal suspend fun fetchStatisticsThumbnail(context: Context, post: Post, dest
         return true
     }
     val url = post.preview.url ?: return false
-    val cacheKey = normalizeMediaUrl(post.id.source, url) ?: url
-    context.imageLoader.diskCache?.openSnapshot(cacheKey)?.use { cached ->
-        cached.data.toFile().copyTo(destination, overwrite = true)
-        return true
-    }
+    if (copyCachedMediaBytes(context, post.id.source, url, destination)) return true
     val request = MediaRequestFactory.imageRequest(
         context, url, post.id.source, crossfade = false, staticAnimatedWebPFrame = true,
         targetWidthPx = 320, targetHeightPx = 320,
