@@ -9,6 +9,7 @@ import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.VideoVariant
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.tags.withRecoveredPixivTranslations
 
 const val CURRENT_POST_STORAGE_SCHEMA_VERSION: Int = 1
 
@@ -89,6 +90,8 @@ data class PostTaxonomyTermStorageRecord(
     val sourceNamespace: String? = null,
     @field:SerializedName("count")
     val count: Int? = null,
+    @field:SerializedName("translation")
+    val translation: String? = null,
 )
 
 data class CreatorProfileStorageRecord(
@@ -222,7 +225,7 @@ object PostStorageCodec {
             creatorProfiles = record.creatorProfiles
                 ?.mapNotNull { stored -> stored?.toDomainOrNull() }
                 ?: listOfNotNull(creator),
-        )
+        ).withRecoveredPixivTranslations()
     }
 
     private fun encodeImageRef(ref: ImageRef): ImageRefStorageRecord {
@@ -252,6 +255,7 @@ object PostStorageCodec {
             facet = term.facet.name,
             sourceNamespace = term.sourceNamespace,
             count = term.count,
+            translation = term.translation,
         )
     }
 }
@@ -286,6 +290,7 @@ private fun PostTaxonomyTermStorageRecord.toDomainOrNull(): PostTaxonomyTerm? {
         facet = resolvedFacet,
         sourceNamespace = sourceNamespace?.trim()?.takeIf(String::isNotBlank),
         count = count?.takeIf { it >= 0 },
+        translation = translation?.trim()?.takeIf(String::isNotBlank),
     )
 }
 

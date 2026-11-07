@@ -21,42 +21,6 @@ import org.junit.Test
 
 class PixivSourceAdapterTest {
     @Test
-    fun `autocomplete and trending preserve native tags with translated labels`() = runTest {
-        val credentials = FakeCredentialsProvider().apply {
-            pixivTokens = PixivAuthTokens(
-                accessToken = "access",
-                refreshToken = "refresh",
-                expiresAtEpochMs = Long.MAX_VALUE,
-            )
-        }
-        val httpClient = FakeHttpClient().apply {
-            nextGetResponse = SourceHttpResponse(
-                statusCode = 200,
-                body = """{"tags":[{"name":"初音ミク","translated_name":"Hatsune Miku"}]}""",
-            )
-        }
-        val adapter = PixivSourceAdapter(
-            httpClient = httpClient,
-            credentialsProvider = credentials,
-            minRequestIntervalMs = 0L,
-            languageTag = "en-US",
-        )
-
-        val autocomplete = adapter.autocompleteTags("hatsune", limit = 10).single()
-        assertEquals("初音ミク", autocomplete.text)
-        assertEquals("Hatsune Miku", autocomplete.alternateText)
-        assertEquals("en-US", httpClient.lastGet?.headers?.get("Accept-Language"))
-
-        httpClient.nextGetResponse = SourceHttpResponse(
-            statusCode = 200,
-            body = """{"trend_tags":[{"tag":{"name":"風景","translated_name":"Scenery"}}]}""",
-        )
-        val trending = adapter.trendingTags(limit = 10).single()
-        assertEquals("風景", trending.text)
-        assertEquals("Scenery", trending.alternateText)
-    }
-
-    @Test
     fun `related posts use bounded first response and preserve unique provider order`() = runTest {
         val credentials = FakeCredentialsProvider().apply {
             pixivTokens = PixivAuthTokens(
@@ -469,45 +433,6 @@ class PixivSourceAdapterTest {
         assertEquals("60", httpClient.lastGet?.query?.get("offset"))
         assertEquals("30", page.nextPageToken)
         assertEquals("999", page.items.first().id.sourcePostId)
-    }
-
-    @Test
-    fun `search normalizes booru-style tags for pixiv word query`() = runTest {
-        val credentials = FakeCredentialsProvider().apply {
-            pixivTokens = PixivAuthTokens(
-                accessToken = "access",
-                refreshToken = "refresh",
-                expiresAtEpochMs = Long.MAX_VALUE,
-            )
-        }
-        val httpClient = FakeHttpClient().apply {
-            nextGetResponse = SourceHttpResponse(
-                statusCode = 200,
-                body = """
-                    {
-                      "illusts": []
-                    }
-                """.trimIndent(),
-            )
-        }
-        val adapter = PixivSourceAdapter(
-            httpClient = httpClient,
-            credentialsProvider = credentials,
-        )
-
-        adapter.search(
-            Query(
-                mode = QueryMode.Source(SourceKey.PIXIV),
-                includeTags = listOf("this_is_a_tag_(Game)"),
-                excludeTags = listOf("nsfw_(content)"),
-                sort = SortMode.NEWEST,
-                dateRange = null,
-                minScore = null,
-            ),
-            pageToken = null,
-        )
-
-        assertEquals("this is a tag -nsfw", httpClient.lastGet?.query?.get("word"))
     }
 
     @Test

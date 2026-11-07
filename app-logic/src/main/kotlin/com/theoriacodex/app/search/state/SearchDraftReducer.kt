@@ -574,10 +574,14 @@ object SearchDraftReducer {
         if (source !in SUGGESTION_CANONICALIZATION_SOURCES) return trimmed
         val parsed = parseScopedInput(trimmed)
         if (parsed.explicitScope != null) return trimmed
+        // A typed translation ("Hatsune Miku") commits the native tag it labels (初音ミク).
         val matched = state.suggestions.autocomplete.firstOrNull { suggestion ->
             sourceTagsMatch(source, suggestion.text, parsed.value)
-        }?.text?.trim().orEmpty().ifBlank { parsed.value }
-        return if (parsed.isExclude) "-$matched" else matched
+        }?.text ?: state.suggestions.autocomplete.firstOrNull { suggestion ->
+            suggestion.alternateText?.let { sourceTagsMatch(source, it, parsed.value) } == true
+        }?.text
+        val committed = matched?.trim().orEmpty().ifBlank { parsed.value }
+        return if (parsed.isExclude) "-$committed" else committed
     }
 
     private fun resolveInputTerm(state: SearchUiState, input: ParsedScopedInput): SearchTerm? {

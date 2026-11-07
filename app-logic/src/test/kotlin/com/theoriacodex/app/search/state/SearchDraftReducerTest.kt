@@ -278,6 +278,24 @@ class SearchDraftReducerTest {
     }
 
     @Test
+    fun `typed pixiv translations commit the native tag they label`() {
+        val pixiv = state(query(QueryMode.Source(SourceKey.PIXIV))).copy(
+            suggestions = SearchSuggestionsUiState(
+                autocomplete = listOf(TagSuggestion("初音ミク", "tag", null, alternateText = "Hatsune Miku")),
+            ),
+        )
+
+        assertEquals(
+            listOf("初音ミク"),
+            SearchDraftReducer.commitInput(pixiv, "hatsune miku").state.query.draft.includeTags,
+        )
+        assertEquals(
+            listOf("初音ミク"),
+            SearchDraftReducer.commitInput(pixiv, "-Hatsune Miku").state.query.draft.excludeTags,
+        )
+    }
+
+    @Test
     fun `nhentai language and full color filters replace only typed filter terms`() {
         val artistChinese = SearchTerm("chinese", SearchFacet.ARTIST, "artist")
         val artistColor = SearchTerm("full color", SearchFacet.ARTIST, "artist")

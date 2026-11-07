@@ -298,6 +298,21 @@ class TagSuggestionStoreTest {
     }
 
     @Test
+    fun `seen pixiv tags keep their translation for labels and English lookup`() = runTest {
+        val store = FileBackedTagSuggestionStore(storeFile = tempDir("tag-store-seen-translation").resolve("tags.json"))
+        store.awaitLoaded()
+
+        store.putFaceted(
+            SourceKey.PIXIV,
+            listOf(FacetedTagSuggestion("初音ミク", SearchFacet.TAG, alternateText = "Hatsune Miku")),
+            TagSuggestionOrigin.SEEN,
+        )
+
+        assertEquals("Hatsune Miku", store.find(SourceKey.PIXIV, "hatsune", limit = 5).single().alternateText)
+        store.close()
+    }
+
+    @Test
     fun `legacy cache rows migrate to portable general tags`() = runTest {
         val tempDir = tempDir("tag-store-legacy-row-test")
         val storeFile = tempDir.resolve("tag_suggestions.json")

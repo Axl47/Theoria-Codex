@@ -620,6 +620,7 @@ private data class CachedSuggestion(
             facet = facet,
             sourceNamespace = sourceNamespace,
             count = count,
+            alternateText = alternateText,
         )
     }
 
@@ -663,7 +664,7 @@ private data class CachedSuggestion(
                 sourceNamespace = suggestion.sourceNamespace,
                 type = null,
                 count = suggestion.count,
-                alternateText = null,
+                alternateText = suggestion.alternateText,
                 origins = setOf(origin),
             )
         }

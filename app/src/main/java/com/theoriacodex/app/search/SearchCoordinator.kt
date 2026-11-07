@@ -39,6 +39,7 @@ import com.theoriacodex.domain.orchestration.SourceRunStatus
 import com.theoriacodex.domain.orchestration.SourceWeightNormalization
 import com.theoriacodex.domain.query.QueryHash
 import com.theoriacodex.domain.query.SearchTermLimit
+import com.theoriacodex.domain.tags.pixivSearchToken
 import com.theoriacodex.domain.tags.normalizeFavoriteTagForStorage
 import com.theoriacodex.domain.tags.sourceAutocompletePrefix
 import com.theoriacodex.domain.tags.normalizeMatchToken
@@ -647,12 +648,7 @@ class SearchCoordinator(
     private fun resolvePixivCompatibilityTags(tags: List<String>): List<String> {
         val seen = mutableSetOf<String>()
         return tags.mapNotNull { raw ->
-            var value = raw.trim().removePrefix("-").replace('_', ' ')
-                .replace(WHITESPACE_REGEX, " ").trim()
-            while (value.isNotBlank() && PIXIV_TRAILING_PARENTHESIS_REGEX.containsMatchIn(value)) {
-                value = value.replace(PIXIV_TRAILING_PARENTHESIS_REGEX, "").trim()
-            }
-            value.takeIf { it.isNotBlank() && seen.add(normalizeMatchToken(it)) }
+            pixivSearchToken(raw).takeIf { it.isNotBlank() && seen.add(normalizeMatchToken(it)) }
         }
     }
 
@@ -666,6 +662,7 @@ class SearchCoordinator(
                         text = normalizeFavoriteTagForStorage(source, term.value),
                         facet = SearchFacet.TAG,
                         sourceNamespace = term.sourceNamespace,
+                        alternateText = term.translation,
                     )
                 }
                 .filter { it.text.isNotBlank() }

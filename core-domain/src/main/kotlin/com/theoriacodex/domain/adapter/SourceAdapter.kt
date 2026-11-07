@@ -97,6 +97,8 @@ data class FacetedTagSuggestion(
     val facet: SearchFacet,
     val sourceNamespace: String? = null,
     val count: Int? = null,
+    /** Optional provider-supplied label, as on [TagSuggestion.alternateText]; [text] stays the search value. */
+    val alternateText: String? = null,
 ) {
     fun toSearchTerm(): SearchTerm {
         return SearchTerm(

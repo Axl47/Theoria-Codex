@@ -49,6 +49,8 @@ data class PostTaxonomyTerm(
     val facet: SearchFacet = SearchFacet.TAG,
     val sourceNamespace: String? = null,
     val count: Int? = null,
+    /** Provider-supplied translation of [value] (Pixiv's English name). Shown and learned, never searched. */
+    val translation: String? = null,
 ) {
     fun toSearchTerm(): SearchTerm {
         return SearchTerm(

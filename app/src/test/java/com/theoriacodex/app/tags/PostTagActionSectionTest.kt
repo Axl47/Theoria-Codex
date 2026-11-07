@@ -65,6 +65,19 @@ class PostTagActionSectionTest {
         assertEquals(listOf(SearchTerm("legacy tag")), postActionTerms(post))
     }
 
+    @Test
+    fun `translated tags render as one chip that searches the native tag`() {
+        val post = samplePost(
+            canonicalTags = listOf("初音ミク", "Hatsune Miku"),
+            taxonomy = listOf(PostTaxonomyTerm("初音ミク", translation = "Hatsune Miku")),
+        )
+
+        assertEquals(listOf(SearchTerm("初音ミク")), postActionTerms(post))
+        assertEquals(mapOf("初音ミク" to "Hatsune Miku"), post.tagTranslations())
+        assertEquals("Hatsune Miku · 初音ミク", postTagChipLabel("初音ミク", "Hatsune Miku"))
+        assertEquals("猫", postTagChipLabel("猫", null))
+    }
+
     private fun samplePost(
         canonicalTags: List<String> = emptyList(),
         taxonomy: List<PostTaxonomyTerm>,

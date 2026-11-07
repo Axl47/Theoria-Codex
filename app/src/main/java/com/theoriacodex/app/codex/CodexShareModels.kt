@@ -14,6 +14,7 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.tags.withRecoveredPixivTranslations
 
 internal data class CodexShareFile(
     @field:SerializedName("version")
@@ -88,6 +89,8 @@ internal data class CodexShareTaxonomyTerm(
     val facet: String? = null,
     @field:SerializedName("sourceNamespace")
     val sourceNamespace: String? = null,
+    @field:SerializedName("translation")
+    val translation: String? = null,
 )
 
 internal data class CodexShareCreatorProfile(
@@ -193,7 +196,7 @@ internal fun codexSharePostSnapshot(post: CodexSharePost): Post? {
         creatorProfiles = creatorProfiles,
         durationMs = snapshot.durationMs?.takeIf { it >= 0L },
         mediaCount = snapshot.mediaCount?.takeIf { it > 0 },
-    ))
+    ).withRecoveredPixivTranslations())
 }
 
 internal fun selectCodexShareEntries(
@@ -281,6 +284,7 @@ private fun PostTaxonomyTerm.toCodexShareTaxonomyTerm(): CodexShareTaxonomyTerm 
         value = value,
         facet = facet.name,
         sourceNamespace = sourceNamespace,
+        translation = translation,
     )
 }
 
@@ -294,6 +298,7 @@ private fun CodexShareTaxonomyTerm.toPostTaxonomyTerm(): PostTaxonomyTerm? {
         value = normalizedValue,
         facet = normalizedFacet,
         sourceNamespace = sourceNamespace.normalizedOptionalString(),
+        translation = translation.normalizedOptionalString(),
     )
 }
 
@@ -389,6 +394,7 @@ private fun JsonObject.toCodexShareTaxonomyTerm(): CodexShareTaxonomyTerm {
         value = stringOrNull("value"),
         facet = stringOrNull("facet"),
         sourceNamespace = stringOrNull("sourceNamespace"),
+        translation = stringOrNull("translation"),
     )
 }
 

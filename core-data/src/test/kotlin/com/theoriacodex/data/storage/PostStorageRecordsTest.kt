@@ -67,6 +67,19 @@ class PostStorageRecordsTest {
     }
 
     @Test
+    fun `pixiv payloads written before paired taxonomy decode with translations`() {
+        val legacy = samplePost().copy(
+            canonicalTags = listOf("風景", "scenery"),
+            rawTags = listOf("風景"),
+            taxonomy = listOf(PostTaxonomyTerm("風景"), PostTaxonomyTerm("scenery")),
+        )
+
+        val decoded = PostStorageCodec.decode(PostStorageCodec.encode(legacy))
+
+        assertEquals(listOf(PostTaxonomyTerm("風景", translation = "scenery")), decoded?.taxonomy)
+    }
+
+    @Test
     fun `unknown explicit storage version fails closed`() {
         val future = PostStorageCodec.encode(samplePost()).copy(schemaVersion = 99)
 
@@ -116,7 +129,8 @@ class PostStorageRecordsTest {
                     count = 42,
                     facet = SearchFacet.ARTIST,
                     sourceNamespace = "user",
-                )
+                ),
+                PostTaxonomyTerm(value = "Landscape", translation = "landscape"),
             ),
             creatorProfiles = listOf(creator),
         )

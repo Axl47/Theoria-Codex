@@ -79,6 +79,7 @@ fun PostTagActionSection(
     val termGroups = remember(post.taxonomy, post.canonicalTags, post.rawTags) {
         postActionTermGroups(post)
     }
+    val translations = remember(post.taxonomy) { post.tagTranslations() }
     val draft = draftQuery ?: LocalSearchDraftSelection.current.collectAsStateWithLifecycle(initialValue = null).value
     val selection = remember(post.id.source, draft) {
         PostTagSelection(post.id.source, draft?.includeTerms.orEmpty(), draft?.excludeTerms.orEmpty())
@@ -113,7 +114,7 @@ fun PostTagActionSection(
                     groups = termGroups,
                     expandedGroups = expandedGroups,
                     onExpandGroup = { label -> expandedGroups = expandedGroups + label },
-                ) { term -> PostTagChip(term, countOf(term), editor, onFavoriteTagLongPress) }
+                ) { term -> PostTagChip(term, translations[term.value], countOf(term), editor, onFavoriteTagLongPress) }
             }
             item(key = "footer") { footer() }
         }
@@ -231,15 +232,17 @@ private class PostTagEditor(
 @Composable
 private fun PostTagChip(
     term: SearchTerm,
+    translation: String?,
     count: Int?,
     editor: PostTagEditor,
     onFavoriteLongPress: ((SourceKey, String) -> Unit)?,
 ) {
-    val name = searchTermChipLabel(term, excluded = false)
+    val nativeName = searchTermChipLabel(term, excluded = false)
+    val name = translation?.let { "$it ($nativeName)" } ?: nativeName
     val state = editor.selection.chipState(term)
     val favorite = onFavoriteLongPress?.takeIf { term.isGeneralPostTag() }
     TagPickerChip(
-        label = term.value,
+        label = postTagChipLabel(term.value, translation),
         count = count?.let(::compactTagCount),
         state = state,
         enabled = editor.canTap(term),
@@ -501,6 +504,13 @@ internal fun postActionSuppliedCounts(post: Post): Map<SearchTerm, Int> = buildM
         if (term != null && count != null) put(term, count)
     }
 }
+
+/** Native tag value to its provider translation; chips show both and still search the native tag. */
+internal fun Post.tagTranslations(): Map<String, String> =
+    taxonomy.mapNotNull { term -> term.translation?.let { term.value to it } }.toMap()
+
+internal fun postTagChipLabel(value: String, translation: String?): String =
+    translation?.let { "$it · $value" } ?: value
 
 internal fun postActionTerms(post: Post): List<SearchTerm> {
     val typedTerms = post.taxonomy
