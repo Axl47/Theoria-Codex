@@ -27,6 +27,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -323,24 +324,38 @@ internal class ViewerViewModel(
             .firstOrNull { candidate -> candidate.key == mediaKey }
             ?: return
         val distance = viewerPrefetchDistance(state.value.pages, state.value.currentMedia?.key, mediaKey) ?: Int.MAX_VALUE
+        // Decoding an image that is already downloaded reads the disk, so it never holds a download slot.
+        val downloaded = mediaKey in state.value.prefetch.warmed
         launchSessionJob(ViewerWorkKey.Prefetch(mediaKey)) {
             awaitFirstMediaShown()
-            prefetchSemaphore.withPermit {
-                coroutineContext.ensureActive()
-                synchronized(lock) {
-                    if (mediaKey !in desiredPrefetchKeys) throw CancellationException("Prefetch superseded")
-                }
-                onAction(ViewerAction.PrefetchStarted(session, mediaKey))
-                val result = try {
-                    prefetcher.prefetch(session, media, distance).also { coroutineContext.ensureActive() }
-                } catch (error: CancellationException) {
-                    throw error
-                } catch (_: Throwable) {
-                    ViewerPrefetchResult(ViewerPrefetchOutcome.FAILED)
-                }
-                onAction(ViewerAction.PrefetchCompleted(session, mediaKey, result))
+            if (downloaded) {
+                runPrefetch(session, mediaKey, media, distance, prefetcher)
+            } else {
+                prefetchSemaphore.withPermit { runPrefetch(session, mediaKey, media, distance, prefetcher) }
             }
         }
+    }
+
+    private suspend fun runPrefetch(
+        session: ViewerSessionIdentity,
+        mediaKey: ViewerMediaKey,
+        media: ViewerMediaState,
+        distance: Int,
+        prefetcher: ViewerMediaPrefetcher,
+    ) {
+        currentCoroutineContext().ensureActive()
+        synchronized(lock) {
+            if (mediaKey !in desiredPrefetchKeys) throw CancellationException("Prefetch superseded")
+        }
+        onAction(ViewerAction.PrefetchStarted(session, mediaKey))
+        val result = try {
+            prefetcher.prefetch(session, media, distance).also { currentCoroutineContext().ensureActive() }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Throwable) {
+            ViewerPrefetchResult(ViewerPrefetchOutcome.FAILED)
+        }
+        onAction(ViewerAction.PrefetchCompleted(session, mediaKey, result))
     }
 
     /**
