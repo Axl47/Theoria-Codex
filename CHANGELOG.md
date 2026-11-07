@@ -45,6 +45,8 @@
 - Swiping to the next video starts from what Theoria preloaded even while that preload is still running.
 - The first scrub preview appears sooner when you start dragging a video's timeline.
 - Videos next to the one you're watching preload only their opening seconds on every network, so watching one video no longer downloads up to about 48 MB of videos you may never open.
+- Seeking a video past what it has loaded, and letting go after scrubbing, resume playback sooner: the abandoned download is dropped at once instead of being read out first.
+- Scrub previews appear sooner when you drag a video's timeline, most of all on a second drag, and stop downloading as soon as you let go.
 
 ### Fixed
 
