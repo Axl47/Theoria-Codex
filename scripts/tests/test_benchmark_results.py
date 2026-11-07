@@ -37,6 +37,17 @@ class BenchmarkResultsTest(unittest.TestCase):
             with self.subTest(output=output, count=count), self.assertRaises(benchmark.EvidenceError):
                 benchmark.validate_instrumentation_output(output, count)
 
+    def test_seeded_library_identity_separates_contracts_and_must_be_a_sha256(self) -> None:
+        library = "ab" * 32
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(0, benchmark.main(["contract", "--scenario", "coldStartup", "--library-sha256", library]))
+        seeded = json.loads(output.getvalue())
+        self.assertEqual(library, seeded["library_sha256"])
+        self.assertTrue(seeded["version"].endswith("+library"))
+        benchmark.validate_contract(seeded)
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(2, benchmark.main(["contract", "--library-sha256", "not-a-hash"]))
+
     def test_single_workload_contract_retains_every_metric_and_iteration(self) -> None:
         full = benchmark.default_contract()
         for scenario, specification in full["scenarios"].items():

@@ -47,6 +47,13 @@
             </intent-filter>
         </activity>
 
+        <!-- Main process, so the snapshot restores through the real app container. -->
+        <activity
+            android:name=".benchmark.BenchmarkLibrarySeedActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:theme="@style/Theme.TheoriaCodex" />
+
         <receiver
             android:name=".benchmark.BenchmarkDurationStartReceiver"
             android:exported="true"
