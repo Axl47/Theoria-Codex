@@ -12,6 +12,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -62,7 +66,7 @@ fun SourceLogo(
         }
 
         is SourceLogoAsset.Favicon -> FaviconImage(logo, presentation, modifier.size(size)) {
-            SourceLabelText(source, presentation.label, modifier)
+            FittedLetter(presentation.mark.orEmpty(), size)
         }
 
         SourceLogoAsset.Text -> SourceLabelText(source, presentation.label, modifier)
@@ -78,6 +82,27 @@ private fun SourceLabelText(source: SourceKey, label: String, modifier: Modifier
         color = if (source.isRule34Family()) Color.White else LocalContentColor.current,
         maxLines = 1,
         overflow = TextOverflow.Clip,
+    )
+}
+
+/**
+ * A letter that fills a [size] box exactly: no font padding and a line box trimmed to the glyph, so
+ * it centers on the same line as neighboring icons instead of sitting low.
+ */
+@Composable
+private fun FittedLetter(mark: String, size: Dp) {
+    val fontSize = with(LocalDensity.current) { (size * 0.9f).toSp() }
+    Text(
+        text = mark,
+        color = Color.White,
+        fontWeight = FontWeight.Bold,
+        style = TextStyle(
+            fontSize = fontSize,
+            lineHeight = fontSize,
+            platformStyle = PlatformTextStyle(includeFontPadding = false),
+            lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
+        ),
+        maxLines = 1,
     )
 }
 
