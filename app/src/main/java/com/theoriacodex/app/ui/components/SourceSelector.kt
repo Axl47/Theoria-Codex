@@ -185,16 +185,12 @@ private fun SourceMenuChoices(
     }
     folders.keys.forEach { group ->
         val label = requireNotNull(group.folderLabel)
-        val sources = folders.getValue(group)
-        SourceFolderChip(
-            label, group.folderIcon, highlightedSources.any { it.presentation().group == group },
-            down = sources.any { it in issues },
-        ) { onOpenFolder(group) }
+        SourceFolderChip(label, group.folderIcon, highlightedSources.any { it.presentation().group == group }) { onOpenFolder(group) }
     }
 }
 
 @Composable
-private fun SourceFolderChip(label: String, icon: ImageVector?, selected: Boolean, down: Boolean, onClick: () -> Unit) {
+private fun SourceFolderChip(label: String, icon: ImageVector?, selected: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .size(width = 64.dp, height = 48.dp)
@@ -202,17 +198,16 @@ private fun SourceFolderChip(label: String, icon: ImageVector?, selected: Boolea
             .background(sourceChipColor(selected))
             .clickable(onClick = onClick)
             .semantics {
-                contentDescription = if (down) "$label, a source is down" else label
+                contentDescription = label
                 this.selected = selected
             },
         contentAlignment = Alignment.Center,
     ) {
         if (icon != null) Icon(icon, contentDescription = null, tint = Color.White) else SourceLetterIcon(label)
-        if (down) DownDot(Modifier.align(Alignment.TopEnd))
     }
 }
 
-/** The small red mark on a source (or a folder holding one) that is currently down. */
+/** The small red mark on a source that is currently down; folders don't carry it. */
 @Composable
 private fun DownDot(modifier: Modifier = Modifier) {
     Box(
