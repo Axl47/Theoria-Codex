@@ -155,7 +155,7 @@ private data class VideoCandidate(
 )
 
 private val RULE34_KVS_OBJECT_REGEX =
-    Regex("""=\s*\{(.*?video_url.*?)}\s*;\s*(?:window\[['"]player_obj['"]]|kt_player\()""", setOf(RegexOption.DOT_MATCHES_ALL))
+    Regex("""=\s*\{(.*?video_url.*?)\}\s*;\s*(?:window\[['"]player_obj['"]\]|kt_player\()""", setOf(RegexOption.DOT_MATCHES_ALL))
 private val RULE34_KVS_PAIR_REGEX = Regex("""([A-Za-z0-9_]+)\s*:\s*'((?:\\.|[^'])*)'""")
 private val RULE34_ALT_VIDEO_KEY_REGEX = Regex("""video_alt_url\d*""")
 private val RULE34_QUALITY_REGEX = Regex("""(\d{3,4})p?""")
