@@ -214,6 +214,16 @@ internal class VideoPlaybackInfrastructure(
         sharedFactories.cache.keys.toList().forEach(sharedFactories.cache::removeResource)
     }
 
+    /** Bytes of one stream held in the shared cache, from its start. */
+    internal suspend fun cachedBytes(location: String, headers: Map<String, String>): Long = withContext(Dispatchers.IO) {
+        sharedFactories.cache.getCachedBytes(videoPlaybackIdentity(location, headers).cacheKey, 0L, Long.MAX_VALUE)
+    }
+
+    /** Drops one stream's cached bytes, leaving every other entry in place. */
+    internal suspend fun removeCached(location: String, headers: Map<String, String>) = withContext(Dispatchers.IO) {
+        sharedFactories.cache.removeResource(videoPlaybackIdentity(location, headers).cacheKey)
+    }
+
     internal suspend fun disposableCacheBytes(): Long = withContext(Dispatchers.IO) {
         sharedFactories.cache.cacheSpace
     }
