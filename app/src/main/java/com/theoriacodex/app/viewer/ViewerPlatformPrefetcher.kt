@@ -4,6 +4,7 @@ import android.content.Context
 import coil.imageLoader
 import coil.request.CachePolicy
 import coil.request.SuccessResult
+import coil.size.Precision
 import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.app.media.isMediaNetworkMetered
 import com.theoriacodex.app.media.viewerPlaybackLocation
@@ -55,8 +56,17 @@ internal suspend fun prefetchViewerMedia(
         sourceKey = media.key.postId.source,
         crossfade = false,
     ).let { request ->
-        // A far neighbour may reuse an existing memory entry but never adds one.
-        if (keepDecodedInMemory) request else request.newBuilder().memoryCachePolicy(CachePolicy.READ_ONLY).build()
+        when {
+            keepDecodedInMemory -> request
+            // A far neighbour may reuse an existing memory entry but never adds one. Only its download matters,
+            // so a static image decodes subsampled instead of as a full-size bitmap that is thrown away.
+            media.kind == ViewerMediaKind.IMAGE -> request.newBuilder()
+                .memoryCachePolicy(CachePolicy.READ_ONLY)
+                .size(DISK_WARM_DECODE_PX)
+                .precision(Precision.INEXACT)
+                .build()
+            else -> request.newBuilder().memoryCachePolicy(CachePolicy.READ_ONLY).build()
+        }
     }
     return if (context.imageLoader.execute(request) is SuccessResult) {
         ViewerPrefetchResult(
@@ -67,6 +77,9 @@ internal suspend fun prefetchViewerMedia(
         ViewerPrefetchResult(ViewerPrefetchOutcome.FAILED)
     }
 }
+
+/** A disk-only image warm decodes to about this edge; the decode is discarded. */
+private const val DISK_WARM_DECODE_PX = 64
 
 private suspend fun prefetchViewerVideoMedia(
     context: Context,
