@@ -323,4 +323,14 @@ class CustomSitesViewModelTest {
         assertFalse(userFieldHint(ProtocolFamily.GELBOORU_02, " 42 ")!!.error)
         assertTrue(userFieldHint(ProtocolFamily.GELBOORU_02, "alice")!!.error)
     }
+
+    @Test fun `a setup request opens the add form with its address and checks it`() = runTest {
+        controller.onProbe = { supported() }
+        val owner = owner()
+        controller.requestSetup("safebooru.org")
+        runCurrent()
+        assertEquals("safebooru.org", owner.add.address)
+        assertEquals(AddStage.Confirm(supported()), owner.add.stage)
+        assertNull(controller.setupRequest.value)
+    }
 }

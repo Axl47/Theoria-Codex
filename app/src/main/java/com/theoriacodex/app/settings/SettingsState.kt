@@ -95,6 +95,9 @@ sealed interface SettingsAction {
     data object DismissCredentialRecovery : SettingsAction
     data object ResetCredentialStore : SettingsAction
     data object OpenSourceAccounts : SettingsAction
+
+    /** Opens Settings → Sites from elsewhere in the app. */
+    data object OpenCustomSites : SettingsAction
     data object SettingsEntered : SettingsAction
 }
 

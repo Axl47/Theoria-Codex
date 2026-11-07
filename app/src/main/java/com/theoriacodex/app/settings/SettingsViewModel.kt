@@ -371,6 +371,10 @@ internal class SettingsViewModel(
                 updateState { copy(page = SettingsPage.ACCOUNTS) }
                 effectChannel.trySend(SettingsEffect.NavigateToSettings)
             }
+            SettingsAction.OpenCustomSites -> {
+                updateState { copy(page = SettingsPage.SITES) }
+                effectChannel.trySend(SettingsEffect.NavigateToSettings)
+            }
             SettingsAction.SettingsEntered -> {
                 updateAccounts { copy(gelbooruApiKeyInput = "", rule34XxxApiKeyInput = "") }
                 refreshAccounts()

@@ -23,6 +23,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -53,6 +54,16 @@ internal class CustomSitesViewModel(
                         form = if (editedSiteGone) null else current.form,
                     )
                 }
+            }
+        }
+    }
+
+    init {
+        scope.launch {
+            controller.setupRequest.filterNotNull().collect { address ->
+                controller.clearSetupRequest()
+                openForm(SiteForm.Add(address = address))
+                probe()
             }
         }
     }

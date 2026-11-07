@@ -28,6 +28,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Settings → Sites over the profile store, the encrypted key store, the prober and the runtime
@@ -48,6 +50,17 @@ internal class CustomSitesControllerImpl(
         combine(runtime, settings.observeSettings().map { it.runtime.enabledSources }.distinctUntilChanged()) { snapshot, enabled ->
             snapshot.sites.map { site -> site.toSummary(included = site.source in enabled) }
         }.stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    private val pendingSetup = MutableStateFlow<String?>(null)
+    override val setupRequest: StateFlow<String?> = pendingSetup.asStateFlow()
+
+    override fun requestSetup(address: String) {
+        pendingSetup.value = address
+    }
+
+    override fun clearSetupRequest() {
+        pendingSetup.value = null
+    }
 
     override suspend fun probe(input: String, credentials: SiteCredentials?, headers: SiteHeaders): SiteProbeResult =
         prober.probe(input, credentials, headers)

@@ -34,6 +34,16 @@ interface CustomSitesController {
 
     /** Removes the profile, its credentials and its Unified/For You opt-in; library data stays. */
     suspend fun remove(sourceId: String): CustomSiteMutation
+
+    /**
+     * An address another flow (such as a Codex import) asked to set up. Settings → Sites opens its
+     * add form with it and calls [clearSetupRequest].
+     */
+    val setupRequest: StateFlow<String?>
+
+    fun requestSetup(address: String)
+
+    fun clearSetupRequest()
 }
 
 data class CustomSiteSummary(

@@ -19,6 +19,15 @@ internal class FakeCustomSitesController(initial: List<CustomSiteSummary> = empt
     data class ProbeCall(val input: String, val credentials: SiteCredentials?, val headers: SiteHeaders)
 
     override val sites: MutableStateFlow<List<CustomSiteSummary>> = MutableStateFlow(initial)
+    override val setupRequest = MutableStateFlow<String?>(null)
+
+    override fun requestSetup(address: String) {
+        setupRequest.value = address
+    }
+
+    override fun clearSetupRequest() {
+        setupRequest.value = null
+    }
     var onProbe: suspend (ProbeCall) -> SiteProbeResult = { error("No probe result scripted") }
     var onAdd: suspend (CustomSiteDraft) -> CustomSiteMutation = { CustomSiteMutation.Success }
     var onRetest: suspend (String) -> SiteProbeResult = { error("No re-test result scripted") }
