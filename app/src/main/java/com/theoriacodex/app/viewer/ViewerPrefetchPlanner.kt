@@ -42,6 +42,13 @@ internal fun planAdjacentViewerPrefetch(
     }.distinct().filterNot { key -> key == current }
 }
 
+/** What the Viewer asks its owner to prefetch: a swipe's target first, then the adjacent plan. */
+internal fun viewerPrefetchQueue(
+    pages: List<ViewerPageState>,
+    current: ViewerMediaKey?,
+    swipeTarget: ViewerMediaKey?,
+): List<ViewerMediaKey> = (listOfNotNull(swipeTarget) + planAdjacentViewerPrefetch(pages, current)).distinct()
+
 /** Media-item distance between [current] and [target] in the flattened Viewer stream; null when either is absent. */
 internal fun viewerPrefetchDistance(
     pages: List<ViewerPageState>,

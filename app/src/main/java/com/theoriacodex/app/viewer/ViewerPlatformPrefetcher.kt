@@ -15,6 +15,12 @@ import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
 import com.theoriacodex.domain.model.VideoQuality
 import java.io.File
 
+/** The Viewer route's prefetcher: how far from the current media a prefetch may stay decoded is decided here. */
+internal fun viewerMediaPrefetcher(context: Context, videoQuality: () -> VideoQuality) =
+    ViewerMediaPrefetcher { _, media, distance ->
+        prefetchViewerMedia(context, media, videoQuality(), keepDecodedInMemory = distance <= VIEWER_MEMORY_PREFETCH_DISTANCE)
+    }
+
 /**
  * Android transport/cache seam injected into the route owner; no platform handle enters state.
  * [keepDecodedInMemory] keeps a prefetched image in Coil's memory cache; otherwise only its disk copy is warmed.

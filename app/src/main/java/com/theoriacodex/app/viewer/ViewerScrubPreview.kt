@@ -162,20 +162,44 @@ private suspend fun extractPreviewFrames(
     context: Context, location: String, source: SourceKey, widthPx: Int, heightPx: Int,
     target: () -> Long, publish: (Long, Bitmap) -> Unit,
 ) {
-    val request = context.videoPlaybackInfrastructure().bind(location, source.requestHeaders())
-    FrameExtractor.Builder(context, request.mediaItem)
-        .setMediaSourceFactory(request.mediaSourceFactory)
-        .setSeekParameters(SeekParameters.CLOSEST_SYNC)
-        .setEffects(listOf(Presentation.createForWidthAndHeight(widthPx, heightPx, Presentation.LAYOUT_SCALE_TO_FIT)))
-        .build().use { extractor ->
-            snapshotFlow { target() }.conflate().collect { requested ->
-                delay(80L)
-                if (requested != target()) return@collect
-                val bitmap = withTimeout(6_000L) { extractor.getFrame(requested).awaitPreviewFrame().bitmap }
-                if (requested == target()) publish(requested, bitmap)
-            }
+    ScrubFrameSource(context, location, source, widthPx, heightPx).use { frames ->
+        snapshotFlow { target() }.conflate().collect { requested ->
+            delay(80L)
+            if (requested != target()) return@collect
+            val bitmap = frames.frameAt(requested)
+            if (requested == target()) publish(requested, bitmap)
         }
+    }
 }
+
+/**
+ * Scrub preview frames for one Viewer stream, read through the same shared video cache as playback.
+ * Frames come from the nearest sync sample. Build and close it on the main thread.
+ */
+internal class ScrubFrameSource(
+    context: Context,
+    location: String,
+    source: SourceKey,
+    widthPx: Int,
+    heightPx: Int,
+) : AutoCloseable {
+    private val extractor: FrameExtractor = context.videoPlaybackInfrastructure()
+        .bind(location, source.requestHeaders())
+        .let { request ->
+            FrameExtractor.Builder(context, request.mediaItem)
+                .setMediaSourceFactory(request.mediaSourceFactory)
+                .setSeekParameters(SeekParameters.CLOSEST_SYNC)
+                .setEffects(listOf(Presentation.createForWidthAndHeight(widthPx, heightPx, Presentation.LAYOUT_SCALE_TO_FIT)))
+                .build()
+        }
+
+    suspend fun frameAt(positionMs: Long): Bitmap =
+        withTimeout(SCRUB_FRAME_TIMEOUT_MS) { extractor.getFrame(positionMs).awaitPreviewFrame().bitmap }
+
+    override fun close() = extractor.close()
+}
+
+private const val SCRUB_FRAME_TIMEOUT_MS = 6_000L
 
 private suspend fun <T> ListenableFuture<T>.awaitPreviewFrame(): T = suspendCancellableCoroutine { continuation ->
     continuation.invokeOnCancellation { cancel(true) }
