@@ -183,23 +183,36 @@ internal class ViewerScrubPreviews(
     private val widthPx: Int,
     private val heightPx: Int,
 ) : AutoCloseable {
-    /** Publishes a frame for the newest of [targets] until cancelled. */
+    /** Publishes a frame for the newest of [targets] until cancelled (see [followScrubTargets]). */
     suspend fun follow(targets: StateFlow<Long>, publish: (Long, Bitmap) -> Unit) {
         val location = checkNotNull(player.currentMediaItem?.localConfiguration?.uri) { "No stream to preview" }.toString()
         ScrubFrameSource(context, location, source, widthPx, heightPx).use { frames ->
-            targets.collect { requested ->
-                delay(SCRUB_FRAME_DEBOUNCE_MS)
-                if (requested != targets.value) return@collect
-                val bitmap = frames.frameAt(requested)
-                if (requested == targets.value) publish(requested, bitmap)
-            }
+            followScrubTargets(targets, frames::frameAt, publish)
         }
     }
 
     override fun close() = Unit
 }
 
-private const val SCRUB_FRAME_DEBOUNCE_MS = 80L
+/** A later drag target is extracted only once the finger has rested on it this long. */
+internal const val SCRUB_FRAME_SETTLE_MS = 80L
+
+/**
+ * One drag's frame loop: one pending frame, and only the newest target may publish. The first target, where the
+ * finger landed, is extracted at once; later ones only once the finger rests on them for [SCRUB_FRAME_SETTLE_MS].
+ */
+internal suspend fun <F> followScrubTargets(targets: StateFlow<Long>, frameAt: suspend (Long) -> F, publish: (Long, F) -> Unit) {
+    var landed = false
+    targets.collect { requested ->
+        if (landed) {
+            delay(SCRUB_FRAME_SETTLE_MS)
+            if (requested != targets.value) return@collect
+        }
+        landed = true
+        val frame = frameAt(requested)
+        if (requested == targets.value) publish(requested, frame)
+    }
+}
 
 /**
  * Scrub preview frames for one Viewer stream, read through the same shared video cache as playback.
