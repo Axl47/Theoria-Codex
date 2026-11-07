@@ -59,10 +59,23 @@ internal fun SourceHttpResponse.isMoebooruPostList(): Boolean {
 }
 
 /**
- * Classifies a response no family claimed. Challenge and maintenance pages (403/503 HTML) and
- * server errors are inconclusive; anything else is a well-formed answer that matched nothing.
+ * A browser verification gate, e.g. an anti-DDoS proof-of-work checkbox served instead of every
+ * real response (see the `challenge_gate` fixture). Needs the word `challenge` plus an independent
+ * corroboration, so ordinary pages that merely mention verification stay `NoMatch`.
+ */
+internal fun SourceHttpResponse.isVerificationChallenge(): Boolean {
+    if (!looksLikeHtml()) return false
+    val scan = body.take(CHALLENGE_SCAN_CHARS).lowercase()
+    return "challenge" in scan && VERIFICATION_CHALLENGE_CORROBORATION.any { it in scan }
+}
+
+/**
+ * Classifies a response no family claimed. Browser challenges (any status, and 403/503 HTML
+ * generally) and server errors are inconclusive; anything else is a well-formed answer that
+ * matched nothing.
  */
 internal fun SourceHttpResponse.unclaimed(): FamilyProbe = when {
+    isVerificationChallenge() -> FamilyProbe.Failed(ProbeFailure.BLOCKED)
     (statusCode == HTTP_FORBIDDEN || statusCode == HTTP_UNAVAILABLE) && looksLikeHtml() ->
         FamilyProbe.Failed(ProbeFailure.BLOCKED)
     statusCode >= HTTP_SERVER_ERROR || statusCode == HTTP_TOO_MANY_REQUESTS -> FamilyProbe.Failed(ProbeFailure.HTTP_ERROR)
@@ -88,6 +101,18 @@ private fun SourceHttpResponse.looksLikeHtml(): Boolean {
 
 private fun SourceHttpResponse.header(name: String): String? =
     headers.entries.firstOrNull { (key, _) -> key.equals(name, ignoreCase = true) }?.value?.firstOrNull()
+
+private const val CHALLENGE_SCAN_CHARS = 8192
+private val VERIFICATION_CHALLENGE_CORROBORATION = listOf(
+    "not a robot",
+    "challenge-platform",
+    "x-verification-challenge",
+    "ddos",
+    "just a moment",
+    "checking your browser",
+    "enable javascript",
+    "javascript is disabled",
+)
 
 private const val HTTP_OK = 200
 private const val HTTP_UNAUTHORIZED = 401

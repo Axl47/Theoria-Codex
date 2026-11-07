@@ -97,6 +97,15 @@ class SiteProberTest {
     }
 
     @Test
+    fun `a browser verification gate on every route makes the probe inconclusive`() = runTest {
+        val result = prober.probe("booru.challenge-gate.example")
+
+        assertEquals(SiteProbeResult.Unreachable(address("https://booru.challenge-gate.example"), ProbeFailure.BLOCKED), result)
+        // Asking the site itself (counts, DAPI) and the unsupported-family signature, nothing else.
+        assertEquals(3, transport.requested.size)
+    }
+
+    @Test
     fun `shipped sites and invalid input never reach the network`() = runTest {
         val shipped = SiteProber(SiteFamilyRegistry.default(), http)
 
@@ -162,6 +171,6 @@ class SiteProberTest {
     }
 
     companion object {
-        val FIXTURE_SITES = arrayOf("danbooru", "aibooru", "safebooru", "gelbooru", "rule34xxx", "sakugabooru", "sakugabooru_apex", "example")
+        val FIXTURE_SITES = arrayOf("danbooru", "aibooru", "safebooru", "gelbooru", "rule34xxx", "sakugabooru", "sakugabooru_apex", "challenge_gate", "example")
     }
 }

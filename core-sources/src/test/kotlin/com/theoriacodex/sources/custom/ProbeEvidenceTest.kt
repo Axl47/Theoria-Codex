@@ -36,5 +36,21 @@ class ProbeEvidenceTest {
         assertFalse(SourceHttpResponse(200, "<html><posts count=\"1\">").isGelbooruPostsEnvelope())
     }
 
+    @Test
+    fun `a verification challenge page is blocked, whatever its status`() {
+        val challenge = fixture("challenge_gate/verification_challenge_200.html")
+
+        assertTrue(SourceHttpResponse(200, challenge).isVerificationChallenge())
+        assertEquals(FamilyProbe.Failed(ProbeFailure.BLOCKED), SourceHttpResponse(200, challenge).unclaimed())
+        assertEquals(FamilyProbe.Failed(ProbeFailure.BLOCKED), SourceHttpResponse(503, challenge).unclaimed())
+    }
+
+    @Test
+    fun `ordinary pages are not verification challenges`() {
+        assertFalse(SourceHttpResponse(200, "<!doctype html><p>we accept the challenge and a powerful counter</p></html>").isVerificationChallenge())
+        assertFalse(SourceHttpResponse(200, "<!doctype html><noscript>JavaScript is disabled. Please enable it.</noscript></html>").isVerificationChallenge())
+        assertEquals(FamilyProbe.NoMatch, SourceHttpResponse(200, "<!doctype html><p>we accept the challenge and a powerful counter</p></html>").unclaimed())
+    }
+
     private fun fixture(path: String) = FixtureSiteTransport.resource(path).decodeToString()
 }

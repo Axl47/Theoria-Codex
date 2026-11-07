@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<!--
+  Shape-only capture of a browser verification gate (2026-11-07, de-identified: hostname
+  replaced). Every route on the host — the root, /counts/posts.json, the Gelbooru DAPI path and
+  /post.json alike — answered this same 200 text/html page, which runs a JavaScript
+  proof-of-work ("I am not a robot") and POSTs the answer for a challenge cookie. Styles and the
+  inline script are omitted; the markup alone carries the fingerprints the probe classifies on.
+-->
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>booru.challenge-gate.example | Verification</title>
+</head>
+<body>
+    <div class="page-content">
+        <div class="maintenance-notice">DDoS attacks - site(s) might not be available!<br>Please visit the maintenance page for more.</div>
+        <h1>booru.challenge-gate.example</h1>
+        <p id="challenge-prompt">Wait for signal before clicking the checkbox...</p>
+        <p id="time-waited-container" style="font-size: small;">Time waited: <span id="waited-seconds">0.00</span>s</p>
+        <div class="challenge-container">
+            <div class="checkbox-container">
+                <input id="challenge-checkbox" type="checkbox" autocomplete="off" style="display: none; visibility: hidden;" />
+                <div id="spinner" class="spinner"></div>
+                <span id="checkbox-status">I am not a robot &#129302;</span>
+            </div>
+        </div>
+        <div id="challenge-result">
+            <noscript>
+                <span style="color: crimson";>JavaScript is disabled.<br>Please enable JavaScript to continue.</span>
+            </noscript>
+        </div>
+    </div>
+</body>
+</html>

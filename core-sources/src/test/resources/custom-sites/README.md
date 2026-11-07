@@ -24,4 +24,5 @@ Bodies are evidence of protocol shape only; no media was fetched.
 | `rule34xxx` | Gelbooru 0.2 refusing keyless access: DAPI 200 `<error>Missing authentication…</error>` / JSON string. |
 | `sakugabooru` | Moebooru: `/post.json` array with `md5` and `file_url` (unsupported family). |
 | `sakugabooru_apex` | The bare domain 301-redirects to `www.`. |
+| `challenge_gate` | Browser verification gate (de-identified capture): 200 HTML "Verification" challenge on **every** route, including API paths and keyed requests, served by a site under DDoS attacks. The proof-of-work answer and its cookie live in omitted scripts; the markup alone is the evidence. |
 | `example` | Ordinary HTML site: 404 HTML everywhere. |
