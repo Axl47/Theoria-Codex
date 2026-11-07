@@ -57,7 +57,7 @@ abstract class AppJourneyFixture {
                     canonicalTags = listOf("landscape", if (index % 2 == 0) "blue" else "green", "multi",
                         if (source == SourceKey.PIXIV) "pixiv_seed" else "gelbooru_seed"),
                     rawTags = emptyList(), authorName = "Journey artist", createdAtEpochMs = 1_000L + index,
-                    title = "${source.name} landscape $index",
+                    title = "${source.id} landscape $index",
                     creatorProfile = CreatorProfile(source, "Journey artist", "journey-artist", uploadsQuery = "journey-artist"),
                 )
             }

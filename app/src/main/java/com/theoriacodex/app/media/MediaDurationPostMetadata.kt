@@ -177,7 +177,7 @@ private fun authoritativeDurationIdentity(post: Post): String {
     val ref = authoritativeDurationRef(post)
     val location = ref?.localPath ?: ref?.url
     return location?.normalizeDurationIdentity()
-        ?: "provider:${post.id.source.name}:${post.id.sourcePostId}"
+        ?: "provider:${post.id.source.id}:${post.id.sourcePostId}"
 }
 
 private fun authoritativeDurationRef(post: Post): ImageRef? {

@@ -159,9 +159,13 @@ internal fun PostCreatorRows(
  * [showPostId] adds the source's post ID for surfaces that present post details.
  */
 @Composable
-internal fun PostActionHeader(post: Post, showPostId: Boolean = false) {
+internal fun PostActionHeader(post: Post, showPostId: Boolean = false, creator: HeaderLink? = null) {
     val pageCount = maxOf(post.mediaCount ?: 1, post.media.size)
+    // Without its own title the header names the creator, so that title becomes the link; a titled
+    // post keeps its title and links the creator on the details line. Either way it appears once.
+    val hasOwnTitle = post.displayTitleOrNull() != null
     ActionMenuHeader(
+        titleLink = creator?.takeUnless { hasOwnTitle },
         title = post.displayTitleOrNull()
             ?: post.authorName?.trim()?.takeIf(String::isNotBlank)
             ?: post.id.source.displayName(),
@@ -174,6 +178,7 @@ internal fun PostActionHeader(post: Post, showPostId: Boolean = false) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 SourceIcon(post.id.source)
+                if (hasOwnTitle) creator?.let { HeaderLinkText(it, MaterialTheme.typography.bodySmall) }
                 if (pageCount > 1) ActionMenuDetailText("$pageCount pages")
                 if (showPostId) ActionMenuDetailText(post.id.sourcePostId)
             }

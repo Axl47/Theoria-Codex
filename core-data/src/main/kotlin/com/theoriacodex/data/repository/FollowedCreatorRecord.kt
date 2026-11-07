@@ -16,7 +16,7 @@ internal data class FollowedCreatorRecord(
     @field:SerializedName("checkedAtEpochMs") val checkedAtEpochMs: Long? = null,
 ) {
     fun toDomain(): FollowedCreator? {
-        val sourceKey = SourceKey.entries.firstOrNull { it.name == source } ?: return null
+        val sourceKey = source?.let(SourceKey::parse) ?: return null
         val query = uploadsQuery?.takeIf(String::isNotBlank) ?: return null
         val membership = membershipId?.takeIf(String::isNotBlank) ?: return null
         return FollowedCreator(CreatorProfile(sourceKey, name.orEmpty(), profileId, profileUrl, query),
@@ -25,7 +25,7 @@ internal data class FollowedCreatorRecord(
 
     companion object {
         fun fromDomain(follow: FollowedCreator) = with(follow) {
-            FollowedCreatorRecord(creator.source.name, creator.displayName, creator.profileId,
+            FollowedCreatorRecord(creator.source.id, creator.displayName, creator.profileId,
                 creator.profileUrl, creator.uploadsQuery, membershipId, seenPostIds, latestPostIds, checkedAtEpochMs)
         }
     }

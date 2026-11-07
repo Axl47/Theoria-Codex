@@ -20,7 +20,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SearchDraftReducerTest {
-    private val available = SourceKey.entries.toSet()
+    private val available = SourceKey.builtIns.toSet()
     private val context = SearchDraftContext(available, emptyMap())
     private val artist = FacetedSearchScope(SearchFacet.ARTIST, "artist")
     private val character = FacetedSearchScope(SearchFacet.CHARACTER, "character")
@@ -274,6 +274,24 @@ class SearchDraftReducerTest {
         assertEquals(
             listOf(SearchTerm("blue hair")),
             SearchDraftReducer.commitInput(faceted, "blue hair").state.query.draft.includeTerms,
+        )
+    }
+
+    @Test
+    fun `typed pixiv translations commit the native tag they label`() {
+        val pixiv = state(query(QueryMode.Source(SourceKey.PIXIV))).copy(
+            suggestions = SearchSuggestionsUiState(
+                autocomplete = listOf(TagSuggestion("初音ミク", "tag", null, alternateText = "Hatsune Miku")),
+            ),
+        )
+
+        assertEquals(
+            listOf("初音ミク"),
+            SearchDraftReducer.commitInput(pixiv, "hatsune miku").state.query.draft.includeTags,
+        )
+        assertEquals(
+            listOf("初音ミク"),
+            SearchDraftReducer.commitInput(pixiv, "-Hatsune Miku").state.query.draft.excludeTags,
         )
     }
 

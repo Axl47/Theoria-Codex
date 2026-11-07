@@ -41,7 +41,7 @@ fun TwoColumnPostStaggeredGrid(
     AdaptivePostGrid(postIds = postIds, state = state, modifier = modifier) {
         itemsIndexed(
             items = posts,
-            key = { _, post -> "${post.id.source.name}:${post.id.sourcePostId}" },
+            key = { _, post -> "${post.id.source.id}:${post.id.sourcePostId}" },
             itemContent = itemContent,
         )
         if (showPagingTile || footerMessage != null) {
@@ -71,10 +71,10 @@ fun TwoColumnProjectedPostStaggeredGrid(
             items = projection.entries,
             key = { _, entry ->
                 when (entry) {
-                    is RelatedFeedEntry.PostEntry -> "post:${entry.post.id.source.name}:${entry.post.id.sourcePostId}"
+                    is RelatedFeedEntry.PostEntry -> "post:${entry.post.id.source.id}:${entry.post.id.sourcePostId}"
                     is RelatedFeedEntry.ShelfEntry -> {
                         val seed = entry.state.requestOrNull?.seed?.id
-                        "related:${seed?.source?.name}:${seed?.sourcePostId}"
+                        "related:${seed?.source?.id}:${seed?.sourcePostId}"
                     }
                 }
             },

@@ -43,20 +43,8 @@ class StubFixtureLoader(
         }
     }
 
-    private fun sourceFolder(sourceKey: SourceKey): String {
-        return when (sourceKey) {
-            SourceKey.PIXIV -> "pixiv"
-            SourceKey.GELBOORU -> "gelbooru"
-            SourceKey.AIBOORU -> "aibooru"
-            SourceKey.NHENTAI -> "nhentai"
-            SourceKey.HITOMI -> "hitomi"
-            SourceKey.IWARA -> "iwara"
-            SourceKey.RULE34XXX -> "rule34xxx"
-            SourceKey.RULE34PAHEAL -> "rule34paheal"
-            SourceKey.RULE34VIDEO -> "rule34video"
-            SourceKey.RULE34GEN -> "rule34gen"
-        }
-    }
+    /** Fixture folders are the lowercase source id (`pixiv`, `rule34xxx`, ...). */
+    private fun sourceFolder(sourceKey: SourceKey): String = sourceKey.id.lowercase()
 }
 
 data class SearchPageFixture(

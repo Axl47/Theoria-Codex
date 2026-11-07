@@ -1,13 +1,18 @@
 package com.theoriacodex.app.sourceauth
 
+import com.theoriacodex.domain.source.CustomSourceIds
+import com.theoriacodex.domain.source.SiteCredentials
 import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.credentials.PixivAuthTokens
 import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -48,6 +53,8 @@ internal class SourceCredentialSnapshot(
     val gelbooruApiKey: String? = null,
     val rule34XxxUserId: String? = null,
     val rule34XxxApiKey: String? = null,
+    /** Keys of user-added sites by source id; written only when non-empty (plan D7). */
+    val customSites: Map<String, SiteCredentials> = emptyMap(),
 ) {
     fun pixivTokens(): PixivAuthTokens? {
         val accessToken = pixivAccessToken?.takeIf(String::isNotBlank) ?: return null
@@ -76,6 +83,7 @@ internal class SourceCredentialSnapshot(
         gelbooruApiKey = gelbooruApiKey,
         rule34XxxUserId = rule34XxxUserId,
         rule34XxxApiKey = rule34XxxApiKey,
+        customSites = customSites,
     )
 
     fun withGelbooru(credentials: GelbooruCredentials?): SourceCredentialSnapshot = SourceCredentialSnapshot(
@@ -86,6 +94,7 @@ internal class SourceCredentialSnapshot(
         gelbooruApiKey = credentials?.apiKey,
         rule34XxxUserId = rule34XxxUserId,
         rule34XxxApiKey = rule34XxxApiKey,
+        customSites = customSites,
     )
 
     fun withRule34Xxx(credentials: Rule34XxxCredentials?): SourceCredentialSnapshot = SourceCredentialSnapshot(
@@ -96,6 +105,18 @@ internal class SourceCredentialSnapshot(
         gelbooruApiKey = gelbooruApiKey,
         rule34XxxUserId = credentials?.userId,
         rule34XxxApiKey = credentials?.apiKey,
+        customSites = customSites,
+    )
+
+    fun withCustomSite(sourceId: String, credentials: SiteCredentials?): SourceCredentialSnapshot = SourceCredentialSnapshot(
+        pixivAccessToken = pixivAccessToken,
+        pixivRefreshToken = pixivRefreshToken,
+        pixivExpiresAtEpochMs = pixivExpiresAtEpochMs,
+        gelbooruUserId = gelbooruUserId,
+        gelbooruApiKey = gelbooruApiKey,
+        rule34XxxUserId = rule34XxxUserId,
+        rule34XxxApiKey = rule34XxxApiKey,
+        customSites = if (credentials == null) customSites - sourceId else customSites + (sourceId to credentials),
     )
 
     override fun equals(other: Any?): Boolean {
@@ -107,7 +128,8 @@ internal class SourceCredentialSnapshot(
             gelbooruUserId == other.gelbooruUserId &&
             gelbooruApiKey == other.gelbooruApiKey &&
             rule34XxxUserId == other.rule34XxxUserId &&
-            rule34XxxApiKey == other.rule34XxxApiKey
+            rule34XxxApiKey == other.rule34XxxApiKey &&
+            customSites == other.customSites
     }
 
     override fun hashCode(): Int {
@@ -117,7 +139,8 @@ internal class SourceCredentialSnapshot(
         result = 31 * result + gelbooruUserId.hashCode()
         result = 31 * result + gelbooruApiKey.hashCode()
         result = 31 * result + rule34XxxUserId.hashCode()
-        return 31 * result + rule34XxxApiKey.hashCode()
+        result = 31 * result + rule34XxxApiKey.hashCode()
+        return 31 * result + customSites.hashCode()
     }
 
     override fun toString(): String = "SourceCredentialSnapshot([REDACTED])"
@@ -175,8 +198,9 @@ internal class VersionedSourceCredentialsStore(
     private val envelopeStore: CredentialEnvelopeStore,
     private val legacyStore: LegacyCredentialStore,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-) : RecoverableSourceCredentialsStore {
+) : RecoverableSourceCredentialsStore, SiteCredentialsStore {
     private val mutex = Mutex()
+    private val customSiteRevision = MutableStateFlow(0L)
     private val mutableRecoveryState = MutableStateFlow<CredentialStoreRecoveryState>(
         CredentialStoreRecoveryState.Loading,
     )
@@ -218,6 +242,21 @@ internal class VersionedSourceCredentialsStore(
         updateSnapshot { snapshot -> snapshot.withRule34Xxx(null) }
     }
 
+    override suspend fun get(sourceId: String): SiteCredentials? = readSnapshot()?.customSites?.get(sourceId)
+
+    override suspend fun save(sourceId: String, credentials: SiteCredentials) {
+        require(CustomSourceIds.isValid(sourceId)) { "Site credentials need a custom source id" }
+        updateSnapshot { snapshot -> snapshot.withCustomSite(sourceId, credentials) }
+        customSiteRevision.update { it + 1 }
+    }
+
+    override suspend fun clear(sourceId: String) {
+        updateSnapshot { snapshot -> snapshot.withCustomSite(sourceId, null) }
+        customSiteRevision.update { it + 1 }
+    }
+
+    override val changes: Flow<Unit> = customSiteRevision.map { }
+
     override suspend fun resetAfterReconnectRequired(): Boolean = withContext(ioDispatcher) {
         mutex.withLock {
             if (mutableRecoveryState.value != CredentialStoreRecoveryState.ReconnectRequired) {
@@ -233,6 +272,7 @@ internal class VersionedSourceCredentialsStore(
                 loadedSnapshot = SourceCredentialSnapshot()
                 legacyCleanupPending = false
                 mutableRecoveryState.value = CredentialStoreRecoveryState.Ready
+                customSiteRevision.update { it + 1 }
                 true
             } else {
                 mutableRecoveryState.value = CredentialStoreRecoveryState.ReconnectRequired

@@ -58,7 +58,7 @@ object CodexLikesPolicy {
                 tag.copy(groupIndex = compactGroupIndexBySource.getValue(tag.source).getValue(tag.groupIndex))
             }
             .sortedWith(
-                compareBy<CodexAutomaticTag> { tag -> tag.source.ordinal }
+                compareBy<CodexAutomaticTag> { tag -> tag.source }
                     .thenBy(CodexAutomaticTag::groupIndex)
                     .thenBy { tag -> sourceTagKey(tag.source, tag.tag) },
             )

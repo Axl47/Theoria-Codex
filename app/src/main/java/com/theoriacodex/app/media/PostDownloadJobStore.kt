@@ -34,7 +34,7 @@ internal class FileBackedPostDownloadJobStore(private val file: File,
             val items = batch.getAsJsonArray("items").map { value ->
                 require(++itemCount <= 20_000) { "Too many queued downloads" }
                 val row = value.asJsonObject
-                val source = SourceKey.valueOf(row.get("source").asString)
+                val source = SourceKey.parseOrThrow(row.get("source").asString)
                 val id = row.get("postId").asString.also { require(it.isNotBlank() && it.length <= 500) }
                 val title = row.get("title")?.asString
                 val post = Post(PostId(source, id), ImageRef(null, null, null), null,
@@ -71,7 +71,7 @@ internal class FileBackedPostDownloadJobStore(private val file: File,
                 addProperty("title", batch.title.take(200))
                 add("items", JsonArray().apply { batch.items.forEach { item -> add(JsonObject().apply {
                     addProperty("id", item.id)
-                    addProperty("source", item.request.post.id.source.name)
+                    addProperty("source", item.request.post.id.source.id)
                     addProperty("postId", item.request.post.id.sourcePostId)
                     item.request.post.title?.let { addProperty("title", it.take(240)) }
                     addProperty("marker", item.request.marker)

@@ -78,6 +78,8 @@ internal fun TagPickerChip(
     longPressLabel: String? = null,
     leadingIcon: ImageVector? = null,
     reserveCountSlot: Boolean = true,
+    /** Extra state TalkBack reads after the search state, such as "saved". */
+    stateSuffix: String? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     val shape = RoundedCornerShape(8.dp)
@@ -98,7 +100,7 @@ internal fun TagPickerChip(
             )
             .semantics {
                 selected = !neutral
-                stateDescription = state.description
+                stateDescription = listOfNotNull(state.description, stateSuffix).joinToString(", ")
                 customActions = alternateActions.map { action ->
                     CustomAccessibilityAction(action.label) { action.run(); true }
                 }

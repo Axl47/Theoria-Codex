@@ -97,14 +97,17 @@ private fun matchesDateRange(post: Post, range: DateRange?): Boolean {
     return created >= (range.fromEpochMs ?: Long.MIN_VALUE) && created <= (range.toEpochMs ?: Long.MAX_VALUE)
 }
 
-private val gelbooruAnimatedTags = setOf("animated", "animation", "video", "gif", "animated_gif")
+/** The built-in "Animated" saved "or" group for Gelbooru-engine sites, which tag animation several ways. */
+val GELBOORU_ANIMATED_SEARCH_TAGS = listOf("video", "animated", "animation", "animated_gif", "animated_image", "gif")
 
+/** Danbooru-engine sites tag animation consistently; a short group keeps within their tag limits. */
+val DANBOORU_ANIMATED_SEARCH_TAGS = listOf("animated", "video")
+
+private val animatedTags = GELBOORU_ANIMATED_SEARCH_TAGS.toSet()
+
+/** One rule for every source: animated media, or a tag that says so (covers sites whose previews are stills). */
 private fun matchesAnimatedFilter(post: Post): Boolean =
-    if (post.id.source == SourceKey.GELBOORU) {
-        (post.rawTags + post.canonicalTags).any { it.lowercase() in gelbooruAnimatedTags }
-    } else {
-        isAnimatedPost(post)
-    }
+    isAnimatedPost(post) || (post.rawTags + post.canonicalTags).any { it.lowercase() in animatedTags }
 
 private fun matchesAnimatedDurationFilter(
     post: Post,

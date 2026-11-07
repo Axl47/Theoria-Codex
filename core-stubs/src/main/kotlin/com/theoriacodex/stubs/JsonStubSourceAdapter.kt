@@ -100,7 +100,7 @@ class JsonStubSourceAdapter(
         if (preset == StubScenarioPreset.PARTIAL_FAILURE) {
             val config = fixtureLoader
                 .loadFailureScenario()
-                .sources[sourceKey.name]
+                .sources[sourceKey.id]
                 ?: return
             if (config.delayMs > 0) {
                 delay(config.delayMs)

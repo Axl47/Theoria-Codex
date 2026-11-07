@@ -9,15 +9,33 @@ data class PixivAuthTokens(
 /** Process-local authority for a refresh; credentials themselves retain their existing wire format. */
 data class PixivCredentialSession(val tokens: PixivAuthTokens?, val revision: Long)
 
+/** A user + API key pair: Gelbooru-family `user_id` + `api_key`, or Danbooru-family `login` + `api_key`. */
+interface UserApiKeyCredentials {
+    val userId: String
+    val apiKey: String
+}
+
+/** Reads the keys saved for one site; a site without saved keys returns null. */
+typealias UserApiKeyCredentialLookup = suspend () -> UserApiKeyCredentials?
+
+/** Whether a booru site's API calls need saved keys. */
+enum class ApiKeyUse {
+    /** Attach the keys when the user saved them. */
+    OPTIONAL,
+
+    /** Fail with an auth error before any API call that lacks them. */
+    REQUIRED,
+}
+
 data class GelbooruCredentials(
-    val userId: String,
-    val apiKey: String,
-)
+    override val userId: String,
+    override val apiKey: String,
+) : UserApiKeyCredentials
 
 data class Rule34XxxCredentials(
-    val userId: String,
-    val apiKey: String,
-)
+    override val userId: String,
+    override val apiKey: String,
+) : UserApiKeyCredentials
 
 interface SourceCredentialsProvider {
     suspend fun getPixivTokens(): PixivAuthTokens?

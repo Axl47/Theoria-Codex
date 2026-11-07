@@ -65,7 +65,7 @@ class RoomRecentsRepository(
     }.distinctUntilChanged().flowOn(Dispatchers.Default)
 
     override fun observeWatchedPostIds(): Flow<Set<PostId>> = dao.observeWatchedPostIds().map { rows ->
-        rows.mapTo(linkedSetOf()) { PostId(SourceKey.valueOf(it.source), it.sourcePostId) }
+        rows.mapTo(linkedSetOf()) { PostId(SourceKey.parseOrThrow(it.source), it.sourcePostId) }
     }.distinctUntilChanged().flowOn(Dispatchers.Default)
 
     override fun observeSearches(): Flow<List<RecentSearchEntry>> = dao.observeSearches()
@@ -89,12 +89,12 @@ class RoomRecentsRepository(
     ) {
         database.withTransaction {
             val recordedAt = clock()
-            val previous = dao.watched(post.id.source.name, post.id.sourcePostId, section.name)
+            val previous = dao.watched(post.id.source.id, post.id.sourcePostId, section.name)
             val preserve = origin == ViewerStreamSource.RECENTS && previous != null
             sharedPostPayloads.upsert(post)
             dao.upsertWatched(
                 RecentWatchedEntity(
-                    post.id.source.name,
+                    post.id.source.id,
                     post.id.sourcePostId,
                     section.name,
                     recordedAt,
@@ -121,16 +121,16 @@ class RoomRecentsRepository(
         database.withTransaction {
             val normalizedMediaNumber = viewedMediaNumber.coerceAtLeast(1)
             val raised = dao.raiseWatchedMediaProgress(
-                post.id.source.name,
+                post.id.source.id,
                 post.id.sourcePostId,
                 section.name,
                 normalizedMediaNumber,
             )
-            if (raised == 0 && dao.watched(post.id.source.name, post.id.sourcePostId, section.name) == null) {
+            if (raised == 0 && dao.watched(post.id.source.id, post.id.sourcePostId, section.name) == null) {
                 sharedPostPayloads.upsert(post)
                 dao.upsertWatched(
                     RecentWatchedEntity(
-                        post.id.source.name,
+                        post.id.source.id,
                         post.id.sourcePostId,
                         section.name,
                         clock(),
@@ -174,12 +174,12 @@ class RoomRecentsRepository(
         database.withTransaction {
             watchedPosts.asReversed().forEach { entry ->
                 val post = entry.post
-                val existing = dao.watched(post.id.source.name, post.id.sourcePostId, entry.section.name)
+                val existing = dao.watched(post.id.source.id, post.id.sourcePostId, entry.section.name)
                 if (existing == null || entry.viewedAtEpochMs > existing.viewedAtEpochMs) {
                     sharedPostPayloads.upsert(post)
                     dao.upsertWatched(
                         RecentWatchedEntity(
-                            post.id.source.name,
+                            post.id.source.id,
                             post.id.sourcePostId,
                             entry.section.name,
                             entry.viewedAtEpochMs,

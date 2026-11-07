@@ -1,0 +1,17 @@
+{
+  "nextPageToken": "page_2",
+  "items": [
+    {
+      "sourcePostId": "db_3001",
+      "previewUrl": "https://example.com/danbooru/thumb/3001.jpg",
+      "fullUrl": "https://example.com/danbooru/full/3001.jpg",
+      "pageUrl": "https://example.com/danbooru/post/3001",
+      "width": 1280,
+      "height": 1280,
+      "canonicalTags": ["scenery"],
+      "rawTags": ["scenery"],
+      "authorName": "db_artist_1",
+      "createdAtEpochMs": 1700000005000
+    }
+  ]
+}

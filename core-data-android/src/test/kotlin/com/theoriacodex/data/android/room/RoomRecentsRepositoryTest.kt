@@ -337,7 +337,7 @@ class RoomRecentsRepositoryTest {
         assertTrue(runCatching {
             repository.recordWatchedPost(post, ViewerStreamSource.SEARCH, null)
         }.isFailure)
-        assertNull(database.codexLikesDao().post(post.id.source.name, post.id.sourcePostId))
+        assertNull(database.codexLikesDao().post(post.id.source.id, post.id.sourcePostId))
         assertTrue(repository.observeWatchedPosts().first().isEmpty())
     }
 
@@ -369,7 +369,7 @@ class RoomRecentsRepositoryTest {
         repository.recordSearch(recentQuery("again"), "again")
         repository.clearAll()
         assertTrue(repository.observeActivity().first().isEmpty())
-        assertNull(database.codexLikesDao().post(SourceKey.PIXIV.name, "watched-2"))
+        assertNull(database.codexLikesDao().post(SourceKey.PIXIV.id, "watched-2"))
     }
 }
 

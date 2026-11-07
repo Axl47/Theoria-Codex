@@ -207,6 +207,10 @@
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
+-keepclassmembers class com.theoriacodex.app.sourceauth.CustomSiteCredentialRecord {
+    <init>();
+    @com.google.gson.annotations.SerializedName <fields>;
+}
 -keepclassmembers class com.theoriacodex.app.update.UpdateStateSnapshot {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
@@ -262,6 +266,16 @@
 }
 
 -keepclassmembers class com.theoriacodex.data.repository.FollowedCreatorRecord {
+    <init>();
+    @com.google.gson.annotations.SerializedName <fields>;
+}
+
+-keepclassmembers class com.theoriacodex.data.repository.SiteProfileRecord {
+    <init>();
+    @com.google.gson.annotations.SerializedName <fields>;
+}
+
+-keepclassmembers class com.theoriacodex.data.repository.SiteProfileStoreFile {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }

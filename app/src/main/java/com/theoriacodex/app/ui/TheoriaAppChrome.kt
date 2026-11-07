@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Collections
-import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -85,7 +85,8 @@ internal fun TheoriaBottomNavigation(
 internal fun TopLevelDestination.icon() = when (this) {
     TopLevelDestination.Search -> Icons.Default.Search
     TopLevelDestination.Recents -> Icons.Default.History
-    TopLevelDestination.ForYou -> Icons.Default.Favorite
+    // The mark For You searches carry in Recents; a heart read as Likes.
+    TopLevelDestination.ForYou -> Icons.Default.AutoAwesome
     TopLevelDestination.Codex -> Icons.Default.Collections
     TopLevelDestination.Settings -> Icons.Default.Settings
 }

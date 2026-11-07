@@ -90,8 +90,6 @@ internal const val MAX_REMEMBERED_QUERY_OVERRIDES = 8
 internal const val RATE_LIMIT_BACKOFF_FIRST_MS = 30_000L
 internal const val RATE_LIMIT_BACKOFF_REPEAT_MS = 2L * 60L * 1000L
 internal const val RATE_LIMIT_REPEAT_WINDOW_MS = 2L * 60L * 1000L
-internal val WHITESPACE_REGEX = Regex("\\s+")
-internal val PIXIV_TRAILING_PARENTHESIS_REGEX = Regex("\\s*\\([^)]*\\)\\s*$")
 
 internal data class ResolvedAutocompleteRequest(
     val scope: FacetedSearchScope,

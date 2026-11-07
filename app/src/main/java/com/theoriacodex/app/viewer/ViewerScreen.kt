@@ -199,6 +199,7 @@ private fun ViewerLoadedScreen(
         ViewerInfoSheet(
             selection, controls, creatorBrowsingSources, saveToCodexQuery, tagVideoCountProvider, fetchTagVideoCounts,
             onAction, onOpenInBrowser, onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, onGoToSearch, onOpenCreatorFallback,
+            liked = selection.post.id in likedPostIds,
         )
     }
 }

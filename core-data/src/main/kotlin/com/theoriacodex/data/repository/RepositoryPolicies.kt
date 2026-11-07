@@ -1,6 +1,7 @@
 package com.theoriacodex.data.repository
 
 import com.theoriacodex.domain.model.SourceKey
+import kotlin.math.abs
 import com.theoriacodex.domain.tags.normalizeFavoriteTagForStorage
 import com.theoriacodex.domain.tags.sourceTagKey
 
@@ -86,14 +87,23 @@ internal object RepositoryPolicies {
         enabledSources: Set<SourceKey>,
         rawWeights: Map<SourceKey, Double>,
     ): Map<SourceKey, Double> {
-        val orderedSources = SourceKey.entries.filter { source -> source in enabledSources }
+        val orderedSources = enabledSources.sorted()
         if (orderedSources.isEmpty()) return emptyMap()
 
         val defaults = SourceRuntimeSettings().sourceWeights
+        val knownWeights = orderedSources.associateWith { source -> rawWeights[source] ?: defaults[source] }
+            .mapValues { (_, weight) -> weight?.takeIf(Double::isFinite)?.coerceAtLeast(0.0) }
+        // A source with no stored or default weight (a newly opted-in custom site) gets the others'
+        // mean, an even share, rather than a raw 1.0 that would dominate already-normalized weights.
+        val fallbackWeight = knownWeights.values.filterNotNull().takeIf { it.isNotEmpty() }?.average() ?: 1.0
         val safeWeights = orderedSources.associateWith { source ->
-            val rawWeight = rawWeights[source] ?: defaults[source] ?: 1.0
-            rawWeight.takeIf(Double::isFinite)?.coerceAtLeast(0.0) ?: 0.0
+            when {
+                source !in rawWeights && source !in defaults -> fallbackWeight
+                else -> knownWeights[source] ?: 0.0
+            }
         }
+        // Already-normalized weights pass through, so normalizing again never drifts in the last bit.
+        if (abs(safeWeights.values.sum() - 1.0) <= NORMALIZED_WEIGHT_TOLERANCE) return safeWeights
         val largestWeight = safeWeights.values.maxOrNull().orZero()
         if (largestWeight <= 0.0) {
             val uniformWeight = 1.0 / orderedSources.size.toDouble()
@@ -345,4 +355,5 @@ internal object RepositoryPolicies {
 }
 
 private const val MAX_FAVORITE_TAG_NAME_LENGTH = 60
+private const val NORMALIZED_WEIGHT_TOLERANCE = 1e-9
 private val LINE_BREAK_REGEX = Regex("\\s*[\\r\\n]+\\s*")

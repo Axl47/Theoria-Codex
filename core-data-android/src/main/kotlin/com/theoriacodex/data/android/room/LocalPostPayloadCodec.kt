@@ -199,7 +199,7 @@ private fun JsonObject.optionalObject(field: String): JsonObject? {
 }
 
 private fun String.toSourceKey(field: String): SourceKey {
-    return runCatching { SourceKey.valueOf(this) }.getOrNull()
+    return SourceKey.parse(this)
         ?: throw MalformedLocalPostPayloadException("$field is invalid")
 }
 

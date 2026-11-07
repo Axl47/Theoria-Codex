@@ -77,7 +77,7 @@ class FollowedCodexFiltersTest {
 
     @Test fun `author and source controls allow multiple selections without crossing author identities`() {
         val follows = listOf(SourceKey.PIXIV, SourceKey.IWARA).map { source ->
-            FollowedCreator(CreatorProfile(source, "Same author", "1", uploadsQuery = "user:1"), source.name)
+            FollowedCreator(CreatorProfile(source, "Same author", "1", uploadsQuery = "user:1"), source.id)
         }
         val state = mutableStateOf(FeedFabRestoreState())
         compose.setContent {

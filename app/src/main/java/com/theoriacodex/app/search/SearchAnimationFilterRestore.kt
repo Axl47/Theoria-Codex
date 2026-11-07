@@ -27,5 +27,5 @@ internal fun FeedFabRestoreState.withSearchAnimationFilter(
 
 private fun QueryMode.animationFilterScopeKey(): String = when (this) {
     QueryMode.Unified -> "UNIFIED"
-    is QueryMode.Source -> source.name
+    is QueryMode.Source -> source.id
 }

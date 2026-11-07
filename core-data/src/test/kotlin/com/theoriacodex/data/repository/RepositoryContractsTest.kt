@@ -321,8 +321,8 @@ class RepositoryContractTest(
     fun `settings starts with a complete normalized source catalog`() = runTest {
         val settings = createSettingsRepository().observeSettings().first()
 
-        assertEquals(SourceKey.entries.toSet(), settings.runtime.enabledSources)
-        assertEquals(SourceKey.entries.toSet(), settings.runtime.sourceWeights.keys)
+        assertEquals(SourceKey.builtIns.toSet(), settings.runtime.enabledSources)
+        assertEquals(SourceKey.builtIns.toSet(), settings.runtime.sourceWeights.keys)
         assertEquals(1.0, settings.runtime.sourceWeights.values.sum(), 0.0000001)
         assertTrue(settings.runtime.sourceWeights.values.all { weight -> weight.isFinite() && weight >= 0.0 })
         assertEquals(1.0, SourceRuntimeSettings().sourceWeights.values.sum(), 0.0000001)

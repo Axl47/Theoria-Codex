@@ -8,6 +8,7 @@ import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.query.SearchTermLimit
 
 interface SearchExecutionService {
     fun executionKeyFor(
@@ -52,6 +53,7 @@ data class SearchEnvironmentChange(
     val settingsChanged: Boolean,
     val sourcesChanged: Boolean,
     val availableSources: List<SourceKey>,
+    val sourceTermLimits: Map<SourceKey, SearchTermLimit> = emptyMap(),
 )
 
 /** Immutable provider continuation owned by the Search route owner. */

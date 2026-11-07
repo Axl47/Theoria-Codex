@@ -5,6 +5,8 @@ import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.util.AtomicFile
 import android.util.Base64
 import com.theoriacodex.data.repository.readBoundedDocument
+import com.theoriacodex.domain.source.CustomSourceIds
+import com.theoriacodex.domain.source.SiteCredentials
 import com.google.gson.Gson
 import com.google.gson.JsonParseException
 import com.google.gson.annotations.SerializedName
@@ -246,7 +248,7 @@ private class CredentialEnvelopeRecord(
     val ciphertext: String? = null,
 )
 
-private class CredentialPayloadRecord(
+internal class CredentialPayloadRecord(
     @field:SerializedName("schemaVersion")
     val schemaVersion: Int = CREDENTIAL_PAYLOAD_SCHEMA_VERSION,
     @field:SerializedName("pixivAccessToken")
@@ -263,6 +265,9 @@ private class CredentialPayloadRecord(
     val rule34XxxUserId: String? = null,
     @field:SerializedName("rule34XxxApiKey")
     val rule34XxxApiKey: String? = null,
+    /** Additive in payload schema 1 (plan D7); absent when no custom site has keys. */
+    @field:SerializedName("customSites")
+    val customSites: Map<String, CustomSiteCredentialRecord>? = null,
 ) {
     constructor(snapshot: SourceCredentialSnapshot) : this(
         pixivAccessToken = snapshot.pixivAccessToken,
@@ -272,6 +277,8 @@ private class CredentialPayloadRecord(
         gelbooruApiKey = snapshot.gelbooruApiKey,
         rule34XxxUserId = snapshot.rule34XxxUserId,
         rule34XxxApiKey = snapshot.rule34XxxApiKey,
+        customSites = snapshot.customSites.takeIf(Map<*, *>::isNotEmpty)
+            ?.mapValues { (_, credentials) -> CustomSiteCredentialRecord(credentials.user, credentials.apiKey) },
     )
 
     fun toSnapshot(): SourceCredentialSnapshot = SourceCredentialSnapshot(
@@ -282,9 +289,24 @@ private class CredentialPayloadRecord(
         gelbooruApiKey = gelbooruApiKey,
         rule34XxxUserId = rule34XxxUserId,
         rule34XxxApiKey = rule34XxxApiKey,
+        // An entry that is not a valid custom id with both values is dropped, never fatal.
+        customSites = customSites.orEmpty().mapNotNull { (sourceId, record) ->
+            val user = record?.user?.takeIf(String::isNotBlank)
+            val apiKey = record?.apiKey?.takeIf(String::isNotBlank)
+            if (CustomSourceIds.isValid(sourceId) && user != null && apiKey != null) sourceId to SiteCredentials(user, apiKey) else null
+        }.toMap(),
     )
 
     override fun toString(): String = "CredentialPayloadRecord([REDACTED])"
+}
+
+internal class CustomSiteCredentialRecord(
+    @field:SerializedName("user")
+    val user: String? = null,
+    @field:SerializedName("apiKey")
+    val apiKey: String? = null,
+) {
+    override fun toString(): String = "CustomSiteCredentialRecord([REDACTED])"
 }
 
 private fun Exception.toCredentialReadFailure(): CredentialEnvelopeReadResult {

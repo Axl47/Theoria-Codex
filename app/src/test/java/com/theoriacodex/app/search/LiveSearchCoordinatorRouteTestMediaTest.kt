@@ -68,7 +68,7 @@ internal class LiveSearchCoordinatorRouteTestMediaTest : LiveSearchCoordinatorRo
             val post = run.result.posts.firstOrNull()
             val candidate = post?.let(::postDownloadMediaCandidate)
             if (candidate == null) {
-                issues += "${probeCase.source.name}: app media policy found no downloadable candidate"
+                issues += "${probeCase.source.id}: app media policy found no downloadable candidate"
                 return@forEach
             }
 
@@ -81,12 +81,12 @@ internal class LiveSearchCoordinatorRouteTestMediaTest : LiveSearchCoordinatorRo
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                issues += "${probeCase.source.name}: media URL ${sanitizeUrlForReport(candidate.url)} failed with ${error.javaClass.simpleName}"
+                issues += "${probeCase.source.id}: media URL ${sanitizeUrlForReport(candidate.url)} failed with ${error.javaClass.simpleName}"
                 return@forEach
             }
             val statusCode = probe.statusCode
             if (statusCode !in 200..399) {
-                issues += "${probeCase.source.name}: media URL ${sanitizeUrlForReport(candidate.url)} returned $statusCode"
+                issues += "${probeCase.source.id}: media URL ${sanitizeUrlForReport(candidate.url)} returned $statusCode"
             }
         }
 

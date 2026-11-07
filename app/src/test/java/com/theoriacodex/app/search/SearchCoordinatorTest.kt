@@ -36,6 +36,7 @@ import com.theoriacodex.domain.query.QueryHash
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
+import com.theoriacodex.domain.query.SearchTermLimit
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -58,6 +59,21 @@ class SearchCoordinatorTest {
         assertEquals(SourceRunState.SUCCESS, result.statuses.single().state)
         assertTrue(result.continuation.canLoadMore)
         assertEquals(QueryHash.from(query), result.executionKey)
+    }
+
+    @Test
+    fun `a single-source search past the source's term cap is refused without a request`() = runTest {
+        val danbooru = TestAdapter(SourceKey.DANBOORU, SearchTermLimit(maxTerms = 2))
+        val coordinator = coordinator(danbooru)
+        coordinator.initializeRoute()
+        val query = Query(QueryMode.Source(SourceKey.DANBOORU), listOf("cat", "sky", "cloud"), emptyList(),
+            SortMode.NEWEST, null, null)
+
+        val result = coordinator.executeInitial(query, SearchSourceScope.Single(SourceKey.DANBOORU))
+            as SearchExecutionResult.Failure
+
+        assertEquals("Danbooru allows up to 2 tags per search.", result.message)
+        assertTrue(danbooru.searchedQueries.isEmpty())
     }
 
     @Test
@@ -521,7 +537,10 @@ internal class TestRegistry(adapters: List<SourceAdapter>) : SourceAdapterRegist
     override fun unifiedOrchestrator(): UnifiedSearchOrchestrator = orchestrator
 }
 
-internal class TestAdapter(override val sourceKey: SourceKey) : SourceAdapter {
+internal class TestAdapter(
+    override val sourceKey: SourceKey,
+    searchTermLimit: SearchTermLimit? = null,
+) : SourceAdapter {
     var failure: Throwable? = null
     var autocompleteFailure: Throwable? = null
     var autocomplete: List<TagSuggestion> = emptyList()
@@ -544,6 +563,7 @@ internal class TestAdapter(override val sourceKey: SourceKey) : SourceAdapter {
         supportsDateRangeServerSide = true,
         supportsMinScoreServerSide = true,
         requiresCredentials = false,
+        searchTermLimit = searchTermLimit,
     )
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> {
@@ -651,9 +671,6 @@ internal class RecordingTagStore : TagSuggestionStore {
     override fun putFaceted(source: SourceKey, suggestions: List<FacetedTagSuggestion>) {
         faceted += suggestions
     }
-
-
-
 }
 
 internal fun query(source: SourceKey, tag: String) = Query(

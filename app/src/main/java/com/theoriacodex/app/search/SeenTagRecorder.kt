@@ -50,6 +50,7 @@ internal class SeenTagRecorder(
                         text = normalizeFavoriteTagForStorage(source, term.value),
                         facet = SearchFacet.TAG,
                         sourceNamespace = term.sourceNamespace,
+                        alternateText = term.translation,
                     )
                 }
                 .filter { it.text.isNotBlank() }

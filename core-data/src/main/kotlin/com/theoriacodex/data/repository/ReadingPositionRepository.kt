@@ -126,7 +126,7 @@ internal fun decodeReadingPositions(document: JsonObject, entryLimit: Int = MAX_
         runCatching {
             val record = element.asJsonObject
             ReadingPosition(
-                postId = PostId(SourceKey.valueOf(record.get("source").asString), record.get("postId").asString),
+                postId = PostId(SourceKey.parseOrThrow(record.get("source").asString), record.get("postId").asString),
                 section = RecentPostSection.valueOf(record.get("section").asString),
                 mediaNumber = record.get("mediaNumber").asInt,
                 lastViewedAt = record.get("lastViewedAt").asLong,
@@ -141,7 +141,7 @@ private fun encodeReadingPositions(updated: List<ReadingPosition>): JsonObject =
     add("positions", JsonArray().apply {
         updated.forEach { position ->
             add(JsonObject().apply {
-                addProperty("source", position.postId.source.name)
+                addProperty("source", position.postId.source.id)
                 addProperty("postId", position.postId.sourcePostId)
                 addProperty("section", position.section.name)
                 addProperty("mediaNumber", position.mediaNumber)

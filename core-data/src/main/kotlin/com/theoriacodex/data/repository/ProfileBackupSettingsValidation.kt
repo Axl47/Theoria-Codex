@@ -6,7 +6,7 @@ import com.theoriacodex.domain.model.VideoQuality
 
 /** Reject malformed external settings rather than invoking legacy migration's lossy fallbacks. */
 internal fun validateBackupSettings(root: JsonObject, profileIds: Set<String>) {
-    root.backupStrings("enabledSources").forEach { SourceKey.valueOf(it) }
+    root.backupStrings("enabledSources").forEach { SourceKey.parseOrThrow(it) }
     validateSourceWeights(requireNotNull(root.getAsJsonObject("sourceWeights")))
     root.get("sourceWeightsByConfiguration")?.let { configurations ->
         require(configurations.isJsonObject)
@@ -41,7 +41,7 @@ private fun validateProfileTags(root: JsonObject, key: String, profileIds: Set<S
         require(profileId in profileIds && entries.isJsonArray && entries.asJsonArray.size() <= 10_000)
         entries.asJsonArray.forEach { entry ->
             require(entry.isJsonObject)
-            SourceKey.valueOf(entry.asJsonObject.backupString("source"))
+            SourceKey.parseOrThrow(entry.asJsonObject.backupString("source"))
             if (grouped) {
                 val tags = entry.asJsonObject.backupStrings("tags")
                 require(tags.isNotEmpty() && tags.all(String::isNotBlank))
@@ -60,7 +60,7 @@ private fun validateProfileTags(root: JsonObject, key: String, profileIds: Set<S
 
 private fun validateSourceWeights(weights: JsonObject) {
     weights.entrySet().forEach { (source, value) ->
-        SourceKey.valueOf(source)
+        SourceKey.parseOrThrow(source)
         require(value.isJsonPrimitive && value.asJsonPrimitive.isNumber &&
             value.asDouble.isFinite() && value.asDouble >= 0.0) { "Invalid backup source weight" }
     }

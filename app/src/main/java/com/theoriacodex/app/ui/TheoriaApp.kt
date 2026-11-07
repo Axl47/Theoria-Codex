@@ -20,6 +20,24 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.combine
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.produceState
+import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.http.SiteHealthCheck
+import com.theoriacodex.sources.http.HostOutageKind
+import com.theoriacodex.app.source.inPresentationOrder
+import com.theoriacodex.app.source.startSourceHealthCheck
+import com.theoriacodex.app.source.sourceIssues
+import com.theoriacodex.app.source.clearSource
+import com.theoriacodex.app.source.SourceHealth
+import com.theoriacodex.app.source.LocalSourceHealth
+import com.theoriacodex.app.ui.routes.activeRecommendationProfile
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import com.theoriacodex.app.tags.PostTagSavedTags
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -54,6 +72,25 @@ import com.theoriacodex.app.viewer.ViewerReturnTransition
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 
+/** Ranks Codices for "Save to Codex" from the saved library. */
+@Composable
+private fun rememberCodexSaveRelevanceLoader(shell: TheoriaShell): CodexSaveRelevanceLoader = remember(shell) {
+    val source = CodexCollectionSource(shell.data.codexRepository, shell.data.storageDirectory, shell.data.cacheRepository)
+    CodexSaveRelevanceLoader(shell.data.codexRepository, shell.scope, observeLibrary = source::observeSavedLibrary)
+}
+
+/** The active profile's single saved tags, for the star in post sheets, and how to unsave one. */
+@Composable
+private fun rememberPostTagSavedTags(shell: TheoriaShell): PostTagSavedTags = remember(shell) {
+    PostTagSavedTags(
+        saved = shell.data.settingsRepository.observeSettings().map { settings ->
+            settings.favoriteTagsByProfile[settings.activeRecommendationProfile().profileId].orEmpty()
+                .mapNotNullTo(mutableSetOf()) { entry -> entry.tags.singleOrNull()?.let { entry.source to it } }
+        }.distinctUntilChanged(),
+        remove = { source, tag -> shell.removeFavoriteTags(source, listOf(tag)) },
+    )
+}
+
 /** Renderable app-shell boundary with dependencies supplied by the application owner. */
 @Composable
 internal fun TheoriaAppContent(
@@ -85,20 +122,20 @@ internal fun TheoriaAppContent(
         settingsRepository = shell.data.settingsRepository,
         onProfileChanged = { profile -> shell.workflows.likesCodexSync.ensureProfileCodex(profile) },
     )
-    val saveRelevanceLoader = remember(shell) {
-        val source = CodexCollectionSource(shell.data.codexRepository, shell.data.storageDirectory, shell.data.cacheRepository)
-        CodexSaveRelevanceLoader(shell.data.codexRepository, shell.scope, observeLibrary = source::observeSavedLibrary)
-    }
+    val saveRelevanceLoader = rememberCodexSaveRelevanceLoader(shell)
     val watchPresentation = com.theoriacodex.app.search.rememberPostWatchPresentation(
         shell.data.readingPositions, shell.data.recentsRepository,
     )
     val viewerReturnTransition = remember { ViewerReturnTransition() }
     val relatedPostsSupport = remember(shell) { shell.features.relatedPosts::supports }
+    val sourceHealth = rememberSourceHealth(shell)
+    val savedTags = rememberPostTagSavedTags(shell)
     CompositionLocalProvider(
         com.theoriacodex.app.search.LocalPostWatchPresentation provides watchPresentation,
         LocalCodexSaveRelevanceLoader provides saveRelevanceLoader,
         LocalViewerReturnTransition provides viewerReturnTransition,
         LocalNetworkOnline provides shell.sources.networkOnline,
+        LocalSourceHealth provides sourceHealth,
         com.theoriacodex.app.related.LocalRelatedPostsSupport provides relatedPostsSupport,
     ) {
         com.theoriacodex.app.codex.SavedCodexSession {
@@ -106,6 +143,7 @@ internal fun TheoriaAppContent(
                 shell.routes.searchOwner?.state,
                 shell.features.search::fetchSearchTermCounts,
                 shell.routes.postTagSearchActions,
+                savedTags,
             ) {
                 TheoriaNightTheme {
                     ShellOverlaySheets(shell)
@@ -302,19 +340,23 @@ private fun SaveToCodexOverlay(shell: TheoriaShell) {
             codicesByProfile = state.codicesByProfile,
             codexItemCounts = state.itemCounts,
             codexCoverCandidates = state.coverCandidates,
-            relevanceScores = state.relevanceScores,
+            relevanceScores = remember(state.relevanceScores, pendingSave.query) {
+                pendingSave.searchSaves.boost(pendingSave.query, state.relevanceScores)
+            },
             librarySort = state.settings.codexLibrarySort,
             libraryUsage = state.libraryUsage,
             containingCodexIds = state.containingCodexIds,
             excludedCodexIds = pendingSave.excludedCodexIds,
             onCreateCodex = { profileId, name ->
+                val codexId = profileScopedCodexId(profileId)
                 shell.owners.codexSaves.save(
-                    codexId = profileScopedCodexId(profileId),
+                    codexId = codexId,
                     posts = posts,
                     cacheFullImage = state.settings.cache.cacheFullImageOnSave,
                     fromForYou = pendingSave.fromForYou,
                     newCollectionName = name,
                 )
+                pendingSave.searchSaves.record(pendingSave.query, codexId)
                 pendingSave.clear()
             },
             onSelectCodex = { codexId ->
@@ -324,9 +366,46 @@ private fun SaveToCodexOverlay(shell: TheoriaShell) {
                     cacheFullImage = state.settings.cache.cacheFullImageOnSave,
                     fromForYou = pendingSave.fromForYou,
                 )
+                pendingSave.searchSaves.record(pendingSave.query, codexId)
                 pendingSave.clear()
             },
             onDismiss = pendingSave::clear,
         )
+    }
+}
+
+/**
+ * Down sources for the dropdowns, refreshed when outages change and each minute so expired ones
+ * clear. Starts the background startup check once the app is showing (it never blocks startup).
+ */
+@Composable
+private fun rememberSourceHealth(shell: TheoriaShell): SourceHealth {
+    val outages = shell.sources.outages
+    LaunchedEffect(shell.navReady) {
+        if (shell.navReady) {
+            startSourceHealthCheck(shell.scope, SiteHealthCheck(outages)) { shell.sources.availableSources.value.inPresentationOrder() }
+        }
+    }
+    val issues by produceState(emptyMap<SourceKey, HostOutageKind>(), outages) {
+        combine(outages.outages, shell.sources.availableSources, minuteTicks()) { recorded, sources, _ ->
+            sourceIssues(recorded, sources, System.currentTimeMillis())
+        }.collect { value = it }
+    }
+    return remember(issues, shell) {
+        SourceHealth(
+            issues = issues,
+            recheck = outages::clearSource,
+            verify = { source ->
+                shell.container.customSites.requestVerification(source.id)
+                shell.owners.settings.onAction(SettingsAction.OpenCustomSites)
+            },
+        )
+    }
+}
+
+private fun minuteTicks() = flow {
+    while (true) {
+        emit(Unit)
+        delay(60_000L)
     }
 }

@@ -1,5 +1,7 @@
 package com.theoriacodex.app.recents
 
+import com.theoriacodex.app.source.SourcePresentationCatalog
+import com.theoriacodex.app.source.NullableSourceKeySaver
 import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
 import androidx.compose.foundation.layout.height
 import com.theoriacodex.app.ui.components.POST_SHELF_CARD_WIDTH
@@ -38,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -122,7 +125,7 @@ internal fun RecentsScreen(
     var filter by rememberSaveable { mutableStateOf(RecentsFilter.ALL) }
     var searchFilter by rememberSaveable { mutableStateOf(RecentSearchFilter.ALL) }
     var showMenu by remember { mutableStateOf(false) }
-    var selectedSource by rememberSaveable { mutableStateOf<SourceKey?>(null) }
+    var selectedSource by rememberSaveable(stateSaver = NullableSourceKeySaver) { mutableStateOf<SourceKey?>(null) }
     val visible = rememberVisibleRecents(watchedPosts, codexPosts, searches, fypSearches, activity, selectedSource)
     val sourceEmptyMessage = selectedSource?.let { "No recent activity from ${it.displayName()}." }
     val openWatchedPost: (Int) -> Unit = { onOpenWatchedPost(visible.watchedPosts, it) }
@@ -188,7 +191,7 @@ private fun RecentsSourceSelector(selectedSource: SourceKey?, onSelected: (Sourc
     var expanded by remember { mutableStateOf(false) }
     SourceSelector(
         selectedSource = selectedSource,
-        availableSources = SourceKey.entries,
+        availableSources = SourceKey.builtIns + SourcePresentationCatalog.customSources(),
         allSourcesLabel = "All sources",
         accessibilityLabel = "Filter Recents by source",
         enabled = true,
@@ -462,7 +465,7 @@ private fun WatchedGrid(
                     item(key = "day:${row.date}", span = StaggeredGridItemSpan.FullLine) { RecentsDayHeading(row.label) }
                 is RecentsGridRow.Post -> {
                     val post = row.entry.post
-                    item(key = "${post.id.source.name}:${post.id.sourcePostId}") {
+                    item(key = "${post.id.source.id}:${post.id.sourcePostId}") {
                         RecentPostCard(
                             row.entry, now, pixivUgoiraClient, likedPostIds, durationStateForPost,
                             onDurationPostVisibilityChanged, onAuthoritativeDurationKnown, onToggleLike,
@@ -607,33 +610,11 @@ private fun ActivityList(
             when (item) {
                 is RecentsTimelineItem.Day -> RecentsDayHeading(item.label)
                 RecentsTimelineItem.RelatedShelf -> related?.content?.invoke()
-                is RecentsTimelineItem.Posts -> {
-                val row = rememberLazyListState()
-                val postIds = remember(item.entries) { item.entries.map { it.post.id } }
-                ViewerReturnShelf(ViewerReturnShelfId.RecentsTimeline, postIds, row) {
-                LazyRow(
-                    state = row,
-                    // The same square frame as other shelves keeps every card in a row the same height.
-                    modifier = Modifier.height(POST_SHELF_CARD_WIDTH / POST_SHELF_MEDIA_ASPECT_RATIO),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    items(item.entries, key = { "${it.section}:${it.post.id.source.name}:${it.post.id.sourcePostId}" }) { entry ->
-                        Box(Modifier.width(POST_SHELF_CARD_WIDTH)) {
-                            RecentPostCard(
-                                entry, now, pixivUgoiraClient, likedPostIds, durationStateForPost,
-                                onDurationPostVisibilityChanged, onAuthoritativeDurationKnown, onToggleLike,
-                                viewedMediaNumber = null,
-                                onClick = {
-                                    openRecentPost(entry, watchedPosts, codexPosts, onOpenWatchedPost, onOpenCodexPost)
-                                },
-                                onLongPress = { onLongPress(entry.post, entry.section) },
-                                mediaAspectRatio = POST_SHELF_MEDIA_ASPECT_RATIO, showTitle = false,
-                            )
-                        }
-                    }
-                }
-                }
-                }
+                is RecentsTimelineItem.Posts -> RecentPostsRow(
+                    item.entries, now, pixivUgoiraClient, likedPostIds, durationStateForPost,
+                    onDurationPostVisibilityChanged, onAuthoritativeDurationKnown, onToggleLike, onLongPress,
+                    onOpen = { entry -> openRecentPost(entry, watchedPosts, codexPosts, onOpenWatchedPost, onOpenCodexPost) },
+                )
                 is RecentsTimelineItem.Searches -> LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(item.entries, key = { entry -> "${entry.kind}:${entry.queryHash}" }) { entry ->
                         RecentSearchTile(
@@ -647,6 +628,48 @@ private fun ActivityList(
             }
         }
     }
+    }
+}
+
+/** One day's posts as a horizontal shelf, newest first. */
+@Composable
+private fun RecentPostsRow(
+    entries: List<RecentPostEntry>,
+    now: Long,
+    pixivUgoiraClient: PixivUgoiraClient?,
+    likedPostIds: Set<PostId>,
+    durationStateForPost: (Post) -> Flow<MediaDurationState?>,
+    onDurationPostVisibilityChanged: (Post, Boolean) -> Unit,
+    onAuthoritativeDurationKnown: (Post, Long) -> Unit,
+    onToggleLike: ((Post) -> Unit)?,
+    onLongPress: (Post, RecentPostSection) -> Unit,
+    onOpen: (RecentPostEntry) -> Unit,
+) {
+    val row = rememberLazyListState()
+    val postIds = remember(entries) { entries.map { it.post.id } }
+    // Rows are newest first, but a list keeps its place by key, so a post viewed since would
+    // land off-screen to the left. Show the newest whenever it changes.
+    LaunchedEffect(postIds.firstOrNull()) { if (row.firstVisibleItemIndex != 0) row.scrollToItem(0) }
+    ViewerReturnShelf(ViewerReturnShelfId.RecentsTimeline, postIds, row) {
+        LazyRow(
+            state = row,
+            // The same square frame as other shelves keeps every card in a row the same height.
+            modifier = Modifier.height(POST_SHELF_CARD_WIDTH / POST_SHELF_MEDIA_ASPECT_RATIO),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            items(entries, key = { "${it.section}:${it.post.id.source.id}:${it.post.id.sourcePostId}" }) { entry ->
+                Box(Modifier.width(POST_SHELF_CARD_WIDTH)) {
+                    RecentPostCard(
+                        entry, now, pixivUgoiraClient, likedPostIds, durationStateForPost,
+                        onDurationPostVisibilityChanged, onAuthoritativeDurationKnown, onToggleLike,
+                        viewedMediaNumber = null,
+                        onClick = { onOpen(entry) },
+                        onLongPress = { onLongPress(entry.post, entry.section) },
+                        mediaAspectRatio = POST_SHELF_MEDIA_ASPECT_RATIO, showTitle = false,
+                    )
+                }
+            }
+        }
     }
 }
 

@@ -29,7 +29,7 @@ data class ForYouSection(
 
 internal class ForYouSectionsLoader(
     registry: SourceAdapterRegistry,
-    store: TagSuggestionStore,
+    private val store: TagSuggestionStore,
     private val likes: LikesRepository,
     private val savedSearches: SavedSearchRepository,
     private val execute: suspend (ForYouFeedRequest, Map<SourceKey, List<String>>, Int) -> ForYouFeedResult,
@@ -67,8 +67,9 @@ internal class ForYouSectionsLoader(
     private suspend fun generatedSeeds(request: ForYouFeedRequest, sources: List<SourceKey>,
         liked: List<com.theoriacodex.data.repository.LikedPost>,
         blocked: List<com.theoriacodex.data.repository.ForYouBlacklistEntry>): List<SectionSeed> {
+        val training = crossSourceTraining(liked, store)
         return sources.mapConcurrent { source ->
-            val documents = liked.filter { it.postId.source == source }.map { it.tags }
+            val documents = training.documentsFor(source)
             val tags = documents.flatMap { RecommendationTagNormalization.normalizeDistinct(source, it, 40) }
                 .groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.take(48).map { it.key }
             val providerCounts = if (tags.isEmpty()) emptyMap() else counts.fetch(source, tags, emptyMap())

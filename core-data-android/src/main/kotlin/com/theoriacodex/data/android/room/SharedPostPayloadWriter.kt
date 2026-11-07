@@ -15,7 +15,7 @@ internal class SharedPostPayloadWriter(
     private val codec: LocalPostPayloadCodec,
 ) {
     fun upsert(post: Post) {
-        val source = post.id.source.name
+        val source = post.id.source.id
         val sourcePostId = post.id.sourcePostId
         val existingEntity = dao.post(source, sourcePostId)
         if (existingEntity == null) {

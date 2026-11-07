@@ -11,7 +11,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.domain.tags.normalizeGelbooruToken
+import com.theoriacodex.domain.tags.sourceAutocompletePrefix
 import com.theoriacodex.domain.tags.normalizeMatchToken
 import java.util.LinkedHashMap
 import kotlinx.coroutines.CancellationException
@@ -474,10 +474,6 @@ internal class SearchSuggestionCoordinator(
 
     private fun autocompletePrefixForSource(source: SourceKey, input: String): String {
         val normalized = parseScopedInput(input).value
-        return when (source) {
-            SourceKey.GELBOORU, SourceKey.IWARA, SourceKey.RULE34XXX ->
-                normalizeGelbooruToken(normalized)
-            else -> normalized
-        }
+        return sourceAutocompletePrefix(source, normalized)
     }
 }

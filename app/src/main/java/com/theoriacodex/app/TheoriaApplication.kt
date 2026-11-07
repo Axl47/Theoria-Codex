@@ -5,6 +5,7 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.decode.ImageDecoderDecoder
 import coil.disk.DiskCache
+import com.theoriacodex.app.customsites.BrowserVerifiedSites
 import com.theoriacodex.app.di.DefaultTheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
@@ -33,6 +34,7 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
 
     override fun onCreate() {
         super.onCreate()
+        BrowserVerifiedSites.install(this)
         readiness = ApplicationDataReadiness(
             applicationScope = applicationScope,
             initializationDispatcher = Dispatchers.IO,
@@ -93,6 +95,7 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
             .okHttpClient {
                 OkHttpClient.Builder()
                     .dispatcher(Dispatcher().apply { maxRequestsPerHost = IMAGE_MAX_REQUESTS_PER_HOST })
+                    .cookieJar(BrowserVerifiedSites.cookieJar)
                     .build()
             }
             .build()

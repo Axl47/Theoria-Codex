@@ -150,13 +150,12 @@ class ForYouCoordinator(
             Random(0L)
         }
 
+        val training = crossSourceTraining(likes, tagSuggestionStore)
         val preparedBySource = withContext(computationDispatcher) {
-            likes.asSequence()
-                .filter { liked -> liked.postId.source in enabledSources }
-                .groupBy { liked -> liked.postId.source }
-                .mapValues { (source, sourceLikes) ->
-                    ForYouTagSetGenerator.prepare(source, sourceLikes.map(LikedPost::tags))
-                }
+            enabledSources
+                .associateWith(training::documentsFor)
+                .filterValues { documents -> documents.isNotEmpty() }
+                .mapValues { (source, documents) -> ForYouTagSetGenerator.prepare(source, documents) }
         }
         val fallbackBySource = preparedBySource.filterValues { it.needsFallback }.keys
             .mapConcurrent { source -> source to fallbackTagsForSource(source) }.toMap()
@@ -187,7 +186,7 @@ class ForYouCoordinator(
                 val includeTags = selectAllowedSeed(
                     prepared = ForYouTagSetGenerator.prepare(source, emptyList()),
                     fallbackCandidates = fallbackTags,
-                    random = Random(source.name.hashCode()),
+                    random = Random(source.id.hashCode()),
                     blockedKeys = blacklistedSeedKeys[source].orEmpty(),
                 )
                 includeTags.takeIf { it.isNotEmpty() }?.let { tags -> source to tags }

@@ -29,12 +29,24 @@ internal class PostTagSearchActions(
 
 internal val LocalPostTagSearchActions = staticCompositionLocalOf { PostTagSearchActions() }
 
+/**
+ * The active profile's saved single tags, so every tag sheet marks them, and how holding a saved tag
+ * removes it. Saving still goes through each sheet's own long-press callback.
+ */
+internal class PostTagSavedTags(
+    val saved: Flow<Set<Pair<SourceKey, String>>> = flowOf(emptySet()),
+    val remove: (SourceKey, String) -> Unit = { _, _ -> },
+)
+
+internal val LocalPostTagSavedTags = staticCompositionLocalOf { PostTagSavedTags() }
+
 /** Cross-route tag sheets share the Search draft, typed count lookup, and draft actions while shown. */
 @Composable
 internal fun PostTagContextProvider(
     state: StateFlow<SearchUiState>?,
     fetchSearchTermCounts: suspend (SourceKey, List<SearchTerm>) -> Map<SearchTerm, Int?> = { _, _ -> emptyMap() },
     searchActions: PostTagSearchActions = PostTagSearchActions(),
+    savedTags: PostTagSavedTags = PostTagSavedTags(),
     content: @Composable () -> Unit,
 ) {
     val draft = remember(state) { state?.map { it.query.draft }?.distinctUntilChanged() ?: noSearchDraft }
@@ -42,6 +54,7 @@ internal fun PostTagContextProvider(
         LocalSearchDraftSelection provides draft,
         LocalSearchTermCounts provides fetchSearchTermCounts,
         LocalPostTagSearchActions provides searchActions,
+        LocalPostTagSavedTags provides savedTags,
         content = content,
     )
 }

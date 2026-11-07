@@ -13,8 +13,7 @@ import com.theoriacodex.app.sourceauth.CredentialStoreRecoveryState
 import com.theoriacodex.app.sourceauth.CredentialStoreUnavailableException
 import com.theoriacodex.app.sourceauth.PixivPkceController
 import com.theoriacodex.app.sourceauth.SourceAccountStore
-import com.theoriacodex.app.sourceauth.parseGelbooruCredentialInput
-import com.theoriacodex.app.sourceauth.parseRule34XxxCredentialInput
+import com.theoriacodex.app.sourceauth.parseCredentialSnippet
 import com.theoriacodex.app.ui.state.RouteStateOwner
 import com.theoriacodex.data.repository.CacheRepository
 import com.theoriacodex.data.repository.CodexRepository
@@ -205,7 +204,7 @@ internal class SettingsViewModel(
                         activeProfileBlacklist = settings.forYouBlacklistByProfile[activeProfile.profileId]
                             .orEmpty()
                             .sortedWith(
-                                compareBy<com.theoriacodex.data.repository.ForYouBlacklistEntry> { it.source.name }
+                                compareBy<com.theoriacodex.data.repository.ForYouBlacklistEntry> { it.source.id }
                                     .thenBy { it.tags.joinToString("+") },
                             ),
                     )
@@ -372,6 +371,10 @@ internal class SettingsViewModel(
                 updateState { copy(page = SettingsPage.ACCOUNTS) }
                 effectChannel.trySend(SettingsEffect.NavigateToSettings)
             }
+            SettingsAction.OpenCustomSites -> {
+                updateState { copy(page = SettingsPage.SITES) }
+                effectChannel.trySend(SettingsEffect.NavigateToSettings)
+            }
             SettingsAction.SettingsEntered -> {
                 updateAccounts { copy(gelbooruApiKeyInput = "", rule34XxxApiKeyInput = "") }
                 refreshAccounts()
@@ -431,23 +434,23 @@ internal class SettingsViewModel(
     }
 
     private fun updateGelbooruApiKey(input: String) {
-        val parsed = parseGelbooruCredentialInput(input)
+        val parsed = parseCredentialSnippet(input)
         updateAccounts {
             if (parsed == null) {
                 copy(gelbooruApiKeyInput = input.trim())
             } else {
-                copy(gelbooruApiKeyInput = parsed.apiKey, gelbooruUserIdInput = parsed.userId)
+                copy(gelbooruApiKeyInput = parsed.apiKey, gelbooruUserIdInput = parsed.user)
             }
         }
     }
 
     private fun updateRule34XxxApiKey(input: String) {
-        val parsed = parseRule34XxxCredentialInput(input)
+        val parsed = parseCredentialSnippet(input)
         updateAccounts {
             if (parsed == null) {
                 copy(rule34XxxApiKeyInput = input.trim())
             } else {
-                copy(rule34XxxApiKeyInput = parsed.apiKey, rule34XxxUserIdInput = parsed.userId)
+                copy(rule34XxxApiKeyInput = parsed.apiKey, rule34XxxUserIdInput = parsed.user)
             }
         }
     }

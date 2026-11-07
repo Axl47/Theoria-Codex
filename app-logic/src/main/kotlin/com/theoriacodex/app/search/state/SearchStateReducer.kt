@@ -274,7 +274,7 @@ object SearchStateReducer {
         val mergedStatuses = (state.content.statuses + change.statuses)
             .associateBy { status -> status.source }
             .values
-            .sortedBy { status -> status.source.name }
+            .sortedBy { status -> status.source.id }
         return SearchReduction(
             state = state.copy(
                 content = state.content.copy(
@@ -347,7 +347,7 @@ object SearchStateReducer {
     ): List<SourceRunStatus> = (current + updates)
         .associateBy(SourceRunStatus::source)
         .values
-        .sortedBy { status -> status.source.name }
+        .sortedBy { status -> status.source.id }
 
     private fun cancelRequest(
         state: SearchUiState,

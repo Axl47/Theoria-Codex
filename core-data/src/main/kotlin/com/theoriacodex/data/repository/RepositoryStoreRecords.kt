@@ -3,7 +3,13 @@ package com.theoriacodex.data.repository
 import com.google.gson.annotations.SerializedName
 import com.theoriacodex.domain.model.SourceKey
 
-internal const val SHARED_SOURCE_CATALOG_VERSION = 2
+internal const val SHARED_SOURCE_CATALOG_VERSION = 3
+
+/** Sources each catalog version introduced; older stored selections gain them once on read. */
+private val SOURCES_ADDED_BY_CATALOG_VERSION = mapOf(
+    2 to setOf(SourceKey.HITOMI),
+    3 to setOf(SourceKey.DANBOORU, SourceKey.AIBOORU),
+)
 
 /**
  * The legacy settings JSON schema shared by the atomic-file repository and the one-time
@@ -16,9 +22,9 @@ internal data class LegacySettingsStoreRecord(
     @field:SerializedName("sourceCatalogVersion")
     val sourceCatalogVersion: Int? = null,
     @field:SerializedName("enabledSources")
-    val enabledSources: List<String> = SourceKey.entries.map { it.name },
+    val enabledSources: List<String> = SourceKey.builtIns.map { it.id },
     @field:SerializedName("sourceWeights")
-    val sourceWeights: Map<String, Double> = SourceRuntimeSettings().sourceWeights.mapKeys { it.key.name },
+    val sourceWeights: Map<String, Double> = SourceRuntimeSettings().sourceWeights.mapKeys { it.key.id },
     @field:SerializedName("sourceWeightsByConfiguration")
     val sourceWeightsByConfiguration: Map<String, Map<String, Double>>? = null,
     @field:SerializedName("viewerPlaybackMode") val viewerPlaybackMode: String? = null,
@@ -58,17 +64,15 @@ internal data class LegacySettingsStoreRecord(
 ) {
     fun toDomain(): AppSettings {
         val storedEnabledSources = enabledSources
-            .mapNotNull { runCatching { SourceKey.valueOf(it) }.getOrNull() }
+            .mapNotNull { SourceKey.parse(it) }
             .toSet()
-        val migratedEnabledSources = if (requiresSourceCatalogMigration()) {
-            storedEnabledSources + SourceKey.HITOMI
-        } else {
-            storedEnabledSources
-        }
+        val migratedEnabledSources = storedEnabledSources + SOURCES_ADDED_BY_CATALOG_VERSION
+            .filterKeys { version -> version > sourceSchemaVersion() }
+            .values.flatten()
         val runtime = SourceRuntimeSettings(
             enabledSources = migratedEnabledSources,
             sourceWeights = sourceWeights.mapNotNull { (key, value) ->
-                runCatching { SourceKey.valueOf(key) }.getOrNull()?.let { source -> source to value }
+                SourceKey.parse(key)?.let { source -> source to value }
             }.toMap(),
             sourceWeightsByConfiguration = decodeWeightConfigurations(),
         )
@@ -120,13 +124,9 @@ internal data class LegacySettingsStoreRecord(
     private fun decodeWeightConfigurations(): Map<String, Map<SourceKey, Double>> =
         sourceWeightsByConfiguration.orEmpty().mapValues { (_, weights) ->
             weights.mapNotNull { (name, weight) ->
-                runCatching { SourceKey.valueOf(name) }.getOrNull()?.let { it to weight }
+                SourceKey.parse(name)?.let { it to weight }
             }.toMap()
         }
-
-    fun requiresSourceCatalogMigration(): Boolean {
-        return sourceSchemaVersion() < SHARED_SOURCE_CATALOG_VERSION
-    }
 
     private fun toCacheSettings() = CacheSettings(
         cacheFullImageOnSave = cacheFullImageOnSave,
@@ -169,10 +169,10 @@ internal data class LegacySettingsStoreRecord(
                 sourceCatalogVersion = SHARED_SOURCE_CATALOG_VERSION,
                 oldSearchBar = settings.oldSearchBar,
                 codexLibrarySort = settings.codexLibrarySort.name,
-                enabledSources = settings.runtime.enabledSources.map { it.name },
-                sourceWeights = settings.runtime.sourceWeights.mapKeys { it.key.name },
+                enabledSources = settings.runtime.enabledSources.map { it.id },
+                sourceWeights = settings.runtime.sourceWeights.mapKeys { it.key.id },
                 sourceWeightsByConfiguration = settings.runtime.sourceWeightsByConfiguration.mapValues { (_, weights) ->
-                    weights.mapKeys { it.key.name }
+                    weights.mapKeys { it.key.id }
                 },
                 cacheFullImageOnSave = settings.cache.cacheFullImageOnSave,
                 viewerPlaybackMode = settings.viewer.playbackMode.name,
@@ -199,7 +199,7 @@ internal data class LegacySettingsStoreRecord(
                     entries.map(LegacyFavoriteTagEntryRecord::fromDomain)
                 },
                 providerHealth = settings.providerHealth.values
-                    .sortedBy { snapshot -> snapshot.source.name }
+                    .sortedBy { snapshot -> snapshot.source.id }
                     .map(LegacyProviderHealthSnapshotRecord::fromDomain),
             )
         }
@@ -224,7 +224,7 @@ internal data class LegacyProviderHealthSnapshotRecord(
         val resolvedSource = source
             ?.trim()
             ?.takeIf(String::isNotEmpty)
-            ?.let { value -> runCatching { SourceKey.valueOf(value) }.getOrNull() }
+            ?.let { value -> SourceKey.parse(value) }
             ?: return null
         val resolvedStatus = status
             ?.trim()
@@ -244,7 +244,7 @@ internal data class LegacyProviderHealthSnapshotRecord(
     companion object {
         fun fromDomain(snapshot: ProviderHealthSnapshot): LegacyProviderHealthSnapshotRecord {
             return LegacyProviderHealthSnapshotRecord(
-                source = snapshot.source.name,
+                source = snapshot.source.id,
                 status = snapshot.status.name,
                 checkedAtEpochMs = snapshot.checkedAtEpochMs,
                 latencyMs = snapshot.latencyMs,
@@ -274,7 +274,7 @@ internal data class LegacyFavoriteTagEntryRecord(
         val resolvedSource = source
             ?.trim()
             ?.takeIf(String::isNotEmpty)
-            ?.let { value -> runCatching { SourceKey.valueOf(value) }.getOrNull() }
+            ?.let { value -> SourceKey.parse(value) }
             ?: return null
         return RepositoryPolicies.normalizeFavoriteTagEntry(resolvedSource, tags ?: listOfNotNull(tag), name)
     }
@@ -283,7 +283,7 @@ internal data class LegacyFavoriteTagEntryRecord(
         fun fromDomain(entry: FavoriteTagEntry): LegacyFavoriteTagEntryRecord {
             val normalized = entry.tags.map { tag -> RepositoryPolicies.normalizeFavoriteTag(entry.source, tag) }
             return LegacyFavoriteTagEntryRecord(
-                source = entry.source.name,
+                source = entry.source.id,
                 tag = normalized.first(),
                 tags = normalized.takeIf { it.size > 1 },
                 name = entry.name,
@@ -302,7 +302,7 @@ internal data class LegacyForYouBlacklistEntryRecord(
         val resolvedSource = source
             ?.trim()
             ?.takeIf(String::isNotEmpty)
-            ?.let { value -> runCatching { SourceKey.valueOf(value) }.getOrNull() }
+            ?.let { value -> SourceKey.parse(value) }
             ?: return null
         val normalizedTags = RepositoryPolicies.normalizeBlacklistTags(tags.orEmpty())
         if (normalizedTags.isEmpty()) return null
@@ -312,7 +312,7 @@ internal data class LegacyForYouBlacklistEntryRecord(
     companion object {
         fun fromDomain(entry: ForYouBlacklistEntry): LegacyForYouBlacklistEntryRecord {
             return LegacyForYouBlacklistEntryRecord(
-                source = entry.source.name,
+                source = entry.source.id,
                 tags = RepositoryPolicies.normalizeBlacklistTags(entry.tags),
             )
         }

@@ -21,18 +21,21 @@ class GelbooruRelatedPostsParserTest {
             </body></html>
         """.trimIndent()
 
-        val ids = parseGelbooruRelatedPostIds(html, seedId = "100", limit = 2)
+        val ids = parseGelbooruRelatedPostIds(html, baseUrl = "https://gelbooru.com", seedId = "100", limit = 2)
 
         assertEquals(listOf("200", "300"), ids)
     }
 
     @Test
     fun `parser distinguishes absent block from present empty block`() {
-        assertNull(parseGelbooruRelatedPostIds("<html><body></body></html>", seedId = "1", limit = 6))
+        assertNull(
+            parseGelbooruRelatedPostIds("<html><body></body></html>", baseUrl = "https://gelbooru.com", seedId = "1", limit = 6),
+        )
         assertEquals(
             emptyList<String>(),
             parseGelbooruRelatedPostIds(
                 "<div><div>More Like This: (Beta Temporary Feature)</div></div>",
+                baseUrl = "https://gelbooru.com",
                 seedId = "1",
                 limit = 6,
             ),

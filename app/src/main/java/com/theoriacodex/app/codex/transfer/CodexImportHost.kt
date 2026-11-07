@@ -11,12 +11,19 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.ui.routes.CollectRouteEffects
 
 @Composable
-internal fun CodexImportHost(owner: CodexImportViewModel, snackbar: SnackbarHostState) {
+internal fun CodexImportHost(owner: CodexImportViewModel, snackbar: SnackbarHostState, onSetUpSite: (String) -> Unit) {
     val state by owner.state.collectAsStateWithLifecycle()
     CollectRouteEffects(owner.effects) { result ->
         val retryable = result == CodexImportResult.Failure || result == CodexImportResult.TimedOut || result == CodexImportResult.Unreadable
-        val message = result.feedbackMessage()
-        if (snackbar.showSnackbar(message, actionLabel = if (retryable) "Retry" else null) == SnackbarResult.ActionPerformed) owner.retry()
+        val missingSite = (result as? CodexImportResult.Success)?.missingSiteHosts?.firstOrNull()
+        val actionLabel = when {
+            retryable -> "Retry"
+            missingSite != null -> "Set up"
+            else -> null
+        }
+        if (snackbar.showSnackbar(result.feedbackMessage(), actionLabel = actionLabel) == SnackbarResult.ActionPerformed) {
+            if (retryable) owner.retry() else missingSite?.let(onSetUpSite)
+        }
     }
     if (state.running) {
         val progress = state.progress
@@ -41,5 +48,10 @@ private fun CodexImportResult.feedbackMessage(): String = when (this) {
             CodexImportResult.Unreadable -> "Could not read Codex file."
             CodexImportResult.Invalid -> "Unsupported or invalid Codex file. Files must be 32 MiB or smaller."
             is CodexImportResult.Success -> "Imported ${imported} posts" +
-                if (skipped > 0) " (${skipped} skipped)" else ""
+                (if (skipped > 0) " (${skipped} skipped)" else "") +
+                when (missingSiteHosts.size) {
+                    0 -> ""
+                    1 -> ". ${missingSiteHosts.single()} isn't set up here."
+                    else -> ". ${missingSiteHosts.size} sites aren't set up here."
+                }
         }

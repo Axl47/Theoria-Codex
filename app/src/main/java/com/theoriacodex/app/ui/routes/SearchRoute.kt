@@ -1,6 +1,7 @@
 package com.theoriacodex.app.ui.routes
 
 import com.theoriacodex.app.ui.LocalNetworkOnline
+import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.SavedSearchEntry
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -64,6 +65,8 @@ internal data class SearchRouteCallbacks(
     val onPostUrlCopied: (Post) -> Unit = {},
     val onOpenSourceAccounts: () -> Unit = {},
     val onOpenSavedSearch: (SavedSearchEntry) -> Unit = {},
+    val onSaveSearch: (String, RecentSearchEntry) -> Unit = { _, _ -> },
+    val onManageSavedSearches: () -> Unit = {},
     val onAddFavoriteTag: (SourceKey, List<String>, String?) -> Unit,
     val onRemoveFavoriteTag: (SourceKey, List<String>) -> Unit,
     val onRenameFavoriteTag: (SourceKey, List<String>, String) -> Unit,
@@ -363,6 +366,8 @@ private fun SearchRouteContent(
         oldSearchBar = config.settings.oldSearchBar,
         savedSearches = config.savedSearches,
         onOpenSavedSearch = callbacks.onOpenSavedSearch,
+        onSaveSearch = callbacks.onSaveSearch,
+        onManageSavedSearches = callbacks.onManageSavedSearches,
         creatorBrowsingSources = config.creatorBrowsingSources,
         onAction = owner::onAction,
         resolvePostById = resolvePostById,

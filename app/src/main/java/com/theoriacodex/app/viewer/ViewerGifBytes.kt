@@ -109,13 +109,13 @@ internal class ViewerGifByteStore(private val directory: File) {
 
 internal suspend fun loadRemoteViewerGifBytes(context: Context, source: SourceKey, location: String): ByteArray {
     val url = normalizeMediaUrl(source, location) ?: location
-    return gifByteStore(context).load("${source.name}:$url") { file -> fillRemoteGif(context, source, url, file) }
+    return gifByteStore(context).load("${source.id}:$url") { file -> fillRemoteGif(context, source, url, file) }
 }
 
 /** Prefetch path: caches the GIF on disk and reports its size without loading it into memory. */
 internal suspend fun warmRemoteViewerGif(context: Context, source: SourceKey, location: String): Long {
     val url = normalizeMediaUrl(source, location) ?: location
-    return gifByteStore(context).warm("${source.name}:$url") { file -> fillRemoteGif(context, source, url, file) }
+    return gifByteStore(context).warm("${source.id}:$url") { file -> fillRemoteGif(context, source, url, file) }
 }
 
 private suspend fun fillRemoteGif(context: Context, source: SourceKey, url: String, destination: File) {
@@ -128,7 +128,7 @@ private suspend fun fillRemoteGif(context: Context, source: SourceKey, url: Stri
 }
 
 internal suspend fun cachedViewerGifLocation(context: Context, source: SourceKey, location: String): String =
-    gifByteStore(context).cachedLocation("${source.name}:${normalizeMediaUrl(source, location) ?: location}") ?: location
+    gifByteStore(context).cachedLocation("${source.id}:${normalizeMediaUrl(source, location) ?: location}") ?: location
 
 internal suspend fun clearViewerGifCache(context: Context) = gifByteStore(context).clear()
 
