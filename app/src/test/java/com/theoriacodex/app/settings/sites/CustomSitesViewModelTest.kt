@@ -121,7 +121,8 @@ class CustomSitesViewModelTest {
 
         controller.onProbe = { SiteProbeResult.AlreadyBuiltIn("DANBOORU") }
         probeAddress(owner, "danbooru.donmai.us")
-        assertEquals(AddStage.Address("This site is already built into Theoria."), owner.add.stage)
+        assertEquals(AddStage.Address("Danbooru is already built into Theoria."), owner.add.stage)
+        assertEquals("This site is already built into Theoria.", alreadyBuiltInMessage("NOT_A_SOURCE"))
         owner.onAction(CustomSitesAction.SetAddress("safebooru.org"))
         assertEquals(AddStage.Address(), owner.add.stage)
     }

@@ -3,6 +3,8 @@ package com.theoriacodex.app.settings.sites
 import com.theoriacodex.app.customsites.CustomSiteAvailability
 import com.theoriacodex.app.customsites.CustomSiteMutation
 import com.theoriacodex.app.customsites.CustomSiteSummary
+import com.theoriacodex.app.source.displayName
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.ProbeFailure
 import com.theoriacodex.domain.source.ProtocolFamily
 import com.theoriacodex.domain.source.SiteAddressError
@@ -23,10 +25,15 @@ internal fun probeMessage(result: SiteProbeResult): String? = when (result) {
     is SiteProbeResult.UnsupportedFamily ->
         "This looks like a ${result.familyName} site, which Theoria can't use yet."
     is SiteProbeResult.NotABooru -> "${result.address.host} doesn't answer like a supported booru."
-    is SiteProbeResult.AlreadyBuiltIn -> "This site is already built into Theoria."
+    is SiteProbeResult.AlreadyBuiltIn -> alreadyBuiltInMessage(result.builtInSourceId)
     is SiteProbeResult.Unreachable -> unreachableMessage(result.address.host, result.reason)
     is SiteProbeResult.InvalidAddress -> invalidAddressMessage(result.error)
 }
+
+/** Names the shipped source when the id parses, e.g. "Danbooru is already built into Theoria." */
+internal fun alreadyBuiltInMessage(builtInSourceId: String): String =
+    SourceKey.parse(builtInSourceId)?.takeUnless { it.isCustom }?.let { "${it.displayName()} is already built into Theoria." }
+        ?: "This site is already built into Theoria."
 
 internal fun unreachableMessage(host: String, reason: ProbeFailure): String = when (reason) {
     ProbeFailure.DNS -> "Couldn't find $host. Check the address."
