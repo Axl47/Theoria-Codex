@@ -9,6 +9,15 @@
 - Liking a post from a card now gives the same haptic tick, heart pop and pink heart as liking it in the Viewer.
 - Recents' All view now groups each day's searches in one row at the top of that day, above the posts you viewed.
 - Searches in Recents read like the search editor: "or" alternatives are muted and excluded tags are red, with the source and time beside each search.
+- Feed cards load a source's preview-size images instead of originals, so feeds fill in faster and use less data.
+- On a metered network, the Viewer preloads only the next and previous videos, and only their opening seconds, to save mobile data.
+- Theoria keeps more already-seen images on your device (up to 512 MB), so scrolling back reloads them without downloading again.
+- Saving a post offline reuses the copy already loaded on your device instead of downloading it again.
+- Scrolling feeds, liking posts and typing in Search do less redrawing, so they stay smoother on busy screens.
+- The Viewer keeps fewer pages decoded in memory ahead of you and swipes through animated pages with less memory pressure.
+- Pixiv animations fetch their frame details once and share them between the card and the Viewer.
+- Settings statistics now update only while you're looking at them, instead of in the background.
+- The Codex library and its covers open faster on large collections.
 
 ### Fixed
 
