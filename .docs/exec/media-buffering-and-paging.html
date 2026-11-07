@@ -143,7 +143,7 @@
       <table>
         <thead><tr><th>Scenario</th><th>What it does</th></tr></thead>
         <tbody>
-          <tr><td><code>feedToViewer</code></td><td>Four feed cards autoplay together for 5 s; the first opens in the Viewer (cards pause, leases return after the 1 s grace), and the clip loops twice (31 s).</td></tr>
+          <tr><td><code>feedToViewer</code></td><td>Four feed cards autoplay together for 5 s; the first opens in the Viewer (cards pause, leases return after the 1 s grace), and the clip loops twice (31 s). Since round 1 it then returns to the feed and requires all four cards to play again, also after a Viewer that closes within the grace.</td></tr>
           <tr><td><code>viewerSeekAndScrub</code></td><td>A 90 s video opens cold; four seeks past the buffer; three scrub preview frames past the buffer while it plays; a release seek to the last previewed position.</td></tr>
           <tr><td><code>galleryPaging</code></td><td>An 80-page nhentai-shaped post: open, read 40 pages (1.2 s after each appears), skim 35 pages (200 ms each). Each page is requested the way its <code>AsyncImage</code> resolves it (page location, screen size, inexact, fit).</td></tr>
         </tbody>
@@ -261,6 +261,7 @@ scripts/media_bench_device.py record --round &lt;n&gt; build/media-bench/&lt;lab
           <tr><td><code>./gradlew :app:detektDebug</code></td><td>6 findings, all in files this branch does not touch (<code>RecentsScreen</code>, <code>SearchComposer</code>, <code>SearchScreen</code>, <code>TheoriaApp</code>, <code>ViewerScreenChrome</code>); they come from the base branch.</td></tr>
           <tr><td><code>python3 scripts/check_hotspots.py</code></td><td>2 pre-existing oversized test files (<code>SearchCoordinatorTest.kt</code>, <code>GelbooruSourceAdapterTest.kt</code>), untouched here.</td></tr>
           <tr><td>Device benchmark (phone, n=3, interleaved)</td><td>All three scenarios pass on both builds; numbers above.</td></tr>
+          <tr><td>Return to feed (phone, final build, n=1)</td><td><code>feedToViewer</code> now also re-leases the four cards after the Viewer closes and checks every card plays again: all four playing 371 ms after returning; after a Viewer opened and closed within the release grace (stopped cards still leased), all four resumed within 353 ms. Not compared with round 0 (its test APK predates the check).</td></tr>
         </tbody>
       </table>
       <p><code>:core-sources:test</code> and <code>:app-logic:test</code> were not run: round 1 changes neither module.</p>

@@ -148,8 +148,9 @@ class MediaBufferingBenchmarkTest {
             probe.detach()
             infrastructure.viewerVideoPlayerPool.recycle(lease)
         }
-        surfaces.forEach(BenchSurface::close)
         val cached = clips.map { infrastructure.cachedBytes(it, headers) }
+        val returned = returnToFeed(clips, surfaces)
+        surfaces.forEach(BenchSurface::close)
         val clip = end.path("/clip_1.mp4")
         val otherClipsAfterOpen = (2..FEED_CARDS).sumOf { index ->
             end.path("/clip_$index.mp4").optLong("bytes") - atOpen.path("/clip_$index.mp4").optLong("bytes")
@@ -167,6 +168,8 @@ class MediaBufferingBenchmarkTest {
                 .put("clip_duplicate_mb", megabytes(clip.optLong("duplicateBytes")))
                 .put("clip_requests", clip.optInt("requests"))
                 .put("feed_bytes_after_viewer_open_mb", megabytes(otherClipsAfterOpen))
+                .put("feed_return_all_playing_ms", returned.first)
+                .put("feed_resume_after_short_viewer_ms", returned.second)
                 .put("server", end.json)
                 .put(
                     "diagnostics",
@@ -332,6 +335,50 @@ class MediaBufferingBenchmarkTest {
                 .put("gallery_duplicate_mb", megabytes(galleryDuplicates))
                 .put("display_sources", JSONObject(sources.toMap())),
         )
+    }
+
+    /**
+     * Closing the Viewer: the four cards lease again and must all play (every visible card autoplays). Then a
+     * Viewer opens and closes within the release grace, so the cards keep their stopped leases and resume, as
+     * the card's effect does. Returns how long until all four were playing in each case.
+     */
+    private suspend fun returnToFeed(clips: List<String>, surfaces: List<BenchSurface>): Pair<Long, Long> {
+        val infrastructure = context.videoPlaybackInfrastructure()
+        val returnedAt = SystemClock.elapsedRealtime()
+        val cards = onMain {
+            clips.mapIndexed { index, clip ->
+                val lease = infrastructure.feedPreviewPlayerPool.acquire(clip, headers)
+                PlayerProbe(lease.player, surfaces[index].surface).also { probe ->
+                    probe.attach()
+                    lease.player.playWhenReady = true
+                } to lease
+            }
+        }
+        cards.forEach { (probe, _) -> probe.awaitPlaying() }
+        val allPlaying = SystemClock.elapsedRealtime() - returnedAt
+        val reopened = onMain {
+            val lease = infrastructure.viewerVideoPlayerPool.acquire(clips[1], headers)
+            infrastructure.viewerVideoPlayerPool.recycle(lease)
+            cards.forEach { (probe, _) -> check(probe.player.playbackState == Player.STATE_IDLE) { "Feed player kept loading" } }
+            SystemClock.elapsedRealtime()
+        }
+        val resumed = onMain {
+            cards.mapIndexed { index, (probe, lease) ->
+                probe.detach()
+                PlayerProbe(probe.player, surfaces[index].surface).also { resumedProbe ->
+                    resumedProbe.attach()
+                    infrastructure.feedPreviewPlayerPool.resume(lease)
+                    lease.player.playWhenReady = true
+                }
+            }
+        }
+        resumed.forEach { it.awaitPlaying() }
+        val resumedAfter = SystemClock.elapsedRealtime() - reopened
+        onMain {
+            resumed.forEach(PlayerProbe::detach)
+            cards.forEach { (_, lease) -> infrastructure.feedPreviewPlayerPool.recycle(lease, retainBinding = true) }
+        }
+        return allPlaying to resumedAfter
     }
 
     /** One Viewer player plays its first frame, so codec and player setup costs are paid before measuring. */

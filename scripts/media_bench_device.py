@@ -50,6 +50,8 @@ METRICS = {
     "clip_bytes_per_view_mb": ("MB", "bytes served for the clip: feed autoplay plus two Viewer loops (file 7.3 MB)"),
     "clip_duplicate_mb": ("MB", "bytes of that clip served more than once (re-downloaded ranges)"),
     "feed_bytes_after_viewer_open_mb": ("MB", "bytes the other three feed clips kept downloading after the Viewer opened"),
+    "feed_return_all_playing_ms": ("ms", "Viewer closed: four cards lease again until all four are playing"),
+    "feed_resume_after_short_viewer_ms": ("ms", "Viewer opened and closed within the release grace: stopped cards resume until all play"),
     "viewer_ttff_cold_ms": ("ms", "Viewer lease to first frame for a 90 s video nothing had loaded"),
     "seek_to_resume_ms": ("ms", "seek past the buffer to playing again, median of 4 seeks"),
     "seek_to_resume_max_ms": ("ms", "slowest of those 4 seeks"),
