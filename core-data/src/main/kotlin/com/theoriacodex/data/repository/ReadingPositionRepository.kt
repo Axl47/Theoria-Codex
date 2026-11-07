@@ -1,6 +1,5 @@
 package com.theoriacodex.data.repository
 
-import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.theoriacodex.data.storage.AtomicJsonFileStore
@@ -54,7 +53,7 @@ internal const val READING_POSITION_COALESCE_MS = 5_000L
  */
 class FileBackedReadingPositionRepository(
     baseDirectory: File,
-    private val store: AtomicJsonFileStore = AtomicJsonFileStore(gson = Gson()),
+    private val store: AtomicJsonFileStore = AtomicJsonFileStore(),
     private val entryLimit: Int = MAX_READING_POSITIONS,
 ) : ReadingPositionRepository {
     private val file = baseDirectory.resolve(READING_POSITIONS_FILE_NAME)
