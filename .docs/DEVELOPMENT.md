@@ -241,6 +241,21 @@ or incompatible evidence. Limits derive from observed baseline dispersion, not a
 Keep each complete evidence directory, including all Perfetto traces, for future comparisons. See
 [macrobenchmark/README.md](../macrobenchmark/README.md) for workload and metric meanings.
 
+Media buffering benchmark (video first frame, rebuffering, bytes and re-downloaded bytes, seeks, scrub
+previews, gallery paging) runs the app's real media stack against generated media served from a throttled
+loopback server inside Theoria Debug; it needs `ffmpeg`. Compare builds interleaved in one session, because
+separate sessions drift as the phone warms:
+
+```sh
+scripts/media_bench_device.py run --serial YOUR_PHONE_SERIAL --label my-change --runs 3
+scripts/media_bench_device.py run --serial YOUR_PHONE_SERIAL --label ab --skip-build \
+  --variant base=build/media-bench/apks/base --variant head=build/media-bench/apks/head
+scripts/media_bench_device.py record --round N build/media-bench/my-change/results.json
+```
+
+Results land in `build/media-bench/<label>/results.json`; rounds are tracked in
+`.docs/exec/media-buffering-metrics.json` (see `.docs/exec/media-buffering-and-paging.html`).
+
 Opt-in live provider health report:
 
 ```sh

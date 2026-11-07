@@ -1,0 +1,1004 @@
+[
+  {
+    "round": 0,
+    "commit": "61759ea6",
+    "device": "SM-S926U",
+    "conditions": "16.0 Mbit/s shared, 100 ms TTFB, in-process loopback",
+    "metrics": {
+      "feed_preview_ttff_ms": {
+        "value": 619,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; feed card lease to first rendered frame, median of 4 simultaneous cards"
+      },
+      "viewer_ttff_from_feed_ms": {
+        "value": 676,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; Viewer lease to first frame for a clip a feed card was playing"
+      },
+      "viewer_time_to_playing_from_feed_ms": {
+        "value": 1224,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; Viewer lease to isPlaying for that clip"
+      },
+      "viewer_rebuffer_count": {
+        "value": 0,
+        "unit": "count",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; rebuffers while the clip loops twice in the Viewer"
+      },
+      "viewer_rebuffer_ms": {
+        "value": 0,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; time spent rebuffering while the clip loops twice"
+      },
+      "clip_bytes_per_view_mb": {
+        "value": 8.15,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; bytes served for the clip: feed autoplay plus two Viewer loops (file 7.3 MB)"
+      },
+      "clip_duplicate_mb": {
+        "value": 0.87,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; bytes of that clip served more than once (re-downloaded ranges)"
+      },
+      "feed_bytes_after_viewer_open_mb": {
+        "value": 10.27,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; bytes the other three feed clips kept downloading after the Viewer opened"
+      },
+      "viewer_ttff_cold_ms": {
+        "value": 401,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; Viewer lease to first frame for a 90 s video nothing had loaded"
+      },
+      "seek_to_resume_ms": {
+        "value": 635,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; seek past the buffer to playing again, median of 4 seeks"
+      },
+      "seek_to_resume_max_ms": {
+        "value": 843,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; slowest of those 4 seeks"
+      },
+      "scrub_first_frame_ms": {
+        "value": 757,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; scrub preview opened to its first frame, past the buffer"
+      },
+      "scrub_frame_ms": {
+        "value": 519,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; scrub preview frame past the buffer, median of 3 targets"
+      },
+      "scrub_bytes_mb": {
+        "value": 3.27,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; bytes downloaded to show those 3 preview frames"
+      },
+      "seek_after_scrub_ms": {
+        "value": 472,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; release seek to the last previewed position until playing"
+      },
+      "long_bytes_mb": {
+        "value": 25.59,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; bytes served for the 90 s video over the seek and scrub session"
+      },
+      "long_duplicate_mb": {
+        "value": 0.67,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; bytes of the 90 s video served more than once"
+      },
+      "gallery_open_to_first_page_ms": {
+        "value": 664,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; Viewer session start to page 1 decoded at screen size"
+      },
+      "page_load_p50_ms": {
+        "value": 170,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; page becomes current to decoded, median while reading 40 pages at 1.2 s each"
+      },
+      "page_load_p90_ms": {
+        "value": 175,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; 90th percentile of the same"
+      },
+      "pages_ready_ahead": {
+        "value": 1.95,
+        "unit": "pages",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; of the next 10 pages, how many are on disk when a page opens (higher is better)"
+      },
+      "skim_shown_pct": {
+        "value": 100,
+        "unit": "%",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; pages shown within 200 ms while skimming 35 pages (higher is better)"
+      },
+      "skim_shown_p50_ms": {
+        "value": 157,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; median time to show the skimmed pages that made it"
+      },
+      "peak_memory_delta_mb": {
+        "value": 94.27,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; peak Java plus native heap growth while paging"
+      },
+      "peak_memory_mb": {
+        "value": 195.33,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; peak Java plus native heap while paging"
+      },
+      "gallery_bytes_mb": {
+        "value": 30.75,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; bytes served for gallery pages over the session"
+      },
+      "gallery_duplicate_mb": {
+        "value": 0,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with round 1 head; median of 3 runs; gallery page bytes served more than once"
+      }
+    },
+    "notes": "Baseline code (benchmark harness only). Measured interleaved run by run with round 1 in the same session: video scenarios in build/media-bench/round1-ab, gallery in build/media-bench/gallery-abc. A first standalone baseline session (same commit) gave the same picture but drifted up to 90 ms on seeks as the phone warmed, which is why rounds are compared interleaved."
+  },
+  {
+    "round": 1,
+    "commit": "31bad82f",
+    "device": "SM-S926U",
+    "conditions": "16.0 Mbit/s shared, 100 ms TTFB, in-process loopback",
+    "metrics": {
+      "feed_preview_ttff_ms": {
+        "value": 619,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; feed card lease to first rendered frame, median of 4 simultaneous cards"
+      },
+      "viewer_ttff_from_feed_ms": {
+        "value": 408,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; Viewer lease to first frame for a clip a feed card was playing"
+      },
+      "viewer_time_to_playing_from_feed_ms": {
+        "value": 456,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; Viewer lease to isPlaying for that clip"
+      },
+      "viewer_rebuffer_count": {
+        "value": 0,
+        "unit": "count",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; rebuffers while the clip loops twice in the Viewer"
+      },
+      "viewer_rebuffer_ms": {
+        "value": 0,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; time spent rebuffering while the clip loops twice"
+      },
+      "clip_bytes_per_view_mb": {
+        "value": 7.74,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; bytes served for the clip: feed autoplay plus two Viewer loops (file 7.3 MB)"
+      },
+      "clip_duplicate_mb": {
+        "value": 0.46,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; bytes of that clip served more than once (re-downloaded ranges)"
+      },
+      "feed_bytes_after_viewer_open_mb": {
+        "value": 0.2,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; bytes the other three feed clips kept downloading after the Viewer opened"
+      },
+      "viewer_ttff_cold_ms": {
+        "value": 425,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; Viewer lease to first frame for a 90 s video nothing had loaded"
+      },
+      "seek_to_resume_ms": {
+        "value": 543,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; seek past the buffer to playing again, median of 4 seeks"
+      },
+      "seek_to_resume_max_ms": {
+        "value": 738,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; slowest of those 4 seeks"
+      },
+      "scrub_first_frame_ms": {
+        "value": 714,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; scrub preview opened to its first frame, past the buffer"
+      },
+      "scrub_frame_ms": {
+        "value": 488,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; scrub preview frame past the buffer, median of 3 targets"
+      },
+      "scrub_bytes_mb": {
+        "value": 3.17,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; bytes downloaded to show those 3 preview frames"
+      },
+      "seek_after_scrub_ms": {
+        "value": 495,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; release seek to the last previewed position until playing"
+      },
+      "long_bytes_mb": {
+        "value": 25.19,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; bytes served for the 90 s video over the seek and scrub session"
+      },
+      "long_duplicate_mb": {
+        "value": 0.41,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; bytes of the 90 s video served more than once"
+      },
+      "gallery_open_to_first_page_ms": {
+        "value": 326,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; Viewer session start to page 1 decoded at screen size"
+      },
+      "page_load_p50_ms": {
+        "value": 2,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; page becomes current to decoded, median while reading 40 pages at 1.2 s each"
+      },
+      "page_load_p90_ms": {
+        "value": 4,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; 90th percentile of the same"
+      },
+      "pages_ready_ahead": {
+        "value": 1.95,
+        "unit": "pages",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; of the next 10 pages, how many are on disk when a page opens (higher is better)"
+      },
+      "skim_shown_pct": {
+        "value": 100,
+        "unit": "%",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; pages shown within 200 ms while skimming 35 pages (higher is better)"
+      },
+      "skim_shown_p50_ms": {
+        "value": 39,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; median time to show the skimmed pages that made it"
+      },
+      "peak_memory_delta_mb": {
+        "value": 82.36,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; peak Java plus native heap growth while paging"
+      },
+      "peak_memory_mb": {
+        "value": 184.34,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; peak Java plus native heap while paging"
+      },
+      "gallery_bytes_mb": {
+        "value": 30.75,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; bytes served for gallery pages over the session"
+      },
+      "gallery_duplicate_mb": {
+        "value": 0,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with round 0 base; median of 3 runs; gallery page bytes served more than once"
+      },
+      "feed_return_all_playing_ms": {
+        "value": 377,
+        "unit": "ms",
+        "n": 3,
+        "method": "measured in round 2's interleaved session as build 2ef4ca85 (round 1 head plus benchmark commits, same test APK as round 2), order swapped every run; median of 3 runs; Viewer closed: four cards lease again until all four are playing"
+      },
+      "feed_resume_after_short_viewer_ms": {
+        "value": 425,
+        "unit": "ms",
+        "n": 3,
+        "method": "measured in round 2's interleaved session as build 2ef4ca85 (round 1 head plus benchmark commits, same test APK as round 2), order swapped every run; median of 3 runs; Viewer opened and closed within the release grace: stopped cards resume until all play"
+      },
+      "scrub_second_drag_first_frame_ms": {
+        "value": 811,
+        "unit": "ms",
+        "n": 3,
+        "method": "measured in round 2's interleaved session as build 2ef4ca85 (round 1 head plus benchmark commits, same test APK as round 2), order swapped every run; median of 3 runs; a second drag on the same page, after the release seek settles, to its first frame"
+      },
+      "swipe_ttff_ms": {
+        "value": 338,
+        "unit": "ms",
+        "n": 3,
+        "method": "measured in round 2's interleaved session as build 2ef4ca85 (round 1 head plus benchmark commits, same test APK as round 2), order swapped every run; median of 3 runs; swipe start to the neighbour video's first frame (three 90 s videos, 20 s on the middle one)"
+      },
+      "swipe_time_to_playing_ms": {
+        "value": 359,
+        "unit": "ms",
+        "n": 3,
+        "method": "measured in round 2's interleaved session as build 2ef4ca85 (round 1 head plus benchmark commits, same test APK as round 2), order swapped every run; median of 3 runs; swipe start until the neighbour video plays"
+      },
+      "swipe_rebuffer_count": {
+        "value": 0,
+        "unit": "count",
+        "n": 3,
+        "method": "measured in round 2's interleaved session as build 2ef4ca85 (round 1 head plus benchmark commits, same test APK as round 2), order swapped every run; median of 3 runs; rebuffers in the 3 s after the swipe"
+      },
+      "swipe_target_bytes_before_mb": {
+        "value": 12.86,
+        "unit": "MB",
+        "n": 3,
+        "method": "measured in round 2's interleaved session as build 2ef4ca85 (round 1 head plus benchmark commits, same test APK as round 2), order swapped every run; median of 3 runs; bytes of the swiped-to video downloaded before the swipe (prefetch)"
+      },
+      "swipe_unvisited_neighbour_mb": {
+        "value": 12.45,
+        "unit": "MB",
+        "n": 3,
+        "method": "measured in round 2's interleaved session as build 2ef4ca85 (round 1 head plus benchmark commits, same test APK as round 2), order swapped every run; median of 3 runs; bytes of the neighbour never visited"
+      },
+      "swipe_session_mb": {
+        "value": 45.13,
+        "unit": "MB",
+        "n": 3,
+        "method": "measured in round 2's interleaved session as build 2ef4ca85 (round 1 head plus benchmark commits, same test APK as round 2), order swapped every run; median of 3 runs; bytes of all three videos over the swipe session"
+      },
+      "feed_scroll_ttff_ms": {
+        "value": 1035,
+        "unit": "ms",
+        "n": 3,
+        "method": "measured in round 2's interleaved session as build 2ef4ca85 (round 1 head plus benchmark commits, same test APK as round 2), order swapped every run; median of 3 runs; scroll start to the first frame of the two cards that came on screen, median"
+      },
+      "feed_scroll_all_playing_ms": {
+        "value": 1414,
+        "unit": "ms",
+        "n": 3,
+        "method": "measured in round 2's interleaved session as build 2ef4ca85 (round 1 head plus benchmark commits, same test APK as round 2), order swapped every run; median of 3 runs; scroll start until all four visible cards play"
+      },
+      "feed_scrolled_past_mb": {
+        "value": 0.44,
+        "unit": "MB",
+        "n": 3,
+        "method": "measured in round 2's interleaved session as build 2ef4ca85 (round 1 head plus benchmark commits, same test APK as round 2), order swapped every run; median of 3 runs; bytes the two scrolled-past clips (2 s on screen) downloaded in the 8 s after leaving it"
+      },
+      "feed_scroll_back_playing_ms": {
+        "value": 547,
+        "unit": "ms",
+        "n": 3,
+        "method": "measured in round 2's interleaved session as build 2ef4ca85 (round 1 head plus benchmark commits, same test APK as round 2), order swapped every run; median of 3 runs; scrolling back until the two returning cards play again"
+      },
+      "feed_scroll_session_mb": {
+        "value": 23.47,
+        "unit": "MB",
+        "n": 3,
+        "method": "measured in round 2's interleaved session as build 2ef4ca85 (round 1 head plus benchmark commits, same test APK as round 2), order swapped every run; median of 3 runs; bytes of all six clips over the scroll session"
+      },
+      "swipe_early_ttff_ms": {
+        "value": 591,
+        "unit": "ms",
+        "n": 3,
+        "method": "measured in round 2's interleaved session as build 2ef4ca85 (round 1 head plus benchmark commits, same test APK as round 2), order swapped every run; median of 3 runs; swipe start to the neighbour video's first frame after 8 s on the middle one (prefetch still running)"
+      },
+      "swipe_early_time_to_playing_ms": {
+        "value": 618,
+        "unit": "ms",
+        "n": 3,
+        "method": "measured in round 2's interleaved session as build 2ef4ca85 (round 1 head plus benchmark commits, same test APK as round 2), order swapped every run; median of 3 runs; swipe start until the neighbour plays, after 8 s on the middle one"
+      },
+      "swipe_early_unvisited_neighbour_mb": {
+        "value": 5.2,
+        "unit": "MB",
+        "n": 3,
+        "method": "measured in round 2's interleaved session as build 2ef4ca85 (round 1 head plus benchmark commits, same test APK as round 2), order swapped every run; median of 3 runs; bytes of the neighbour never visited, 8 s session"
+      }
+    },
+    "notes": "Video scenarios ran on the 2054e073 build; the two later commits (81935f4f, 31bad82f) change only Viewer prefetch scheduling, which the video scenarios do not use. Seek and scrub metrics did not change in round 1 (differences are run-to-run noise). Attribution from the same-session gallery run with a G1-only build (1de77259): page_load_p50 170 -> 47 ms from revalidation removal, 47 -> 2 ms from decoding the next page ahead; gallery_open_to_first_page 749 -> 326 ms from loading the first media alone. Metrics added in round 2 (scrub_second_drag_first_frame_ms, feed_return_*, swipe_*, feed_scroll_*) were measured in round 2's session with the round 1 build; round 2 also changed scrub frame timing to drag through the page's scrub previews (80 ms settle included), so compare round 1 and 2 scrub values from round 2's session (see the round 2 report), not this entry."
+  },
+  {
+    "round": 2,
+    "commit": "da41f33d",
+    "device": "SM-S926U",
+    "conditions": "16.0 Mbit/s shared, 100 ms TTFB, in-process loopback",
+    "metrics": {
+      "feed_preview_ttff_ms": {
+        "value": 575,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; feed card lease to first rendered frame, median of 4 simultaneous cards"
+      },
+      "viewer_ttff_from_feed_ms": {
+        "value": 237,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; Viewer lease to first frame for a clip a feed card was playing"
+      },
+      "viewer_time_to_playing_from_feed_ms": {
+        "value": 264,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; Viewer lease to isPlaying for that clip"
+      },
+      "viewer_rebuffer_count": {
+        "value": 0,
+        "unit": "count",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; rebuffers while the clip loops twice in the Viewer"
+      },
+      "viewer_rebuffer_ms": {
+        "value": 0,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; time spent rebuffering while the clip loops twice"
+      },
+      "clip_bytes_per_view_mb": {
+        "value": 7.29,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; bytes served for the clip: feed autoplay plus two Viewer loops (file 7.3 MB)"
+      },
+      "clip_duplicate_mb": {
+        "value": 0.01,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; bytes of that clip served more than once (re-downloaded ranges)"
+      },
+      "feed_bytes_after_viewer_open_mb": {
+        "value": 0.28,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; bytes the other three feed clips kept downloading after the Viewer opened"
+      },
+      "feed_return_all_playing_ms": {
+        "value": 382,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; Viewer closed: four cards lease again until all four are playing"
+      },
+      "feed_resume_after_short_viewer_ms": {
+        "value": 409,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; Viewer opened and closed within the release grace: stopped cards resume until all play"
+      },
+      "viewer_ttff_cold_ms": {
+        "value": 471,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; Viewer lease to first frame for a 90 s video nothing had loaded"
+      },
+      "seek_to_resume_ms": {
+        "value": 643,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; seek past the buffer to playing again, median of 4 seeks"
+      },
+      "seek_to_resume_max_ms": {
+        "value": 769,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; slowest of those 4 seeks"
+      },
+      "scrub_first_frame_ms": {
+        "value": 737,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; drag start to its first preview frame, past the buffer, through the page's scrub previews"
+      },
+      "scrub_frame_ms": {
+        "value": 479,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; moving to a target past the buffer to its preview frame, median of the drag's 3 targets"
+      },
+      "scrub_bytes_mb": {
+        "value": 2.83,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; bytes downloaded to show those 3 preview frames"
+      },
+      "seek_after_scrub_ms": {
+        "value": 501,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; release seek to the last previewed position until playing"
+      },
+      "scrub_second_drag_first_frame_ms": {
+        "value": 662,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; a second drag on the same page, after the release seek settles, to its first frame"
+      },
+      "long_bytes_mb": {
+        "value": 26.53,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; bytes served for the 90 s video over the seek and scrub session"
+      },
+      "long_duplicate_mb": {
+        "value": 0.68,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; bytes of the 90 s video served more than once"
+      },
+      "gallery_open_to_first_page_ms": {
+        "value": 333,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; Viewer session start to page 1 decoded at screen size"
+      },
+      "page_load_p50_ms": {
+        "value": 3,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; page becomes current to decoded, median while reading 40 pages at 1.2 s each"
+      },
+      "page_load_p90_ms": {
+        "value": 6,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; 90th percentile of the same"
+      },
+      "pages_ready_ahead": {
+        "value": 1.95,
+        "unit": "pages",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; of the next 10 pages, how many are on disk when a page opens (higher is better)"
+      },
+      "skim_shown_pct": {
+        "value": 100,
+        "unit": "%",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; pages shown within 200 ms while skimming 35 pages (higher is better)"
+      },
+      "skim_shown_p50_ms": {
+        "value": 49,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; median time to show the skimmed pages that made it"
+      },
+      "peak_memory_delta_mb": {
+        "value": 78.24,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; peak Java plus native heap growth while paging"
+      },
+      "peak_memory_mb": {
+        "value": 179.65,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; peak Java plus native heap while paging"
+      },
+      "gallery_bytes_mb": {
+        "value": 30.73,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; bytes served for gallery pages over the session"
+      },
+      "gallery_duplicate_mb": {
+        "value": 0,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; gallery page bytes served more than once"
+      },
+      "swipe_ttff_ms": {
+        "value": 298,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; swipe start to the neighbour video's first frame (three 90 s videos, 20 s on the middle one)"
+      },
+      "swipe_time_to_playing_ms": {
+        "value": 368,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; swipe start until the neighbour video plays"
+      },
+      "swipe_rebuffer_count": {
+        "value": 0,
+        "unit": "count",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; rebuffers in the 3 s after the swipe"
+      },
+      "swipe_target_bytes_before_mb": {
+        "value": 4,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; bytes of the swiped-to video downloaded before the swipe (prefetch)"
+      },
+      "swipe_unvisited_neighbour_mb": {
+        "value": 4,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; bytes of the neighbour never visited"
+      },
+      "swipe_session_mb": {
+        "value": 45.2,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; bytes of all three videos over the swipe session"
+      },
+      "feed_scroll_ttff_ms": {
+        "value": 933,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; scroll start to the first frame of the two cards that came on screen, median"
+      },
+      "feed_scroll_all_playing_ms": {
+        "value": 1390,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; scroll start until all four visible cards play"
+      },
+      "feed_scrolled_past_mb": {
+        "value": 0.53,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; bytes the two scrolled-past clips (2 s on screen) downloaded in the 8 s after leaving it"
+      },
+      "feed_scroll_back_playing_ms": {
+        "value": 594,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; scrolling back until the two returning cards play again"
+      },
+      "feed_scroll_session_mb": {
+        "value": 23.28,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; bytes of all six clips over the scroll session"
+      },
+      "swipe_early_ttff_ms": {
+        "value": 277,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; swipe start to the neighbour video's first frame after 8 s on the middle one (prefetch still running)"
+      },
+      "swipe_early_time_to_playing_ms": {
+        "value": 354,
+        "unit": "ms",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; swipe start until the neighbour plays, after 8 s on the middle one"
+      },
+      "swipe_early_unvisited_neighbour_mb": {
+        "value": 4,
+        "unit": "MB",
+        "n": 3,
+        "method": "interleaved run by run with the round 1 build (2ef4ca85: round 1 head plus benchmark commits, same test APK), order swapped every run; median of 3 runs; bytes of the neighbour never visited, 8 s session"
+      }
+    },
+    "notes": "Bounded cache locks for feed cards and neighbour prefetch (1bf1baff, narrowed from 9ccba58b), first scrub frame without the settle wait (38fddddf), 4 MB neighbour video prefetch (8a8fe592). Final session in build/media-bench/round2-final and round2-early-swipe. seek_to_resume_ms is bimodal (single seeks about 530 or 630 ms) and its code path did not change; across three sessions the round 1 build put 37% of later seeks in the slow mode and round 2 44%, so its +18% median is noise. The first sessions (round2-ab, round2-reversed) measured the unnarrowed bounding and found its scrub regression."
+  },
+  {
+    "round": 3,
+    "commit": "85422e2e",
+    "device": "SM-S926U",
+    "conditions": "16.0 Mbit/s shared, 100 ms TTFB, in-process loopback",
+    "metrics": {
+      "feed_preview_ttff_ms": {
+        "value": 601.0,
+        "unit": "ms",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; feed card lease to first rendered frame, median of 4 simultaneous cards"
+      },
+      "viewer_ttff_from_feed_ms": {
+        "value": 196.5,
+        "unit": "ms",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; Viewer lease to first frame for a clip a feed card was playing"
+      },
+      "viewer_time_to_playing_from_feed_ms": {
+        "value": 220.0,
+        "unit": "ms",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; Viewer lease to isPlaying for that clip"
+      },
+      "viewer_rebuffer_count": {
+        "value": 0.0,
+        "unit": "count",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; rebuffers while the clip loops twice in the Viewer"
+      },
+      "viewer_rebuffer_ms": {
+        "value": 0.0,
+        "unit": "ms",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; time spent rebuffering while the clip loops twice"
+      },
+      "clip_bytes_per_view_mb": {
+        "value": 7.28,
+        "unit": "MB",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; bytes served for the clip: feed autoplay plus two Viewer loops (file 7.3 MB)"
+      },
+      "clip_duplicate_mb": {
+        "value": 0.01,
+        "unit": "MB",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; bytes of that clip served more than once (re-downloaded ranges)"
+      },
+      "feed_bytes_after_viewer_open_mb": {
+        "value": 0.12,
+        "unit": "MB",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; bytes the other three feed clips kept downloading after the Viewer opened"
+      },
+      "feed_return_all_playing_ms": {
+        "value": 414.0,
+        "unit": "ms",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; Viewer closed: four cards lease again until all four are playing"
+      },
+      "feed_resume_after_short_viewer_ms": {
+        "value": 387.0,
+        "unit": "ms",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; Viewer opened and closed within the release grace: stopped cards resume until all play"
+      },
+      "viewer_ttff_cold_ms": {
+        "value": 379.5,
+        "unit": "ms",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; Viewer lease to first frame for a 90 s video nothing had loaded"
+      },
+      "seek_to_resume_ms": {
+        "value": 549.0,
+        "unit": "ms",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; seek past the buffer to playing again, median of 4 seeks"
+      },
+      "seek_to_resume_max_ms": {
+        "value": 752.5,
+        "unit": "ms",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; slowest of those 4 seeks"
+      },
+      "scrub_first_frame_ms": {
+        "value": 658.5,
+        "unit": "ms",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; drag start to its first preview frame, past the buffer, through the page's scrub previews"
+      },
+      "scrub_frame_ms": {
+        "value": 490.0,
+        "unit": "ms",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; moving to a target past the buffer to its preview frame, median of the drag's 3 targets"
+      },
+      "scrub_bytes_mb": {
+        "value": 3.04,
+        "unit": "MB",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; bytes downloaded to show those 3 preview frames"
+      },
+      "seek_after_scrub_ms": {
+        "value": 380.0,
+        "unit": "ms",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; release seek to the last previewed position until playing"
+      },
+      "scrub_second_drag_first_frame_ms": {
+        "value": 455.0,
+        "unit": "ms",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; a second drag on the same page, after the release seek settles, to its first frame"
+      },
+      "long_bytes_mb": {
+        "value": 25.8,
+        "unit": "MB",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; bytes served for the 90 s video over the seek and scrub session"
+      },
+      "long_duplicate_mb": {
+        "value": 0.46,
+        "unit": "MB",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; bytes of the 90 s video served more than once"
+      },
+      "gallery_open_to_first_page_ms": {
+        "value": 316.0,
+        "unit": "ms",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; Viewer session start to page 1 decoded at screen size"
+      },
+      "page_load_p50_ms": {
+        "value": 2.0,
+        "unit": "ms",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; page becomes current to decoded, median while reading 40 pages at 1.2 s each"
+      },
+      "page_load_p90_ms": {
+        "value": 3.5,
+        "unit": "ms",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; 90th percentile of the same"
+      },
+      "pages_ready_ahead": {
+        "value": 1.95,
+        "unit": "pages",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; of the next 10 pages, how many are on disk when a page opens (higher is better)"
+      },
+      "skim_shown_pct": {
+        "value": 100.0,
+        "unit": "%",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; pages shown within 200 ms while skimming 35 pages (higher is better)"
+      },
+      "skim_shown_p50_ms": {
+        "value": 36.5,
+        "unit": "ms",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; median time to show the skimmed pages that made it"
+      },
+      "peak_memory_delta_mb": {
+        "value": 82.63,
+        "unit": "MB",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; peak Java plus native heap growth while paging"
+      },
+      "peak_memory_mb": {
+        "value": 184.14,
+        "unit": "MB",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; peak Java plus native heap while paging"
+      },
+      "gallery_bytes_mb": {
+        "value": 30.73,
+        "unit": "MB",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; bytes served for gallery pages over the session"
+      },
+      "gallery_duplicate_mb": {
+        "value": 0.0,
+        "unit": "MB",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; gallery page bytes served more than once"
+      },
+      "swipe_ttff_ms": {
+        "value": 268.5,
+        "unit": "ms",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; swipe start to the neighbour video's first frame (three 90 s videos, 20 s on the middle one)"
+      },
+      "swipe_time_to_playing_ms": {
+        "value": 340.5,
+        "unit": "ms",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; swipe start until the neighbour video plays"
+      },
+      "swipe_rebuffer_count": {
+        "value": 0.0,
+        "unit": "count",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; rebuffers in the 3 s after the swipe"
+      },
+      "swipe_target_bytes_before_mb": {
+        "value": 4.0,
+        "unit": "MB",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; bytes of the swiped-to video downloaded before the swipe (prefetch)"
+      },
+      "swipe_unvisited_neighbour_mb": {
+        "value": 4.0,
+        "unit": "MB",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; bytes of the neighbour never visited"
+      },
+      "swipe_session_mb": {
+        "value": 45.03,
+        "unit": "MB",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; bytes of all three videos over the swipe session"
+      },
+      "feed_scroll_ttff_ms": {
+        "value": 858.0,
+        "unit": "ms",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; scroll start to the first frame of the two cards that came on screen, median"
+      },
+      "feed_scroll_all_playing_ms": {
+        "value": 1253.5,
+        "unit": "ms",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; scroll start until all four visible cards play"
+      },
+      "feed_scrolled_past_mb": {
+        "value": 0.41,
+        "unit": "MB",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; bytes the two scrolled-past clips (2 s on screen) downloaded in the 8 s after leaving it"
+      },
+      "feed_scroll_back_playing_ms": {
+        "value": 529.0,
+        "unit": "ms",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; scrolling back until the two returning cards play again"
+      },
+      "feed_scroll_session_mb": {
+        "value": 23.13,
+        "unit": "MB",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs; bytes of all six clips over the scroll session"
+      },
+      "swipe_early_ttff_ms": {
+        "value": 247.5,
+        "unit": "ms",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs in a separate 8 s swipe session; swipe start to the neighbour video's first frame (three 90 s videos, 8 s on the middle one)"
+      },
+      "swipe_early_time_to_playing_ms": {
+        "value": 335.5,
+        "unit": "ms",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs in a separate 8 s swipe session; swipe start until the neighbour video plays"
+      },
+      "swipe_early_unvisited_neighbour_mb": {
+        "value": 4.0,
+        "unit": "MB",
+        "n": 4,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; median of 4 runs in a separate 8 s swipe session; bytes of the neighbour never visited"
+      },
+      "seek_slow_share_pct": {
+        "value": 0.0,
+        "unit": "%",
+        "n": 12,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; 4 runs pooled, not a median: share of seeks 2-4 (each 0.5 s past a keyframe) above 580 ms, the slow group of the bimodal ~530/~630 ms split"
+      },
+      "seek_close_slow_share_pct": {
+        "value": 0.0,
+        "unit": "%",
+        "n": 20,
+        "method": "interleaved run by run with the round 2 build (da41f33d, the code of round 2's head d1177cb0, same test APK), order swapped every run; 4 runs pooled, not a median: share of seeks (4 seeks plus the release seek) whose abandoned load took over 80 ms to close (HTTP drain)"
+      }
+    },
+    "notes": "Video HTTP through OkHttp with abandoned responses cancelled instead of drained (4cce1e82), and one scrub preview player per page that seeks straight to the target's keyframe and idles between drags (85422e2e). Final session in build/media-bench/round3-final and round3-early-swipe: the round 2 build (da41f33d) and this build alternated with order swapped every run, n=4 so each went first twice, same test APK. Pooled seeks: the round 2 build put 5 of 12 later seeks in the slow (~630 ms) group and 11 of 20 seek closes took 120-138 ms; this build 0 of 12 and 0 of 20 (closes 21-42 ms). The first seek of each run (1 s past a keyframe, the others 0.5 s) stays ~750 ms in both. viewer_ttff_from_feed (+11%), feed_return_all_playing (+12%) and gallery peak memory (+6%) have overlapping ranges with no consistent order effect, and the gallery path is unchanged. Round 2's values here are this session's round 2 build, not round 2's recorded entry."
+  }
+]

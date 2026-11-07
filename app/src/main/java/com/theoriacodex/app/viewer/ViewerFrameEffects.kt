@@ -214,11 +214,10 @@ private fun ViewerNavigationEffects(
         swipeLoadPost?.let { onAction(ViewerAction.RequestPageResolution(it.id)) }
     }
     LaunchedEffect(posts, currentPostIndex, frame.selection.mediaIndex, swipeLoadTarget) {
-        val keys = planAdjacentViewerPrefetch(pages = pages, current = uiState.currentMedia?.key)
         val targetKey = swipeLoadTarget?.let { target ->
             pages.getOrNull(target.postIndex)?.media?.getOrNull(target.mediaIndex)?.key
         }
-        onAction(ViewerAction.QueuePrefetch(listOfNotNull(targetKey).plus(keys).distinct()))
+        onAction(viewerPrefetchAction(pages, uiState.currentMedia?.key, targetKey))
     }
     LaunchedEffect(navigation.originalPosts.size, navigation.stripAnchorIndex, canLoadMoreFromSource, loadingMoreFromSource) {
         if (loadingMoreFromSource || !canLoadMoreFromSource) return@LaunchedEffect

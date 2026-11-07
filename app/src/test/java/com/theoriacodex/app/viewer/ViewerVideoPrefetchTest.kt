@@ -25,13 +25,6 @@ class ViewerVideoPrefetchTest {
     }
 
     @Test
-    fun `video warm target supports media larger than the retired manual limit`() {
-        assertEquals(24L * 1024L * 1024L, VIEWER_VIDEO_PREFETCH_BYTES)
-        assertTrue(VIEWER_VIDEO_PREFETCH_BYTES > 16L * 1024L * 1024L)
-        assertTrue(VIEWER_VIDEO_PREFETCH_BYTES < VIDEO_PLAYBACK_CACHE_MAX_BYTES)
-    }
-
-    @Test
     fun `prefetch and playback share CacheWriter identity without a legacy cache owner`() {
         val source = repositoryFile(
             "app/src/main/java/com/theoriacodex/app/viewer/VideoPlaybackInfrastructure.kt",
@@ -41,7 +34,7 @@ class ViewerVideoPrefetchTest {
         ).readText()
 
         assertTrue("CacheWriter" in source)
-        assertTrue("cacheDataSourceFactory(bound, headers)" in source)
+        assertTrue("cacheDataSourceFactory(bound, headers" in source)
         assertTrue("setKey(cacheKey)" in source)
         assertTrue("videoPlaybackInfrastructure().prefetch(location, headers, maxBytes)" in platform)
         assertFalse("theoria_codex/viewer/videos" in source + platform)

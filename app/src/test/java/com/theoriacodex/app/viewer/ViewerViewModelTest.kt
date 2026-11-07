@@ -20,6 +20,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import java.util.concurrent.atomic.AtomicInteger
@@ -510,6 +511,69 @@ class ViewerViewModelTest {
     }
 
     @Test
+    fun `neighbors wait for the first media on screen, or until the wait runs out`() = runTest {
+        val started = mutableListOf<com.theoriacodex.app.viewer.state.ViewerMediaKey>()
+        val owner = ViewerViewModel(
+            savedStateHandle = SavedStateHandle(),
+            mediaPrefetcher = ViewerMediaPrefetcher { _, media, _ ->
+                started += media.key
+                ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED)
+            },
+            scopeOverride = this,
+        )
+        owner.replaceSession(session("prefetch-gate", listOf(post("gallery", media = (0..3).map { image("$it.jpg") }))))
+        val keys = owner.state.value.currentPage?.media.orEmpty().map { media -> media.key }
+
+        owner.onAction(ViewerAction.QueuePrefetch(listOf(keys[1])))
+        runCurrent()
+        assertTrue(started.isEmpty())
+        owner.onAction(ViewerAction.MediaReady(requireNotNull(owner.state.value.session), keys[0], 0L))
+        runCurrent()
+        assertEquals(listOf(keys[1]), started)
+        // Later pages do not wait for the page on screen.
+        owner.onAction(ViewerAction.SelectMedia(2))
+        owner.onAction(ViewerAction.QueuePrefetch(listOf(keys[3])))
+        runCurrent()
+        assertEquals(listOf(keys[1], keys[3]), started)
+
+        owner.replaceSession(session("prefetch-gate-slow", listOf(post("slow", media = (0..1).map { image("slow-$it.jpg") }))))
+        val slow = owner.state.value.currentPage?.media.orEmpty().last().key
+        owner.onAction(ViewerAction.QueuePrefetch(listOf(slow)))
+        advanceTimeBy(VIEWER_PREFETCH_READY_WAIT_MS - 1)
+        runCurrent()
+        assertTrue(slow !in started)
+        advanceTimeBy(1)
+        runCurrent()
+        assertEquals(slow, started.last())
+    }
+
+    @Test
+    fun `decoding a downloaded image does not wait for a download slot`() = runTest {
+        val started = mutableListOf<com.theoriacodex.app.viewer.state.ViewerMediaKey>()
+        val owner = ViewerViewModel(
+            savedStateHandle = SavedStateHandle(),
+            mediaPrefetcher = ViewerMediaPrefetcher { _, media, _ ->
+                started += media.key
+                if (media.key.mediaIndex == 3) ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED, decoded = true) else awaitCancellation()
+            },
+            scopeOverride = this,
+        )
+        owner.replaceSession(session("decode-slot", listOf(post("gallery", media = (0..3).map { image("$it.jpg") }))))
+        val session = requireNotNull(owner.state.value.session)
+        val keys = owner.state.value.currentPage?.media.orEmpty().map { media -> media.key }
+        owner.onAction(ViewerAction.MediaReady(session, keys[0], 0L))
+        owner.onAction(ViewerAction.PrefetchCompleted(session, keys[3], ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED)))
+
+        owner.onAction(ViewerAction.QueuePrefetch(listOf(keys[1], keys[2], keys[3]), decodeKeys = setOf(keys[3])))
+        runCurrent()
+
+        assertEquals(listOf(keys[1], keys[2], keys[3]), started)
+        assertTrue(keys[3] in owner.state.value.prefetch.decoded)
+        owner.onAction(ViewerAction.QueuePrefetch(emptyList()))
+        runCurrent()
+    }
+
+    @Test
     fun `prefetch limits active work and cancels neighbors that are no longer desired`() = runTest {
         val active = AtomicInteger()
         val peak = AtomicInteger()
@@ -537,6 +601,7 @@ class ViewerViewModelTest {
             ),
         )
         val keys = owner.state.value.currentPage?.media.orEmpty().map { media -> media.key }
+        owner.onAction(ViewerAction.MediaReady(requireNotNull(owner.state.value.session), keys.first(), 0L))
 
         owner.onAction(ViewerAction.QueuePrefetch(keys))
         runCurrent()

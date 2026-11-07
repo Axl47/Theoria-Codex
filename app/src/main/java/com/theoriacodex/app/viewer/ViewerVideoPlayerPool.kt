@@ -39,6 +39,7 @@ internal class ViewerVideoPlayerPool(
 
     fun acquire(location: String, headers: Map<String, String>): ReusableVideoSlotPool.Lease<ExoPlayer> {
         checkMainThread()
+        infrastructure.onViewerStreamAcquired()
         val request = infrastructure.bind(location, headers)
         val lease = slots.acquire(request.identity)
         val player = lease.resource

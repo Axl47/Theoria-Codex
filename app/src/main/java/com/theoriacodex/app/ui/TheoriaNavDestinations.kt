@@ -54,12 +54,10 @@ import com.theoriacodex.app.ui.routes.ViewerRouteRenderConfig
 import com.theoriacodex.app.ui.routes.ViewerRouteScreenCallbacks
 import com.theoriacodex.app.ui.routes.shareViewerPostMessage
 import com.theoriacodex.app.ui.routes.virtualCodexUi
-import com.theoriacodex.app.viewer.ViewerMediaPrefetcher
 import com.theoriacodex.app.viewer.ViewerRelatedBinding
 import com.theoriacodex.app.viewer.ViewerReturnLifetime
 import com.theoriacodex.app.viewer.ViewerSession
-import com.theoriacodex.app.viewer.VIEWER_MEMORY_PREFETCH_DISTANCE
-import com.theoriacodex.app.viewer.prefetchViewerMedia
+import com.theoriacodex.app.viewer.viewerMediaPrefetcher
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.data.repository.ViewerStreamSource
@@ -307,14 +305,7 @@ private fun ViewerDestination(shell: TheoriaShell) {
                 sessionRetentionOwner = shell.viewerSessions,
                 canonicalizePost = { post -> shell.features.offlineMedia?.withoutOfflineLocations(post) ?: post },
                 postResolver = shell.viewerRouteWorkflow,
-                mediaPrefetcher = ViewerMediaPrefetcher { _, media, distance ->
-                    prefetchViewerMedia(
-                        shell.appContext,
-                        media,
-                        state.browsing.settings.viewer.videoQuality,
-                        keepDecodedInMemory = distance <= VIEWER_MEMORY_PREFETCH_DISTANCE,
-                    )
-                },
+                mediaPrefetcher = viewerMediaPrefetcher(shell.appContext) { state.browsing.settings.viewer.videoQuality },
                 mediaDurationCoordinator = shell.features.mediaDurationCoordinator,
                 restoreSession = shell.viewerRouteWorkflow::restoreSession,
             ),
