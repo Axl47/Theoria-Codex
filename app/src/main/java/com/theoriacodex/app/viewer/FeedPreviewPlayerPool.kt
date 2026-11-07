@@ -97,6 +97,9 @@ internal class FeedPreviewPlayerPool(
             val mediaSource = request.mediaSourceFactory.createMediaSource(request.mediaItem)
             slotLease.resource.setMediaSource(mediaSource, true)
             enqueuePrepare(slotLease)
+        } else if (slotLease.resource.playbackState == Player.STATE_IDLE) {
+            // Stopped behind a Viewer: the binding and position remain, only loading restarts.
+            enqueuePrepare(slotLease)
         }
         publishTraceCounters()
         scheduleCooling()
@@ -118,6 +121,38 @@ internal class FeedPreviewPlayerPool(
             publishTraceCounters()
             scheduleCooling()
             scheduleCleanup()
+        }
+    }
+
+    /**
+     * An open Viewer hides every feed card, so each preview stops: none keeps downloading or holds a decoder,
+     * and none holds the cache range of a stream the Viewer is about to read. A held range makes the Viewer
+     * read around the cache, so the Viewer's own bytes for that stream would never be cached. Stopped players
+     * keep their media, position and, through the card's keep-content player view, their last frame. A card
+     * shown again resumes through [resume]; a returned binding re-prepares on its next lease.
+     */
+    fun stopForViewer() {
+        checkMainThread()
+        pendingPrepares.clear()
+        if (prepareScheduled) {
+            handler.removeCallbacks(prepareRunnable)
+            prepareScheduled = false
+        }
+        slots.resources.forEach { player ->
+            if (player.playbackState != Player.STATE_IDLE) {
+                traceMediaSection(MediaTraceSections.PREVIEW_PLAYER_COOL) { player.stop() }
+            }
+        }
+    }
+
+    /** Restarts loading for a leased card that [stopForViewer] stopped; a no-op for a loaded or failed player. */
+    fun resume(lease: FeedPreviewPlayerLease) {
+        checkMainThread()
+        val player = lease.player
+        if (slots.isActive(lease.slotLease) && player.playbackState == Player.STATE_IDLE &&
+            player.mediaItemCount > 0 && player.playerError == null
+        ) {
+            enqueuePrepare(lease.slotLease)
         }
     }
 
@@ -241,6 +276,10 @@ internal class ReusableVideoSlotPool<Resource : Any, Identity : Any>(
 
     val totalResourceCount: Int
         get() = slotsByResource.size
+
+    /** Every resource the pool owns, leased or idle. */
+    val resources: Collection<Resource>
+        get() = slotsByResource.keys
 
     init {
         require(maxIdleResources >= 0) { "Idle resource bound must not be negative" }

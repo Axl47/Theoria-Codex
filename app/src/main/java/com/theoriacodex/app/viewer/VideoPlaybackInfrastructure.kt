@@ -107,9 +107,9 @@ internal class VideoPlaybackInfrastructure(
 ) {
     internal val feedPositionHandoff = FeedVideoPositionHandoff()
     private val appContext = context.applicationContext
-    internal val feedPreviewPlayerPool: FeedPreviewPlayerPool by lazy {
-        FeedPreviewPlayerPool(this)
-    }
+    private val feedPlayers = lazy { FeedPreviewPlayerPool(this) }
+    internal val feedPreviewPlayerPool: FeedPreviewPlayerPool
+        get() = feedPlayers.value
     private val viewerPlayers = lazy { ViewerVideoPlayerPool(this) }
     internal val viewerVideoPlayerPool: ViewerVideoPlayerPool
         get() = viewerPlayers.value
@@ -130,6 +130,11 @@ internal class VideoPlaybackInfrastructure(
     )
     private val resourcePool = SharedVideoResourcePool(sharedFactories)
     private val localMediaSourceFactory = DefaultMediaSourceFactory(sharedFactories.local)
+
+    /** A Viewer stream is starting: the feed previews hidden behind it stop loading. */
+    internal fun onViewerStreamAcquired() {
+        if (feedPlayers.isInitialized()) feedPlayers.value.stopForViewer()
+    }
 
     internal fun bind(
         location: String,
