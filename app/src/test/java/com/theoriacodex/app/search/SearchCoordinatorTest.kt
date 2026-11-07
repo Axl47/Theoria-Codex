@@ -671,9 +671,6 @@ internal class RecordingTagStore : TagSuggestionStore {
     override fun putFaceted(source: SourceKey, suggestions: List<FacetedTagSuggestion>) {
         faceted += suggestions
     }
-
-
-
 }
 
 internal fun query(source: SourceKey, tag: String) = Query(
