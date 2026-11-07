@@ -1,5 +1,7 @@
 package com.theoriacodex.app.backup
 
+import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.app.source.displayName
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theoriacodex.data.repository.ProfileBackupPreview
@@ -153,9 +155,12 @@ internal class BackupViewModel(
     }
 }
 
-private fun ProfileRestoreResult.message(): String =
-    if (profilesAdded == 0 && collectionsAdded == 0) "Backup restored into your existing collections."
+private fun ProfileRestoreResult.message(): String {
+    val restored = if (profilesAdded == 0 && collectionsAdded == 0) "Backup restored into your existing collections."
     else "Backup restored: ${countLabel(profilesAdded, "profile")} and ${countLabel(collectionsAdded, "collection")} added."
+    val kept = keptExistingSites.mapNotNull { id -> SourceKey.parse(id)?.displayName() }
+    return if (kept.isEmpty()) restored else "$restored Kept this device's settings for ${kept.joinToString()}."
+}
 
 private fun countLabel(count: Int, noun: String) = "$count ${if (count == 1) noun else "${noun}s"}"
 

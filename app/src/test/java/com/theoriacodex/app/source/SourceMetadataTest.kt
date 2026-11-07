@@ -4,10 +4,17 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.http.THEORIA_SOURCE_USER_AGENT
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SourceMetadataTest {
+    private val custom = requireNotNull(SourceKey.parse("custom_safebooru_org"))
+    private val other = requireNotNull(SourceKey.parse("custom_booru_example__p8443"))
+
+    @After
+    fun resetCustomSources() = SourcePresentationCatalog.installCustom(emptyList())
+
     @Test
     fun `exposed real sources hide rule34xxx until configured`() {
         val hidden = exposedRealSources(rule34XxxConfigured = false)
@@ -66,5 +73,48 @@ class SourceMetadataTest {
         assertEquals("Hitomi", SourceKey.HITOMI.displayName())
         // Danbooru's Cloudflare challenges the generic browser agent on its media CDN.
         assertEquals(THEORIA_SOURCE_USER_AGENT, SourceKey.DANBOORU.requestHeaders()["User-Agent"])
+    }
+
+    @Test
+    fun `a custom source without a profile falls back to a readable host label`() {
+        val fallback = custom.presentation()
+
+        assertEquals("safebooru.org", custom.displayName())
+        assertEquals("https://safebooru.org/", custom.referer())
+        assertEquals(SourcePresentationGroup.CUSTOM, fallback.group)
+        assertEquals("S", fallback.mark)
+        assertEquals(mapOf("Referer" to "https://safebooru.org/", "User-Agent" to "Mozilla/5.0"), custom.requestHeaders())
+        assertFalse(custom in SourcePresentationCatalog.orderedSources())
+    }
+
+    @Test
+    fun `installed custom sources override the fallback and follow every built-in`() {
+        SourcePresentationCatalog.installCustom(
+            listOf(
+                customSourcePresentation(other, "Homelab", baseUrl = "https://booru.example:8443", order = 101),
+                customSourcePresentation(custom, "Safebooru", "https://safebooru.org", userAgent = "Theoria/1", order = 100),
+            ),
+        )
+
+        assertEquals("Safebooru", custom.displayName())
+        assertEquals(mapOf("Referer" to "https://safebooru.org/", "User-Agent" to "Theoria/1"), custom.requestHeaders())
+        assertEquals("https://booru.example:8443/", other.referer())
+        assertEquals(listOf(custom, other), SourcePresentationCatalog.customSources())
+        assertEquals(listOf(custom, other), SourcePresentationCatalog.orderedSources().takeLast(2))
+        assertEquals(listOf(SourceKey.PIXIV, custom, other), listOf(other, custom, SourceKey.PIXIV).inPresentationOrder())
+        assertFalse(custom in exposedRealSources(rule34XxxConfigured = true))
+
+        SourcePresentationCatalog.installCustom(emptyList())
+        assertEquals("safebooru.org", custom.displayName())
+    }
+
+    @Test
+    fun `only distinct custom sources can be installed`() {
+        val builtIn = SourceKey.PIXIV.presentation()
+        assertTrue(runCatching { SourcePresentationCatalog.installCustom(listOf(builtIn)) }.isFailure)
+        assertTrue(runCatching { customSourcePresentation(SourceKey.PIXIV, "Pixiv") }.isFailure)
+        val twice = listOf(customSourcePresentation(custom, "A"), customSourcePresentation(custom, "B"))
+        assertTrue(runCatching { SourcePresentationCatalog.installCustom(twice) }.isFailure)
+        assertEquals(builtIn, SourceKey.PIXIV.presentation())
     }
 }

@@ -1,7 +1,9 @@
 package com.theoriacodex.domain.recommendation
 
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.tags.TagDialect
 import com.theoriacodex.domain.tags.normalizeGelbooruToken
+import com.theoriacodex.domain.tags.tagDialect
 
 /**
  * Canonical normalization for tags that train and serve the For You recommendation model.
@@ -26,16 +28,9 @@ object RecommendationTagNormalization {
             return null
         }
 
-        return when (source) {
-            SourceKey.GELBOORU,
-            SourceKey.AIBOORU,
-            SourceKey.DANBOORU,
-            SourceKey.IWARA,
-            SourceKey.RULE34XXX,
-            -> normalizeGelbooruToken(cleaned)
-
-            // Pixiv, NHentai, Hitomi and the spaced Rule34 sources keep the cleaned spelling.
-            else -> cleaned
+        return when (source.tagDialect) {
+            TagDialect.UNDERSCORE -> normalizeGelbooruToken(cleaned)
+            TagDialect.SPACED -> cleaned
         }.takeIf(String::isNotBlank)
     }
 
