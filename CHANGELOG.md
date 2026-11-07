@@ -12,8 +12,9 @@
 - Feed cards load a source's preview-size images instead of originals, so feeds fill in faster and use less data.
 - On a metered network, the Viewer preloads only the next and previous videos, and only their opening seconds, to save mobile data.
 - Theoria keeps more already-seen images on your device (up to 512 MB), so scrolling back reloads them without downloading again.
-- Saving a post offline reuses the copy already loaded on your device instead of downloading it again.
+- Saving a post offline reuses the copy already loaded on your device instead of downloading it again, including videos you have watched through.
 - Scrolling feeds, liking posts and typing in Search do less redrawing, so they stay smoother on busy screens.
+- Video, GIF and animation timelines in the Viewer redraw their progress without rebuilding the controls on every frame.
 - The Viewer keeps fewer pages decoded in memory ahead of you and swipes through animated pages with less memory pressure.
 - Pixiv animations fetch their frame details once and share them between the card and the Viewer.
 - Settings statistics now update only while you're looking at them, instead of in the background.
