@@ -11,13 +11,14 @@ import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import java.security.KeyStore
 import kotlinx.coroutines.flow.StateFlow
 
-class AndroidSecureSourceCredentialsStore(
-    context: Context,
-) : RecoverableSourceCredentialsStore {
-    private val appContext = context.applicationContext
-    private val delegate = VersionedSourceCredentialsStore(
-        envelopeStore = AndroidCredentialEnvelopeStore(appContext),
-        legacyStore = AndroidLegacyCredentialStore(appContext),
+class AndroidSecureSourceCredentialsStore private constructor(
+    private val delegate: VersionedSourceCredentialsStore,
+) : RecoverableSourceCredentialsStore, SiteCredentialsStore by delegate {
+    constructor(context: Context) : this(
+        VersionedSourceCredentialsStore(
+            envelopeStore = AndroidCredentialEnvelopeStore(context.applicationContext),
+            legacyStore = AndroidLegacyCredentialStore(context.applicationContext),
+        ),
     )
 
     override val recoveryState: StateFlow<CredentialStoreRecoveryState> = delegate.recoveryState
