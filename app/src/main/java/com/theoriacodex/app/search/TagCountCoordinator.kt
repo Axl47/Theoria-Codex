@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import java.util.concurrent.ConcurrentHashMap
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -22,7 +23,7 @@ internal class TagCountCoordinator(
     private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val timeoutMs: Long = 4_000L,
 ) {
-    private val sourceLocks = SourceKey.entries.associateWith { Mutex() }
+    private val sourceLocks = ConcurrentHashMap<SourceKey, Mutex>()
     private val missingUntil = LinkedHashMap<Pair<SourceKey, String>, Long>()
 
     suspend fun fetch(source: SourceKey, tags: List<String>, supplemental: Map<String, Int?>): Map<String, Int?> =
@@ -31,7 +32,7 @@ internal class TagCountCoordinator(
             val resolved = requested.associateWith { store.getCount(source, it) ?: supplemental[it] }.toMutableMap()
             val adapter = registry.adapterFor(source) as? TagCountLookupSourceAdapter ?: return@withContext resolved
             val completed = withTimeoutOrNull(timeoutMs) {
-                sourceLocks.getValue(source).withLock {
+                sourceLocks.computeIfAbsent(source) { Mutex() }.withLock {
                     enrichCounts(source, requested, resolved, adapter)
                 }
                 true

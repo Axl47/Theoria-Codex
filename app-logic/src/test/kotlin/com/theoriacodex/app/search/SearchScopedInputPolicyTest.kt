@@ -88,7 +88,7 @@ class SearchScopedInputPolicyTest {
         val switched = SearchDraftReducer.selectMode(
             sourceOwned,
             QueryMode.Unified,
-            com.theoriacodex.app.search.state.SearchDraftContext(SourceKey.entries.toSet(), emptyMap()),
+            com.theoriacodex.app.search.state.SearchDraftContext(SourceKey.builtIns.toSet(), emptyMap()),
         ) { emptyList() }
         assertEquals(UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE, switched.state.query.validationMessage)
     }
@@ -111,8 +111,8 @@ class SearchScopedInputPolicyTest {
                 applied = query,
                 draftSourceScope = SearchSourceScope.fromQuery(query),
                 appliedSourceScope = SearchSourceScope.fromQuery(query),
-                availableSources = SourceKey.entries,
-                modeOptions = listOf(QueryMode.Unified) + SourceKey.entries.map(QueryMode::Source),
+                availableSources = SourceKey.builtIns,
+                modeOptions = listOf(QueryMode.Unified) + SourceKey.builtIns.map(QueryMode::Source),
                 supportedScopes = scopes,
             ),
         )

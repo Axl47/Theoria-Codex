@@ -186,7 +186,7 @@ internal class CreatorProfileViewModel(
     }
 
     private fun persistCreator(creator: CreatorProfile) {
-        savedStateHandle[KEY_SOURCE] = creator.source.name
+        savedStateHandle[KEY_SOURCE] = creator.source.id
         savedStateHandle[KEY_DISPLAY_NAME] = creator.displayName
         savedStateHandle[KEY_PROFILE_ID] = creator.profileId
         savedStateHandle[KEY_PROFILE_URL] = creator.profileUrl
@@ -195,7 +195,7 @@ internal class CreatorProfileViewModel(
 
     private fun restoredCreator(): CreatorProfile? {
         val source = savedStateHandle.get<String>(KEY_SOURCE)
-            ?.let { name -> SourceKey.entries.firstOrNull { it.name == name } }
+            ?.let { name -> SourceKey.parse(name) }
             ?: return null
         val displayName = savedStateHandle.get<String>(KEY_DISPLAY_NAME)
             ?.takeIf(String::isNotBlank)

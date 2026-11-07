@@ -20,7 +20,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SearchDraftReducerTest {
-    private val available = SourceKey.entries.toSet()
+    private val available = SourceKey.builtIns.toSet()
     private val context = SearchDraftContext(available, emptyMap())
     private val artist = FacetedSearchScope(SearchFacet.ARTIST, "artist")
     private val character = FacetedSearchScope(SearchFacet.CHARACTER, "character")

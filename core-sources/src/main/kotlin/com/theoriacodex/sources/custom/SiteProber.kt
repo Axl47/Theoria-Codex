@@ -88,10 +88,10 @@ class SiteProber(
 
         /** Shipped booru sites, from the family presets, including separate API hosts. */
         val BUILT_IN_SITE_HOSTS: Map<String, String> = buildMap {
-            listOf(DanbooruSite.DANBOORU, DanbooruSite.AIBOORU).forEach { put(hostOf(it.baseUrl), it.source.name) }
+            listOf(DanbooruSite.DANBOORU, DanbooruSite.AIBOORU).forEach { put(hostOf(it.baseUrl), it.source.id) }
             listOf(GelbooruSite.GELBOORU, GelbooruSite.RULE34XXX).forEach { site ->
-                put(hostOf(site.siteUrl), site.source.name)
-                put(hostOf(site.apiUrl), site.source.name)
+                put(hostOf(site.siteUrl), site.source.id)
+                put(hostOf(site.apiUrl), site.source.id)
             }
         }
 

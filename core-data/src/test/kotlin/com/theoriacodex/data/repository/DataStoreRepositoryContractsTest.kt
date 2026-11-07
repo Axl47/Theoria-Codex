@@ -42,7 +42,7 @@ class DataStoreRepositoryContractsTest(
     fun `settings normalization and profile-owned mutations share one contract`() = runTest {
         val repository = createSettingsRepository()
         val initial = repository.observeSettings().first()
-        assertEquals(SourceKey.entries.toSet(), initial.runtime.enabledSources)
+        assertEquals(SourceKey.builtIns.toSet(), initial.runtime.enabledSources)
         assertEquals(1.0, initial.runtime.sourceWeights.values.sum(), 0.0000001)
 
         repository.setEnabledSources(setOf(SourceKey.PIXIV, SourceKey.GELBOORU))

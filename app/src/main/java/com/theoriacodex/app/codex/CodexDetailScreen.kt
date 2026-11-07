@@ -320,7 +320,7 @@ private fun FeedFabRestoreState.withCollectionFilters(updated: CodexCollectionFi
     animatedOnly = updated.animatedOnly,
     durationMinBucket = updated.animatedDurationRange.normalizedMinBucket,
     durationMaxBucket = updated.animatedDurationRange.normalizedMaxBucket,
-    source = updated.source?.name,
+    source = updated.source?.id,
     language = updated.language.name,
     fullColorOnly = updated.fullColorOnly,
 )

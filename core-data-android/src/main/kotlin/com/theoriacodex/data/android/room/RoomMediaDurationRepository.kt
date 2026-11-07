@@ -20,7 +20,7 @@ class RoomMediaDurationRepository(
     override suspend fun get(key: StoredMediaDurationKey): StoredMediaDurationState? {
         return database.withTransaction {
             val entity = dao.find(
-                key.postId.source.name,
+                key.postId.source.id,
                 key.postId.sourcePostId,
                 key.mediaFingerprint,
             ) ?: return@withTransaction null
@@ -85,7 +85,7 @@ private fun StoredMediaDurationState.toEntity(
         )
     }
     return MediaDurationEntity(
-        key.postId.source.name,
+        key.postId.source.id,
         key.postId.sourcePostId,
         key.mediaFingerprint,
         fields.decision,

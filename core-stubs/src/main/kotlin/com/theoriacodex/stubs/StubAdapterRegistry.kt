@@ -9,7 +9,7 @@ class StubAdapterRegistry(
     private val fixtureLoader: StubFixtureLoader = StubFixtureLoader(),
     val runtime: StubRuntime = StubRuntime(),
 ) : SourceAdapterRegistry {
-    private val adaptersBySource: Map<SourceKey, SourceAdapter> = SourceKey.entries.associateWith { sourceKey ->
+    private val adaptersBySource: Map<SourceKey, SourceAdapter> = SourceKey.builtIns.associateWith { sourceKey ->
         JsonStubSourceAdapter(
             sourceKey = sourceKey,
             fixtureLoader = fixtureLoader,

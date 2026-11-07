@@ -175,7 +175,7 @@ object StatisticsProjection {
         return counts.entries.asSequence()
             .filter { (_, count) -> count > 0L }
             .sortedWith(compareByDescending<Map.Entry<SourceKey, Long>> { entry -> entry.value }
-                .thenBy { entry -> entry.key.name })
+                .thenBy { entry -> entry.key.id })
             .map { (source, count) -> SourceStatistic(source, count, percentage(count, denominator)) }
             .toList()
     }
@@ -184,7 +184,7 @@ object StatisticsProjection {
         return counts.entries.asSequence()
             .filter { (key, count) -> key.tag.isNotBlank() && count > 0L }
             .sortedWith(compareByDescending<Map.Entry<StatisticsTagKey, Long>> { entry -> entry.value }
-                .thenBy { entry -> entry.key.source.name }
+                .thenBy { entry -> entry.key.source.id }
                 .thenBy { entry -> entry.key.tag })
             .take(TOP_TAG_LIMIT)
             .map { (key, count) -> TagStatistic(key, count, percentage(count, denominator)) }
@@ -265,7 +265,7 @@ fun statisticsCodexId(context: ViewerLaunchContext?): String? =
     context?.takeIf { it.streamSource == ViewerStreamSource.CODEX }
         ?.queryHash?.takeIf { it.startsWith("codex:") }?.removePrefix("codex:")?.takeIf(String::isNotBlank)
 
-fun statisticsPostKey(id: PostId): String = "${id.source.name}:${id.sourcePostId}"
+fun statisticsPostKey(id: PostId): String = "${id.source.id}:${id.sourcePostId}"
 
 private fun dailyRows(history: Map<LocalDate, DailyActivity>): List<DailyStatistic> =
     history.retainedHistory(LocalDate.now()).map { (date, day) -> DailyStatistic(

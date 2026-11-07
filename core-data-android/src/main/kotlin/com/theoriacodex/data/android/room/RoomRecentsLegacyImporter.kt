@@ -118,7 +118,7 @@ class RoomRecentsLegacyImporter(
             sharedPostPayloads.upsert(post)
             dao.upsertWatched(
                 RecentWatchedEntity(
-                    post.id.source.name,
+                    post.id.source.id,
                     post.id.sourcePostId,
                     entry.section.name,
                     entry.viewedAtEpochMs,

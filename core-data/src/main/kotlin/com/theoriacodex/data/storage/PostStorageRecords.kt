@@ -142,7 +142,7 @@ data class ImageRefStorageRecord(
 object PostStorageCodec {
     fun encode(post: Post): PostStorageRecord {
         return PostStorageRecord(
-            source = post.id.source.name,
+            source = post.id.source.id,
             sourcePostId = post.id.sourcePostId,
             previewUrl = post.preview.url,
             previewLocalPath = post.preview.localPath,
@@ -177,7 +177,7 @@ object PostStorageCodec {
         if (record.schemaVersion != null && record.schemaVersion != CURRENT_POST_STORAGE_SCHEMA_VERSION) {
             return null
         }
-        val source = record.source.toSourceKeyOrNull() ?: return null
+        val source = SourceKey.parse(record.source) ?: return null
         val creator = record.creatorProfile?.toDomainOrNull()
         val canonicalTags = record.canonicalTags.orEmpty()
         return Post(
@@ -241,7 +241,7 @@ object PostStorageCodec {
 
     private fun encodeCreatorProfile(profile: CreatorProfile): CreatorProfileStorageRecord {
         return CreatorProfileStorageRecord(
-            source = profile.source.name,
+            source = profile.source.id,
             displayName = profile.displayName,
             profileId = profile.profileId,
             profileUrl = profile.profileUrl,
@@ -272,7 +272,7 @@ private fun ImageRefStorageRecord.toDomain(): ImageRef {
 }
 
 private fun CreatorProfileStorageRecord.toDomainOrNull(): CreatorProfile? {
-    val sourceKey = source.toSourceKeyOrNull() ?: return null
+    val sourceKey = SourceKey.parse(source) ?: return null
     return CreatorProfile(
         source = sourceKey,
         displayName = displayName,
@@ -292,12 +292,6 @@ private fun PostTaxonomyTermStorageRecord.toDomainOrNull(): PostTaxonomyTerm? {
         count = count?.takeIf { it >= 0 },
         translation = translation?.trim()?.takeIf(String::isNotBlank),
     )
-}
-
-private fun String.toSourceKeyOrNull(): SourceKey? {
-    return trim()
-        .takeIf(String::isNotBlank)
-        ?.let { value -> runCatching { SourceKey.valueOf(value) }.getOrNull() }
 }
 
 private fun String?.toSearchFacetOrNull(): SearchFacet? {

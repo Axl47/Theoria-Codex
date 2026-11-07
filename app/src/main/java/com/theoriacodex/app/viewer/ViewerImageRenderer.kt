@@ -121,7 +121,7 @@ private class ViewerImageState {
         error: Throwable, post: Post, key: ViewerMediaKey, candidate: MediaDeliveryCandidate?, count: Int,
         session: ViewerImageSession, onRecovery: ((Post, ImageRef) -> Unit)?, events: ViewerRendererEvents,
     ) {
-        val recoveryKey = "${post.id.source.name}:${post.id.sourcePostId}:${key.mediaIndex}:${candidate?.location}"
+        val recoveryKey = "${post.id.source.id}:${post.id.sourcePostId}:${key.mediaIndex}:${candidate?.location}"
         if (candidate != null && onRecovery != null && isHttpNotFound(error) && session.recoveryRequests.add(recoveryKey)) {
             onRecovery(post, candidate.ref.copy(url = candidate.location))
         }

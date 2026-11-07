@@ -28,7 +28,7 @@ fun main(args: Array<String>) = runBlocking {
         val registry = RealAdapterRegistry(
             credentialsProvider = EnvironmentCredentialsProvider,
             httpClient = httpClient,
-            exposedSources = requestedSources.ifEmpty { SourceKey.entries.toSet() },
+            exposedSources = requestedSources.ifEmpty { SourceKey.builtIns.toSet() },
         )
         val probeCases = selectProbeCases(loadProbeCases(), requestedSources)
         val genericResults = ProviderProbeRunner(
@@ -73,8 +73,7 @@ internal fun parseRequestedSources(raw: String?): Set<SourceKey> {
         .map(String::trim)
         .filter(String::isNotEmpty)
         .map { name ->
-            runCatching { SourceKey.valueOf(name.uppercase()) }
-                .getOrElse { throw IllegalArgumentException("Unknown live source filter: $name") }
+            SourceKey.parse(name.uppercase()) ?: throw IllegalArgumentException("Unknown live source filter: $name")
         }
         .toSet()
 }
@@ -87,7 +86,7 @@ internal fun selectProbeCases(
     val selected = cases.filter { probeCase -> probeCase.source in requestedSources }
     val missing = requestedSources - selected.mapTo(mutableSetOf(), ProviderProbeCase::source)
     require(missing.isEmpty()) {
-        "No provider probe case is configured for ${missing.joinToString { it.name }}"
+        "No provider probe case is configured for ${missing.joinToString { it.id }}"
     }
     return selected
 }
@@ -136,7 +135,7 @@ private fun credentialedSourcesFromEnvironment(): Set<SourceKey> {
 private fun aggregateProbeResults(probeResults: List<ProviderProbeStepResult>): List<ProviderHealthCheckResult> {
     return probeResults
         .groupBy { it.source }
-        .toSortedMap(compareBy { it.name })
+        .toSortedMap(compareBy { it.id })
         .map { (source, sourceResults) ->
             val status = when {
                 sourceResults.any { it.status == ProviderHealthStatus.FAILED } -> ProviderHealthStatus.FAILED
@@ -181,7 +180,7 @@ private fun printSummary(report: ProviderHealthReport, outputFile: File) {
             result.failureReason?.name,
             result.message,
         ).joinToString(" | ")
-        println("${result.source.name}: ${result.status.name}${if (suffix.isBlank()) "" else " ($suffix)"}")
+        println("${result.source.id}: ${result.status.name}${if (suffix.isBlank()) "" else " ($suffix)"}")
     }
     if (report.probeResults.isNotEmpty()) {
         println("Provider probe steps:")
@@ -192,7 +191,7 @@ private fun printSummary(report: ProviderHealthReport, outputFile: File) {
                 result.requestUrl,
                 result.message,
             ).joinToString(" | ")
-            println("${result.source.name}/${result.checkName}: ${result.status.name}${if (suffix.isBlank()) "" else " ($suffix)"}")
+            println("${result.source.id}/${result.checkName}: ${result.status.name}${if (suffix.isBlank()) "" else " ($suffix)"}")
         }
     }
     println("Report: ${outputFile.absolutePath}")

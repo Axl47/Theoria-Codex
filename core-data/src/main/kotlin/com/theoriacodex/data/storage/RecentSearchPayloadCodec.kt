@@ -55,8 +55,8 @@ object RecentSearchPayloadCodec {
                 schemaVersion = CURRENT_RECENT_SEARCH_PAYLOAD_VERSION,
                 query = QueryStorageCodec.encode(query),
                 kind = kind.name,
-                sources = normalizedSources.map(SourceKey::name),
-                sourceTags = normalizedSourceTags.mapKeys { (source, _) -> source.name },
+                sources = normalizedSources.map(SourceKey::id),
+                sourceTags = normalizedSourceTags.mapKeys { (source, _) -> source.id },
             )
         )
     }
@@ -82,15 +82,11 @@ object RecentSearchPayloadCodec {
             ?: error("Stored recent search has an invalid kind")
         val rawSources = record.sources ?: error("Stored recent search has no sources")
         val sources = rawSources.map { raw ->
-            runCatching { SourceKey.valueOf(raw) }.getOrElse {
-                error("Stored recent search has an invalid source")
-            }
+            SourceKey.parse(raw) ?: error("Stored recent search has an invalid source")
         }
         require(sources == sources.distinct()) { "Stored recent search sources must be distinct" }
         val sourceTags = record.sourceTags.orEmpty().mapKeys { (rawSource, _) ->
-            runCatching { SourceKey.valueOf(rawSource) }.getOrElse {
-                error("Stored recent search has an invalid source-tag source")
-            }
+            SourceKey.parse(rawSource) ?: error("Stored recent search has an invalid source-tag source")
         }
         validate(query, kind, sources, sourceTags)
         return RecentSearchPayload(query, kind, sources, sourceTags)

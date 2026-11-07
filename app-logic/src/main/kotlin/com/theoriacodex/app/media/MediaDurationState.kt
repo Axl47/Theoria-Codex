@@ -27,7 +27,7 @@ data class MediaDurationFingerprintInput(
 
 fun mediaDurationFingerprint(input: MediaDurationFingerprintInput): String {
     val canonical = buildString {
-        append(input.postId.source.name)
+        append(input.postId.source.id)
         append('\u0000')
         append(input.postId.sourcePostId)
         append('\u0000')

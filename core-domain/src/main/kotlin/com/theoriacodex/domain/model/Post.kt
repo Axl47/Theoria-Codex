@@ -3,20 +3,6 @@ package com.theoriacodex.domain.model
 /** Canonical wire MIME emitted for Pixiv Ugoira animation archives. */
 const val PIXIV_UGOIRA_MIME: String = "image/ugoira"
 
-enum class SourceKey {
-    PIXIV,
-    GELBOORU,
-    AIBOORU,
-    DANBOORU,
-    NHENTAI,
-    HITOMI,
-    IWARA,
-    RULE34XXX,
-    RULE34PAHEAL,
-    RULE34VIDEO,
-    RULE34GEN,
-}
-
 data class PostId(
     val source: SourceKey,
     val sourcePostId: String,

@@ -166,7 +166,7 @@ object SourcePresentationCatalog {
     private val bySource = entries.associateBy(SourcePresentation::source)
 
     init {
-        check(bySource.keys == SourceKey.entries.toSet()) {
+        check(bySource.keys == SourceKey.builtIns.toSet()) {
             "Source presentation catalog must cover every SourceKey exactly once"
         }
         check(entries.map(SourcePresentation::order).distinct().size == entries.size) {
@@ -192,7 +192,7 @@ fun SourceKey.presentation(): SourcePresentation = SourcePresentationCatalog.pre
 fun Iterable<SourceKey>.inPresentationOrder(): List<SourceKey> {
     return distinct().sortedWith(
         compareBy<SourceKey> { source -> source.presentation().order }
-            .thenBy(SourceKey::name),
+            .thenBy(SourceKey::id),
     )
 }
 

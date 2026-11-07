@@ -30,6 +30,6 @@ class FollowedCodexTest {
     }
 
     private fun follow(source: SourceKey, id: String) = FollowedCreator(
-        CreatorProfile(source, "Same name", id, uploadsQuery = "user:$id"), "${source.name}:$id",
+        CreatorProfile(source, "Same name", id, uploadsQuery = "user:$id"), "${source.id}:$id",
     )
 }

@@ -2,7 +2,6 @@ package com.theoriacodex.data.android.room
 
 import com.google.gson.JsonObject
 import com.google.gson.annotations.SerializedName
-import com.theoriacodex.domain.model.SourceKey
 
 internal data class LegacyCodexStoreFile(
     @field:SerializedName("codices")
@@ -57,10 +56,6 @@ internal data class LegacyLikedPostRecord(
     @field:SerializedName("tags")
     val tags: List<String>? = null,
 )
-
-internal fun String?.toSourceKeyOrNull(): SourceKey? {
-    return this?.trim()?.let { value -> runCatching { SourceKey.valueOf(value) }.getOrNull() }
-}
 
 internal fun parseStoredProfileId(profileId: String?, legacyProfile: String?): String {
     val normalized = profileId?.trim().orEmpty()

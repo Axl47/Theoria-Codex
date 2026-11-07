@@ -122,10 +122,10 @@ internal fun mergeViewerPosts(current: List<Post>, incoming: List<Post>): List<P
     if (incoming.isEmpty()) return current
     if (current.isEmpty()) return incoming
     val seen = current
-        .mapTo(mutableSetOf()) { post -> "${post.id.source.name}:${post.id.sourcePostId}" }
+        .mapTo(mutableSetOf()) { post -> "${post.id.source.id}:${post.id.sourcePostId}" }
     val merged = current.toMutableList()
     incoming.forEach { post ->
-        val key = "${post.id.source.name}:${post.id.sourcePostId}"
+        val key = "${post.id.source.id}:${post.id.sourcePostId}"
         if (seen.add(key)) {
             merged += post
         }

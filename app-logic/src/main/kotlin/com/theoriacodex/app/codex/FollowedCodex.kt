@@ -11,6 +11,6 @@ fun selectFollowedCreators(
     sources: Set<String>,
     authors: Set<String>,
 ): List<FollowedCreator> = follows.filter { follow ->
-    (sources.isEmpty() || follow.creator.source.name in sources) &&
+    (sources.isEmpty() || follow.creator.source.id in sources) &&
         (authors.isEmpty() || follow.creator.followKey() in authors)
 }

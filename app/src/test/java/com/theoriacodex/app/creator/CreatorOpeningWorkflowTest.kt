@@ -68,7 +68,7 @@ class CreatorOpeningWorkflowTest {
     }
 
     private fun creator(id: String) = CreatorProfile(SourceKey.PIXIV, id, id, uploadsQuery = id)
-    private fun link(source: SourceKey) = ExternalCreatorDeepLink(source, source.name, "owner", "https://example.test/owner")
+    private fun link(source: SourceKey) = ExternalCreatorDeepLink(source, source.id, "owner", "https://example.test/owner")
     private fun workflow(source: SourceKey, resolve: suspend (PostId) -> Post?): CreatorOpeningWorkflow {
         val stubs = StubAdapterRegistry()
         val adapter = object : SourceAdapter by requireNotNull(stubs.adapterFor(source)), CreatorPostsSourceAdapter {

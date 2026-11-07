@@ -112,7 +112,7 @@ fun CreatorUiState.reduce(action: CreatorAction): CreatorTransition = when (acti
     }
     CreatorAction.SourceUnavailable -> CreatorTransition(
         failed(
-            "Creator browsing is not available for ${creator?.source?.name?.lowercase()}.",
+            "Creator browsing is not available for ${creator?.source?.id?.lowercase()}.",
             CreatorFailureReason.UNSUPPORTED_SOURCE,
             clearResults = true,
         )
@@ -216,7 +216,7 @@ private fun CreatorUiState.unchanged(): CreatorTransition = CreatorTransition(th
 
 fun creatorQueryHash(creator: CreatorProfile): String {
     val key = creator.uploadsQuery ?: creator.profileId ?: creator.profileUrl ?: creator.displayName
-    return "creator:${creator.source.name}:$key"
+    return "creator:${creator.source.id}:$key"
 }
 
 private fun CreatorUiState.openRelatedResult(action: CreatorAction.OpenRelatedResult): CreatorTransition {
@@ -225,7 +225,7 @@ private fun CreatorUiState.openRelatedResult(action: CreatorAction.OpenRelatedRe
     return CreatorTransition(this, CreatorEffect.OpenViewer(
         posts = action.visibleResults.toList(),
         context = ViewerLaunchContext(
-            queryHash = "related:${request.seed.id.source.name}:${request.seed.id.sourcePostId}",
+            queryHash = "related:${request.seed.id.source.id}:${request.seed.id.sourcePostId}",
             startIndex = action.index,
             streamSource = ViewerStreamSource.RELATED,
             scrollOffsetHint = 0,

@@ -471,6 +471,25 @@ class RoomCodexLikesRepositoryTest {
         assertNull(repository.observeCodex("system_likes_codex").first())
     }
 
+    @Test
+    fun `likes and Codex items from a custom source round trip without a site profile`() = runTest {
+        val repository = repository()
+        val custom = requireNotNull(SourceKey.parse("custom_safebooru_org"))
+        val post = post("123", custom)
+
+        repository.toggleLikeAndSyncSystemCodex(
+            profileId = "profile-main",
+            systemCodexId = "system_likes_codex",
+            systemCodexName = "Likes",
+            post = post,
+            tags = listOf("cat_ears"),
+        )
+
+        assertEquals(post.id, repository.observeLikes("profile-main").first().single().postId)
+        assertEquals(listOf(post), repository.observeCodexPosts("system_likes_codex", CodexSortMode.NEWEST_SAVED).first())
+        assertEquals(post.id, repository.observeCodexItems("system_likes_codex").first().single().postId)
+    }
+
     private fun repository(): RoomCodexLikesRepository {
         return RoomCodexLikesRepository(
             database = database,

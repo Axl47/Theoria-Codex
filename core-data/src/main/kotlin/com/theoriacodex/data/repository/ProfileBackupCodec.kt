@@ -70,7 +70,7 @@ class ProfileBackupCodec(private val gson: Gson = Gson()) {
             addProperty("name", codex.name)
             addProperty("createdAt", codex.createdAtEpochMs)
             add("automaticTags", backupArray(codex.automaticTags) { tag -> backupObject {
-                addProperty("source", tag.source.name)
+                addProperty("source", tag.source.id)
                 addProperty("tag", tag.tag)
                 addProperty("group", tag.groupIndex)
             } })
@@ -105,7 +105,7 @@ class ProfileBackupCodec(private val gson: Gson = Gson()) {
             codices = root.backupObjects("codices", 10_000).map { codex ->
                 Codex(codex.backupString("id"), codex.backupString("name"), codex.backupLong("createdAt"),
                     codex.backupObjects("automaticTags", 10_000).map { tag ->
-                        CodexAutomaticTag(SourceKey.valueOf(tag.backupString("source")),
+                        CodexAutomaticTag(SourceKey.parseOrThrow(tag.backupString("source")),
                             tag.backupString("tag"), tag.backupInt("group"))
                     })
             },

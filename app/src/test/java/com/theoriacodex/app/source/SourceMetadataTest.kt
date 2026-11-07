@@ -30,7 +30,7 @@ class SourceMetadataTest {
     fun `catalog covers every source with stable ordering and explicit exposure`() {
         val presentations = SourcePresentationCatalog.orderedPresentations()
 
-        assertEquals(SourceKey.entries.toSet(), presentations.map { it.source }.toSet())
+        assertEquals(SourceKey.builtIns.toSet(), presentations.map { it.source }.toSet())
         assertEquals(presentations.indices.toList(), presentations.map { it.order })
         assertEquals(
             listOf(

@@ -53,11 +53,11 @@ internal fun JsonObject.backupStrings(name: String): List<String> {
 }
 
 internal fun JsonObject.putId(id: PostId) {
-    addProperty("source", id.source.name)
+    addProperty("source", id.source.id)
     addProperty("postId", id.sourcePostId)
 }
 
-internal fun JsonObject.backupId() = PostId(SourceKey.valueOf(backupString("source")), backupString("postId"))
+internal fun JsonObject.backupId() = PostId(SourceKey.parseOrThrow(backupString("source")), backupString("postId"))
 
 internal fun backupSearch(entry: RecentSearchEntry, gson: Gson): JsonObject = backupObject {
     addProperty("queryHash", entry.queryHash)
@@ -84,7 +84,7 @@ internal fun decodeBackupPost(record: JsonObject, gson: Gson): Post {
 }
 
 private fun validateBackupPostRecord(record: JsonObject) {
-    SourceKey.valueOf(record.backupString("source"))
+    SourceKey.parseOrThrow(record.backupString("source"))
     record.backupString("sourcePostId")
     record.backupStrings("canonicalTags")
     record.backupStrings("rawTags")
@@ -107,7 +107,7 @@ private fun validateBackupPostRecord(record: JsonObject) {
 }
 
 private fun validateBackupCreator(record: JsonObject) {
-    SourceKey.valueOf(record.backupString("source"))
+    SourceKey.parseOrThrow(record.backupString("source"))
     val name = record.get("displayName")
     require(name?.isJsonPrimitive == true && name.asJsonPrimitive.isString)
 }

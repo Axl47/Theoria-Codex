@@ -7,8 +7,8 @@ import org.junit.Test
 class SourceWeightSettingsTest {
     @Test
     fun `every slider step preserves edited weight and distributes whole steps totaling one`() {
-        for (count in 2..SourceKey.entries.size) {
-            val sources = SourceKey.entries.take(count).toSet()
+        for (count in 2..SourceKey.builtIns.size) {
+            val sources = SourceKey.builtIns.take(count).toSet()
             val original = SourceWeightSettings.weightsFor(SourceRuntimeSettings(), sources)
             val source = sources.first()
             for (step in 0..20) {

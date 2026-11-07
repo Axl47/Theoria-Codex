@@ -34,30 +34,30 @@ class RoomProfileBackupStore(
         val codices = dao.codices().map { row ->
             Codex(row.codexId, row.name, row.createdAtEpochMs,
                 dao.automaticTagsForCodex(row.codexId).map {
-                    CodexAutomaticTag(SourceKey.valueOf(it.source), it.tagDisplay, it.groupIndex)
-                }.sortedWith(compareBy<CodexAutomaticTag> { it.source.ordinal }.thenBy { it.groupIndex }
+                    CodexAutomaticTag(SourceKey.parseOrThrow(it.source), it.tagDisplay, it.groupIndex)
+                }.sortedWith(compareBy<CodexAutomaticTag> { it.source }.thenBy { it.groupIndex }
                     .thenBy { sourceTagKey(it.source, it.tag) }))
         }
         val items = dao.codexItems().map {
-            CodexItem(it.codexId, PostId(SourceKey.valueOf(it.source), it.sourcePostId), it.savedAtEpochMs)
+            CodexItem(it.codexId, PostId(SourceKey.parseOrThrow(it.source), it.sourcePostId), it.savedAtEpochMs)
         }
         val likes = dao.allLikes().map { row ->
-            LikedPost(row.profileId, PostId(SourceKey.valueOf(row.source), row.sourcePostId), row.likedAtEpochMs,
+            LikedPost(row.profileId, PostId(SourceKey.parseOrThrow(row.source), row.sourcePostId), row.likedAtEpochMs,
                 JsonParser.parseString(row.tagsJson).asJsonArray.map { it.asString })
         }
         val watchedRows = if (includeRecents) recents.watched().filter { it.section != RecentPostSection.FYP.name } else emptyList()
         val referencedIds = items.map { it.postId }.toSet() + likes.map { it.postId } + watchedRows.map {
-            PostId(SourceKey.valueOf(it.source), it.sourcePostId)
+            PostId(SourceKey.parseOrThrow(it.source), it.sourcePostId)
         }
         val likesById = likes.associateBy { it.postId }
         val posts = referencedIds.map { id ->
-            dao.post(id.source.name, id.sourcePostId)?.let(postCodec::decode)
+            dao.post(id.source.id, id.sourcePostId)?.let(postCodec::decode)
                 ?: legacyLikedPost(requireNotNull(likesById[id]) { "Saved post payload is missing" })
         }
         val postsById = posts.associateBy { it.id }
         BackupLibrary(codices, items, posts, likes,
             watchedRows.map {
-                RecentPostEntry(postsById.getValue(PostId(SourceKey.valueOf(it.source), it.sourcePostId)),
+                RecentPostEntry(postsById.getValue(PostId(SourceKey.parseOrThrow(it.source), it.sourcePostId)),
                     it.viewedAtEpochMs, ViewerStreamSource.valueOf(it.origin), it.originQueryHash,
                     RecentPostSection.valueOf(it.section), it.maxViewedMediaNumber)
             },
@@ -74,7 +74,7 @@ class RoomProfileBackupStore(
             var collectionsAdded = 0
             // Existing shared payloads can contain useful offline bytes and richer resolved media.
             library.posts.forEach { post ->
-                dao.insertPost(PostEntity(post.id.source.name, post.id.sourcePostId, postCodec.encode(post)))
+                dao.insertPost(PostEntity(post.id.source.id, post.id.sourcePostId, postCodec.encode(post)))
             }
             var displayOrder = dao.codices().size
             library.codices.forEach { codex ->
@@ -82,12 +82,12 @@ class RoomProfileBackupStore(
                     displayOrder += 1
                     collectionsAdded += 1
                     dao.insertAutomaticTags(codex.automaticTags.map {
-                        CodexAutomaticTagEntity(codex.codexId, it.source.name, sourceTagKey(it.source, it.tag), it.tag, it.groupIndex)
+                        CodexAutomaticTagEntity(codex.codexId, it.source.id, sourceTagKey(it.source, it.tag), it.tag, it.groupIndex)
                     })
                 }
             }
             library.items.forEach { item ->
-                dao.insertCodexItem(CodexItemEntity(item.codexId, item.postId.source.name,
+                dao.insertCodexItem(CodexItemEntity(item.codexId, item.postId.source.id,
                     item.postId.sourcePostId, item.savedAtEpochMs))
             }
             library.likes.forEach { like ->
@@ -95,9 +95,9 @@ class RoomProfileBackupStore(
                 if (dao.insertCodex(CodexEntity(systemCodexId, "Likes", like.likedAtEpochMs, displayOrder)) != -1L) {
                     displayOrder += 1
                 }
-                dao.insertCodexItem(CodexItemEntity(systemCodexId, like.postId.source.name,
+                dao.insertCodexItem(CodexItemEntity(systemCodexId, like.postId.source.id,
                     like.postId.sourcePostId, like.likedAtEpochMs))
-                dao.insertLike(LikedPostEntity(like.profileId, like.postId.source.name, like.postId.sourcePostId,
+                dao.insertLike(LikedPostEntity(like.profileId, like.postId.source.id, like.postId.sourcePostId,
                     like.likedAtEpochMs, gson.toJson(like.tags)))
             }
             mergeRecents(library)
@@ -107,13 +107,13 @@ class RoomProfileBackupStore(
     private fun mergeRecents(library: BackupLibrary) {
         library.watched.asReversed().forEach { entry ->
             val id = entry.post.id
-            val existing = recents.watched(id.source.name, id.sourcePostId, entry.section.name)
+            val existing = recents.watched(id.source.id, id.sourcePostId, entry.section.name)
             if (existing == null || entry.viewedAtEpochMs > existing.viewedAtEpochMs) {
-                recents.upsertWatched(RecentWatchedEntity(id.source.name, id.sourcePostId, entry.section.name,
+                recents.upsertWatched(RecentWatchedEntity(id.source.id, id.sourcePostId, entry.section.name,
                     entry.viewedAtEpochMs, recents.nextWatchedSequence(), entry.origin.name, entry.originQueryHash,
                     maxOf(entry.maxViewedMediaNumber, existing?.maxViewedMediaNumber ?: 1)))
             } else {
-                recents.raiseWatchedMediaProgress(id.source.name, id.sourcePostId, entry.section.name, entry.maxViewedMediaNumber)
+                recents.raiseWatchedMediaProgress(id.source.id, id.sourcePostId, entry.section.name, entry.maxViewedMediaNumber)
             }
         }
         library.searches.asReversed().forEach { entry ->

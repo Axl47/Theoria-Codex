@@ -86,7 +86,7 @@ internal class ForYouViewModel(
             ?.takeIf { id -> initialProfiles.any { it.profileId == id } }
             ?: initialProfiles.firstOrNull()?.profileId ?: defaultRecommendationProfiles().first().profileId,
         selectedSource = savedStateHandle.get<String>(KEY_SELECTED_SOURCE)
-            ?.let { name -> SourceKey.entries.firstOrNull { it.name == name } },
+            ?.let { name -> SourceKey.parse(name) },
         sortMode = savedStateHandle.get<String>(KEY_SORT_MODE)
             ?.let { name -> SortMode.entries.firstOrNull { it.name == name } } ?: initialSort ?: SortMode.NEWEST,
     ))
@@ -446,7 +446,7 @@ internal class ForYouViewModel(
 
     private fun persistRouteInputs(value: ForYouUiState) {
         savedStateHandle[KEY_PROFILE_ID] = value.activeProfileId
-        savedStateHandle[KEY_SELECTED_SOURCE] = value.selectedSource?.name
+        savedStateHandle[KEY_SELECTED_SOURCE] = value.selectedSource?.id
         savedStateHandle[KEY_SORT_MODE] = value.sortMode.name
     }
 
