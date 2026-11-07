@@ -1,6 +1,7 @@
 package com.theoriacodex.domain.recommendation
 
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.tags.normalizeGelbooruToken
 
 /**
  * Canonical normalization for tags that train and serve the For You recommendation model.
@@ -31,7 +32,7 @@ object RecommendationTagNormalization {
             SourceKey.DANBOORU,
             SourceKey.IWARA,
             SourceKey.RULE34XXX,
-            -> cleaned.replace(' ', '_')
+            -> normalizeGelbooruToken(cleaned)
 
             SourceKey.PIXIV,
             SourceKey.NHENTAI,

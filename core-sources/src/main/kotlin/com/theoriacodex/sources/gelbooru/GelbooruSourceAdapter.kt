@@ -18,6 +18,7 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.tags.decodeHtmlEntities
 import com.theoriacodex.sources.common.ambiguousDurationFieldMs
 import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.classifyHttpFailure
@@ -127,7 +128,7 @@ class GelbooruSourceAdapter(
                 )
             )
             parseTagItems(response).forEach tagItemLoop@{ raw ->
-                val name = raw.stringValue("name")?.trim().orEmpty()
+                val name = raw.stringValue("name")?.let(::decodeHtmlEntities)?.trim().orEmpty()
                 if (name.isBlank()) return@tagItemLoop
                 val count = raw.intValue("count") ?: raw.intValue("post_count") ?: return@tagItemLoop
                 countsByName.putIfAbsent(name, count)
@@ -281,7 +282,7 @@ class GelbooruSourceAdapter(
         val id = raw.stringValue("id")?.ifBlank { null } ?: return null
         val tags = raw.stringValue("tags")
             ?.split(" ")
-            ?.map { it.trim() }
+            ?.map { decodeHtmlEntities(it).trim() }
             ?.filter { it.isNotBlank() }
             .orEmpty()
         val fullUrl = normalizeGelbooruMediaUrl(raw.stringValue("file_url"))
@@ -329,7 +330,7 @@ class GelbooruSourceAdapter(
     }
 
     private fun parseTag(raw: JsonObject, type: String): TagSuggestion? {
-        val name = raw.stringValue("name")?.trim().orEmpty()
+        val name = raw.stringValue("name")?.let(::decodeHtmlEntities)?.trim().orEmpty()
         if (name.isBlank()) return null
         val count = raw.intValue("count") ?: raw.intValue("post_count")
         return TagSuggestion(

@@ -61,7 +61,7 @@
       <span class="pill">Plan file: .docs/exec/cross-source-tag-affinity.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Phase 2: decode HTML-escaped booru tags.</div>
+      <div class="card"><strong>Next Action</strong>Phase 3: cross-source affinity in For You.</div>
       <div class="card"><strong>Main Risk</strong>Live provider behavior (Pixiv English translations, Gelbooru escaped tags) can only be confirmed on a device. Device use is paused for benchmarks, so these remain manual checks.</div>
       <div class="card"><strong>Validation</strong>Focused JVM and Robolectric tests in <code>core-domain</code>, <code>core-sources</code>, <code>core-data</code>, <code>app-logic</code> and <code>app</code>. No device or emulator.</div>
       <div class="card"><strong>Affected Areas</strong>Pixiv adapter, post taxonomy and storage, the tag suggestion store, post tag chips, the Gelbooru/Rule34 adapters, and For You seed generation.</div>
@@ -202,7 +202,7 @@
       <ul>
         <li>[x] 2026-11-06 Research and plan.</li>
         <li>[x] 2026-11-07 Phase 1: Pixiv translation pairing. Evidence: <code>:core-domain:test :core-sources:test :core-data:test :app-logic:test</code> pass; focused <code>:app:testDebugUnitTest</code> (TagSuggestionStore, PostTag*, CodexShare*, SearchCoordinator*, TrainingTags) pass; detekt clean for touched modules. Pixiv tag tests moved to <code>PixivTagsAdapterTest</code> to keep <code>PixivSourceAdapterTest</code> under detekt's class-size limit.</li>
-        <li>[ ] Phase 2: booru entity decoding.</li>
+        <li>[x] 2026-11-07 Phase 2: booru entity decoding. Decoding lives in <code>normalizeGelbooruToken</code>, so search keys, favorites, autocomplete prefixes and recommendation keys all see real names. Evidence: <code>:core-domain:test :core-sources:test :core-data:test :app-logic:test</code> pass; <code>:app:testDebugUnitTest</code> Search/Codex/ForYou/Tag filters ran 383 tests, 0 failures, 3 skipped; detekt clean for core modules.</li>
         <li>[ ] Phase 3: cross-source affinity.</li>
       </ul>
       <h3>Surprises And Discoveries</h3>

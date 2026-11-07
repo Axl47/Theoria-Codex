@@ -15,6 +15,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.tags.decodeHtmlEntities
 import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.intValue
@@ -113,7 +114,7 @@ class Rule34XxxSourceAdapter(
                 ),
             )
             jsonArrayOfObjects(response, gson, "rule34.xxx tags").forEach tagRecords@{ raw ->
-                val name = raw.stringValue("name")?.trim().orEmpty()
+                val name = raw.stringValue("name")?.let(::decodeHtmlEntities)?.trim().orEmpty()
                 val count = raw.intValue("count") ?: raw.intValue("post_count") ?: return@tagRecords
                 if (name.isNotBlank()) {
                     counts.putIfAbsent(name, count)
@@ -207,7 +208,7 @@ class Rule34XxxSourceAdapter(
 
         val tags = raw.stringValue("tags")
             ?.split(' ')
-            ?.map(String::trim)
+            ?.map { decodeHtmlEntities(it).trim() }
             ?.filter(String::isNotBlank)
             .orEmpty()
         val fullUrl = raw.stringValue("file_url")
@@ -232,7 +233,7 @@ class Rule34XxxSourceAdapter(
     }
 
     private fun parseTagSuggestion(raw: JsonObject, type: String): TagSuggestion? {
-        val text = raw.stringValue("name")?.trim().orEmpty()
+        val text = raw.stringValue("name")?.let(::decodeHtmlEntities)?.trim().orEmpty()
         if (text.isBlank()) return null
         return TagSuggestion(
             text = text,

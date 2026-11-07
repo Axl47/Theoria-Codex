@@ -5,6 +5,7 @@ import com.google.gson.JsonObject
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SortMode
+import com.theoriacodex.domain.tags.decodeHtmlEntities
 import com.theoriacodex.sources.common.asStringOrNull
 import com.theoriacodex.sources.common.elementsOrEmpty
 import com.theoriacodex.sources.common.intValue
@@ -86,7 +87,7 @@ internal fun parseRule34XxxAutocompleteSuggestions(
     val items = parseJsonArray(body, gson, "rule34.xxx autocomplete")
     return items.mapNotNull { item ->
         val obj = item.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
-        val text = obj.stringValue("value")?.trim().orEmpty()
+        val text = obj.stringValue("value")?.let(::decodeHtmlEntities)?.trim().orEmpty()
         if (text.isBlank()) return@mapNotNull null
         TagSuggestion(
             text = text,

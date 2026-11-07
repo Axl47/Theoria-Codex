@@ -118,7 +118,7 @@ class GelbooruSourceAdapterTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(
                 statusCode = 200,
-                body = """{"post":[{"id":"12345678","preview_url":"https://gelbooru.com/p.jpg","file_url":"https://gelbooru.com/f.jpg","tags":"a b"}]}""",
+                body = """{"post":[{"id":"12345678","preview_url":"https://gelbooru.com/p.jpg","file_url":"https://gelbooru.com/f.jpg","tags":"a jojo&#039;s_bizarre_adventure"}]}""",
             )
         }
         val adapter = GelbooruSourceAdapter(
@@ -132,6 +132,7 @@ class GelbooruSourceAdapterTest {
             "https://gelbooru.com/index.php?page=post&s=view&id=12345678",
             page.items.firstOrNull()?.pageUrl,
         )
+        assertEquals(listOf("a", "jojo's_bizarre_adventure"), page.items.firstOrNull()?.canonicalTags)
     }
 
     @Test
@@ -411,7 +412,8 @@ class GelbooruSourceAdapterTest {
                     {
                       "tag": [
                         {"name":"blue_hair","count":"1200"},
-                        {"name":"landscape","count":"560"}
+                        {"name":"landscape","count":"560"},
+                        {"name":"jojo&#039;s_bizarre_adventure","count":"9"}
                       ]
                     }
                 """.trimIndent(),
@@ -422,10 +424,11 @@ class GelbooruSourceAdapterTest {
             credentialsProvider = FakeCredentialsProvider(),
         )
 
-        val counts = adapter.fetchTagCounts(listOf("blue hair", "landscape"))
+        val counts = adapter.fetchTagCounts(listOf("blue hair", "landscape", "jojo's bizarre adventure"))
 
-        assertEquals("blue_hair landscape", httpClient.lastGet?.query?.get("names"))
-        assertEquals("2", httpClient.lastGet?.query?.get("limit"))
+        assertEquals("blue_hair landscape jojo's_bizarre_adventure", httpClient.lastGet?.query?.get("names"))
+        assertEquals("3", httpClient.lastGet?.query?.get("limit"))
+        assertEquals(9, counts["jojo's_bizarre_adventure"])
         assertEquals(1200, counts["blue_hair"])
         assertEquals(560, counts["landscape"])
         assertNull(counts["missing"])
