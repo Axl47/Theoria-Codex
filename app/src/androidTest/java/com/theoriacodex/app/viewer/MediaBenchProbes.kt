@@ -10,6 +10,10 @@ import android.os.SystemClock
 import android.view.Surface
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime
+import androidx.media3.exoplayer.source.LoadEventInfo
+import androidx.media3.exoplayer.source.MediaLoadData
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -24,7 +28,30 @@ import kotlinx.coroutines.withTimeout
 
 /** Times one player's first frame, playback start, rebuffers and seek completions; attach and detach on main. */
 internal class PlayerProbe(val player: ExoPlayer, private val surface: Surface) : Player.Listener {
-    private val attachedAt = SystemClock.elapsedRealtime()
+    /** Elapsed-realtime clock value when the probe was made; server timelines are reported relative to it. */
+    val attachedAt = SystemClock.elapsedRealtime()
+
+    /**
+     * Per seek: when it started (ms after [attachedAt]), then the player's load, render and state events in ms after
+     * the seek request, until it was ready. Read on main.
+     */
+    val seekEvents = mutableListOf<MutableList<String>>()
+    private var seekStartedAt = -1L
+    private val seekLog = object : AnalyticsListener {
+        override fun onLoadStarted(eventTime: EventTime, info: LoadEventInfo, data: MediaLoadData, retryCount: Int) =
+            log(eventTime, "load@${info.dataSpec.position / KIB}k")
+
+        override fun onLoadCanceled(eventTime: EventTime, info: LoadEventInfo, data: MediaLoadData) = log(eventTime, "cancel")
+
+        override fun onLoadCompleted(eventTime: EventTime, info: LoadEventInfo, data: MediaLoadData) = log(eventTime, "done")
+
+        override fun onRenderedFirstFrame(eventTime: EventTime, output: Any, renderTimeMs: Long) = log(eventTime, "frame")
+
+        override fun onPlaybackStateChanged(eventTime: EventTime, state: Int) {
+            log(eventTime, "state$state")
+            if (state == Player.STATE_READY) seekStartedAt = -1L
+        }
+    }
     private val firstFrame = CompletableDeferred<Long>()
     private val playing = CompletableDeferred<Long>()
     private var seekReady: CompletableDeferred<Long>? = null
@@ -37,11 +64,13 @@ internal class PlayerProbe(val player: ExoPlayer, private val surface: Surface) 
 
     fun attach() {
         player.addListener(this)
+        player.addAnalyticsListener(seekLog)
         player.setVideoSurface(surface)
     }
 
     fun detach() {
         player.removeListener(this)
+        player.removeAnalyticsListener(seekLog)
         player.clearVideoSurface(surface)
     }
 
@@ -60,9 +89,17 @@ internal class PlayerProbe(val player: ExoPlayer, private val surface: Surface) 
         val ready = CompletableDeferred<Long>()
         val started = withContext(Dispatchers.Main) {
             seekReady = ready
-            SystemClock.elapsedRealtime().also { player.seekTo(positionMs) }
+            SystemClock.elapsedRealtime().also { now ->
+                seekStartedAt = now
+                seekEvents += mutableListOf("at${now - attachedAt}")
+                player.seekTo(positionMs)
+            }
         }
         return withTimeout(PLAYER_TIMEOUT_MS) { ready.await() } - started
+    }
+
+    private fun log(eventTime: EventTime, event: String) {
+        if (seekStartedAt >= 0L) seekEvents.last() += "$event+${eventTime.realtimeMs - seekStartedAt}"
     }
 
     override fun onRenderedFirstFrame() {
@@ -138,6 +175,7 @@ internal fun percentile(values: List<Long>, percentile: Int): Long {
 internal fun megabytes(bytes: Long): Double = (bytes / 10_485.76).roundToInt() / 100.0
 
 internal const val PLAYER_TIMEOUT_MS = 30_000L
+private const val KIB = 1024
 private const val MEMORY_SAMPLE_MS = 50L
 private const val SURFACE_WIDTH = 1920
 private const val SURFACE_HEIGHT = 1080

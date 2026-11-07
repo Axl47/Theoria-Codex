@@ -221,6 +221,8 @@ class MediaBufferingBenchmarkTest {
         val secondDrag = previews.drag(listOf((duration * SECOND_DRAG_FRACTION).toLong()))
         val dragEvents = JSONArray((firstDrag + secondDrag).map { "${it.movedAt - scrubStartedAt}->${it.publishedAt - scrubStartedAt}" })
         val scrubTimeline = server.timeline("/long_1.mp4", scrubStartedAt)
+        val seekTimeline = server.timeline("/long_1.mp4", probe.attachedAt)
+        val seekEvents = onMain { JSONArray(probe.seekEvents.map(::JSONArray)) }
         val end = serverStats()
         onMain {
             previews.close()
@@ -249,7 +251,11 @@ class MediaBufferingBenchmarkTest {
                 .put("long_bytes_mb", megabytes(path.optLong("bytes")))
                 .put("long_duplicate_mb", megabytes(path.optLong("duplicateBytes")))
                 .put("server", end.json)
-                .put("diagnostics", JSONObject().put("scrubTimeline", scrubTimeline).put("dragEvents", dragEvents).put("releasedAt", releasedAt)),
+                .put(
+                    "diagnostics",
+                    JSONObject().put("scrubTimeline", scrubTimeline).put("dragEvents", dragEvents).put("releasedAt", releasedAt)
+                        .put("seekEvents", seekEvents).put("seekTimeline", seekTimeline),
+                ),
         )
     }
 
