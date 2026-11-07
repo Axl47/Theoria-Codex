@@ -7,6 +7,7 @@ import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.danbooru.DanbooruSite
 import com.theoriacodex.sources.danbooru.DanbooruSourceAdapter
+import com.theoriacodex.sources.gelbooru.GelbooruSite
 import com.theoriacodex.sources.gelbooru.GelbooruSourceAdapter
 import com.theoriacodex.sources.http.DefaultSourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpClient
@@ -19,7 +20,6 @@ import com.theoriacodex.sources.pixiv.PixivTokenCoordinator
 import com.theoriacodex.sources.rule34.Rule34GenSourceAdapter
 import com.theoriacodex.sources.rule34.Rule34PahealSourceAdapter
 import com.theoriacodex.sources.rule34.Rule34VideoSourceAdapter
-import com.theoriacodex.sources.rule34.Rule34XxxSourceAdapter
 
 class RealAdapterRegistry(
     credentialsProvider: SourceCredentialsProvider,
@@ -39,8 +39,9 @@ class RealAdapterRegistry(
         SourceKey.AIBOORU to DanbooruSourceAdapter(DanbooruSite.AIBOORU, httpClient),
         SourceKey.DANBOORU to DanbooruSourceAdapter(DanbooruSite.DANBOORU, httpClient),
         SourceKey.GELBOORU to GelbooruSourceAdapter(
-            httpClient = httpClient,
-            credentialsProvider = credentialsProvider,
+            GelbooruSite.GELBOORU,
+            httpClient,
+            credentialsProvider::getGelbooruCredentials,
         ),
         SourceKey.NHENTAI to NhentaiSourceAdapter(
             httpClient = httpClient,
@@ -51,9 +52,10 @@ class RealAdapterRegistry(
         SourceKey.IWARA to IwaraSourceAdapter(
             httpClient = httpClient,
         ),
-        SourceKey.RULE34XXX to Rule34XxxSourceAdapter(
-            httpClient = httpClient,
-            credentialsProvider = credentialsProvider,
+        SourceKey.RULE34XXX to GelbooruSourceAdapter(
+            GelbooruSite.RULE34XXX,
+            httpClient,
+            credentialsProvider::getRule34XxxCredentials,
         ),
         SourceKey.RULE34PAHEAL to Rule34PahealSourceAdapter(
             httpClient = httpClient,

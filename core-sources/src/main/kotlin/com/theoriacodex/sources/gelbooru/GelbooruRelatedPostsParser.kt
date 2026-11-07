@@ -2,14 +2,15 @@ package com.theoriacodex.sources.gelbooru
 
 import org.jsoup.Jsoup
 
-/** Returns null when Gelbooru's related block is absent, versus an empty present block. */
+/** Returns null when the post page's related block is absent, versus an empty present block. */
 internal fun parseGelbooruRelatedPostIds(
     html: String,
+    baseUrl: String,
     seedId: String,
     limit: Int,
 ): List<String>? {
     if (limit <= 0) return emptyList()
-    val document = Jsoup.parse(html, GELBOORU_BASE_URL)
+    val document = Jsoup.parse(html, "$baseUrl/")
     val heading = document.getElementsContainingOwnText(RELATED_HEADING)
         .firstOrNull { element -> element.ownText().trim().startsWith(RELATED_HEADING) }
         ?: return null
@@ -29,7 +30,6 @@ private fun relatedPostId(href: String): String? {
 }
 
 private const val RELATED_HEADING = "More Like This:"
-private const val GELBOORU_BASE_URL = "https://gelbooru.com/"
 private const val MAX_RELATED_POSTS = 6
 private val PAGE_POST_PATTERN = Regex("(?:[?&])page=post(?:[&#]|$)")
 private val VIEW_POST_PATTERN = Regex("(?:[?&])s=view(?:[&#]|$)")
