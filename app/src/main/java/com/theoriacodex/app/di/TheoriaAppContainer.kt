@@ -37,6 +37,7 @@ import com.theoriacodex.app.update.StartupUpdater
 import com.theoriacodex.app.update.UpdateFeedClient
 import com.theoriacodex.app.update.UpdateStateStore
 import com.theoriacodex.app.viewer.PixivUgoiraClient
+import com.theoriacodex.app.viewer.videoPlaybackInfrastructure
 import com.theoriacodex.data.repository.CacheRepository
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.app.codex.CodexCleaningService
@@ -249,7 +250,10 @@ internal class DefaultTheoriaAppContainer(
             com.theoriacodex.app.statistics.fetchStatisticsThumbnail(appContext, post, destination)
         },
     )
-    private val offlineAcquisition = OfflineMediaAcquisition(appContext, sourceRegistry, settingsRepository, pixivUgoiraClient)
+    private val offlineAcquisition = OfflineMediaAcquisition(appContext, sourceRegistry, settingsRepository, pixivUgoiraClient) {
+            url, headers, destination ->
+        appContext.videoPlaybackInfrastructure().copyFullyCached(url, headers, destination)
+    }
     private val offlineMedia = OfflineMediaCoordinator(
         store = offlineStore,
         scope = durableStoreScope,

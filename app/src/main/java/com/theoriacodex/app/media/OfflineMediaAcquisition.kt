@@ -20,12 +20,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
-/** Provider resolution and network policy are shared by automatic saves and explicit collection downloads. */
+/**
+ * Provider resolution and network policy are shared by automatic saves and explicit collection downloads.
+ * [copyCachedVideo] copies a video the player already cached in full, so saving a watched video skips the download.
+ */
 class OfflineMediaAcquisition(
     private val context: Context,
     private val registry: SourceAdapterRegistry,
     private val settings: SettingsRepository,
     private val ugoira: PixivUgoiraClient,
+    private val copyCachedVideo: suspend (url: String, headers: Map<String, String>, destination: File) -> Boolean,
 ) {
     suspend fun resolve(post: Post): Post {
         checkNetwork()
@@ -52,7 +56,7 @@ class OfflineMediaAcquisition(
             }
             return
         }
-        if (media.mime != PIXIV_UGOIRA_MIME && copyFromImageCache(post, media, destination)) return
+        if (media.mime != PIXIV_UGOIRA_MIME && copyFromMediaCaches(post, media, destination)) return
         checkNetwork()
         if (media.mime == PIXIV_UGOIRA_MIME) {
             ugoira.copyArchiveForOffline(post.id.sourcePostId, destination)
@@ -62,13 +66,14 @@ class OfflineMediaAcquisition(
         }
     }
 
-    /** Reuses the exact bytes Coil already downloaded for this URL; no network policy applies to a copy. */
-    private suspend fun copyFromImageCache(post: Post, media: ImageRef, destination: File): Boolean {
+    /** Reuses the exact bytes Coil or the video player already downloaded for this URL; no network policy applies. */
+    private suspend fun copyFromMediaCaches(post: Post, media: ImageRef, destination: File): Boolean {
         val url = media.url?.takeIf(String::isNotBlank) ?: return false
         return withContext(Dispatchers.IO) {
             runCatchingPreservingCancellation {
-                copyCachedMediaBytes(context, post.id.source, url, destination) &&
-                    run { validateOfflineMediaFile(destination); true }
+                val copied = copyCachedMediaBytes(context, post.id.source, url, destination) ||
+                    copyCachedVideo(url, post.id.source.requestHeaders(), destination)
+                copied && run { validateOfflineMediaFile(destination); true }
             }.getOrDefault(false)
         }
     }
