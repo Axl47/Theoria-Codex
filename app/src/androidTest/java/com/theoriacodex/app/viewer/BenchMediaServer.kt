@@ -1,5 +1,6 @@
 package com.theoriacodex.app.viewer
 
+import android.os.SystemClock
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.IOException
@@ -19,6 +20,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.concurrent.thread
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -54,6 +56,17 @@ internal class BenchMediaServer(
     val baseUrl = "http://127.0.0.1:${server.localPort}"
 
     fun reset() = responses.clear()
+
+    /**
+     * Every response for [path] opened at or after [sinceMs] (elapsed realtime): when its headers were sent, its
+     * first byte, bytes written so far, and when it finished or was abandoned (or -1 while still open).
+     */
+    fun timeline(path: String, sinceMs: Long): JSONArray = JSONArray().apply {
+        responses[path].orEmpty().filter { it.openedAtMs >= sinceMs }.forEach { response ->
+            put(JSONObject().put("at", response.openedAtMs - sinceMs).put("offset", response.start)
+                .put("bytes", response.sent.get()).put("endedAt", response.endedAtMs.let { if (it < 0) -1 else it - sinceMs }))
+        }
+    }
 
     /** Per path: requests, bytes written, unique bytes and duplicate bytes. */
     fun snapshot(): JSONObject = JSONObject().apply {
@@ -121,26 +134,32 @@ internal class BenchMediaServer(
         }
         output.write(header.toByteArray())
         val response = Response(start).also { responses.getOrPut(path) { CopyOnWriteArrayList() } += it }
-        RandomAccessFile(file, "r").use { handle ->
-            handle.seek(start)
-            val buffer = ByteArray(CHUNK_BYTES)
-            var remaining = length
-            while (remaining > 0) {
-                val read = handle.read(buffer, 0, minOf(buffer.size.toLong(), remaining).toInt())
-                if (read < 0) break
-                bucket.take(read)
-                output.write(buffer, 0, read)
-                response.sent.addAndGet(read.toLong())
-                remaining -= read
+        try {
+            RandomAccessFile(file, "r").use { handle ->
+                handle.seek(start)
+                val buffer = ByteArray(CHUNK_BYTES)
+                var remaining = length
+                while (remaining > 0) {
+                    val read = handle.read(buffer, 0, minOf(buffer.size.toLong(), remaining).toInt())
+                    if (read < 0) break
+                    bucket.take(read)
+                    output.write(buffer, 0, read)
+                    response.sent.addAndGet(read.toLong())
+                    remaining -= read
+                }
             }
+            output.flush()
+        } finally {
+            response.endedAtMs = SystemClock.elapsedRealtime()
         }
-        output.flush()
     }
 
     private class Request(val target: String, val headers: Map<String, String>)
 
     private class Response(val start: Long, val notModified: Boolean = false) {
         val sent = AtomicLong()
+        val openedAtMs = SystemClock.elapsedRealtime()
+        @Volatile var endedAtMs = -1L
     }
 
     /** One link shared by every response. */

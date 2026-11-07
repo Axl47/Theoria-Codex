@@ -201,6 +201,7 @@ class MediaBufferingBenchmarkTest {
         }
 
         val beforeScrub = serverStats()
+        val scrubStartedAt = SystemClock.elapsedRealtime()
         val density = context.resources.displayMetrics.density
         val frameSize = viewerScrubFrameSize(16f / 9f)
         val previews = onMain {
@@ -210,12 +211,16 @@ class MediaBufferingBenchmarkTest {
                 (frameSize.height.value * density).roundToInt() and 1.inv(),
             )
         }
-        val scrubFrames = previews.drag(SCRUB_FRACTIONS.map { (duration * it).toLong() })
+        val firstDrag = previews.drag(SCRUB_FRACTIONS.map { (duration * it).toLong() })
+        val scrubFrames = firstDrag.map(DragFrame::elapsedMs)
         val afterScrub = serverStats()
         // Lifting the finger ends the drag and seeks the player to the last previewed position.
+        val releasedAt = SystemClock.elapsedRealtime() - scrubStartedAt
         val releaseSeek = probe.seekAndAwaitReady((duration * SCRUB_FRACTIONS.last()).toLong())
         delay(SEEK_SETTLE_MS)
         val secondDrag = previews.drag(listOf((duration * SECOND_DRAG_FRACTION).toLong()))
+        val dragEvents = JSONArray((firstDrag + secondDrag).map { "${it.movedAt - scrubStartedAt}->${it.publishedAt - scrubStartedAt}" })
+        val scrubTimeline = server.timeline("/long_1.mp4", scrubStartedAt)
         val end = serverStats()
         onMain {
             previews.close()
@@ -240,10 +245,11 @@ class MediaBufferingBenchmarkTest {
                     megabytes(afterScrub.path("/long_1.mp4").optLong("bytes") - beforeScrub.path("/long_1.mp4").optLong("bytes")),
                 )
                 .put("seek_after_scrub_ms", releaseSeek)
-                .put("scrub_second_drag_first_frame_ms", secondDrag.first())
+                .put("scrub_second_drag_first_frame_ms", secondDrag.first().elapsedMs)
                 .put("long_bytes_mb", megabytes(path.optLong("bytes")))
                 .put("long_duplicate_mb", megabytes(path.optLong("duplicateBytes")))
-                .put("server", end.json),
+                .put("server", end.json)
+                .put("diagnostics", JSONObject().put("scrubTimeline", scrubTimeline).put("dragEvents", dragEvents).put("releasedAt", releasedAt)),
         )
     }
 
@@ -520,9 +526,9 @@ class MediaBufferingBenchmarkTest {
 
     /**
      * One timeline drag through the page's scrub previews, as the popup drives it: the finger rests on each target
-     * until its frame is published. Returns, per target, the time from moving there to its frame.
+     * until its frame is published. Returns, per target, when the finger moved there and when its frame arrived.
      */
-    private suspend fun ViewerScrubPreviews.drag(targets: List<Long>): List<Long> = coroutineScope {
+    private suspend fun ViewerScrubPreviews.drag(targets: List<Long>): List<DragFrame> = coroutineScope {
         val positions = MutableStateFlow(targets.first())
         val published = Channel<Pair<Long, Long>>(Channel.UNLIMITED)
         var movedAt = SystemClock.elapsedRealtime()
@@ -537,7 +543,7 @@ class MediaBufferingBenchmarkTest {
             withTimeout(PLAYER_TIMEOUT_MS) {
                 var frame = published.receive()
                 while (frame.first != target) frame = published.receive()
-                frame.second - movedAt
+                DragFrame(movedAt, frame.second)
             }
         }
         following.cancelAndJoin()
@@ -647,6 +653,11 @@ class MediaBufferingBenchmarkTest {
     private suspend fun <T> onMain(block: () -> T): T = withContext(Dispatchers.Main) { block() }
 
     private data class Shown(val elapsedMs: Long, val source: String)
+
+    /** One drag target: when the finger moved there and when its preview frame was published. */
+    private data class DragFrame(val movedAt: Long, val publishedAt: Long) {
+        val elapsedMs: Long get() = publishedAt - movedAt
+    }
 
     private class ServerStats(val json: JSONObject) {
         fun path(path: String): JSONObject = json.optJSONObject(path) ?: JSONObject()
