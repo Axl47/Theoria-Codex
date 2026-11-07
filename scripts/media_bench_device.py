@@ -2,13 +2,17 @@
 """Run the media buffering benchmark on a device and summarize it.
 
     scripts/media_bench_device.py run --serial R5CWC0SXR3A --label baseline [--runs 3]
+    scripts/media_bench_device.py run --serial R5CWC0SXR3A --label ab --skip-build \
+        --variant base=build/media-bench/apks/base --variant head=build/media-bench/apks/head
     scripts/media_bench_device.py record --round 0 build/media-bench/baseline/results.json
 
 `run` generates the test media (ffmpeg), builds the debug and test APKs, proves both are the isolated debug
 lane (`scripts/verify_device_apk.py`) before installing them, copies the media into the debug app's
 `cache/media-bench` (through `run-as`), and runs each `MediaBufferingBenchmarkTest` scenario once per run in a
 fresh app process. The test serves that media from a throttled loopback server inside the app process. The
-summary is the median of every metric across runs. `record` writes a summary into
+summary is the median of every metric across runs. With `--variant NAME=DIR` (APK pairs saved from earlier
+builds), each run installs and measures every variant in turn, so variants share the phone's thermal and
+network conditions; one results file is written per variant. `record` writes a summary into
 `.docs/exec/media-buffering-metrics.json` as one round entry.
 
 Only `com.theoriacodex.debug` and its test package are installed; no provider media is involved.
@@ -112,8 +116,10 @@ def build() -> None:
     run(["./gradlew", ":app:assembleDebug", ":app:assembleDebugAndroidTest", "--console=plain", "-q"])
 
 
-def install(serial: str) -> None:
-    for apk, package in ((APP_APK, DEBUG_PACKAGE), (TEST_APK, f"{DEBUG_PACKAGE}.test")):
+def install(serial: str, apk_dir: Path | None = None) -> None:
+    app_apk = apk_dir / APP_APK.name if apk_dir else APP_APK
+    test_apk = apk_dir / TEST_APK.name if apk_dir else TEST_APK
+    for apk, package in ((app_apk, DEBUG_PACKAGE), (test_apk, f"{DEBUG_PACKAGE}.test")):
         run([sys.executable, "scripts/verify_device_apk.py", str(apk), "--package", package])
         adb(serial, "install", "-r", "-t", str(apk))
 
@@ -178,35 +184,41 @@ def command_run(args: argparse.Namespace) -> None:
     generate_media()
     if not args.skip_build:
         build()
-    if not args.skip_install:
+    variants = {name: Path(path) for name, path in (item.split("=", 1) for item in args.variant)}
+    if not variants and not args.skip_install:
         install(args.serial)
     push_media(args.serial)
-    out = ROOT / "build" / "media-bench" / args.label
-    out.mkdir(parents=True, exist_ok=True)
-    samples: dict[str, list[dict]] = {scenario: [] for scenario in args.scenarios}
+    samples = {name: {scenario: [] for scenario in args.scenarios} for name in variants or {"current": None}}
     for run_index in range(1, args.runs + 1):
-        for scenario in args.scenarios:
-            result = instrument(args.serial, scenario, args.rate_mbps, args.ttfb_ms)
-            samples[scenario].append(result["metrics"])
-            printable = {k: v for k, v in result["metrics"].items() if k != "server"}
-            print(f"run {run_index} {scenario}: {json.dumps(printable)}", flush=True)
-    per_run = [
-        {k: v for scenario_runs in samples.values() for k, v in scenario_runs[index].items()}
-        for index in range(args.runs)
-    ]
-    results = {
-        "label": args.label,
-        "commit": git_head(),
-        "device": adb(args.serial, "shell", "getprop", "ro.product.model", capture=True).strip(),
-        "network": {"rate_mbps": args.rate_mbps, "ttfb_ms": args.ttfb_ms, "transport": "in-process loopback"},
-        "runs": args.runs,
-        "summary": summarize(per_run),
-        "samples": samples,
-    }
-    (out / "results.json").write_text(json.dumps(results, indent=2) + "\n")
-    print(f"wrote {out / 'results.json'}")
-    for name, entry in results["summary"].items():
-        print(f"  {name:38s} {entry['value']:>10} {entry['unit']:6s} n={entry['n']} {entry['values']}")
+        for name in samples:
+            if name in variants:
+                install(args.serial, variants[name])
+            for scenario in args.scenarios:
+                result = instrument(args.serial, scenario, args.rate_mbps, args.ttfb_ms)
+                samples[name][scenario].append(result["metrics"])
+                printable = {k: v for k, v in result["metrics"].items() if k not in ("server", "diagnostics")}
+                print(f"run {run_index} {name} {scenario}: {json.dumps(printable)}", flush=True)
+    for name, variant_samples in samples.items():
+        out = ROOT / "build" / "media-bench" / args.label / ("" if name == "current" else name)
+        out.mkdir(parents=True, exist_ok=True)
+        per_run = [
+            {k: v for scenario_runs in variant_samples.values() for k, v in scenario_runs[index].items()}
+            for index in range(args.runs)
+        ]
+        results = {
+            "label": args.label if name == "current" else f"{args.label}/{name}",
+            "commit": git_head() if name == "current" else str(variants[name]),
+            "device": adb(args.serial, "shell", "getprop", "ro.product.model", capture=True).strip(),
+            "network": {"rate_mbps": args.rate_mbps, "ttfb_ms": args.ttfb_ms, "transport": "in-process loopback"},
+            "runs": args.runs,
+            "interleaved_with": [other for other in samples if other != name],
+            "summary": summarize(per_run),
+            "samples": variant_samples,
+        }
+        (out / "results.json").write_text(json.dumps(results, indent=2) + "\n")
+        print(f"wrote {out / 'results.json'}")
+        for metric, entry in results["summary"].items():
+            print(f"  {metric:38s} {entry['value']:>10} {entry['unit']:6s} n={entry['n']} {entry['values']}")
 
 
 def command_record(args: argparse.Namespace) -> None:
@@ -214,6 +226,8 @@ def command_record(args: argparse.Namespace) -> None:
     history = json.loads(METRICS_FILE.read_text()) if METRICS_FILE.exists() else []
     history = [entry for entry in history if entry.get("round") != args.round]
     network = results["network"]
+    interleaved = results.get("interleaved_with") or []
+    method_prefix = f"interleaved run by run with {', '.join(interleaved)}; " if interleaved else ""
     history.append({
         "round": args.round,
         "commit": args.commit or results["commit"],
@@ -224,7 +238,7 @@ def command_record(args: argparse.Namespace) -> None:
                 "value": entry["value"],
                 "unit": entry["unit"],
                 "n": entry["n"],
-                "method": f"median of {entry['n']} runs; {entry['method']}",
+                "method": f"{method_prefix}median of {entry['n']} runs; {entry['method']}",
             }
             for name, entry in results["summary"].items()
         },
@@ -246,6 +260,8 @@ def main() -> None:
     run_parser.add_argument("--ttfb-ms", type=int, default=100)
     run_parser.add_argument("--skip-build", action="store_true")
     run_parser.add_argument("--skip-install", action="store_true")
+    run_parser.add_argument("--variant", action="append", default=[], metavar="NAME=DIR",
+                            help="interleave saved APK pairs (app-debug.apk, app-debug-androidTest.apk) per run")
     record_parser = commands.add_parser("record")
     record_parser.add_argument("--round", type=int, required=True)
     record_parser.add_argument("--commit")
