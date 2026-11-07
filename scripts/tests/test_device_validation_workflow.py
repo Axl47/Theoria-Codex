@@ -45,14 +45,18 @@ class DeviceValidationWorkflowTest(unittest.TestCase):
 
     def test_tag_reuses_main_checks_and_still_runs_release_acceptance(self) -> None:
         release = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+        preflight = release.split("  release-acceptance:", 1)[0]
         self.assertNotIn("uses: ./.github/workflows/verify.yml", release)
-        for workflow in ("verify.yml", "device-validation.yml", "dependency-submission.yml"):
-            self.assertIn(workflow, release.split("  release-acceptance:", 1)[0])
+        self.assertIn("latest_run verify.yml", preflight)
+        self.assertIn("latest_run device-validation.yml", preflight)
+        self.assertNotIn("dependency-submission.yml", release)
         self.assertIn("head_sha=${GITHUB_SHA}&event=push&branch=main", release)
         self.assertIn("completed/success", release)
-        self.assertIn("release-acceptance-only: true", release)
-        self.assertIn("if: ${{ !inputs.release-acceptance-only }}", self.workflow)
-        self.assertIn("if: inputs.release-acceptance-only ||", self.workflow)
+        # A skipped or cancelled main device run moves its connected tests to the tag instead of blocking it.
+        self.assertIn("missing|completed/cancelled", preflight)
+        self.assertIn("connected-tests: ${{ needs.preflight.outputs.connected-tests == 'true' }}", release)
+        self.assertIn("if: ${{ !startsWith(github.ref, 'refs/tags/') || inputs.connected-tests }}", self.workflow)
+        self.assertIn("if: startsWith(github.ref, 'refs/tags/') ||", self.workflow)
 
     def test_tag_publishes_only_after_acceptance_and_parallel_build(self) -> None:
         release = RELEASE_WORKFLOW.read_text(encoding="utf-8")

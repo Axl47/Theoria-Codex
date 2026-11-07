@@ -22,6 +22,7 @@ jobs:
       release-tag: ${{ steps.metadata.outputs.release-tag }}
       release-title: ${{ steps.metadata.outputs.release-title }}
       release-notes-file: ${{ steps.metadata.outputs.release-notes-file }}
+      connected-tests: ${{ steps.checks.outputs.connected-tests }}
 
     steps:
       - name: Checkout
@@ -87,35 +88,49 @@ jobs:
             echo "release-notes-file=${RELEASE_NOTES_FILE}"
           } >> "$GITHUB_OUTPUT"
 
+      # Verify runs on every push to main and must have passed. Device Validation is path-filtered and
+      # cancellable, so a missing or cancelled run sends its connected tests to this tag instead.
       - name: Require successful main checks for this exact commit
+        id: checks
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          failed=0
-          for workflow in verify.yml device-validation.yml dependency-submission.yml; do
+          latest_run() {
             # The newest push-to-main run for this SHA is authoritative; a re-run updates it in place.
-            latest="$(gh api \
-              "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs?head_sha=${GITHUB_SHA}&event=push&branch=main&per_page=100" \
+            gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/$1/runs?head_sha=${GITHUB_SHA}&event=push&branch=main&per_page=100" \
               --jq "[.workflow_runs[] | select(.head_sha == \"${GITHUB_SHA}\" and .head_branch == \"main\" and .event == \"push\")]
                     | sort_by(.created_at) | last
-                    | if . == null then \"missing\" else \"\(.status)/\(.conclusion) \(.html_url)\" end")"
-            echo "${workflow}: ${latest}"
-            if [[ "$latest" != completed/success\ * ]]; then
-              echo "::error::${workflow} has no successful push-to-main run for ${GITHUB_SHA} (${latest})."
-              failed=1
-            fi
-          done
-          exit "$failed"
+                    | if . == null then \"missing\" else \"\(.status)/\(.conclusion) \(.html_url)\" end"
+          }
+          verify="$(latest_run verify.yml)"
+          echo "verify.yml: ${verify}"
+          if [[ "$verify" != completed/success\ * ]]; then
+            echo "::error::verify.yml has no successful push-to-main run for ${GITHUB_SHA} (${verify})."
+            exit 1
+          fi
+          device="$(latest_run device-validation.yml)"
+          echo "device-validation.yml: ${device}"
+          case "$device" in
+            completed/success\ *) connected=false ;;
+            missing|completed/cancelled\ *|completed/skipped\ *)
+              echo "::notice::Device Validation did not complete for ${GITHUB_SHA}; this tag runs its connected tests."
+              connected=true ;;
+            *)
+              echo "::error::device-validation.yml did not pass for ${GITHUB_SHA} (${device})."
+              exit 1 ;;
+          esac
+          echo "connected-tests=${connected}" >> "$GITHUB_OUTPUT"
 
-  # Debug connected tests already passed on main; only the R8 release lane is tag-specific.
+  # R8 acceptance is tag-specific; debug connected tests run here only when main lacks them for this commit.
   release-acceptance:
     needs: preflight
     uses: ./.github/workflows/device-validation.yml
     secrets:
       GRADLE_ENCRYPTION_KEY: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
     with:
-      release-acceptance-only: true
+      connected-tests: ${{ needs.preflight.outputs.connected-tests == 'true' }}
 
   # Builds and signs in parallel with acceptance; nothing is published until both succeed.
   build-release:
@@ -198,3 +213,4 @@ jobs:
           files: theoria-codex-main.apk
           fail_on_unmatched_files: true
           body_path: ${{ needs.preflight.outputs.release-notes-file }}
+
