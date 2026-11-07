@@ -38,6 +38,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -179,7 +183,11 @@ class MediaBufferingBenchmarkTest {
         )
     }
 
-    /** A long video opened directly: cold first frame, four seeks past the buffer, scrub previews, and a release seek. */
+    /**
+     * A long video opened directly: cold first frame, four seeks past the buffer, then two timeline drags through
+     * the page's scrub previews. The first drag rests on three targets past the buffer and releases, seeking to the
+     * last one; the second, after playback settles, rests on one target and is cancelled.
+     */
     @Test
     fun viewerSeekAndScrub() = runBlocking {
         val video = url("long_1.mp4")
@@ -204,25 +212,22 @@ class MediaBufferingBenchmarkTest {
         val beforeScrub = serverStats()
         val density = context.resources.displayMetrics.density
         val frameSize = viewerScrubFrameSize(16f / 9f)
-        val frames = onMain {
-            ScrubFrameSource(
-                context, video, SourceKey.GELBOORU,
+        val previews = onMain {
+            ViewerScrubPreviews(
+                context, probe.player, SourceKey.GELBOORU,
                 (frameSize.width.value * density).roundToInt() and 1.inv(),
                 (frameSize.height.value * density).roundToInt() and 1.inv(),
             )
         }
-        val scrubFrames = SCRUB_FRACTIONS.map { fraction ->
-            val started = SystemClock.elapsedRealtime()
-            withContext(Dispatchers.Main) { frames.frameAt((duration * fraction).toLong()) }
-            SystemClock.elapsedRealtime() - started
-        }
+        val scrubFrames = previews.drag(SCRUB_FRACTIONS.map { (duration * it).toLong() })
         val afterScrub = serverStats()
-        // Lifting the finger closes the preview and seeks the player to the last previewed position.
-        onMain { frames.close() }
+        // Lifting the finger ends the drag and seeks the player to the last previewed position.
         val releaseSeek = probe.seekAndAwaitReady((duration * SCRUB_FRACTIONS.last()).toLong())
         delay(SEEK_SETTLE_MS)
+        val secondDrag = previews.drag(listOf((duration * SECOND_DRAG_FRACTION).toLong()))
         val end = serverStats()
         onMain {
+            previews.close()
             probe.detach()
             infrastructure.viewerVideoPlayerPool.recycle(lease)
         }
@@ -244,9 +249,150 @@ class MediaBufferingBenchmarkTest {
                     megabytes(afterScrub.path("/long_1.mp4").optLong("bytes") - beforeScrub.path("/long_1.mp4").optLong("bytes")),
                 )
                 .put("seek_after_scrub_ms", releaseSeek)
+                .put("scrub_second_drag_first_frame_ms", secondDrag.first())
                 .put("long_bytes_mb", megabytes(path.optLong("bytes")))
                 .put("long_duplicate_mb", megabytes(path.optLong("duplicateBytes")))
                 .put("server", end.json),
+        )
+    }
+
+    /**
+     * Three 90 s videos in one post, opened on the middle one: it plays while the Viewer owner warms its two
+     * neighbours, then a swipe leases the right neighbour (the pager's swipe target), makes it current and plays it.
+     */
+    @Test
+    fun viewerSwipe() = runBlocking {
+        val videos = SWIPE_VIDEOS.map { name -> ImageRef(url(name), null, "video/mp4") }
+        val post = Post(
+            // A Gelbooru post's media would be repaired to https; this loopback server is plain HTTP.
+            id = PostId(SourceKey.NHENTAI, "media-bench-swipe-$nonce"), preview = videos[1], full = videos[1],
+            media = videos, pageUrl = null, width = 1920, height = 1080, canonicalTags = emptyList(),
+            rawTags = emptyList(), authorName = null, createdAtEpochMs = 1L, mediaCount = videos.size,
+        )
+        // The Viewer's player and prefetcher both bind the post's source headers, so they share a cache entry.
+        val swipeHeaders = post.id.source.requestHeaders()
+        val infrastructure = context.videoPlaybackInfrastructure()
+        warmUpVideo()
+        resetServer()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val viewer = ViewerViewModel(
+            SavedStateHandle(),
+            mediaPrefetcher = viewerMediaPrefetcher(context) { VideoQuality.AUTO },
+            scopeOverride = scope,
+        )
+        scope.launch { viewer.effects.collect { } }
+        val surfaces = List(2) { BenchSurface() }
+        val current = onMain {
+            viewer.replaceSession(
+                ViewerSession(
+                    listOf(post), ViewerLaunchContext("media-bench", 0, ViewerStreamSource.SEARCH, 0),
+                    initialMediaIndex = 1,
+                ),
+            )
+            viewer.queueAdjacentPrefetch()
+            viewerProbe(requireNotNull(videos[1].url), surfaces[0], play = true, swipeHeaders)
+        }
+        current.first.awaitFirstFrame()
+        onMain { viewer.markShown(1) }
+        delay(SWIPE_WATCH_MS)
+
+        // The swipe's target page leases its player as the drag starts; it plays once the pager settles on it.
+        val beforeSwipe = serverStats()
+        val swipeStarted = SystemClock.elapsedRealtime()
+        val target = onMain {
+            viewer.onAction(viewerPrefetchAction(viewer.state.value.pages, viewer.state.value.currentMedia?.key,
+                viewer.state.value.pages.first().media[2].key))
+            viewerProbe(requireNotNull(videos[2].url), surfaces[1], play = false, swipeHeaders)
+        }
+        delay(SWIPE_SETTLE_MS)
+        onMain {
+            current.first.detach()
+            infrastructure.viewerVideoPlayerPool.recycle(current.second)
+            viewer.selectAndPrefetch(2)
+            target.first.player.playWhenReady = true
+        }
+        val swipeFirstFrame = target.first.awaitFirstFrameAt() - swipeStarted
+        val swipePlaying = target.first.awaitPlayingAt() - swipeStarted
+        onMain { viewer.markShown(2) }
+        delay(SWIPE_AFTER_MS)
+        val end = serverStats()
+        onMain {
+            target.first.detach()
+            infrastructure.viewerVideoPlayerPool.recycle(target.second)
+        }
+        scope.cancel()
+        surfaces.forEach(BenchSurface::close)
+        videos.forEach { infrastructure.removeCached(requireNotNull(it.url), swipeHeaders) }
+        val bytes = SWIPE_VIDEOS.map { end.path("/$it").optLong("bytes") }
+        report(
+            "viewerSwipe",
+            JSONObject()
+                .put("swipe_ttff_ms", swipeFirstFrame)
+                .put("swipe_time_to_playing_ms", swipePlaying)
+                .put("swipe_rebuffer_count", target.first.rebufferCount)
+                .put("swipe_target_bytes_before_mb", megabytes(beforeSwipe.path("/${SWIPE_VIDEOS[2]}").optLong("bytes")))
+                .put("swipe_unvisited_neighbour_mb", megabytes(bytes[0]))
+                .put("swipe_session_mb", megabytes(bytes.sum()))
+                .put("server", end.json),
+        )
+    }
+
+    /**
+     * Four autoplaying feed cards; a scroll moves the first two off screen (paused, then returned warm, as a
+     * disposed card does) and brings two new cards on, which must autoplay with the rest. After the new cards
+     * play for a while, scrolling back returns the first two.
+     */
+    @Test
+    fun feedScroll() = runBlocking {
+        val clips = (1..FEED_SCROLL_CLIPS).map { url("clip_$it.mp4") }
+        val infrastructure = context.videoPlaybackInfrastructure()
+        warmUpVideo()
+        resetServer()
+        val surfaces = List(FEED_SCROLL_CLIPS) { BenchSurface() }
+        val shown = onMain { (0 until FEED_CARDS).associateWith { feedCard(clips[it], surfaces[it]) }.toMutableMap() }
+        shown.values.forEach { it.first.awaitPlaying() }
+        delay(FEED_SCROLL_WATCH_MS)
+
+        val scrolledAt = SystemClock.elapsedRealtime()
+        val atScroll = serverStats()
+        onMain { SCROLLED_OFF.forEach { shown.getValue(it).first.player.playWhenReady = false } }
+        delay(FEED_SCROLL_OFF_MS)
+        val entered = onMain {
+            SCROLLED_OFF.forEach { index -> shown.remove(index)?.let { (probe, lease) -> returnFeedCard(probe, lease) } }
+            SCROLLED_ON.associateWith { feedCard(clips[it], surfaces[it]) }.also(shown::putAll)
+        }
+        val enteredFirstFrames = entered.values.map { it.first.awaitFirstFrameAt() - scrolledAt }
+        shown.values.forEach { it.first.awaitPlaying() }
+        val allPlaying = SystemClock.elapsedRealtime() - scrolledAt
+        delay(FEED_SCROLL_AWAY_MS)
+        val away = serverStats()
+        val scrolledPast = SCROLLED_OFF.sumOf { index ->
+            val path = "/clip_${index + 1}.mp4"
+            away.path(path).optLong("bytes") - atScroll.path(path).optLong("bytes")
+        }
+
+        val backAt = SystemClock.elapsedRealtime()
+        onMain { SCROLLED_ON.forEach { shown.getValue(it).first.player.playWhenReady = false } }
+        delay(FEED_SCROLL_OFF_MS)
+        val returned = onMain {
+            SCROLLED_ON.forEach { index -> shown.remove(index)?.let { (probe, lease) -> returnFeedCard(probe, lease) } }
+            SCROLLED_OFF.associateWith { feedCard(clips[it], surfaces[it]) }.also(shown::putAll)
+        }
+        returned.values.forEach { it.first.awaitPlaying() }
+        val backPlaying = SystemClock.elapsedRealtime() - backAt
+        check(onMain { shown.values.all { it.first.player.isPlaying } }) { "Every visible card must autoplay" }
+        onMain { shown.values.forEach { (probe, lease) -> returnFeedCard(probe, lease) } }
+        surfaces.forEach(BenchSurface::close)
+        clips.forEach { infrastructure.removeCached(it, headers) }
+        report(
+            "feedScroll",
+            JSONObject()
+                .put("feed_scroll_ttff_ms", median(enteredFirstFrames))
+                .put("feed_scroll_all_playing_ms", allPlaying)
+                .put("feed_scrolled_past_mb", megabytes(scrolledPast))
+                .put("feed_scroll_back_playing_ms", backPlaying)
+                .put("feed_scroll_session_mb", megabytes(clips.sumOf { away.path(it.toPath()).optLong("bytes") }))
+                .put("server", serverStats().json),
         )
     }
 
@@ -381,6 +527,63 @@ class MediaBufferingBenchmarkTest {
         return allPlaying to resumedAfter
     }
 
+    /**
+     * One timeline drag through the page's scrub previews, as the popup drives it: the finger rests on each target
+     * until its frame is published. Returns, per target, the time from moving there to its frame.
+     */
+    private suspend fun ViewerScrubPreviews.drag(targets: List<Long>): List<Long> = coroutineScope {
+        val positions = MutableStateFlow(targets.first())
+        val published = Channel<Pair<Long, Long>>(Channel.UNLIMITED)
+        var movedAt = SystemClock.elapsedRealtime()
+        val following = launch(Dispatchers.Main) {
+            follow(positions) { requested, _ -> published.trySend(requested to SystemClock.elapsedRealtime()) }
+        }
+        val elapsed = targets.mapIndexed { index, target ->
+            if (index > 0) {
+                movedAt = SystemClock.elapsedRealtime()
+                positions.value = target
+            }
+            withTimeout(PLAYER_TIMEOUT_MS) {
+                var frame = published.receive()
+                while (frame.first != target) frame = published.receive()
+                frame.second - movedAt
+            }
+        }
+        following.cancelAndJoin()
+        elapsed
+    }
+
+    /** A Viewer page's player for [location], bound to [surface]; it plays at once only when [play] is set. */
+    private fun viewerProbe(
+        location: String,
+        surface: BenchSurface,
+        play: Boolean,
+        requestHeaders: Map<String, String> = headers,
+    ): Pair<PlayerProbe, ReusableVideoSlotPool.Lease<ExoPlayer>> {
+        val lease = context.videoPlaybackInfrastructure().viewerVideoPlayerPool.acquire(location, requestHeaders)
+        return PlayerProbe(lease.resource, surface.surface).also { probe ->
+            probe.attach()
+            lease.resource.playWhenReady = play
+        } to lease
+    }
+
+    /** A visible feed card: it leases its player and autoplays. */
+    private fun feedCard(location: String, surface: BenchSurface): Pair<PlayerProbe, FeedPreviewPlayerLease> {
+        val lease = context.videoPlaybackInfrastructure().feedPreviewPlayerPool.acquire(location, headers)
+        return PlayerProbe(lease.player, surface.surface).also { probe ->
+            probe.attach()
+            lease.player.playWhenReady = true
+        } to lease
+    }
+
+    /** A card scrolled out of composition returns its player with its binding, as its disposal does. */
+    private fun returnFeedCard(probe: PlayerProbe, lease: FeedPreviewPlayerLease) {
+        probe.detach()
+        context.videoPlaybackInfrastructure().feedPreviewPlayerPool.recycle(lease, retainBinding = true)
+    }
+
+    private fun String.toPath(): String = substringAfter(server.baseUrl).substringBefore('?')
+
     /** One Viewer player plays its first frame, so codec and player setup costs are paid before measuring. */
     private suspend fun warmUpVideo() {
         val infrastructure = context.videoPlaybackInfrastructure()
@@ -482,9 +685,15 @@ private class PlayerProbe(val player: ExoPlayer, private val surface: Surface) :
         player.clearVideoSurface(surface)
     }
 
-    suspend fun awaitFirstFrame(): Long = withTimeout(PLAYER_TIMEOUT_MS) { firstFrame.await() } - attachedAt
+    suspend fun awaitFirstFrame(): Long = awaitFirstFrameAt() - attachedAt
 
-    suspend fun awaitPlaying(): Long = withTimeout(PLAYER_TIMEOUT_MS) { playing.await() } - attachedAt
+    suspend fun awaitPlaying(): Long = awaitPlayingAt() - attachedAt
+
+    /** Elapsed-realtime clock value of the first rendered frame. */
+    suspend fun awaitFirstFrameAt(): Long = withTimeout(PLAYER_TIMEOUT_MS) { firstFrame.await() }
+
+    /** Elapsed-realtime clock value at which playback first started. */
+    suspend fun awaitPlayingAt(): Long = withTimeout(PLAYER_TIMEOUT_MS) { playing.await() }
 
     /** Milliseconds from the seek request until the player is ready to play at [positionMs]. */
     suspend fun seekAndAwaitReady(positionMs: Long): Long {
@@ -577,6 +786,17 @@ private const val CLIP_WATCH_MS = 31_000L
 private const val SEEK_SETTLE_MS = 1_500L
 private val SEEK_FRACTIONS = listOf(0.50, 0.85, 0.25, 0.65)
 private val SCRUB_FRACTIONS = listOf(0.40, 0.72, 0.93)
+private const val SECOND_DRAG_FRACTION = 0.10
+private val SWIPE_VIDEOS = listOf("long_2.mp4", "long_1.mp4", "long_3.mp4")
+private const val SWIPE_WATCH_MS = 20_000L
+private const val SWIPE_SETTLE_MS = 300L
+private const val SWIPE_AFTER_MS = 3_000L
+private const val FEED_SCROLL_CLIPS = 6
+private val SCROLLED_OFF = listOf(0, 1)
+private val SCROLLED_ON = listOf(4, 5)
+private const val FEED_SCROLL_WATCH_MS = 2_000L
+private const val FEED_SCROLL_OFF_MS = 300L
+private const val FEED_SCROLL_AWAY_MS = 8_000L
 private const val GALLERY_PAGES = 80
 private const val READ_PAGES = 40
 private const val READ_DWELL_MS = 1_200L

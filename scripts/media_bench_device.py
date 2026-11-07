@@ -36,7 +36,7 @@ TEST_APK = ROOT / "app/build/outputs/apk/androidTest/debug/app-debug-androidTest
 DEBUG_PACKAGE = "com.theoriacodex.debug"
 TEST_CLASS = "com.theoriacodex.app.viewer.MediaBufferingBenchmarkTest"
 RUNNER = "com.theoriacodex.debug.test/androidx.test.runner.AndroidJUnitRunner"
-SCENARIOS = ("feedToViewer", "viewerSeekAndScrub", "galleryPaging")
+SCENARIOS = ("feedToViewer", "viewerSeekAndScrub", "galleryPaging", "viewerSwipe", "feedScroll")
 DEVICE_MEDIA = "cache/media-bench"
 STATUS_PREFIX = "INSTRUMENTATION_STATUS: mediaBench="
 
@@ -55,10 +55,11 @@ METRICS = {
     "viewer_ttff_cold_ms": ("ms", "Viewer lease to first frame for a 90 s video nothing had loaded"),
     "seek_to_resume_ms": ("ms", "seek past the buffer to playing again, median of 4 seeks"),
     "seek_to_resume_max_ms": ("ms", "slowest of those 4 seeks"),
-    "scrub_first_frame_ms": ("ms", "scrub preview opened to its first frame, past the buffer"),
-    "scrub_frame_ms": ("ms", "scrub preview frame past the buffer, median of 3 targets"),
+    "scrub_first_frame_ms": ("ms", "drag start to its first preview frame, past the buffer, through the page's scrub previews"),
+    "scrub_frame_ms": ("ms", "moving to a target past the buffer to its preview frame, median of the drag's 3 targets"),
     "scrub_bytes_mb": ("MB", "bytes downloaded to show those 3 preview frames"),
     "seek_after_scrub_ms": ("ms", "release seek to the last previewed position until playing"),
+    "scrub_second_drag_first_frame_ms": ("ms", "a second drag on the same page, after the release seek settles, to its first frame"),
     "long_bytes_mb": ("MB", "bytes served for the 90 s video over the seek and scrub session"),
     "long_duplicate_mb": ("MB", "bytes of the 90 s video served more than once"),
     "gallery_open_to_first_page_ms": ("ms", "Viewer session start to page 1 decoded at screen size"),
@@ -71,6 +72,17 @@ METRICS = {
     "peak_memory_mb": ("MB", "peak Java plus native heap while paging"),
     "gallery_bytes_mb": ("MB", "bytes served for gallery pages over the session"),
     "gallery_duplicate_mb": ("MB", "gallery page bytes served more than once"),
+    "swipe_ttff_ms": ("ms", "swipe start to the neighbour video's first frame (three 90 s videos, 20 s on the middle one)"),
+    "swipe_time_to_playing_ms": ("ms", "swipe start until the neighbour video plays"),
+    "swipe_rebuffer_count": ("count", "rebuffers in the 3 s after the swipe"),
+    "swipe_target_bytes_before_mb": ("MB", "bytes of the swiped-to video downloaded before the swipe (prefetch)"),
+    "swipe_unvisited_neighbour_mb": ("MB", "bytes of the neighbour never visited"),
+    "swipe_session_mb": ("MB", "bytes of all three videos over the swipe session"),
+    "feed_scroll_ttff_ms": ("ms", "scroll start to the first frame of the two cards that came on screen, median"),
+    "feed_scroll_all_playing_ms": ("ms", "scroll start until all four visible cards play"),
+    "feed_scrolled_past_mb": ("MB", "bytes the two scrolled-past clips (2 s on screen) downloaded in the 8 s after leaving it"),
+    "feed_scroll_back_playing_ms": ("ms", "scrolling back until the two returning cards play again"),
+    "feed_scroll_session_mb": ("MB", "bytes of all six clips over the scroll session"),
 }
 
 
@@ -80,9 +92,10 @@ def generate_media() -> None:
     gallery = MEDIA / "gallery"
     gallery.mkdir(exist_ok=True)
     jobs = []
-    for index, hue in zip(range(1, 5), (0, 90, 180, 270)):
+    for index, hue in zip(range(1, 7), (0, 90, 180, 270, 135, 315)):
         jobs.append((MEDIA / f"clip_{index}.mp4", video_args(15, hue, keyframe_seconds=1)))
-    jobs.append((MEDIA / "long_1.mp4", video_args(90, 45, keyframe_seconds=2)))
+    for index, hue in zip(range(1, 4), (45, 225, 300)):
+        jobs.append((MEDIA / f"long_{index}.mp4", video_args(90, hue, keyframe_seconds=2)))
     for output, args in jobs:
         if not output.exists():
             run(["ffmpeg", "-loglevel", "error", "-y", *args, str(output)])
