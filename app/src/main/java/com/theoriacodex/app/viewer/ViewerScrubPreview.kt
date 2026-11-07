@@ -49,22 +49,14 @@ import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import kotlin.math.roundToInt
 import androidx.media3.common.Player
-import androidx.media3.effect.Presentation
-import androidx.media3.exoplayer.SeekParameters
-import androidx.media3.inspector.frame.FrameExtractor
-import com.google.common.util.concurrent.ListenableFuture
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.domain.model.SourceKey
-import java.util.concurrent.Executor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 /** The current media's width over height, so scrub previews can take its real shape. */
 internal val LocalViewerMediaAspectRatio = staticCompositionLocalOf<Float?> { null }
@@ -173,8 +165,10 @@ internal fun ViewerVideoScrubPreview(previews: ViewerScrubPreviews, positionMs: 
 private fun Int.even(): Int = this and 1.inv()
 
 /**
- * A Viewer page's scrub previews. [follow] serves one drag: one extractor, one pending frame, and only the newest
- * target may publish. Build, follow and close on the main thread.
+ * A Viewer page's scrub previews. [follow] serves one drag: one pending frame, and only the newest target may
+ * publish. Every drag reads from the page's one [ScrubPreviewPlayer], built on the first drag and kept, idle
+ * between drags, until [close], or until a drag fails, so the next one starts afresh. Build, follow and close on
+ * the main thread.
  */
 internal class ViewerScrubPreviews(
     private val context: Context,
@@ -183,15 +177,40 @@ internal class ViewerScrubPreviews(
     private val widthPx: Int,
     private val heightPx: Int,
 ) : AutoCloseable {
+    private var preview: Pair<String, ScrubPreviewPlayer>? = null
+
     /** Publishes a frame for the newest of [targets] until cancelled (see [followScrubTargets]). */
     suspend fun follow(targets: StateFlow<Long>, publish: (Long, Bitmap) -> Unit) {
         val location = checkNotNull(player.currentMediaItem?.localConfiguration?.uri) { "No stream to preview" }.toString()
-        ScrubFrameSource(context, location, source, widthPx, heightPx).use { frames ->
-            followScrubTargets(targets, frames::frameAt, publish)
+        val frames = previewPlayer(location)
+        var healthy = true
+        try {
+            followScrubTargets(targets, { positionMs -> withTimeout(SCRUB_FRAME_TIMEOUT_MS) { frames.frameAt(positionMs) } }, publish)
+        } catch (timeout: TimeoutCancellationException) {
+            healthy = false
+            throw timeout
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            healthy = false
+            throw error
+        } finally {
+            // A drag that ended keeps the player, idle; a failed or stuck one is replaced on the next drag.
+            if (healthy) frames.idle() else close()
         }
     }
 
-    override fun close() = Unit
+    override fun close() {
+        preview?.second?.close()
+        preview = null
+    }
+
+    private fun previewPlayer(location: String): ScrubPreviewPlayer {
+        preview?.let { (boundLocation, frames) -> if (boundLocation == location) return frames }
+        close()
+        val request = context.videoPlaybackInfrastructure().bind(location, source.requestHeaders())
+        return ScrubPreviewPlayer(context, request, widthPx, heightPx).also { preview = location to it }
+    }
 }
 
 /** A later drag target is extracted only once the finger has rested on it this long. */
@@ -214,42 +233,4 @@ internal suspend fun <F> followScrubTargets(targets: StateFlow<Long>, frameAt: s
     }
 }
 
-/**
- * Scrub preview frames for one Viewer stream, read through the same shared video cache as playback.
- * Frames come from the nearest sync sample. Build and close it on the main thread.
- */
-internal class ScrubFrameSource(
-    context: Context,
-    location: String,
-    source: SourceKey,
-    widthPx: Int,
-    heightPx: Int,
-) : AutoCloseable {
-    private val extractor: FrameExtractor = context.videoPlaybackInfrastructure()
-        .bind(location, source.requestHeaders())
-        .let { request ->
-            FrameExtractor.Builder(context, request.mediaItem)
-                .setMediaSourceFactory(request.mediaSourceFactory)
-                .setSeekParameters(SeekParameters.CLOSEST_SYNC)
-                .setEffects(listOf(Presentation.createForWidthAndHeight(widthPx, heightPx, Presentation.LAYOUT_SCALE_TO_FIT)))
-                .build()
-        }
-
-    suspend fun frameAt(positionMs: Long): Bitmap =
-        withTimeout(SCRUB_FRAME_TIMEOUT_MS) { extractor.getFrame(positionMs).awaitPreviewFrame().bitmap }
-
-    override fun close() = extractor.close()
-}
-
 private const val SCRUB_FRAME_TIMEOUT_MS = 6_000L
-
-private suspend fun <T> ListenableFuture<T>.awaitPreviewFrame(): T = suspendCancellableCoroutine { continuation ->
-    continuation.invokeOnCancellation { cancel(true) }
-    addListener({
-        try {
-            continuation.resume(get())
-        } catch (error: Exception) {
-            continuation.resumeWithException(error)
-        }
-    }, Executor { it.run() })
-}
