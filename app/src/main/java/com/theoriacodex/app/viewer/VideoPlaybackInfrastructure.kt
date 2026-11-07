@@ -8,7 +8,6 @@ import androidx.media3.common.MediaItem
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.datasource.cache.Cache
 import androidx.media3.datasource.cache.CacheDataSource
@@ -118,11 +117,7 @@ internal class VideoPlaybackInfrastructure(
     internal val hasActiveViewerPlayer: Boolean
         get() = viewerPlayers.isInitialized() && viewerPlayers.value.activePlayerCount() > 0
     private val sharedFactories = SharedVideoFactories(
-        http = DefaultHttpDataSource.Factory()
-            .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(12_000)
-            .setReadTimeoutMs(24_000)
-            .setUserAgent("Mozilla/5.0"),
+        http = AbandoningHttpDataSourceFactory(videoHttpClient()),
         local = DefaultDataSource.Factory(appContext),
         cache = SimpleCache(
             File(appContext.cacheDir, VIDEO_PLAYBACK_CACHE_DIRECTORY),
