@@ -69,12 +69,6 @@ private fun SitesListPage(state: CustomSitesUiState, onAction: (CustomSitesActio
                 }
             }
         }
-        Text(
-            "New sites stay out of Unified and For You until you turn that on.",
-            modifier = Modifier.padding(horizontal = 4.dp),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 

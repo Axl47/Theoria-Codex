@@ -14,7 +14,9 @@ import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import kotlinx.coroutines.withTimeoutOrNull
+import org.jsoup.Jsoup
 
 /**
  * Finds which supported protocol family a typed address speaks (plan C3, "Probe algorithm"). Read
@@ -53,13 +55,15 @@ class SiteProber(
         var failure: ProbeFailure? = null
         for (family in registry.families) {
             when (val result = family.probe(address, anonymous)) {
-                is FamilyProbe.Match -> return supported(address, family.family, result, keyed = false)
+                is FamilyProbe.Match -> return supported(address, anonymous, family.family, result, keyed = false)
                 FamilyProbe.NoMatch -> Unit
                 is FamilyProbe.Failed -> failure = failure ?: result.reason
                 FamilyProbe.NeedsCredentials -> {
                     // Anonymous first; supplied keys are tried once, and only on a family that refused.
                     val withKeys = credentials?.let { family.probe(address, anonymous.copy(credentials = it)) }
-                    if (withKeys is FamilyProbe.Match) return supported(address, family.family, withKeys, keyed = true)
+                    if (withKeys is FamilyProbe.Match) {
+                        return supported(address, anonymous, family.family, withKeys, keyed = true)
+                    }
                     refused = refused ?: SiteProbeResult.CredentialsRequired(address, family.family, rejected = withKeys != null)
                 }
             }
@@ -71,11 +75,17 @@ class SiteProber(
             ?: SiteProbeResult.NotABooru(address)
     }
 
-    private fun supported(address: SiteAddress, family: ProtocolFamily, match: FamilyProbe.Match, keyed: Boolean) =
+    private suspend fun supported(
+        address: SiteAddress,
+        context: SiteRequestContext,
+        family: ProtocolFamily,
+        match: FamilyProbe.Match,
+        keyed: Boolean,
+    ) =
         SiteProbeResult.Supported(
             address = address,
             family = family,
-            suggestedLabel = match.suggestedLabel ?: defaultLabel(address),
+            suggestedLabel = match.suggestedLabel ?: homePageName(address, context) ?: defaultLabel(address),
             searchTermLimit = match.searchTermLimit,
             credentialsRequired = keyed,
         )
@@ -83,8 +93,8 @@ class SiteProber(
     companion object {
         const val DEADLINE_MS = 30_000L
 
-        /** Worst case is 5: two families refusing then retried with keys, plus a signature or an adapter page. */
-        const val MAX_REQUESTS = 6
+        /** Worst case is 6: two families refusing then retried with keys, a signature or adapter page, and the home page. */
+        const val MAX_REQUESTS = 7
 
         /** Shipped booru sites, from the family presets, including separate API hosts. */
         val BUILT_IN_SITE_HOSTS: Map<String, String> = buildMap {
@@ -101,6 +111,26 @@ class SiteProber(
 
         private fun hostOf(url: String): String =
             (SiteAddress.parse(url) as SiteAddressParse.Valid).address.host.removePrefix("www.")
+    }
+}
+
+/** The site's own name from its home page, best effort: any failure leaves the host as the label. */
+private suspend fun homePageName(address: SiteAddress, context: SiteRequestContext): String? =
+    runCatchingPreservingCancellation {
+        val response = context.get(address, "/")
+        response.body.takeIf { response.statusCode == 200 }?.let(::siteNameFromHtml)
+    }.getOrNull()
+
+/**
+ * `og:site_name` when present, else the `<title>` up to its first separator ("Gelbooru | Anime and
+ * Hentai Imageboard" → "Gelbooru"). Null when neither gives a usable name.
+ */
+internal fun siteNameFromHtml(html: String): String? {
+    val document = Jsoup.parse(html)
+    val ogName = document.selectFirst("meta[property=og:site_name]")?.attr("content")
+    val title = document.title().split(" | ", " - ", " – ", " — ", " :: ").first()
+    return listOf(ogName, title).firstNotNullOfOrNull { candidate ->
+        candidate?.trim()?.take(SiteProfile.MAX_LABEL_LENGTH)?.trim()?.takeIf(String::isNotEmpty)
     }
 }
 

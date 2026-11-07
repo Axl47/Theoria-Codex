@@ -2,7 +2,10 @@ package com.theoriacodex.app.source
 
 import com.theoriacodex.app.R
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.app.search.DANBOORU_ANIMATED_SEARCH_TAGS
+import com.theoriacodex.app.search.GELBOORU_ANIMATED_SEARCH_TAGS
 import com.theoriacodex.domain.source.CustomSourceIds
+import com.theoriacodex.domain.source.ProtocolFamily
 import com.theoriacodex.sources.http.THEORIA_SOURCE_USER_AGENT
 
 /**
@@ -16,8 +19,8 @@ enum class SourcePresentationGroup(val folderLabel: String? = null) {
     RULE34(folderLabel = "R34"),
     DANBOORU(folderLabel = "Booru"),
 
-    /** User-added sites, each shown as its own choice. */
-    CUSTOM,
+    /** User-added sites. */
+    CUSTOM(folderLabel = "Custom"),
 }
 
 /** Whether a live adapter is exposed as a user-selectable source. */
@@ -46,6 +49,8 @@ data class SourcePresentation(
     val mark: String? = null,
     /** Media requests' User-Agent; Danbooru's CDN challenges generic browser agents. */
     val userAgent: String = BROWSER_USER_AGENT,
+    /** Tags for the built-in "Animated" saved group; empty when the source has no animated tags. */
+    val animatedSearchTags: List<String> = emptyList(),
 ) {
     fun isUserExposed(rule34XxxConfigured: Boolean): Boolean {
         return when (exposure) {
@@ -75,6 +80,7 @@ object SourcePresentationCatalog {
             group = SourcePresentationGroup.ILLUSTRATION,
             order = 0,
             logo = SourceLogoAsset.RawSvg(R.raw.gelbooru_logo),
+            animatedSearchTags = GELBOORU_ANIMATED_SEARCH_TAGS,
         ),
         SourcePresentation(
             source = SourceKey.DANBOORU,
@@ -86,6 +92,7 @@ object SourcePresentationCatalog {
             logo = SourceLogoAsset.Text,
             mark = "DB",
             userAgent = THEORIA_SOURCE_USER_AGENT,
+            animatedSearchTags = DANBOORU_ANIMATED_SEARCH_TAGS,
         ),
         SourcePresentation(
             source = SourceKey.AIBOORU,
@@ -96,6 +103,7 @@ object SourcePresentationCatalog {
             order = 10,
             logo = SourceLogoAsset.Text,
             mark = "AI",
+            animatedSearchTags = DANBOORU_ANIMATED_SEARCH_TAGS,
         ),
         SourcePresentation(
             source = SourceKey.NHENTAI,
@@ -134,6 +142,7 @@ object SourcePresentationCatalog {
             order = 5,
             logo = SourceLogoAsset.Text,
             mark = "R34",
+            animatedSearchTags = GELBOORU_ANIMATED_SEARCH_TAGS,
         ),
         SourcePresentation(
             source = SourceKey.RULE34PAHEAL,
@@ -241,6 +250,7 @@ fun customSourcePresentation(
     referer: String? = null,
     userAgent: String? = null,
     order: Int = Int.MAX_VALUE,
+    family: ProtocolFamily? = null,
 ): SourcePresentation {
     require(source.isCustom) { "Built-in sources have catalog entries" }
     return SourcePresentation(
@@ -253,6 +263,11 @@ fun customSourcePresentation(
         logo = SourceLogoAsset.Text,
         mark = label.firstOrNull(Char::isLetterOrDigit)?.uppercase() ?: "?",
         userAgent = userAgent ?: BROWSER_USER_AGENT,
+        animatedSearchTags = when (family) {
+            ProtocolFamily.GELBOORU_02 -> GELBOORU_ANIMATED_SEARCH_TAGS
+            ProtocolFamily.DANBOORU -> DANBOORU_ANIMATED_SEARCH_TAGS
+            null -> emptyList()
+        },
     )
 }
 

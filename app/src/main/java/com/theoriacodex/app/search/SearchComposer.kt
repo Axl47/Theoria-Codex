@@ -162,7 +162,7 @@ private fun SearchComposerContent(
         else -> ComposerAddTarget.Required
     }
     // A narrowed scope asks for one tag type, and saved tags are general tags.
-    val savedTagMatches = savedTags.entries.takeIf { state.query.selectedScope.isAll || state.query.selectedScope.facet == SearchFacet.TAG }.orEmpty()
+    val savedTagMatches = savedTags.all.takeIf { state.query.selectedScope.isAll || state.query.selectedScope.facet == SearchFacet.TAG }.orEmpty()
     val suggestions = composerSuggestions(target, state.suggestions.facetedAutocomplete, state.suggestions.autocomplete)
         .withSavedTags(target, input, savedTagMatches, draft)
     val liveSelection = selection?.takeIf { selected ->
@@ -611,10 +611,10 @@ private fun ComposerSavedSection(
     onManageSavedTags: () -> Unit,
     onAction: (SearchAction) -> Unit,
 ) {
-    if (savedSearches.isEmpty() && savedTags.entries.isEmpty()) return
+    if (savedSearches.isEmpty() && savedTags.all.isEmpty()) return
     Row {
         ComposerSectionTitle("Saved", Modifier.weight(1f).alignByBaseline())
-        if (savedTags.entries.isNotEmpty()) {
+        if (savedTags.all.isNotEmpty()) {
             TextButton(
                 onClick = onManageSavedTags,
                 modifier = Modifier.alignByBaseline().semantics { contentDescription = "Manage saved tags" },
@@ -622,7 +622,7 @@ private fun ComposerSavedSection(
         }
     }
     if (savedSearches.isNotEmpty()) SavedSearchChips(savedSearches, onOpenSavedSearch)
-    if (savedTags.entries.isNotEmpty()) SavedTagChips(savedTags.entries, draft, targetIndex, onAction)
+    if (savedTags.all.isNotEmpty()) SavedTagChips(savedTags.all, draft, targetIndex, onAction)
 }
 
 /** One tap reruns a saved search, replacing the current draft. */

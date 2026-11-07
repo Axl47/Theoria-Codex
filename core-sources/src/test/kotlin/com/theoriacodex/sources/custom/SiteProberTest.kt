@@ -32,6 +32,8 @@ class SiteProberTest {
                 "https://aibooru.online/counts/posts.json",
                 "https://aibooru.online/profile.json",
                 "https://aibooru.online/posts.json?limit=40&page=1&tags=",
+                // The home page, for the site's name; with no fixture for it the host stays the label.
+                "https://aibooru.online/",
             ),
             transport.requested,
         )
@@ -42,7 +44,7 @@ class SiteProberTest {
         val result = prober.probe("https://safebooru.org/index.php?page=post&s=list&tags=sky")
 
         assertEquals(supported("https://safebooru.org", ProtocolFamily.GELBOORU_02, "safebooru.org", termLimit = null), result)
-        assertEquals(3, transport.requested.size)
+        assertEquals(4, transport.requested.size)
     }
 
     @Test
@@ -155,6 +157,13 @@ class SiteProberTest {
         SiteProber(SiteFamilyRegistry.default(), counting, maxRequests = 2).probe("booru.example")
 
         assertEquals(2, sent)
+    }
+
+    @Test
+    fun `site name comes from og site_name, else the title before its separator`() {
+        assertEquals("Moebooru Fans", siteNameFromHtml("""<meta property="og:site_name" content="Moebooru Fans"><title>x | y</title>"""))
+        assertEquals("Gelbooru", siteNameFromHtml("<title>Gelbooru | Anime and Hentai Imageboard</title>"))
+        assertEquals(null, siteNameFromHtml("<title>  </title>"))
     }
 
     private fun supported(url: String, family: ProtocolFamily, label: String, termLimit: Int?) =

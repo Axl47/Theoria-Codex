@@ -310,6 +310,8 @@ private fun SearchComposerDialog(
             saveSource = savedTagSource(state),
             onSave = onAddFavoriteTag,
             onRemove = onRemoveFavoriteTag,
+            // Single-source only: Unified would expand the group across sources with tighter tag limits.
+            builtIn = listOfNotNull(animatedSavedGroup((state.query.draft.mode as? QueryMode.Source)?.source)),
         ),
     )
 }
