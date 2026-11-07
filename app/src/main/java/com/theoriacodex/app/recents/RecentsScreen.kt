@@ -610,36 +610,11 @@ private fun ActivityList(
             when (item) {
                 is RecentsTimelineItem.Day -> RecentsDayHeading(item.label)
                 RecentsTimelineItem.RelatedShelf -> related?.content?.invoke()
-                is RecentsTimelineItem.Posts -> {
-                val row = rememberLazyListState()
-                val postIds = remember(item.entries) { item.entries.map { it.post.id } }
-                // Rows are newest first, but a list keeps its place by key, so a post viewed since would
-                // land off-screen to the left. Show the newest whenever it changes.
-                LaunchedEffect(postIds.firstOrNull()) { if (row.firstVisibleItemIndex != 0) row.scrollToItem(0) }
-                ViewerReturnShelf(ViewerReturnShelfId.RecentsTimeline, postIds, row) {
-                LazyRow(
-                    state = row,
-                    // The same square frame as other shelves keeps every card in a row the same height.
-                    modifier = Modifier.height(POST_SHELF_CARD_WIDTH / POST_SHELF_MEDIA_ASPECT_RATIO),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    items(item.entries, key = { "${it.section}:${it.post.id.source.id}:${it.post.id.sourcePostId}" }) { entry ->
-                        Box(Modifier.width(POST_SHELF_CARD_WIDTH)) {
-                            RecentPostCard(
-                                entry, now, pixivUgoiraClient, likedPostIds, durationStateForPost,
-                                onDurationPostVisibilityChanged, onAuthoritativeDurationKnown, onToggleLike,
-                                viewedMediaNumber = null,
-                                onClick = {
-                                    openRecentPost(entry, watchedPosts, codexPosts, onOpenWatchedPost, onOpenCodexPost)
-                                },
-                                onLongPress = { onLongPress(entry.post, entry.section) },
-                                mediaAspectRatio = POST_SHELF_MEDIA_ASPECT_RATIO, showTitle = false,
-                            )
-                        }
-                    }
-                }
-                }
-                }
+                is RecentsTimelineItem.Posts -> RecentPostsRow(
+                    item.entries, now, pixivUgoiraClient, likedPostIds, durationStateForPost,
+                    onDurationPostVisibilityChanged, onAuthoritativeDurationKnown, onToggleLike, onLongPress,
+                    onOpen = { entry -> openRecentPost(entry, watchedPosts, codexPosts, onOpenWatchedPost, onOpenCodexPost) },
+                )
                 is RecentsTimelineItem.Searches -> LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(item.entries, key = { entry -> "${entry.kind}:${entry.queryHash}" }) { entry ->
                         RecentSearchTile(
@@ -653,6 +628,48 @@ private fun ActivityList(
             }
         }
     }
+    }
+}
+
+/** One day's posts as a horizontal shelf, newest first. */
+@Composable
+private fun RecentPostsRow(
+    entries: List<RecentPostEntry>,
+    now: Long,
+    pixivUgoiraClient: PixivUgoiraClient?,
+    likedPostIds: Set<PostId>,
+    durationStateForPost: (Post) -> Flow<MediaDurationState?>,
+    onDurationPostVisibilityChanged: (Post, Boolean) -> Unit,
+    onAuthoritativeDurationKnown: (Post, Long) -> Unit,
+    onToggleLike: ((Post) -> Unit)?,
+    onLongPress: (Post, RecentPostSection) -> Unit,
+    onOpen: (RecentPostEntry) -> Unit,
+) {
+    val row = rememberLazyListState()
+    val postIds = remember(entries) { entries.map { it.post.id } }
+    // Rows are newest first, but a list keeps its place by key, so a post viewed since would
+    // land off-screen to the left. Show the newest whenever it changes.
+    LaunchedEffect(postIds.firstOrNull()) { if (row.firstVisibleItemIndex != 0) row.scrollToItem(0) }
+    ViewerReturnShelf(ViewerReturnShelfId.RecentsTimeline, postIds, row) {
+        LazyRow(
+            state = row,
+            // The same square frame as other shelves keeps every card in a row the same height.
+            modifier = Modifier.height(POST_SHELF_CARD_WIDTH / POST_SHELF_MEDIA_ASPECT_RATIO),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            items(entries, key = { "${it.section}:${it.post.id.source.id}:${it.post.id.sourcePostId}" }) { entry ->
+                Box(Modifier.width(POST_SHELF_CARD_WIDTH)) {
+                    RecentPostCard(
+                        entry, now, pixivUgoiraClient, likedPostIds, durationStateForPost,
+                        onDurationPostVisibilityChanged, onAuthoritativeDurationKnown, onToggleLike,
+                        viewedMediaNumber = null,
+                        onClick = { onOpen(entry) },
+                        onLongPress = { onLongPress(entry.post, entry.section) },
+                        mediaAspectRatio = POST_SHELF_MEDIA_ASPECT_RATIO, showTitle = false,
+                    )
+                }
+            }
+        }
     }
 }
 

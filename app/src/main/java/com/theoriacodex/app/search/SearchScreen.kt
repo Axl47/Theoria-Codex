@@ -161,11 +161,8 @@ fun SearchScreen(
         )
     }
     if (chrome.composerOpen) {
-        val composerSavedSearches = composerSavedSearches(state, savedSearches, onSaveSearch, onManageSavedSearches) { entry ->
-            chrome.closeComposer(onAction)
-            onOpenSavedSearch(entry)
-        }
-        SearchComposerDialog(state, feed, chrome, gridState, sourcePicker, applyDraft, onAction, onOpenSourceAccounts, composerSavedSearches,
+        val saved = composerSavedSearches(state, savedSearches, onSaveSearch, onManageSavedSearches) { chrome.closeComposer(onAction); onOpenSavedSearch(it) }
+        SearchComposerDialog(state, feed, chrome, gridState, sourcePicker, applyDraft, onAction, onOpenSourceAccounts, saved,
             favoriteTags, onAddFavoriteTag, onRemoveFavoriteTag, onRenameFavoriteTag)
     }
     if (chrome.showFavoriteTagSheet) {

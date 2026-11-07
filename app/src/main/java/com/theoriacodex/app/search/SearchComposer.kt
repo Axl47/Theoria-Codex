@@ -722,20 +722,13 @@ private fun SavedTagChips(savedTags: ComposerSavedTags, draft: Query, targetInde
                     onLongPress = if (editable) ({ menuFor = tag }) else null,
                     longPressLabel = if (editable) "Edit ${tag.label}" else null,
                 )
-                DropdownMenu(expanded = menuFor == tag, onDismissRequest = { menuFor = null }) {
-                    if (group) {
-                        DropdownMenuItem(
-                            text = { Text("Rename") },
-                            leadingIcon = { Icon(Icons.Default.Edit, null) },
-                            onClick = { menuFor = null; renaming = tag },
-                        )
-                    }
-                    DropdownMenuItem(
-                        text = { Text("Remove from saved tags") },
-                        leadingIcon = { Icon(Icons.Default.Delete, null) },
-                        onClick = { menuFor = null; savedTags.onRemove(tag.source, tag.tags) },
-                    )
-                }
+                SavedTagMenu(
+                    expanded = menuFor == tag,
+                    canRename = group,
+                    onDismiss = { menuFor = null },
+                    onRename = { menuFor = null; renaming = tag },
+                    onRemove = { menuFor = null; savedTags.onRemove(tag.source, tag.tags) },
+                )
             }
         }
     }
@@ -750,6 +743,21 @@ private fun SavedTagChips(savedTags: ComposerSavedTags, draft: Query, targetInde
                 savedTags.onRename(entry.source, entry.tags, name)
                 renaming = null
             },
+        )
+    }
+}
+
+/** A held saved tag's menu: Rename for "or" groups, and Remove. */
+@Composable
+private fun SavedTagMenu(expanded: Boolean, canRename: Boolean, onDismiss: () -> Unit, onRename: () -> Unit, onRemove: () -> Unit) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        if (canRename) {
+            DropdownMenuItem(text = { Text("Rename") }, leadingIcon = { Icon(Icons.Default.Edit, null) }, onClick = onRename)
+        }
+        DropdownMenuItem(
+            text = { Text("Remove from saved tags") },
+            leadingIcon = { Icon(Icons.Default.Delete, null) },
+            onClick = onRemove,
         )
     }
 }
