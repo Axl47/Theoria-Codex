@@ -35,6 +35,9 @@ sealed interface SourceLogoAsset {
     data class RawSvg(val resourceId: Int) : SourceLogoAsset
 
     data object Text : SourceLogoAsset
+
+    /** A user-added site's own icon, loaded from [url]; the letter mark shows while it loads or if it fails. */
+    data class Favicon(val url: String) : SourceLogoAsset
 }
 
 data class SourcePresentation(
@@ -260,7 +263,7 @@ fun customSourcePresentation(
         exposure = SourceExposure.USER_VISIBLE,
         group = SourcePresentationGroup.CUSTOM,
         order = order,
-        logo = SourceLogoAsset.Text,
+        logo = SourceLogoAsset.Favicon("${baseUrl ?: "https://${CustomSourceIds.hostLabel(source.id)}"}/favicon.ico"),
         mark = label.firstOrNull(Char::isLetterOrDigit)?.uppercase() ?: "?",
         userAgent = userAgent ?: BROWSER_USER_AGENT,
         animatedSearchTags = when (family) {

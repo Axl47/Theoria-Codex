@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.theoriacodex.domain.model.SourceKey
@@ -57,23 +58,52 @@ fun SourceLogo(
             )
         }
 
-        SourceLogoAsset.Text -> {
-            Text(
-                text = presentation.label,
-                modifier = modifier,
-                style = MaterialTheme.typography.labelMedium,
-                color = if (source.isRule34Family()) Color.White else LocalContentColor.current,
-                maxLines = 1,
-                overflow = TextOverflow.Clip,
-            )
+        is SourceLogoAsset.Favicon -> FaviconImage(logo, presentation.label, modifier.size(size)) {
+            SourceLabelText(source, presentation.label, modifier)
         }
+
+        SourceLogoAsset.Text -> SourceLabelText(source, presentation.label, modifier)
     }
+}
+
+@Composable
+private fun SourceLabelText(source: SourceKey, label: String, modifier: Modifier) {
+    Text(
+        text = label,
+        modifier = modifier,
+        style = MaterialTheme.typography.labelMedium,
+        color = if (source.isRule34Family()) Color.White else LocalContentColor.current,
+        maxLines = 1,
+        overflow = TextOverflow.Clip,
+    )
+}
+
+/** A site icon; [fallback] shows while it loads and when the site has none. */
+@Composable
+private fun FaviconImage(logo: SourceLogoAsset.Favicon, label: String, modifier: Modifier, fallback: @Composable () -> Unit) {
+    SubcomposeAsyncImage(
+        model = logo.url,
+        contentDescription = label,
+        modifier = modifier,
+        contentScale = ContentScale.Fit,
+        loading = { fallback() },
+        error = { fallback() },
+    )
 }
 
 /** Compact source selector mark; sources without a legible small logo use a letter mark. */
 @Composable
 fun SourceIcon(source: SourceKey) {
-    source.presentation().mark?.let { SourceLetterIcon(it) } ?: SourceLogo(source, size = 18.dp)
+    val presentation = source.presentation()
+    val logo = presentation.logo
+    val mark = presentation.mark
+    when {
+        logo is SourceLogoAsset.Favicon -> FaviconImage(logo, presentation.label, Modifier.size(24.dp)) {
+            SourceLetterIcon(mark.orEmpty())
+        }
+        mark != null -> SourceLetterIcon(mark)
+        else -> SourceLogo(source, size = 18.dp)
+    }
 }
 
 /** Letter marks share the white, bold treatment of Hitomi's icon. */
