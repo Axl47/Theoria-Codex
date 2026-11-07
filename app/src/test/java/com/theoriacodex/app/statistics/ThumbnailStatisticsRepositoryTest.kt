@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -69,6 +70,26 @@ class ThumbnailStatisticsRepositoryTest {
         repository.observeStatistics().first()
         runCurrent()
         assertEquals(3, requests)
+    }
+
+    @Test fun `statistics updates outside Codex rankings skip the thumbnail directory pass`() = runTest {
+        val delegate = InMemoryStatisticsRepository()
+        val directory = temporary.newFolder()
+        val repository = ThumbnailStatisticsRepository(delegate, backgroundScope,
+            StatisticsThumbnailStore(directory)) { _, _ -> false }
+        repository.recordCodexPostOpen("codex", "PIXIV:42", "Post")
+        runCurrent()
+        // Only a reconcile pass would delete this unowned file.
+        val marker = directory.resolve("unowned").apply { writeText("x") }
+
+        repository.recordWatchedPost(SourceKey.PIXIV, setOf("tag"))
+        repository.recordAppOpen()
+        runCurrent()
+        assertTrue(marker.exists())
+
+        repository.recordCodexPostOpen("codex", "PIXIV:7", "Other")
+        runCurrent()
+        assertFalse(marker.exists())
     }
 
     private fun post(id: String) = Post(PostId(SourceKey.PIXIV, id), ImageRef("https://example.test/$id", null, null),

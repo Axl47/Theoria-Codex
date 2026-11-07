@@ -448,9 +448,11 @@ class DataStoreStatisticsRepository(
         StatisticsPolicies.addUsage(current, delta, LocalDate.now(clock))
     }
 
-    override suspend fun recordWatchedPost(source: SourceKey, tags: Set<String>) = mutate { current ->
-        StatisticsPolicies.recordWatched(current, source, tags, LocalDate.now(clock))
-    }
+    override suspend fun recordWatchedPost(source: SourceKey, tags: Set<String>, codexOpen: CodexPostOpen?) =
+        mutate { current ->
+            val watched = StatisticsPolicies.recordWatched(current, source, tags, LocalDate.now(clock))
+            codexOpen?.let { StatisticsPolicies.recordCodexPostOpen(watched, it.codexId, it.postKey, it.label) } ?: watched
+        }
 
     override suspend fun recordSearch(sources: Set<SourceKey>) = mutate { current ->
         StatisticsPolicies.recordSearch(current, sources, LocalDate.now(clock))

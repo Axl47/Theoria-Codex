@@ -78,13 +78,11 @@ internal fun rememberSearchFeed(
     val retainedLikedPostIds = retainPostsUntilViewerCloses(remember(state.relatedPosts, pendingLikePostIds) {
         state.relatedPosts.retainedLikedPostIds + pendingLikePostIds
     })
-    val visibleResults = remember(
-        presentedResults, visibilityFilters, likedPostIds, retainedLikedPostIds, savedPostIds, watchedPostIds,
-        unknownDurationPolicy, acquiredDurations,
-    ) {
+    val marks = visibilityFilters.markInputs(likedPostIds, savedPostIds, watchedPostIds, retainedLikedPostIds)
+    val visibleResults = remember(presentedResults, visibilityFilters, marks, unknownDurationPolicy, acquiredDurations) {
         filterSearchResults(
-            presentedResults, visibilityFilters, likedPostIds, savedPostIds, watchedPostIds, unknownDurationPolicy,
-            acquiredDurations, retainedLikedPostIds,
+            presentedResults, visibilityFilters, marks.liked, marks.saved, marks.watched, unknownDurationPolicy,
+            acquiredDurations, marks.retained,
         )
     }
     val related = rememberRelatedFeedPresentation(

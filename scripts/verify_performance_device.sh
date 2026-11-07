@@ -99,6 +99,9 @@ for ((index=1; index<=captures; index++)); do
   # Instrumentation has returned before stopping the isolated fixture or copying any files.
   "${adb_command[@]}" shell am force-stop com.theoriacodex.benchmark
   "${adb_command[@]}" pull "$remote/." "$results" > "$output/transfer-$index.log" 2>&1
+  # The traces now live on the host; free the phone before the next capture. A failed pull exits above,
+  # leaving them on the device for inspection.
+  "${adb_command[@]}" shell rm -rf "$remote"
   [[ "$run_status" == 0 ]] || exit "$run_status"
   python3 scripts/benchmark_results.py instrumentation --log "$output/run-$index.log" --tests "$expected_tests"
   report="$(python3 - "$results" "$output/device-fingerprint.txt" <<'PY'

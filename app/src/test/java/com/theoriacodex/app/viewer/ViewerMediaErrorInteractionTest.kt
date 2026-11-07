@@ -1,5 +1,6 @@
 package com.theoriacodex.app.viewer
 
+import androidx.compose.runtime.remember
 import android.app.Application
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -45,7 +46,7 @@ class ViewerMediaErrorInteractionTest {
                     ViewerMediaPage(
                         post = post, media = video, mediaIndex = 0,
                         controls = ViewerRendererControls(true, true, false, true, 1f, 0L, 0L),
-                        events = events, transform = ViewerTransformState(), onTransformChanged = {},
+                        events = events, transform = remember { mutableStateOf(ViewerTransformState()) }, onTransformChanged = {},
                         layout = ViewerMediaLayout(false, false, false),
                         // Avoid hardware playback while exercising the actual video-page gesture layers.
                         videoOptions = ViewerVideoOptions(VideoQuality.AUTO, null, "Unavailable", false),

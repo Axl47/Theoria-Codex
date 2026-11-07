@@ -66,7 +66,7 @@ object RoomUpgradeScenario {
                 recents.recordSearch(query(), "new-search", RecentSearchKind.SOURCE, listOf(SourceKey.PIXIV))
                 RoomMediaDurationRepository(database).put(durationKey, duration)
                 RoomViewerTranslationCacheRepository(database, clock = { 100L }).putAll(mapOf(translationKey to "Blue sky"))
-                assertEquals(9, database.openHelper.readableDatabase.version)
+                assertEquals(10, database.openHelper.readableDatabase.version)
                 database.openHelper.readableDatabase.query("PRAGMA foreign_key_check").use { assertFalse(it.moveToFirst()) }
             }
 

@@ -1,7 +1,6 @@
 package com.theoriacodex.app.settings
 
 import com.theoriacodex.data.repository.AppSettings
-import com.theoriacodex.app.statistics.StatisticsSummary
 import com.theoriacodex.data.repository.CacheSnapshot
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.RecommendationProfile
@@ -36,7 +35,6 @@ data class SettingsUiState(
     val activeProfile: RecommendationProfile = settings.recommendationProfiles.first(),
     val activeProfileLikesCount: Int = 0,
     val activeProfileBlacklist: List<ForYouBlacklistEntry> = emptyList(),
-    val statistics: StatisticsSummary = StatisticsSummary(),
     val availableSources: List<SourceKey> = emptyList(),
     val cacheSnapshot: CacheSnapshot = CacheSnapshot(thumbnailCount = 0, fullImageCount = 0),
     val showDeveloperScenarios: Boolean = false,

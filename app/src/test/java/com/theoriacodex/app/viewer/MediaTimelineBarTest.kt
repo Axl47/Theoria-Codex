@@ -63,6 +63,15 @@ class MediaTimelineBarTest {
         }
     }
 
+    @Test fun `playback moves the shown time once per second`() {
+        showTimeline()
+        compose.onNodeWithText("0:10 / 1:40").assertIsDisplayed()
+        compose.runOnIdle { playbackPosition.value = 10_900L }
+        compose.onNodeWithText("0:10 / 1:40").assertIsDisplayed()
+        compose.runOnIdle { playbackPosition.value = 11_000L }
+        compose.onNodeWithText("0:11 / 1:40").assertIsDisplayed()
+    }
+
     @Test fun `the reserved gesture height covers the whole timeline footer`() {
         showTimeline()
         val bounds = compose.onNodeWithTag("footer").getUnclippedBoundsInRoot()
@@ -106,7 +115,7 @@ class MediaTimelineBarTest {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     if (visible.value) ViewerPlaybackFooter(Modifier.width(360.dp).testTag("footer")) {
                         MediaTimelineBar(
-                        positionMs = playbackPosition.value, durationMs = 100_000L,
+                        positionMs = { playbackPosition.value }, durationMs = 100_000L,
                         onSeekStarted = { dragging = true },
                         onSeekFinished = { seeks += it; playbackPosition.value = it; dragging = false },
                         onSeekCancelled = { cancelled++; dragging = false },

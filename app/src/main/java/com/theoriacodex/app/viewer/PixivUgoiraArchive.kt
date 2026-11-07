@@ -21,18 +21,31 @@ internal fun validateUgoiraArchive(
     checkCancelled: () -> Unit = {},
 ): UgoiraArchiveStats {
     validateArchiveEnvelope(archive, specs)
-    val expectedNames = specs.map(UgoiraFrameSpec::fileName)
-    validateExpectedNames(expectedNames, specs.size)
-
     return ZipFile(archive).use { zip ->
-        val entries = zip.entries().asSequence().filterNot { entry -> entry.isDirectory }.toList()
-        validateArchiveEntries(entries.map { entry -> entry.name }, expectedNames)
+        val entries = checkEntries(zip, specs)
         UgoiraArchiveStats(
             compressedBytes = archive.length(),
             expandedBytes = measureExpandedBytes(zip, entries, checkCancelled),
             frameCount = specs.size,
         )
     }
+}
+
+/**
+ * Envelope and entry-name checks from the central directory only, without decompressing frames. Used for
+ * archives whose metadata sidecar records an earlier [validateUgoiraArchive] pass.
+ */
+internal fun checkUgoiraArchiveStructure(archive: File, specs: List<UgoiraFrameSpec>) {
+    validateArchiveEnvelope(archive, specs)
+    ZipFile(archive).use { zip -> checkEntries(zip, specs) }
+}
+
+private fun checkEntries(zip: ZipFile, specs: List<UgoiraFrameSpec>): List<java.util.zip.ZipEntry> {
+    val expectedNames = specs.map(UgoiraFrameSpec::fileName)
+    validateExpectedNames(expectedNames, specs.size)
+    val entries = zip.entries().asSequence().filterNot { entry -> entry.isDirectory }.toList()
+    validateArchiveEntries(entries.map { entry -> entry.name }, expectedNames)
+    return entries
 }
 
 private fun validateArchiveEnvelope(archive: File, specs: List<UgoiraFrameSpec>) {

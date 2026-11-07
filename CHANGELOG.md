@@ -20,9 +20,21 @@
 - Searches in Recents read like the search editor: "or" alternatives are muted and excluded tags are red, with the source and time beside each search.
 - Pixiv tags show their English name beside the Japanese tag on one chip, and tapping it searches the Japanese tag.
 - Pixiv tag translations are always shown in English, whatever language your phone uses.
+- Feed cards load a source's preview-size images instead of originals, so feeds fill in faster and use less data.
+- On a metered network, the Viewer preloads only the next and previous videos, and only their opening seconds, to save mobile data.
+- Theoria keeps more already-seen images on your device (up to 512 MB), so scrolling back reloads them without downloading again.
+- Saving a post offline reuses the copy already loaded on your device instead of downloading it again, including videos you have watched through.
+- Scrolling feeds, liking posts and typing in Search do less redrawing, so they stay smoother on busy screens.
+- Video, GIF and animation timelines in the Viewer redraw their progress without rebuilding the controls on every frame.
+- The Viewer keeps fewer pages decoded in memory ahead of you and swipes through animated pages with less memory pressure.
+- Pixiv animations fetch their frame details once and share them between the card and the Viewer.
+- Settings statistics now update only while you're looking at them, instead of in the background.
+- The Codex library and its covers open faster on large collections.
 
 ### Fixed
 
+- R34V videos play again in feeds and the Viewer; they previously failed to load on every Android device.
+- A R34V or R34G search with excluded tags now shows its results when one post's details can't be read, instead of failing the whole page.
 - Switching source in Search now shows that source's last search, so the results and the filter button always match the source you picked.
 - Opening an nhentai or Hitomi gallery in the Viewer keeps its cover on screen until the first page loads, instead of flashing to black.
 - When a post's full image fails to load in the Viewer, its preview now takes its place instead of spinning indefinitely.

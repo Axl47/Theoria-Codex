@@ -15,6 +15,7 @@ import com.theoriacodex.app.viewer.ViewerPostResolver
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.ViewerRestorationRequest
 import com.theoriacodex.app.viewer.prepareViewerPostsForLaunch
+import com.theoriacodex.data.repository.CodexPostOpen
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.ReadingPosition
 import com.theoriacodex.data.repository.ViewerLaunchContext
@@ -262,18 +263,17 @@ internal class ViewerRouteWorkflow(
         val origin = session?.context?.streamSource ?: ViewerStreamSource.SEARCH
         recordReadingPosition(post, viewedMediaNumber, session)
         runCatchingPreservingCancellation { data.statisticsRepository.recordPostAvailable(post) }
-        statisticsCodexId(session?.context)?.let { codexId ->
-            runCatchingPreservingCancellation {
-                data.statisticsRepository.recordCodexPostOpen(
-                    codexId, statisticsPostKey(post.id),
-                    post.title?.takeIf(String::isNotBlank) ?: "${post.id.source.name} ${post.id.sourcePostId}",
-                )
-            }
+        val codexOpen = statisticsCodexId(session?.context)?.let { codexId ->
+            CodexPostOpen(
+                codexId, statisticsPostKey(post.id),
+                post.title?.takeIf(String::isNotBlank) ?: "${post.id.source.name} ${post.id.sourcePostId}",
+            )
         }
         runCatchingPreservingCancellation {
             data.statisticsRepository.recordWatchedPost(
                 source = post.id.source,
                 tags = statisticsTagsForPost(post),
+                codexOpen = codexOpen,
             )
         }
         data.recentsRepository.recordWatchedPost(

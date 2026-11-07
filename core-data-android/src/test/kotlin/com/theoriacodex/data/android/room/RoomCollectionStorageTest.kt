@@ -158,6 +158,29 @@ class RoomCollectionStorageTest {
         migrated.close()
     }
 
+    @Test fun `migration nine to ten keeps memberships and serves saved-order Codex queries from one index`() {
+        val name = "collection-storage-migration-9-10-test"
+        migrationHelper.createDatabase(name, 9).apply {
+            execSQL("INSERT INTO codices(codex_id,name,created_at_epoch_ms,display_order) VALUES('saved','Saved',1,0)")
+            execSQL("INSERT INTO posts(source,source_post_id,payload_json) VALUES('PIXIV','saved','{}')")
+            execSQL("INSERT INTO codex_items(codex_id,source,source_post_id,saved_at_epoch_ms) VALUES('saved','PIXIV','saved',12)")
+            close()
+        }
+        val migrated = migrationHelper.runMigrationsAndValidate(name, 10, true, TheoriaRoomDatabase.MIGRATION_9_10)
+        migrated.query("SELECT saved_at_epoch_ms FROM codex_items WHERE codex_id='saved'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(12L, cursor.getLong(0))
+        }
+        migrated.query(
+            "EXPLAIN QUERY PLAN SELECT source FROM codex_items WHERE codex_id='saved' ORDER BY saved_at_epoch_ms DESC",
+        ).use { cursor ->
+            val plan = buildList { while (cursor.moveToNext()) add(cursor.getString(3)) }
+            assertTrue(plan.toString(), plan.any { "index_codex_items_codex_id_saved_at_epoch_ms" in it })
+            assertTrue(plan.toString(), plan.none { "TEMP B-TREE" in it })
+        }
+        migrated.close()
+    }
+
     private fun post(id: String): Post {
         val full = ImageRef("https://example.com/$id-full.jpg", null, "image/jpeg")
         return Post(

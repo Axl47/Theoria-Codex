@@ -249,6 +249,11 @@ android {
         unitTests.isIncludeAndroidResources = true
     }
 
+    // CI's full `:app:lint` covers every source; skip lintVital inside each R8 assembly.
+    lint {
+        checkReleaseBuilds = false
+    }
+
     // Controlled provider/container fixtures are shared by real-screen tests and benchmarks.
     // They are never compiled into the production or release-acceptance APK.
     sourceSets {

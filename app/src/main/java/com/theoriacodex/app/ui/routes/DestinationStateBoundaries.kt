@@ -404,9 +404,11 @@ internal fun SettingsDestinationStateBoundary(
     val emptySearch = remember { MutableStateFlow(com.theoriacodex.app.search.state.SearchUiState()) }
     val searchState = (searchOwner?.state ?: emptySearch).collectAsStateWithLifecycle()
     val selectedSources = if (searchOwner == null) emptySet() else searchState.value.query.draftSources
+    // Subscribing here keeps statistics collection scoped to a visible Settings destination.
+    val statistics = owner.statistics.collectAsStateWithLifecycle()
     DestinationStateBoundary(state) {
         SettingsScreen(
-            state = it, onAction = owner::onAction,
+            state = it, onAction = owner::onAction, statistics = statistics.value,
             searchSources = selectedSources.intersect(it.availableSources.toSet()),
             storageSummary = storageSummary, storageTools = storageTools,
         )

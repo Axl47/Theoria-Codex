@@ -17,7 +17,7 @@ class OfflineMediaAcquisitionTest {
     fun `streaming uses request headers and verifies complete bytes`() = runTest {
         val connection = FakeConnection()
         val output = temporary.newFile()
-        downloadOfflineMedia("https://example.test/image.png", mapOf("Referer" to "https://provider.test/"), output) { connection }
+        downloadMediaFile("https://example.test/image.png", mapOf("Referer" to "https://provider.test/"), output) { connection }
         assertTrue(output.readBytes().contentEquals(PNG_BYTES))
         assertEquals("https://provider.test/", connection.getRequestProperty("Referer"))
         assertEquals("identity", connection.getRequestProperty("Accept-Encoding"))
@@ -36,7 +36,7 @@ class OfflineMediaAcquisitionTest {
         )
         for (connection in invalid) {
             val result = runCatching {
-                downloadOfflineMedia("https://example.test/image.png", emptyMap(), temporary.newFile()) { connection }
+                downloadMediaFile("https://example.test/image.png", emptyMap(), temporary.newFile()) { connection }
             }
             assertTrue(result.isFailure)
             assertTrue(connection.disconnected)

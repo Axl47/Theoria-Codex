@@ -43,7 +43,7 @@ class ViewerVideoPrefetchTest {
         assertTrue("CacheWriter" in source)
         assertTrue("cacheDataSourceFactory(bound, headers)" in source)
         assertTrue("setKey(cacheKey)" in source)
-        assertTrue("videoPlaybackInfrastructure().prefetch(location, headers)" in platform)
+        assertTrue("videoPlaybackInfrastructure().prefetch(location, headers, maxBytes)" in platform)
         assertFalse("theoria_codex/viewer/videos" in source + platform)
     }
 

@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.app.statistics.AppUsageTracker
+import com.theoriacodex.app.statistics.StatisticsSummary
 import com.theoriacodex.app.sourceauth.CredentialStoreRecoveryState
 import com.theoriacodex.app.sourceauth.CredentialStoreUnavailableException
 import com.theoriacodex.app.sourceauth.PixivPkceController
@@ -34,11 +35,13 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -173,6 +176,17 @@ internal class SettingsViewModel(
     private var observedLikesProfileId: String? = null
     private val accountRefreshRunning = AtomicBoolean(false)
 
+    /**
+     * Library and usage statistics for the Settings surfaces that show them. Collected only while a screen
+     * subscribes, because the projection re-reads every saved post whenever the library changes.
+     */
+    val statistics: StateFlow<StatisticsSummary> = SettingsStatisticsSource(
+        statisticsRepository = dependencies.statisticsRepository,
+        codexRepository = dependencies.codexRepository,
+        appUsageTracker = dependencies.appUsageTracker,
+    ).observe(dependencies.settingsRepository.observeSettings().map { settings -> settings.activeProfileId })
+        .stateIn(ownerScope, SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000), StatisticsSummary())
+
     init {
         ownerScope.launch {
             dependencies.availableSources.collect { sources ->
@@ -202,17 +216,6 @@ internal class SettingsViewModel(
         ownerScope.launch {
             dependencies.cacheRepository.observeSnapshot().collect { snapshot ->
                 updateState { copy(cacheSnapshot = snapshot) }
-            }
-        }
-        ownerScope.launch {
-            SettingsStatisticsSource(
-                statisticsRepository = dependencies.statisticsRepository,
-                codexRepository = dependencies.codexRepository,
-                appUsageTracker = dependencies.appUsageTracker,
-            ).observe(
-                dependencies.settingsRepository.observeSettings().map { settings -> settings.activeProfileId }
-            ).collect { statistics ->
-                updateState { copy(statistics = statistics) }
             }
         }
         ownerScope.launch {

@@ -11,6 +11,7 @@ import com.theoriacodex.app.search.state.emptySearchQuery
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.data.repository.InMemoryCodexRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -36,11 +37,10 @@ class PostActionSheetPreloadTest {
         compose.setContent {
             val scope = rememberCoroutineScope()
             loader = androidx.compose.runtime.remember {
-                CodexSaveRelevanceLoader(repository, scope) { _, posts, applied ->
-                    assertEquals(listOf(post), posts)
-                    assertEquals(query, applied)
+                CodexSaveRelevanceLoader(repository, scope, Dispatchers.Unconfined) { ids ->
+                    assertEquals(setOf("target"), ids)
                     lookups++
-                    flowOf(mapOf("target" to 0.8))
+                    flowOf(mapOf("target" to listOf(testPost(sourcePostId = "saved"))))
                 }
             }
             CompositionLocalProvider(LocalCodexSaveRelevanceLoader provides loader) {
@@ -55,7 +55,7 @@ class PostActionSheetPreloadTest {
         compose.runOnIdle {
             assertEquals(1, lookups)
             assertEquals(0, saves)
-            assertEquals(mapOf("target" to 0.8), loader.observe(listOf(post), query).value)
+            assertEquals(mapOf("target" to 1.0), loader.observe(listOf(post), query).value)
         }
         compose.onNodeWithText("Save to Codex").performClick()
         compose.runOnIdle { assertEquals(1, saves) }

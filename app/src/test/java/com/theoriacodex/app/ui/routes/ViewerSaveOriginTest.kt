@@ -54,7 +54,7 @@ class ViewerSaveOriginTest {
                     ViewerRoute(
                         dependencies = ViewerRouteDependencies(
                             retention, ViewerPostResolver { _, _ -> post },
-                            ViewerMediaPrefetcher { _, _ -> ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED) },
+                            ViewerMediaPrefetcher { _, _, _ -> ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED) },
                             durations, restoreSession = { null },
                         ),
                         renderConfig = ViewerRouteRenderConfig(creatorBrowsingSources = emptySet()),
@@ -109,7 +109,7 @@ class ViewerSaveOriginTest {
                     ViewerRoute(
                         dependencies = ViewerRouteDependencies(
                             retention, ViewerPostResolver { _, _ -> post },
-                            ViewerMediaPrefetcher { _, _ -> ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED) },
+                            ViewerMediaPrefetcher { _, _, _ -> ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED) },
                             durations, restoreSession = { null },
                         ),
                         renderConfig = ViewerRouteRenderConfig(creatorBrowsingSources = emptySet()),

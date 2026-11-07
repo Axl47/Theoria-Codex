@@ -302,9 +302,13 @@ private fun rememberForYouFeed(
     val visibilityFilters = remember(animatedOnly, animatedDurationRange) {
         SearchVisibilityFilters(animatedOnly = animatedOnly, animatedDurationRange = animatedDurationRange)
     }
-    val durationPosts = if (state.home.visible) {
-        state.home.sections.flatMap { it.feed.page.items } + state.home.mixedFeed?.page?.items.orEmpty()
-    } else state.results
+    // Duration metadata is only current for the exact list it projected, so keep this list's identity stable.
+    val home = state.home
+    val durationPosts = remember(home.visible, home.sections, home.mixedFeed, state.results) {
+        if (home.visible) {
+            home.sections.flatMap { it.feed.page.items } + home.mixedFeed?.page?.items.orEmpty()
+        } else state.results
+    }
     val durationFilter = rememberSearchDurationFilterPresentation(
         durationPosts, animatedDurationRange, durationStates, resolveUnknownAnimatedDurations, retainKey = "for-you",
     )

@@ -2,7 +2,6 @@ package com.theoriacodex.app.search
 
 import com.theoriacodex.app.media.recoverRemoteMedia
 import com.theoriacodex.app.feed.settleFeedContinuations
-import com.theoriacodex.app.recommend.recommendationTaxonomyFor
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.search.state.modeKey
 import com.theoriacodex.app.search.state.queryMode
@@ -18,7 +17,6 @@ import com.theoriacodex.data.repository.UiRestoreRepository
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
-import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.SourceFailureReason
@@ -30,7 +28,6 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.normalizedForMode
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
-import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SourceKey
@@ -43,13 +40,14 @@ import com.theoriacodex.domain.tags.pixivSearchToken
 import com.theoriacodex.domain.tags.normalizeFavoriteTagForStorage
 import com.theoriacodex.domain.tags.sourceAutocompletePrefix
 import com.theoriacodex.domain.tags.normalizeMatchToken
-import com.theoriacodex.domain.tags.sourceTagKey
 import com.theoriacodex.domain.tags.sourceTagsMatch
 import java.util.LinkedHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
@@ -75,7 +73,10 @@ class SearchCoordinator(
     private val tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
     private val clock: () -> Long = System::currentTimeMillis,
     private val computationDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    /** Runs seen-tag bookkeeping after results return; tests pass their scheduler-backed scope. */
+    seenTagScope: CoroutineScope = CoroutineScope(SupervisorJob() + computationDispatcher),
 ) : SearchExecutionService {
+    private val seenTags = SeenTagRecorder(statisticsRepository, tagSuggestionStore, computationDispatcher, seenTagScope)
     @Volatile private var runtimeSettings = AppSettings()
     private var availableSourcesSnapshot = registry.availableSources()
     private val suggestionCoordinator = SearchSuggestionCoordinator(
@@ -249,7 +250,7 @@ class SearchCoordinator(
             return SearchExecutionResult.Failure(executionKey, query, sourceScope, statuses,
                 unifiedFailureMessage(result.items, statuses), next)
         }
-        rememberSeenTags(result.items)
+        seenTags.record(result.items)
         return SearchExecutionResult.Success(executionKey, query, sourceScope, result.items, statuses, next)
     }
 
@@ -287,7 +288,7 @@ class SearchCoordinator(
         }
         val page = registry.unifiedOrchestrator().searchSource(adapter, query, null)
         currentCoroutineContext().ensureActive()
-        rememberSeenTags(page.items)
+        seenTags.record(page.items)
         return SearchExecutionResult.Success(
             executionKey = executionKey,
             query = query,
@@ -337,7 +338,7 @@ class SearchCoordinator(
                     ?: buildSourceAuthErrorMessage(result.statuses) ?: "Source could not be retried",
             )
         }
-        rememberSeenTags(result.items)
+        seenTags.record(result.items)
         val updated = base.copy(
             unifiedPageTokens = base.unifiedPageTokens + result.nextPageTokens,
             unifiedQueryOverrides = base.unifiedQueryOverrides + result.queriesBySource,
@@ -351,7 +352,7 @@ class SearchCoordinator(
         val page = kotlinx.coroutines.withTimeoutOrNull(15_000L) {
             registry.unifiedOrchestrator().searchSource(adapter, base.query, base.sourcePageToken)
         } ?: throw SourceAdapterException(SourceFailureReason.NETWORK, "Source timed out")
-        rememberSeenTags(page.items)
+        seenTags.record(page.items)
         SearchPageResult.Success(base.executionKey, page.items, listOf(SourceRunStatus(source, SourceRunState.SUCCESS)),
             base.copy(sourcePageToken = page.nextPageToken))
     } catch (error: CancellationException) { throw error }
@@ -416,7 +417,7 @@ class SearchCoordinator(
         if (statuses.none { it.state == SourceRunState.SUCCESS }) {
             return SearchPageResult.Failure(continuation.executionKey, statuses, unifiedFailureMessage(result.items, statuses))
         }
-        rememberSeenTags(result.items)
+        seenTags.record(result.items)
         val nextTokens = settleFeedContinuations(continuation.unifiedPageTokens, pageable, result.nextPageTokens, statuses)
             .minus(pageable - registry.availableSources())
         val failed = statuses.filter { it.state == SourceRunState.FAILED }.mapTo(mutableSetOf()) { it.source }
@@ -444,7 +445,7 @@ class SearchCoordinator(
         val adapter = requireNotNull(registry.adapterFor(mode.source)) { "No adapter for ${mode.source}" }
         val page = registry.unifiedOrchestrator().searchSource(adapter, continuation.query, token)
         currentCoroutineContext().ensureActive()
-        rememberSeenTags(page.items)
+        seenTags.record(page.items)
         return SearchPageResult.Success(
             continuation.executionKey,
             page.items,
@@ -649,29 +650,6 @@ class SearchCoordinator(
         val seen = mutableSetOf<String>()
         return tags.mapNotNull { raw ->
             pixivSearchToken(raw).takeIf { it.isNotBlank() && seen.add(normalizeMatchToken(it)) }
-        }
-    }
-
-    private suspend fun rememberSeenTags(posts: List<Post>) = withContext(computationDispatcher) {
-        posts.forEach { post -> runCatchingPreservingCancellation { statisticsRepository.recordPostAvailable(post) } }
-        posts.groupBy { it.id.source }.forEach { (source, sourcePosts) ->
-            val suggestions = sourcePosts.asSequence()
-                .flatMap { post -> recommendationTaxonomyFor(post).asSequence() }
-                .map { term ->
-                    FacetedTagSuggestion(
-                        text = normalizeFavoriteTagForStorage(source, term.value),
-                        facet = SearchFacet.TAG,
-                        sourceNamespace = term.sourceNamespace,
-                        alternateText = term.translation,
-                    )
-                }
-                .filter { it.text.isNotBlank() }
-                .distinctBy { Triple(it.facet, it.sourceNamespace, sourceTagKey(source, it.text)) }
-                .take(SEEN_TAGS_PER_SOURCE_INGEST_LIMIT)
-                .toList()
-            if (suggestions.isNotEmpty()) {
-                tagSuggestionStore.putFaceted(source, suggestions, TagSuggestionOrigin.SEEN)
-            }
         }
     }
 

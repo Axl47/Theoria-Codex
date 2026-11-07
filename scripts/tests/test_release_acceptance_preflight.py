@@ -45,13 +45,14 @@ class ReleaseAcceptancePreflightTest(unittest.TestCase):
             if values.get("fail_tool") == kind:
                 sys.exit(1)
             if kind == "apkanalyzer":
-                if sys.argv[2] == "print":
-                    extra = '<meta-data android:name="listener" android:value="SideEffectRunListener"/>' if values.get("listener") else ''
-                    runner = '<instrumentation android:name="androidx.test.runner.AndroidJUnitRunner" android:targetPackage="com.theoriacodex"/>' if values.get("production_target") else ''
-                    print('<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application>' + extra + '</application>' + runner + '</manifest>')
-                else:
-                    field = {"application-id": "package", "debuggable": "debuggable", "version-name": "version"}[sys.argv[2]]
-                    print(values[field])
+                if sys.argv[1:3] != ["manifest", "print"]:
+                    sys.exit(3)
+                extra = '<meta-data android:name="listener" android:value="SideEffectRunListener"/>' if values.get("listener") else ''
+                runner = '<instrumentation android:name="androidx.test.runner.AndroidJUnitRunner" android:targetPackage="com.theoriacodex"/>' if values.get("production_target") else ''
+                debuggable = '' if values["debuggable"] is None else ' android:debuggable="' + values["debuggable"] + '"'
+                print('<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="' + values["package"]
+                      + '" android:versionName="' + values["version"] + '"><application' + debuggable + '>' + extra
+                      + '</application>' + runner + '</manifest>')
             elif kind == "apksigner":
                 prefix = "V2 Signer:" if values.get("versioned_signer") else "Signer #1"
                 print(prefix + " certificate SHA-256 digest: " + values["signature"])
@@ -64,7 +65,7 @@ class ReleaseAcceptancePreflightTest(unittest.TestCase):
             path.chmod(0o755)
             self.environment[name.upper()] = str(path)
 
-    def invoke(self, **changes: str) -> subprocess.CompletedProcess[str]:
+    def invoke(self, **changes: str | None) -> subprocess.CompletedProcess[str]:
         values = json.loads(self.environment["PREFLIGHT_METADATA"])
         values.update(changes)
         env = {**self.environment, "PREFLIGHT_METADATA": json.dumps(values)}
@@ -73,7 +74,7 @@ class ReleaseAcceptancePreflightTest(unittest.TestCase):
     def test_wrong_package_signer_or_lane_never_reaches_adb(self) -> None:
         cases = [
             {"package": "com.theoriacodex"}, {"package": "com.theoriacodex.debug"},
-            {"debuggable": "true"}, {"debuggable": "unknown"}, {"version": "0.10.0"},
+            {"debuggable": "true"}, {"debuggable": "unknown"}, {"debuggable": "-1"}, {"version": "0.10.0"},
             {"signature": "ab" * 32}, {"signature": ""},
             {"fail_tool": "apkanalyzer"}, {"fail_tool": "apksigner"}, {"fail_tool": "keytool"},
             {"listener": "true"}, {"production_target": "true"},
@@ -84,6 +85,10 @@ class ReleaseAcceptancePreflightTest(unittest.TestCase):
                 self.assertNotEqual(0, result.returncode)
                 self.assertNotEqual(42, result.returncode)
                 self.assertFalse(self.adb_log.exists(), result.stdout + result.stderr)
+
+    def test_absent_debuggable_attribute_means_a_non_debuggable_lane(self) -> None:
+        result = self.invoke(debuggable=None)
+        self.assertEqual(42, result.returncode, result.stdout + result.stderr)
 
     def test_missing_apk_never_reaches_adb(self) -> None:
         self.apk.unlink()

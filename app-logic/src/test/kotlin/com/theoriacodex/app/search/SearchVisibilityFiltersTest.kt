@@ -12,6 +12,19 @@ import org.junit.Test
 
 class SearchVisibilityFiltersTest {
     @Test
+    fun `mark inputs drop marks whose hide toggle is off so new likes keep the same key`() {
+        val liked = setOf(PostId(SourceKey.PIXIV, "a"))
+        val likedMore = liked + PostId(SourceKey.PIXIV, "b")
+        val showAll = SearchVisibilityFilters()
+        assertEquals(
+            showAll.markInputs(liked, liked, liked, liked),
+            showAll.markInputs(likedMore, likedMore, likedMore, likedMore),
+        )
+        val hideLiked = SearchVisibilityFilters(hideLiked = true)
+        assertEquals(PostMarkInputs(likedMore, emptySet(), emptySet(), liked), hideLiked.markInputs(likedMore, likedMore, likedMore, liked))
+    }
+
+    @Test
     fun `watched liked seed stays visible until recommendations are dismissed`() {
         val seed = samplePost(id = "seed", source = SourceKey.PIXIV)
         val other = samplePost(id = "other", source = SourceKey.PIXIV)
