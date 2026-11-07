@@ -5,6 +5,7 @@ package com.theoriacodex.app.viewer
 import android.content.Context
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.util.Util
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
@@ -20,6 +21,8 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.LoadControl
+import androidx.media3.exoplayer.analytics.PlayerId
+import androidx.media3.exoplayer.upstream.DefaultAllocator
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
 import com.theoriacodex.app.TheoriaApplication
@@ -49,10 +52,9 @@ internal const val FEED_PREVIEW_PLAYBACK_BUFFER_MS = 750
 internal const val FEED_PREVIEW_REBUFFER_MS = 1_500
 
 /**
- * A Viewer stream starts, or resumes after a seek, once this much is buffered; Media3 waits for 1 s. Both begin with an
- * empty buffer, so on a link faster than the video this takes half a second of media off the wait (Media3 treats a
- * seek like a start). After a stall the player still waits for Media3's 2 s, so a link slower than the video does
- * not stall more often once it has stalled.
+ * A Viewer stream starts, or resumes after a seek, once this much is buffered, until it stalls ([ViewerLoadControl]);
+ * Media3 waits for 1 s. Both begin with an empty buffer, so on a link faster than the video this takes half a second
+ * of media off the wait.
  */
 internal const val VIEWER_START_BUFFER_MS = 500
 
@@ -105,15 +107,49 @@ internal object VideoLoadControlFactory {
                 .setBackBuffer(0, false)
                 .build()
 
-            VideoPlaybackProfile.VIEWER -> DefaultLoadControl.Builder()
-                .setBufferDurationsMsForStreaming(
-                    /* minBufferMs = */ DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
-                    /* maxBufferMs = */ DefaultLoadControl.DEFAULT_MAX_BUFFER_MS,
-                    /* bufferForPlaybackMs = */ VIEWER_START_BUFFER_MS,
-                    /* bufferForPlaybackAfterRebufferMs = */ DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
-                )
-                .build()
+            VideoPlaybackProfile.VIEWER -> ViewerLoadControl()
         }
+    }
+}
+
+/**
+ * Media3's default buffering, except that a stream starts, or resumes after a seek, on [VIEWER_START_BUFFER_MS] until
+ * it stalls. Media3 treats a seek like a start, so after a stall a seek would otherwise resume on half a second on a
+ * link that has just shown it barely keeps up, and stall again sooner. From a stall until the player prepares its next
+ * stream, starts wait for Media3's 1 s as they did before, and a stall itself still waits for 2 s. One per player.
+ */
+private class ViewerLoadControl : DefaultLoadControl(
+    DefaultAllocator(/* trimOnReset = */ true, C.DEFAULT_BUFFER_SEGMENT_SIZE),
+    DEFAULT_MIN_BUFFER_MS,
+    DEFAULT_MIN_BUFFER_FOR_LOCAL_PLAYBACK_MS,
+    DEFAULT_MAX_BUFFER_MS,
+    DEFAULT_MAX_BUFFER_FOR_LOCAL_PLAYBACK_MS,
+    /* bufferForPlaybackMs = */ VIEWER_START_BUFFER_MS,
+    DEFAULT_BUFFER_FOR_PLAYBACK_FOR_LOCAL_PLAYBACK_MS,
+    DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
+    DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_FOR_LOCAL_PLAYBACK_MS,
+    DEFAULT_TARGET_BUFFER_BYTES,
+    DEFAULT_PRIORITIZE_TIME_OVER_SIZE_THRESHOLDS,
+    DEFAULT_PRIORITIZE_TIME_OVER_SIZE_THRESHOLDS_FOR_LOCAL_PLAYBACK,
+    DEFAULT_BACK_BUFFER_DURATION_MS,
+    DEFAULT_RETAIN_BACK_BUFFER_FROM_KEYFRAME,
+    emptyMap(),
+) {
+    // Read and written on the player's playback thread.
+    private var stalled = false
+
+    override fun onPrepared(playerId: PlayerId) {
+        stalled = false
+        super.onPrepared(playerId)
+    }
+
+    override fun shouldStartPlayback(parameters: LoadControl.Parameters): Boolean {
+        if (parameters.rebuffering) stalled = true
+        return super.shouldStartPlayback(parameters) && (
+            parameters.rebuffering || !stalled ||
+                Util.getPlayoutDurationForMediaDuration(parameters.bufferedDurationUs, parameters.playbackSpeed) >=
+                Util.msToUs(DEFAULT_BUFFER_FOR_PLAYBACK_MS.toLong())
+            )
     }
 }
 

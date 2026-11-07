@@ -77,7 +77,7 @@ class VideoPlaybackInfrastructureTest {
     }
 
     @Test
-    fun `a Viewer stream starts after half a second buffered, while a stall still waits for two`() {
+    fun `a Viewer stream starts on half a second until it stalls, then on one second until prepared again`() {
         val control = VideoLoadControlFactory.create(VideoPlaybackProfile.VIEWER).apply { onPrepared(PlayerId.UNSET) }
         val timeline = SinglePeriodTimeline(90_000_000L, true, false, false, null, MediaItem.EMPTY)
         val period = MediaSource.MediaPeriodId(timeline.getUidOfPeriod(0))
@@ -89,8 +89,13 @@ class VideoPlaybackInfrastructureTest {
 
         assertFalse(startsWith(bufferedMs = 400L, rebuffering = false))
         assertTrue(startsWith(bufferedMs = 500L, rebuffering = false))
+        // A stall waits for 2 s, and a seek after it for 1 s, until the next stream is prepared.
         assertFalse(startsWith(bufferedMs = 1_900L, rebuffering = true))
         assertTrue(startsWith(bufferedMs = 2_000L, rebuffering = true))
+        assertFalse(startsWith(bufferedMs = 900L, rebuffering = false))
+        assertTrue(startsWith(bufferedMs = 1_000L, rebuffering = false))
+        control.onPrepared(PlayerId.UNSET)
+        assertTrue(startsWith(bufferedMs = 500L, rebuffering = false))
     }
 
     @Test
