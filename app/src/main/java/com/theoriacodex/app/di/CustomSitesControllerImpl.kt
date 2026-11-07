@@ -6,6 +6,7 @@ import com.theoriacodex.app.customsites.CustomSiteEdit
 import com.theoriacodex.app.customsites.CustomSiteMutation
 import com.theoriacodex.app.customsites.CustomSiteSummary
 import com.theoriacodex.app.customsites.CustomSitesController
+import com.theoriacodex.app.customsites.SitesRequest
 import com.theoriacodex.app.sourceauth.CredentialStoreUnavailableException
 import com.theoriacodex.app.sourceauth.SiteCredentialsStore
 import com.theoriacodex.data.repository.SettingsRepository
@@ -51,11 +52,15 @@ internal class CustomSitesControllerImpl(
             snapshot.sites.map { site -> site.toSummary(included = site.source in enabled) }
         }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
-    private val pendingSetup = MutableStateFlow<String?>(null)
-    override val setupRequest: StateFlow<String?> = pendingSetup.asStateFlow()
+    private val pendingSetup = MutableStateFlow<SitesRequest?>(null)
+    override val setupRequest: StateFlow<SitesRequest?> = pendingSetup.asStateFlow()
 
     override fun requestSetup(address: String) {
-        pendingSetup.value = address
+        pendingSetup.value = SitesRequest.Add(address)
+    }
+
+    override fun requestVerification(sourceId: String) {
+        pendingSetup.value = SitesRequest.Verify(sourceId)
     }
 
     override fun clearSetupRequest() {

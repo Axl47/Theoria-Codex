@@ -80,6 +80,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.sources.RealAdapterRegistry
 import com.theoriacodex.sources.custom.CustomSiteHttpClient
+import com.theoriacodex.sources.http.HostOutageTracker
 import com.theoriacodex.sources.custom.SiteFamilyRegistry
 import com.theoriacodex.sources.custom.SiteProber
 import com.theoriacodex.sources.http.DefaultSourceHttpClient
@@ -125,6 +126,8 @@ data class SourceDependencies(
     val availableSources: StateFlow<Set<SourceKey>>,
     val networkOnline: StateFlow<Boolean> = kotlinx.coroutines.flow.MutableStateFlow(true),
     val pixivTokens: PixivTokenCoordinator = PixivTokenCoordinator(accounts, pixivAuthApi),
+    /** Hosts known to be down this session; shared by the built-in and custom-site clients. */
+    val outages: HostOutageTracker = HostOutageTracker(),
 )
 
 data class UpdateDependencies(
@@ -186,7 +189,9 @@ internal class DefaultTheoriaAppContainer(
         seedData = loadSeedTagSuggestions(appContext),
         recoveryRegistry = legacyJsonRecoveryRegistry,
     )
-    private val sourceHttpClient = DefaultSourceHttpClient()
+    private val networkOnline = NetworkMonitor(appContext).online
+    private val hostOutages = HostOutageTracker(isOnline = { networkOnline.value })
+    private val sourceHttpClient = DefaultSourceHttpClient(outages = hostOutages)
     private val credentialStore = AndroidSecureSourceCredentialsStore(appContext)
     private val accountStore = ObservableSourceAccountStore(delegate = credentialStore)
     private val pixivAuthApi = PixivAuthApi(sourceHttpClient)
@@ -223,7 +228,7 @@ internal class DefaultTheoriaAppContainer(
         profiles = siteProfiles,
         credentials = credentialStore,
         families = siteFamilies,
-        http = CustomSiteHttpClient(readTimeoutMs = CUSTOM_SITE_READ_TIMEOUT_MS),
+        http = CustomSiteHttpClient(readTimeoutMs = CUSTOM_SITE_READ_TIMEOUT_MS, outages = hostOutages),
         scope = durableStoreScope,
     )
     private val sourceRegistry = CompositeSourceAdapterRegistry(
@@ -366,8 +371,9 @@ internal class DefaultTheoriaAppContainer(
         pixivUgoiraClient = pixivUgoiraClient,
         registry = sourceRegistry,
         availableSources = availableSources,
-        networkOnline = NetworkMonitor(appContext).online,
+        networkOnline = networkOnline,
         pixivTokens = pixivTokenCoordinator,
+        outages = hostOutages,
     )
 
     override val updates = UpdateDependencies(

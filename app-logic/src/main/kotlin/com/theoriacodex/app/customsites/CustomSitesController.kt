@@ -36,14 +36,22 @@ interface CustomSitesController {
     suspend fun remove(sourceId: String): CustomSiteMutation
 
     /**
-     * An address another flow (such as a Codex import) asked to set up. Settings → Sites opens its
-     * add form with it and calls [clearSetupRequest].
+     * What another flow asked Settings → Sites to do: add an address (a Codex import, a shared link)
+     * or verify a stored site in the browser (a challenged source). Sites acts on it and calls
+     * [clearSetupRequest].
      */
-    val setupRequest: StateFlow<String?>
+    val setupRequest: StateFlow<SitesRequest?>
 
     fun requestSetup(address: String)
 
+    fun requestVerification(sourceId: String)
+
     fun clearSetupRequest()
+}
+
+sealed interface SitesRequest {
+    data class Add(val address: String) : SitesRequest
+    data class Verify(val sourceId: String) : SitesRequest
 }
 
 data class CustomSiteSummary(

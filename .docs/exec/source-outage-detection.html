@@ -34,7 +34,7 @@ this may slow app startup.</p>
 
 <section id="status">
 <h2>Current Status</h2>
-<p>Implementation in progress. See Progress.</p>
+<p>Implemented on <code>spike/webview-verification</code>; host tests and a live check against Danbooru's maintenance page pass. On-device look and feel awaits the developer.</p>
 </section>
 
 <section id="context">
@@ -110,16 +110,18 @@ slower. Only the developer can confirm feel on device.</li>
 <h2>Progress</h2>
 <ul>
 <li>[x] 2026-11-07 Investigated: Danbooru 503 + Retry-After 30 causes ~60 s per request.</li>
-<li>[ ] Transport tracker and client changes, with tests.</li>
-<li>[ ] App mapping, background check, wiring.</li>
-<li>[ ] Dropdown dot, tap behavior, verification hand-off.</li>
-<li>[ ] Validation and device install.</li>
+<li>[x] 2026-11-07 Transport tracker, both clients, SiteHealthCheck, with host tests (commit 82cbb19a).</li>
+<li>[x] 2026-11-07 App mapping (<code>app/.../source/SourceHealth.kt</code>), background check started once after navigation is ready, container wiring.</li>
+<li>[x] 2026-11-07 Dropdown red dot (icon chips, folder chips, titled submenu rows with a reason), pick = recheck, challenged custom site = Settings → Sites verification via <code>SitesRequest.Verify</code>.</li>
+<li>[x] 2026-11-07 Full core-sources, app-logic and app unit suites pass; live run against Danbooru: health check recorded MAINTENANCE, first request failed in 112 ms, second in 0 ms (previously ~60 s).</li>
+<li>[ ] Developer to confirm the dot and messages on device.</li>
 </ul>
 </section>
 
 <section id="surprises">
 <h2>Surprises And Discoveries</h2>
-<ul><li>The slowness was mostly self-inflicted: honoring a maintenance page's Retry-After for every request.</li></ul>
+<ul><li>The slowness was mostly self-inflicted: honoring a maintenance page's Retry-After for every request.</li>
+<li>Built-in home pages can be challenged while their APIs work, so the background check counts challenges only for custom sites.</li></ul>
 </section>
 
 <section id="decisions">
@@ -137,7 +139,7 @@ separate probe UI.</li>
 
 <section id="outcomes">
 <h2>Outcomes And Retrospective</h2>
-<p class="muted">To be filled in at close.</p>
+<p>The minute-long waits were the client obeying a maintenance page's Retry-After on every request; refusing long waits plus a per-host breaker turns an outage into instant, explained failures. The startup check runs only in the background and is redundant by design: the first real request trips the breaker too.</p>
 </section>
 
 <section id="recovery">

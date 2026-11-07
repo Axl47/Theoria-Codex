@@ -333,4 +333,14 @@ class CustomSitesViewModelTest {
         assertEquals(AddStage.Confirm(supported()), owner.add.stage)
         assertNull(controller.setupRequest.value)
     }
+
+    @Test fun `a verification request opens that site and its browser check`() = runTest {
+        controller.sites.value = listOf(site())
+        val owner = owner()
+        controller.requestVerification("custom_safebooru_org")
+        runCurrent()
+        assertEquals("custom_safebooru_org", (owner.state.value.form as SiteForm.Edit).sourceId)
+        assertEquals("safebooru.org", owner.state.value.verifyingHost)
+        assertNull(controller.setupRequest.value)
+    }
 }

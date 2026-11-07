@@ -10,6 +10,7 @@ import com.theoriacodex.app.customsites.CustomSiteDraft
 import com.theoriacodex.app.customsites.CustomSiteEdit
 import com.theoriacodex.app.customsites.CustomSiteMutation
 import com.theoriacodex.app.customsites.CustomSitesController
+import com.theoriacodex.app.customsites.SitesRequest
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.sourceauth.parseCredentialSnippet
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -60,10 +61,19 @@ internal class CustomSitesViewModel(
 
     init {
         scope.launch {
-            controller.setupRequest.filterNotNull().collect { address ->
+            controller.setupRequest.filterNotNull().collect { request ->
                 controller.clearSetupRequest()
-                openForm(SiteForm.Add(address = address))
-                probe()
+                when (request) {
+                    is SitesRequest.Add -> {
+                        openForm(SiteForm.Add(address = request.address))
+                        probe()
+                    }
+                    // A challenged source: open the site and its browser check; Done then Save keeps the agent.
+                    is SitesRequest.Verify -> state.value.sites.firstOrNull { it.sourceId == request.sourceId }?.let { site ->
+                        startEdit(site.sourceId)
+                        mutableState.update { it.copy(verifyingHost = site.host) }
+                    }
+                }
             }
         }
     }

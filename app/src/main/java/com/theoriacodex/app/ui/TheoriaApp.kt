@@ -20,6 +20,20 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.combine
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.produceState
+import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.http.SiteHealthCheck
+import com.theoriacodex.sources.http.HostOutageKind
+import com.theoriacodex.app.source.inPresentationOrder
+import com.theoriacodex.app.source.startSourceHealthCheck
+import com.theoriacodex.app.source.sourceIssues
+import com.theoriacodex.app.source.clearSource
+import com.theoriacodex.app.source.SourceHealth
+import com.theoriacodex.app.source.LocalSourceHealth
 import com.theoriacodex.app.ui.routes.activeRecommendationProfile
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -98,6 +112,7 @@ internal fun TheoriaAppContent(
     )
     val viewerReturnTransition = remember { ViewerReturnTransition() }
     val relatedPostsSupport = remember(shell) { shell.features.relatedPosts::supports }
+    val sourceHealth = rememberSourceHealth(shell)
     val savedTags = remember(shell) {
         PostTagSavedTags(
             saved = shell.data.settingsRepository.observeSettings().map { settings ->
@@ -112,6 +127,7 @@ internal fun TheoriaAppContent(
         LocalCodexSaveRelevanceLoader provides saveRelevanceLoader,
         LocalViewerReturnTransition provides viewerReturnTransition,
         LocalNetworkOnline provides shell.sources.networkOnline,
+        LocalSourceHealth provides sourceHealth,
         com.theoriacodex.app.related.LocalRelatedPostsSupport provides relatedPostsSupport,
     ) {
         com.theoriacodex.app.codex.SavedCodexSession {
@@ -347,5 +363,41 @@ private fun SaveToCodexOverlay(shell: TheoriaShell) {
             },
             onDismiss = pendingSave::clear,
         )
+    }
+}
+
+/**
+ * Down sources for the dropdowns, refreshed when outages change and each minute so expired ones
+ * clear. Starts the background startup check once the app is showing (it never blocks startup).
+ */
+@Composable
+private fun rememberSourceHealth(shell: TheoriaShell): SourceHealth {
+    val outages = shell.sources.outages
+    LaunchedEffect(shell.navReady) {
+        if (shell.navReady) {
+            startSourceHealthCheck(shell.scope, SiteHealthCheck(outages)) { shell.sources.availableSources.value.inPresentationOrder() }
+        }
+    }
+    val issues by produceState(emptyMap<SourceKey, HostOutageKind>(), outages) {
+        combine(outages.outages, shell.sources.availableSources, minuteTicks()) { recorded, sources, _ ->
+            sourceIssues(recorded, sources, System.currentTimeMillis())
+        }.collect { value = it }
+    }
+    return remember(issues, shell) {
+        SourceHealth(
+            issues = issues,
+            recheck = outages::clearSource,
+            verify = { source ->
+                shell.container.customSites.requestVerification(source.id)
+                shell.owners.settings.onAction(SettingsAction.OpenCustomSites)
+            },
+        )
+    }
+}
+
+private fun minuteTicks() = flow {
+    while (true) {
+        emit(Unit)
+        delay(60_000L)
     }
 }

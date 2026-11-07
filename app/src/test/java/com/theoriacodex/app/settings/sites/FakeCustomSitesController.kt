@@ -4,6 +4,7 @@ import com.theoriacodex.app.customsites.CustomSiteAvailability
 import com.theoriacodex.app.customsites.CustomSiteDraft
 import com.theoriacodex.app.customsites.CustomSiteEdit
 import com.theoriacodex.app.customsites.CustomSiteMutation
+import com.theoriacodex.app.customsites.SitesRequest
 import com.theoriacodex.app.customsites.CustomSiteSummary
 import com.theoriacodex.app.customsites.CustomSitesController
 import com.theoriacodex.domain.source.ProtocolFamily
@@ -19,10 +20,14 @@ internal class FakeCustomSitesController(initial: List<CustomSiteSummary> = empt
     data class ProbeCall(val input: String, val credentials: SiteCredentials?, val headers: SiteHeaders)
 
     override val sites: MutableStateFlow<List<CustomSiteSummary>> = MutableStateFlow(initial)
-    override val setupRequest = MutableStateFlow<String?>(null)
+    override val setupRequest = MutableStateFlow<SitesRequest?>(null)
 
     override fun requestSetup(address: String) {
-        setupRequest.value = address
+        setupRequest.value = SitesRequest.Add(address)
+    }
+
+    override fun requestVerification(sourceId: String) {
+        setupRequest.value = SitesRequest.Verify(sourceId)
     }
 
     override fun clearSetupRequest() {
