@@ -74,7 +74,7 @@ class CrossSourceTraining(
 
     fun documentsFor(target: SourceKey): List<List<String>> {
         val native = documents.filter { it.like.source == target }.map { it.like.tags }
-        if (target !in SHARED_VOCABULARY_SOURCES) return native
+        if (!target.sharesBooruVocabulary) return native
         val foreign = documents.asSequence()
             .filter { canMap(from = it.like.source, to = target) }
             .map { document -> document.conceptKeys.mapNotNull { key -> spell(key, target) }.distinct() }
@@ -85,7 +85,7 @@ class CrossSourceTraining(
     }
 
     private fun canMap(from: SourceKey, to: SourceKey): Boolean =
-        from != to && from in SHARED_VOCABULARY_SOURCES &&
+        from != to && from.sharesBooruVocabulary &&
             (!dictionary.isEmpty || (from != SourceKey.PIXIV && to != SourceKey.PIXIV))
 
     private fun spell(conceptKey: String, target: SourceKey): String? =
@@ -99,13 +99,19 @@ class CrossSourceTraining(
         }
     }
 
-    companion object {
-        /** Sources whose tags share one English vocabulary, directly or through Pixiv translations. */
-        val SHARED_VOCABULARY_SOURCES: Set<SourceKey> = setOf(
-            SourceKey.PIXIV, SourceKey.DANBOORU, SourceKey.AIBOORU, SourceKey.GELBOORU, SourceKey.RULE34XXX,
-        )
-    }
 }
+
+private val SHARED_VOCABULARY_BUILT_INS = setOf(
+    SourceKey.PIXIV, SourceKey.DANBOORU, SourceKey.AIBOORU, SourceKey.GELBOORU, SourceKey.RULE34XXX,
+)
+
+/**
+ * Sources whose tags share one English vocabulary, directly or through Pixiv translations. Custom
+ * sites join by default, betting on Danbooru-style tags. Nothing persists this, so the rule can
+ * change (or become a per-site setting) without migrating data.
+ */
+val SourceKey.sharesBooruVocabulary: Boolean
+    get() = isCustom || this in SHARED_VOCABULARY_BUILT_INS
 
 private const val FOREIGN_DOCUMENT_FLOOR = 24
 private val CROSS_SOURCE_WHITESPACE_REGEX = Regex("\\s+")

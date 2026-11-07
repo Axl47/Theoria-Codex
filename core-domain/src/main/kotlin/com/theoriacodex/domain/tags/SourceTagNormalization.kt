@@ -8,14 +8,28 @@ private val NAMED_HTML_ENTITIES = mapOf(
     "amp" to '&'.code, "lt" to '<'.code, "gt" to '>'.code, "quot" to '"'.code, "apos" to '\''.code,
 )
 
-/** Booru-style sources whose tags join words with underscores. */
-private val UNDERSCORE_TAG_SOURCES = setOf(
+/** How a source spells multi-word tags. Persisted tag keys depend on it, so it never changes for a source. */
+enum class TagDialect {
+    /** Booru style: lowercase, words joined with underscores. */
+    UNDERSCORE,
+
+    /** Words joined with spaces; matching ignores case, underscores and repeated whitespace. */
+    SPACED,
+}
+
+private val UNDERSCORE_BUILT_INS = setOf(
     SourceKey.GELBOORU, SourceKey.AIBOORU, SourceKey.DANBOORU, SourceKey.IWARA, SourceKey.RULE34XXX,
 )
 
+/** Every user-added site is a booru, so custom sources use [TagDialect.UNDERSCORE]. */
+val SourceKey.tagDialect: TagDialect
+    get() = if (isCustom || this in UNDERSCORE_BUILT_INS) TagDialect.UNDERSCORE else TagDialect.SPACED
+
 /** The provider spelling of typed input, used as an autocomplete prefix. */
-fun sourceAutocompletePrefix(source: SourceKey, input: String): String =
-    if (source in UNDERSCORE_TAG_SOURCES) normalizeGelbooruToken(input) else input
+fun sourceAutocompletePrefix(source: SourceKey, input: String): String = when (source.tagDialect) {
+    TagDialect.UNDERSCORE -> normalizeGelbooruToken(input)
+    TagDialect.SPACED -> input
+}
 
 fun normalizeMatchToken(value: String): String {
     return value
@@ -54,23 +68,16 @@ fun decodeHtmlEntities(value: String): String {
 fun normalizeFavoriteTagForStorage(source: SourceKey, tag: String): String {
     val normalized = tag.trim()
     if (normalized.isBlank()) return ""
-    return when (source) {
-        in UNDERSCORE_TAG_SOURCES -> normalizeGelbooruToken(normalized)
-        else -> normalized
+    return when (source.tagDialect) {
+        TagDialect.UNDERSCORE -> normalizeGelbooruToken(normalized)
+        TagDialect.SPACED -> normalized
     }
 }
 
 fun sourceTagKey(source: SourceKey, tag: String): String {
-    return when (source) {
-        in UNDERSCORE_TAG_SOURCES -> normalizeGelbooruToken(tag)
-        SourceKey.PIXIV,
-        SourceKey.NHENTAI,
-        SourceKey.HITOMI,
-        SourceKey.RULE34PAHEAL,
-        SourceKey.RULE34VIDEO,
-        SourceKey.RULE34GEN,
-        -> normalizeMatchToken(tag)
-        else -> tag.trim().lowercase()
+    return when (source.tagDialect) {
+        TagDialect.UNDERSCORE -> normalizeGelbooruToken(tag)
+        TagDialect.SPACED -> normalizeMatchToken(tag)
     }
 }
 
@@ -78,16 +85,8 @@ fun sourceTagsMatch(source: SourceKey, left: String, right: String): Boolean {
     val normalizedLeft = left.trim()
     val normalizedRight = right.trim()
     if (normalizedLeft.isBlank() || normalizedRight.isBlank()) return false
-    return when (source) {
-        in UNDERSCORE_TAG_SOURCES ->
-            normalizeGelbooruToken(normalizedLeft) == normalizeGelbooruToken(normalizedRight)
-        SourceKey.PIXIV,
-        SourceKey.NHENTAI,
-        SourceKey.HITOMI,
-        SourceKey.RULE34PAHEAL,
-        SourceKey.RULE34VIDEO,
-        SourceKey.RULE34GEN,
-        -> normalizeMatchToken(normalizedLeft) == normalizeMatchToken(normalizedRight)
-        else -> normalizedLeft.equals(normalizedRight, ignoreCase = true)
+    return when (source.tagDialect) {
+        TagDialect.UNDERSCORE -> normalizeGelbooruToken(normalizedLeft) == normalizeGelbooruToken(normalizedRight)
+        TagDialect.SPACED -> normalizeMatchToken(normalizedLeft) == normalizeMatchToken(normalizedRight)
     }
 }

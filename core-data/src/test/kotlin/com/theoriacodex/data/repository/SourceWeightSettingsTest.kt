@@ -53,4 +53,17 @@ class SourceWeightSettingsTest {
         assertEquals(0.8, updated.sourceWeights.getValue(SourceKey.GELBOORU), 0.00001)
         assertEquals(updated.sourceWeights, SourceWeightSettings.weightsFor(updated, group))
     }
+
+    @Test
+    fun `a newly opted-in custom source gets an even share instead of dominating`() {
+        val custom = requireNotNull(SourceKey.parse("custom_safebooru_org"))
+        val existing = mapOf(SourceKey.PIXIV to 0.5, SourceKey.GELBOORU to 0.5)
+
+        val weights = RepositoryPolicies.normalizeSourceWeights(setOf(SourceKey.PIXIV, SourceKey.GELBOORU, custom), existing)
+
+        listOf(SourceKey.PIXIV, SourceKey.GELBOORU, custom).forEach { source ->
+            assertEquals(1.0 / 3.0, weights.getValue(source), 1e-9)
+        }
+        assertEquals(listOf(SourceKey.PIXIV, SourceKey.GELBOORU, custom), weights.keys.toList())
+    }
 }
