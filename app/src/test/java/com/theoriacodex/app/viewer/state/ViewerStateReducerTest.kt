@@ -349,6 +349,33 @@ class ViewerStateReducerTest {
     }
 
     @Test
+    fun `a downloaded image is queued again to decode once it is close, and only once`() {
+        val session = session("prefetch-decode")
+        val state = createViewerUiState(
+            session,
+            listOf(samplePost("gallery", media = listOf(media("image/jpeg", "1.jpg"), media("image/jpeg", "2.jpg")))),
+        )
+        val next = state.currentPage?.media.orEmpty().last().key
+        val downloaded = reduceViewerState(
+            state,
+            ViewerAction.PrefetchCompleted(session, next, ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED)),
+        ).state
+
+        val far = reduceViewerState(downloaded, ViewerAction.QueuePrefetch(listOf(next)))
+        val close = reduceViewerState(downloaded, ViewerAction.QueuePrefetch(listOf(next), decodeKeys = setOf(next)))
+        val decoded = reduceViewerState(
+            close.state,
+            ViewerAction.PrefetchCompleted(session, next, ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED, decoded = true)),
+        ).state
+        val again = reduceViewerState(decoded, ViewerAction.QueuePrefetch(listOf(next), decodeKeys = setOf(next)))
+
+        assertEquals(ViewerEffect.PrefetchMedia(session, emptyList()), far.effects.single())
+        assertEquals(ViewerEffect.PrefetchMedia(session, listOf(next)), close.effects.single())
+        assertEquals(setOf(next), decoded.prefetch.decoded)
+        assertEquals(ViewerEffect.PrefetchMedia(session, emptyList()), again.effects.single())
+    }
+
+    @Test
     fun `prefetch terminal outcomes remain truthful and cannot be queued again`() {
         val session = session("prefetch-outcomes")
         val state = createViewerUiState(

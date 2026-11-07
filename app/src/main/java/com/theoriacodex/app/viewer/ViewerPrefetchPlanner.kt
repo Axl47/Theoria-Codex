@@ -1,5 +1,6 @@
 package com.theoriacodex.app.viewer
 
+import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerMediaKind
 import com.theoriacodex.app.viewer.state.ViewerPageState
@@ -40,6 +41,26 @@ internal fun planAdjacentViewerPrefetch(
         for (offset in 1..rightCount) neighbour(offset)?.let(::add)
         for (offset in 1..leftCount) neighbour(-offset)?.let(::add)
     }.distinct().filterNot { key -> key == current }
+}
+
+/**
+ * What the Viewer asks its owner to prefetch: a swipe's target first, then the adjacent plan. Static images
+ * within [VIEWER_MEMORY_PREFETCH_DISTANCE] are marked for decoding, so a page first downloaded while it was
+ * far away is decoded into memory once it becomes a neighbour, and shows without a decode when reached.
+ */
+internal fun viewerPrefetchAction(
+    pages: List<ViewerPageState>,
+    current: ViewerMediaKey?,
+    swipeTarget: ViewerMediaKey?,
+): ViewerAction.QueuePrefetch {
+    val keys = (listOfNotNull(swipeTarget) + planAdjacentViewerPrefetch(pages, current)).distinct()
+    val images = pages.asSequence().flatMap { page -> page.media.asSequence() }
+        .filter { media -> media.kind == ViewerMediaKind.IMAGE }
+        .mapTo(hashSetOf()) { media -> media.key }
+    val decodeKeys = keys.filterTo(hashSetOf()) { key ->
+        key in images && (viewerPrefetchDistance(pages, current, key) ?: Int.MAX_VALUE) <= VIEWER_MEMORY_PREFETCH_DISTANCE
+    }
+    return ViewerAction.QueuePrefetch(keys, decodeKeys)
 }
 
 /** Media-item distance between [current] and [target] in the flattened Viewer stream; null when either is absent. */

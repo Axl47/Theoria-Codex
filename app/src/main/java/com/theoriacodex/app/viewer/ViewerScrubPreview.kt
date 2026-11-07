@@ -28,8 +28,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,21 +48,16 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import kotlin.math.roundToInt
-import androidx.media3.effect.Presentation
+import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
-import androidx.media3.inspector.frame.FrameExtractor
-import com.google.common.util.concurrent.ListenableFuture
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.domain.model.SourceKey
-import java.util.concurrent.Executor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.conflate
-import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withTimeout
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 /** The current media's width over height, so scrub previews can take its real shape. */
 internal val LocalViewerMediaAspectRatio = staticCompositionLocalOf<Float?> { null }
@@ -119,21 +114,33 @@ internal fun ViewerScrubPreview(positionMs: Long, deltaMs: Long, progress: Float
     }
 }
 
-/** One extractor per drag, one pending frame, and only the newest target may publish. */
+/**
+ * Scrub previews for the stream a Viewer page's [player] is playing, at the size the popup shows them. The page
+ * keeps one while its timeline is composed; each drag's popup follows it through [ViewerVideoScrubPreview].
+ */
 @Composable
-internal fun ViewerVideoScrubPreview(location: String, source: SourceKey, positionMs: Long) {
+internal fun rememberViewerScrubPreviews(player: ExoPlayer?, source: SourceKey): ViewerScrubPreviews? {
     val context = LocalContext.current
-    val target by rememberUpdatedState(positionMs)
     // Extract at the size actually shown: fixed small frames were enlarged about threefold on high-density screens.
     val frameSize = viewerScrubFrameSize(LocalViewerMediaAspectRatio.current)
     val (widthPx, heightPx) = with(LocalDensity.current) { frameSize.width.roundToPx().even() to frameSize.height.roundToPx().even() }
-    var frame by remember(location, source) { mutableStateOf<Pair<Long, Bitmap>?>(null) }
-    var failed by remember(location, source) { mutableStateOf(false) }
-    LaunchedEffect(location, source) {
+    val previews = remember(player, source, widthPx, heightPx) {
+        player?.let { ViewerScrubPreviews(context, it, source, widthPx, heightPx) }
+    }
+    DisposableEffect(previews) { onDispose { previews?.close() } }
+    return previews
+}
+
+/** One drag's popup content: the newest target's frame, a spinner while it is pending. */
+@Composable
+internal fun ViewerVideoScrubPreview(previews: ViewerScrubPreviews, positionMs: Long) {
+    val targets = remember(previews) { MutableStateFlow(positionMs) }
+    SideEffect { targets.value = positionMs }
+    var frame by remember(previews) { mutableStateOf<Pair<Long, Bitmap>?>(null) }
+    var failed by remember(previews) { mutableStateOf(false) }
+    LaunchedEffect(previews) {
         try {
-            extractPreviewFrames(context, location, source, widthPx, heightPx, { target }) { requested, bitmap ->
-                frame = requested to bitmap
-            }
+            previews.follow(targets) { requested, bitmap -> frame = requested to bitmap }
         } catch (_: TimeoutCancellationException) {
             failed = true
         } catch (cancelled: CancellationException) {
@@ -158,32 +165,102 @@ internal fun ViewerVideoScrubPreview(location: String, source: SourceKey, positi
 /** Video encoders and effects expect even dimensions. */
 private fun Int.even(): Int = this and 1.inv()
 
-private suspend fun extractPreviewFrames(
-    context: Context, location: String, source: SourceKey, widthPx: Int, heightPx: Int,
-    target: () -> Long, publish: (Long, Bitmap) -> Unit,
-) {
-    val request = context.videoPlaybackInfrastructure().bind(location, source.requestHeaders())
-    FrameExtractor.Builder(context, request.mediaItem)
-        .setMediaSourceFactory(request.mediaSourceFactory)
-        .setSeekParameters(SeekParameters.CLOSEST_SYNC)
-        .setEffects(listOf(Presentation.createForWidthAndHeight(widthPx, heightPx, Presentation.LAYOUT_SCALE_TO_FIT)))
-        .build().use { extractor ->
-            snapshotFlow { target() }.conflate().collect { requested ->
-                delay(80L)
-                if (requested != target()) return@collect
-                val bitmap = withTimeout(6_000L) { extractor.getFrame(requested).awaitPreviewFrame().bitmap }
-                if (requested == target()) publish(requested, bitmap)
+/** Scrub previews of [player]'s stream from [source], read by a [ScrubPreviewPlayer] at [widthPx] × [heightPx]. */
+internal fun ViewerScrubPreviews(context: Context, player: ExoPlayer, source: SourceKey, widthPx: Int, heightPx: Int): ViewerScrubPreviews =
+    ViewerScrubPreviews(player) { location ->
+        ScrubPreviewPlayer(context, context.videoPlaybackInfrastructure().bind(location, source.requestHeaders()), widthPx, heightPx)
+    }
+
+/**
+ * A Viewer page's scrub previews. [follow] serves one drag: one pending frame, and only the newest target may
+ * publish. Every drag reads from the page's one frame source ([openFrames] for the stream's location: a
+ * [ScrubPreviewPlayer]), built on the first drag and kept, idle between drags, until [close], or until a drag fails,
+ * so the next one starts afresh. When a drag is released, [seekReleased] seeks [player]. Use it on the main thread.
+ */
+internal class ViewerScrubPreviews(
+    private val player: ExoPlayer,
+    private val openFrames: (location: String) -> ScrubFrameSource,
+) : AutoCloseable {
+    private var preview: Pair<String, ScrubFrameSource>? = null
+
+    /** While a drag is followed: the target whose frame was last published, and that frame's keyframe position. */
+    private var shown: Pair<Long, Long>? = null
+
+    /** Publishes a frame for the newest of [targets] until cancelled (see [followScrubTargets]). */
+    suspend fun follow(targets: StateFlow<Long>, publish: (Long, Bitmap) -> Unit) {
+        val location = checkNotNull(player.currentMediaItem?.localConfiguration?.uri) { "No stream to preview" }.toString()
+        val frames = previewPlayer(location)
+        var healthy = true
+        try {
+            followScrubTargets(targets, { positionMs -> withTimeout(SCRUB_FRAME_TIMEOUT_MS) { frames.frameAt(positionMs) } }) { requested, frame ->
+                shown = requested to frame.positionMs
+                publish(requested, frame.bitmap)
             }
+        } catch (timeout: TimeoutCancellationException) {
+            healthy = false
+            throw timeout
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            healthy = false
+            throw error
+        } finally {
+            shown = null
+            // A drag that ended keeps the player, idle; a failed or stuck one is replaced on the next drag.
+            if (healthy) frames.idle() else close()
         }
+    }
+
+    /**
+     * Seeks [player] for a drag released on [targetMs], while [follow] still serves it, and returns where playback
+     * lands. When the last published frame is [targetMs]'s, playback lands on that frame's keyframe: the frame the user
+     * saw, which the preview already downloaded, where an exact seek decodes from the keyframe before [targetMs] and
+     * needs bytes the preview never fetched. Otherwise the seek is exact.
+     */
+    fun seekReleased(targetMs: Long): Long {
+        val keyframeMs = shown?.takeIf { (shownTargetMs, _) -> shownTargetMs == targetMs }?.second
+        // The drag is over. Its preview stops before the player seeks: until its request closes, what it read is
+        // uncommitted and its cache lock makes the player download those bytes again.
+        preview?.second?.idle()
+        if (keyframeMs == null) return targetMs.also(player::seekTo)
+        // The keyframe's time is truncated to milliseconds; an exact seek there would decode from the keyframe before.
+        val exactness = player.seekParameters
+        player.setSeekParameters(SeekParameters.CLOSEST_SYNC)
+        player.seekTo(keyframeMs)
+        player.setSeekParameters(exactness)
+        return keyframeMs
+    }
+
+    override fun close() {
+        preview?.second?.close()
+        preview = null
+    }
+
+    private fun previewPlayer(location: String): ScrubFrameSource {
+        preview?.let { (boundLocation, frames) -> if (boundLocation == location) return frames }
+        close()
+        return openFrames(location).also { preview = location to it }
+    }
 }
 
-private suspend fun <T> ListenableFuture<T>.awaitPreviewFrame(): T = suspendCancellableCoroutine { continuation ->
-    continuation.invokeOnCancellation { cancel(true) }
-    addListener({
-        try {
-            continuation.resume(get())
-        } catch (error: Exception) {
-            continuation.resumeWithException(error)
+/** A later drag target is extracted only once the finger has rested on it this long. */
+internal const val SCRUB_FRAME_SETTLE_MS = 80L
+
+/**
+ * One drag's frame loop: one pending frame, and only the newest target may publish. The first target, where the
+ * finger landed, is extracted at once; later ones only once the finger rests on them for [SCRUB_FRAME_SETTLE_MS].
+ */
+internal suspend fun <F> followScrubTargets(targets: StateFlow<Long>, frameAt: suspend (Long) -> F, publish: (Long, F) -> Unit) {
+    var landed = false
+    targets.collect { requested ->
+        if (landed) {
+            delay(SCRUB_FRAME_SETTLE_MS)
+            if (requested != targets.value) return@collect
         }
-    }, Executor { it.run() })
+        landed = true
+        val frame = frameAt(requested)
+        if (requested == targets.value) publish(requested, frame)
+    }
 }
+
+private const val SCRUB_FRAME_TIMEOUT_MS = 6_000L

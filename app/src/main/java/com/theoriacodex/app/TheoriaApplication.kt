@@ -10,6 +10,7 @@ import com.theoriacodex.app.di.DefaultTheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
 import com.theoriacodex.app.media.AnimatedWebPDecoder
+import com.theoriacodex.app.media.UndecodableImageEviction
 import com.theoriacodex.app.viewer.VideoPlaybackInfrastructure
 import com.theoriacodex.data.storage.ApplicationDataReadiness
 import com.theoriacodex.data.storage.ApplicationDataState
@@ -78,19 +79,23 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
     }
 
     override fun newImageLoader(): ImageLoader {
+        // Same directory as Coil's default, so the existing cache is kept. Coil's default size
+        // (2% of disk, at most 250 MB) let a few Viewer originals evict the grid's thumbnails.
+        val diskCache = DiskCache.Builder()
+            .directory(cacheDir.resolve(IMAGE_DISK_CACHE_DIRECTORY))
+            .maxSizeBytes(IMAGE_DISK_CACHE_MAX_BYTES)
+            .build()
         return ImageLoader.Builder(this)
             .components {
                 add(AnimatedWebPDecoder.Factory())
                 add(ImageDecoderDecoder.Factory())
             }
-            // Same directory as Coil's default, so the existing cache is kept. Coil's default size
-            // (2% of disk, at most 250 MB) let a few Viewer originals evict the grid's thumbnails.
-            .diskCache {
-                DiskCache.Builder()
-                    .directory(cacheDir.resolve(IMAGE_DISK_CACHE_DIRECTORY))
-                    .maxSizeBytes(IMAGE_DISK_CACHE_MAX_BYTES)
-                    .build()
-            }
+            .diskCache(diskCache)
+            // Media URLs name files that never change, so a cached copy is used as is. Revalidating it cost a
+            // round trip per cached image on origins that send only validators (nginx's default), including
+            // every Viewer page a prefetch had already downloaded; no-store responses were never cached.
+            .respectCacheHeaders(false)
+            .eventListener(UndecodableImageEviction(diskCache))
             // OkHttp's default of five per host lets a few large GIFs stall every thumbnail behind them.
             .okHttpClient {
                 OkHttpClient.Builder()

@@ -5,10 +5,10 @@ package com.theoriacodex.app.viewer
 import android.content.Context
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.util.Util
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.datasource.cache.Cache
 import androidx.media3.datasource.cache.CacheDataSource
@@ -21,6 +21,8 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.LoadControl
+import androidx.media3.exoplayer.analytics.PlayerId
+import androidx.media3.exoplayer.upstream.DefaultAllocator
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
 import com.theoriacodex.app.TheoriaApplication
@@ -37,15 +39,24 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 
 internal const val VIDEO_PLAYBACK_CACHE_MAX_BYTES = 256L * 1024L * 1024L
-internal const val VIEWER_VIDEO_PREFETCH_BYTES = 24L * 1024L * 1024L
 
-/** Metered networks warm only the opening seconds of a neighbour video. */
-internal const val VIEWER_METERED_VIDEO_PREFETCH_BYTES = 4L * 1024L * 1024L
+/**
+ * A neighbour video warms only its opening seconds, on every network: enough for a swipe to start from the
+ * cache, while a neighbour that is never shown costs a few megabytes instead of most of its file.
+ */
+internal const val VIEWER_VIDEO_PREFETCH_BYTES = 4L * 1024L * 1024L
 internal const val FEED_PREVIEW_TARGET_BUFFER_BYTES = 2 * 1024 * 1024
 internal const val FEED_PREVIEW_MIN_BUFFER_MS = 6_000
 internal const val FEED_PREVIEW_MAX_BUFFER_MS = 12_000
 internal const val FEED_PREVIEW_PLAYBACK_BUFFER_MS = 750
 internal const val FEED_PREVIEW_REBUFFER_MS = 1_500
+
+/**
+ * A Viewer stream starts, or resumes after a seek, once this much is buffered, until it stalls ([ViewerLoadControl]);
+ * Media3 waits for 1 s. Both begin with an empty buffer, so on a link faster than the video this takes half a second
+ * of media off the wait.
+ */
+internal const val VIEWER_START_BUFFER_MS = 500
 
 internal enum class VideoPlaybackProfile {
     FEED_PREVIEW,
@@ -96,8 +107,49 @@ internal object VideoLoadControlFactory {
                 .setBackBuffer(0, false)
                 .build()
 
-            VideoPlaybackProfile.VIEWER -> DefaultLoadControl.Builder().build()
+            VideoPlaybackProfile.VIEWER -> ViewerLoadControl()
         }
+    }
+}
+
+/**
+ * Media3's default buffering, except that a stream starts, or resumes after a seek, on [VIEWER_START_BUFFER_MS] until
+ * it stalls. Media3 treats a seek like a start, so after a stall a seek would otherwise resume on half a second on a
+ * link that has just shown it barely keeps up, and stall again sooner. From a stall until the player prepares its next
+ * stream, starts wait for Media3's 1 s as they did before, and a stall itself still waits for 2 s. One per player.
+ */
+private class ViewerLoadControl : DefaultLoadControl(
+    DefaultAllocator(/* trimOnReset = */ true, C.DEFAULT_BUFFER_SEGMENT_SIZE),
+    DEFAULT_MIN_BUFFER_MS,
+    DEFAULT_MIN_BUFFER_FOR_LOCAL_PLAYBACK_MS,
+    DEFAULT_MAX_BUFFER_MS,
+    DEFAULT_MAX_BUFFER_FOR_LOCAL_PLAYBACK_MS,
+    /* bufferForPlaybackMs = */ VIEWER_START_BUFFER_MS,
+    DEFAULT_BUFFER_FOR_PLAYBACK_FOR_LOCAL_PLAYBACK_MS,
+    DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
+    DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_FOR_LOCAL_PLAYBACK_MS,
+    DEFAULT_TARGET_BUFFER_BYTES,
+    DEFAULT_PRIORITIZE_TIME_OVER_SIZE_THRESHOLDS,
+    DEFAULT_PRIORITIZE_TIME_OVER_SIZE_THRESHOLDS_FOR_LOCAL_PLAYBACK,
+    DEFAULT_BACK_BUFFER_DURATION_MS,
+    DEFAULT_RETAIN_BACK_BUFFER_FROM_KEYFRAME,
+    emptyMap(),
+) {
+    // Read and written on the player's playback thread.
+    private var stalled = false
+
+    override fun onPrepared(playerId: PlayerId) {
+        stalled = false
+        super.onPrepared(playerId)
+    }
+
+    override fun shouldStartPlayback(parameters: LoadControl.Parameters): Boolean {
+        if (parameters.rebuffering) stalled = true
+        return super.shouldStartPlayback(parameters) && (
+            parameters.rebuffering || !stalled ||
+                Util.getPlayoutDurationForMediaDuration(parameters.bufferedDurationUs, parameters.playbackSpeed) >=
+                Util.msToUs(DEFAULT_BUFFER_FOR_PLAYBACK_MS.toLong())
+            )
     }
 }
 
@@ -107,20 +159,16 @@ internal class VideoPlaybackInfrastructure(
 ) {
     internal val feedPositionHandoff = FeedVideoPositionHandoff()
     private val appContext = context.applicationContext
-    internal val feedPreviewPlayerPool: FeedPreviewPlayerPool by lazy {
-        FeedPreviewPlayerPool(this)
-    }
+    private val feedPlayers = lazy { FeedPreviewPlayerPool(this) }
+    internal val feedPreviewPlayerPool: FeedPreviewPlayerPool
+        get() = feedPlayers.value
     private val viewerPlayers = lazy { ViewerVideoPlayerPool(this) }
     internal val viewerVideoPlayerPool: ViewerVideoPlayerPool
         get() = viewerPlayers.value
     internal val hasActiveViewerPlayer: Boolean
         get() = viewerPlayers.isInitialized() && viewerPlayers.value.activePlayerCount() > 0
     private val sharedFactories = SharedVideoFactories(
-        http = DefaultHttpDataSource.Factory()
-            .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(12_000)
-            .setReadTimeoutMs(24_000)
-            .setUserAgent("Mozilla/5.0"),
+        http = AbandoningHttpDataSourceFactory(videoHttpClient()),
         local = DefaultDataSource.Factory(appContext),
         cache = SimpleCache(
             File(appContext.cacheDir, VIDEO_PLAYBACK_CACHE_DIRECTORY),
@@ -131,13 +179,25 @@ internal class VideoPlaybackInfrastructure(
     private val resourcePool = SharedVideoResourcePool(sharedFactories)
     private val localMediaSourceFactory = DefaultMediaSourceFactory(sharedFactories.local)
 
+    /** A Viewer stream is starting: the feed previews hidden behind it stop loading. */
+    internal fun onViewerStreamAcquired() {
+        if (feedPlayers.isInitialized()) feedPlayers.value.stopForViewer()
+    }
+
+    /**
+     * Binds a player's media to [location]. [boundedLocks] is for players that keep loading while another reader
+     * may want the same stream (a feed card behind the Viewer): each of their requests locks at most a chunk of it.
+     */
     internal fun bind(
         location: String,
         headers: Map<String, String>,
+        boundedLocks: Boolean = false,
     ): BoundVideoPlaybackRequest {
         val bound = resourcePool.bind(location, headers)
         val mediaSourceFactory = if (isHttpVideoLocation(location)) {
-            DefaultMediaSourceFactory(cacheDataSourceFactory(bound, headers))
+            DefaultMediaSourceFactory(
+                cacheDataSourceFactory(bound, headers, lockChunkBytes = VIDEO_CACHE_CHUNK_BYTES.takeIf { boundedLocks }),
+            )
         } else {
             localMediaSourceFactory
         }
@@ -177,7 +237,10 @@ internal class VideoPlaybackInfrastructure(
                 .setLength(maxBytes)
                 .setFlags(DataSpec.FLAG_ALLOW_CACHE_FRAGMENTATION)
                 .build()
-            val dataSource = cacheDataSourceFactory(bound, headers, blockOnCache = true).createDataSource()
+            // The swiped-to player reads what a still-running prefetch has committed, a chunk at a time.
+            val dataSource = cacheDataSourceFactory(
+                bound, headers, blockOnCache = true, lockChunkBytes = VIDEO_CACHE_CHUNK_BYTES,
+            ).createDataSource()
             val writer = CacheWriter(dataSource, dataSpec, null, null)
             writer.cacheCancellable()
             currentCoroutineContext().ensureActive()
@@ -214,6 +277,16 @@ internal class VideoPlaybackInfrastructure(
         sharedFactories.cache.keys.toList().forEach(sharedFactories.cache::removeResource)
     }
 
+    /** Bytes of one stream held in the shared cache, from its start. */
+    internal suspend fun cachedBytes(location: String, headers: Map<String, String>): Long = withContext(Dispatchers.IO) {
+        sharedFactories.cache.getCachedBytes(videoPlaybackIdentity(location, headers).cacheKey, 0L, Long.MAX_VALUE)
+    }
+
+    /** Drops one stream's cached bytes, leaving every other entry in place. */
+    internal suspend fun removeCached(location: String, headers: Map<String, String>) = withContext(Dispatchers.IO) {
+        sharedFactories.cache.removeResource(videoPlaybackIdentity(location, headers).cacheKey)
+    }
+
     internal suspend fun disposableCacheBytes(): Long = withContext(Dispatchers.IO) {
         sharedFactories.cache.cacheSpace
     }
@@ -222,12 +295,13 @@ internal class VideoPlaybackInfrastructure(
         bound: BoundVideoResource<SharedVideoFactories>,
         headers: Map<String, String>,
         blockOnCache: Boolean = false,
+        lockChunkBytes: Long? = null,
     ): CacheDataSource.Factory {
         val immutableHeaders = headers.toMap()
         val requestScopedUpstream = ResolvingDataSource.Factory(bound.sharedResource.http) { dataSpec ->
             dataSpec.withAdditionalHeaders(immutableHeaders)
         }
-        return videoCacheDataSourceFactory(bound.sharedResource.cache, requestScopedUpstream, blockOnCache)
+        return videoCacheDataSourceFactory(bound.sharedResource.cache, requestScopedUpstream, blockOnCache, lockChunkBytes)
     }
 }
 
@@ -255,14 +329,20 @@ internal suspend fun copyFullyCachedVideo(cache: Cache, cacheKey: String, destin
     }.also { cacheOnly.close() }.getOrDefault(false)
 }
 
-/** Playback bypasses occupied cache ranges; only background writers may wait for another writer. */
+/**
+ * Playback bypasses occupied cache ranges; only background writers may wait for another writer. With
+ * [lockChunkBytes], each request locks at most that much of a stream ([BoundedLockCache]), so another reader of it
+ * can read what was committed and cache past the lock; without it, a request locks to the next cached span or the
+ * end of the file, which keeps the reader that matters on one request.
+ */
 internal fun videoCacheDataSourceFactory(
     cache: Cache,
     upstream: DataSource.Factory,
     blockOnCache: Boolean = false,
+    lockChunkBytes: Long? = null,
 ): CacheDataSource.Factory = CacheDataSource.Factory()
-    .setCache(cache)
-    .setUpstreamDataSourceFactory(upstream)
+    .setCache(lockChunkBytes?.let { BoundedLockCache(cache, it) } ?: cache)
+    .setUpstreamDataSourceFactory(RangeRecordingDataSource.Factory(upstream, cache))
     .setFlags(
         CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR or
             (if (blockOnCache) CacheDataSource.FLAG_BLOCK_ON_CACHE else 0),

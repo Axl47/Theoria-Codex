@@ -187,6 +187,8 @@ private fun rememberFeedPreviewPlayerState(
     LaunchedEffect(state.player, isActive) {
         val player = state.player ?: return@LaunchedEffect
         runCatching {
+            // A Viewer that opened and closed within the release grace stopped this still-leased player.
+            if (isActive) state.lease?.let(context.videoPlaybackInfrastructure().feedPreviewPlayerPool::resume)
             player.playWhenReady = isActive
             if (isActive) player.play() else player.pause()
         }

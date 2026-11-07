@@ -132,6 +132,16 @@ private class ViewerVideoState {
         scrubbing = false
     }
 
+    /**
+     * A drag's seek to [target]: on release, where [previews] may land it on the frame their popup shows, or on every
+     * move with instant seek, where no popup shows and the seek is exact.
+     */
+    fun release(target: Long, previews: ViewerScrubPreviews?) {
+        if (previews == null) return seek(target)
+        position = runCatching { previews.seekReleased(target) }.getOrDefault(target)
+        scrubbing = false
+    }
+
     fun jump(deltaMs: Long) {
         val active = player ?: return
         runCatching {
@@ -377,17 +387,14 @@ private fun ViewerVideoTimeline(
     controls: ViewerRendererControls,
     events: ViewerRendererEvents,
 ) {
+    val previews = rememberViewerScrubPreviews(state.player, source)
     ViewerPlaybackFooter {
         MediaTimelineBar(
             positionMs = { state.position }, durationMs = state.duration,
             onSeekStarted = { state.scrubbing = true },
-            onSeekFinished = state::seek,
+            onSeekFinished = { target -> state.release(target, previews) },
             onSeekCancelled = { state.scrubbing = false },
-            preview = { target ->
-                state.player?.currentMediaItem?.localConfiguration?.uri?.toString()?.let { location ->
-                    ViewerVideoScrubPreview(location, source, target)
-                }
-            },
+            preview = { target -> previews?.let { ViewerVideoScrubPreview(it, target) } },
             onInteractionActiveChanged = events.onTimelineInteractionActiveChanged,
             playbackRate = controls.playbackRate,
             leading = {

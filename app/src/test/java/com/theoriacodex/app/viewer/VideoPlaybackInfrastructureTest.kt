@@ -1,5 +1,13 @@
+@file:androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+
 package com.theoriacodex.app.viewer
 
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.LoadControl
+import androidx.media3.exoplayer.analytics.PlayerId
+import androidx.media3.exoplayer.source.MediaSource
+import androidx.media3.exoplayer.source.SinglePeriodTimeline
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -66,6 +74,28 @@ class VideoPlaybackInfrastructureTest {
         val second = VideoLoadControlFactory.create(VideoPlaybackProfile.FEED_PREVIEW)
 
         assertNotSame(first, second)
+    }
+
+    @Test
+    fun `a Viewer stream starts on half a second until it stalls, then on one second until prepared again`() {
+        val control = VideoLoadControlFactory.create(VideoPlaybackProfile.VIEWER).apply { onPrepared(PlayerId.UNSET) }
+        val timeline = SinglePeriodTimeline(90_000_000L, true, false, false, null, MediaItem.EMPTY)
+        val period = MediaSource.MediaPeriodId(timeline.getUidOfPeriod(0))
+        fun startsWith(bufferedMs: Long, rebuffering: Boolean) = control.shouldStartPlayback(
+            LoadControl.Parameters(
+                PlayerId.UNSET, timeline, period, 0L, bufferedMs * 1_000L, 1f, true, rebuffering, C.TIME_UNSET, C.TIME_UNSET,
+            ),
+        )
+
+        assertFalse(startsWith(bufferedMs = 400L, rebuffering = false))
+        assertTrue(startsWith(bufferedMs = 500L, rebuffering = false))
+        // A stall waits for 2 s, and a seek after it for 1 s, until the next stream is prepared.
+        assertFalse(startsWith(bufferedMs = 1_900L, rebuffering = true))
+        assertTrue(startsWith(bufferedMs = 2_000L, rebuffering = true))
+        assertFalse(startsWith(bufferedMs = 900L, rebuffering = false))
+        assertTrue(startsWith(bufferedMs = 1_000L, rebuffering = false))
+        control.onPrepared(PlayerId.UNSET)
+        assertTrue(startsWith(bufferedMs = 500L, rebuffering = false))
     }
 
     @Test

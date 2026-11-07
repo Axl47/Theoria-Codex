@@ -63,6 +63,14 @@ class MediaTimelineBarTest {
         }
     }
 
+    @Test fun `a release lands where the finger last moved, not where it lifts`() {
+        showTimeline()
+        track().performTouchInput { down(Offset(width * 0.25f, centerY)); moveTo(Offset(width * 0.75f, centerY)) }
+        compose.onNodeWithText("Frame 75000").assertIsDisplayed()
+        track().performTouchInput { updatePointerTo(0, Offset(width * 0.8f, centerY)); up() }
+        compose.runOnIdle { assertEquals(listOf(75_000L), seeks) }
+    }
+
     @Test fun `playback moves the shown time once per second`() {
         showTimeline()
         compose.onNodeWithText("0:10 / 1:40").assertIsDisplayed()
