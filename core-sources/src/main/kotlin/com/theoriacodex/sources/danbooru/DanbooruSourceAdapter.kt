@@ -9,6 +9,7 @@ import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.CreatorProfile
@@ -23,6 +24,7 @@ import com.theoriacodex.sources.common.autocompleteTagCounts
 import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.durationFieldMs
+import com.theoriacodex.sources.common.httpsMediaUrl
 import com.theoriacodex.sources.common.intValue
 import com.theoriacodex.sources.common.isSuccessful
 import com.theoriacodex.sources.common.longValue
@@ -34,6 +36,9 @@ import com.theoriacodex.sources.common.parseJsonObject
 import com.theoriacodex.sources.common.sourceNetworkFailure
 import com.theoriacodex.sources.common.sourceQuickQuery
 import com.theoriacodex.sources.common.stringValue
+import com.theoriacodex.sources.credentials.ApiKeyUse
+import com.theoriacodex.sources.credentials.UserApiKeyCredentialLookup
+import com.theoriacodex.sources.credentials.UserApiKeyCredentials
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.THEORIA_SOURCE_USER_AGENT
 import java.io.IOException
@@ -45,6 +50,10 @@ data class DanbooruSite(
     val label: String,
     val baseUrl: String,
     val searchTermLimit: SearchTermLimit? = null,
+    /** Sent with every API request. Danbooru's Cloudflare challenges generic browser agents. */
+    val headers: Map<String, String> = mapOf("User-Agent" to THEORIA_SOURCE_USER_AGENT),
+    /** Keys go out as `login` + `api_key` query parameters, to [baseUrl] only. */
+    val credentials: ApiKeyUse = ApiKeyUse.OPTIONAL,
 ) {
     companion object {
         /** Guests may search two tags, and an `order:` metatag counts as one of them. */
@@ -66,6 +75,8 @@ data class DanbooruSite(
 class DanbooruSourceAdapter(
     private val site: DanbooruSite,
     private val httpClient: SourceHttpClient,
+    /** [UserApiKeyCredentials.userId] is the Danbooru login name. */
+    private val credentials: UserApiKeyCredentialLookup = { null },
     private val gson: Gson = Gson(),
 ) : SourceAdapter, TagCountLookupSourceAdapter, CreatorPostsSourceAdapter {
     override val sourceKey: SourceKey = site.source
@@ -78,7 +89,7 @@ class DanbooruSourceAdapter(
         supportsExcludeTagsServerSide = true,
         supportsDateRangeServerSide = false,
         supportsMinScoreServerSide = false,
-        requiresCredentials = false,
+        requiresCredentials = site.credentials == ApiKeyUse.REQUIRED,
         searchTermLimit = site.searchTermLimit,
     )
 
@@ -143,8 +154,16 @@ class DanbooruSourceAdapter(
     }
 
     private suspend fun request(path: String, query: Map<String, String> = emptyMap()): String {
+        val saved = credentials()
+        if (saved == null && site.credentials == ApiKeyUse.REQUIRED) {
+            throw SourceAdapterException(
+                reason = SourceFailureReason.AUTH_REQUIRED,
+                message = "${site.label} credentials required",
+            )
+        }
+        val authorizedQuery = saved?.let { query + mapOf("login" to it.userId, "api_key" to it.apiKey) } ?: query
         val response = try {
-            httpClient.get(url = "${site.baseUrl}$path", query = query, headers = REQUEST_HEADERS)
+            httpClient.get(url = "${site.baseUrl}$path", query = authorizedQuery, headers = site.headers)
         } catch (error: IOException) {
             sourceNetworkFailure(site.label, error)
         }
@@ -163,15 +182,15 @@ class DanbooruSourceAdapter(
     /** Posts without a file URL are restricted to signed-in users, so they are left out. */
     private fun parsePost(raw: JsonObject): Post? {
         val id = raw.longValue("id")?.toString() ?: return null
-        val fileUrl = raw.stringValue("file_url") ?: return null
-        val sampleUrl = raw.stringValue("large_file_url")
+        val fileUrl = httpsMediaUrl(raw.stringValue("file_url")) ?: return null
+        val sampleUrl = httpsMediaUrl(raw.stringValue("large_file_url"))
         val fileExt = raw.stringValue("file_ext")
         val mediaAsset = raw.optionalJsonObject("media_asset")
         // Ugoira originals are zip archives; the site's sample is the playable webm rendition.
         val ugoiraSample = sampleUrl?.takeIf { fileExt == UGOIRA_FILE_EXT }
         val fullUrl = ugoiraSample ?: fileUrl
         val fullMime = mimeFromUrlOrExt(fullUrl, fileExt.takeIf { ugoiraSample == null })
-        val previewUrl = mediaAsset?.variantUrl(CARD_PREVIEW_VARIANT) ?: raw.stringValue("preview_file_url")
+        val previewUrl = httpsMediaUrl(mediaAsset?.variantUrl(CARD_PREVIEW_VARIANT) ?: raw.stringValue("preview_file_url"))
         val tags = raw.tagList("tag_string")
         val artistTag = raw.tagList("tag_string_artist").firstOrNull()
         return Post(
@@ -215,7 +234,6 @@ class DanbooruSourceAdapter(
         const val UGOIRA_FILE_EXT = "zip"
         /** The largest bounded thumbnail; the 180px default blurs in two-column cards. */
         const val CARD_PREVIEW_VARIANT = "720x720"
-        val REQUEST_HEADERS = mapOf("User-Agent" to THEORIA_SOURCE_USER_AGENT)
     }
 }
 

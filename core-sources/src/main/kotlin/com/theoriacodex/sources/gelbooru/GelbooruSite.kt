@@ -1,6 +1,7 @@
 package com.theoriacodex.sources.gelbooru
 
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.credentials.ApiKeyUse
 import com.theoriacodex.sources.rule34.RULE34_BROWSER_HEADERS
 
 /**
@@ -20,7 +21,7 @@ data class GelbooruSite(
     /** `autocomplete.php`-style endpoint returning `[{label, value}]`; null searches the DAPI tag list instead. */
     val autocompleteUrl: String? = null,
     val headers: Map<String, String> = emptyMap(),
-    val credentials: GelbooruCredentialUse = GelbooruCredentialUse.OPTIONAL,
+    val credentials: ApiKeyUse = ApiKeyUse.OPTIONAL,
     val postLookup: GelbooruPostLookup = GelbooruPostLookup.ID_PARAMETER,
     /** Native spelling of an OR group; null makes the search orchestrator expand groups instead. */
     val orGroup: GelbooruOrGroup? = null,
@@ -33,6 +34,7 @@ data class GelbooruSite(
     val creatorPosts: Boolean = false,
     /** The HTML post page's "More Like This:" block supplies related posts. */
     val relatedPosts: Boolean = false,
+    val tagList: GelbooruTagList = GelbooruTagList.JSON,
 ) {
     companion object {
         val GELBOORU = GelbooruSite(
@@ -54,19 +56,11 @@ data class GelbooruSite(
             apiUrl = "https://api.rule34.xxx/index.php",
             autocompleteUrl = "https://api.rule34.xxx/autocomplete.php",
             headers = RULE34_BROWSER_HEADERS,
-            credentials = GelbooruCredentialUse.REQUIRED,
+            credentials = ApiKeyUse.REQUIRED,
             postLookup = GelbooruPostLookup.ID_TAG,
             scoreSortTag = "sort:score",
         )
     }
-}
-
-enum class GelbooruCredentialUse {
-    /** Attach `user_id` + `api_key` when the user saved them. */
-    OPTIONAL,
-
-    /** Fail with an auth error before any API call that lacks them. */
-    REQUIRED,
 }
 
 enum class GelbooruPostLookup {
@@ -75,6 +69,19 @@ enum class GelbooruPostLookup {
 
     /** `tags=id:<id>` on the post list. */
     ID_TAG,
+}
+
+/** How the DAPI tag list (`s=tag`) answers, which decides where trending, autocomplete and counts come from. */
+enum class GelbooruTagList {
+    /** Honors `json=1`, `names`, `name_pattern` and `orderby`. */
+    JSON,
+
+    /**
+     * Unknown until the first tag request. Some forks (Safebooru) answer the tag list in XML whatever
+     * `json=1` says and ignore its filters; the first XML answer switches the adapter to
+     * `autocomplete.php` for suggestions and counts and turns trending off for its lifetime.
+     */
+    DETECT,
 }
 
 /** Wraps OR alternatives, e.g. `{cat ~ dog}` on Gelbooru or `( cat ~ dog )` on older forks. */
