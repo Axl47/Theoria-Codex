@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Icon
@@ -91,6 +94,8 @@ fun PostTagActionSection(
     val draftGroups = draft?.effectiveIncludeTermGroups.orEmpty()
     val targetGroup = draftGroups.indexOfFirst { group -> targetTerm in group.terms }.takeIf { it >= 0 }
     val searchActions = LocalPostTagSearchActions.current
+    val savedTags = LocalPostTagSavedTags.current
+    val saved by savedTags.saved.collectAsStateWithLifecycle(initialValue = emptySet())
     val editor = PostTagEditor(
         post, draft, selection, targetGroup,
         onAddInclude = onAddIncludeTerm,
@@ -114,7 +119,10 @@ fun PostTagActionSection(
                     groups = termGroups,
                     expandedGroups = expandedGroups,
                     onExpandGroup = { label -> expandedGroups = expandedGroups + label },
-                ) { term -> PostTagChip(term, translations[term.value], countOf(term), editor, onFavoriteTagLongPress) }
+                ) { term ->
+                    val isSaved = term.isGeneralPostTag() && (post.id.source to term.value) in saved
+                    PostTagChip(term, translations[term.value], countOf(term), editor, isSaved, onFavoriteTagLongPress, savedTags.remove)
+                }
             }
             item(key = "footer") { footer() }
         }
@@ -235,12 +243,22 @@ private fun PostTagChip(
     translation: String?,
     count: Int?,
     editor: PostTagEditor,
+    saved: Boolean,
     onFavoriteLongPress: ((SourceKey, String) -> Unit)?,
+    onRemoveSaved: (SourceKey, String) -> Unit,
 ) {
     val nativeName = searchTermChipLabel(term, excluded = false)
     val name = translation?.let { "$it ($nativeName)" } ?: nativeName
     val state = editor.selection.chipState(term)
     val favorite = onFavoriteLongPress?.takeIf { term.isGeneralPostTag() }
+    val haptics = LocalHapticFeedback.current
+    // Holding toggles the saved tag; the bookmark mark appearing or leaving is the feedback.
+    val toggleSaved = favorite?.let { save ->
+        {
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            if (saved) onRemoveSaved(editor.post.id.source, term.value) else save(editor.post.id.source, term.value)
+        }
+    }
     TagPickerChip(
         label = postTagChipLabel(term.value, translation),
         count = count?.let(::compactTagCount),
@@ -249,8 +267,10 @@ private fun PostTagChip(
         tapLabel = tagTapLabel(name, state),
         onTap = { editor.tap(term) },
         alternateActions = editor.alternateActions(term),
-        onLongPress = favorite?.let { { it(editor.post.id.source, term.value) } },
-        longPressLabel = favorite?.let { "Add $name to favorites" },
+        onLongPress = toggleSaved,
+        longPressLabel = favorite?.let { if (saved) "Remove $name from saved tags" else "Save $name" },
+        leadingIcon = if (saved) Icons.Default.Star else null,
+        stateSuffix = if (saved) "saved" else null,
     )
 }
 
@@ -343,14 +363,6 @@ private fun LazyListScope.postTagList(
         }
         return
     }
-    item(key = "hint") {
-        Text(
-            text = "Tap a tag to add it, again to exclude it, and once more to clear it.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-    }
     groups.forEach { group ->
         item(key = "group:${group.label}", contentType = "group") {
             Text(
@@ -372,6 +384,15 @@ private fun LazyListScope.postTagList(
                 }
             }
         }
+    }
+    // After the tags, so the sheet opens on them rather than on instructions.
+    item(key = "hint") {
+        Text(
+            text = "Tap a tag to add it, again to exclude it, and once more to clear it. Hold a tag to save it or unsave it.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 12.dp),
+        )
     }
 }
 

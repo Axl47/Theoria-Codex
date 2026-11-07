@@ -154,7 +154,7 @@ fun SearchScreen(
     }
     if (chrome.composerOpen) {
         SearchComposerDialog(state, feed, chrome, gridState, sourcePicker, applyDraft, onAction, onOpenSourceAccounts, savedSearches, onOpenSavedSearch,
-            favoriteTags, onAddFavoriteTag, onRemoveFavoriteTag)
+            favoriteTags, onAddFavoriteTag, onRemoveFavoriteTag, onRenameFavoriteTag)
     }
     if (chrome.showFavoriteTagSheet) {
         SearchFavoriteTags(state, favoriteTags, tagVideoCountProvider, fetchTagVideoCounts, onAction, onRemoveFavoriteTag, onRenameFavoriteTag) { chrome.showFavoriteTagSheet = false }
@@ -278,6 +278,7 @@ private fun SearchComposerDialog(
     favoriteTags: List<FavoriteTagEntry>,
     onAddFavoriteTag: (SourceKey, List<String>, String?) -> Unit,
     onRemoveFavoriteTag: (SourceKey, List<String>) -> Unit,
+    onRenameFavoriteTag: (SourceKey, List<String>, String) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val favoriteSections = rememberFavoriteTagSections(state, favoriteTags)
@@ -310,6 +311,7 @@ private fun SearchComposerDialog(
             saveSource = savedTagSource(state),
             onSave = onAddFavoriteTag,
             onRemove = onRemoveFavoriteTag,
+            onRename = onRenameFavoriteTag,
             // Single-source only: Unified would expand the group across sources with tighter tag limits.
             builtIn = listOfNotNull(animatedSavedGroup((state.query.draft.mode as? QueryMode.Source)?.source)),
         ),

@@ -20,6 +20,10 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import com.theoriacodex.app.ui.routes.activeRecommendationProfile
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import com.theoriacodex.app.tags.PostTagSavedTags
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -94,6 +98,15 @@ internal fun TheoriaAppContent(
     )
     val viewerReturnTransition = remember { ViewerReturnTransition() }
     val relatedPostsSupport = remember(shell) { shell.features.relatedPosts::supports }
+    val savedTags = remember(shell) {
+        PostTagSavedTags(
+            saved = shell.data.settingsRepository.observeSettings().map { settings ->
+                settings.favoriteTagsByProfile[settings.activeRecommendationProfile().profileId].orEmpty()
+                    .mapNotNullTo(mutableSetOf()) { entry -> entry.tags.singleOrNull()?.let { entry.source to it } }
+            }.distinctUntilChanged(),
+            remove = { source, tag -> shell.removeFavoriteTags(source, listOf(tag)) },
+        )
+    }
     CompositionLocalProvider(
         com.theoriacodex.app.search.LocalPostWatchPresentation provides watchPresentation,
         LocalCodexSaveRelevanceLoader provides saveRelevanceLoader,
@@ -106,6 +119,7 @@ internal fun TheoriaAppContent(
                 shell.routes.searchOwner?.state,
                 shell.features.search::fetchSearchTermCounts,
                 shell.routes.postTagSearchActions,
+                savedTags,
             ) {
                 TheoriaNightTheme {
                     ShellOverlaySheets(shell)

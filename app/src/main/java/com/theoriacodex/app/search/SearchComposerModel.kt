@@ -124,6 +124,8 @@ internal class ComposerSavedTags(
     /** Saves tags under a source; a group may carry a name. */
     val onSave: (SourceKey, List<String>, String?) -> Unit = { _, _, _ -> },
     val onRemove: (SourceKey, List<String>) -> Unit = { _, _ -> },
+    /** Names a saved "or" group; a blank name shows it by its alternatives. */
+    val onRename: (SourceKey, List<String>, String) -> Unit = { _, _, _ -> },
     /** App-provided groups, such as "Animated", shown after the user's own and never stored. */
     builtIn: List<FavoriteTagEntry> = emptyList(),
 ) {
@@ -132,6 +134,9 @@ internal class ComposerSavedTags(
 
     /** The saved entry that is exactly [terms], whichever source it was saved under. */
     fun entryFor(terms: List<SearchTerm>): FavoriteTagEntry? = entries.firstOrNull { it.matches(terms) }
+
+    /** Only the user's own entries can be renamed or removed; built-ins have no hold menu. */
+    fun isEditable(entry: FavoriteTagEntry): Boolean = entry in entries
 
     /** Only general tags can be saved, so a typed tag, or a group of them, offers no save. */
     fun canSave(terms: List<SearchTerm>): Boolean = terms.isNotEmpty() && terms.all(SearchTerm::isGeneralPostTag)

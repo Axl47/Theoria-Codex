@@ -25,6 +25,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import com.theoriacodex.app.ui.components.NameEntryDialog
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Close
@@ -622,7 +625,7 @@ private fun ComposerSavedSection(
         }
     }
     if (savedSearches.isNotEmpty()) SavedSearchChips(savedSearches, onOpenSavedSearch)
-    if (savedTags.all.isNotEmpty()) SavedTagChips(savedTags.all, draft, targetIndex, onAction)
+    if (savedTags.all.isNotEmpty()) SavedTagChips(savedTags, draft, targetIndex, onAction)
 }
 
 /** One tap reruns a saved search, replacing the current draft. */
@@ -644,23 +647,57 @@ private fun SavedSearchChips(searches: List<SavedSearchEntry>, onOpen: (SavedSea
  * applies. A saved "or" group is added as one group, and its next tap removes it.
  */
 @Composable
-private fun SavedTagChips(tags: List<FavoriteTagEntry>, draft: Query, targetIndex: Int, onAction: (SearchAction) -> Unit) {
+private fun SavedTagChips(savedTags: ComposerSavedTags, draft: Query, targetIndex: Int, onAction: (SearchAction) -> Unit) {
+    var menuFor by remember { mutableStateOf<FavoriteTagEntry?>(null) }
+    var renaming by remember { mutableStateOf<FavoriteTagEntry?>(null) }
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(tags, key = FavoriteTagEntry::key) { tag ->
+        items(savedTags.all, key = FavoriteTagEntry::key) { tag ->
             val chipState = tag.state(draft)
             val group = tag.tags.size > 1
-            TagPickerChip(
-                label = tag.label,
-                count = null,
-                state = chipState,
-                enabled = tag.canTap(draft, targetIndex),
-                tapLabel = if (group) savedGroupTapLabel(tag.label, chipState) else tagTapLabel(tag.label, chipState),
-                onTap = { tag.tapActions(draft, targetIndex).forEach(onAction) },
-                leadingIcon = Icons.Default.Star,
-                reserveCountSlot = false,
-                // A scrolling row offers unbounded width, which would leave the chip's label none.
-                modifier = Modifier.widthIn(max = SAVED_TAG_MAX_WIDTH),
-            )
+            val editable = savedTags.isEditable(tag)
+            Box {
+                TagPickerChip(
+                    label = tag.label,
+                    count = null,
+                    state = chipState,
+                    enabled = tag.canTap(draft, targetIndex),
+                    tapLabel = if (group) savedGroupTapLabel(tag.label, chipState) else tagTapLabel(tag.label, chipState),
+                    onTap = { tag.tapActions(draft, targetIndex).forEach(onAction) },
+                    leadingIcon = Icons.Default.Star,
+                    reserveCountSlot = false,
+                    // A scrolling row offers unbounded width, which would leave the chip's label none.
+                    modifier = Modifier.widthIn(max = SAVED_TAG_MAX_WIDTH),
+                    onLongPress = if (editable) ({ menuFor = tag }) else null,
+                    longPressLabel = if (editable) "Edit ${tag.label}" else null,
+                )
+                DropdownMenu(expanded = menuFor == tag, onDismissRequest = { menuFor = null }) {
+                    if (group) {
+                        DropdownMenuItem(
+                            text = { Text("Rename") },
+                            leadingIcon = { Icon(Icons.Default.Edit, null) },
+                            onClick = { menuFor = null; renaming = tag },
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text("Remove from saved tags") },
+                        leadingIcon = { Icon(Icons.Default.Delete, null) },
+                        onClick = { menuFor = null; savedTags.onRemove(tag.source, tag.tags) },
+                    )
+                }
+            }
         }
+    }
+    renaming?.let { entry ->
+        NameEntryDialog(
+            title = "Name “or” group",
+            initialName = entry.name.orEmpty(),
+            optional = true,
+            hint = "Leave blank to show it as ${entry.alternativesText}.",
+            onDismiss = { renaming = null },
+            onSave = { name ->
+                savedTags.onRename(entry.source, entry.tags, name)
+                renaming = null
+            },
+        )
     }
 }
