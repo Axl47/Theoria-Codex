@@ -277,6 +277,7 @@ class MediaBufferingBenchmarkTest {
             viewer.queueAdjacentPrefetch()
         }
         val first = display(post, 0)
+        onMain { viewer.markShown(0) }
         val openToFirstPage = SystemClock.elapsedRealtime() - opened
         val sources = mutableMapOf<String, Int>()
         sources.merge(first.source, 1, Int::plus)
@@ -285,6 +286,7 @@ class MediaBufferingBenchmarkTest {
             onMain { viewer.selectAndPrefetch(index) }
             val ahead = pagesReadyAhead(post, index)
             val shown = display(post, index)
+            onMain { viewer.markShown(index) }
             sources.merge(shown.source, 1, Int::plus)
             delay(READ_DWELL_MS)
             shown.elapsedMs to ahead
@@ -297,6 +299,7 @@ class MediaBufferingBenchmarkTest {
             val pending = scope.async { display(post, index) }
             val shown = withTimeoutOrNull(SKIM_DWELL_MS) { pending.await() }
             if (shown != null) {
+                onMain { viewer.markShown(index) }
                 skimShown += 1
                 skimLatencies += shown.elapsedMs
                 delay((SKIM_DWELL_MS - (SystemClock.elapsedRealtime() - flipped)).coerceAtLeast(0L))
@@ -354,6 +357,12 @@ class MediaBufferingBenchmarkTest {
 
     private fun ViewerViewModel.queueAdjacentPrefetch() {
         onAction(viewerPrefetchAction(state.value.pages, state.value.currentMedia?.key, null))
+    }
+
+    /** What the page's renderer reports once its image is on screen. */
+    private fun ViewerViewModel.markShown(mediaIndex: Int) {
+        val current = state.value.currentMedia?.takeIf { it.key.mediaIndex == mediaIndex } ?: return
+        onAction(ViewerAction.MediaReady(requireNotNull(state.value.session), current.key, current.loadGeneration))
     }
 
     private fun ViewerViewModel.selectAndPrefetch(mediaIndex: Int) {
