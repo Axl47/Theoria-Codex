@@ -477,7 +477,7 @@ internal class FileBackedTagSuggestionStore(
     }
 
     private fun enforceTotalByteBudgetLocked(): Boolean {
-        var pruned = false
+        val trimmedSources = mutableSetOf<SourceKey>()
         while (estimatedTotalUtf8Bytes > maxTotalUtf8Bytes) {
             val sourceToTrim = inMemory.entries
                 .asSequence()
@@ -498,9 +498,14 @@ internal class FileBackedTagSuggestionStore(
                 entryWeights.remove(sourceToTrim)
                 estimatedTotalUtf8Bytes -= sourceEstimatedOverhead(sourceToTrim)
             }
-            pruned = true
+            trimmedSources += sourceToTrim
         }
-        return pruned
+        // Trimmed tags must stop reporting counts, or getCount keeps answering for tags the store dropped.
+        trimmedSources.forEach { source ->
+            val remaining = inMemory[source]
+            countsBySource = if (remaining == null) countsBySource - source else countsBySource + (source to indexCounts(source, remaining))
+        }
+        return trimmedSources.isNotEmpty()
     }
 
     private fun snapshotLocked(): TagStoreSnapshot {

@@ -360,6 +360,22 @@ class TagSuggestionStoreTest {
     }
 
     @Test
+    fun `tags the byte budget drops stop reporting counts`() = runTest {
+        val store = FileBackedTagSuggestionStore(
+            tempDir("tag-store-trim-counts").resolve("tags.json"), maxEntriesPerSource = 100, maxTotalUtf8Bytes = 1_024,
+        )
+        try {
+            val tags = (0 until 40).map { TagSuggestion("tag_${it}_" + "x".repeat(80), "tag", it + 1) }
+            store.put(SourceKey.GELBOORU, tags)
+            val kept = store.get(SourceKey.GELBOORU, Int.MAX_VALUE).map(TagSuggestion::text).toSet()
+            assertTrue("budget should drop some tags", kept.size < tags.size)
+            tags.forEach { tag ->
+                assertEquals(tag.text, tag.count.takeIf { tag.text in kept }, store.getCount(SourceKey.GELBOORU, tag.text))
+            }
+        } finally { store.close() }
+    }
+
+    @Test
     fun `total serialized cache stays within the configured UTF-8 byte budget`() = runTest {
         val storeFile = tempDir("tag-store-byte-cap-test").resolve("tag_suggestions.json")
         val maxBytes = 1_024
