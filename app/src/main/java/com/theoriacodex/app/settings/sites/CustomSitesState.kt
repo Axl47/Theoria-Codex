@@ -14,6 +14,8 @@ data class CustomSitesUiState(
     val removing: Boolean = false,
     /** A short failure message shown above the list until the next action. */
     val notice: String? = null,
+    /** SPIKE: host whose browser challenge is open in the in-app WebView. */
+    val verifyingHost: String? = null,
 ) {
     val removeTarget: CustomSiteSummary? get() = removeTargetId?.let { id -> sites.firstOrNull { it.sourceId == id } }
 }
@@ -53,7 +55,7 @@ sealed interface SiteForm {
 /** Where the add flow is. Editing the address or headers returns it to [Address]. */
 sealed interface AddStage {
     /** Entering the address; [message] explains the last probe result that can't be added. */
-    data class Address(val message: String? = null) : AddStage
+    data class Address(val message: String? = null, val blockedHost: String? = null) : AddStage
 
     data object Probing : AddStage
 
@@ -100,4 +102,10 @@ sealed interface CustomSitesAction {
     data object DismissRemove : CustomSitesAction
     data object ConfirmRemove : CustomSitesAction
     data object DismissNotice : CustomSitesAction
+
+    data class StartVerification(val host: String) : CustomSitesAction
+    data object CancelVerification : CustomSitesAction
+
+    /** The user passed the challenge; [userAgent] is the WebView's, so requests match its clearance. */
+    data class FinishVerification(val userAgent: String) : CustomSitesAction
 }

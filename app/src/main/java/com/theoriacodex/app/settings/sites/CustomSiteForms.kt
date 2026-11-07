@@ -80,7 +80,12 @@ internal fun AddSitePage(form: SiteForm.Add, onAction: (CustomSitesAction) -> Un
 @Composable
 private fun AddStageControls(form: SiteForm.Add, onAction: (CustomSitesAction) -> Unit) {
     when (val stage = form.stage) {
-        is AddStage.Address -> Button(onClick = { onAction(CustomSitesAction.Probe) }) { Text("Check site") }
+        is AddStage.Address -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { onAction(CustomSitesAction.Probe) }) { Text("Check site") }
+            stage.blockedHost?.let { host ->
+                TextButton(onClick = { onAction(CustomSitesAction.StartVerification(host)) }) { Text("Verify in browser") }
+            }
+        }
         AddStage.Probing -> Progress("Checking site…")
         is AddStage.Credentials -> {
             AnnouncedText(
@@ -141,6 +146,9 @@ internal fun EditSitePage(form: SiteForm.Edit, site: CustomSiteSummary, onAction
         form.message?.let { AnnouncedText(it, Modifier.padding(horizontal = 4.dp), error = true) }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = { onAction(CustomSitesAction.SaveEdit) }, enabled = editable) { Text("Save") }
+            TextButton(onClick = { onAction(CustomSitesAction.StartVerification(site.host)) }, enabled = editable) {
+                Text("Verify in browser")
+            }
             TextButton(onClick = { onAction(CustomSitesAction.RequestRemove(site.sourceId)) }, enabled = editable) {
                 Text("Remove site", color = MaterialTheme.colorScheme.error)
             }

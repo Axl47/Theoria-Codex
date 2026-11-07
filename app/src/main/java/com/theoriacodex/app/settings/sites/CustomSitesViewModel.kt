@@ -12,6 +12,7 @@ import com.theoriacodex.app.customsites.CustomSiteMutation
 import com.theoriacodex.app.customsites.CustomSitesController
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.domain.source.ProbeFailure
 import com.theoriacodex.domain.source.SiteCredentials
 import com.theoriacodex.domain.source.SiteHeaders
 import com.theoriacodex.domain.source.SiteProbeResult
@@ -80,7 +81,17 @@ internal class CustomSitesViewModel(
             CustomSitesAction.DismissRemove -> mutableState.update { if (it.removing) it else it.copy(removeTargetId = null) }
             CustomSitesAction.ConfirmRemove -> confirmRemove()
             CustomSitesAction.DismissNotice -> mutableState.update { it.copy(notice = null) }
+            is CustomSitesAction.StartVerification -> mutableState.update { it.copy(verifyingHost = action.host) }
+            CustomSitesAction.CancelVerification -> mutableState.update { it.copy(verifyingHost = null) }
+            is CustomSitesAction.FinishVerification -> finishVerification(action.userAgent)
         }
+    }
+
+    /** Adopts the WebView's User-Agent; the add flow re-checks right away, the edit flow waits for Save. */
+    private fun finishVerification(userAgent: String) {
+        mutableState.update { it.copy(verifyingHost = null) }
+        setFields(ProbeReset.ALWAYS) { copy(userAgent = userAgent) }
+        if (state.value.form is SiteForm.Add) probe()
     }
 
     private fun openForm(form: SiteForm) {
@@ -163,6 +174,8 @@ internal class CustomSitesViewModel(
         )
         is SiteProbeResult.CredentialsRequired ->
             copy(showCredentials = true, stage = AddStage.Credentials(result.family, result.rejected))
+        is SiteProbeResult.Unreachable if result.reason == ProbeFailure.BLOCKED ->
+            copy(stage = AddStage.Address(probeMessage(result), blockedHost = result.address.host))
         else -> copy(stage = AddStage.Address(probeMessage(result)))
     }
 
