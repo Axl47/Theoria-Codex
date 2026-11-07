@@ -1,5 +1,6 @@
 package com.theoriacodex.app.viewer
 
+import android.graphics.Bitmap
 import android.graphics.ImageFormat
 import android.hardware.HardwareBuffer
 import android.media.ImageReader
@@ -14,11 +15,16 @@ import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime
 import androidx.media3.exoplayer.source.LoadEventInfo
 import androidx.media3.exoplayer.source.MediaLoadData
+import java.io.File
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -143,6 +149,60 @@ internal class BenchSurface : AutoCloseable {
     }
 }
 
+/**
+ * One timeline drag through the page's scrub previews, as the popup drives it: the finger rests on each target
+ * until its frame is published. Returns, per target, when the finger moved there and when its frame arrived.
+ */
+internal suspend fun ViewerScrubPreviews.drag(targets: List<Long>, frameLog: PreviewFrameLog): List<DragFrame> = coroutineScope {
+    val positions = MutableStateFlow(targets.first())
+    val published = Channel<Pair<Long, Long>>(Channel.UNLIMITED)
+    var movedAt = SystemClock.elapsedRealtime()
+    val following = launch(Dispatchers.Main) {
+        follow(positions) { requested, bitmap ->
+            frameLog.record(bitmap)
+            published.trySend(requested to SystemClock.elapsedRealtime())
+        }
+    }
+    val elapsed = targets.mapIndexed { index, target ->
+        if (index > 0) {
+            movedAt = SystemClock.elapsedRealtime()
+            positions.value = target
+        }
+        withTimeout(PLAYER_TIMEOUT_MS) {
+            var frame = published.receive()
+            while (frame.first != target) frame = published.receive()
+            DragFrame(movedAt, frame.second)
+        }
+    }
+    following.cancelAndJoin()
+    elapsed
+}
+
+/** One drag target: when the finger moved there and when its preview frame was published. */
+internal data class DragFrame(val movedAt: Long, val publishedAt: Long) {
+    val elapsedMs: Long get() = publishedAt - movedAt
+}
+
+/**
+ * Describes each published preview frame (its size, and "blank" when its pixels do not vary, as a failed read
+ * would) and saves the latest to [file], the benchmark's generated media only, for a look at its orientation.
+ * Record on main.
+ */
+internal class PreviewFrameLog(private val file: File) {
+    val frames = mutableListOf<String>()
+    private var latest: Bitmap? = null
+
+    fun record(bitmap: Bitmap) {
+        val samples = (0 until FRAME_SAMPLES).map { i -> bitmap.getPixel(bitmap.width * i / FRAME_SAMPLES, bitmap.height * i / FRAME_SAMPLES) }
+        frames += "${bitmap.width}x${bitmap.height}" + if (samples.distinct().size == 1) " blank" else ""
+        latest = bitmap
+    }
+
+    fun saveLatest() {
+        latest?.let { bitmap -> file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, PNG_QUALITY, it) } }
+    }
+}
+
 /** Samples Java plus native heap (where bitmaps live) until stopped. */
 internal class MemorySampler(scope: CoroutineScope) {
     val baselineBytes = usedBytes()
@@ -176,6 +236,8 @@ internal fun megabytes(bytes: Long): Double = (bytes / 10_485.76).roundToInt() /
 
 internal const val PLAYER_TIMEOUT_MS = 30_000L
 private const val KIB = 1024
+private const val FRAME_SAMPLES = 8
+private const val PNG_QUALITY = 100
 private const val MEMORY_SAMPLE_MS = 50L
 private const val SURFACE_WIDTH = 1920
 private const val SURFACE_HEIGHT = 1080

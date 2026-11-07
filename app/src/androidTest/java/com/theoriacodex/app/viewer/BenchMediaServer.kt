@@ -98,6 +98,8 @@ internal class BenchMediaServer(
             }
         } catch (_: IOException) {
             // The client closed or abandoned the connection; the bytes written so far stay recorded.
+        } catch (_: InterruptedException) {
+            // The server is closing while this response waits on the link.
         }
     }
 
