@@ -60,6 +60,7 @@ import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.related.LikeToggleOutcome
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchSourceScope
+import com.theoriacodex.app.codex.SearchSaveMemory
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsViewModel
 import com.theoriacodex.app.source.displayName
@@ -202,6 +203,9 @@ internal class HomeNavigation(
 /** Posts on their way into a Codex, and what the save sheet should offer for them. */
 @Stable
 internal class PendingCodexSave {
+    /** Save targets per search this session, so the picker suggests where this search's posts went. */
+    val searchSaves = SearchSaveMemory()
+
     var visible by mutableStateOf(false)
         private set
     var posts by mutableStateOf<List<Post>>(emptyList())
