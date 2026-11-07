@@ -9,15 +9,21 @@ data class PixivAuthTokens(
 /** Process-local authority for a refresh; credentials themselves retain their existing wire format. */
 data class PixivCredentialSession(val tokens: PixivAuthTokens?, val revision: Long)
 
+/** The `user_id` + `api_key` pair every Gelbooru-family site accepts. */
+interface UserApiKeyCredentials {
+    val userId: String
+    val apiKey: String
+}
+
 data class GelbooruCredentials(
-    val userId: String,
-    val apiKey: String,
-)
+    override val userId: String,
+    override val apiKey: String,
+) : UserApiKeyCredentials
 
 data class Rule34XxxCredentials(
-    val userId: String,
-    val apiKey: String,
-)
+    override val userId: String,
+    override val apiKey: String,
+) : UserApiKeyCredentials
 
 interface SourceCredentialsProvider {
     suspend fun getPixivTokens(): PixivAuthTokens?

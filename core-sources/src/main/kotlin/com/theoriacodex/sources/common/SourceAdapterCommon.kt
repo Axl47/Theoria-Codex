@@ -207,6 +207,11 @@ internal fun JsonElement.objectList(vararg envelopeKeys: String): List<JsonObjec
         .orEmpty()
 }
 
+/** Booru tags are lowercase and never contain spaces, so typed words join with underscores. */
+internal fun normalizeBooruTag(raw: String): String = raw.trim().replace(BOORU_WHITESPACE_REGEX, "_").lowercase()
+
+private val BOORU_WHITESPACE_REGEX = Regex("\\s+")
+
 internal fun mimeFromUrlOrExt(url: String?, ext: String?): String? {
     return inferMimeFromUrl(url) ?: mimeFromFileExt(ext)
 }

@@ -9,17 +9,18 @@ import com.theoriacodex.domain.adapter.RelatedPostsSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
-import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
+import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SortMode
-import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.decodeHtmlEntities
 import com.theoriacodex.sources.common.ambiguousDurationFieldMs
+import com.theoriacodex.sources.common.asStringOrNull
 import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.durationFieldMs
@@ -28,12 +29,14 @@ import com.theoriacodex.sources.common.intValue
 import com.theoriacodex.sources.common.isSuccessful
 import com.theoriacodex.sources.common.longValue
 import com.theoriacodex.sources.common.mimeFromUrlOrExt
+import com.theoriacodex.sources.common.normalizeBooruTag
 import com.theoriacodex.sources.common.objectList
+import com.theoriacodex.sources.common.parseJsonArray
 import com.theoriacodex.sources.common.parseJsonElement
 import com.theoriacodex.sources.common.sourceNetworkFailure
 import com.theoriacodex.sources.common.sourceQuickQuery
 import com.theoriacodex.sources.common.stringValue
-import com.theoriacodex.sources.credentials.SourceCredentialsProvider
+import com.theoriacodex.sources.credentials.UserApiKeyCredentials
 import com.theoriacodex.sources.http.SourceHttpClient
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
@@ -43,12 +46,42 @@ import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
-class GelbooruSourceAdapter(
+/** Reads the credentials saved for one site; a site without saved credentials returns null. */
+typealias GelbooruCredentialLookup = suspend () -> UserApiKeyCredentials?
+
+/**
+ * Builds the adapter for any [GelbooruSite]. The app discovers creator and related posts with `is`
+ * checks, so the returned adapter implements those interfaces only when the profile enables them.
+ * Named like a class so registration reads the same as the Danbooru family.
+ */
+fun GelbooruSourceAdapter(
+    site: GelbooruSite,
+    httpClient: SourceHttpClient,
+    credentials: GelbooruCredentialLookup = { null },
+): GelbooruFamilySourceAdapter {
+    val core = GelbooruFamilyAdapter(site, httpClient, credentials)
+    return when {
+        site.creatorPosts && site.relatedPosts -> object :
+            GelbooruFamilySourceAdapter by core,
+            CreatorPostsSourceAdapter by core,
+            RelatedPostsSourceAdapter by core {}
+        site.creatorPosts -> object : GelbooruFamilySourceAdapter by core, CreatorPostsSourceAdapter by core {}
+        site.relatedPosts -> object : GelbooruFamilySourceAdapter by core, RelatedPostsSourceAdapter by core {}
+        else -> object : GelbooruFamilySourceAdapter by core {}
+    }
+}
+
+/** What every Gelbooru-family site supports; creator and related posts depend on the profile. */
+interface GelbooruFamilySourceAdapter : SourceAdapter, TagCountLookupSourceAdapter
+
+/** Speaks the DAPI for one [GelbooruSite]; every search pages by `pid` in fixed 40-post pages. */
+private class GelbooruFamilyAdapter(
+    private val site: GelbooruSite,
     private val httpClient: SourceHttpClient,
-    private val credentialsProvider: SourceCredentialsProvider,
+    private val credentials: GelbooruCredentialLookup,
     private val gson: Gson = Gson(),
-) : SourceAdapter, TagCountLookupSourceAdapter, CreatorPostsSourceAdapter, RelatedPostsSourceAdapter {
-    override val sourceKey: SourceKey = SourceKey.GELBOORU
+) : GelbooruFamilySourceAdapter, CreatorPostsSourceAdapter, RelatedPostsSourceAdapter {
+    override val sourceKey = site.source
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
         supportsSortNewest = true,
@@ -58,182 +91,114 @@ class GelbooruSourceAdapter(
         supportsExcludeTagsServerSide = true,
         supportsDateRangeServerSide = false,
         supportsMinScoreServerSide = false,
-        requiresCredentials = false,
-        supportsGroupedIncludeTagsServerSide = true,
+        requiresCredentials = site.credentials == GelbooruCredentialUse.REQUIRED,
+        supportsGroupedIncludeTagsServerSide = site.orGroup != null,
     )
 
-    override suspend fun search(query: Query, pageToken: String?): Page<Post> {
-        val pageIndex = pageToken?.toIntOrNull()?.coerceAtLeast(0) ?: 0
-        val limit = 40
-        val response = request(
-            query = baseQuery(
-                "s" to "post",
-                "q" to "index",
-                "pid" to pageIndex.toString(),
-                "limit" to limit.toString(),
-                "tags" to compileTags(query),
-            ),
-        )
-        val rawPosts = parsePostItems(response)
-        val posts = rawPosts.mapNotNull { parsePost(it) }
-        val next = if (rawPosts.size >= limit) (pageIndex + 1).toString() else null
-        return canonicalPostPage(items = posts, nextPageToken = next)
+    override suspend fun search(query: Query, pageToken: String?): Page<Post> =
+        searchPosts(compileTags(query), pageToken)
+
+    override suspend fun searchCreatorPosts(creator: CreatorProfile, pageToken: String?): Page<Post> {
+        val uploadsQuery = creator.uploadsQuery?.trim()
+        if (creator.source != sourceKey || uploadsQuery.isNullOrBlank()) return canonicalPostPage(emptyList(), null)
+        return searchPosts(uploadsQuery, pageToken)
     }
 
     override suspend fun trendingTags(limit: Int): List<TagSuggestion> {
-        val response = request(
-            query = baseQuery(
-                "s" to "tag",
-                "q" to "index",
-                "orderby" to "count",
-                "order" to "desc",
-                "limit" to limit.coerceIn(1, 50).toString(),
-            ),
+        val response = requestApi(
+            "s" to "tag",
+            "q" to "index",
+            "orderby" to "count",
+            "order" to "desc",
+            "limit" to limit.coerceIn(1, 50).toString(),
         )
-        return parseTagItems(response).mapNotNull { parseTag(it, "trending") }
+        return parseItems(response, TAG_ENVELOPE).mapNotNull { parseTag(it, "trending") }
     }
 
     override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> {
-        if (prefix.isBlank()) return emptyList()
-        val response = request(
-            query = baseQuery(
-                "s" to "tag",
-                "q" to "index",
-                "name_pattern" to "${prefix.trim()}%",
-                "orderby" to "count",
-                "order" to "desc",
-                "limit" to limit.coerceIn(1, 30).toString(),
-            ),
+        val normalized = prefix.trim()
+        if (normalized.isBlank()) return emptyList()
+        site.autocompleteUrl?.let { url ->
+            val response = request(url, mapOf("q" to normalized))
+            return parseAutocompleteSuggestions(response, gson, site.label).take(limit)
+        }
+        val response = requestApi(
+            "s" to "tag",
+            "q" to "index",
+            "name_pattern" to "$normalized%",
+            "orderby" to "count",
+            "order" to "desc",
+            "limit" to limit.coerceIn(1, 30).toString(),
         )
-        return parseTagItems(response).mapNotNull { parseTag(it, "tag") }
+        return parseItems(response, TAG_ENVELOPE).mapNotNull { parseTag(it, "tag") }
     }
 
     override suspend fun fetchTagCounts(tags: List<String>): Map<String, Int> {
-        val normalizedTags = tags
-            .asSequence()
-            .map(::normalizeGelbooruTagToken)
-            .filter { it.isNotBlank() }
-            .distinct()
-            .toList()
-        if (normalizedTags.isEmpty()) return emptyMap()
-
+        val normalizedTags = tags.map(::normalizeBooruTag).filter(String::isNotBlank).distinct()
         val countsByName = linkedMapOf<String, Int>()
-        normalizedTags.chunked(GELBOORU_TAG_COUNT_BATCH_SIZE).forEach { chunk ->
-            val response = request(
-                query = baseQuery(
-                    "s" to "tag",
-                    "q" to "index",
-                    "names" to chunk.joinToString(" "),
-                    "limit" to chunk.size.toString(),
-                )
+        normalizedTags.chunked(TAG_COUNT_BATCH_SIZE).forEach { chunk ->
+            val response = requestApi(
+                "s" to "tag",
+                "q" to "index",
+                "names" to chunk.joinToString(" "),
+                "limit" to chunk.size.toString(),
             )
-            parseTagItems(response).forEach tagItemLoop@{ raw ->
-                val name = raw.stringValue("name")?.let(::decodeHtmlEntities)?.trim().orEmpty()
-                if (name.isBlank()) return@tagItemLoop
-                val count = raw.intValue("count") ?: raw.intValue("post_count") ?: return@tagItemLoop
-                countsByName.putIfAbsent(name, count)
+            parseItems(response, TAG_ENVELOPE).forEach { raw ->
+                val tag = parseTag(raw, "tag") ?: return@forEach
+                tag.count?.let { count -> countsByName.putIfAbsent(tag.text, count) }
             }
         }
         return countsByName
     }
 
-    override suspend fun quickQuery(kind: QuickQueryKind): Query {
-        return sourceQuickQuery(source = SourceKey.GELBOORU, kind = kind)
-    }
+    override suspend fun quickQuery(kind: QuickQueryKind): Query = sourceQuickQuery(source = sourceKey, kind = kind)
 
     override suspend fun resolvePost(id: PostId): Post? {
-        if (id.source != SourceKey.GELBOORU) return null
-        val response = request(
-            query = baseQuery(
-                "s" to "post",
-                "q" to "index",
-                "id" to id.sourcePostId,
-                "limit" to "1",
-            ),
-        )
-        return parsePostItems(response).firstOrNull()?.let(::parsePost)
+        if (id.source != sourceKey) return null
+        val lookup = when (site.postLookup) {
+            GelbooruPostLookup.ID_PARAMETER -> "id" to id.sourcePostId
+            GelbooruPostLookup.ID_TAG -> "tags" to "id:${id.sourcePostId}"
+        }
+        val response = requestApi("s" to "post", "q" to "index", lookup, "limit" to "1")
+        return parseItems(response, POST_ENVELOPE).firstOrNull()?.let(::parsePost)
     }
 
     override suspend fun relatedPosts(seed: PostId, limit: Int): List<Post> {
-        if (seed.source != SourceKey.GELBOORU || limit <= 0) return emptyList()
-        val boundedLimit = limit.coerceAtMost(MAX_RELATED_POSTS)
+        if (seed.source != sourceKey || limit <= 0) return emptyList()
         val html = request(
-            query = linkedMapOf(
-                "page" to "post",
-                "s" to "view",
-                "id" to seed.sourcePostId,
-            ),
+            url = "${site.siteUrl}/index.php",
+            query = mapOf("page" to "post", "s" to "view", "id" to seed.sourcePostId),
         )
-        val relatedIds = parseGelbooruRelatedPostIds(html, seed.sourcePostId, boundedLimit)
-            ?: throw SourceAdapterException(
-                reason = com.theoriacodex.domain.adapter.SourceFailureReason.PARSE,
-                message = "Gelbooru related-post block was not found",
-            )
+        val relatedIds = parseGelbooruRelatedPostIds(
+            html = html,
+            baseUrl = site.siteUrl,
+            seedId = seed.sourcePostId,
+            limit = limit.coerceAtMost(MAX_RELATED_POSTS),
+        ) ?: throw SourceAdapterException(
+            reason = SourceFailureReason.PARSE,
+            message = "${site.label} related-post block was not found",
+        )
         if (relatedIds.isEmpty()) return emptyList()
 
         val resolved = hydrateRelatedPosts(relatedIds)
-        val posts = resolved.mapNotNull(Result<Post?>::getOrNull)
-            .distinctBy(Post::id)
+        val posts = resolved.mapNotNull(Result<Post?>::getOrNull).distinctBy(Post::id)
         if (posts.isNotEmpty() || resolved.none(Result<Post?>::isFailure)) return posts
         throw resolved.firstNotNullOf { result -> result.exceptionOrNull() }
     }
 
-    override suspend fun searchCreatorPosts(
-        creator: CreatorProfile,
-        pageToken: String?,
-    ): Page<Post> {
-        if (creator.source != SourceKey.GELBOORU) return canonicalPostPage(items = emptyList(), nextPageToken = null)
-        val uploadsQuery = creator.uploadsQuery?.trim().takeIf { !it.isNullOrBlank() }
-            ?: return canonicalPostPage(items = emptyList(), nextPageToken = null)
+    private suspend fun searchPosts(tags: String, pageToken: String?): Page<Post> {
         val pageIndex = pageToken?.toIntOrNull()?.coerceAtLeast(0) ?: 0
-        val limit = 40
-        val response = request(
-            query = baseQuery(
-                "s" to "post",
-                "q" to "index",
-                "pid" to pageIndex.toString(),
-                "limit" to limit.toString(),
-                "tags" to uploadsQuery,
-            ),
+        val response = requestApi(
+            "s" to "post",
+            "q" to "index",
+            "pid" to pageIndex.toString(),
+            "limit" to PAGE_SIZE.toString(),
+            "tags" to tags,
         )
-        val rawPosts = parsePostItems(response)
-        val posts = rawPosts.mapNotNull(::parsePost)
-        val next = if (rawPosts.size >= limit) (pageIndex + 1).toString() else null
-        return canonicalPostPage(items = posts, nextPageToken = next)
-    }
-
-    private suspend fun request(query: Map<String, String>): String {
-        val response = try {
-            httpClient.get(
-                url = GELBOORU_DAPI_URL,
-                query = query,
-            )
-        } catch (error: IOException) {
-            sourceNetworkFailure("Gelbooru", error)
-        }
-
-        if (!response.isSuccessful()) {
-            throw SourceAdapterException(
-                reason = classifyHttpFailure(
-                    statusCode = response.statusCode,
-                    body = response.body,
-                    authBlockedBody = ::looksLikeAuthBlocked,
-                ),
-                message = "Gelbooru request failed (${response.statusCode})",
-            )
-        }
-
-        if (looksLikeAuthBlocked(response.body)) {
-            throw SourceAdapterException(
-                reason = classifyHttpFailure(
-                    statusCode = 200,
-                    body = response.body,
-                    authBlockedBody = ::looksLikeAuthBlocked,
-                ),
-                message = "Gelbooru rejected request without credentials",
-            )
-        }
-        return response.body
+        val rawPosts = parseItems(response, POST_ENVELOPE)
+        // Fullness counts every raw record, so a malformed entry never ends paging early.
+        val next = if (rawPosts.size >= PAGE_SIZE) (pageIndex + 1).toString() else null
+        return canonicalPostPage(items = rawPosts.mapNotNull(::parsePost), nextPageToken = next)
     }
 
     private suspend fun hydrateRelatedPosts(ids: List<String>): List<Result<Post?>> = supervisorScope {
@@ -242,7 +207,7 @@ class GelbooruSourceAdapter(
             async {
                 semaphore.withPermit {
                     try {
-                        Result.success(resolvePost(PostId(SourceKey.GELBOORU, id)))
+                        Result.success(resolvePost(PostId(sourceKey, id)))
                     } catch (error: CancellationException) {
                         throw error
                     } catch (error: Throwable) {
@@ -253,144 +218,182 @@ class GelbooruSourceAdapter(
         }.awaitAll()
     }
 
-    private suspend fun baseQuery(vararg entries: Pair<String, String>): Map<String, String> {
-        val query = linkedMapOf(
-            "page" to "dapi",
-            "json" to "1",
-        )
-        entries.forEach { (k, v) -> query[k] = v }
-        credentialsProvider.getGelbooruCredentials()?.let { credentials ->
-            query["user_id"] = credentials.userId
-            query["api_key"] = credentials.apiKey
+    /** DAPI call with the site's credentials; a site that requires them fails before the request. */
+    private suspend fun requestApi(vararg entries: Pair<String, String>): String {
+        val saved = credentials()
+        if (saved == null && site.credentials == GelbooruCredentialUse.REQUIRED) {
+            throw SourceAdapterException(
+                reason = SourceFailureReason.AUTH_REQUIRED,
+                message = "${site.label} credentials required",
+            )
         }
-        return query
+        val query = buildMap {
+            put("page", "dapi")
+            put("json", "1")
+            putAll(entries)
+            saved?.let {
+                put("user_id", it.userId)
+                put("api_key", it.apiKey)
+            }
+        }
+        return request(site.apiUrl, query)
     }
 
-    private fun parsePostItems(body: String): List<JsonObject> {
-        val element = parseJsonElement(body = body, gson = gson, errorLabel = "Gelbooru")
-
-        return element.objectList("post")
+    private suspend fun request(url: String, query: Map<String, String>): String {
+        val response = try {
+            httpClient.get(url = url, query = query, headers = site.headers)
+        } catch (error: IOException) {
+            sourceNetworkFailure(site.label, error)
+        }
+        if (!response.isSuccessful()) {
+            throw SourceAdapterException(
+                reason = classifyHttpFailure(
+                    statusCode = response.statusCode,
+                    body = response.body,
+                    authBlockedBody = ::looksLikeAuthFailure,
+                ),
+                message = "${site.label} request failed (${response.statusCode})",
+            )
+        }
+        // Sites report a missing or bad key in a successful response body.
+        if (looksLikeAuthFailure(response.body)) {
+            throw SourceAdapterException(
+                reason = SourceFailureReason.AUTH_REQUIRED,
+                message = "${site.label} credentials are missing or invalid",
+            )
+        }
+        return response.body
     }
 
-    private fun parseTagItems(body: String): List<JsonObject> {
-        val element = parseJsonElement(body = body, gson = gson, errorLabel = "Gelbooru tags")
-
-        return element.objectList("tag")
+    /** Some sites answer an empty result with an empty body instead of `[]`. */
+    private fun parseItems(body: String, envelopeKey: String): List<JsonObject> {
+        if (body.isBlank()) return emptyList()
+        return parseJsonElement(body = body, gson = gson, errorLabel = site.label).objectList(envelopeKey)
     }
 
     private fun parsePost(raw: JsonObject): Post? {
-        val id = raw.stringValue("id")?.ifBlank { null } ?: return null
+        val id = raw.stringValue("id")?.trim()?.ifBlank { null } ?: return null
         val tags = raw.stringValue("tags")
-            ?.split(" ")
+            ?.split(' ')
             ?.map { decodeHtmlEntities(it).trim() }
-            ?.filter { it.isNotBlank() }
+            ?.filter(String::isNotBlank)
             .orEmpty()
         val fullUrl = normalizeGelbooruMediaUrl(raw.stringValue("file_url"))
         val sampleUrl = normalizeGelbooruMediaUrl(raw.stringValue("sample_url"))
         val previewUrl = normalizeGelbooruMediaUrl(raw.stringValue("preview_url")) ?: sampleUrl ?: fullUrl
         val fullMime = mimeFromUrlOrExt(fullUrl, raw.stringValue("file_ext"))
-        val previewMime = mimeFromUrlOrExt(previewUrl, null) ?: fullMime
-        val createdAt = raw.longValue("created_at")?.times(1000L)
-            ?: raw.longValue("change")?.times(1000L)
-        val owner = raw.stringValue("owner")?.trim().orEmpty()
-        val creatorId = raw.stringValue("creator_id")?.trim().orEmpty()
-        val creatorDisplayName = owner.ifBlank { creatorId }.ifBlank { null }
-        val uploadsQuery = owner.takeIf { it.isNotBlank() }?.let { "user:$it" }
-
+        val creator = parseCreator(raw)
         return Post(
-            id = PostId(SourceKey.GELBOORU, id),
-            preview = ImageRef(url = previewUrl, localPath = null, mime = previewMime),
-            full = fullUrl?.let {
+            id = PostId(sourceKey, id),
+            preview = ImageRef(url = previewUrl, localPath = null, mime = mimeFromUrlOrExt(previewUrl, null) ?: fullMime),
+            full = fullUrl?.let { url ->
                 ImageRef(
-                    url = it,
+                    url = url,
                     localPath = null,
                     mime = fullMime,
-                    progressiveUrls = listOfNotNull(sampleUrl).filter { candidate -> candidate != it },
+                    progressiveUrls = listOfNotNull(sampleUrl.takeIf { site.progressiveSample }).filter { it != url },
                 )
             },
-            pageUrl = "https://gelbooru.com/index.php?page=post&s=view&id=$id",
+            pageUrl = "${site.siteUrl}/index.php?page=post&s=view&id=$id",
             width = raw.intValue("width"),
             height = raw.intValue("height"),
             canonicalTags = tags,
             rawTags = tags,
-            authorName = creatorDisplayName,
-            createdAtEpochMs = createdAt,
-            durationMs = parseGelbooruDurationMs(raw),
-            creatorProfile = creatorDisplayName?.let { displayName ->
-                CreatorProfile(
-                    source = SourceKey.GELBOORU,
-                    displayName = displayName,
-                    profileId = creatorId.ifBlank { null },
-                    profileUrl = creatorId.ifBlank { null }
-                        ?.let { "https://gelbooru.com/index.php?page=account&s=profile&id=$it" },
-                    uploadsQuery = uploadsQuery,
-                )
-            },
+            authorName = creator?.displayName ?: raw.stringValue("author")?.trim()?.ifBlank { null },
+            // `created_at` is a date string on most sites; `change` is the epoch-second fallback.
+            createdAtEpochMs = (raw.longValue("created_at") ?: raw.longValue("change"))?.times(1000L),
+            durationMs = parseDurationMs(raw),
+            creatorProfile = creator?.takeIf { site.creatorPosts },
         )
     }
 
-    private fun parseTag(raw: JsonObject, type: String): TagSuggestion? {
-        val name = raw.stringValue("name")?.let(::decodeHtmlEntities)?.trim().orEmpty()
-        if (name.isBlank()) return null
-        val count = raw.intValue("count") ?: raw.intValue("post_count")
-        return TagSuggestion(
-            text = name,
-            type = type,
-            count = count,
+    /** The uploader is named by `owner`, or by `creator_id` alone on posts without one. */
+    private fun parseCreator(raw: JsonObject): CreatorProfile? {
+        val owner = raw.stringValue("owner")?.trim().orEmpty()
+        val creatorId = raw.stringValue("creator_id")?.trim()?.ifBlank { null }
+        val displayName = owner.ifBlank { creatorId } ?: return null
+        return CreatorProfile(
+            source = sourceKey,
+            displayName = displayName,
+            profileId = creatorId,
+            profileUrl = creatorId?.let { "${site.siteUrl}/index.php?page=account&s=profile&id=$it" },
+            uploadsQuery = owner.ifBlank { null }?.let { "user:$it" },
         )
+    }
+
+    private fun compileTags(query: Query): String {
+        val orGroup = site.orGroup
+        val include = query.effectiveIncludeTermGroups.flatMap { group ->
+            val alternatives = group.terms.map { normalizeBooruTag(it.value) }.filter(String::isNotBlank)
+            if (orGroup == null || alternatives.size < 2) {
+                alternatives
+            } else {
+                listOf(alternatives.joinToString(orGroup.separator, orGroup.prefix, orGroup.suffix))
+            }
+        }
+        val exclude = query.excludeTags.map(::normalizeBooruTag).filter(String::isNotBlank).map { "-$it" }
+        val sort = when (query.sort) {
+            SortMode.NEWEST, SortMode.RANDOM -> site.newestSortTag
+            SortMode.POPULAR, SortMode.TOP -> site.scoreSortTag
+        }
+        return (include + exclude + listOfNotNull(sort)).take(MAX_SEARCH_TAGS).joinToString(" ")
     }
 }
 
+/** Gelbooru's numbered video CDN hosts serve invalid certificates; the main host serves the same paths. */
 fun normalizeGelbooruMediaUrl(rawUrl: String?): String? {
     val url = rawUrl?.trim()?.takeIf(String::isNotBlank) ?: return null
     return url.replaceFirst(GELBOORU_NUMBERED_VIDEO_CDN_PREFIX, "https://gelbooru.com/")
 }
 
-private fun parseGelbooruDurationMs(raw: JsonObject): Long? {
-    return firstDurationMs(
-        raw.durationFieldMs("duration_ms", multiplier = 1L),
-        raw.durationFieldMs("durationMs", multiplier = 1L),
-        raw.durationFieldMs("duration_seconds", multiplier = 1_000L),
-        raw.durationFieldMs("durationSeconds", multiplier = 1_000L),
-        raw.ambiguousDurationFieldMs("duration"),
-        raw.ambiguousDurationFieldMs("video_duration"),
-        raw.durationFieldMs("length_seconds", multiplier = 1_000L),
-        raw.ambiguousDurationFieldMs("length"),
-    )
+/** Parses `autocomplete.php` rows such as `{"label": "landscape (9927)", "value": "landscape"}`. */
+internal fun parseAutocompleteSuggestions(body: String, gson: Gson, siteLabel: String): List<TagSuggestion> =
+    parseJsonArray(body, gson, "$siteLabel autocomplete").mapNotNull { item ->
+        val obj = item.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
+        val text = obj.stringValue("value")?.let(::decodeHtmlEntities)?.trim().orEmpty()
+        if (text.isBlank()) return@mapNotNull null
+        TagSuggestion(text = text, type = "tag", count = parseTrailingCount(obj.get("label").asStringOrNull()))
+    }
+
+private fun parseTrailingCount(label: String?): Int? {
+    val match = TRAILING_COUNT_REGEX.find(label.orEmpty()) ?: return null
+    return match.groupValues.getOrNull(1)?.replace(",", "")?.toIntOrNull()
 }
 
-private fun compileTags(query: Query): String {
-    val include = query.effectiveIncludeTermGroups.mapNotNull { group ->
-        val alternatives = group.terms.map { term -> term.value.trim() }.filter(String::isNotBlank)
-        when (alternatives.size) {
-            0 -> null
-            1 -> alternatives.single()
-            else -> alternatives.joinToString(separator = " ~ ", prefix = "{", postfix = "}")
-        }
-    }
-    val exclude = query.excludeTags.map { it.trim() }.filter { it.isNotBlank() }.map { "-$it" }
-    val order = when (query.sort) {
-        SortMode.NEWEST -> "sort:id:desc"
-        SortMode.POPULAR, SortMode.TOP -> "sort:score:desc"
-        SortMode.RANDOM -> "sort:id:desc"
-    }
-    return (include + exclude + order).take(40).joinToString(" ")
+private fun parseTag(raw: JsonObject, type: String): TagSuggestion? {
+    val name = raw.stringValue("name")?.let(::decodeHtmlEntities)?.trim().orEmpty()
+    if (name.isBlank()) return null
+    return TagSuggestion(text = name, type = type, count = raw.intValue("count") ?: raw.intValue("post_count"))
 }
 
-private fun looksLikeAuthBlocked(body: String): Boolean {
+private fun parseDurationMs(raw: JsonObject): Long? = firstDurationMs(
+    raw.durationFieldMs("duration_ms", multiplier = 1L),
+    raw.durationFieldMs("durationMs", multiplier = 1L),
+    raw.durationFieldMs("duration_seconds", multiplier = 1_000L),
+    raw.durationFieldMs("durationSeconds", multiplier = 1_000L),
+    raw.ambiguousDurationFieldMs("duration"),
+    raw.ambiguousDurationFieldMs("video_duration"),
+    raw.durationFieldMs("length_seconds", multiplier = 1_000L),
+    raw.ambiguousDurationFieldMs("length"),
+)
+
+/** Missing-key replies from Gelbooru (`API key required`, `Access denied`) and rule34.xxx. */
+private fun looksLikeAuthFailure(body: String): Boolean {
     val lowered = body.lowercase()
-    return "access denied" in lowered || "api key" in lowered && "required" in lowered
+    return "access denied" in lowered ||
+        ("api key" in lowered && "required" in lowered) ||
+        "missing authentication" in lowered ||
+        "invalid api key" in lowered ||
+        "invalid user" in lowered
 }
 
-private fun normalizeGelbooruTagToken(value: String): String {
-    return value.trim().replace(WHITESPACE_REGEX, "_")
-}
-
-private val GELBOORU_NUMBERED_VIDEO_CDN_PREFIX =
-    Regex("^https://video-cdn\\d+\\.gelbooru\\.com/", RegexOption.IGNORE_CASE)
-
-private const val GELBOORU_DAPI_URL = "https://gelbooru.com/index.php"
-private const val GELBOORU_TAG_COUNT_BATCH_SIZE = 50
+private const val PAGE_SIZE = 40
+private const val MAX_SEARCH_TAGS = 40
+private const val TAG_COUNT_BATCH_SIZE = 50
 private const val MAX_RELATED_POSTS = 6
 private const val RELATED_HYDRATION_CONCURRENCY = 2
-private val WHITESPACE_REGEX = Regex("\\s+")
+private const val POST_ENVELOPE = "post"
+private const val TAG_ENVELOPE = "tag"
+private val GELBOORU_NUMBERED_VIDEO_CDN_PREFIX =
+    Regex("^https://video-cdn\\d+\\.gelbooru\\.com/", RegexOption.IGNORE_CASE)
+private val TRAILING_COUNT_REGEX = Regex("\\(([-\\d,]+)\\)\\s*$")
