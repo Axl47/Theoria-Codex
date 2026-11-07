@@ -2,6 +2,8 @@ package com.theoriacodex.app.recommend
 
 import androidx.lifecycle.SavedStateHandle
 import com.theoriacodex.app.recommend.state.ForYouAction
+import com.theoriacodex.app.search.NoOpTagSuggestionStore
+import com.theoriacodex.app.search.TagSuggestionStore
 import com.theoriacodex.app.testing.testPost
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -129,6 +131,28 @@ class ForYouCoordinatorTest {
         assertEquals(listOf(1, 1), tagsBySource.values.map(CountingTags::reads))
         service.execute(request)
         assertEquals(listOf(2, 2), tagsBySource.values.map(CountingTags::reads))
+    }
+
+    @Test
+    fun `pixiv likes seed tag-compatible sources through learned translations`() = runTest {
+        val likes = InMemoryLikesRepository().apply {
+            toggleLike(defaultRecommendationProfiles().first().profileId, PostId(SourceKey.PIXIV, "liked"), listOf("初音ミク"))
+        }
+        val store = object : TagSuggestionStore by NoOpTagSuggestionStore {
+            override fun get(source: SourceKey, limit: Int) = listOf(
+                TagSuggestion("初音ミク", "tag", null, alternateText = "Hatsune Miku"),
+            ).takeIf { source == SourceKey.PIXIV }.orEmpty()
+        }
+        val service = testForYouCoordinator(
+            registryOf(FakeAdapter(SourceKey.PIXIV, "p"), FakeAdapter(SourceKey.GELBOORU, "g")),
+            likesRepository = likes,
+            tagSuggestionStore = store,
+        )
+
+        val seed = service.execute(request(service)).seed
+
+        assertEquals(listOf("初音ミク"), seed[SourceKey.PIXIV])
+        assertEquals(listOf("hatsune_miku"), seed[SourceKey.GELBOORU])
     }
 
     @Test

@@ -54,14 +54,14 @@
     <h1>ExecPlan: Cross-Source Tag Affinity</h1>
     <p>When this plan is complete, a Like on one source teaches For You about the same interest on the other tag-compatible sources. Liking a Pixiv post tagged <code>初音ミク</code> (translated by Pixiv as "Hatsune Miku") makes <code>hatsune_miku</code> a candidate seed on Danbooru, Gelbooru, AIBooru and Rule34.xxx. Liking a Gelbooru post tagged <code>hatsune_miku</code> can likewise seed Pixiv with <code>初音ミク</code>. Pixiv tag chips show the English translation beside the native tag, and still search the native tag.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: In progress</span>
+      <span class="pill">Status: Validating (device checks pending)</span>
       <span class="pill">Owner: Claude</span>
       <span class="pill">Created: 2026-11-06</span>
       <span class="pill">Updated: 2026-11-07</span>
       <span class="pill">Plan file: .docs/exec/cross-source-tag-affinity.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Phase 3: cross-source affinity in For You.</div>
+      <div class="card"><strong>Next Action</strong>Once benchmarks finish, run the manual device checks in Validation on the dev install.</div>
       <div class="card"><strong>Main Risk</strong>Live provider behavior (Pixiv English translations, Gelbooru escaped tags) can only be confirmed on a device. Device use is paused for benchmarks, so these remain manual checks.</div>
       <div class="card"><strong>Validation</strong>Focused JVM and Robolectric tests in <code>core-domain</code>, <code>core-sources</code>, <code>core-data</code>, <code>app-logic</code> and <code>app</code>. No device or emulator.</div>
       <div class="card"><strong>Affected Areas</strong>Pixiv adapter, post taxonomy and storage, the tag suggestion store, post tag chips, the Gelbooru/Rule34 adapters, and For You seed generation.</div>
@@ -171,7 +171,7 @@
           <tr><td>Edits</td><td>New <code>core-domain/.../recommendation/CrossSourceTags.kt</code>:
             <ul>
               <li><code>crossSourceTagKey(tag)</code>: decode entities, NFKC, lowercase, <code>_</code>/whitespace → single space.</li>
-              <li><code>PixivTagDictionary</code>: built from Pixiv suggestions with <code>alternateText</code> in the store. Maps native → concept key, and concept key → the most frequently paired native tag.</li>
+              <li><code>PixivTagDictionary</code>: built from Pixiv suggestions with <code>alternateText</code> in the store. Maps native → concept key, and concept key → the first native tag in store order (the store keeps the most recently seen entries first).</li>
               <li><code>CrossSourceTags.trainingDocuments(target, likes, dictionary)</code>: the target's native documents first, then other compatible sources' documents translated into the target's vocabulary. Booru targets use the <code>key.replace(' ', '_')</code> spelling; the Pixiv target uses a dictionary lookup. Tags that can't be mapped are dropped, and so are empty documents. Most recent first, capped at <code>max(nativeCount, 24)</code> foreign documents, so native Likes stay at least half of the evidence once there are 24 or more.</li>
             </ul>
             <code>ForYouCoordinator.buildSeedBySource</code> and <code>ForYouSectionsLoader.generatedSeeds</code> both use it. Sections already drop tags whose provider count is 0, which filters mapped tags that don't exist on the target.</td></tr>
@@ -203,7 +203,8 @@
         <li>[x] 2026-11-06 Research and plan.</li>
         <li>[x] 2026-11-07 Phase 1: Pixiv translation pairing. Evidence: <code>:core-domain:test :core-sources:test :core-data:test :app-logic:test</code> pass; focused <code>:app:testDebugUnitTest</code> (TagSuggestionStore, PostTag*, CodexShare*, SearchCoordinator*, TrainingTags) pass; detekt clean for touched modules. Pixiv tag tests moved to <code>PixivTagsAdapterTest</code> to keep <code>PixivSourceAdapterTest</code> under detekt's class-size limit.</li>
         <li>[x] 2026-11-07 Phase 2: booru entity decoding. Decoding lives in <code>normalizeGelbooruToken</code>, so search keys, favorites, autocomplete prefixes and recommendation keys all see real names. Evidence: <code>:core-domain:test :core-sources:test :core-data:test :app-logic:test</code> pass; <code>:app:testDebugUnitTest</code> Search/Codex/ForYou/Tag filters ran 383 tests, 0 failures, 3 skipped; detekt clean for core modules.</li>
-        <li>[ ] Phase 3: cross-source affinity.</li>
+        <li>[x] 2026-11-07 Phase 3: cross-source affinity. <code>CrossSourceTraining</code> translates each Like at most once, and only for source pairs that can map, so the existing read-once test still holds. Evidence: <code>:core-domain:test</code> (incl. 5 <code>CrossSourceTagsTest</code> cases), <code>:app-logic:test</code>, <code>:app:testDebugUnitTest --tests '*ForYou*' --tests '*TrainingTags*'</code> (incl. 15 <code>ForYouCoordinatorTest</code> cases) pass; <code>:core-domain:detekt</code> clean; <code>:app:detekt</code> reports only the finding that predates this plan.</li>
+        <li>[ ] Manual device checks (paused while benchmarks run).</li>
       </ul>
       <h3>Surprises And Discoveries</h3>
       <ul>
@@ -221,7 +222,7 @@
         <li>Decision: exact concept-key matching only; no qualifier stripping, alias tables or the HuggingFace dataset. Rationale: smallest design that covers characters, series and common general tags. Date/Author: 2026-11-06 / Claude.</li>
       </ul>
       <h3>Outcomes And Retrospective</h3>
-      <p>Pending.</p>
+      <p>All three phases are implemented and covered by host tests. A Pixiv Like now yields a seed on Gelbooru (<code>hatsune_miku</code> from <code>初音ミク</code>) once the pair is in the suggestion store, and booru Likes reach Pixiv through the same dictionary. Not yet proven: live Pixiv English translations, Gelbooru's escaped-tag behavior, and the For You result on a device. Future agents: the dictionary only grows as Pixiv results, autocomplete or trending are seen, so existing Pixiv Likes map gradually rather than immediately.</p>
       <h3>Follow-ups (not in scope)</h3>
       <ul>
         <li>Unified search could send booru tags to Pixiv as dictionary-mapped native tags instead of stripped English.</li>
