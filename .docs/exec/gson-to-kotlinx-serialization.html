@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Gson To Compile-Time Serialization</title>
+  <style>` tag in the document head.
+
+Do not use HTML as an excuse for noise. Avoid animations, decorative gradients, remote scripts, or layout tricks that make the plan harder to maintain. A useful plan should print reasonably, work offline, and remain readable in a plain browser.
+
+## Evidence And Examples
+
+Capture concise evidence. Good evidence includes:
+
+- A short test transcript showing the command and pass/fail count.
+- A browser observation with viewport and URL.
+- A small diff excerpt when it clarifies the key change.
+- A screenshot or annotated image that explains layout, hit areas, or visual state.
+- A performance measurement before and after a change.
+
+Do not paste huge logs or entire source files into the plan. Use summaries plus exact commands so the evidence can be reproduced.
+
+## Safe Implementation Standards
+
+Plans should prefer additive, testable steps. When a migration or destructive operation is necessary, describe the backup, retry, and rollback path. Commands should be safe to rerun when possible. If rerunning a command changes state, say exactly how and why.
+
+Respect VESTIGE repository constraints in every plan.
+
+If a future plan relies on a newer repository constraint, add it to `AGENTS.md` when it would help other developers discover the rule.
+
+## HTML ExecPlan Skeleton
+
+Copy this skeleton into a new `.docs/exec/<plan-name>.html` file and then replace every placeholder with concrete project knowledge. Keep the plan valid HTML.
+
+```html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Short Action-Oriented Title</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f7f4;
+      --surface: #ffffff;
+      --text: #202124;
+      --muted: #5f6368;
+      --border: #d7d7d0;
+      --accent: #0f766e;
+      --accent-soft: #dff3ef;
+      --risk: #9a3412;
+      --risk-soft: #ffedd5;
+      --code: #111827;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #151716;
+        --surface: #202321;
+        --text: #f0f2ef;
+        --muted: #b8beb7;
+        --border: #3a403c;
+        --accent: #5eead4;
+        --accent-soft: #123b37;
+        --risk: #fdba74;
+        --risk-soft: #43230f;
+        --code: #0b0f0d;
+      }
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header, main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    header {
+      padding-top: 36px;
+    }
+    h1, h2, h3 {
+      line-height: 1.15;
+      margin: 0 0 12px;
+    }
+    h1 { font-size: clamp(2rem, 4vw, 3.25rem); }
+    h2 { margin-top: 36px; font-size: 1.55rem; }
+    h3 { margin-top: 24px; font-size: 1.1rem; }
+    p { margin: 0 0 14px; }
+    a { color: var(--accent); }
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-block: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+      backdrop-filter: blur(10px);
+    }
+    nav ul {
+      display: flex;
+      gap: 6px;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 8px 24px;
+      list-style: none;
+      overflow-x: auto;
+    }
+    nav a {
+      display: block;
+      padding: 6px 10px;
+      border-radius: 6px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    nav a:hover { background: var(--accent-soft); }
+    section {
+      padding: 22px;
+      margin: 18px 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 0.95rem;
+    }
+    th, td {
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+    th { color: var(--muted); font-weight: 650; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    pre {
+      overflow-x: auto;
+      padding: 14px;
+      border-radius: 8px;
+      background: var(--code);
+      color: #f8fafc;
+    }
+    details {
+      margin: 12px 0;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--surface) 88%, var(--bg));
+    }
+    summary {
+      cursor: pointer;
+      font-weight: 700;
+    }
+    figure { margin: 16px 0; }
+    img {
+      max-width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    figcaption {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 16px 0;
+      color: var(--muted);
+    }
+    .pill {
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface);
+    }
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 12px;
+      margin: 18px 0 0;
+    }
+    .card {
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+    .card strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    .callout {
+      margin: 14px 0;
+      padding: 12px 14px;
+      border-left: 4px solid var(--accent);
+      background: var(--accent-soft);
+      border-radius: 6px;
+    }
+    .risk {
+      border-left-color: var(--risk);
+      background: var(--risk-soft);
+    }
+    .status-table td:first-child {
+      width: 180px;
+      color: var(--muted);
+      font-weight: 650;
+    }
+
+    @media print {
+      nav { position: static; }
+      section, .card { break-inside: avoid; }
+      body { background: #fff; color: #000; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ExecPlan: Move Saved Data From Gson Reflection To Compile-Time Serialization</h1>
+    <p>When this is complete, saved data no longer depends on R8 keeping field names or on Gson creating objects by reflection. Every durable file, Room payload, and export is read and written by serializers the compiler generates, an offline copy survives any app update, and the hand-maintained R8 contract machinery is deleted. Users see no format loss: every file written by an older build still loads.</p>
+    <div class="meta" aria-label="Plan metadata">
+      <span class="pill">Status: In progress (Phase 1)</span>
+      <span class="pill">Owner: Claude</span>
+      <span class="pill">Created: 2026-11-08</span>
+      <span class="pill">Updated: 2026-11-08</span>
+      <span class="pill">Plan file: .docs/exec/gson-to-kotlinx-serialization.html</span>
+    </div>
+    <div class="dashboard">
+      <div class="card"><strong>Next Action</strong>Finish Phase 1 (offline manifest schema v3), then ship it in a release before any later phase changes the <code>Post</code> classes.</div>
+      <div class="card"><strong>Main Risk</strong>A stricter decoder turning a repairable file into "corrupt", which resets settings or re-downloads offline media. Reduced by a Gson parity harness and one shared corrupt-JSON contract.</div>
+      <div class="card"><strong>Validation</strong>Gson-vs-kotlinx parity tests on golden files, the full host gates, and the minified release-acceptance run on Android 16 and 17.</div>
+      <div class="card"><strong>Affected Areas</strong><code>core-data</code>, <code>core-data-android</code>, <code>app</code> persistence, <code>app/proguard-rules.pro</code>, release verification.</div>
+    </div>
+  </header>
+
+  <nav aria-label="Plan sections">
+    <ul>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#status">Status</a></li>
+      <li><a href="#context">Context</a></li>
+      <li><a href="#contract">Compatibility Contract</a></li>
+      <li><a href="#phases">Phases</a></li>
+      <li><a href="#work-plan">Work Plan</a></li>
+      <li><a href="#validation">Validation</a></li>
+      <li><a href="#living-log">Living Log</a></li>
+      <li><a href="#recovery">Recovery</a></li>
+      <li><a href="#appendix">Appendix</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <section id="purpose">
+      <h2>Purpose / Big Picture</h2>
+      <p>Gson fills Kotlin objects by reflection. That bypasses constructors and Kotlin null safety, and it means R8 (the release shrinker and obfuscator) can break saved data by renaming a field. The project guards against this with about 280 lines of keep rules, a 59-class contract list, a Python verifier, and a Gradle task. kotlinx.serialization generates each serializer at compile time, so field names are ordinary strings in generated code and most of that machinery can go.</p>
+      <p>The guard already has a hole. Offline manifests serialize the domain <code>Post</code> directly, and <code>Post</code> is not in the keep rules, so release builds write keys such as <code>a</code> and <code>b</code>. Phase 1 closes that hole on its own, before any new library arrives.</p>
+      <p><strong>How to see it working:</strong> after an update, offline collections remain available; a release-build <code>manifest.json</code> shows readable keys such as <code>sourcePostId</code>; and <code>app/proguard-rules.pro</code> no longer lists durable records.</p>
+    </section>
+
+    <section id="status">
+      <h2>Current Status</h2>
+      <table class="status-table"><tbody>
+        <tr><td>State</td><td>In progress. Investigation complete, Phase 1 underway on branch <code>fix/offline-manifest-stable-keys</code>.</td></tr>
+        <tr><td>Next action</td><td>Complete Phase 1, open its PR, and release it before Phase 2 merges.</td></tr>
+        <tr><td>Blocked by</td><td>Nothing. A local emulator failure on 2026-11-08 means device proof currently comes from CI (see Surprises).</td></tr>
+      </tbody></table>
+    </section>
+
+    <section id="context">
+      <h2>Context And Orientation</h2>
+      <p>Terms: a <strong>record</strong> is a Kotlin class that exists only to define a stored JSON shape. A <strong>surface</strong> is one place JSON is persisted or exchanged. <strong>Unsafe allocation</strong> is how Gson creates a class with no zero-argument constructor: it skips the constructor, so Kotlin defaults do not run and non-null fields can hold null. The <strong>tree API</strong> is Gson's <code>JsonObject</code>/<code>JsonParser</code>, which uses no reflection.</p>
+      <p>Every store defaults to a plain <code>Gson()</code>. That means nulls are omitted, defaulted values are written, <code>&lt; &gt; &amp; = '</code> are escaped as <code><</code> and friends, unknown keys are ignored, and reads are lenient.</p>
+      <table>
+        <thead><tr><th>Surface</th><th>Entry point</th><th>Value</th><th>Phase</th></tr></thead>
+        <tbody>
+          <tr><td>Offline <code>manifest.json</code> (domain <code>Post</code>)</td><td><code>core-data/.../repository/OfflineMediaStore.kt</code></td><td>Re-downloadable, but the commit point for the folder</td><td>1</td></tr>
+          <tr><td><code>query_store.json</code>, <code>tag_suggestions.json</code>, <code>update_state.json</code>, Hitomi page token, Codex share export</td><td><code>FileBackedQueryRepository</code>, <code>TagSuggestionStore</code>, <code>UpdateStateStore</code>, <code>HitomiPageTokenCodec</code>, <code>CodexTransferService</code></td><td>Low or disposable</td><td>3</td></tr>
+          <tr><td>DataStore: settings, UI restore, statistics, custom sites</td><td><code>core-data/.../storage/DataStoreStorage.kt</code> <code>GsonDataStoreSerializer</code></td><td>User data. Decode failure resets to defaults</td><td>4</td></tr>
+          <tr><td>Room <code>posts.payload_json</code>, <code>recent_searches.query_payload_json</code>, <code>liked_posts.tags_json</code></td><td><code>LocalPostPayloadCodec</code>, <code>RecentSearchPayloadCodec</code>, <code>RoomCodexLikesRepository</code></td><td>Irreplaceable library</td><td>5</td></tr>
+          <tr><td>Backup, restore journal, developer copy, <code>pinned_searches.json</code></td><td><code>ProfileBackupCodec</code>, <code>ProfileBackupJson</code>, <code>SavedSearchSnapshotAdapter</code></td><td>User-exported, long-lived</td><td>6</td></tr>
+          <tr><td>Encrypted credentials</td><td><code>app/.../sourceauth/CredentialEnvelopeStore.kt</code></td><td>Credentials</td><td>7</td></tr>
+          <tr><td>Five legacy one-time import files</td><td><code>DataStoreMigrations</code>, <code>LegacyDataPreparer</code>, <code>RoomRecentsLegacyImporter</code></td><td>Irreplaceable until archived</td><td>8</td></tr>
+        </tbody>
+      </table>
+      <p><strong>Out of scope:</strong> Gson's tree API (provider parsing in <code>core-sources</code>, backup framing, share-file import) has no reflection and no R8 risk. <code>core-stubs</code> and the provider health CLI are not shipped and are not minified. Gson stays as a tree parser after this plan. Replacing it there is a separate decision.</p>
+    </section>
+
+    <section id="contract">
+      <h2>Compatibility Contract</h2>
+      <p>Every phase must honor these. They come from reading what each consumer actually requires.</p>
+      <pre><code>// One shared configuration, defined once in Phase 2.
+val DurableJson = Json {
+    ignoreUnknownKeys = true   // Newer files and retired fields must not be rejected.
+    encodeDefaults = true      // validateBackupSettings requires defaulted keys to be present.
+    explicitNulls = false      // LocalPostPayloadCodec.validateCurrentShape treats a present key as data.
+    coerceInputValues = true   // A stored null on a defaulted field repairs instead of resetting the store.
+    isLenient = true           // Gson accepted "5" as Int and "true" as Boolean.
+}</code></pre>
+      <div class="callout risk"><strong>Failure types are part of the format.</strong> <code>SerializationException</code> extends <code>IllegalArgumentException</code>. <code>AtomicJsonFileStore</code> must quarantine on <code>SerializationException</code> only; a plain <code>IllegalArgumentException</code> from an adapter must keep propagating, as <code>AtomicJsonFileStoreTest</code> pins. <code>CredentialEnvelopeStore.toCredentialReadFailure</code> must add <code>SerializationException</code> to the <code>ReconnectRequired</code> path, or a corrupt envelope is stuck on "temporarily unavailable" forever.</div>
+      <table>
+        <thead><tr><th>Rule</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>Keep enum-like fields as <code>String</code></td><td>Unknown values are tolerated today. A kotlinx enum would throw and reset the store.</td></tr>
+          <tr><td>Keep explicit <code>@SerialName</code> on every property</td><td>A property rename must not silently change a stored key.</td></tr>
+          <tr><td>Do not annotate core-domain classes</td><td>Storage records already mirror them, and the domain stays free of format concerns.</td></tr>
+          <tr><td>Freeze <code>RoomRecentsLegacyImporter.destinationSummary</code> on Gson</td><td>The only output that must stay byte-identical: its hash is compared on every launch while a migration is unarchived. It reflects only strings, longs, and null, so it needs no keep rules.</td></tr>
+          <tr><td>Compare decoded values in <code>SharedPostPayloadWriter</code></td><td>Comparing strings would rewrite every old row once, which changes bytes hashed by unarchived migration proofs.</td></tr>
+          <tr><td>Use kotlinx <code>Transient</code> on <code>CodexShareImageRef.localPath</code></td><td><code>kotlin.jvm.Transient</code> is ignored by kotlinx, which would export device paths.</td></tr>
+          <tr><td>Never put <code>SourceKey</code> in a <code>@Serializable</code> type</td><td>It is a value class with a private constructor. Records use <code>String</code> ids.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="phases">
+      <h2>Phases</h2>
+      <p>Each phase is one PR that leaves the app shippable. Phase order runs from lowest to highest data risk, so the harness has proven itself before it guards irreplaceable data.</p>
+
+      <article>
+        <h3>Phase 1: Offline manifest schema v3 (no new library)</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Manifests use stable keys, and existing manifests upgrade in place. Must ship in a release before Phase 2.</td></tr>
+          <tr><td>Edits</td><td><code>OfflineMediaStore</code> writes <code>version: 3</code> with <code>PostStorageCodec.encode</code> records. It reads v3, and reads v2 through the existing reflective path, rejecting a v2 result whose <code>id</code> does not hash to its folder name. <code>rebuildCatalog</code> rewrites readable v2 manifests as v3. When a manifest exists but its post cannot be decoded, <code>commit</code> carries its root <code>owners</code> forward, since those keys are never obfuscated.</td></tr>
+          <tr><td>Commands</td><td><code>./gradlew :core-data:test :app:testDebugUnitTest --offline</code></td></tr>
+          <tr><td>Acceptance</td><td>A real minified APK writes a v2 manifest with renamed keys, upgrades it, and after a process restart reads v3 keys. Existing offline copies stay available.</td></tr>
+        </tbody></table>
+      </article>
+
+      <article>
+        <h3>Phase 2: Foundation and parity harness</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>The library, the shared configuration, and a test harness that proves each migrated type matches Gson. No store changes yet.</td></tr>
+          <tr><td>Edits</td><td>Add <code>kotlinx-serialization-json</code> 1.12.0 and the Kotlin serialization plugin to the catalog and to <code>core-data</code>, <code>core-data-android</code>, <code>app</code>, <code>core-sources</code>. Define <code>DurableJson</code> and a test fixture <code>assertGsonParity(serializer, samples, goldenJson)</code>. Add the missing golden files listed in the appendix, captured from the current Gson code <em>before</em> any record changes. Prototype on <code>UpdateStateSnapshot</code>.</td></tr>
+          <tr><td>Parity checks</td><td>For each sample: Gson output decodes via kotlinx to an equal value; kotlinx output decodes via Gson to an equal value; both produce the same key set. For each golden file: both decoders agree.</td></tr>
+          <tr><td>Promote or discard</td><td>Continue only if the minified acceptance run proves the prototype serializer survives R8 and the harness catches a deliberately broken record.</td></tr>
+        </tbody></table>
+      </article>
+
+      <article>
+        <h3>Phase 3: Low-risk stores and the storage engine</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td><code>AtomicJsonFileStore</code> gains <code>KSerializer</code> reads and writes with the quarantine contract intact. Query store, tag cache, update state, Hitomi token, and Codex share export move over.</td></tr>
+          <tr><td>Acceptance</td><td>Existing quarantine tests pass unchanged. <code>JsonObject</code> callers keep a tree overload.</td></tr>
+        </tbody></table>
+      </article>
+
+      <article>
+        <h3>Phase 4: DataStore files</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Replace <code>GsonDataStoreSerializer</code> with one serializer taking a <code>KSerializer</code>. Migrate the settings, UI restore, statistics, and site profile records.</td></tr>
+          <tr><td>Acceptance</td><td><code>UnsupportedStoreSchemaException</code> still never replaces a file. Golden settings and statistics decode identically, with no reset of partial or retired-field files.</td></tr>
+        </tbody></table>
+      </article>
+
+      <article>
+        <h3>Phase 5: Room payloads</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Post payloads, recent searches, and like tags use kotlinx. Old rows stay untouched until genuinely changed.</td></tr>
+          <tr><td>Acceptance</td><td>Golden Gson-written rows containing <code>&amp; = &lt; &gt; '</code> decode equal. <code>SharedPostPayloadWriter</code> issues no update for an unchanged post. A golden hash pins <code>destinationSummary</code>.</td></tr>
+        </tbody></table>
+      </article>
+
+      <article>
+        <h3>Phase 6: Backups, journal, developer copy, pinned searches</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Reflective leaves become kotlinx, while Gson tree framing stays. Leaves bridge through strings at the tree boundary, so old backups and a mixed-version developer copy keep working.</td></tr>
+          <tr><td>Acceptance</td><td>A Gson-written backup (v1 and v2) and restore journal restore correctly, and a pending restore still matches the same backup.</td></tr>
+        </tbody></table>
+      </article>
+
+      <article>
+        <h3>Phase 7: Credentials</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Envelope and payload records use kotlinx, with failure mapping preserved and no secrets in exception text.</td></tr>
+          <tr><td>Acceptance</td><td>An envelope written by the old code decrypts and decodes on device. A corrupt envelope yields <code>ReconnectRequired</code>. Parse errors are logged without their input.</td></tr>
+        </tbody></table>
+      </article>
+
+      <article>
+        <h3>Phase 8: Legacy importers</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Read-only legacy records move over, with <code>LegacyCodexStoreFile.posts</code> converted to kotlinx <code>JsonObject</code>. Importers never rewrite a source file.</td></tr>
+          <tr><td>Acceptance</td><td><code>RoomLegacyJsonImporterTest</code> and <code>RoomRecentsLegacyImporterTest</code> pass, including exact exception types.</td></tr>
+        </tbody></table>
+      </article>
+
+      <article>
+        <h3>Phase 9: Delete the R8 machinery</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Remove durable keep rules, <code>r8-json-contracts.txt</code>, <code>verify_r8_json_contract.py</code> and its test, <code>VerifyR8JsonContractsTask</code>, and the reflective half of <code>GsonWireContractTest</code>. Drop the five dead records. Retire the v2 manifest reader only after a release has carried the v3 upgrade.</td></tr>
+          <tr><td>Keep</td><td><code>ReleaseDataAcceptanceActivity</code> and <code>InstalledJsonCompatibilityDeviceTest</code>, retargeted. They are the proof that serializers survive R8.</td></tr>
+          <tr><td>Acceptance</td><td>No shipped class is decoded by Gson reflection (<code>git grep</code> for <code>fromJson(.*::class.java)</code> finds only tree types). Release acceptance passes.</td></tr>
+        </tbody></table>
+      </article>
+    </section>
+
+    <section id="work-plan">
+      <h2>Work Plan</h2>
+      <ol>
+        <li>Complete Phase 1 on its own branch and PR. A release must carry it before Phase 2 merges.</li>
+        <li>Until Phase 9, do not add, remove, or reorder fields on <code>Post</code>, <code>PostId</code>, <code>CreatorProfile</code>, <code>ImageRef</code>, <code>VideoVariant</code>, or <code>PostTaxonomyTerm</code> in a release that has not yet shipped Phase 1, because the v2 upgrade depends on their obfuscated names.</li>
+        <li>Each later phase: capture golden files first and commit them, convert records from <code>@field:SerializedName("x")</code> to <code>@SerialName("x")</code> with <code>@Serializable</code>, switch the entry points, then remove that phase's classes from the keep rules and contract list.</li>
+        <li>Convert a record and its nested records together. Keep <code>gson</code> on the test classpath of every module so the parity harness still runs after production stops using reflection.</li>
+        <li>Update <code>.docs/DEVELOPMENT.md</code> in the phase that makes its current Gson sentences false.</li>
+      </ol>
+    </section>
+
+    <section id="validation">
+      <h2>Validation And Acceptance</h2>
+      <p>Run from the repository root with a JDK 21 or newer as <code>JAVA_HOME</code>.</p>
+      <table>
+        <thead><tr><th>Check</th><th>Command or action</th><th>Expected result</th></tr></thead>
+        <tbody>
+          <tr><td>Unit and parity tests</td><td><code>./gradlew :core-data:test :core-data-android:testDebugUnitTest :app:testDebugUnitTest :core-sources:test --offline</code></td><td>All pass; parity failures name the type and differing key.</td></tr>
+          <tr><td>Quality gates</td><td><code>./gradlew :koverVerifyQuality</code>, the Detekt tasks in <code>.github/workflows/verify.yml</code>, <code>python3 scripts/check_changed_coverage.py</code>, <code>python3 scripts/check_hotspots.py</code></td><td>All pass, with changed-line coverage at least 60%.</td></tr>
+          <tr><td>Minified behavior</td><td>The <code>R8 release acceptance</code> job in <code>device-validation.yml</code>, run by <code>gh workflow run device-validation.yml --ref &lt;branch&gt;</code></td><td>Passes on API 36 and 37. Host tests cannot prove R8 behavior.</td></tr>
+          <tr><td>Real upgrade</td><td>Install the previous acceptance APK, write data, install the new APK over it, and read.</td><td>Collections, settings, and offline availability are intact.</td></tr>
+          <tr><td>Your device</td><td>After a release, open an offline collection in airplane mode.</td><td>Only you can confirm this against real data, through the signed update path.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="living-log">
+      <h2>Living Log</h2>
+      <h3>Progress</h3>
+      <ul>
+        <li>[x] 2026-11-08 - Inventoried 24 surfaces and 61 shipped record types, and mapped byte and failure dependencies.</li>
+        <li>[x] 2026-11-08 - Proved v1.3.0 and current <code>main</code> assign the same obfuscated field names to the <code>Post</code> graph.</li>
+        <li>[ ] 2026-11-08 - Phase 1: offline manifest schema v3.</li>
+        <li>[ ] Phases 2 to 9.</li>
+      </ul>
+
+      <h3>Surprises And Discoveries</h3>
+      <ul>
+        <li>Observation: release manifests already use obfuscated keys. Evidence: <code>app/build/outputs/mapping/release/mapping.txt</code> maps <code>Post.id</code> to <code>a</code> and <code>preview</code> to <code>b</code>, and <code>Post</code> has no keep rule.</li>
+        <li>Observation: an undecodable manifest is treated as "no copy", so <code>OfflineMediaStore.commit</code> deletes the old generation and forgets other collections' ownership. Evidence: <code>readRecord</code> returns null through <code>runCatching</code>, then <code>commit</code> writes <code>setOf(owner)</code>.</li>
+        <li>Observation: the existing golden tests use <code>serializeNulls()</code>, which production does not, so they do not pin real output. Evidence: <code>GsonWireContractTest.kt:12</code>.</li>
+        <li>Observation: nine keep-rule entries refer to classes that no longer exist, and five records are unused. Evidence: inventory section 4.</li>
+        <li>Observation: the local <code>theoria-search-test</code> emulator stayed adb-offline for over seven minutes on 2026-11-08 and <code>device_open</code> failed. Evidence: <code>adb devices</code> reported <code>emulator-5554 offline</code>. CI emulators passed the same day.</li>
+      </ul>
+
+      <h3>Decision Log</h3>
+      <ul>
+        <li>Decision: migrate reflective surfaces only and keep Gson's tree API. Rationale: the tree API has no reflection or R8 exposure, and rewriting about 190 provider parsing sites adds risk with no safety gain. Date/Author: 2026-11-08 / Claude.</li>
+        <li>Decision: use <code>PostStorageRecord</code> for manifest v3 instead of annotating domain classes. Rationale: it is already the stable, tested mirror of <code>Post</code>, and no new library is needed. Date/Author: 2026-11-08 / Claude.</li>
+        <li>Decision: upgrade v2 manifests through the existing reflective reader. Rationale: the mapping comparison shows names are unchanged since v1.3.0, so this is the simplest correct reader. Date/Author: 2026-11-08 / Claude.</li>
+        <li>Decision: use kotlinx.serialization rather than Moshi. Rationale: code generation is built into the Kotlin compiler toolchain, and its JSON tree is available if Gson's tree use is ever replaced. Date/Author: 2026-11-08 / Claude.</li>
+        <li>Decision: do not delete legacy importers. Rationale: it cannot be shown that every install has finished archiving them. Date/Author: 2026-11-08 / Claude.</li>
+      </ul>
+
+      <h3>Outcomes And Retrospective</h3>
+      <p>Not started. Update at the end of each phase.</p>
+    </section>
+
+    <section id="recovery">
+      <h2>Idempotence And Recovery</h2>
+      <p>Build and test commands are safe to rerun. Each phase is a separate PR, so a bad phase reverts on its own. Reading always accepts the old format, so an app reverted to a phase's predecessor still needs that format to be readable: phases 3 to 8 keep Gson-readable output (same keys, nulls omitted, defaults present) so a rollback does not strand data. Manifest v3 is the exception. Older builds ignore it and see no offline copy, so its downloads remain on disk but are offered again as downloads. Android blocks version downgrades on the signed update path, so this only affects manual rollbacks.</p>
+      <p>Device work uses isolated packages only (<code>com.theoriacodex.acceptance</code>, <code>com.theoriacodex.debug</code>). Never touch <code>com.theoriacodex</code>.</p>
+    </section>
+
+    <section id="appendix">
+      <h2>Appendix: Evidence And Notes</h2>
+      <details>
+        <summary>Golden files to capture in Phase 2 (none exist today)</summary>
+        <ul>
+          <li>A <code>posts.payload_json</code> row and <code>liked_posts.tags_json</code> exactly as Gson wrote them, including escaped characters.</li>
+          <li>A stored Recents <code>destinationSha256</code> computed by current code over rows containing <code>&amp; = &lt; &gt; '</code> and a null <code>originQueryHash</code>.</li>
+          <li>A v2 manifest with obfuscated keys and one predating <code>taxonomy</code>.</li>
+          <li>A Gson-written backup (v1 and v2) and a <code>pending_profile_restore.json</code>.</li>
+          <li>A corrupt credential envelope and payload, asserting <code>ReconnectRequired</code>.</li>
+          <li>DataStore files holding nulls or missing required values, pinning which repair and which reset.</li>
+        </ul>
+      </details>
+      <details>
+        <summary>Obfuscated name comparison, v1.3.0 vs main</summary>
+        <pre><code>Post 17 fields, CreatorProfile 5, ImageRef 6, VideoVariant 4, PostId 2: identical
+PostTaxonomyTerm: identical plus new translation -> e
+SearchFacet: static field names shifted, but Gson matches enum values by name()</code></pre>
+      </details>
+    </section>
+  </main>
+</body>
+</html>
