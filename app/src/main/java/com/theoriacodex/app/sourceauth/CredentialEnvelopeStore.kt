@@ -267,7 +267,7 @@ internal class CredentialPayloadRecord(
     val rule34XxxApiKey: String? = null,
     /** Additive in payload schema 1 (plan D7); absent when no custom site has keys. */
     @field:SerializedName("customSites")
-    val customSites: Map<String, CustomSiteCredentialRecord>? = null,
+    val customSites: Map<String, CustomSiteCredentialRecord?>? = null,
 ) {
     constructor(snapshot: SourceCredentialSnapshot) : this(
         pixivAccessToken = snapshot.pixivAccessToken,

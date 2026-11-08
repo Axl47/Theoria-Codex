@@ -193,7 +193,3 @@ private class CanonicalDigest {
 }
 
 private val SHA256_PATTERN = Regex("[0-9a-f]{64}")
-
-private fun ByteArray.toHexString(): String {
-    return joinToString(separator = "") { byte -> "%02x".format(byte) }
-}

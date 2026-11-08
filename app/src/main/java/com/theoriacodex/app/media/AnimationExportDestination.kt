@@ -134,7 +134,7 @@ internal class AnimationExportDestination(private val context: Context) {
     }
 
     private fun markerKey(marker: String): String = MessageDigest.getInstance("SHA-256")
-        .digest(marker.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+        .digest(marker.toByteArray(Charsets.UTF_8)).toHexString()
 
     private fun description(key: String, complete: Boolean): String =
         "theoria-export:$key:${if (complete) "complete" else "pending"}"

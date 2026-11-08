@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.net.HttpURLConnection
+import java.net.UnknownHostException
 import java.net.URLEncoder
 import java.net.URL
 import kotlinx.coroutines.delay
@@ -132,10 +133,13 @@ class DefaultSourceHttpClient(
                 )
             } catch (error: HostUnavailableException) {
                 throw error
+            } catch (error: UnknownHostException) {
+                outages?.recordFailure(requestUrl, error)
+                throw error
             } catch (error: IOException) {
                 lastError = error
                 outages?.recordFailure(requestUrl, error)
-                if (attempt == maxRetries || error is java.net.UnknownHostException) throw error
+                if (attempt == maxRetries) throw error
                 attempt += 1
                 delay(retryBaseDelayMs * attempt)
             }

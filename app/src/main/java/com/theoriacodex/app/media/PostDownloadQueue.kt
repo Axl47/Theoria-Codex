@@ -237,6 +237,8 @@ internal class PostDownloadQueue(
         }
     }
 
+    // Unexpected failures surface only as a generic user message; the queue has no logging seam, so the cause is dropped.
+    @Suppress("SwallowedException")
     private suspend fun execute(item: PostDownloadItem) {
         var downloadId: Long? = item.downloadId
         try {
@@ -266,15 +268,20 @@ internal class PostDownloadQueue(
             checkpoint()
         } catch (cancelled: CancellationException) {
             throw cancelled
+        } catch (error: DownloadPreparationException) {
+            markFailed(item.id, error.message)
         } catch (error: Exception) {
-            val message = if (error is DownloadPreparationException) error.message else "Could not save this post. Try again."
-            update(item.id) { it.copy(status = PostDownloadStatus.FAILED, message = message) }
-            com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation { checkpoint() }
+            markFailed(item.id, "Could not save this post. Try again.")
         } finally {
             if (currentItem(item.id)?.status == PostDownloadStatus.CANCELLED) {
                 withContext(NonCancellable) { (downloadId ?: currentItem(item.id)?.downloadId)?.let { backend.cancel(it) } }
             }
         }
+    }
+
+    private suspend fun markFailed(itemId: Long, message: String?) {
+        update(itemId) { it.copy(status = PostDownloadStatus.FAILED, message = message) }
+        com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation { checkpoint() }
     }
 
     private suspend fun resumeExistingTransfer(item: PostDownloadItem): Boolean {

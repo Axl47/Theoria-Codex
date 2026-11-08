@@ -532,7 +532,8 @@ internal class SettingsViewModel(
         }
         val snapshot = try {
             dependencies.accounts.loadSnapshot()
-        } catch (error: CredentialStoreUnavailableException) {
+        } catch (expected: CredentialStoreUnavailableException) {
+            // The store reports why it is unavailable through recoveryState, which is what the UI shows.
             applyRecoveryState(dependencies.accounts.recoveryState.value)
             return
         }

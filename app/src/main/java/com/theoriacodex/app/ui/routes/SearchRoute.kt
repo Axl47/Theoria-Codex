@@ -140,7 +140,7 @@ internal class WeakRouteOwnerLease<Owner : Any>(owner: Owner) : Closeable {
         return Closeable {
             listenerId?.let { id ->
                 synchronized(lock) {
-                    closeListeners.remove(id)
+                    closeListeners -= id
                 }
             }
         }

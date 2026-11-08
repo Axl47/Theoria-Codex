@@ -48,6 +48,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.theoriacodex.app.source.displayName
@@ -340,13 +341,14 @@ private fun TimeSplit(segments: List<TimeSegment>) {
 
 @Composable
 private fun StatTiles(vararg tiles: Pair<String, Long>) {
+    val locale = LocalConfiguration.current.locales[0]
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         tiles.toList().chunked(2).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { (label, value) ->
                     Card(Modifier.weight(1f), shape = RoundedCornerShape(16.dp)) {
                         Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                            Text("%,d".format(value), style = MaterialTheme.typography.titleLarge)
+                            Text("%,d".format(locale, value), style = MaterialTheme.typography.titleLarge)
                             StatsCaption(label)
                         }
                     }

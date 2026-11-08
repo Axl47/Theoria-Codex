@@ -67,5 +67,5 @@ class StatisticsThumbnailStore(private val directory: File) {
     }
 
     private fun fileName(key: String): String = MessageDigest.getInstance("SHA-256")
-        .digest(key.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) } + ".webp"
+        .digest(key.toByteArray(Charsets.UTF_8)).toHexString() + ".webp"
 }

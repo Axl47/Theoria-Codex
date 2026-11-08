@@ -183,7 +183,8 @@ fun ForYouScreen(
     if (showSortSheet) {
         ForYouSortSheet(
             state.sortMode, fabRestoreState, feed, onFabRestoreStateChange, onAction,
-            onReset = { clearFilters() }, onDismiss = { showSortSheet = false },
+            // The sheet reset has no undo affordance, so the undo callback is intentionally discarded.
+            onReset = @Suppress("IgnoredReturnValue") { clearFilters() }, onDismiss = { showSortSheet = false },
         )
     }
 }

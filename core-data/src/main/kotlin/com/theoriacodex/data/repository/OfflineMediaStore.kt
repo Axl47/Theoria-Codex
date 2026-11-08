@@ -141,15 +141,15 @@ class OfflineMediaStore(
         directory.mkdirs()
         val staged = File(directory, ".pending-${UUID.randomUUID()}").also { activeStaging.add(it); it.mkdirs() }
         try {
-            val localMedia = media.mapIndexed { index, ref ->
+            val stagedMedia = media.mapIndexed { index, ref ->
                 currentCoroutineContext().ensureActive()
                 val output = File(staged, "$index.${extension(ref)}")
                 acquire(ref, output)
                 check(output.isFile && output.length() > 0L) { "No media bytes were saved" }
-                ref.copy(localPath = output.name)
+                ref to output.name
             }
             currentCoroutineContext().ensureActive()
-            mutex.withLock { commit(post, localMedia, owner, admitted, staged) }
+            mutex.withLock { commit(post, stagedMedia, owner, admitted, staged) }
         } finally {
             staged.deleteRecursively()
             activeStaging.remove(staged)
@@ -158,7 +158,7 @@ class OfflineMediaStore(
 
     private fun commit(
         post: Post,
-        localMedia: List<ImageRef>,
+        stagedMedia: List<Pair<ImageRef, String>>,
         owner: String,
         admission: OfflineMediaAdmission,
         staged: File,
@@ -176,7 +176,7 @@ class OfflineMediaStore(
         }
         val generation = File(folder, UUID.randomUUID().toString())
         check(staged.renameTo(generation)) { "Could not finish saving offline media" }
-        val completedMedia = localMedia.map { it.copy(localPath = File(generation, it.localPath!!).absolutePath) }
+        val completedMedia = stagedMedia.map { (ref, name) -> ref.copy(localPath = File(generation, name).absolutePath) }
         val completed = post.copy(
             media = completedMedia,
             full = completedMedia.first(),
@@ -237,13 +237,13 @@ class OfflineMediaStore(
         if (!hasCanonicalSourceSnapshot(post, sourcePost)) return null
         if (post.media.isEmpty()) return null
         val canonicalFolder = folder.canonicalFile
-        if (post.media.any { ref ->
-                val file = ref.localPath?.let(::File) ?: return@any true
+        val files = post.media.map { ref -> ref.localPath?.let(::File) ?: return null }
+        if (files.any { file ->
                 !file.canonicalFile.toPath().startsWith(canonicalFolder.toPath()) || !file.isFile || file.length() <= 0L
             }
         ) return null
         val expectedBytes = root.getAsJsonArray("mediaBytes").map { it.asLong }
-        if (expectedBytes != post.media.map { File(it.localPath!!).length() }) return null
+        if (expectedBytes != files.map { it.length() }) return null
         OfflineRecord(post, sourcePost, root.getAsJsonArray("owners").map { it.asString }.toSet())
     }.getOrNull()
 
@@ -258,7 +258,7 @@ class OfflineMediaStore(
             add("post", gson.toJsonTree(post))
             add("sourcePost", gson.toJsonTree(sourcePost))
             add("owners", JsonArray().apply { owners.sorted().forEach(::add) })
-            add("mediaBytes", JsonArray().apply { post.media.forEach { add(File(it.localPath!!).length()) } })
+            add("mediaBytes", JsonArray().apply { post.media.forEach { add(File(checkNotNull(it.localPath) { "Offline media is missing its local path" }).length()) } })
         }
         val temporary = File(folder, "manifest.pending")
         try {

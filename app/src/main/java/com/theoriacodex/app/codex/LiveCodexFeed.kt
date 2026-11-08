@@ -61,7 +61,7 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
 ) {
     private val mutableState = MutableStateFlow(LiveCodexFeedState())
     val state = mutableState.asStateFlow()
-    private var branches = linkedMapOf<String, B>()
+    private val branches = linkedMapOf<String, B>()
     private var job: Job? = null
     private var generation = 0L
     private var coverPostId: PostId? = null
@@ -89,7 +89,8 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
         related.clear("live codex reset")
         generation++
         coverPostId = null
-        branches = initial.associateByTo(linkedMapOf()) { it.id }
+        branches.clear()
+        initial.associateByTo(branches) { it.id }
         mutableState.value = LiveCodexFeedState(generation = generation)
         load(branches.keys.toList(), retry = false, cacheInitialCover = true)
     }
