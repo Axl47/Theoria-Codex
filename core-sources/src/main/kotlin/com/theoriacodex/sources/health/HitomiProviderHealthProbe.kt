@@ -31,6 +31,7 @@ class HitomiProviderHealthProbe(
     private val mediaUrlResolver: HitomiMediaUrlResolver = HitomiMediaUrlResolver(httpClient),
     private val nowProvider: () -> Long = System::currentTimeMillis,
     private val probeMediaRanges: Boolean = true,
+    private val challengesSeen: () -> Int = { 0 },
 ) {
     init {
         require(adapter.sourceKey == SourceKey.HITOMI) {
@@ -243,7 +244,7 @@ class HitomiProviderHealthProbe(
         initialRequestUrl: String? = null,
         requestUrl: () -> String? = { initialRequestUrl },
         block: suspend () -> ProviderProbeStepResult,
-    ): ProviderProbeStepResult {
+    ): ProviderProbeStepResult = observingChallenges(challengesSeen) {
         var result: ProviderProbeStepResult? = null
         var failure: Throwable? = null
         val latencyMs = measureTimeMillis {
@@ -257,7 +258,7 @@ class HitomiProviderHealthProbe(
         }
         val caught = failure
         if (caught != null) {
-            return ProviderProbeStepResult(
+            return@observingChallenges ProviderProbeStepResult(
                 source = SourceKey.HITOMI,
                 checkName = checkName,
                 status = ProviderHealthStatus.FAILED,
@@ -268,7 +269,7 @@ class HitomiProviderHealthProbe(
                 requestUrl = requestUrl(),
             )
         }
-        return requireNotNull(result).copy(latencyMs = latencyMs)
+        requireNotNull(result).copy(latencyMs = latencyMs)
     }
 
     private fun ok(

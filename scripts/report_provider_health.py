@@ -34,7 +34,7 @@ SOURCE_ID = re.compile(r"^[A-Z][A-Z0-9_]{1,31}$")
 CHECK_NAME = re.compile(r"^[a-z0-9-]+$")
 FINGERPRINT = re.compile(r"<!-- provider-health-fingerprint: ([0-9a-f]{16}) -->")
 RUN_URL = re.compile(r"^https?://[A-Za-z0-9./_-]+$")
-STATUSES = frozenset({"OK", "DEGRADED", "FAILED", "SKIPPED"})
+STATUSES = frozenset({"OK", "DEGRADED", "FAILED", "SKIPPED", "CANNOT_CHECK"})
 UNHEALTHY = frozenset({"DEGRADED", "FAILED"})
 REASONS = frozenset(
     {"AUTH_REQUIRED", "AUTH_EXPIRED", "RATE_LIMITED", "NETWORK", "PARSE", "UNKNOWN"}
@@ -171,7 +171,7 @@ def classify(
             healthy.add(source)
         elif initial.status in UNHEALTHY and source in confirm and latest.status in UNHEALTHY:
             unhealthy[source] = latest
-        # SKIPPED, unconfirmed, or unclassified: no evidence either way.
+        # SKIPPED, CANNOT_CHECK (a browser challenge), unconfirmed, or unclassified: no evidence either way.
     return unhealthy, healthy
 
 

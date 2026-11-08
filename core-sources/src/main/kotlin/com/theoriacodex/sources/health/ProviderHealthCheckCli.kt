@@ -20,41 +20,7 @@ fun main(args: Array<String>) = runBlocking {
     val publicSafe = System.getProperty("theoria.providerHealth.publicSafe") == "true"
     val gson = GsonBuilder().setPrettyPrinting().create()
     val report = if (liveEnabled) {
-        val requestedSources = parseRequestedSources(System.getProperty("theoria.liveSources.sources"))
-        val httpClient = DefaultSourceHttpClient(
-            connectTimeoutMs = 8_000,
-            readTimeoutMs = 12_000,
-            maxRetries = 0,
-        )
-        val registry = RealAdapterRegistry(
-            credentialsProvider = EnvironmentCredentialsProvider,
-            httpClient = httpClient,
-            exposedSources = requestedSources.ifEmpty { SourceKey.builtIns.toSet() },
-        )
-        val probeCases = selectProbeCases(loadProbeCases(), requestedSources)
-        val genericResults = ProviderProbeRunner(
-            registry = registry,
-            credentialedSources = credentialedSourcesFromEnvironment(),
-        ).runAll(probeCases)
-        val hitomiResults = if (probeCases.any { probeCase -> probeCase.source == SourceKey.HITOMI }) {
-            val adapter = requireNotNull(registry.adapterFor(SourceKey.HITOMI)) {
-                "Hitomi was selected for provider health but is not exposed by the registry"
-            }
-            HitomiProviderHealthProbe(
-                adapter = adapter,
-                httpClient = httpClient,
-                probeMediaRanges = !publicSafe,
-            ).runAll()
-        } else {
-            emptyList()
-        }
-        val probeResults = genericResults + hitomiResults
-        ProviderHealthReport(
-            liveProvidersEnabled = true,
-            generatedAtEpochMs = System.currentTimeMillis(),
-            results = aggregateProbeResults(probeResults),
-            probeResults = probeResults,
-        )
+        liveReport(publicSafe)
     } else {
         ProviderHealthReport(
             liveProvidersEnabled = false,
@@ -70,6 +36,49 @@ fun main(args: Array<String>) = runBlocking {
     if (liveEnabled && strictMode && shouldFailStrict(report, requestedSources)) {
         error("Strict live source health failed. See report: ${outputFile.absolutePath}")
     }
+}
+
+/** Probes the selected providers over the network. */
+private suspend fun liveReport(publicSafe: Boolean): ProviderHealthReport {
+    val requestedSources = parseRequestedSources(System.getProperty("theoria.liveSources.sources"))
+    val httpClient = ChallengeObservingHttpClient(
+        DefaultSourceHttpClient(
+            connectTimeoutMs = 8_000,
+            readTimeoutMs = 12_000,
+            maxRetries = 0,
+        ),
+    )
+    val registry = RealAdapterRegistry(
+        credentialsProvider = EnvironmentCredentialsProvider,
+        httpClient = httpClient,
+        exposedSources = requestedSources.ifEmpty { SourceKey.builtIns.toSet() },
+    )
+    val probeCases = selectProbeCases(loadProbeCases(), requestedSources)
+    val genericResults = ProviderProbeRunner(
+        registry = registry,
+        credentialedSources = credentialedSourcesFromEnvironment(),
+        challengesSeen = httpClient::challengesSeen,
+    ).runAll(probeCases)
+    val hitomiResults = if (probeCases.any { probeCase -> probeCase.source == SourceKey.HITOMI }) {
+        val adapter = requireNotNull(registry.adapterFor(SourceKey.HITOMI)) {
+            "Hitomi was selected for provider health but is not exposed by the registry"
+        }
+        HitomiProviderHealthProbe(
+            adapter = adapter,
+            httpClient = httpClient,
+            probeMediaRanges = !publicSafe,
+            challengesSeen = httpClient::challengesSeen,
+        ).runAll()
+    } else {
+        emptyList()
+    }
+    val probeResults = genericResults + hitomiResults
+    return ProviderHealthReport(
+        liveProvidersEnabled = true,
+        generatedAtEpochMs = System.currentTimeMillis(),
+        results = aggregateProbeResults(probeResults),
+        probeResults = probeResults,
+    )
 }
 
 internal fun parseRequestedSources(raw: String?): Set<SourceKey> {
@@ -137,7 +146,7 @@ private fun credentialedSourcesFromEnvironment(): Set<SourceKey> {
     }
 }
 
-private fun aggregateProbeResults(probeResults: List<ProviderProbeStepResult>): List<ProviderHealthCheckResult> {
+internal fun aggregateProbeResults(probeResults: List<ProviderProbeStepResult>): List<ProviderHealthCheckResult> {
     return probeResults
         .groupBy { it.source }
         .toSortedMap(compareBy { it.id })
@@ -145,6 +154,7 @@ private fun aggregateProbeResults(probeResults: List<ProviderProbeStepResult>): 
             val status = when {
                 sourceResults.any { it.status == ProviderHealthStatus.FAILED } -> ProviderHealthStatus.FAILED
                 sourceResults.any { it.status == ProviderHealthStatus.DEGRADED } -> ProviderHealthStatus.DEGRADED
+                sourceResults.any { it.status == ProviderHealthStatus.CANNOT_CHECK } -> ProviderHealthStatus.CANNOT_CHECK
                 sourceResults.all { it.status == ProviderHealthStatus.SKIPPED } -> ProviderHealthStatus.SKIPPED
                 else -> ProviderHealthStatus.OK
             }

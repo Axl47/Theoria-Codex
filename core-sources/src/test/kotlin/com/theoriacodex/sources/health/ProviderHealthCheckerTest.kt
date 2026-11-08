@@ -55,6 +55,28 @@ class ProviderHealthCheckerTest {
     }
 
     @Test
+    fun `a problem during a browser challenge cannot be checked while a real failure stays failed`() = runTest {
+        val registry = FakeRegistry(
+            mapOf(
+                SourceKey.AIBOORU to FakeAdapter(
+                    SourceKey.AIBOORU,
+                    failure = SourceAdapterException(SourceFailureReason.NETWORK, "request failed"),
+                ),
+            ),
+        )
+        val cases = listOf(ProviderProbeCase(source = SourceKey.AIBOORU, mediaProbe = false, trendingProbe = false))
+        var challenges = 0
+
+        val challenged = ProviderProbeRunner(registry, challengesSeen = { challenges++ }).runAll(cases)
+            .first { it.checkName == "newest-search" }
+        val outage = ProviderProbeRunner(registry).runAll(cases).first { it.checkName == "newest-search" }
+
+        assertEquals(ProviderHealthStatus.CANNOT_CHECK, challenged.status)
+        assertEquals(null, challenged.failureReason)
+        assertEquals(ProviderHealthStatus.FAILED, outage.status)
+    }
+
+    @Test
     fun `probe cases parse json configuration`() {
         val cases = ProviderProbeCases.fromJson(
             """

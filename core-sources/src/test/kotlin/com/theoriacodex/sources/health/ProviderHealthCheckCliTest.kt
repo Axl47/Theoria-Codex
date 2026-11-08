@@ -9,6 +9,16 @@ import org.junit.Test
 
 class ProviderHealthCheckCliTest {
     @Test
+    fun `a browser challenge only marks a source when nothing is actually broken`() {
+        val cannotCheck = step(SourceKey.IWARA, ProviderHealthStatus.CANNOT_CHECK)
+        val ok = step(SourceKey.IWARA, ProviderHealthStatus.OK)
+        val failed = step(SourceKey.IWARA, ProviderHealthStatus.FAILED)
+
+        assertEquals(ProviderHealthStatus.CANNOT_CHECK, aggregateProbeResults(listOf(ok, cannotCheck)).single().status)
+        assertEquals(ProviderHealthStatus.FAILED, aggregateProbeResults(listOf(failed, cannotCheck)).single().status)
+    }
+
+    @Test
     fun `source filter selects only requested provider cases`() {
         val selected = selectProbeCases(
             cases = ProviderProbeCases.defaults,

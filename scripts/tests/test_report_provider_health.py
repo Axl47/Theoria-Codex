@@ -31,6 +31,7 @@ def report(**sources: tuple[str, list[tuple[str, str, str | None]]]) -> dict:
 BAD = ("FAILED", [("newest-search", "FAILED", "NETWORK")])
 OK = ("OK", [("newest-search", "OK", None)])
 SKIP = ("SKIPPED", [("credentials", "SKIPPED", None)])
+CHALLENGED = ("CANNOT_CHECK", [("newest-search", "CANNOT_CHECK", None)])
 
 
 def health(**sources):
@@ -85,6 +86,12 @@ class PlanTest(unittest.TestCase):
         # Confirm pass skipped it: no evidence it is still unhealthy or recovered.
         first = health(PIXIV=BAD)
         self.assertEqual([], self.plan(first, health(PIXIV=SKIP), []))
+
+    def test_browser_challenge_is_not_retried_and_leaves_issues_alone(self):
+        first = health(A=CHALLENGED)
+        self.assertEqual(rph.retry_sources(first), [])
+        self.assertEqual(self.plan(first, {}, []), [])
+        self.assertEqual(self.plan(health(A=BAD), health(A=CHALLENGED), [issue(1, "A", body="x")]), [])
 
     def test_issues_are_matched_by_exact_title(self):
         first = health(DANBOORU=BAD)

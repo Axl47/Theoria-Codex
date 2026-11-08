@@ -274,7 +274,8 @@ probes are skipped, and stdout shows only `<source id>: <status> <reason>` per p
 report is written but never uploaded. Providers that fail are re-checked after five minutes;
 `scripts/report_provider_health.py` opens one `provider-health`-labelled issue per provider that is
 degraded in both passes, edits it only when the failing checks change, and closes it when the provider
-is healthy again. Skipped providers leave their issues alone. Issues and the step summary contain only
+is healthy again. A step that fails behind a browser challenge reports `CANNOT_CHECK` because the
+provider's health is unknown. `CANNOT_CHECK` and skipped providers leave their issues alone. Issues and the step summary contain only
 allowlisted fields (source id, status, reason enum, normalised check name). Gelbooru and Rule34.xxx are
 probed only when the optional repository secrets `THEORIA_GELBOORU_USER_ID`, `THEORIA_GELBOORU_API_KEY`,
 `THEORIA_RULE34XXX_USER_ID`, and `THEORIA_RULE34XXX_API_KEY` are set; Pixiv is always skipped.
