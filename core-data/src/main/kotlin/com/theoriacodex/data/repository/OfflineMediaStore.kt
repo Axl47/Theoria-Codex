@@ -2,11 +2,16 @@ package com.theoriacodex.data.repository
 
 import com.google.gson.Gson
 import com.google.gson.JsonArray
+import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.data.storage.PostStorageCodec
+import com.theoriacodex.data.storage.PostStorageRecord
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.PostTaxonomyTerm
+import com.theoriacodex.domain.model.SearchFacet
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
@@ -167,6 +172,8 @@ class OfflineMediaStore(
         ensureCatalogLoaded()
         val folder = postDirectory(post.id).apply { mkdirs() }
         val old = readRecord(folder)
+        // An undecodable manifest must not make other collections forget their copy.
+        val priorOwners = if (old == null) salvageOwners(folder) else emptySet()
         if (old != null) {
             val retained = old.copy(owners = old.owners + owner)
             writeManifest(folder, retained.post, retained.sourcePost, retained.owners)
@@ -187,13 +194,13 @@ class OfflineMediaStore(
         )
         val sourcePost = withoutOfflineLocations(post)
         try {
-            writeManifest(folder, completed, sourcePost, setOf(owner))
+            writeManifest(folder, completed, sourcePost, priorOwners + owner)
         } catch (failure: Exception) {
             generation.deleteRecursively()
             throw failure
         }
         folder.listFiles().orEmpty().filter { it.isDirectory && it != generation }.forEach(File::deleteRecursively)
-        val record = OfflineRecord(completed, sourcePost, setOf(owner))
+        val record = OfflineRecord(completed, sourcePost, priorOwners + owner)
         rememberSourceMedia(record)
         updateCatalog(folder, record)
         return completed
@@ -227,25 +234,74 @@ class OfflineMediaStore(
         }
     }
 
-    private fun readRecord(folder: File): OfflineRecord? = runCatching {
-        val manifest = File(folder, "manifest.json")
+    /** [upgradeLegacy] rewrites a readable v2 manifest as v3; a failed rewrite keeps serving the v2 record. */
+    private fun readRecord(folder: File, upgradeLegacy: Boolean = false): OfflineRecord? = runCatching {
+        val manifest = File(folder, MANIFEST_NAME)
         if (!manifest.isFile || manifest.length() !in 1..MAX_MANIFEST_BYTES) return null
         val root = JsonParser.parseString(manifest.readText()).asJsonObject
-        if (root.get("version").asInt != 2) return null
-        val post = gson.fromJson(root.get("post"), Post::class.java)
-        val sourcePost = gson.fromJson(root.get("sourcePost"), Post::class.java)
-        if (!hasCanonicalSourceSnapshot(post, sourcePost)) return null
-        if (post.media.isEmpty()) return null
+        val version = root.get("version").asInt
+        val (post, sourcePost) = decodePosts(root, version) ?: return null
+        // A v2 read of renamed fields can land on the wrong values; the folder name is derived from the id.
+        if (folder.name != digest("${post.id.source.id}:${post.id.sourcePostId}")) return null
+        if (!hasCanonicalSourceSnapshot(post, sourcePost) || !mediaMatchesManifest(folder, post, root)) return null
+        val owners = root.getAsJsonArray("owners").map { it.asString }.toSet()
+        if (upgradeLegacy && version == LEGACY_MANIFEST_VERSION) {
+            try { writeManifest(folder, post, sourcePost, owners) } catch (_: IOException) { /* retried on the next catalog build */ }
+        }
+        OfflineRecord(post, sourcePost, owners)
+    }.getOrNull()
+
+    private fun decodePosts(root: JsonObject, version: Int): Pair<Post, Post>? {
+        val (post, sourcePost) = when (version) {
+            MANIFEST_VERSION -> decodeStored(root.get("post")) to decodeStored(root.get("sourcePost"))
+            LEGACY_MANIFEST_VERSION -> gson.fromJson(root.get("post"), Post::class.java).withLegacyDefaults() to
+                gson.fromJson(root.get("sourcePost"), Post::class.java).withLegacyDefaults()
+            else -> return null
+        }
+        return if (post == null || sourcePost == null) null else post to sourcePost
+    }
+
+    private fun mediaMatchesManifest(folder: File, post: Post, root: JsonObject): Boolean {
+        if (post.media.isEmpty()) return false
         val canonicalFolder = folder.canonicalFile
-        val files = post.media.map { ref -> ref.localPath?.let(::File) ?: return null }
+        val files = post.media.map { ref -> ref.localPath?.let(::File) ?: return false }
         if (files.any { file ->
                 !file.canonicalFile.toPath().startsWith(canonicalFolder.toPath()) || !file.isFile || file.length() <= 0L
             }
-        ) return null
-        val expectedBytes = root.getAsJsonArray("mediaBytes").map { it.asLong }
-        if (expectedBytes != files.map { it.length() }) return null
-        OfflineRecord(post, sourcePost, root.getAsJsonArray("owners").map { it.asString }.toSet())
-    }.getOrNull()
+        ) return false
+        return root.getAsJsonArray("mediaBytes").map { it.asLong } == files.map { it.length() }
+    }
+
+    private fun decodeStored(element: JsonElement): Post? =
+        gson.fromJson(element, PostStorageRecord::class.java)?.let(PostStorageCodec::decode)
+
+    /** Root owners are plain strings that R8 never renames, so they survive even when the post cannot be decoded. */
+    private fun salvageOwners(folder: File): Set<String> = runCatching {
+        val manifest = File(folder, MANIFEST_NAME)
+        if (!manifest.isFile || manifest.length() !in 1..MAX_MANIFEST_BYTES) return emptySet()
+        JsonParser.parseString(manifest.readText()).asJsonObject.getAsJsonArray("owners")
+            .mapNotNull { element -> element.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString }.toSet()
+    }.getOrDefault(emptySet())
+
+    /**
+     * Gson builds v2 posts without running constructors, so keys absent from older manifests leave null in
+     * non-null fields. Fill them with the constructors' own defaults before anything else touches the post.
+     */
+    @Suppress("USELESS_ELVIS", "SENSELESS_COMPARISON")
+    private fun Post.withLegacyDefaults(): Post {
+        fun ImageRef.fixed() = copy(progressiveUrls = progressiveUrls ?: emptyList(), videoVariants = videoVariants ?: emptyList())
+        val tags = canonicalTags ?: emptyList()
+        return copy(
+            preview = preview.fixed(),
+            full = full?.fixed(),
+            media = (media ?: emptyList()).map { it.fixed() },
+            canonicalTags = tags,
+            rawTags = rawTags ?: emptyList(),
+            taxonomy = (taxonomy ?: tags.map { PostTaxonomyTerm(value = it) })
+                .map { term -> if (term.facet == null) term.copy(facet = SearchFacet.TAG) else term },
+            creatorProfiles = creatorProfiles ?: listOfNotNull(creatorProfile),
+        )
+    }
 
     private fun hasCanonicalSourceSnapshot(offline: Post, source: Post): Boolean {
         if (source.id != offline.id) return false
@@ -254,9 +310,9 @@ class OfflineMediaStore(
 
     private fun writeManifest(folder: File, post: Post, sourcePost: Post, owners: Set<String>) {
         val root = JsonObject().apply {
-            addProperty("version", 2)
-            add("post", gson.toJsonTree(post))
-            add("sourcePost", gson.toJsonTree(sourcePost))
+            addProperty("version", MANIFEST_VERSION)
+            add("post", gson.toJsonTree(PostStorageCodec.encode(post)))
+            add("sourcePost", gson.toJsonTree(PostStorageCodec.encode(sourcePost)))
             add("owners", JsonArray().apply { owners.sorted().forEach(::add) })
             add("mediaBytes", JsonArray().apply { post.media.forEach { add(File(checkNotNull(it.localPath) { "Offline media is missing its local path" }).length()) } })
         }
@@ -264,7 +320,7 @@ class OfflineMediaStore(
         try {
             temporary.writeText(root.toString())
             if (temporary.length() > MAX_MANIFEST_BYTES) throw IOException("Offline gallery metadata is too large")
-            Files.move(temporary.toPath(), File(folder, "manifest.json").toPath(), ATOMIC_MOVE, REPLACE_EXISTING)
+            Files.move(temporary.toPath(), File(folder, MANIFEST_NAME).toPath(), ATOMIC_MOVE, REPLACE_EXISTING)
         } finally {
             temporary.delete()
         }
@@ -277,7 +333,7 @@ class OfflineMediaStore(
         directory.listFiles().orEmpty().forEach { folder ->
             if (folder.name.startsWith(".pending-")) {
                 if (folder !in activeStaging) folder.deleteRecursively()
-            } else indexFolder(folder, readRecord(folder))
+            } else indexFolder(folder, readRecord(folder, upgradeLegacy = true))
         }
         catalogLoaded = true
         mutableSnapshot.value = catalog.snapshot()
@@ -326,7 +382,14 @@ class OfflineMediaStore(
     ) {
         val effectiveMedia: List<ImageRef> get() = media.ifEmpty { listOfNotNull(full) }
     }
-    private companion object { const val MAX_MANIFEST_BYTES = 8L * 1024L * 1024L }
+    private companion object {
+        const val MAX_MANIFEST_BYTES = 8L * 1024L * 1024L
+        const val MANIFEST_NAME = "manifest.json"
+        /** v2 serialized the domain Post reflectively, so release builds wrote R8-renamed keys. */
+        const val LEGACY_MANIFEST_VERSION = 2
+        /** v3 serializes the keep-ruled PostStorageRecord with stable keys. */
+        const val MANIFEST_VERSION = 3
+    }
 }
 
 data class OfflineMediaSnapshot(

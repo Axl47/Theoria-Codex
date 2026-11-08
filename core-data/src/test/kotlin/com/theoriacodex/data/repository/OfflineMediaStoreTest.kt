@@ -1,6 +1,16 @@
 package com.theoriacodex.data.repository
 
+import com.google.gson.Gson
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
+import com.theoriacodex.data.storage.PostStorageCodec
+import com.theoriacodex.data.storage.PostStorageRecord
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.PostTaxonomyTerm
+import com.theoriacodex.domain.model.SearchFacet
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.VideoVariant
 import java.io.File
@@ -28,7 +38,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
             }
             val gson = com.google.gson.GsonBuilder().registerTypeAdapterFactory(object : com.google.gson.TypeAdapterFactory {
                 override fun <T> create(gson: com.google.gson.Gson, type: com.google.gson.reflect.TypeToken<T>): com.google.gson.TypeAdapter<T>? {
-                    if (type.rawType != Post::class.java) return null
+                    if (type.rawType != PostStorageRecord::class.java) return null
                     val delegate = gson.getDelegateAdapter(this, type)
                     return object : com.google.gson.TypeAdapter<T>() {
                         override fun write(writer: com.google.gson.stream.JsonWriter, value: T) = delegate.write(writer, value)
@@ -255,6 +265,150 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         assertNull(reopened.find(source.id))
         assertEquals(0, reopened.snapshot.value.postCount)
         assertTrue(offline.media.all { File(it.localPath!!).isFile })
+    }
+
+    @Test
+    fun `new manifests are version 3 with stable keys and round-trip the full post`() = runTest {
+        val directory = tempDir("v3")
+        val base = gallery()
+        val source = base.copy(
+            full = base.full?.copy(videoVariants = listOf(VideoVariant("https://example.test/480.mp4", 480, mime = "video/mp4"))),
+            taxonomy = listOf(PostTaxonomyTerm("cat", SearchFacet.TAG, "ns", 3, translation = "neko")),
+            creatorProfiles = listOf(CreatorProfile(SourceKey.PIXIV, "artist", "1", "https://example.test/u/1", "user:1")),
+        )
+        val saved = OfflineMediaStore(directory).save(source, source.media, "codex:a") { _, file -> file.writeText("bytes") }
+        val manifest = manifestOf(directory)
+        assertEquals(3, manifest.get("version").asInt)
+        val wire = manifest.getAsJsonObject("post")
+        assertTrue(wire.has("sourcePostId") && wire.has("previewUrl"))
+        assertTrue(manifest.getAsJsonObject("sourcePost").has("fullVideoVariants"))
+        assertTrue(saved.media.all { it.localPath != null })
+        val reopened = OfflineMediaStore(directory)
+        val restored = requireNotNull(reopened.find(source.id))
+        assertEquals(saved, restored)
+        assertEquals("neko", restored.taxonomy.single().translation)
+        // The source snapshot keeps the canonical refs, including video variants, and restores them.
+        assertEquals(source, reopened.withoutOfflineLocations(restored))
+    }
+
+    @Test
+    fun `a version 2 manifest is read and upgraded to version 3 with its owners`() = runTest {
+        val directory = tempDir("v2")
+        val post = gallery()
+        val saved = OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes") }
+        OfflineMediaStore(directory).retain(post.id, "codex:b")
+        downgradeToV2(directory)
+        assertEquals(2, manifestOf(directory).get("version").asInt)
+
+        val fresh = OfflineMediaStore(directory)
+        assertEquals(saved, fresh.find(post.id))
+        assertEquals(mapOf("codex:a" to 1, "codex:b" to 1), fresh.snapshot.value.postsByOwner)
+        val upgraded = manifestOf(directory)
+        assertEquals(3, upgraded.get("version").asInt)
+        assertTrue(upgraded.getAsJsonObject("post").has("sourcePostId"))
+        assertEquals(saved, OfflineMediaStore(directory).find(post.id))
+    }
+
+    @Test
+    fun `a version 2 manifest missing newer keys loads with constructor defaults`() = runTest {
+        val directory = tempDir("v2-sparse")
+        val post = samplePost("7", null).copy(media = emptyList(), mediaCount = null)
+        val saved = OfflineMediaStore(directory).save(post, listOf(requireNotNull(post.full)), "codex:a") { _, file -> file.writeText("bytes") }
+        downgradeToV2(directory) { manifest ->
+            for (name in listOf("post", "sourcePost")) {
+                val wire = manifest.getAsJsonObject(name)
+                listOf("taxonomy", "creatorProfiles").forEach(wire::remove)
+                listOf("preview", "full").forEach { wire.getAsJsonObject(it).remove("progressiveUrls") }
+                listOf("preview", "full").forEach { wire.getAsJsonObject(it).remove("videoVariants") }
+                wire.getAsJsonArray("media").forEach {
+                    it.asJsonObject.remove("progressiveUrls"); it.asJsonObject.remove("videoVariants")
+                }
+            }
+        }
+        val loaded = requireNotNull(OfflineMediaStore(directory).find(post.id))
+        assertEquals(post.canonicalTags.map { PostTaxonomyTerm(value = it) }, loaded.taxonomy)
+        assertEquals(listOfNotNull(post.creatorProfile), loaded.creatorProfiles)
+        assertEquals(emptyList<String>(), loaded.preview.progressiveUrls)
+        assertEquals(emptyList<VideoVariant>(), loaded.full?.videoVariants)
+        assertEquals(saved.media, loaded.media)
+        assertEquals(3, manifestOf(directory).get("version").asInt)
+        assertEquals(loaded, OfflineMediaStore(directory).find(post.id))
+    }
+
+    @Test
+    fun `an undecodable manifest has no record and a later commit keeps its owners`() = runTest {
+        val directory = tempDir("obfuscated")
+        val post = gallery()
+        OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes") }
+        val file = directory.listFiles().orEmpty().single().resolve("manifest.json")
+        val root = JsonParser.parseString(file.readText()).asJsonObject
+        root.addProperty("version", 2)
+        root.add("post", JsonParser.parseString("""{"a":{"a":"PIXIV","b":"42"},"b":[]}"""))
+        root.add("owners", JsonArray().apply { add("codex:a"); add("codex:z") })
+        file.writeText(root.toString())
+
+        val store = OfflineMediaStore(directory)
+        assertNull(store.find(post.id))
+        store.save(post, post.media, "codex:b") { _, media -> media.writeText("again") }
+        assertEquals(setOf("codex:a", "codex:b", "codex:z"), manifestOf(directory).getAsJsonArray("owners").map { it.asString }.toSet())
+        assertNotNull(OfflineMediaStore(directory).find(post.id))
+    }
+
+    @Test
+    fun `a version 2 manifest whose id does not hash to its folder is rejected`() = runTest {
+        val directory = tempDir("v2-misplaced")
+        val post = gallery()
+        OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes") }
+        downgradeToV2(directory) { manifest ->
+            for (name in listOf("post", "sourcePost")) manifest.getAsJsonObject(name).getAsJsonObject("id").addProperty("sourcePostId", "other")
+        }
+        val store = OfflineMediaStore(directory)
+        store.refresh()
+        assertEquals(0, store.snapshot.value.postCount)
+        assertEquals(2, manifestOf(directory).get("version").asInt)
+    }
+
+    @Test
+    fun `the pinned version 2 post shape still loads`() = runTest {
+        val directory = tempDir("v2-golden")
+        val golden = javaClass.classLoader.getResource("golden/source-identity/offline-manifest-post.json")!!.readText()
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest("GELBOORU:100".toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        val folder = File(directory, digest).apply { mkdirs() }
+        val media = File(folder, "0.png").apply { writeText("bytes") }
+        val offline = JsonParser.parseString(golden).asJsonObject.apply {
+            add("media", JsonArray().apply {
+                add(JsonObject().apply { addProperty("url", "https://example.test/g/100-full.png"); addProperty("localPath", media.absolutePath) })
+            })
+        }
+        File(folder, "manifest.json").writeText(JsonObject().apply {
+            addProperty("version", 2)
+            add("post", offline)
+            add("sourcePost", JsonParser.parseString(golden))
+            add("owners", JsonArray().apply { add("codex:a") })
+            add("mediaBytes", JsonArray().apply { add(media.length()) })
+        }.toString())
+        val loaded = requireNotNull(OfflineMediaStore(directory).find(com.theoriacodex.domain.model.PostId(SourceKey.GELBOORU, "100")))
+        assertEquals(listOf("cat_ears", "blue_sky"), loaded.canonicalTags)
+        assertEquals(media.absolutePath, loaded.media.single().localPath)
+        assertEquals(3, manifestOf(directory).get("version").asInt)
+    }
+
+    private fun manifestOf(directory: File): JsonObject =
+        JsonParser.parseString(directory.listFiles().orEmpty().single().resolve("manifest.json").readText()).asJsonObject
+
+    /** Rewrites the only manifest the way version 2 builds did: reflective Gson over the domain Post. */
+    private fun downgradeToV2(directory: File, edit: (JsonObject) -> Unit = {}) {
+        val file = directory.listFiles().orEmpty().single().resolve("manifest.json")
+        val root = JsonParser.parseString(file.readText()).asJsonObject
+        val gson = Gson()
+        for (name in listOf("post", "sourcePost")) {
+            val post = requireNotNull(PostStorageCodec.decode(gson.fromJson(root.get(name), PostStorageRecord::class.java)))
+            root.add(name, gson.toJsonTree(post))
+        }
+        root.addProperty("version", 2)
+        edit(root)
+        file.writeText(root.toString())
     }
 
     private fun gallery(): Post {
