@@ -310,6 +310,26 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
     }
 
     @Test
+    fun `a version 2 manifest that cannot be rewritten stays available and upgrades later`() = runTest {
+        val directory = tempDir("v2-read-only")
+        val post = gallery()
+        val saved = OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes") }
+        downgradeToV2(directory)
+        val folder = directory.listFiles().orEmpty().single()
+        assertTrue(folder.setWritable(false))
+
+        try {
+            assertEquals(saved, OfflineMediaStore(directory).find(post.id))
+            assertEquals(2, manifestOf(directory).get("version").asInt)
+        } finally {
+            folder.setWritable(true)
+        }
+
+        assertEquals(saved, OfflineMediaStore(directory).find(post.id))
+        assertEquals(3, manifestOf(directory).get("version").asInt)
+    }
+
+    @Test
     fun `a version 2 manifest missing newer keys loads with constructor defaults`() = runTest {
         val directory = tempDir("v2-sparse")
         val post = samplePost("7", null).copy(media = emptyList(), mediaCount = null)

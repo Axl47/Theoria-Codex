@@ -149,7 +149,7 @@ private suspend fun verifyLegacyOfflineManifest(offline: File) {
 }
 
 private fun offlineFolderName(id: PostId) = MessageDigest.getInstance("SHA-256")
-    .digest("${id.source.id}:${id.sourcePostId}".toByteArray()).joinToString("") { "%02x".format(it) }
+    .digest("${id.source.id}:${id.sourcePostId}".toByteArray()).toHexString()
 
 private fun videoPostFixture() = Post(
     id = PostId(SourceKey.IWARA, "video-contract"),

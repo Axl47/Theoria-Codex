@@ -5,10 +5,10 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
-import com.theoriacodex.domain.model.ImageRef
-import com.theoriacodex.domain.model.Post
 import com.theoriacodex.data.storage.PostStorageCodec
 import com.theoriacodex.data.storage.PostStorageRecord
+import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchFacet
@@ -246,7 +246,8 @@ class OfflineMediaStore(
         if (!hasCanonicalSourceSnapshot(post, sourcePost) || !mediaMatchesManifest(folder, post, root)) return null
         val owners = root.getAsJsonArray("owners").map { it.asString }.toSet()
         if (upgradeLegacy && version == LEGACY_MANIFEST_VERSION) {
-            try { writeManifest(folder, post, sourcePost, owners) } catch (_: IOException) { /* retried on the next catalog build */ }
+            // Never let a failed rewrite hide a readable copy; the next catalog build retries it.
+            runCatching { writeManifest(folder, post, sourcePost, owners) }
         }
         OfflineRecord(post, sourcePost, owners)
     }.getOrNull()
