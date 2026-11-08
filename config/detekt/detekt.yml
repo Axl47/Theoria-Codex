@@ -72,7 +72,11 @@ empty-blocks:
   active: false
 
 exceptions:
-  active: false
+  active: true
+  # Deliberate failure-isolation boundaries (provider, storage, decoder) that rethrow cancellation first;
+  # SuspendFunSwallowedCancellation guards the real risk.
+  TooGenericExceptionCaught:
+    active: false
 
 naming:
   active: false
@@ -81,7 +85,7 @@ performance:
   active: false
 
 potential-bugs:
-  active: false
+  active: true
 
 style:
   active: false

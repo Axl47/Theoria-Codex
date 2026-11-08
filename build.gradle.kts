@@ -49,7 +49,7 @@ kover {
             }
             verify {
                 rule("aggregate line coverage floor") {
-                    minBound(55)
+                    minBound(80)
                 }
             }
         }
