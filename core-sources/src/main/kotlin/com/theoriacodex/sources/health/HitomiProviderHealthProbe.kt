@@ -21,13 +21,16 @@ import kotlin.system.measureTimeMillis
 
 /**
  * Exercises the provider-owned routes that a generic search probe cannot prove: mutable CDN
- * configuration, exact regression galleries, and bounded media range transport.
+ * configuration, exact regression galleries, and bounded media range transport. The two media
+ * range steps are the only probes that download media bytes; [probeMediaRanges] = false skips them
+ * for unattended public runs.
  */
 class HitomiProviderHealthProbe(
     private val adapter: SourceAdapter,
     private val httpClient: SourceHttpClient,
     private val mediaUrlResolver: HitomiMediaUrlResolver = HitomiMediaUrlResolver(httpClient),
     private val nowProvider: () -> Long = System::currentTimeMillis,
+    private val probeMediaRanges: Boolean = true,
 ) {
     init {
         require(adapter.sourceKey == SourceKey.HITOMI) {
@@ -36,7 +39,7 @@ class HitomiProviderHealthProbe(
     }
 
     suspend fun runAll(): List<ProviderProbeStepResult> {
-        return listOf(
+        return listOfNotNull(
             runStep(
                 checkName = GG_CONFIGURATION_STEP,
                 initialRequestUrl = HitomiMediaUrlResolver.GG_CONFIGURATION_URL,
@@ -66,7 +69,7 @@ class HitomiProviderHealthProbe(
                     else -> null
                 }
             },
-            probeAnimatedWebpRange(),
+            if (probeMediaRanges) probeAnimatedWebpRange() else null,
             probeGalleryResolve(
                 galleryId = ANIME_GALLERY_ID,
                 checkName = ANIME_GALLERY_RESOLVE_STEP,
@@ -83,7 +86,7 @@ class HitomiProviderHealthProbe(
                     else -> null
                 }
             },
-            probeAnimeMp4Range(),
+            if (probeMediaRanges) probeAnimeMp4Range() else null,
         )
     }
 
