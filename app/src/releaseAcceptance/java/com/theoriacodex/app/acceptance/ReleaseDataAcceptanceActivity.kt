@@ -5,12 +5,16 @@ import android.util.Log
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
+import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.theoriacodex.app.codex.CodexShareFile
 import com.theoriacodex.app.codex.CodexSharePost
 import com.theoriacodex.app.search.FileBackedTagSuggestionStore
 import com.theoriacodex.app.update.FileBackedUpdateStateStore
+import com.theoriacodex.data.repository.OfflineMediaStore
 import com.theoriacodex.data.storage.PostStorageCodec
 import com.theoriacodex.data.storage.PostStorageRecord
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -20,6 +24,7 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.VideoVariant
 import java.io.File
+import java.security.MessageDigest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -68,6 +73,7 @@ private suspend fun verifyData(directory: File, phase: String) {
         )))
         postFile.writeText(gson.toJson(PostStorageCodec.encode(videoPostFixture())))
         legacyPostFile.writeText(LEGACY_VIDEO_POST)
+        writeLegacyOfflineManifest(File(directory, "offline"))
         tagsFile.writeText("""{"sources":{"GELBOORU":[{"text":"legacy","type":"trending","count":9}]}}""")
         val tags = FileBackedTagSuggestionStore(tagsFile, persistenceDebounceMs = 0L)
         try {
@@ -92,6 +98,7 @@ private suspend fun verifyData(directory: File, phase: String) {
         check(legacyPost.preview.url == "https://example.test/preview.mp4" && legacyPost.preview.videoVariants.isEmpty())
         check(legacyPost.full?.url == "https://example.test/full.mp4" && legacyPost.full?.videoVariants == emptyList<VideoVariant>())
         check(legacyPost.media.single().url == "https://example.test/gallery.webm" && legacyPost.media.single().videoVariants.isEmpty())
+        verifyLegacyOfflineManifest(File(directory, "offline"))
         val tags = FileBackedTagSuggestionStore(tagsFile, persistenceDebounceMs = 0L)
         try {
             tags.awaitLoaded()
@@ -116,6 +123,33 @@ private fun verifyVideoPost(json: String) {
     check(restored == videoPostFixture())
     check(restored.preview.videoVariants.isEmpty())
 }
+
+/** A v2 manifest is reflective Gson over the domain Post, so this phase writes R8's renamed keys for real. */
+private fun writeLegacyOfflineManifest(offline: File) {
+    val post = videoPostFixture()
+    val folder = File(offline, offlineFolderName(post.id)).apply { check(mkdirs()) }
+    val media = File(folder, "0.webm").apply { writeText("offline bytes") }
+    val stored = post.copy(media = post.media.map { it.copy(localPath = media.absolutePath) })
+    File(folder, "manifest.json").writeText(JsonObject().apply {
+        addProperty("version", 2)
+        add("post", Gson().toJsonTree(stored))
+        add("sourcePost", Gson().toJsonTree(post))
+        add("owners", JsonArray().apply { add("acceptance") })
+        add("mediaBytes", JsonArray().apply { add(media.length()) })
+    }.toString())
+}
+
+/** The old build's manifest must resolve in this process, then be rewritten with stable keys. */
+private suspend fun verifyLegacyOfflineManifest(offline: File) {
+    val post = videoPostFixture()
+    val found = requireNotNull(OfflineMediaStore(offline).find(post.id))
+    check(found.id == post.id && found.media.single().url == post.media.single().url)
+    val manifest = JsonParser.parseString(File(offline, "${offlineFolderName(post.id)}/manifest.json").readText()).asJsonObject
+    check(manifest.get("version").asInt == 3 && manifest.getAsJsonObject("post").has("sourcePostId"))
+}
+
+private fun offlineFolderName(id: PostId) = MessageDigest.getInstance("SHA-256")
+    .digest("${id.source.id}:${id.sourcePostId}".toByteArray()).joinToString("") { "%02x".format(it) }
 
 private fun videoPostFixture() = Post(
     id = PostId(SourceKey.IWARA, "video-contract"),
