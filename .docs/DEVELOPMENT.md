@@ -268,6 +268,17 @@ Target only Hitomi's live provider probes:
 ./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true -Ptheoria.liveSources.sources=HITOMI
 ```
 
+A scheduled workflow (`.github/workflows/provider-health.yml`) runs this check daily. Because the
+repository is public, it passes `-Ptheoria.providerHealth.publicSafe=true`: the Hitomi media byte-range
+probes are skipped, and stdout shows only `<source id>: <status> <reason>` per provider. The full JSON
+report is written but never uploaded. Providers that fail are re-checked after five minutes;
+`scripts/report_provider_health.py` opens one `provider-health`-labelled issue per provider that is
+degraded in both passes, edits it only when the failing checks change, and closes it when the provider
+is healthy again. Skipped providers leave their issues alone. Issues and the step summary contain only
+allowlisted fields (source id, status, reason enum, normalised check name). Gelbooru and Rule34.xxx are
+probed only when the optional repository secrets `THEORIA_GELBOORU_USER_ID`, `THEORIA_GELBOORU_API_KEY`,
+`THEORIA_RULE34XXX_USER_ID`, and `THEORIA_RULE34XXX_API_KEY` are set; Pixiv is always skipped.
+
 Strict live provider health report:
 
 ```sh
