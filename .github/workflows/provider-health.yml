@@ -40,6 +40,8 @@ jobs:
       # it, so it reports SKIPPED. Gelbooru and Rule34.xxx are skipped when their secrets are unset.
       # Failing providers are re-checked once, five minutes later: a provider only counts as
       # unhealthy if both passes fail, which filters out transient blips.
+      # The configuration cache would capture these secrets with the task environment and could
+      # replay stale values, so this task opts out.
       - name: Probe providers
         env:
           THEORIA_GELBOORU_USER_ID: ${{ secrets.THEORIA_GELBOORU_USER_ID }}
@@ -48,13 +50,13 @@ jobs:
           THEORIA_RULE34XXX_API_KEY: ${{ secrets.THEORIA_RULE34XXX_API_KEY }}
         run: |
           report=core-sources/build/reports/provider-health/provider-health.json
-          ./gradlew :core-sources:providerHealthCheck \
+          ./gradlew :core-sources:providerHealthCheck --no-configuration-cache \
             -Ptheoria.liveProviders=true -Ptheoria.providerHealth.publicSafe=true
           cp "$report" "$RUNNER_TEMP/first.json"
           retry="$(python3 scripts/report_provider_health.py retry-list "$RUNNER_TEMP/first.json")"
           if [ -n "$retry" ]; then
             sleep 300
-            ./gradlew :core-sources:providerHealthCheck \
+            ./gradlew :core-sources:providerHealthCheck --no-configuration-cache \
               -Ptheoria.liveProviders=true -Ptheoria.providerHealth.publicSafe=true \
               "-Ptheoria.liveSources.sources=$retry"
             cp "$report" "$RUNNER_TEMP/confirm.json"
