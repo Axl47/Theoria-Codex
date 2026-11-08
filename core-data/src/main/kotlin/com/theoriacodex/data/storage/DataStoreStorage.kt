@@ -205,7 +205,7 @@ internal fun preserveCorruptFile(storeFile: File): String? {
 internal fun ByteArray.sha256(): String {
     return MessageDigest.getInstance("SHA-256")
         .digest(this)
-        .joinToString(separator = "") { byte -> "%02x".format(byte) }
+        .toHexString()
 }
 
 private const val SHA_256_HEX_LENGTH = 64

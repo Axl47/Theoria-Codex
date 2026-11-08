@@ -69,4 +69,4 @@ class RoomViewerTranslationCacheRepository(
 
 private fun String.sha256(): String = MessageDigest.getInstance("SHA-256")
     .digest(toByteArray(Charsets.UTF_8))
-    .joinToString(separator = "") { byte -> "%02x".format(byte) }
+    .toHexString()

@@ -17,39 +17,10 @@ fun main(args: Array<String>) = runBlocking {
         ?: File("build/reports/provider-health/provider-health.json")
     val liveEnabled = System.getProperty("theoria.liveProviders") == "true"
     val strictMode = System.getProperty("theoria.liveSources.strict") == "true"
+    val publicSafe = System.getProperty("theoria.providerHealth.publicSafe") == "true"
     val gson = GsonBuilder().setPrettyPrinting().create()
     val report = if (liveEnabled) {
-        val requestedSources = parseRequestedSources(System.getProperty("theoria.liveSources.sources"))
-        val httpClient = DefaultSourceHttpClient(
-            connectTimeoutMs = 8_000,
-            readTimeoutMs = 12_000,
-            maxRetries = 0,
-        )
-        val registry = RealAdapterRegistry(
-            credentialsProvider = EnvironmentCredentialsProvider,
-            httpClient = httpClient,
-            exposedSources = requestedSources.ifEmpty { SourceKey.builtIns.toSet() },
-        )
-        val probeCases = selectProbeCases(loadProbeCases(), requestedSources)
-        val genericResults = ProviderProbeRunner(
-            registry = registry,
-            credentialedSources = credentialedSourcesFromEnvironment(),
-        ).runAll(probeCases)
-        val hitomiResults = if (probeCases.any { probeCase -> probeCase.source == SourceKey.HITOMI }) {
-            val adapter = requireNotNull(registry.adapterFor(SourceKey.HITOMI)) {
-                "Hitomi was selected for provider health but is not exposed by the registry"
-            }
-            HitomiProviderHealthProbe(adapter = adapter, httpClient = httpClient).runAll()
-        } else {
-            emptyList()
-        }
-        val probeResults = genericResults + hitomiResults
-        ProviderHealthReport(
-            liveProvidersEnabled = true,
-            generatedAtEpochMs = System.currentTimeMillis(),
-            results = aggregateProbeResults(probeResults),
-            probeResults = probeResults,
-        )
+        liveReport(publicSafe)
     } else {
         ProviderHealthReport(
             liveProvidersEnabled = false,
@@ -60,11 +31,54 @@ fun main(args: Array<String>) = runBlocking {
 
     outputFile.parentFile?.mkdirs()
     outputFile.writeText(gson.toJson(report))
-    printSummary(report, outputFile)
+    if (publicSafe) publicSafeSummaryLines(report).forEach(::println) else printSummary(report, outputFile)
     val requestedSources = parseRequestedSources(System.getProperty("theoria.liveSources.sources"))
     if (liveEnabled && strictMode && shouldFailStrict(report, requestedSources)) {
         error("Strict live source health failed. See report: ${outputFile.absolutePath}")
     }
+}
+
+/** Probes the selected providers over the network. */
+private suspend fun liveReport(publicSafe: Boolean): ProviderHealthReport {
+    val requestedSources = parseRequestedSources(System.getProperty("theoria.liveSources.sources"))
+    val httpClient = ChallengeObservingHttpClient(
+        DefaultSourceHttpClient(
+            connectTimeoutMs = 8_000,
+            readTimeoutMs = 12_000,
+            maxRetries = 0,
+        ),
+    )
+    val registry = RealAdapterRegistry(
+        credentialsProvider = EnvironmentCredentialsProvider,
+        httpClient = httpClient,
+        exposedSources = requestedSources.ifEmpty { SourceKey.builtIns.toSet() },
+    )
+    val probeCases = selectProbeCases(loadProbeCases(), requestedSources)
+    val genericResults = ProviderProbeRunner(
+        registry = registry,
+        credentialedSources = credentialedSourcesFromEnvironment(),
+        challengesSeen = httpClient::challengesSeen,
+    ).runAll(probeCases)
+    val hitomiResults = if (probeCases.any { probeCase -> probeCase.source == SourceKey.HITOMI }) {
+        val adapter = requireNotNull(registry.adapterFor(SourceKey.HITOMI)) {
+            "Hitomi was selected for provider health but is not exposed by the registry"
+        }
+        HitomiProviderHealthProbe(
+            adapter = adapter,
+            httpClient = httpClient,
+            probeMediaRanges = !publicSafe,
+            challengesSeen = httpClient::challengesSeen,
+        ).runAll()
+    } else {
+        emptyList()
+    }
+    val probeResults = genericResults + hitomiResults
+    return ProviderHealthReport(
+        liveProvidersEnabled = true,
+        generatedAtEpochMs = System.currentTimeMillis(),
+        results = aggregateProbeResults(probeResults),
+        probeResults = probeResults,
+    )
 }
 
 internal fun parseRequestedSources(raw: String?): Set<SourceKey> {
@@ -132,7 +146,7 @@ private fun credentialedSourcesFromEnvironment(): Set<SourceKey> {
     }
 }
 
-private fun aggregateProbeResults(probeResults: List<ProviderProbeStepResult>): List<ProviderHealthCheckResult> {
+internal fun aggregateProbeResults(probeResults: List<ProviderProbeStepResult>): List<ProviderHealthCheckResult> {
     return probeResults
         .groupBy { it.source }
         .toSortedMap(compareBy { it.id })
@@ -140,6 +154,7 @@ private fun aggregateProbeResults(probeResults: List<ProviderProbeStepResult>): 
             val status = when {
                 sourceResults.any { it.status == ProviderHealthStatus.FAILED } -> ProviderHealthStatus.FAILED
                 sourceResults.any { it.status == ProviderHealthStatus.DEGRADED } -> ProviderHealthStatus.DEGRADED
+                sourceResults.any { it.status == ProviderHealthStatus.CANNOT_CHECK } -> ProviderHealthStatus.CANNOT_CHECK
                 sourceResults.all { it.status == ProviderHealthStatus.SKIPPED } -> ProviderHealthStatus.SKIPPED
                 else -> ProviderHealthStatus.OK
             }
@@ -161,6 +176,17 @@ private fun aggregateProbeResults(probeResults: List<ProviderProbeStepResult>): 
                 checkedAtEpochMs = firstProblem?.checkedAtEpochMs ?: System.currentTimeMillis(),
             )
         }
+}
+
+/**
+ * Console output for runs whose logs are public: one `<source id>: <status> <reason>` line per
+ * source and nothing provider-derived (no URLs, messages, ids, counts, or latencies).
+ */
+internal fun publicSafeSummaryLines(report: ProviderHealthReport): List<String> {
+    if (!report.liveProvidersEnabled) return listOf("Provider health skipped: live providers disabled.")
+    return report.results.map { result ->
+        "${result.source.id}: ${result.status.name} ${result.failureReason?.name ?: "NONE"}"
+    }
 }
 
 private fun printSummary(report: ProviderHealthReport, outputFile: File) {

@@ -27,6 +27,9 @@ enum class ProviderHealthStatus {
     DEGRADED,
     FAILED,
     SKIPPED,
+
+    /** A browser challenge answered instead of the provider, so its health is unknown. */
+    CANNOT_CHECK,
 }
 
 data class ProviderHealthCheckResult(
@@ -324,6 +327,7 @@ class ProviderProbeRunner(
     private val registry: SourceAdapterRegistry,
     private val nowProvider: () -> Long = System::currentTimeMillis,
     private val credentialedSources: Set<SourceKey> = emptySet(),
+    private val challengesSeen: () -> Int = { 0 },
 ) {
     suspend fun runAll(cases: List<ProviderProbeCase> = ProviderProbeCases.defaults): List<ProviderProbeStepResult> {
         return cases.sortedBy { it.source.id }.flatMap { probeCase ->
@@ -678,7 +682,7 @@ class ProviderProbeRunner(
         autocompletePrefix: String? = probeCase.autocompletePrefix,
         requestUrl: String? = probeCase.diagnosticUrls[checkName],
         block: suspend () -> ProviderProbeStepResult,
-    ): ProviderProbeStepResult {
+    ): ProviderProbeStepResult = observingChallenges(challengesSeen) {
         var result: ProviderProbeStepResult? = null
         var failure: Throwable? = null
         val latency = measureTimeMillis {
@@ -693,7 +697,7 @@ class ProviderProbeRunner(
         val caught = failure
         if (caught != null) {
             val typed = caught as? SourceAdapterException
-            return ProviderProbeStepResult(
+            return@observingChallenges ProviderProbeStepResult(
                 source = probeCase.source,
                 checkName = checkName,
                 status = ProviderHealthStatus.FAILED,
@@ -707,7 +711,7 @@ class ProviderProbeRunner(
                 requestUrl = requestUrl,
             )
         }
-        return requireNotNull(result).copy(latencyMs = latency)
+        requireNotNull(result).copy(latencyMs = latency)
     }
 
     private fun okOrDegraded(

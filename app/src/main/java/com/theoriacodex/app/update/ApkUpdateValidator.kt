@@ -66,7 +66,7 @@ class ApkUpdateValidator(
         if (signatureBytes.isEmpty()) return emptySet()
         val digest = MessageDigest.getInstance("SHA-256")
         return signatureBytes.map { bytes ->
-            digest.digest(bytes).joinToString(separator = "") { b -> "%02x".format(b) }
+            digest.digest(bytes).toHexString()
         }.toSet()
     }
 }

@@ -18,6 +18,7 @@ import com.theoriacodex.data.repository.DailyActivity
 import com.theoriacodex.data.repository.retainedHistory
 import com.theoriacodex.data.repository.withDailyUsage
 import java.time.LocalDate
+import java.util.Locale
 import kotlin.math.roundToInt
 
 data class SourceStatistic(
@@ -220,7 +221,7 @@ fun formatStatisticsDuration(durationMs: Long): String {
     val hours = totalSeconds / 3_600L
     val minutes = (totalSeconds % 3_600L) / 60L
     val seconds = totalSeconds % 60L
-    return "%dh %02dm %02ds".format(hours, minutes, seconds)
+    return "%dh %02dm %02ds".format(Locale.getDefault(), hours, minutes, seconds)
 }
 
 private fun percentage(count: Long, denominator: Long): Int {

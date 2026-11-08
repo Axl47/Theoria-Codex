@@ -1,0 +1,75 @@
+name: Provider health
+
+on:
+  schedule:
+    - cron: "37 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: provider-health
+  cancel-in-progress: false
+
+jobs:
+  provider-health:
+    name: Daily provider health
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Setup Java
+        uses: actions/setup-java@v6.1.0
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6.4.0
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+
+      # Pixiv is deliberately not configured: its token is short-lived and this path cannot refresh
+      # it, so it reports SKIPPED. Gelbooru and Rule34.xxx are skipped when their secrets are unset.
+      # Failing providers are re-checked once, five minutes later: a provider only counts as
+      # unhealthy if both passes fail, which filters out transient blips.
+      # The configuration cache would capture these secrets with the task environment and could
+      # replay stale values, so this task opts out.
+      - name: Probe providers
+        env:
+          THEORIA_GELBOORU_USER_ID: ${{ secrets.THEORIA_GELBOORU_USER_ID }}
+          THEORIA_GELBOORU_API_KEY: ${{ secrets.THEORIA_GELBOORU_API_KEY }}
+          THEORIA_RULE34XXX_USER_ID: ${{ secrets.THEORIA_RULE34XXX_USER_ID }}
+          THEORIA_RULE34XXX_API_KEY: ${{ secrets.THEORIA_RULE34XXX_API_KEY }}
+        run: |
+          report=core-sources/build/reports/provider-health/provider-health.json
+          ./gradlew :core-sources:providerHealthCheck --no-configuration-cache \
+            -Ptheoria.liveProviders=true -Ptheoria.providerHealth.publicSafe=true
+          cp "$report" "$RUNNER_TEMP/first.json"
+          retry="$(python3 scripts/report_provider_health.py retry-list "$RUNNER_TEMP/first.json")"
+          if [ -n "$retry" ]; then
+            sleep 300
+            ./gradlew :core-sources:providerHealthCheck --no-configuration-cache \
+              -Ptheoria.liveProviders=true -Ptheoria.providerHealth.publicSafe=true \
+              "-Ptheoria.liveSources.sources=$retry"
+            cp "$report" "$RUNNER_TEMP/confirm.json"
+          fi
+
+      # The JSON report is never uploaded as an artifact: this repo is public and the providers'
+      # URLs, messages, and sample ids must not be published. Only sanitised fields reach issues.
+      - name: Open, update, or close issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          confirm=()
+          if [ -f "$RUNNER_TEMP/confirm.json" ]; then confirm=(--confirm "$RUNNER_TEMP/confirm.json"); fi
+          python3 scripts/report_provider_health.py reconcile \
+            --first "$RUNNER_TEMP/first.json" "${confirm[@]}" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

@@ -358,5 +358,5 @@ private fun RecentsMigrationProof.destinationSummary() =
     RecentsDestination(destinationSha256, watchedCount, searchCount)
 
 private fun ByteArray.sha256(): String = java.security.MessageDigest.getInstance("SHA-256")
-    .digest(this).joinToString("") { "%02x".format(it) }
+    .digest(this).toHexString()
 private const val EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"

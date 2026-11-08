@@ -85,7 +85,7 @@ internal class ViewerGifByteStore(private val directory: File) {
         directory.listFiles().orEmpty().filter { it.isFile && !it.name.endsWith(TEMPORARY_SUFFIX) }
 
     private fun entryName(key: String): String = MessageDigest.getInstance("SHA-256").digest(key.toByteArray())
-        .joinToString("") { "%02x".format(it) }
+        .toHexString()
 
     private fun trim(retained: File) {
         val files = entries().sortedBy(File::lastModified)

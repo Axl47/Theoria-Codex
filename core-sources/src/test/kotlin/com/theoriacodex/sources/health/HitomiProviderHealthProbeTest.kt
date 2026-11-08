@@ -61,6 +61,27 @@ class HitomiProviderHealthProbeTest {
     }
 
     @Test
+    fun `disabling media ranges skips both byte probes and keeps configuration and gallery steps`() = runTest {
+        val http = ProbeHttpClient()
+
+        val results = HitomiProviderHealthProbe(
+            adapter = ExactGalleryAdapter(),
+            httpClient = http,
+            probeMediaRanges = false,
+        ).runAll()
+
+        assertEquals(
+            listOf(
+                HitomiProviderHealthProbe.GG_CONFIGURATION_STEP,
+                HitomiProviderHealthProbe.ANIMATED_GALLERY_RESOLVE_STEP,
+                HitomiProviderHealthProbe.ANIME_GALLERY_RESOLVE_STEP,
+            ),
+            results.map(ProviderProbeStepResult::checkName),
+        )
+        assertTrue(http.byteRequests.isEmpty())
+    }
+
+    @Test
     fun `media signature drift is reported against the exact request URL`() = runTest {
         val webpUrl = ExactGalleryAdapter.ANIMATED_WEBP_URL
         val http = ProbeHttpClient(webpBody = "not-webp".toByteArray())

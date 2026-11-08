@@ -11,7 +11,7 @@ data class HitomiAutocompleteEntry(
     val namespace: String,
 )
 
-class HitomiProtocolException(message: String) : IllegalArgumentException(message)
+class HitomiProtocolException(message: String, cause: Throwable? = null) : IllegalArgumentException(message, cause)
 
 object HitomiProtocol {
     const val TAG_INDEX_BASE_URL: String = "https://tagindex.hitomi.la"
@@ -142,7 +142,7 @@ object HitomiProtocol {
     private fun parseJson(body: String, label: String) = try {
         JsonParser.parseString(body)
     } catch (error: RuntimeException) {
-        throw HitomiProtocolException("Hitomi $label was malformed JSON: ${error.message}")
+        throw HitomiProtocolException("Hitomi $label was malformed JSON: ${error.message}", error)
     }
 
     /**

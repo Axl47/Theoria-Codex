@@ -154,7 +154,8 @@ fun CreatorProfileScreen(
     if (showFilterSheet) {
         CreatorFilterSheet(
             fabRestoreState, feed.animatedDurationRange, onFabRestoreStateChange,
-            onReset = { clearFilters() }, onDismiss = { showFilterSheet = false },
+            // The sheet reset has no undo affordance, so the undo callback is intentionally discarded.
+            onReset = @Suppress("IgnoredReturnValue") { clearFilters() }, onDismiss = { showFilterSheet = false },
         )
     }
     selectedActionPost?.let { post ->
