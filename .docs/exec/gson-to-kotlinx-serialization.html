@@ -240,7 +240,7 @@ Copy this skeleton into a new `.docs/exec/<plan-name>.html` file and then replac
       <span class="pill">Plan file: .docs/exec/gson-to-kotlinx-serialization.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Finish Phase 1 (offline manifest schema v3), then ship it in a release before any later phase changes the <code>Post</code> classes.</div>
+      <div class="card"><strong>Next Action</strong>Open the Phase 1 PR and run the minified acceptance job, then ship it in a release before any later phase changes the <code>Post</code> classes.</div>
       <div class="card"><strong>Main Risk</strong>A stricter decoder turning a repairable file into "corrupt", which resets settings or re-downloads offline media. Reduced by a Gson parity harness and one shared corrupt-JSON contract.</div>
       <div class="card"><strong>Validation</strong>Gson-vs-kotlinx parity tests on golden files, the full host gates, and the minified release-acceptance run on Android 16 and 17.</div>
       <div class="card"><strong>Affected Areas</strong><code>core-data</code>, <code>core-data-android</code>, <code>app</code> persistence, <code>app/proguard-rules.pro</code>, release verification.</div>
@@ -274,7 +274,7 @@ Copy this skeleton into a new `.docs/exec/<plan-name>.html` file and then replac
       <h2>Current Status</h2>
       <table class="status-table"><tbody>
         <tr><td>State</td><td>In progress. Investigation complete, Phase 1 underway on branch <code>fix/offline-manifest-stable-keys</code>.</td></tr>
-        <tr><td>Next action</td><td>Complete Phase 1, open its PR, and release it before Phase 2 merges.</td></tr>
+        <tr><td>Next action</td><td>Open the Phase 1 PR so CI runs the minified acceptance job, then release it before Phase 2 merges.</td></tr>
         <tr><td>Blocked by</td><td>Nothing. A local emulator failure on 2026-11-08 means device proof currently comes from CI (see Surprises).</td></tr>
       </tbody></table>
     </section>
@@ -438,7 +438,8 @@ val DurableJson = Json {
       <ul>
         <li>[x] 2026-11-08 - Inventoried 24 surfaces and 61 shipped record types, and mapped byte and failure dependencies.</li>
         <li>[x] 2026-11-08 - Proved v1.3.0 and current <code>main</code> assign the same obfuscated field names to the <code>Post</code> graph.</li>
-        <li>[ ] 2026-11-08 - Phase 1: offline manifest schema v3.</li>
+        <li>[x] 2026-11-08 - Phase 1 code and host validation: manifests write v3, readable v2 manifests upgrade at catalog build, and unreadable manifests keep their owners.</li>
+        <li>[ ] Phase 1 proof: run the minified <code>R8 release acceptance</code> job, then ship in a release before Phase 2 merges.</li>
         <li>[ ] Phases 2 to 9.</li>
       </ul>
 
@@ -447,8 +448,10 @@ val DurableJson = Json {
         <li>Observation: release manifests already use obfuscated keys. Evidence: <code>app/build/outputs/mapping/release/mapping.txt</code> maps <code>Post.id</code> to <code>a</code> and <code>preview</code> to <code>b</code>, and <code>Post</code> has no keep rule.</li>
         <li>Observation: an undecodable manifest is treated as "no copy", so <code>OfflineMediaStore.commit</code> deletes the old generation and forgets other collections' ownership. Evidence: <code>readRecord</code> returns null through <code>runCatching</code>, then <code>commit</code> writes <code>setOf(owner)</code>.</li>
         <li>Observation: the existing golden tests use <code>serializeNulls()</code>, which production does not, so they do not pin real output. Evidence: <code>GsonWireContractTest.kt:12</code>.</li>
-        <li>Observation: nine keep-rule entries refer to classes that no longer exist, and five records are unused. Evidence: inventory section 4.</li>
+        <li>Observation: nine keep-rule entries refer to classes that no longer exist, and five records are unused. Evidence: <code>app/proguard-rules.pro</code> keeps <code>SettingsStoreFile</code> and <code>CodexStoreFile</code>, which no longer exist, and nothing in production references <code>UiRestoreStoreFile</code> or <code>LikesStoreFile</code>.</li>
         <li>Observation: the local <code>theoria-search-test</code> emulator stayed adb-offline for over seven minutes on 2026-11-08 and <code>device_open</code> failed. Evidence: <code>adb devices</code> reported <code>emulator-5554 offline</code>. CI emulators passed the same day.</li>
+        <li>Observation: <code>PostStorageCodec.decode</code> is not a strict inverse of <code>encode</code> (it trims taxonomy values and can add recovered Pixiv translations). Evidence: <code>PostStorageRecords.kt</code>. Harmless for manifests, since stored posts already go through it, and ordinary posts round-trip equal in <code>OfflineMediaStoreTest</code>.</li>
+        <li>Observation: a v2 rewrite that throws inside <code>readRecord</code> must not hide a readable copy. Evidence: found in review and pinned by <code>a version 2 manifest that cannot be rewritten stays available and upgrades later</code>.</li>
       </ul>
 
       <h3>Decision Log</h3>
