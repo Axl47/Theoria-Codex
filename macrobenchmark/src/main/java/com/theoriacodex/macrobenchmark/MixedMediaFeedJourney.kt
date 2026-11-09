@@ -28,7 +28,7 @@ private const val STATUS_TAG = "benchmark_journey_status"
 internal fun UiDevice.completeFiveFeedJourney() {
     exerciseCurrentFeed("Search")
     clickDescription("For You")
-    exerciseCurrentFeed("For You")
+    exerciseCurrentFeed("For You", sideways = true)
     clickDescription("Recents")
     clickDescription("Filter Recents by section")
     clickText("Watched")
@@ -72,7 +72,8 @@ internal fun UiDevice.completeFiveFeedJourney() {
     requireMovingFeedPreviews("Search after background resume")
 }
 
-private fun UiDevice.exerciseCurrentFeed(label: String) {
+/** [sideways] is for feeds built from shelves, whose later cards only come into view by scrolling across. */
+private fun UiDevice.exerciseCurrentFeed(label: String, sideways: Boolean = false) {
     val observedKinds = mutableSetOf<String>()
     fun verify(step: String) {
         requireMovingFeedPreviews(step).keys.forEach { identity ->
@@ -89,6 +90,10 @@ private fun UiDevice.exerciseCurrentFeed(label: String) {
         flingFeed(Direction.UP)
         verify("$label up $it")
     }
+    if (sideways) repeat(3) {
+        flingShelf()
+        verify("$label across $it")
+    }
     check(observedKinds == setOf("video", "gif", "webp", "ugoira")) {
         "$label did not exercise all four animated media kinds: $observedKinds"
     }
@@ -99,6 +104,16 @@ private fun UiDevice.flingFeed(direction: Direction) {
         ?: error("Current real feed has no scrollable grid")
     grid.setGestureMargin(displayWidth / 6)
     grid.fling(direction)
+}
+
+private fun UiDevice.flingShelf() {
+    val shelf = findObjects(By.scrollable(true))
+        .filter { it.visibleBounds.width() > it.visibleBounds.height() }
+        .maxByOrNull { it.visibleBounds.height() }
+        ?: error("Current real feed has no horizontal shelf")
+    // Stays clear of the screen edges, where a swipe would be the system back gesture.
+    shelf.setGestureMargins(displayWidth / 6, 0, displayWidth / 6, 0)
+    shelf.fling(Direction.RIGHT)
 }
 
 /**
