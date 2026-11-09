@@ -152,6 +152,8 @@ data class SearchExecutionUiState(
     val activeRequestId: Long? = null,
     val activeKind: SearchRequestKind? = null,
     val submittedQuery: Query? = null,
+    /** The active request already put results on screen, so it must not look like a blocking refresh. */
+    val showingPartialResults: Boolean = false,
     val lastCompletedRequestId: Long? = null,
     val lastCancelledRequestId: Long? = null,
 )

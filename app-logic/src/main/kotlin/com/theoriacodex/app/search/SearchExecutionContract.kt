@@ -21,6 +21,13 @@ interface SearchExecutionService {
         sourceScope: com.theoriacodex.app.search.state.SearchSourceScope,
     ): SearchExecutionResult
 
+    /** Like [executeInitial], handing [onPartial] usable results before every source has answered. */
+    suspend fun executeInitialProgressively(
+        query: Query,
+        sourceScope: com.theoriacodex.app.search.state.SearchSourceScope,
+        onPartial: suspend (SearchExecutionResult.Success) -> Unit,
+    ): SearchExecutionResult = executeInitial(query, sourceScope)
+
     suspend fun executePage(continuation: SearchContinuation): SearchPageResult
 
     suspend fun recordAcceptedSearch(result: SearchExecutionResult) = Unit

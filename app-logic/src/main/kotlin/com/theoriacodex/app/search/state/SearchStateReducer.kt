@@ -28,6 +28,16 @@ sealed interface SearchStateChange {
         val appliedQueryHash: String = QueryHash.from(appliedQuery),
     ) : SearchStateChange
 
+    /** Shows results while their request keeps running; paging waits for the request to finish. */
+    data class PublishPartialResults(
+        val requestId: Long,
+        val appliedQuery: Query,
+        val results: List<Post>,
+        val statuses: List<SourceRunStatus>,
+        val appliedSourceScope: SearchSourceScope = SearchSourceScope.fromQuery(appliedQuery),
+        val appliedQueryHash: String = QueryHash.from(appliedQuery),
+    ) : SearchStateChange
+
     data class AppendPage(
         val requestId: Long,
         val results: List<Post>,
@@ -129,6 +139,7 @@ object SearchStateReducer {
                             activeRequestId = change.requestId,
                             activeKind = change.kind,
                             submittedQuery = change.submittedQuery,
+                            showingPartialResults = false,
                         ),
                     )
                 }
@@ -136,6 +147,7 @@ object SearchStateReducer {
             }
 
             is SearchStateChange.ReplaceResults -> replaceResults(state, change)
+            is SearchStateChange.PublishPartialResults -> publishPartialResults(state, change)
             is SearchStateChange.AppendPage -> appendPage(state, change)
             is SearchStateChange.RequestFailed -> failRequest(state, change)
             is SearchStateChange.RequestCancelled -> cancelRequest(state, change)
@@ -237,32 +249,56 @@ object SearchStateReducer {
         change: SearchStateChange.ReplaceResults,
     ): SearchReduction {
         if (!state.isCurrent(change.requestId)) return SearchReduction(state)
-        val submittedQuery = state.execution.submittedQuery
-        val draft = if (state.query.draft == submittedQuery) {
-            change.appliedQuery
-        } else {
-            state.query.draft
-        }
+        val published = state.withPublishedResults(
+            change.appliedQuery, change.appliedSourceScope, change.appliedQueryHash,
+            change.results, change.statuses, change.canLoadMore,
+        )
+        return SearchReduction(published.copy(execution = published.execution.completed(change.requestId)))
+    }
+
+    private fun publishPartialResults(
+        state: SearchUiState,
+        change: SearchStateChange.PublishPartialResults,
+    ): SearchReduction {
+        if (!state.isCurrent(change.requestId)) return SearchReduction(state)
+        val published = state.withPublishedResults(
+            change.appliedQuery, change.appliedSourceScope, change.appliedQueryHash,
+            change.results, change.statuses, canLoadMore = false,
+        )
         return SearchReduction(
-            state = state.copy(
-                query = state.query.copy(
-                    draft = draft,
-                    applied = change.appliedQuery,
-                    appliedSourceScope = change.appliedSourceScope,
-                    appliedQueryHash = change.appliedQueryHash,
+            published.copy(
+                execution = published.execution.copy(
+                    // The applied query may be a normalized form of what was submitted.
+                    submittedQuery = change.appliedQuery,
+                    showingPartialResults = true,
                 ),
-                content = state.content.copy(
-                    results = change.results.toList(),
-                    statuses = change.statuses.toList(),
-                    canLoadMore = change.canLoadMore,
-                    hasExecutedSearch = true,
-                    error = null,
-                    displayVersion = state.content.displayVersion + 1,
-                ),
-                execution = state.execution.completed(change.requestId),
             ),
         )
     }
+
+    private fun SearchUiState.withPublishedResults(
+        appliedQuery: Query,
+        appliedSourceScope: SearchSourceScope,
+        appliedQueryHash: String,
+        results: List<Post>,
+        statuses: List<SourceRunStatus>,
+        canLoadMore: Boolean,
+    ): SearchUiState = copy(
+        query = query.copy(
+            draft = if (query.draft == execution.submittedQuery) appliedQuery else query.draft,
+            applied = appliedQuery,
+            appliedSourceScope = appliedSourceScope,
+            appliedQueryHash = appliedQueryHash,
+        ),
+        content = content.copy(
+            results = results.toList(),
+            statuses = statuses.toList(),
+            canLoadMore = canLoadMore,
+            hasExecutedSearch = true,
+            error = null,
+            displayVersion = content.displayVersion + 1,
+        ),
+    )
 
     private fun appendPage(
         state: SearchUiState,
@@ -336,6 +372,7 @@ object SearchStateReducer {
                     activeRequestId = null,
                     activeKind = null,
                     submittedQuery = null,
+                    showingPartialResults = false,
                 ),
             ),
         )
@@ -360,6 +397,7 @@ object SearchStateReducer {
                     activeRequestId = null,
                     activeKind = null,
                     submittedQuery = null,
+                    showingPartialResults = false,
                     lastCancelledRequestId = change.requestId,
                 ),
             ),
@@ -376,6 +414,7 @@ private fun SearchExecutionUiState.completed(requestId: Long): SearchExecutionUi
         activeRequestId = null,
         activeKind = null,
         submittedQuery = null,
+        showingPartialResults = false,
         lastCompletedRequestId = requestId,
     )
 }

@@ -157,6 +157,17 @@ internal class MismatchedExecutionService(
 ) : SearchExecutionService by delegate {
     var persistCalls = 0
 
+    override suspend fun executeInitialProgressively(
+
+        query: Query,
+
+        sourceScope: SearchSourceScope,
+
+        onPartial: suspend (SearchExecutionResult.Success) -> Unit,
+
+    ): SearchExecutionResult = executeInitial(query, sourceScope)
+
+
     override suspend fun executeInitial(
         query: Query,
         sourceScope: SearchSourceScope,

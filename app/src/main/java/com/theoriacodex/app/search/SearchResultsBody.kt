@@ -75,7 +75,7 @@ internal fun ColumnScope.SearchResultsBody(
                 ErrorBlock(title = "Source account required", message = authMessage)
             }
             PullToRefreshBox(
-                isRefreshing = state.retainsResultsWhileRefreshing,
+                isRefreshing = state.retainsResultsWhileRefreshing && !state.execution.showingPartialResults,
                 onRefresh = retrySearch,
                 modifier = Modifier.weight(1f),
             ) {

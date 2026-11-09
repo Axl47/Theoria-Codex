@@ -618,22 +618,33 @@ internal class SearchViewModel(
         expectedExecutionKey: String, persistAcceptedResult: Boolean, undo: Boolean,
         undoScrollState: SearchScrollState?, onSuccess: suspend () -> Unit,
     ) = withTimeout(rootRequestTimeoutMs) {
-        val result = executionService.executeInitial(query, sourceScope)
+        // Persisting the search and resetting the scroll target happen once, when results first reach the screen.
+        var acceptancePending = persistAcceptedResult
+        suspend fun publish(result: SearchExecutionResult, show: () -> Boolean): Boolean? {
+            val accepting = acceptancePending
+            if (accepting) scrollPersistence.reset(result.executionKey) {
+                executionService.persistAppliedSearch(result.query, result.sourceScope, result.executionKey)
+            }
+            if (!isAdmittedResult(requestId, result, expectedExecutionKey)) return null
+            val previous = mutableState.value
+            val shown = show()
+            acceptancePending = false
+            if (accepting) rememberAcceptedSearchNavigation(previous, undo, undoScrollState)
+            return shown
+        }
+
+        val result = executionService.executeInitialProgressively(query, sourceScope) { partial ->
+            if (isAdmittedResult(requestId, partial, expectedExecutionKey)) {
+                publish(partial) { showPartialResults(requestId, partial) }
+            }
+        }
         coroutineContext.ensureActive()
         if (!isAdmittedResult(requestId, result, expectedExecutionKey)) {
             activeContinuation = null
             cancelRequestIfCurrent(requestId)
             return@withTimeout
         }
-        if (persistAcceptedResult) scrollPersistence.reset(result.executionKey) {
-            executionService.persistAppliedSearch(result.query, result.sourceScope, result.executionKey)
-        }
-        if (!isAdmittedResult(requestId, result, expectedExecutionKey)) return@withTimeout
-        val previous = mutableState.value
-        val succeeded = completeRequest(requestId, result, expectedExecutionKey)
-        if (persistAcceptedResult) {
-            rememberAcceptedSearchNavigation(previous, undo, undoScrollState)
-        }
+        val succeeded = publish(result) { completeRequest(requestId, result, expectedExecutionKey) } ?: return@withTimeout
         persistDraftQuery()
         if (persistAcceptedResult) withContext(NonCancellable) {
             executionService.recordAcceptedSearch(result)
@@ -653,6 +664,21 @@ internal class SearchViewModel(
             if (undoScrollState != null) SearchStateChange.RouteEntryScrollRestorationRequested(scrollState)
             else SearchStateChange.ScrollResetRequested,
         )
+    }
+
+    private fun showPartialResults(requestId: Long, result: SearchExecutionResult.Success): Boolean {
+        rememberAppliedQuery(result.query, result.sourceScope)
+        reduce(
+            SearchStateChange.PublishPartialResults(
+                requestId = requestId,
+                appliedQuery = result.query,
+                appliedSourceScope = result.sourceScope,
+                appliedQueryHash = result.executionKey,
+                results = result.posts,
+                statuses = result.statuses,
+            ),
+        )
+        return true
     }
 
     private fun completeRequest(

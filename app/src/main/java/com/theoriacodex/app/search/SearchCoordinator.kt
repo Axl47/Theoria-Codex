@@ -164,6 +164,18 @@ class SearchCoordinator(
     override suspend fun executeInitial(
         query: Query,
         sourceScope: SearchSourceScope,
+    ): SearchExecutionResult = executeRoot(query, sourceScope, onPartial = null)
+
+    override suspend fun executeInitialProgressively(
+        query: Query,
+        sourceScope: SearchSourceScope,
+        onPartial: suspend (SearchExecutionResult.Success) -> Unit,
+    ): SearchExecutionResult = executeRoot(query, sourceScope, onPartial)
+
+    private suspend fun executeRoot(
+        query: Query,
+        sourceScope: SearchSourceScope,
+        onPartial: (suspend (SearchExecutionResult.Success) -> Unit)?,
     ): SearchExecutionResult {
         currentCoroutineContext().ensureActive()
         val sanitized = query.normalizedForMode(sourceScope.queryMode()).query
@@ -180,6 +192,7 @@ class SearchCoordinator(
                     enabledSources = enabled,
                     availableSources = available,
                     weights = weights,
+                    onPartial = onPartial,
                 )
                 is QueryMode.Source -> executeSourceInitial(
                     query = sanitized,
@@ -217,6 +230,7 @@ class SearchCoordinator(
         enabledSources: Set<SourceKey>,
         availableSources: List<SourceKey>,
         weights: Map<SourceKey, Double>,
+        onPartial: (suspend (SearchExecutionResult.Success) -> Unit)?,
     ): SearchExecutionResult {
         val excluded = excludedStatuses(sourceScope, availableSources, enabledSources)
         if (enabledSources.isEmpty()) {
@@ -239,6 +253,16 @@ class SearchCoordinator(
                 if (source == SourceKey.GELBOORU) {
                     queryPreparation.prepareGelbooru(requireNotNull(registry.adapterFor(source)), sourceQuery)
                 } else sourceQuery
+            },
+            onPartial = onPartial?.let { publish ->
+                { partial ->
+                    publish(
+                        SearchExecutionResult.Success(
+                            executionKey, query, sourceScope, partial.items, mergeStatuses(excluded, partial.statuses),
+                            continuation(executionKey, query, sourceScope, enabledSources, availableSources, weights),
+                        ),
+                    )
+                }
             },
         )
         currentCoroutineContext().ensureActive()

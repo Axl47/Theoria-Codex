@@ -115,6 +115,12 @@ internal class RequestOwnershipSearchViewModelTest : SearchViewModelTestFixture(
                 rootRequestTimeoutMs = 100L,
                 executionService = { coordinator ->
                     object : SearchExecutionService by coordinator {
+                        override suspend fun executeInitialProgressively(
+                            query: Query,
+                            sourceScope: SearchSourceScope,
+                            onPartial: suspend (SearchExecutionResult.Success) -> Unit,
+                        ): SearchExecutionResult = executeInitial(query, sourceScope)
+
                         override suspend fun executeInitial(
                             query: Query,
                             sourceScope: SearchSourceScope,

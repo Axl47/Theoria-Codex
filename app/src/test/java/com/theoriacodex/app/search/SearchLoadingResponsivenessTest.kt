@@ -44,11 +44,53 @@ internal class SearchLoadingResponsivenessTest : SearchViewModelTestFixture() {
     }
 
     @Test
+    fun `partial results show while late sources finish without enabling paging`() = runTest(mainDispatcherRule.dispatcher) {
+        val lateSourcesDone = CompletableDeferred<Unit>()
+        val owner = viewModel(ViewModelSearchAdapter(), executionService = { coordinator ->
+            object : SearchExecutionService by coordinator {
+                override suspend fun executeInitialProgressively(
+                    query: Query,
+                    sourceScope: SearchSourceScope,
+                    onPartial: suspend (SearchExecutionResult.Success) -> Unit,
+                ): SearchExecutionResult {
+                    val complete = coordinator.executeInitial(query, sourceScope)
+                    onPartial(complete as SearchExecutionResult.Success)
+                    lateSourcesDone.await()
+                    return complete
+                }
+            }
+        })
+        restore(owner)
+        owner.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
+        owner.onAction(SearchAction.AddIncludeTerm(SearchTerm("fast")))
+        owner.onAction(SearchAction.ApplyDraft)
+        runCurrent()
+
+        assertEquals(listOf("fast-result"), resultIds(owner))
+        assertTrue(owner.state.value.loading)
+        assertTrue(owner.state.value.execution.showingPartialResults)
+        assertFalse(owner.state.value.content.canLoadMore)
+
+        lateSourcesDone.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(listOf("fast-result"), resultIds(owner))
+        assertFalse(owner.state.value.loading)
+        assertFalse(owner.state.value.execution.showingPartialResults)
+    }
+
+    @Test
     fun `same query refresh retains content while a different query does not`() = runTest(mainDispatcherRule.dispatcher) {
         val held = CompletableDeferred<Unit>()
         var hold = false
         val owner = viewModel(ViewModelSearchAdapter(), executionService = { coordinator ->
             object : SearchExecutionService by coordinator {
+                override suspend fun executeInitialProgressively(
+                    query: Query,
+                    sourceScope: SearchSourceScope,
+                    onPartial: suspend (SearchExecutionResult.Success) -> Unit,
+                ): SearchExecutionResult = executeInitial(query, sourceScope)
+
                 override suspend fun executeInitial(query: Query, sourceScope: SearchSourceScope): SearchExecutionResult {
                     if (hold) held.await()
                     return coordinator.executeInitial(query, sourceScope)
