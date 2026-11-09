@@ -1,6 +1,7 @@
 package com.theoriacodex.sources.http
 
 import com.sun.net.httpserver.HttpServer
+import java.io.IOException
 import java.net.InetSocketAddress
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -8,6 +9,8 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -80,6 +83,22 @@ class DefaultSourceHttpClientTest {
         assertTrue(capturedContentType.orEmpty().startsWith("application/x-www-form-urlencoded"))
         assertEquals("tag=blue%20hair", capturedBody)
         assertEquals(responseBody, response.body)
+    }
+
+    @Test
+    fun `blocked network access is an ordinary failure instead of a crash`() = runBlocking {
+        val client = OkHttpClient.Builder()
+            .dns { throw SecurityException("Permission denied (missing INTERNET permission?)") }
+            .addInterceptor(unexpectedFailuresAsIoExceptions)
+            .build()
+
+        val failure = runCatching {
+            client.newCall(Request.Builder().url("https://example.test/").build()).await { it.code }
+        }.exceptionOrNull()
+
+        assertTrue(failure is IOException)
+        // Coroutine stack recovery can add a copy of the exception in front of the original cause.
+        assertTrue(generateSequence(failure) { it.cause }.any { it is SecurityException })
     }
 
     @Test

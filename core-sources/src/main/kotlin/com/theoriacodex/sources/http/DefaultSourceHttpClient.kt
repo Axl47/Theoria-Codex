@@ -191,7 +191,10 @@ private const val MAX_CONCURRENT_SOURCE_REQUESTS = 128
 
 /** For callers outside the app: tests and the provider health CLI. */
 internal val defaultSourceOkHttpClient: OkHttpClient by lazy {
-    OkHttpClient.Builder().dispatcher(unqueuedSourceDispatcher()).build()
+    OkHttpClient.Builder()
+        .dispatcher(unqueuedSourceDispatcher())
+        .addInterceptor(unexpectedFailuresAsIoExceptions)
+        .build()
 }
 
 /** One HTTP exchange as [executeHttpRequest] performs it; shared by every [SourceHttpClient]. */

@@ -1,6 +1,7 @@
 package com.theoriacodex.app.network
 
 import com.theoriacodex.app.customsites.BrowserVerifiedSites
+import com.theoriacodex.sources.http.unexpectedFailuresAsIoExceptions
 import com.theoriacodex.sources.http.unqueuedSourceDispatcher
 import java.util.concurrent.TimeUnit
 import okhttp3.ConnectionPool
@@ -18,6 +19,7 @@ internal object AppHttpClients {
             .fastFallback(true)
             .connectionPool(ConnectionPool(MAX_IDLE_CONNECTIONS, IDLE_KEEP_ALIVE_MINUTES, TimeUnit.MINUTES))
             .cookieJar(BrowserVerifiedSites.cookieJar)
+            .addInterceptor(unexpectedFailuresAsIoExceptions)
             .build()
     }
 
