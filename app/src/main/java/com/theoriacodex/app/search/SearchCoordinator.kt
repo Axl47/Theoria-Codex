@@ -93,7 +93,10 @@ class SearchCoordinator(
     private val searchTermCounts = SearchTermCountCoordinator(registry, clock, computationDispatcher)
     private val resolvedPostsByExecution = linkedMapOf<String, LinkedHashMap<PostId, Post>>()
     private val resolveFailuresByExecution = mutableMapOf<String, MutableMap<PostId, ResolveFailureRecord>>()
-    private val queryPreparation = UnifiedQueryPreparation(clock)
+    private val queryPreparation = UnifiedQueryPreparation(
+        isKnownTag = { tag -> tagSuggestionStore.getCount(SourceKey.GELBOORU, tag) != null },
+        clock = clock,
+    )
     private val appliedPersistenceMutex = Mutex()
     private val scrollPersistenceMutex = Mutex()
     private val persistedScrollStateByQuery = mutableMapOf<String, SearchScrollState>()
