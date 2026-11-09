@@ -59,6 +59,7 @@ data class GelbooruSite(
             credentials = ApiKeyUse.REQUIRED,
             postLookup = GelbooruPostLookup.ID_TAG,
             scoreSortTag = "sort:score",
+            progressiveSample = true,
         )
     }
 }
