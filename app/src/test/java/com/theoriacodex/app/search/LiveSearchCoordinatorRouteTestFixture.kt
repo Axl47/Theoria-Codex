@@ -145,16 +145,12 @@ internal abstract class LiveSearchCoordinatorRouteTestFixture {
         range: SourceByteRange = GENERIC_MEDIA_RANGE,
         maxBodyBytes: Int = GENERIC_MEDIA_PROBE_BYTES,
     ): SourceByteResponse {
-        return try {
-            httpClient.getBytes(
-                url = url,
-                headers = headers,
-                range = range,
-                maxBodyBytes = maxBodyBytes,
-            )
-        } catch (error: CancellationException) {
-            throw error
-        }
+        return httpClient.getBytes(
+            url = url,
+            headers = headers,
+            range = range,
+            maxBodyBytes = maxBodyBytes,
+        )
     }
 
     protected fun sanitizeUrlForReport(url: String): String {

@@ -38,18 +38,7 @@ class PostTagActionLazyLayoutTest {
         val lookupOnMain = AtomicBoolean(false)
         val lookups = AtomicInteger()
         val selections = mutableListOf<String>()
-        val post = Post(
-            id = PostId(SourceKey.GELBOORU, "1"),
-            preview = ImageRef("https://example.test/preview.jpg", null, "image/jpeg"),
-            full = null,
-            pageUrl = "https://example.test/post/1",
-            width = null,
-            height = null,
-            canonicalTags = List(300) { "tag_$it" },
-            rawTags = emptyList(),
-            authorName = null,
-            createdAtEpochMs = null,
-        )
+        val post = postWithManyTags()
         val draft = mutableStateOf(emptySearchQuery())
         compose.setContent {
             MaterialTheme {
@@ -99,4 +88,17 @@ class PostTagActionLazyLayoutTest {
         assertFalse(lookupOnMain.get())
         assertEquals(listOf("include:tag_0", "exclude:tag_0", "remove:tag_0"), selections)
     }
+
+    private fun postWithManyTags() = Post(
+        id = PostId(SourceKey.GELBOORU, "1"),
+        preview = ImageRef("https://example.test/preview.jpg", null, "image/jpeg"),
+        full = null,
+        pageUrl = "https://example.test/post/1",
+        width = null,
+        height = null,
+        canonicalTags = List(300) { "tag_$it" },
+        rawTags = emptyList(),
+        authorName = null,
+        createdAtEpochMs = null,
+    )
 }
