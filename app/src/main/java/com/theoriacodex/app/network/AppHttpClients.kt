@@ -3,6 +3,7 @@ package com.theoriacodex.app.network
 import com.theoriacodex.app.customsites.BrowserVerifiedSites
 import com.theoriacodex.sources.http.unqueuedSourceDispatcher
 import java.util.concurrent.TimeUnit
+import okhttp3.ConnectionPool
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 
@@ -15,6 +16,7 @@ internal object AppHttpClients {
     val shared: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .fastFallback(true)
+            .connectionPool(ConnectionPool(MAX_IDLE_CONNECTIONS, IDLE_KEEP_ALIVE_MINUTES, TimeUnit.MINUTES))
             .cookieJar(BrowserVerifiedSites.cookieJar)
             .build()
     }
@@ -42,6 +44,12 @@ internal object AppHttpClients {
     }
 }
 
+/**
+ * OkHttp's default of five idle connections across all hosts discards most of a burst, so the next scroll pays for
+ * new handshakes. Simultaneous HTTP/1.1 feed previews need one connection each, and a single search touches many hosts.
+ */
+private const val MAX_IDLE_CONNECTIONS = 32
+private const val IDLE_KEEP_ALIVE_MINUTES = 5L
 private const val IMAGE_MAX_REQUESTS_PER_HOST = 16
 private const val DOWNLOAD_CONNECT_TIMEOUT_MS = 12_000L
 private const val DOWNLOAD_READ_TIMEOUT_MS = 30_000L
