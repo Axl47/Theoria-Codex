@@ -278,7 +278,7 @@ private fun ViewerUnfoldedPages(source: SourceKey, pages: ViewerStripPages, cell
         ) {
             itemsIndexed(pages.items, key = { _, item -> item.mediaIndex }) { _, item ->
                 ViewerThumbnailTile(
-                    model = rememberViewerPosterRequest(source, item),
+                    model = rememberViewerThumbnailRequest(source, item),
                     description = "Go to page ${item.mediaIndex + 1} of ${pages.items.size}",
                     selected = item.mediaIndex == pages.selectedIndex,
                     animated = item.kind.badgeLabel != null,

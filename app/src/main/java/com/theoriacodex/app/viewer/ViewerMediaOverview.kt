@@ -90,10 +90,19 @@ private fun ViewerOverviewPoster(source: SourceKey, item: ViewerMediaOverviewIte
 
 /** The still that stands for one page wherever the Viewer lists a post's pages; null when the page has none. */
 @Composable
-internal fun rememberViewerPosterRequest(source: SourceKey, item: ViewerMediaOverviewItem): ImageRequest? {
+internal fun rememberViewerPosterRequest(source: SourceKey, item: ViewerMediaOverviewItem): ImageRequest? =
+    rememberViewerOverviewRequest(source, item, item.posterLocation)
+
+/** The small stand-in for page pickers (strip, seek preview); falls back to the poster when the provider has none. */
+@Composable
+internal fun rememberViewerThumbnailRequest(source: SourceKey, item: ViewerMediaOverviewItem): ImageRequest? =
+    rememberViewerOverviewRequest(source, item, item.thumbnailLocation)
+
+@Composable
+private fun rememberViewerOverviewRequest(source: SourceKey, item: ViewerMediaOverviewItem, location: String?): ImageRequest? {
     val context = LocalContext.current
-    return remember(context, item.posterLocation, item.kind, source) {
-        item.posterLocation?.let {
+    return remember(context, location, item.kind, source) {
+        location?.let {
             buildViewerImageRequest(context, it, source, staticAnimatedWebPFrame = shouldDecodeStaticOverviewFrame(item.kind))
         }
     }
@@ -130,16 +139,24 @@ internal data class ViewerMediaOverviewItem(
     val media: ImageRef,
     val kind: ViewerMediaOverviewKind,
     val posterLocation: String?,
+    // A smaller stand-in for pickers; equals the poster when the provider has none.
+    val thumbnailLocation: String? = posterLocation,
 )
 
 internal fun viewerMediaOverviewItems(post: Post): List<ViewerMediaOverviewItem> {
     return postMediaItems(post).mapIndexed { index, media ->
         val kind = viewerMediaOverviewKind(post, media)
+        val posterLocation = viewerMediaOverviewPosterLocation(post, media, kind)
+        // A locally saved page keeps using its local file.
+        val thumbnail = media.thumbnailUrl?.takeIf {
+            kind == ViewerMediaOverviewKind.STILL_IMAGE && media.localPath.isNullOrBlank() && it.isNotBlank()
+        }
         ViewerMediaOverviewItem(
             mediaIndex = index,
             media = media,
             kind = kind,
-            posterLocation = viewerMediaOverviewPosterLocation(post, media, kind),
+            posterLocation = posterLocation,
+            thumbnailLocation = thumbnail ?: posterLocation,
         )
     }
 }

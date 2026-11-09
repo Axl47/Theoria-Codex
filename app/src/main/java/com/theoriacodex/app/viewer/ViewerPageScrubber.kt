@@ -202,7 +202,7 @@ private fun ViewerPagePreviewFrame(source: SourceKey, item: ViewerMediaOverviewI
         return
     }
     Box(Modifier.alpha(opacity).viewerScrubFrame(frameSize)) {
-        rememberViewerPosterRequest(source, item)?.let { AsyncImage(it, null, Modifier.fillMaxSize(), contentScale = scale) }
+        rememberViewerThumbnailRequest(source, item)?.let { AsyncImage(it, null, Modifier.fillMaxSize(), contentScale = scale) }
     }
 }
 

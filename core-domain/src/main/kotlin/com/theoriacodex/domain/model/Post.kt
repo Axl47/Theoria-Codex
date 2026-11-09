@@ -28,6 +28,8 @@ data class ImageRef(
     val progressiveUrls: List<String> = emptyList(),
     val isAnimated: Boolean = false,
     val videoVariants: List<VideoVariant> = emptyList(),
+    /** Small stand-in for choosing a page; never shown as the page itself. */
+    val thumbnailUrl: String? = null,
 )
 
 data class PostTaxonomyTerm(
