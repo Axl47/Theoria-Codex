@@ -29,14 +29,14 @@ internal fun FeedImagePreloadEffect(entries: List<Post?>, gridState: LazyStagger
     val screenWidthPx = LocalWindowInfo.current.containerSize.width
     val currentEntries by rememberUpdatedState(entries)
     LaunchedEffect(gridState, screenWidthPx) {
-        if (context.isMediaNetworkMetered()) return@LaunchedEffect
         val considered = HashSet<PostId>()
         val inFlight = ArrayList<Disposable>()
         try {
             snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
                 .distinctUntilChanged()
                 .collect { lastVisible ->
-                    if (lastVisible == null) return@collect
+                    // Checked per batch: the network can become metered while the grid stays open.
+                    if (lastVisible == null || context.isMediaNetworkMetered()) return@collect
                     inFlight.removeAll(Disposable::isDisposed)
                     currentEntries.subList(
                         (lastVisible + 1).coerceAtMost(currentEntries.size),
