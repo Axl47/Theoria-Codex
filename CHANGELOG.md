@@ -22,6 +22,7 @@
 ### Changed
 
 - The Viewer's page bar now fills up to the current page, like video progress.
+- On nhentai, a post's page gallery fills in right away with small previews, and each page sharpens once it stays on screen.
 - Post cards show their like, count, duration, time and source as plain marks over soft edge shading instead of separate badges, so more of each post stays visible.
 - Galleries you have partly viewed show how far you got as a thin line along the bottom of the card.
 - Liking a post from a card now gives the same haptic tick, heart pop and pink heart as liking it in the Viewer.

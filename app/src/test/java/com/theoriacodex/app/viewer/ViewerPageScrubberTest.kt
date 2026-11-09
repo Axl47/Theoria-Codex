@@ -1,8 +1,6 @@
 package com.theoriacodex.app.viewer
 
 import android.app.Application
-import android.graphics.Bitmap
-import android.graphics.drawable.BitmapDrawable
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
@@ -18,18 +16,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.percentOffset
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
-import androidx.test.core.app.ApplicationProvider
 import coil.Coil
-import coil.EventListener
-import coil.ImageLoader
-import coil.decode.DataSource
-import coil.fetch.DrawableResult
-import coil.fetch.Fetcher
-import coil.request.ImageRequest
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.awaitCancellation
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -204,48 +193,7 @@ class ViewerPageScrubberTest {
 
     private fun List<String>.pages(prefix: String) = filter { prefix in it }.map { it.substringAfter(prefix).substringBefore(".").toInt() }.sorted()
 
-    /**
-     * Replaces Coil's loader with one whose requests never finish, except the one ending in [loadsImmediately],
-     * recording which requests started and were cancelled.
-     */
-    private fun installHangingLoader(loadsImmediately: String? = null): LoadLog {
-        val log = LoadLog()
-        val context = ApplicationProvider.getApplicationContext<Application>()
-        val image = BitmapDrawable(context.resources, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888))
-        Coil.setImageLoader(
-            ImageLoader.Builder(context)
-                .dispatcher(Dispatchers.Unconfined)
-                .components {
-                    add(
-                        Fetcher.Factory<Any> { data, _, _ ->
-                            Fetcher {
-                                if (loadsImmediately != null && data.toString().endsWith(loadsImmediately)) DrawableResult(image, false, DataSource.MEMORY)
-                                else awaitCancellation()
-                            }
-                        },
-                    )
-                }
-                .eventListener(log)
-                .build(),
-        )
-        return log
-    }
-
     @After fun resetCoil() = Coil.reset()
-
-    /**
-     * [requests], [started] and [cancelled] cover only the preview's own loads. Disk-only warm requests, which never
-     * write the memory cache (`memoryCachePolicy.writeEnabled == false`), are kept apart in [warmed].
-     */
-    private class LoadLog : EventListener {
-        val requests = mutableListOf<ImageRequest>()
-        val warmed = mutableListOf<ImageRequest>()
-        val started get() = requests.map { it.data.toString() }
-        val cancelled = mutableListOf<String>()
-        override fun onStart(request: ImageRequest) { (if (request.isWarm) warmed else requests) += request }
-        override fun onCancel(request: ImageRequest) { if (!request.isWarm) cancelled += request.data.toString() }
-        private val ImageRequest.isWarm get() = !memoryCachePolicy.writeEnabled
-    }
 
     private fun TouchInjectionScope.at(fraction: Float) = percentOffset(fraction, 0.5f)
 

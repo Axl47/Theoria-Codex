@@ -195,7 +195,7 @@ private fun ViewerPagePreview(
     // [settled] rather than reset, so the sharp page never flashes back to the thumbnail between pages.
     var sharpPage by remember { mutableIntStateOf(-1) }
     LaunchedEffect(settled) {
-        delay(SCRUB_SHARP_SETTLE_MS)
+        delay(VIEWER_SHARP_SETTLE_MS)
         sharpPage = settled
     }
     // A jump that replaces all three frames would leave the centre empty; its new frame starts from this instead.
@@ -269,7 +269,6 @@ internal fun viewerPagePreviewFrame(aspectRatio: Float?, availableWidth: Dp): Dp
 }
 
 private const val MAX_PAGE_SEGMENTS = 24
-private const val SCRUB_SHARP_SETTLE_MS = 250L
 private const val SIDE_FRAME_SCALE = 0.55f
 private const val SIDE_FRAME_ALPHA = 0.5f
 private val PREVIEW_FRAME_GAP = 6.dp
