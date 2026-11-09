@@ -31,8 +31,8 @@ import com.theoriacodex.app.settings.SettingsRowDivider
 @Composable
 internal fun CustomSitesScreen(state: CustomSitesUiState, onAction: (CustomSitesAction) -> Unit, onBack: () -> Unit) {
     BackHandler(enabled = state.form != null) { onAction(CustomSitesAction.CloseForm) }
-    state.verifyingHost?.let { host ->
-        SiteVerificationPage(host, onAction)
+    state.verification?.let { verification ->
+        SiteVerificationPage(verification.host, onAction)
         return
     }
     when (val form = state.form) {

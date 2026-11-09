@@ -37,6 +37,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import okhttp3.CookieJar
 
 internal const val VIDEO_PLAYBACK_CACHE_MAX_BYTES = 256L * 1024L * 1024L
 
@@ -156,6 +157,7 @@ private class ViewerLoadControl : DefaultLoadControl(
 /** Process-owned Media3 infrastructure shared by every feed and Viewer player. */
 internal class VideoPlaybackInfrastructure(
     context: Context,
+    cookieJar: CookieJar = CookieJar.NO_COOKIES,
 ) {
     internal val feedPositionHandoff = FeedVideoPositionHandoff()
     private val appContext = context.applicationContext
@@ -168,7 +170,7 @@ internal class VideoPlaybackInfrastructure(
     internal val hasActiveViewerPlayer: Boolean
         get() = viewerPlayers.isInitialized() && viewerPlayers.value.activePlayerCount() > 0
     private val sharedFactories = SharedVideoFactories(
-        http = AbandoningHttpDataSourceFactory(videoHttpClient()),
+        http = AbandoningHttpDataSourceFactory(videoHttpClient(cookieJar)),
         local = DefaultDataSource.Factory(appContext),
         cache = SimpleCache(
             File(appContext.cacheDir, VIDEO_PLAYBACK_CACHE_DIRECTORY),

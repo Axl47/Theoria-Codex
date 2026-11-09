@@ -7,9 +7,9 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.TransferListener
 import androidx.media3.datasource.okhttp.OkHttpDataSource
-import com.theoriacodex.app.customsites.BrowserVerifiedSites
 import java.util.concurrent.TimeUnit
 import okhttp3.Call
+import okhttp3.CookieJar
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
@@ -21,13 +21,13 @@ private const val VIDEO_MAX_REQUESTS = 64
 /**
  * The HTTP client behind every video player, prefetch and scrub preview. It matches the `HttpURLConnection` stack
  * it replaced: HTTP/1.1 only (as Android's `HttpURLConnection` speaks; HTTP/2's 16 MiB stream window would let a
- * paused player buffer far more than a TCP window), the same timeouts, browser-verified sites' cookies, and no
+ * paused player buffer far more than a TCP window), the same timeouts, the browser-verified sites' cookies ([cookieJar]), and no
  * per-host request cap. OkHttp queues calls above its dispatcher limits, where `HttpURLConnection` had none.
  *
  * The agent comes from the stream's headers, its source's media headers ([com.theoriacodex.app.source.requestHeaders])
  * as its images use, so a custom site's own agent, which its clearance cookies are usually bound to, applies to video.
  */
-internal fun videoHttpClient(): OkHttpClient = OkHttpClient.Builder()
+internal fun videoHttpClient(cookieJar: CookieJar = CookieJar.NO_COOKIES): OkHttpClient = OkHttpClient.Builder()
     .protocols(listOf(Protocol.HTTP_1_1))
     .connectTimeout(VIDEO_CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
     .readTimeout(VIDEO_READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
@@ -35,7 +35,7 @@ internal fun videoHttpClient(): OkHttpClient = OkHttpClient.Builder()
         maxRequests = VIDEO_MAX_REQUESTS
         maxRequestsPerHost = VIDEO_MAX_REQUESTS
     })
-    .cookieJar(BrowserVerifiedSites.cookieJar)
+    .cookieJar(cookieJar)
     .build()
 
 /** HTTP data sources on [client] whose half-read responses are dropped, not drained ([AbandoningHttpDataSource]). */

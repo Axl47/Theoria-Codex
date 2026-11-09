@@ -38,11 +38,18 @@ internal class FakeCustomSitesController(initial: List<CustomSiteSummary> = empt
     var onRetest: suspend (String) -> SiteProbeResult = { error("No re-test result scripted") }
     var onUpdate: suspend (String, CustomSiteEdit) -> CustomSiteMutation = { _, _ -> CustomSiteMutation.Success }
     var onRemove: suspend (String) -> CustomSiteMutation = { CustomSiteMutation.Success }
+    var onCompleteVerification: suspend (String, String) -> SiteProbeResult = { _, _ -> error("No verification result scripted") }
 
     val probes = mutableListOf<ProbeCall>()
     val drafts = mutableListOf<CustomSiteDraft>()
     val edits = mutableListOf<Pair<String, CustomSiteEdit>>()
     val removals = mutableListOf<String>()
+
+    /** Source id and agent of every completed-verification call. */
+    val verifications = mutableListOf<Pair<String, String>>()
+
+    /** Every [setSetupHost] value, in order. */
+    val setupHosts = mutableListOf<String?>()
 
     override suspend fun probe(input: String, credentials: SiteCredentials?, headers: SiteHeaders): SiteProbeResult =
         ProbeCall(input, credentials, headers).also(probes::add).let { onProbe(it) }
@@ -58,6 +65,15 @@ internal class FakeCustomSitesController(initial: List<CustomSiteSummary> = empt
     }
 
     override suspend fun retest(sourceId: String): SiteProbeResult = onRetest(sourceId)
+
+    override suspend fun completeVerification(sourceId: String, userAgent: String): SiteProbeResult {
+        verifications += sourceId to userAgent
+        return onCompleteVerification(sourceId, userAgent)
+    }
+
+    override fun setSetupHost(host: String?) {
+        setupHosts += host
+    }
 
     override suspend fun update(sourceId: String, edit: CustomSiteEdit): CustomSiteMutation {
         edits += sourceId to edit

@@ -5,6 +5,8 @@ import com.theoriacodex.app.customsites.CustomSiteAvailability
 import com.theoriacodex.app.customsites.CustomSiteDraft
 import com.theoriacodex.app.customsites.CustomSiteEdit
 import com.theoriacodex.app.customsites.CustomSiteMutation
+import com.theoriacodex.app.customsites.FakeBrowserCookieStore
+import com.theoriacodex.app.customsites.SiteCookieBridge
 import com.theoriacodex.app.sourceauth.InMemorySiteCredentialsStore
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.InMemorySiteProfileRepository
@@ -15,7 +17,9 @@ import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
 import com.theoriacodex.domain.source.ProtocolFamily
 import com.theoriacodex.domain.source.SiteAddress
 import com.theoriacodex.domain.source.SiteAddressParse
+import com.theoriacodex.domain.source.ProbeFailure
 import com.theoriacodex.domain.source.SiteCredentials
+import com.theoriacodex.domain.source.SiteHeaders
 import com.theoriacodex.domain.source.SiteProbeResult
 import com.theoriacodex.domain.source.SiteProfile
 import com.theoriacodex.sources.custom.FamilyProbe
@@ -24,6 +28,8 @@ import com.theoriacodex.sources.custom.SiteFamily
 import com.theoriacodex.sources.custom.SiteFamilyRegistry
 import com.theoriacodex.sources.custom.SiteProber
 import com.theoriacodex.sources.custom.SiteRequestContext
+import com.theoriacodex.sources.http.HostOutageKind
+import com.theoriacodex.sources.http.HostOutageTracker
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import kotlinx.coroutines.CoroutineScope
@@ -52,6 +58,8 @@ class CustomSitesControllerImplTest {
     private val families = SiteFamilyRegistry(listOf(family), emptyList())
     private var libraryHasData = false
     private var now = 1_000L
+    private val outages = HostOutageTracker()
+    private val cookieStore = FakeBrowserCookieStore()
 
     /** Each install: the custom sources installed, and the sources whose adapters were visible at that moment. */
     private val installs = mutableListOf<Pair<Set<SourceKey>, Set<SourceKey>>>()
@@ -76,6 +84,8 @@ class CustomSitesControllerImplTest {
             settings = settings,
             library = { libraryHasData },
             scope = scope,
+            outages = outages,
+            cookieBridge = SiteCookieBridge(cookieStore),
             clock = { now },
         )
         return Graph(controller, CompositeSourceAdapterRegistry(NoBuiltIns, NoBuiltIns, runtime.snapshot))
@@ -190,6 +200,49 @@ class CustomSitesControllerImplTest {
     }
 
     @Test
+    fun `a passing verification saves the agent beside the other headers, clears the outage and flushes cookies`() = runTest {
+        val graph = graph()
+        graph.controller.add(draft().copy(headers = SiteHeaders(userAgent = "Old/1", referer = "https://ref.example/")))
+        outages.record("https://booru.example/posts.json", HostOutageKind.CHALLENGE)
+        now = 5_000L
+
+        val result = graph.controller.completeVerification(SITE.id, "WebView/2")
+
+        assertTrue(result is SiteProbeResult.Supported)
+        assertEquals(SiteHeaders(userAgent = "WebView/2", referer = "https://ref.example/"), family.probedWith)
+        val site = graph.controller.sites.value.single()
+        assertEquals(SiteHeaders(userAgent = "WebView/2", referer = "https://ref.example/"), site.headers)
+        assertEquals(5_000L, site.verifiedAtEpochMs)
+        assertTrue(outages.outages.value.isEmpty())
+        assertEquals(1, cookieStore.flushes)
+    }
+
+    @Test
+    fun `a refused verification changes neither the agent nor the outage`() = runTest {
+        val graph = graph()
+        graph.controller.add(draft().copy(headers = SiteHeaders(userAgent = "Old/1")))
+        outages.record("https://booru.example/posts.json", HostOutageKind.CHALLENGE)
+        family.answer = FamilyProbe.Failed(ProbeFailure.BLOCKED)
+
+        val result = graph.controller.completeVerification(SITE.id, "WebView/2")
+
+        assertEquals(SiteProbeResult.Unreachable(ADDRESS, ProbeFailure.BLOCKED), result)
+        assertEquals(SiteHeaders(userAgent = "Old/1"), graph.controller.sites.value.single().headers)
+        assertEquals(setOf("booru.example"), outages.outages.value.keys)
+        assertEquals(0, cookieStore.flushes)
+    }
+
+    @Test
+    fun `removing a site forgets its cookies`() = runTest {
+        val graph = graph()
+        graph.controller.add(draft())
+
+        graph.controller.remove(SITE.id)
+
+        assertEquals(listOf("https://booru.example/"), cookieStore.expired)
+    }
+
+    @Test
     fun `the unified orchestrator is rebuilt only when the custom sites change`() = runTest {
         val graph = graph()
         graph.controller.add(draft())
@@ -219,7 +272,13 @@ class CustomSitesControllerImplTest {
     private class ScriptedFamily : SiteFamily by GelbooruFamily {
         var answer: FamilyProbe = FamilyProbe.Match(suggestedLabel = null, searchTermLimit = null)
 
-        override suspend fun probe(address: SiteAddress, context: SiteRequestContext): FamilyProbe = answer
+        /** The headers of the latest probe, to show which agent a verification probed with. */
+        var probedWith: SiteHeaders? = null
+
+        override suspend fun probe(address: SiteAddress, context: SiteRequestContext): FamilyProbe {
+            probedWith = context.headers
+            return answer
+        }
     }
 
     private object NoNetwork : SourceHttpClient {

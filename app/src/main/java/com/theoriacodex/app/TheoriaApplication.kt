@@ -5,7 +5,8 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.decode.ImageDecoderDecoder
 import coil.disk.DiskCache
-import com.theoriacodex.app.customsites.BrowserVerifiedSites
+import com.theoriacodex.app.customsites.AndroidBrowserCookieStore
+import com.theoriacodex.app.customsites.SiteCookieBridge
 import com.theoriacodex.app.di.DefaultTheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
@@ -14,6 +15,7 @@ import com.theoriacodex.app.media.UndecodableImageEviction
 import com.theoriacodex.app.viewer.VideoPlaybackInfrastructure
 import com.theoriacodex.data.storage.ApplicationDataReadiness
 import com.theoriacodex.data.storage.ApplicationDataState
+import java.net.CookieHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -26,8 +28,11 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
     private lateinit var readiness: ApplicationDataReadiness<TheoriaAppContainer>
     private var initializingContainer: DefaultTheoriaAppContainer? = null
 
+    /** The one place browser cookies reach the app's own requests: Coil, video, custom-site calls and downloads. */
+    internal val siteCookieBridge = SiteCookieBridge(AndroidBrowserCookieStore)
+
     internal val videoPlaybackInfrastructure: VideoPlaybackInfrastructure by lazy {
-        VideoPlaybackInfrastructure(this)
+        VideoPlaybackInfrastructure(this, siteCookieBridge.cookieJar)
     }
 
     override val appContainerState: StateFlow<ApplicationDataState<TheoriaAppContainer>>
@@ -35,13 +40,15 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
 
     override fun onCreate() {
         super.onCreate()
-        BrowserVerifiedSites.install(this)
+        CookieHandler.setDefault(siteCookieBridge.cookieHandler)
+        // Replaced by deriving allowed hosts from the saved sites.
+        deleteSharedPreferences("browser_verified_sites")
         readiness = ApplicationDataReadiness(
             applicationScope = applicationScope,
             initializationDispatcher = Dispatchers.IO,
         ) {
             val container = initializingContainer
-                ?: DefaultTheoriaAppContainer(this@TheoriaApplication).also { created ->
+                ?: DefaultTheoriaAppContainer(this@TheoriaApplication, siteCookieBridge).also { created ->
                     initializingContainer = created
                 }
             container.awaitDurableStores()
@@ -100,7 +107,7 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
             .okHttpClient {
                 OkHttpClient.Builder()
                     .dispatcher(Dispatcher().apply { maxRequestsPerHost = IMAGE_MAX_REQUESTS_PER_HOST })
-                    .cookieJar(BrowserVerifiedSites.cookieJar)
+                    .cookieJar(siteCookieBridge.cookieJar)
                     .build()
             }
             .build()

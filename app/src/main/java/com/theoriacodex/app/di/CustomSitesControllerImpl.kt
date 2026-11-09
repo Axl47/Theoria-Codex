@@ -6,8 +6,10 @@ import com.theoriacodex.app.customsites.CustomSiteEdit
 import com.theoriacodex.app.customsites.CustomSiteMutation
 import com.theoriacodex.app.customsites.CustomSiteSummary
 import com.theoriacodex.app.customsites.CustomSitesController
+import com.theoriacodex.app.customsites.SiteCookieBridge
 import com.theoriacodex.app.customsites.SitesRequest
 import com.theoriacodex.app.sourceauth.CredentialStoreUnavailableException
+import com.theoriacodex.app.source.clearSource
 import com.theoriacodex.app.sourceauth.SiteCredentialsStore
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.SiteProfileAddResult
@@ -20,7 +22,9 @@ import com.theoriacodex.domain.source.SiteCredentials
 import com.theoriacodex.domain.source.SiteHeaders
 import com.theoriacodex.domain.source.SiteProbeResult
 import com.theoriacodex.domain.source.SiteProfile
+import com.theoriacodex.domain.source.clearedChallenge
 import com.theoriacodex.sources.custom.SiteProber
+import com.theoriacodex.sources.http.HostOutageTracker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -35,7 +39,8 @@ import kotlinx.coroutines.flow.asStateFlow
 /**
  * Settings → Sites over the profile store, the encrypted key store, the prober and the runtime
  * (plan C9). The Unified/For You opt-in is the site's membership in `enabledSources` (plan D4).
- * Removing a site deletes its profile, keys and opt-in, never library data.
+ * Removing a site deletes its profile, keys and opt-in, never library data. Completing a browser check
+ * ties the saved agent, the site's outage and the browser's cookies together in one step.
  */
 internal class CustomSitesControllerImpl(
     private val profiles: SiteProfileRepository,
@@ -45,6 +50,8 @@ internal class CustomSitesControllerImpl(
     private val settings: SettingsRepository,
     private val library: SourceLibraryPresence,
     scope: CoroutineScope,
+    private val outages: HostOutageTracker,
+    private val cookieBridge: SiteCookieBridge,
     private val clock: () -> Long = System::currentTimeMillis,
 ) : CustomSitesController {
     override val sites: StateFlow<List<CustomSiteSummary>> =
@@ -118,6 +125,19 @@ internal class CustomSitesControllerImpl(
         return result
     }
 
+    override suspend fun completeVerification(sourceId: String, userAgent: String): SiteProbeResult {
+        val profile = requireNotNull(find(sourceId)) { "Verification needs a stored site" }
+        val result = prober.probe(profile.address.baseUrl, credentials.get(sourceId), profile.headers.copy(userAgent = userAgent))
+        if (result.clearedChallenge) {
+            profiles.update(sourceId) { it.copy(headers = it.headers.copy(userAgent = userAgent), verifiedAtEpochMs = clock()) }
+            outages.clearSource(SourceKey.of(profile))
+            cookieBridge.flush()
+        }
+        return result
+    }
+
+    override fun setSetupHost(host: String?) = cookieBridge.setSetupHost(host)
+
     override suspend fun update(sourceId: String, edit: CustomSiteEdit): CustomSiteMutation {
         val profile = find(sourceId) ?: return CustomSiteMutation.NotFound
         val label = edit.label?.let { validLabel(it) ?: return CustomSiteMutation.InvalidLabel(SiteProfile.MAX_LABEL_LENGTH) }
@@ -141,6 +161,7 @@ internal class CustomSitesControllerImpl(
         if (!writeKeys { credentials.clear(sourceId) }) return CustomSiteMutation.CredentialStoreUnavailable
         if (!profiles.remove(sourceId)) return CustomSiteMutation.NotFound
         setIncluded(SourceKey.of(profile), included = false)
+        cookieBridge.forget(profile.address.host)
         return CustomSiteMutation.Success
     }
 

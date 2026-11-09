@@ -9,6 +9,7 @@ import com.theoriacodex.app.backup.SharedPreferencesAutoBackupStore
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.creator.CreatorProfileCoordinator
 import com.theoriacodex.app.customsites.CustomSitesController
+import com.theoriacodex.app.customsites.SiteCookieBridge
 import com.theoriacodex.app.media.BoundedMediaDurationProbe
 import com.theoriacodex.app.media.MediaDurationAcquisitionEngine
 import com.theoriacodex.app.media.MediaDurationCoordinator
@@ -78,6 +79,7 @@ import com.theoriacodex.data.android.room.TheoriaRoomDatabase
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.source.SiteProfile
 import com.theoriacodex.sources.RealAdapterRegistry
 import com.theoriacodex.sources.custom.CustomSiteHttpClient
 import com.theoriacodex.sources.http.HostOutageTracker
@@ -98,7 +100,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 data class DataDependencies(
     val storageDirectory: File,
@@ -178,6 +182,7 @@ interface TheoriaAppContainerOwner {
 
 internal class DefaultTheoriaAppContainer(
     context: Context,
+    private val cookieBridge: SiteCookieBridge,
 ) : TheoriaAppContainer {
     private val appContext = context.applicationContext
     private val storageDirectory = File(appContext.filesDir, "theoria_codex")
@@ -436,10 +441,21 @@ internal class DefaultTheoriaAppContainer(
         settings = settingsRepository,
         library = contentRepository,
         scope = durableStoreScope,
+        outages = hostOutages,
+        cookieBridge = cookieBridge,
     )
+
+    /** Keeps the bridge's allowed hosts equal to the saved sites; [awaitDurableStores] seeds them first. */
+    init {
+        durableStoreScope.launch {
+            siteProfiles.observeProfiles().map(::siteHosts).collect(cookieBridge::updateSiteHosts)
+        }
+    }
 
     /** Complete typed-store migration before any route can observe default placeholder state. */
     suspend fun awaitDurableStores() = coroutineScope {
+        // Before the app is ready: a request racing an empty list would be challenged and trip a 10-minute outage.
+        cookieBridge.updateSiteHosts(siteHosts(siteProfiles.observeProfiles().first()))
         val settingsReady = async { settingsRepository.awaitReady() }
         val statisticsReady = async { statisticsStore.awaitReady() }
         val uiRestoreReady = async { uiRestoreRepository.awaitReady() }
@@ -460,6 +476,8 @@ internal class DefaultTheoriaAppContainer(
         awaitProfileLibraryStores(contentDatabase, storageDirectory, legacyJsonRecoveryRegistry)
     }
 }
+
+private fun siteHosts(profiles: List<SiteProfile>): Set<String> = profiles.mapTo(HashSet()) { it.address.host }
 
 /** Matches the built-in client's read timeout; probes keep the custom client's 10 s default. */
 private const val CUSTOM_SITE_READ_TIMEOUT_MS = 20_000

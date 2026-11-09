@@ -30,6 +30,20 @@ interface CustomSitesController {
      */
     suspend fun retest(sourceId: String): SiteProbeResult
 
+    /**
+     * Finishes a browser check of a stored site. Probes it with [userAgent], the in-app browser's, which
+     * its clearance cookies are usually bound to. Only when the site itself answers does it save that
+     * agent (keeping the site's other headers), stamp the verified time, lift the site's challenge
+     * outage and flush the browser's cookies; a refusal changes nothing. [sourceId] must be stored.
+     */
+    suspend fun completeVerification(sourceId: String, userAgent: String): SiteProbeResult
+
+    /**
+     * Lets the browser's cookies reach requests to [host] while it is verified before being saved, or
+     * stops that when null. Saved sites always get their cookies.
+     */
+    fun setSetupHost(host: String?)
+
     suspend fun update(sourceId: String, edit: CustomSiteEdit): CustomSiteMutation
 
     /** Removes the profile, its credentials and its Unified/For You opt-in; library data stays. */
