@@ -137,6 +137,9 @@ private fun parseNhentaiPages(pages: List<JsonElement>, mediaId: String): List<I
             url = url,
             localPath = null,
             mime = mimeFromFileExt(ext),
+            // API-provided paths win: about half of real thumbnails use irregular names.
+            thumbnailUrl = sourceImageUrl(NHENTAI_THUMBS_BASE, page.get("thumbnail").asStringOrNull())
+                ?: "$NHENTAI_THUMBS_BASE/galleries/$mediaId/${index + 1}t.$ext",
         )
     }
 }

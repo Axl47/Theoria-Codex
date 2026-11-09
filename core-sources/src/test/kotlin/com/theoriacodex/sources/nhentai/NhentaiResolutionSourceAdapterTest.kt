@@ -63,6 +63,7 @@ internal class NhentaiResolutionSourceAdapterTest : NhentaiSourceAdapterTestFixt
         assertEquals("https://t.nhentai.net/galleries/3821534/thumb.webp", post?.preview?.url)
         assertEquals("https://i.nhentai.net/galleries/3821534/1.webp", post?.media?.get(0)?.url)
         assertEquals("https://i.nhentai.net/galleries/3821534/2.jpg", post?.media?.get(1)?.url)
+        assertEquals("https://t.nhentai.net/galleries/3821534/2t.jpg.webp", post?.media?.get(1)?.thumbnailUrl)
         assertEquals(2, post?.mediaCount)
         assertEquals(listOf("english", "kyaradain"), post?.canonicalTags)
         assertEquals("kyaradain", post?.authorName)
@@ -134,6 +135,7 @@ internal class NhentaiResolutionSourceAdapterTest : NhentaiSourceAdapterTestFixt
             post?.media?.get(0)?.progressiveUrls,
         )
         assertEquals("https://i.nhentai.net/galleries/3821534/3.webp", post?.media?.get(2)?.url)
+        assertEquals("https://t.nhentai.net/galleries/3821534/1t.webp", post?.media?.get(0)?.thumbnailUrl)
         assertEquals(listOf("big breasts", "yomoda yomo", "english"), post?.canonicalTags)
         assertEquals(
             listOf(

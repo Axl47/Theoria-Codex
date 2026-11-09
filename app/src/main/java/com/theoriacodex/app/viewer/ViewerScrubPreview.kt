@@ -79,9 +79,26 @@ internal fun viewerScrubFrameSize(aspectRatio: Float?): DpSize {
 internal fun formatScrubDelta(deltaMs: Long): String =
     "${if (deltaMs < 0L) "-" else "+"}${formatTimelineTime(abs(deltaMs))}"
 
-/** A floating thumbnail is presentation only; the track below owns the drag gesture. */
+/** A timeline drag's floating frame and time. */
 @Composable
 internal fun ViewerScrubPreview(positionMs: Long, deltaMs: Long, progress: Float, content: @Composable () -> Unit) {
+    ViewerScrubPopup(formatTimelineTime(positionMs), formatScrubDelta(deltaMs), progress) {
+        Box(Modifier.viewerScrubFrame(viewerScrubFrameSize(LocalViewerMediaAspectRatio.current)), contentAlignment = Alignment.Center) { content() }
+    }
+}
+
+/** One floating preview's surface: a rounded black frame with a shadow, so it stands off the artwork behind it. */
+internal fun Modifier.viewerScrubFrame(frameSize: DpSize): Modifier {
+    val shape = RoundedCornerShape(12.dp)
+    return size(frameSize).shadow(12.dp, shape).background(Color.Black, shape).clip(shape)
+}
+
+/**
+ * Floats [frames] and a readout over the track at [progress], kept inside the window.
+ * It is presentation only; the track below owns the drag gesture.
+ */
+@Composable
+internal fun ViewerScrubPopup(readout: String, detail: String, progress: Float, frames: @Composable () -> Unit) {
     val gapPx = with(LocalDensity.current) { 8.dp.roundToPx() }
     val position = remember(progress, gapPx) {
         object : PopupPositionProvider {
@@ -96,19 +113,15 @@ internal fun ViewerScrubPreview(positionMs: Long, deltaMs: Long, progress: Float
     Popup(popupPositionProvider = position, properties = PopupProperties(
         focusable = false, dismissOnBackPress = false, dismissOnClickOutside = false,
     )) {
-        val shape = RoundedCornerShape(12.dp)
         Column(
             Modifier.testTag("viewer-scrub-preview"),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Box(
-                Modifier.size(viewerScrubFrameSize(LocalViewerMediaAspectRatio.current)).shadow(12.dp, shape).background(Color.Black, shape).clip(shape),
-                contentAlignment = Alignment.Center,
-            ) { content() }
+            frames()
             Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(formatTimelineTime(positionMs), color = Color.White, style = ViewerVeil.LargeReadout, fontWeight = FontWeight.Medium)
-                Text(formatScrubDelta(deltaMs), Modifier.padding(bottom = 3.dp), color = Color.White.copy(alpha = ViewerVeil.SECONDARY_TEXT_ALPHA), style = ViewerVeil.Time)
+                Text(readout, color = Color.White, style = ViewerVeil.LargeReadout, fontWeight = FontWeight.Medium)
+                Text(detail, Modifier.padding(bottom = 3.dp), color = Color.White.copy(alpha = ViewerVeil.SECONDARY_TEXT_ALPHA), style = ViewerVeil.Time)
             }
         }
     }

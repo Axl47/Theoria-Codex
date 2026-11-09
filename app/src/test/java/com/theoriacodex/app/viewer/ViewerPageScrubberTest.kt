@@ -1,0 +1,218 @@
+package com.theoriacodex.app.viewer
+
+import android.app.Application
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.TouchInjectionScope
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.percentOffset
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.dp
+import coil.Coil
+import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.SourceKey
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+@RunWith(RobolectricTestRunner::class)
+@Config(application = Application::class)
+class ViewerPageScrubberTest {
+    @get:Rule val compose = createComposeRule()
+
+    private val selected = mutableListOf<Int>()
+    private val activity = mutableListOf<Boolean>()
+    private val preview get() = compose.onNodeWithTag("viewer-scrub-preview")
+
+    @Test fun `each page owns an equal share of the track, and mirroring flips it`() {
+        assertEquals(0, viewerPageAt(0f, 120f, 12, mirrored = false))
+        assertEquals(0, viewerPageAt(9.9f, 120f, 12, mirrored = false))
+        assertEquals(1, viewerPageAt(10f, 120f, 12, mirrored = false))
+        assertEquals(11, viewerPageAt(120f, 120f, 12, mirrored = false))
+        assertEquals(11, viewerPageAt(0f, 120f, 12, mirrored = true))
+        assertEquals(0, viewerPageAt(120f, 120f, 12, mirrored = true))
+    }
+
+    @Test fun `a landscape page and its neighbours are shrunk to fit a phone, a portrait one is left alone`() {
+        val landscape = viewerPagePreviewFrame(16f / 9f, 344.dp)
+        assertTrue("target is ${landscape.width}", landscape.width * 2.1f + 12.dp <= 344.01.dp)
+        assertEquals(viewerScrubFrameSize(0.7f), viewerPagePreviewFrame(0.7f, 344.dp))
+    }
+
+    @Test fun `a drag steps through pages and turns the page once on release`() {
+        setScrubber(pageIndex = 2)
+        scrubber { down(at(0.1f)); moveTo(at(0.5f)) }
+        preview.assertIsDisplayed()
+        compose.onNodeWithText("7 / 12").assertIsDisplayed()
+        compose.onNodeWithText("+4").assertIsDisplayed()
+        compose.runOnIdle { assertTrue(selected.isEmpty()) }
+
+        scrubber { moveTo(at(0.77f)); up() }
+        preview.assertDoesNotExist()
+        compose.runOnIdle {
+            assertEquals(listOf(9), selected)
+            assertEquals(listOf(true, false), activity)
+        }
+    }
+
+    @Test fun `releasing on the starting page does not turn it`() {
+        setScrubber(pageIndex = 6)
+        scrubber { down(at(0.5f)); up() }
+        compose.runOnIdle { assertTrue(selected.isEmpty()) }
+    }
+
+    @Test fun `a cancelled drag leaves the post on its page`() {
+        setScrubber(pageIndex = 2)
+        scrubber { down(at(0.1f)); moveTo(at(0.9f)); cancel() }
+        preview.assertDoesNotExist()
+        compose.runOnIdle {
+            assertTrue(selected.isEmpty())
+            assertEquals(listOf(true, false), activity)
+        }
+    }
+
+    @Test fun `removing a held scrubber cancels rather than turning the page`() {
+        var shown by mutableStateOf(true)
+        setScrubber(pageIndex = 2) { shown }
+        scrubber { down(at(0.1f)); moveTo(at(0.9f)) }
+        compose.runOnIdle { shown = false }
+        compose.runOnIdle {
+            assertTrue(selected.isEmpty())
+            assertEquals(listOf(true, false), activity)
+        }
+    }
+
+    @Test fun `instant seek turns the page at each new step without a preview`() {
+        setScrubber(pageIndex = 0, instantSeek = true)
+        scrubber { down(at(0.2f)); moveTo(at(0.21f)); moveTo(at(0.4f)) }
+        preview.assertDoesNotExist()
+        scrubber { up() }
+        compose.runOnIdle { assertEquals(listOf(2, 4), selected) }
+    }
+
+    @Test fun `moving one page keeps the loads of the frames that stay in the preview`() {
+        val loads = installHangingLoader()
+        setScrubber(pageIndex = 0)
+        scrubber { down(at(0.1f)) }
+        compose.mainClock.advanceTimeBy(SCRUB_FRAME_SETTLE_MS + 20)
+        compose.runOnIdle { assertEquals(listOf(0, 1, 2), loads.started.pages("/thumb/")) }
+
+        // Page 2 was the right-hand neighbour and becomes the centre.
+        scrubber { moveTo(at(0.2f)) }
+        compose.onNodeWithText("3 / 12").assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(SCRUB_FRAME_SETTLE_MS + 20)
+        compose.runOnIdle {
+            assertEquals("started ${loads.started}", 1, loads.started.count { it.endsWith("/thumb/3.jpg") })
+            assertEquals(1, loads.started.count { it.endsWith("/thumb/2.jpg") })
+            // Only page 0, which left the preview, is dropped.
+            assertEquals(listOf("/thumb/0.jpg"), loads.cancelled.filter { "/thumb/" in it })
+        }
+    }
+
+    @Test fun `the original covers only the centre page, once the finger has rested`() {
+        val loads = installHangingLoader()
+        setScrubber(pageIndex = 0)
+        scrubber { down(at(0.1f)) }
+        compose.mainClock.advanceTimeBy(SCRUB_FRAME_SETTLE_MS + 20)
+        compose.runOnIdle {
+            assertEquals(listOf(0, 1, 2), loads.started.pages("/thumb/"))
+            assertTrue("started ${loads.started}", loads.started.pages("/missing/").isEmpty())
+        }
+
+        compose.mainClock.advanceTimeBy(250)
+        compose.runOnIdle { assertEquals(listOf(1), loads.started.pages("/missing/")) }
+
+        // Page 5 has no separate thumbnail, so its poster is loaded once, as the thumbnail.
+        scrubber { moveTo(at(0.45f)) }
+        compose.onNodeWithText("6 / 12").assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(SCRUB_FRAME_SETTLE_MS + 250 + 20)
+        compose.runOnIdle {
+            assertEquals("started ${loads.started}", listOf(1, 5), loads.started.pages("/missing/"))
+            assertEquals(1, loads.started.count { it.endsWith("/missing/5.jpg") })
+        }
+    }
+
+    @Test fun `after a far jump the new centre frame starts from the last centre image`() {
+        val loads = installHangingLoader(loadsImmediately = "/thumb/1.jpg")
+        setScrubber(pageIndex = 0)
+        scrubber { down(at(0.1f)) }
+        compose.mainClock.advanceTimeBy(SCRUB_FRAME_SETTLE_MS + 20)
+
+        scrubber { moveTo(at(0.7f)) }
+        compose.onNodeWithText("9 / 12").assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(SCRUB_FRAME_SETTLE_MS + 20)
+        compose.runOnIdle {
+            fun placeholderOf(page: Int) = loads.requests.single { it.data.toString().endsWith("/thumb/$page.jpg") }.placeholderMemoryCacheKey
+            assertNotNull(placeholderOf(8))
+            assertNull(placeholderOf(7))
+            assertNull(placeholderOf(9))
+        }
+    }
+
+    @Test fun `the first touch warms dedicated thumbnails nearest first, eight at a time`() {
+        val loads = installHangingLoader()
+        setScrubber(pageIndex = 0)
+        scrubber { down(at(0.1f)) }
+        compose.runOnIdle {
+            // Touched page 1; page 5 (poster as thumbnail) is skipped and the eight nearest of the rest start.
+            assertEquals("warmed ${loads.warmed}", listOf(0, 1, 2, 3, 4, 6, 7, 8), loads.warmed.map { it.data.toString() }.pages("/thumb/"))
+            assertTrue(loads.warmed.first().data.toString().endsWith("/thumb/1.jpg"))
+        }
+    }
+
+    @Test fun `a second drag on the same post starts no new warm requests`() {
+        val loads = installHangingLoader()
+        setScrubber(pageIndex = 0)
+        scrubber { down(at(0.1f)); up() }
+        compose.runOnIdle { assertEquals(8, loads.warmed.size) }
+        scrubber { down(at(0.9f)); up() }
+        compose.runOnIdle { assertEquals(8, loads.warmed.size) }
+    }
+
+    @Test fun `instant seek warms nothing`() {
+        val loads = installHangingLoader()
+        setScrubber(pageIndex = 0, instantSeek = true)
+        scrubber { down(at(0.1f)); up() }
+        compose.runOnIdle { assertTrue("warmed ${loads.warmed}", loads.warmed.isEmpty()) }
+    }
+
+    private fun List<String>.pages(prefix: String) = filter { prefix in it }.map { it.substringAfter(prefix).substringBefore(".").toInt() }.sorted()
+
+    @After fun resetCoil() = Coil.reset()
+
+    private fun TouchInjectionScope.at(fraction: Float) = percentOffset(fraction, 0.5f)
+
+    private fun scrubber(gesture: TouchInjectionScope.() -> Unit) {
+        compose.onNodeWithTag("viewer-page-scrubber").performTouchInput(gesture)
+    }
+
+    private fun setScrubber(pageIndex: Int, instantSeek: Boolean = false, shown: () -> Boolean = { true }) {
+        val items = List(12) { index ->
+            ViewerMediaOverviewItem(index, ImageRef(null, "/missing/$index.jpg", "image/jpeg"), ViewerMediaOverviewKind.STILL_IMAGE, "/missing/$index.jpg", if (index == 5) "/missing/5.jpg" else "/thumb/$index.jpg")
+        }
+        compose.setContent {
+            MaterialTheme {
+                CompositionLocalProvider(LocalViewerInstantSeek provides instantSeek) {
+                    if (shown()) {
+                        ViewerPageScrubber(SourceKey.PIXIV, items, 0.7f, pageIndex, false, { selected += it }, { activity += it }, Modifier.width(352.dp))
+                    }
+                }
+            }
+        }
+    }
+}

@@ -2,6 +2,7 @@ package com.theoriacodex.app.viewer
 
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.app.media.viewerMediaDeliveryPlan
+import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -283,6 +284,31 @@ class ViewerScreenImagePipelineTest {
             ),
             items.map { it.posterLocation },
         )
+    }
+
+    @Test
+    fun `overview thumbnails come from remote stills only and fall back to the poster`() {
+        fun page(n: Int, localPath: String? = null, thumbnailUrl: String? = null) = ImageRef(
+            url = "https://example.com/$n.jpg",
+            localPath = localPath,
+            mime = "image/jpeg",
+            thumbnailUrl = thumbnailUrl,
+        )
+        val post = testPost(
+            media = listOf(
+                page(1, thumbnailUrl = "https://example.com/1t.jpg"),
+                page(2, localPath = "/saved/2.jpg", thumbnailUrl = "https://example.com/2t.jpg"),
+                page(3),
+            ),
+        )
+
+        val items = viewerMediaOverviewItems(post)
+
+        assertEquals("https://example.com/1t.jpg", items[0].thumbnailLocation)
+        assertEquals("/saved/2.jpg", items[1].thumbnailLocation)
+        assertEquals(items[1].posterLocation, items[1].thumbnailLocation)
+        assertEquals("https://example.com/3.jpg", items[2].thumbnailLocation)
+        assertEquals(items[2].posterLocation, items[2].thumbnailLocation)
     }
 
     @Test

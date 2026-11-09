@@ -20,7 +20,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,6 +34,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.theoriacodex.app.media.isAnimatedImageMediaRef
 import com.theoriacodex.app.media.isGifMediaRef
 import com.theoriacodex.app.media.isPixivUgoiraMedia
@@ -40,6 +45,7 @@ import com.theoriacodex.app.media.postMediaItems
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.delay
 
 @Composable
 internal fun ViewerMediaOverviewGrid(
@@ -79,16 +85,63 @@ private fun ViewerOverviewCell(source: SourceKey, item: ViewerMediaOverviewItem,
     }
 }
 
+/** The thumbnail at once, then the original over it, since the thumbnail is soft at this tile size. */
 @Composable
 private fun ViewerOverviewPoster(source: SourceKey, item: ViewerMediaOverviewItem) {
-    val context = LocalContext.current
-    val model = remember(context, item.posterLocation, item.kind, source) {
-        item.posterLocation?.let { buildViewerImageRequest(context, it, source,
-            staticAnimatedWebPFrame = shouldDecodeStaticOverviewFrame(item.kind)) }
+    val thumbnail = rememberViewerThumbnailRequest(source, item)
+    if (thumbnail == null) {
+        Text("Preview unavailable", color = Color.White, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+        return
     }
-    if (model != null) AsyncImage(model, "Media ${item.mediaIndex + 1}: ${item.kind.accessibilityLabel}",
-        Modifier.fillMaxSize().padding(4.dp), contentScale = ContentScale.Fit)
-    else Text("Preview unavailable", color = Color.White, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+    val imageModifier = Modifier.fillMaxSize().padding(4.dp)
+    AsyncImage(thumbnail, "Media ${item.mediaIndex + 1}: ${item.kind.accessibilityLabel}", imageModifier, contentScale = ContentScale.Fit)
+    if (item.posterLocation != item.thumbnailLocation) ViewerOverviewOriginal(source, item, imageModifier)
+}
+
+/** Waits for the tile to stay on screen, so a fast scroll starts no heavy downloads, then fades in over the thumbnail. */
+@Composable
+private fun ViewerOverviewOriginal(source: SourceKey, item: ViewerMediaOverviewItem, modifier: Modifier) {
+    var rested by remember(item.posterLocation) { mutableStateOf(false) }
+    LaunchedEffect(item.posterLocation) {
+        delay(VIEWER_SHARP_SETTLE_MS)
+        rested = true
+    }
+    val original = rememberViewerPosterRequest(source, item)
+    val fadingIn = remember(original) { original?.newBuilder()?.crossfade(true)?.build() }
+    if (rested && fadingIn != null) AsyncImage(fadingIn, null, modifier, contentScale = ContentScale.Fit)
+}
+
+/** How long a page must stay put before its heavy original replaces its thumbnail. */
+internal const val VIEWER_SHARP_SETTLE_MS = 250L
+
+/** The still that stands for one page wherever the Viewer lists a post's pages; null when the page has none. */
+@Composable
+internal fun rememberViewerPosterRequest(source: SourceKey, item: ViewerMediaOverviewItem): ImageRequest? =
+    rememberViewerOverviewRequest(source, item, item.posterLocation)
+
+/** The small stand-in for page pickers (strip, seek preview, gallery grid); falls back to the poster when the provider has none. */
+@Composable
+internal fun rememberViewerThumbnailRequest(source: SourceKey, item: ViewerMediaOverviewItem, decodeEdgePx: Int? = null): ImageRequest? =
+    rememberViewerOverviewRequest(source, item, item.thumbnailLocation, decodeEdgePx)
+
+@Composable
+private fun rememberViewerOverviewRequest(
+    source: SourceKey,
+    item: ViewerMediaOverviewItem,
+    location: String?,
+    decodeEdgePx: Int? = null,
+): ImageRequest? {
+    val context = LocalContext.current
+    return remember(context, location, item.kind, source, decodeEdgePx) {
+        location?.let {
+            buildViewerImageRequest(
+                context, it, source,
+                staticAnimatedWebPFrame = shouldDecodeStaticOverviewFrame(item.kind),
+                targetWidthPx = decodeEdgePx,
+                targetHeightPx = decodeEdgePx,
+            )
+        }
+    }
 }
 
 @Composable
@@ -122,16 +175,24 @@ internal data class ViewerMediaOverviewItem(
     val media: ImageRef,
     val kind: ViewerMediaOverviewKind,
     val posterLocation: String?,
+    // A smaller stand-in for pickers; equals the poster when the provider has none.
+    val thumbnailLocation: String? = posterLocation,
 )
 
 internal fun viewerMediaOverviewItems(post: Post): List<ViewerMediaOverviewItem> {
     return postMediaItems(post).mapIndexed { index, media ->
         val kind = viewerMediaOverviewKind(post, media)
+        val posterLocation = viewerMediaOverviewPosterLocation(post, media, kind)
+        // A locally saved page keeps using its local file.
+        val thumbnail = media.thumbnailUrl?.takeIf {
+            kind == ViewerMediaOverviewKind.STILL_IMAGE && media.localPath.isNullOrBlank() && it.isNotBlank()
+        }
         ViewerMediaOverviewItem(
             mediaIndex = index,
             media = media,
             kind = kind,
-            posterLocation = viewerMediaOverviewPosterLocation(post, media, kind),
+            posterLocation = posterLocation,
+            thumbnailLocation = thumbnail ?: posterLocation,
         )
     }
 }

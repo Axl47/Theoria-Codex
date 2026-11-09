@@ -136,6 +136,8 @@ data class ImageRefStorageRecord(
     val videoVariants: List<VideoVariantRecord>? = null,
     @field:SerializedName("isAnimated")
     val isAnimated: Boolean? = null,
+    @field:SerializedName("thumbnailUrl")
+    val thumbnailUrl: String? = null,
 )
 
 /** Pure conversion boundary shared by every durable Post store. */
@@ -236,6 +238,7 @@ object PostStorageCodec {
             progressiveUrls = ref.progressiveUrls,
             isAnimated = ref.isAnimated,
             videoVariants = ref.videoVariants.encodeVideoVariants(),
+            thumbnailUrl = ref.thumbnailUrl,
         )
     }
 
@@ -268,6 +271,7 @@ private fun ImageRefStorageRecord.toDomain(): ImageRef {
         progressiveUrls = progressiveUrls.orEmpty(),
         isAnimated = isAnimated ?: false,
         videoVariants = videoVariants.decodeVideoVariants(),
+        thumbnailUrl = thumbnailUrl,
     )
 }
 

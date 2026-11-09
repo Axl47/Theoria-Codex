@@ -44,13 +44,9 @@ abstract class AppJourneyFixture {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         check(context.packageName == "com.theoriacodex.debug")
         directory = File(context.cacheDir, "journey-${UUID.randomUUID()}").apply { mkdirs() }
-        val image = directory.resolve("landscape.png")
-        val bitmap = Bitmap.createBitmap(320, 320, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.CYAN) }
-        image.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        bitmap.recycle()
+        val media = solidImage("landscape", Color.CYAN)
         posts = listOf(SourceKey.PIXIV, SourceKey.GELBOORU).associateWith { source ->
             (0 until 60).map { index ->
-                val media = ImageRef(null, image.absolutePath, "image/png")
                 Post(
                     id = PostId(source, "journey-$index"), preview = media, full = media,
                     pageUrl = null, width = 320, height = 320,
@@ -59,10 +55,22 @@ abstract class AppJourneyFixture {
                     rawTags = emptyList(), authorName = "Journey artist", createdAtEpochMs = 1_000L + index,
                     title = "${source.id} landscape $index",
                     creatorProfile = CreatorProfile(source, "Journey artist", "journey-artist", uploadsQuery = "journey-artist"),
-                )
+                ).let { customizePost(index, it) }
             }
         }
         openGraph()
+    }
+
+    /** Lets a journey reshape a fixture post before the graph reads it. */
+    protected open fun customizePost(index: Int, post: Post): Post = post
+
+    /** A one-color image on disk, standing in for provider media. */
+    protected fun solidImage(name: String, color: Int): ImageRef {
+        val image = directory.resolve("$name.png")
+        val bitmap = Bitmap.createBitmap(320, 320, Bitmap.Config.ARGB_8888).apply { eraseColor(color) }
+        image.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        bitmap.recycle()
+        return ImageRef(null, image.absolutePath, "image/png")
     }
 
     private fun openGraph() {

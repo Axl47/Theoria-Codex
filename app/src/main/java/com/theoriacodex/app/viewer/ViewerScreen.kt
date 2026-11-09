@@ -176,7 +176,7 @@ private fun ViewerLoadedScreen(
     )
     val viewerAccent = rememberViewerAccent(selection.post, enabled = !opening && !returning)
     CompositionLocalProvider(
-        LocalViewerPostStripInset provides if (chromeVisible && !frame.mediaOverviewVisible) 56.dp else 0.dp,
+        LocalViewerPostStripInset provides if (chromeVisible && !frame.mediaOverviewVisible) VIEWER_POST_STRIP_HEIGHT else 0.dp,
         LocalViewerAccent provides viewerAccent,
     ) {
         ViewerBackdrop(returnProgress, dismissDrag) {
@@ -191,7 +191,7 @@ private fun ViewerLoadedScreen(
             }
             ViewerChromeOverlays(
                 frame, postPagerState, screen, controls, swipe, activity, quality, qualityHeight, pendingPostId, likedPostIds,
-                onAction, loadMoreFromStrip, onIncludeRelatedPosts, onDismissRelatedPosts, onRetryRelatedPosts,
+                invertMultiImageScrollDirection, onAction, loadMoreFromStrip, onIncludeRelatedPosts, onDismissRelatedPosts, onRetryRelatedPosts,
             )
         }
     }
@@ -262,10 +262,8 @@ private fun ViewerOverview(
         items = selection.overviewItems,
         selectedMediaIndex = selection.mediaIndex,
         onMediaSelected = { mediaIndex ->
-            onAction(ViewerAction.SelectOverviewMedia(mediaIndex))
-            screen.pendingMediaJumpByPost[selection.post.id] = mediaIndex
+            controls.jumpToMedia(selection.post.id, mediaIndex)
             controls.setOverviewVisible(false)
-            controls.markInteraction()
         },
         modifier = Modifier.fillMaxSize(),
     )

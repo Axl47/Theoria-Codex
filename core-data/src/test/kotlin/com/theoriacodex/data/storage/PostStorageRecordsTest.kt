@@ -1,6 +1,7 @@
 package com.theoriacodex.data.storage
 
 import com.google.gson.Gson
+import com.theoriacodex.data.repository.mergeSparsePost
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -26,6 +27,16 @@ class PostStorageRecordsTest {
         assertTrue(json.contains("\"schemaVersion\":1"))
         assertEquals(CURRENT_POST_STORAGE_SCHEMA_VERSION, record.schemaVersion)
         assertEquals(post, PostStorageCodec.decode(reconstructedRecord))
+    }
+
+    @Test
+    fun `merging a ref without a thumbnail keeps the stored one`() {
+        val stored = samplePost()
+        val sparse = stored.copy(media = stored.media.map { it.copy(thumbnailUrl = null) })
+
+        val merged = mergeSparsePost(existing = stored, incoming = sparse)
+
+        assertEquals("https://example.com/full-thumb.webp", merged.media.single().thumbnailUrl)
     }
 
     @Test
@@ -100,6 +111,7 @@ class PostStorageRecordsTest {
             mime = "image/webp",
             progressiveUrls = listOf("https://example.com/sample.webp"),
             isAnimated = true,
+            thumbnailUrl = "https://example.com/full-thumb.webp",
         )
         return Post(
             id = PostId(SourceKey.PIXIV, "42"),
@@ -110,7 +122,7 @@ class PostStorageRecordsTest {
                 progressiveUrls = listOf("https://example.com/preview-small.jpg"),
                 isAnimated = false,
             ),
-            full = media,
+            full = media.copy(thumbnailUrl = null),
             media = listOf(media),
             pageUrl = "https://example.com/post/42",
             width = 1200,

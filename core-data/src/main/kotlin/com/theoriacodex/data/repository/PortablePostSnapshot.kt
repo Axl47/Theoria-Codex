@@ -27,6 +27,7 @@ internal fun portableBackupCreator(creator: CreatorProfile): CreatorProfile {
 private fun portableBackupImage(image: ImageRef): ImageRef = image.copy(
     url = portableMediaUrl(image.url),
     localPath = null,
+    thumbnailUrl = portableMediaUrl(image.thumbnailUrl),
     progressiveUrls = image.progressiveUrls.mapNotNull(::portableMediaUrl),
     videoVariants = image.videoVariants.mapNotNull { variant ->
         portableMediaUrl(variant.url)?.let { variant.copy(url = it) }

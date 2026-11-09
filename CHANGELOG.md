@@ -4,6 +4,9 @@
 
 ### Added
 
+- In the Viewer, drag the page bar of a multi-page post to move page by page, with a floating preview of the target page and its neighbours.
+- Multi-page posts show stacked cards in the Viewer's post strip, so you can spot them before opening them.
+- The open post unfolds its pages in the Viewer's strip, scrolling between the previous and next posts so both stay one tap away.
 - Danbooru is now a search source, with artists available as creators you can follow.
 - AIBooru is now available as a search source.
 - Danbooru and AIBooru share one "Booru" entry in the source picker, like the R34 sites, so the picker stays compact.
@@ -18,6 +21,8 @@
 
 ### Changed
 
+- The Viewer's page bar now fills up to the current page, like video progress.
+- On nhentai, a post's page gallery fills in right away with small previews, and each page sharpens once it stays on screen.
 - Collections saved for offline use now stay available in the released app, and copies saved before this update are recovered when the app starts.
 - Post cards show their like, count, duration, time and source as plain marks over soft edge shading instead of separate badges, so more of each post stays visible.
 - Galleries you have partly viewed show how far you got as a thin line along the bottom of the card.

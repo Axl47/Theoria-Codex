@@ -81,6 +81,13 @@ internal class ViewerControls(
         screen.interactionSerial += 1
     }
 
+    /** Moves the open post to one of its pages at once, for controls that pick a page directly. */
+    fun jumpToMedia(postId: PostId, mediaIndex: Int) {
+        onAction(ViewerAction.SelectOverviewMedia(mediaIndex))
+        screen.pendingMediaJumpByPost[postId] = mediaIndex
+        markInteraction()
+    }
+
     fun onTimelineInteractionChanged(isActive: Boolean) {
         screen.timelineInteractionActive = isActive
         if (isActive) markInteraction()

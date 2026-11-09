@@ -45,6 +45,7 @@ private fun mergeImageRef(existing: ImageRef, incoming: ImageRef): ImageRef = in
         existing.videoVariants.takeIf { incoming.url.isNullOrBlank() || incoming.url == existing.url }.orEmpty()
     },
     isAnimated = incoming.isAnimated || existing.isAnimated,
+    thumbnailUrl = incoming.thumbnailUrl.presentOr(existing.thumbnailUrl),
 )
 
 private fun mergeMedia(existing: List<ImageRef>, incoming: List<ImageRef>): List<ImageRef> {

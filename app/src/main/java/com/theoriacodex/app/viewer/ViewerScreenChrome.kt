@@ -33,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -78,6 +79,7 @@ internal fun BoxScope.ViewerChromeOverlays(
     qualityHeight: MutableState<Int?>,
     pendingPostId: MutableState<PostId?>,
     likedPostIds: Set<PostId>,
+    invertMultiImageScrollDirection: Boolean,
     onAction: (ViewerAction) -> Unit,
     loadMoreFromStrip: () -> Unit,
     onIncludeRelatedPosts: () -> Unit,
@@ -89,18 +91,37 @@ internal fun BoxScope.ViewerChromeOverlays(
     // While scrubbing everything but the timeline steps back. Only its alpha changes, so the strip keeps its scroll position.
     val scrubFade by animateFloatAsState(if (screen.timelineInteractionActive) 0f else 1f, tween(TheoriaMotion.SHORT_MS), label = "Viewer scrub fade")
     val fadesWhileScrubbing = Modifier.graphicsLayer { alpha = scrubFade }
-    ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_STRIPS && !frame.mediaOverviewVisible, Modifier.align(Alignment.BottomCenter).then(fadesWhileScrubbing)) {
+    val mirrored = viewerMediaPagerReverseLayout(selection.mediaItems.size, invertMultiImageScrollDirection)
+    ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_STRIPS && !frame.mediaOverviewVisible, Modifier.align(Alignment.BottomCenter)) {
         val stripIndex = navigation.originalPosts.indexOfFirst { it.id == frame.posts.getOrNull(postPagerState.currentPage)?.id }
             .takeIf { it >= 0 } ?: navigation.stripAnchorIndex
         ViewerBottomChrome(
             timelinePresent = selection.isAnimated,
-            pageCount = selection.mediaItems.size,
-            pageIndex = selection.mediaIndex,
+            fadesWhileScrubbing = fadesWhileScrubbing,
+            pageBar = {
+                if (selection.overviewItems.size > 1) {
+                    // Keyed by post so a drag held across a post change is cancelled instead of landing on the new post.
+                    key(selection.post.id) {
+                        ViewerPageScrubber(
+                            source = selection.post.id.source,
+                            items = selection.overviewItems,
+                            aspectRatio = viewerAspectRatio(selection.post),
+                            pageIndex = selection.mediaIndex,
+                            mirrored = mirrored,
+                            onPageSelected = { controls.jumpToMedia(selection.post.id, it) },
+                            onInteractionActiveChanged = { controls.onTimelineInteractionChanged(it) },
+                        )
+                    }
+                }
+            },
         ) {
             ViewerPostStrip(navigation.originalPosts, stripIndex, { index ->
                 pendingPostId.value = navigation.originalPosts[index].id
             }, Modifier.testTag("viewer-post-navigation-strip"),
-                onLoadMore = loadMoreFromStrip, onInteraction = { controls.markInteraction() })
+                onLoadMore = loadMoreFromStrip, onInteraction = { controls.markInteraction() },
+                openPages = ViewerStripPages(selection.post.id, selection.overviewItems, selection.mediaIndex, mirrored) {
+                    controls.jumpToMedia(selection.post.id, it)
+                })
         }
     }
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_TOP_BAR, Modifier.align(Alignment.TopCenter).then(fadesWhileScrubbing)) {
