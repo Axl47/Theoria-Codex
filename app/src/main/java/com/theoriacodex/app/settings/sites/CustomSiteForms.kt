@@ -121,7 +121,12 @@ private fun ConfirmSection(
 
 /** Edit flow: name, opt-in, keys (replace or remove) and headers. Never changes the address or family. */
 @Composable
-internal fun EditSitePage(form: SiteForm.Edit, site: CustomSiteSummary, onAction: (CustomSitesAction) -> Unit) {
+internal fun EditSitePage(
+    form: SiteForm.Edit,
+    site: CustomSiteSummary,
+    retest: RetestStatus?,
+    onAction: (CustomSitesAction) -> Unit,
+) {
     val editable = !form.saving
     SettingsPageColumn {
         SettingsHeader(site.label, onBack = { onAction(CustomSitesAction.CloseForm) })
@@ -137,6 +142,18 @@ internal fun EditSitePage(form: SiteForm.Edit, site: CustomSiteSummary, onAction
                 IncludeSwitch(form.fields.includeInUnifiedAndForYou, editable, onAction)
             }
         }
+        SettingsGroup("Browser check") {
+            SettingsRow(
+                title = "Verify in browser",
+                summary = "Open this site to pass its browser check",
+                enabled = editable,
+                onClick = { onAction(CustomSitesAction.StartVerification(site.host, afterRefusal = false)) },
+            )
+            // The last check's answer, so "Working" is there after the page closes by itself.
+            (retest as? RetestStatus.Done)?.let {
+                AnnouncedText(it.message, Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp), error = !it.ok)
+            }
+        }
         SettingsGroup("API key") {
             FormColumn { EditCredentials(form, site.family, editable, onAction) }
         }
@@ -146,9 +163,6 @@ internal fun EditSitePage(form: SiteForm.Edit, site: CustomSiteSummary, onAction
         form.message?.let { AnnouncedText(it, Modifier.padding(horizontal = 4.dp), error = true) }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = { onAction(CustomSitesAction.SaveEdit) }, enabled = editable) { Text("Save") }
-            TextButton(onClick = { onAction(CustomSitesAction.StartVerification(site.host, afterRefusal = false)) }, enabled = editable) {
-                Text("Verify in browser")
-            }
             TextButton(onClick = { onAction(CustomSitesAction.RequestRemove(site.sourceId)) }, enabled = editable) {
                 Text("Remove site", color = MaterialTheme.colorScheme.error)
             }

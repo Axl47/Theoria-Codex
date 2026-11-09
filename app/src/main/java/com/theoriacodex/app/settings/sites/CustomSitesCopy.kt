@@ -35,7 +35,14 @@ internal fun verificationRefusedMessage(host: String): String =
     "$host is still refusing Theoria. Finish its check, or try again in a moment."
 
 /** Shown when the first check passes, so a page opened voluntarily stays open. */
-internal fun verificationAlreadyOpenMessage(host: String): String = "$host already lets Theoria through."
+internal fun verificationAlreadyOpenMessage(host: String): String =
+    "$host already lets Theoria through. Tap Done to save this browser for it."
+
+internal const val VERIFICATION_INSTRUCTION =
+    "Complete the site's check above. This closes by itself when Theoria gets through."
+internal const val BROWSER_UNAVAILABLE_MESSAGE = "The system browser isn't available right now."
+
+internal fun verificationLoadFailedMessage(host: String): String = "Couldn't load $host. Check your connection and try again."
 
 /** Names the shipped source when the id parses, e.g. "Danbooru is already built into Theoria." */
 internal fun alreadyBuiltInMessage(builtInSourceId: String): String =
@@ -102,7 +109,11 @@ internal fun retestStatus(site: CustomSiteSummary, result: SiteProbeResult): Ret
             if (result.rejected) "The saved keys were rejected." else "Needs an API key.",
             ok = false,
         )
-        else -> RetestStatus.Done(probeMessage(result).orEmpty(), ok = false)
+        else -> RetestStatus.Done(
+            probeMessage(result).orEmpty(),
+            ok = false,
+            blocked = result is SiteProbeResult.Unreachable && result.reason == ProbeFailure.BLOCKED,
+        )
     }
 }
 

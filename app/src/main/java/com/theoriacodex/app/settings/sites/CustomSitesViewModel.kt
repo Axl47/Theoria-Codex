@@ -185,7 +185,9 @@ internal class CustomSitesViewModel(
     private suspend fun verificationPassed(host: String, site: CustomSiteSummary?, check: VerificationCheck, result: SiteProbeResult): Boolean {
         val closes = check.explicit || state.value.verification?.sawRefusal == true
         if (!closes) {
-            updateVerification { copy(checking = false, message = verificationAlreadyOpenMessage(host)) }
+            updateVerification {
+                copy(checking = false, message = verificationAlreadyOpenMessage(host), messageIsError = false)
+            }
             return true
         }
         if (site != null) {
@@ -218,6 +220,7 @@ internal class CustomSitesViewModel(
             copy(
                 checking = false,
                 sawRefusal = sawRefusal || blocked,
+                messageIsError = messageIsError || check.explicit,
                 message = when {
                     !check.explicit -> message
                     blocked -> verificationRefusedMessage(host)
@@ -406,7 +409,6 @@ internal class CustomSitesViewModel(
                     )
                 }
             }
-            if (result == CustomSiteMutation.Success) controller.setSetupHost(null)
             // New keys aren't checked on save, so check them right away and show the answer on the row.
             if (result == CustomSiteMutation.Success && edit.credentials is CredentialEdit.Replace) retest(form.sourceId)
         }

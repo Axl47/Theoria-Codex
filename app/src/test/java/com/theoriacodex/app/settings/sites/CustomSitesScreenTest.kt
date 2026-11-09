@@ -12,10 +12,13 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.customsites.CustomSiteAvailability
+import com.theoriacodex.domain.source.ProbeFailure
 import com.theoriacodex.domain.source.ProtocolFamily
+import com.theoriacodex.domain.source.SiteProbeResult
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -77,7 +80,7 @@ class CustomSitesScreenTest {
         val controller = FakeCustomSitesController(listOf(site()))
         show(controller)
         compose.onNodeWithText("Safebooru").performClick()
-        compose.onNodeWithText("Remove site").performClick()
+        compose.onNodeWithText("Remove site").performScrollTo().performClick()
 
         compose.onNodeWithText(removeConfirmationText("Safebooru")).assertExists()
         compose.onNodeWithText(
@@ -88,5 +91,29 @@ class CustomSitesScreenTest {
 
         compose.onNodeWithText("Safebooru").assertDoesNotExist()
         assertEquals(listOf("custom_safebooru_org"), controller.removals)
+    }
+
+    @Test
+    fun `a re-test blocked by a challenge offers browser verification`() {
+        val controller = FakeCustomSitesController(listOf(site())).apply {
+            onRetest = { SiteProbeResult.Unreachable(address("safebooru.org"), ProbeFailure.BLOCKED) }
+        }
+        show(controller)
+        compose.onNodeWithText("Verify in browser").assertDoesNotExist()
+
+        compose.onNodeWithContentDescription("Re-test Safebooru").performClick()
+
+        compose.onNodeWithText(unreachableMessage("safebooru.org", ProbeFailure.BLOCKED)).assertExists()
+        compose.onNodeWithText("Verify in browser").assertExists()
+    }
+
+    @Test
+    fun `the edit page has a Browser check row`() {
+        show(FakeCustomSitesController(listOf(site())))
+        compose.onNodeWithText("Safebooru").performClick()
+
+        compose.onNodeWithText("Browser check").assertExists()
+        compose.onNodeWithText("Verify in browser").assertExists()
+        compose.onNodeWithText("Open this site to pass its browser check").assertExists()
     }
 }

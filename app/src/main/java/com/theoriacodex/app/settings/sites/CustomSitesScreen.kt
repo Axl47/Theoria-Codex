@@ -32,14 +32,14 @@ import com.theoriacodex.app.settings.SettingsRowDivider
 internal fun CustomSitesScreen(state: CustomSitesUiState, onAction: (CustomSitesAction) -> Unit, onBack: () -> Unit) {
     BackHandler(enabled = state.form != null) { onAction(CustomSitesAction.CloseForm) }
     state.verification?.let { verification ->
-        SiteVerificationPage(verification.host, onAction)
+        SiteVerificationPage(verification, onAction)
         return
     }
     when (val form = state.form) {
         null -> SitesListPage(state, onAction, onBack)
         is SiteForm.Add -> AddSitePage(form, onAction)
         is SiteForm.Edit -> state.sites.firstOrNull { it.sourceId == form.sourceId }?.let { site ->
-            EditSitePage(form, site, onAction)
+            EditSitePage(form, site, state.retests[site.sourceId], onAction)
         }
     }
     RemoveSiteDialog(state, onAction)
@@ -98,6 +98,12 @@ private fun SiteRow(site: CustomSiteSummary, retest: RetestStatus?, onAction: (C
                 Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
                 error = !retest.ok,
             )
+            if (retest.blocked) {
+                TextButton(
+                    onClick = { onAction(CustomSitesAction.StartVerification(site.host, afterRefusal = true)) },
+                    modifier = Modifier.padding(start = 4.dp),
+                ) { Text("Verify in browser") }
+            }
         }
     }
 }

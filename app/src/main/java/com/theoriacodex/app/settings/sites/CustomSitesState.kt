@@ -30,6 +30,7 @@ data class SiteVerification(
     val host: String,
     val checking: Boolean = false,
     val message: String? = null,
+    val messageIsError: Boolean = false,
     val sawRefusal: Boolean = false,
 )
 
@@ -86,7 +87,9 @@ sealed interface AddStage {
 
 sealed interface RetestStatus {
     data object Running : RetestStatus
-    data class Done(val message: String, val ok: Boolean) : RetestStatus
+
+    /** [blocked] when a browser challenge refused the check, so the row offers browser verification. */
+    data class Done(val message: String, val ok: Boolean, val blocked: Boolean = false) : RetestStatus
 }
 
 sealed interface CustomSitesAction {
