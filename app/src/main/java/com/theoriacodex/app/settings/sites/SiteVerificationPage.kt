@@ -27,7 +27,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +35,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -59,11 +59,13 @@ internal fun SiteVerificationPage(verification: SiteVerification, onAction: (Cus
     val currentOnAction by rememberUpdatedState(onAction)
     var progress by remember(host) { mutableIntStateOf(0) }
     var loadFailed by remember(host) { mutableStateOf(false) }
+    val backgroundColor = MaterialTheme.colorScheme.background.toArgb()
     val webView = remember(host) {
         runCatching {
             createVerificationWebView(
                 context = context,
                 url = "https://$host/",
+                backgroundColor = backgroundColor,
                 onProgress = { progress = it },
                 onLoadFailed = { loadFailed = it },
                 onPageLoaded = { userAgent ->
@@ -72,26 +74,32 @@ internal fun SiteVerificationPage(verification: SiteVerification, onAction: (Cus
             )
         }.getOrNull()
     }
-    DisposableEffect(webView) {
-        onDispose {
-            webView?.stopLoading()
-            webView?.destroy()
-        }
-    }
     fun reload() {
         loadFailed = false
         webView?.loadUrl("https://$host/")
     }
 
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp)) {
-        SettingsHeader("Verify $host", onBack = { onAction(CustomSitesAction.CancelVerification) }) {
-            IconButton(onClick = ::reload, enabled = webView != null) { Icon(Icons.Default.Refresh, "Reload") }
+    Column(Modifier.fillMaxSize()) {
+        Box(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)) {
+            SettingsHeader("Verify $host", onBack = { onAction(CustomSitesAction.CancelVerification) }) {
+                IconButton(onClick = ::reload, enabled = webView != null) { Icon(Icons.Default.Refresh, "Reload") }
+            }
         }
         if (webView != null && progress < FULL_PROGRESS && !loadFailed) {
             LinearProgressIndicator(progress = { progress / FULL_PROGRESS.toFloat() }, modifier = Modifier.fillMaxWidth())
         }
         Box(Modifier.weight(1f).fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
-            if (webView != null) AndroidView(factory = { webView }, modifier = Modifier.fillMaxSize())
+            if (webView != null) {
+                AndroidView(
+                    factory = { webView },
+                    modifier = Modifier.fillMaxSize(),
+                    // Runs once the view is detached, which destroy() requires.
+                    onRelease = { released ->
+                        released.stopLoading()
+                        released.destroy()
+                    },
+                )
+            }
             when {
                 webView == null -> PageProblem(BROWSER_UNAVAILABLE_MESSAGE) {
                     TextButton(onClick = { onAction(CustomSitesAction.CancelVerification) }) { Text("Close") }
@@ -101,17 +109,22 @@ internal fun SiteVerificationPage(verification: SiteVerification, onAction: (Cus
                 }
             }
         }
-        Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (verification.checking) {
-                Progress("Checking…")
-            } else {
-                AnnouncedText(verification.message ?: VERIFICATION_INSTRUCTION, error = verification.messageIsError)
-            }
-            Button(
-                onClick = { webView?.let { onAction(CustomSitesAction.ConfirmVerification(it.settings.userAgentString)) } },
-                enabled = webView != null && !verification.checking,
-            ) { Text("Done") }
+        VerificationStatusBar(verification, browserReady = webView != null) {
+            webView?.let { onAction(CustomSitesAction.ConfirmVerification(it.settings.userAgentString)) }
         }
+    }
+}
+
+/** The instruction, the last answer or "Checking…", above Done. */
+@Composable
+private fun VerificationStatusBar(verification: SiteVerification, browserReady: Boolean, onDone: () -> Unit) {
+    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (verification.checking) {
+            Progress("Checking…")
+        } else {
+            AnnouncedText(verification.message ?: VERIFICATION_INSTRUCTION, error = verification.messageIsError)
+        }
+        Button(onClick = onDone, enabled = browserReady && !verification.checking) { Text("Done") }
     }
 }
 
@@ -129,7 +142,8 @@ private fun PageProblem(message: String, action: @Composable () -> Unit) {
 }
 
 /**
- * Starts loading [url] in a new WebView that can read neither files nor content providers. Only
+ * Starts loading [url] in a new WebView that can read neither files nor content providers, painting
+ * [backgroundColor] until the page does, so a dark theme has no white flash. Only
  * main-frame loads are reported: [onPageLoaded] with the browser's User-Agent after a page that loaded,
  * [onLoadFailed] true when the main frame could not load (an HTTP 403 challenge is a normal page).
  */
@@ -137,10 +151,12 @@ private fun PageProblem(message: String, action: @Composable () -> Unit) {
 private fun createVerificationWebView(
     context: Context,
     url: String,
+    backgroundColor: Int,
     onProgress: (Int) -> Unit,
     onLoadFailed: (Boolean) -> Unit,
     onPageLoaded: (userAgent: String) -> Unit,
 ): WebView = WebView(context).apply {
+    setBackgroundColor(backgroundColor)
     settings.javaScriptEnabled = true
     settings.domStorageEnabled = true
     settings.allowContentAccess = false

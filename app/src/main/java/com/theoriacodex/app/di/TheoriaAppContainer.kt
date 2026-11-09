@@ -454,6 +454,8 @@ internal class DefaultTheoriaAppContainer(
 
     /** Complete typed-store migration before any route can observe default placeholder state. */
     suspend fun awaitDurableStores() = coroutineScope {
+        // The old stored host list; allowed hosts now come from the saved sites.
+        appContext.deleteSharedPreferences("browser_verified_sites")
         // Before the app is ready: a request racing an empty list would be challenged and trip a 10-minute outage.
         cookieBridge.updateSiteHosts(siteHosts(siteProfiles.observeProfiles().first()))
         val settingsReady = async { settingsRepository.awaitReady() }

@@ -41,8 +41,6 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
     override fun onCreate() {
         super.onCreate()
         CookieHandler.setDefault(siteCookieBridge.cookieHandler)
-        // Replaced by deriving allowed hosts from the saved sites.
-        deleteSharedPreferences("browser_verified_sites")
         readiness = ApplicationDataReadiness(
             applicationScope = applicationScope,
             initializationDispatcher = Dispatchers.IO,
