@@ -87,6 +87,11 @@ python3 scripts/live_latency_bench.py summarize build/live-latency/final</pre>
 <li>OkHttp rethrows anything but IOException on its dispatcher threads. A SecurityException from DNS killed the fixture process, where <code>HttpURLConnection</code> had returned it to the caller.</li>
 <li>nhentai's Viewer images swing between about 1.5 s and 6 s on both builds: 2 of 11 baseline runs and 6 of 11 final runs hit the slow mode. The sample is too small to call a regression, and the slow mode exists without this work.</li>
 <li>Paheal's filterless feed gets no card images on either build, and rule34gen's card images fail 12 of 12 on either build. Neither is caused by this work.</li>
+<li>The nhentai swing is the provider's: its page hosts sometimes stop sending partway through a file. On 88 pages from the Mac, 2 stalled for about 18 s while a second request on a new connection answered in about 1 s. Time didn't follow file size (correlation -0.07) or protocol (HTTP/2 and HTTP/1.1 stalled alike). The hosts honour Range, so the app resumes a silent page after 2.5 s.</li>
+<li>Paheal dropped <code>data-ext</code> for <code>data-mime</code> and its URLs have no extensions, so every file's type came out unknown, tagged searches included.</li>
+<li>rule34gen's RSS thumbnails answer 404 while its listing page's work. Separately, on both rule34gen and rule34video, listing cards after the first four carry an inline placeholder in <code>src</code> and the real address in <code>data-rd-src</code>.</li>
+<li>Follow-up validation on the AVD with isolated packages: the maintenance notice appeared against Danbooru's live 503 and stayed gone after Dismiss, and Test all sits in the Built-in header. The feed journey passed For You, then failed at Watched Recents with ten cards playing on software decoders. That step was never reached before, so a physical run must decide it. The warm-up, IPv6 learning and page rescue have not been measured on the phone.</li>
+<li>The For You autoplay failure was the journey's. For You is built from sideways shelves, and the journey only scrolled vertically, so the fourth card of a row, the Ugoira, never came on screen.</li>
 </ul>
 
 <h2 id="decisions">Decision Log</h2>
