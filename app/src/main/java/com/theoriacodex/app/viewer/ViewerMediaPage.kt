@@ -183,7 +183,7 @@ internal fun viewerMediaIsAnimated(post: Post, media: ImageRef, hasUgoiraClient:
     isVideoMediaRef(media) || isGifMediaRef(media) || (isPixivUgoiraMedia(post, media) && hasUgoiraClient) ||
         (post.id.source == SourceKey.HITOMI && isAnimatedImageMediaRef(media))
 
-private fun viewerAspectRatio(post: Post): Float? {
+internal fun viewerAspectRatio(post: Post): Float? {
     val width = post.width?.takeIf { it > 0 } ?: return null
     val height = post.height?.takeIf { it > 0 } ?: return null
     return width.toFloat() / height.toFloat()

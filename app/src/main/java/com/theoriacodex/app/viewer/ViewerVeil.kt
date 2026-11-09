@@ -1,16 +1,11 @@
 package com.theoriacodex.app.viewer
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
@@ -19,7 +14,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -71,38 +65,21 @@ internal fun ViewerTimelineVeil(timeline: @Composable () -> Unit) {
 /**
  * Everything under the media that belongs to the screen rather than the player. Pages with a timeline
  * bring their own scrim, so only a faint one is added behind the strip to carry it through loading.
+ * [pageBar] takes the timeline's slot on pages without one, and stays lit while [fadesWhileScrubbing] dims the strip.
  */
 @Composable
 internal fun ViewerBottomChrome(
     timelinePresent: Boolean,
-    pageCount: Int,
-    pageIndex: Int,
+    fadesWhileScrubbing: Modifier,
     modifier: Modifier = Modifier,
+    pageBar: @Composable () -> Unit,
     strip: @Composable () -> Unit,
 ) {
     Box(modifier.fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
-        if (timelinePresent) Box(Modifier.matchParentSize().background(ViewerVeil.StripOnlyScrim)) else ViewerBottomScrim()
+        if (timelinePresent) Box(Modifier.matchParentSize().then(fadesWhileScrubbing).background(ViewerVeil.StripOnlyScrim)) else ViewerBottomScrim()
         Column(Modifier.fillMaxWidth()) {
-            if (!timelinePresent && pageCount > 1) ViewerPageSegments(pageCount, pageIndex)
-            strip()
+            if (!timelinePresent) pageBar()
+            Box(fadesWhileScrubbing) { strip() }
         }
     }
 }
-
-/** Multi-page position in the timeline's slot. Long galleries become one continuous bar, since segments would vanish. */
-@Composable
-private fun ViewerPageSegments(pageCount: Int, pageIndex: Int) {
-    val accent = LocalViewerAccent.current
-    val slot = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).height(3.dp).clearAndSetSemantics { }
-    if (pageCount > MAX_PAGE_SEGMENTS) {
-        ViewerTimelineTrack({ (pageIndex + 1f) / pageCount }, slot, showHandle = false)
-        return
-    }
-    Row(slot, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        repeat(pageCount) { page ->
-            Box(Modifier.weight(1f).fillMaxHeight().background(if (page == pageIndex) accent else ViewerVeil.InactiveTrack, CircleShape))
-        }
-    }
-}
-
-private const val MAX_PAGE_SEGMENTS = 24

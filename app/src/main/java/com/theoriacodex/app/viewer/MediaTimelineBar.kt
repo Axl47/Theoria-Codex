@@ -167,14 +167,14 @@ private class TimelineScrubState(private val callbacks: State<TimelineSeekCallba
     fun abandon() = end(released = false)
 }
 
-/** One finger scrubs the track; a second finger or a stolen pointer cancels instead of seeking. */
-private fun Modifier.timelineScrubGestures(
-    durationKey: Long,
-    instantSeekKey: Boolean,
+/** One finger scrubs a track; a second finger or a stolen pointer cancels instead of seeking. A new key restarts the gesture. */
+internal fun Modifier.timelineScrubGestures(
+    key1: Any?,
+    key2: Any?,
     onBegin: (Float) -> Unit,
     onMove: (Float) -> Unit,
     onEnd: (released: Boolean) -> Unit,
-): Modifier = pointerInput(durationKey, instantSeekKey) {
+): Modifier = pointerInput(key1, key2) {
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
         var released = false
@@ -295,7 +295,7 @@ internal fun ViewerTimelineTrack(
     }
 }
 
-private fun DrawScope.drawPill(color: Color, left: Float, centerY: Float, right: Float, height: Float) {
+internal fun DrawScope.drawPill(color: Color, left: Float, centerY: Float, right: Float, height: Float) {
     if (right <= left) return
     drawRoundRect(color, Offset(left, centerY - height / 2f), Size(right - left, height), CornerRadius(height / 2f))
 }

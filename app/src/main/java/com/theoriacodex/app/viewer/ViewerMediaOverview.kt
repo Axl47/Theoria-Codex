@@ -30,6 +30,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.theoriacodex.app.media.isAnimatedImageMediaRef
 import com.theoriacodex.app.media.isGifMediaRef
 import com.theoriacodex.app.media.isPixivUgoiraMedia
@@ -81,14 +82,21 @@ private fun ViewerOverviewCell(source: SourceKey, item: ViewerMediaOverviewItem,
 
 @Composable
 private fun ViewerOverviewPoster(source: SourceKey, item: ViewerMediaOverviewItem) {
-    val context = LocalContext.current
-    val model = remember(context, item.posterLocation, item.kind, source) {
-        item.posterLocation?.let { buildViewerImageRequest(context, it, source,
-            staticAnimatedWebPFrame = shouldDecodeStaticOverviewFrame(item.kind)) }
-    }
+    val model = rememberViewerPosterRequest(source, item)
     if (model != null) AsyncImage(model, "Media ${item.mediaIndex + 1}: ${item.kind.accessibilityLabel}",
         Modifier.fillMaxSize().padding(4.dp), contentScale = ContentScale.Fit)
     else Text("Preview unavailable", color = Color.White, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+}
+
+/** The still that stands for one page wherever the Viewer lists a post's pages; null when the page has none. */
+@Composable
+internal fun rememberViewerPosterRequest(source: SourceKey, item: ViewerMediaOverviewItem): ImageRequest? {
+    val context = LocalContext.current
+    return remember(context, item.posterLocation, item.kind, source) {
+        item.posterLocation?.let {
+            buildViewerImageRequest(context, it, source, staticAnimatedWebPFrame = shouldDecodeStaticOverviewFrame(item.kind))
+        }
+    }
 }
 
 @Composable

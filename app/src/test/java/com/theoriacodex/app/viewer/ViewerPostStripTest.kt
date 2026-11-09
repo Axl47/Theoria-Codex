@@ -3,7 +3,13 @@ package com.theoriacodex.app.viewer
 import android.app.Application
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.assert
@@ -20,7 +26,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.PostId
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -63,6 +71,85 @@ class ViewerPostStripTest {
         compose.onNodeWithContentDescription("Open post video").assertContentDescriptionContains("Animated")
         compose.onNodeWithContentDescription("Open post still").assert(!hasContentDescription("Animated"))
     }
+
+    @Test fun `a long open post scrolls its pages between the neighbouring posts`() {
+        val selectedPages = mutableListOf<Int>()
+        setUnfolded(pageCount = 12, currentPage = 6) { selectedPages += it }
+        val previous = compose.onNodeWithContentDescription("Open post strip-2").fetchSemanticsNode().boundsInRoot
+        val next = compose.onNodeWithContentDescription("Open post strip-4").fetchSemanticsNode().boundsInRoot
+        val current = compose.onNodeWithContentDescription("Go to page 7 of 12").fetchSemanticsNode().boundsInRoot
+        val viewport = compose.onNodeWithTag("strip").fetchSemanticsNode().boundsInRoot
+        assertTrue("previous post starts at ${previous.left}", previous.left >= viewport.left)
+        assertTrue("next post ends at ${next.right}", next.right <= viewport.right)
+        assertEquals(viewport.center.x, current.center.x, 1.5f)
+        compose.onNodeWithContentDescription("Go to page 1 of 12").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Go to page 8 of 12").performClick()
+        compose.runOnIdle { assertEquals(listOf(7), selectedPages) }
+    }
+
+    @Test fun `the first and last pages of a long post scroll fully into view`() {
+        var page by mutableStateOf(0)
+        setUnfolded(pageCount = 12, currentPage = { page })
+        val previous = compose.onNodeWithContentDescription("Open post strip-2").fetchSemanticsNode().boundsInRoot
+        val first = compose.onNodeWithContentDescription("Go to page 1 of 12").fetchSemanticsNode().boundsInRoot
+        assertTrue("page 1 starts at ${first.left}", first.left > previous.right)
+        compose.runOnIdle { page = 11 }
+        compose.waitForIdle()
+        val next = compose.onNodeWithContentDescription("Open post strip-4").fetchSemanticsNode().boundsInRoot
+        val last = compose.onNodeWithContentDescription("Go to page 12 of 12").fetchSemanticsNode().boundsInRoot
+        assertTrue("page 12 ends at ${last.right}", last.right < next.left)
+    }
+
+    @Test fun `a short open post takes only the room its pages need`() {
+        setUnfolded(pageCount = 3, currentPage = 1)
+        val pages = (1..3).map { compose.onNodeWithContentDescription("Go to page $it of 3").fetchSemanticsNode().boundsInRoot }
+        val viewport = compose.onNodeWithTag("strip").fetchSemanticsNode().boundsInRoot
+        assertEquals(viewport.center.x, pages[1].center.x, 1.5f)
+        compose.onNodeWithContentDescription("Open post strip-1").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Open post strip-5").assertIsDisplayed()
+    }
+
+    @Test fun `pages only unfold for the post the strip has selected`() {
+        val posts = (0..6).map { testPost(sourcePostId = "strip-$it") }
+        compose.setContent {
+            MaterialTheme {
+                ViewerPostStrip(posts, 3, {}, Modifier.width(360.dp), openPages = stripPages(posts[0].id, 4, 0))
+            }
+        }
+        compose.onNodeWithContentDescription("Open post strip-3").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Go to page 1 of 4").assertDoesNotExist()
+    }
+
+    @Test fun `only multi-page posts announce their page count`() {
+        val posts = listOf(testPost(sourcePostId = "single").copy(mediaCount = 1), testPost(sourcePostId = "gallery").copy(mediaCount = 8))
+        compose.setContent { MaterialTheme { ViewerPostStrip(posts, 0, {}, Modifier.width(360.dp)) } }
+        compose.onNodeWithContentDescription("Open post gallery").assertStateDescription("8 pages")
+        compose.onNodeWithContentDescription("Open post single").assert(!hasStateDescription("8 pages"))
+    }
+
+    private fun setUnfolded(pageCount: Int, currentPage: Int, onSelect: (Int) -> Unit = {}) = setUnfolded(pageCount, { currentPage }, onSelect)
+
+    private fun setUnfolded(pageCount: Int, currentPage: () -> Int, onSelect: (Int) -> Unit = {}) {
+        val image = ImageRef(null, "/missing/strip.jpg", "image/jpeg")
+        val posts = (0..6).map { testPost(sourcePostId = "strip-$it").copy(preview = image) }
+        compose.setContent {
+            MaterialTheme {
+                ViewerPostStrip(posts, 3, {}, Modifier.width(360.dp).testTag("strip"), openPages = stripPages(posts[3].id, pageCount, currentPage(), onSelect))
+            }
+        }
+        compose.waitForIdle()
+    }
+
+    private fun stripPages(postId: PostId, pageCount: Int, currentPage: Int, onSelect: (Int) -> Unit = {}): ViewerStripPages {
+        val items = List(pageCount) { index ->
+            ViewerMediaOverviewItem(index, ImageRef(null, "/missing/$index.jpg", "image/jpeg"), ViewerMediaOverviewKind.STILL_IMAGE, "/missing/$index.jpg")
+        }
+        return ViewerStripPages(postId, items, currentPage, reversed = false, onSelect)
+    }
+
+    private fun androidx.compose.ui.test.SemanticsNodeInteraction.assertStateDescription(expected: String) = assert(hasStateDescription(expected))
+
+    private fun hasStateDescription(expected: String) = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, expected)
 
     private fun checkSpacing(width: Dp) {
         val image = ImageRef(null, "/missing/strip.jpg", "image/jpeg")
