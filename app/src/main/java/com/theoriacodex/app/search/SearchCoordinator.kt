@@ -9,6 +9,7 @@ import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.QueryRepository
 import com.theoriacodex.data.repository.RecentSearchKind
+import com.theoriacodex.data.repository.SearchFirstPageStore
 import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.SettingsRepository
@@ -71,6 +72,7 @@ class SearchCoordinator(
     private val recentsRepository: RecentsRepository,
     private val statisticsRepository: StatisticsRepository,
     private val tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
+    private val firstPageStore: SearchFirstPageStore? = null,
     private val clock: () -> Long = System::currentTimeMillis,
     private val computationDispatcher: CoroutineDispatcher = Dispatchers.Default,
     /** Runs seen-tag bookkeeping after results return; tests pass their scheduler-backed scope. */
@@ -171,6 +173,13 @@ class SearchCoordinator(
         sourceScope: SearchSourceScope,
         onPartial: suspend (SearchExecutionResult.Success) -> Unit,
     ): SearchExecutionResult = executeRoot(query, sourceScope, onPartial)
+
+    override suspend fun cachedFirstPage(executionKey: String): List<Post> =
+        firstPageStore?.load(executionKey).orEmpty()
+
+    override suspend fun rememberFirstPage(executionKey: String, posts: List<Post>) {
+        firstPageStore?.save(executionKey, posts)
+    }
 
     private suspend fun executeRoot(
         query: Query,

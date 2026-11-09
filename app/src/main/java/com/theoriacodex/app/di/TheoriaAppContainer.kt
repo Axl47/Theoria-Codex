@@ -42,6 +42,7 @@ import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.videoPlaybackInfrastructure
 import com.theoriacodex.data.repository.CacheRepository
 import com.theoriacodex.data.repository.CodexRepository
+import com.theoriacodex.data.repository.SearchFirstPageStore
 import com.theoriacodex.app.codex.CodexCleaningService
 import com.theoriacodex.data.repository.CodexLikesTransactions
 import com.theoriacodex.data.repository.FileBackedCacheRepository
@@ -396,6 +397,7 @@ internal class DefaultTheoriaAppContainer(
             recentsRepository = recentsRepository,
             statisticsRepository = statisticsRepository,
             tagSuggestionStore = tagSuggestionStore,
+            firstPageStore = SearchFirstPageStore(File(appContext.cacheDir, SearchFirstPageStore.FILE_NAME)),
         ),
         forYou = ForYouCoordinator(
             registry = sourceRegistry,

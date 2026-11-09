@@ -2,6 +2,10 @@ package com.theoriacodex.app.search
 
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchSourceScope
+import com.theoriacodex.data.repository.InMemoryQueryRepository
+import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
@@ -77,6 +81,76 @@ internal class SearchLoadingResponsivenessTest : SearchViewModelTestFixture() {
         assertEquals(listOf("fast-result"), resultIds(owner))
         assertFalse(owner.state.value.loading)
         assertFalse(owner.state.value.execution.showingPartialResults)
+    }
+
+    @Test
+    fun `reopening paints the cached first page and swaps it when fresh results arrive`() = runTest(mainDispatcherRule.dispatcher) {
+        val refresh = CompletableDeferred<Unit>()
+        val owner = reopenedSearch(refresh)
+        // Not restore(): advancing until idle would run the held request into its timeout.
+        owner.onAction(SearchAction.Restore)
+        runCurrent()
+
+        assertEquals(listOf("cached"), resultIds(owner))
+        assertTrue(owner.state.value.loading)
+
+        refresh.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(listOf("fast-result"), resultIds(owner))
+    }
+
+    @Test
+    fun `someone who scrolled the cached page keeps it and gets fresh posts below`() = runTest(mainDispatcherRule.dispatcher) {
+        val refresh = CompletableDeferred<Unit>()
+        val owner = reopenedSearch(refresh)
+        // Not restore(): advancing until idle would run the held request into its timeout.
+        owner.onAction(SearchAction.Restore)
+        runCurrent()
+
+        owner.onAction(SearchAction.ScrollChanged(firstVisibleItemIndex = 3, firstVisibleItemOffsetPx = 0))
+        refresh.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(listOf("cached", "fast-result"), resultIds(owner))
+    }
+
+    /** A search that already ran once, reopened with a remembered first page and a network answer held by [refresh]. */
+    private suspend fun kotlinx.coroutines.test.TestScope.reopenedSearch(refresh: CompletableDeferred<Unit>): SearchViewModel {
+        val queries = InMemoryQueryRepository()
+        val firstRun = viewModel(ViewModelSearchAdapter(), queryRepository = queries)
+        restore(firstRun)
+        firstRun.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
+        firstRun.onAction(SearchAction.AddIncludeTerm(SearchTerm("fast")))
+        firstRun.onAction(SearchAction.ApplyDraft)
+        advanceUntilIdle()
+        return viewModel(ViewModelSearchAdapter(), queryRepository = queries, executionService = { coordinator ->
+            object : SearchExecutionService by coordinator {
+                override suspend fun cachedFirstPage(executionKey: String) = listOf(
+                    Post(
+                        id = PostId(SourceKey.PIXIV, "cached"),
+                        preview = ImageRef(url = "https://example.test/cached.jpg", localPath = null, mime = "image/jpeg"),
+                        full = null,
+                        pageUrl = null,
+                        width = 100,
+                        height = 100,
+                        canonicalTags = emptyList(),
+                        rawTags = emptyList(),
+                        authorName = null,
+                        createdAtEpochMs = null,
+                    ),
+                )
+
+                override suspend fun executeInitialProgressively(
+                    query: Query,
+                    sourceScope: SearchSourceScope,
+                    onPartial: suspend (SearchExecutionResult.Success) -> Unit,
+                ): SearchExecutionResult {
+                    refresh.await()
+                    return coordinator.executeInitial(query, sourceScope)
+                }
+            }
+        })
     }
 
     @Test

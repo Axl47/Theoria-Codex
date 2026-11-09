@@ -30,6 +30,7 @@ import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
@@ -115,6 +116,10 @@ internal class SearchViewModel(
     private var pendingRootSearch: (() -> Unit)? = null
     private var activeContinuation: SearchContinuation? = null
     private var pageRetrySource: SourceKey? = null
+
+    /** Last run's first page is on screen awaiting its refresh, so partial results would only make it flicker. */
+    private var showingCachedFirstPage = false
+    private var scrolledCachedFirstPage = false
     private var latestEnvironmentSettings: AppSettings? = null
     private val appliedByMode = mutableMapOf<String, Query>()
     private val scrollPersistence = coordinator.scrollPersistence(scrollPersistenceDispatcher, scrollPersistenceDelayMs)
@@ -571,6 +576,7 @@ internal class SearchViewModel(
             query = current.query.applied,
             sourceScope = current.query.appliedSourceScope,
             persistAcceptedResult = false,
+            paintCachedFirstPage = true,
         )
     }
 
@@ -583,16 +589,20 @@ internal class SearchViewModel(
         undoScrollState: SearchScrollState? = null,
         onSuccess: suspend () -> Unit = {},
         relatedResetReason: String = "root search ($kind)",
+        paintCachedFirstPage: Boolean = false,
     ) {
         relatedPosts.clear(relatedResetReason)
         cancelActiveRequest()
         activeContinuation = null
         pageRetrySource = null
+        showingCachedFirstPage = false
+        scrolledCachedFirstPage = false
         val expectedExecutionKey = executionService.executionKeyFor(query, sourceScope)
         val requestId = ++nextRequestId
         reduce(SearchStateChange.BeginRequest(requestId, kind, query))
         val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
             try {
+                if (paintCachedFirstPage) paintCachedFirstPage(requestId, query, sourceScope, expectedExecutionKey)
                 executeRootRequest(
                     requestId, query, sourceScope, expectedExecutionKey, persistAcceptedResult, undo, undoScrollState, onSuccess,
                 )
@@ -634,7 +644,7 @@ internal class SearchViewModel(
         }
 
         val result = executionService.executeInitialProgressively(query, sourceScope) { partial ->
-            if (isAdmittedResult(requestId, partial, expectedExecutionKey)) {
+            if (!showingCachedFirstPage && isAdmittedResult(requestId, partial, expectedExecutionKey)) {
                 publish(partial) { showPartialResults(requestId, partial) }
             }
         }
@@ -645,6 +655,9 @@ internal class SearchViewModel(
             return@withTimeout
         }
         val succeeded = publish(result) { completeRequest(requestId, result, expectedExecutionKey) } ?: return@withTimeout
+        if (result is SearchExecutionResult.Success && result.posts.isNotEmpty()) {
+            viewModelScope.launch { executionService.rememberFirstPage(result.executionKey, result.posts) }
+        }
         persistDraftQuery()
         if (persistAcceptedResult) withContext(NonCancellable) {
             executionService.recordAcceptedSearch(result)
@@ -664,6 +677,35 @@ internal class SearchViewModel(
             if (undoScrollState != null) SearchStateChange.RouteEntryScrollRestorationRequested(scrollState)
             else SearchStateChange.ScrollResetRequested,
         )
+    }
+
+    private suspend fun paintCachedFirstPage(
+        requestId: Long,
+        query: Query,
+        sourceScope: SearchSourceScope,
+        executionKey: String,
+    ) {
+        val posts = executionService.cachedFirstPage(executionKey)
+        if (posts.isEmpty() || mutableState.value.execution.activeRequestId != requestId) return
+        showingCachedFirstPage = true
+        reduce(
+            SearchStateChange.PublishPartialResults(
+                requestId = requestId,
+                appliedQuery = query,
+                appliedSourceScope = sourceScope,
+                appliedQueryHash = executionKey,
+                results = posts,
+                statuses = emptyList(),
+            ),
+        )
+    }
+
+    /** Someone who has scrolled the cached page keeps their place: its posts stay put and new ones go below. */
+    private fun refreshedResults(fresh: List<Post>): List<Post> {
+        if (!showingCachedFirstPage || !scrolledCachedFirstPage) return fresh
+        val freshById = fresh.associateBy(Post::id)
+        val shown = mutableState.value.content.results.map { post -> freshById[post.id] ?: post }
+        return (shown + fresh).distinctBy(Post::id)
     }
 
     private fun showPartialResults(requestId: Long, result: SearchExecutionResult.Success): Boolean {
@@ -718,11 +760,12 @@ internal class SearchViewModel(
                         appliedQuery = result.query,
                         appliedSourceScope = result.sourceScope,
                         appliedQueryHash = result.executionKey,
-                        results = result.posts,
+                        results = refreshedResults(result.posts),
                         statuses = result.statuses,
                         canLoadMore = result.continuation.canLoadMore,
                     ),
                 )
+                showingCachedFirstPage = false
                 true
             }
         }
@@ -984,6 +1027,7 @@ internal class SearchViewModel(
     }
 
     private fun persistScroll(action: SearchAction.ScrollChanged) {
+        if (showingCachedFirstPage && action.firstVisibleItemIndex > 0) scrolledCachedFirstPage = true
         if (!mutableState.value.restoration.allowsScrollPersistence) return
         val index = action.firstVisibleItemIndex.coerceAtLeast(0)
         val offset = action.firstVisibleItemOffsetPx.coerceAtLeast(0)

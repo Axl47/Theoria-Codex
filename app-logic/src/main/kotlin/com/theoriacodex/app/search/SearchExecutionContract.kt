@@ -30,6 +30,11 @@ interface SearchExecutionService {
 
     suspend fun executePage(continuation: SearchContinuation): SearchPageResult
 
+    /** The first page last remembered for [executionKey], shown while it refreshes; empty when there is none. */
+    suspend fun cachedFirstPage(executionKey: String): List<Post> = emptyList()
+
+    suspend fun rememberFirstPage(executionKey: String, posts: List<Post>) = Unit
+
     suspend fun recordAcceptedSearch(result: SearchExecutionResult) = Unit
 
     suspend fun persistAppliedSearch(
