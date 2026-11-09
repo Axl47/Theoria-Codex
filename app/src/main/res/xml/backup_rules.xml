@@ -3,6 +3,7 @@
     <exclude domain="file" path="theoria_codex/offline_media/" />
     <exclude domain="file" path="theoria_codex/cache/" />
     <exclude domain="file" path="theoria_codex/updates/" />
+    <exclude domain="root" path="app_webview/" />
         <exclude domain="file" path="theoria_codex/download_jobs.json" />
         <exclude domain="file" path="theoria_codex/offline_jobs.json" />
     <exclude
