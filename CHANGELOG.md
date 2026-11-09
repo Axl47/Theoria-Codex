@@ -21,6 +21,13 @@
 
 ### Changed
 
+- Unified search shows results as soon as the first sources answer; slower sources add their posts below without moving what is already on screen.
+- Reopening the app shows your last search right away while it refreshes.
+- Hitomi cards, and Iwara cards with a custom thumbnail, now load small thumbnails instead of full-size images.
+- Choosing a page in a Hitomi gallery loads small page thumbnails instead of full pages.
+- Feeds start loading the next card images before you reach them when you are on an unmetered network.
+- rule34.xxx posts show a lighter sample in the Viewer first, then the original.
+- Gelbooru's untagged feed loads several times faster, including every further page.
 - The Viewer's page bar now fills up to the current page, like video progress.
 - On nhentai, a post's page gallery fills in right away with small previews, and each page sharpens once it stays on screen.
 - Collections saved for offline use now stay available in the released app, and copies saved before this update are recovered when the app starts.
@@ -58,6 +65,7 @@
 
 ### Fixed
 
+- On networks with broken IPv6, sources no longer stall for up to 30 seconds or fail to connect, and one slow source no longer blanks a whole Unified search.
 - R34V videos play again in feeds and the Viewer; they previously failed to load on every Android device.
 - Videos are requested with the same User-Agent as the site's images, including a custom site's own User-Agent, so sites that check it serve their videos too.
 - A R34V or R34G search with excluded tags now shows its results when one post's details can't be read, instead of failing the whole page.
