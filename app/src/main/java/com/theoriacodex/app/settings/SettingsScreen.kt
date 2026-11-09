@@ -16,13 +16,12 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -55,7 +54,7 @@ import com.theoriacodex.data.repository.SourceWeightSettings
 import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.domain.model.SourceKey
 
-private enum class SettingsSheet { PROFILE, SOURCE_MIX, PLAYBACK, CLASSIC_CONTROLS }
+private enum class SettingsSheet { PROFILE, SOURCE_MIX, PLAYBACK, CONTROLS }
 
 /** Settings hub: each row shows its current value; short choices use sheets, larger tasks use pages. */
 @Composable
@@ -173,17 +172,8 @@ private fun SettingsHomeGroups(
             onSheet(SettingsSheet.PLAYBACK)
         })
         SettingsRowDivider()
-        SettingsRow(
-            "Invert scroll direction", "Reverse swipes within multi-media posts", Icons.Default.SwapVert,
-            trailing = {
-                Switch(state.settings.viewer.invertMultiImageScrollDirection, onCheckedChange = {
-                    onAction(SettingsAction.SetInvertScrollDirection(it))
-                })
-            },
-        )
-        SettingsRowDivider()
-        SettingsRow("Classic controls", "Old search bar, instant seek", Icons.Default.History, onClick = {
-            onSheet(SettingsSheet.CLASSIC_CONTROLS)
+        SettingsRow("Controls", "Search bar, seeking, swipe direction", Icons.Default.TouchApp, onClick = {
+            onSheet(SettingsSheet.CONTROLS)
         })
     }
     SettingsGroup("Storage & app") {
@@ -233,7 +223,7 @@ private fun SettingsHomeSheet(
                 onAction(SettingsAction.SetSourceWeights(searchSources, it))
             }
             SettingsSheet.PLAYBACK -> MediaPreferencesSection(state, onAction)
-            SettingsSheet.CLASSIC_CONTROLS -> PreferencesSection(state, onAction)
+            SettingsSheet.CONTROLS -> PreferencesSection(state, onAction)
         }
     }
 }
