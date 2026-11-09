@@ -1,6 +1,7 @@
 package com.theoriacodex.app.network
 
 import com.sun.net.httpserver.HttpServer
+import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.SocketTimeoutException
 import java.util.concurrent.CopyOnWriteArrayList
@@ -64,6 +65,18 @@ class StalledPageRescueTest {
         val source = ResumingSource(stalled) { stalled }.buffer()
 
         assertThrows(SocketTimeoutException::class.java) { source.readByteArray() }
+    }
+
+    @Test
+    fun `a rescue stops reading once the original call is cancelled`() {
+        val original = OkHttpClient().newCall(Request.Builder().url("http://127.0.0.1/").build())
+        val source = StopsWithCall(Buffer().writeUtf8("page"), original).buffer()
+        assertEquals('p'.code.toByte(), source.readByte())
+
+        original.cancel()
+        source.buffer.clear()
+
+        assertThrows(IOException::class.java) { source.readByte() }
     }
 
     private companion object {
