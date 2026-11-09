@@ -96,7 +96,9 @@ python3 scripts/live_latency_bench.py summarize build/live-latency/final</pre>
 <tr><td>Late sources append below the first results instead of re-interleaving.</td><td>Cards already on screen must never move; the cost is a block of one source at the tail, only when that source is slow.</td><td>2026-11-09</td></tr>
 <tr><td>A cached first page is replaced when fresh results arrive, unless it has been scrolled.</td><td>Someone at the top sees the newest posts; someone reading keeps their place and gets new posts below.</td><td>2026-11-09</td></tr>
 <tr><td>Keep <code>sort:id:desc</code> on tagged Gelbooru searches.</td><td>Only the untagged list was slow, so the smallest change removes only that.</td><td>2026-11-09</td></tr>
-<tr><td>Do not teach the client to remember broken IPv6.</td><td>OkHttp's race already caps the cost near 250 ms per new connection. A learned filter adds state for a network the router setting can fix.</td><td>2026-11-09</td></tr>
+<tr><td>Teach the client to set aside IPv6 that keeps losing, per network, for ten minutes at a time.</td><td>Replaces an earlier decision to leave this to the router. Other people's networks can be half-configured too, and they can't all fix them. Filtering never empties a host's addresses, and an IPv4 failure ends it at once.</td><td>2026-11-09</td></tr>
+<tr><td>Reconnect to the twelve most recently used hosts at launch, on unmetered networks.</td><td>The first search chains DNS, TCP and TLS for its API and then its image host. Hosts are learned rather than listed per source, so custom sites benefit too.</td><td>2026-11-09</td></tr>
+<tr><td>Fix the For You autoplay failure in the journey, not by dropping the expectation.</td><td>For You is built from shelves, and the journey only scrolled vertically, so a row's fourth card was never on screen. Scrolling sideways keeps Ugoira covered there.</td><td>2026-11-09</td></tr>
 </table>
 
 <h2 id="outcomes">Outcomes And Retrospective</h2>
