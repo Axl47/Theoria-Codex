@@ -1,0 +1,482 @@
+<img src="./assets/manual-waterfall-sweeps/sweep-hitbox.png" alt="Annotated sweep hitbox areas">
+```
+
+Use descriptive `alt` text. If an image contains critical information, summarize that information in nearby text so the plan remains usable without the image.
+
+## Information Architecture
+
+An HTML ExecPlan should optimize for two readers at once:
+
+- The agent needs exact implementation instructions, commands, acceptance checks, and recovery steps.
+- The developer needs a fast way to understand scope, risks, decisions, and current status.
+
+Use this page structure:
+
+- Header: short title, status, owner, dates, and a one-paragraph outcome.
+- Sticky navigation: links to the major sections.
+- Dashboard: compact cards for current state, risk, validation, affected files, and next action.
+- Purpose: what the player or developer can do after the change that they could not do before.
+- Context: repository orientation, terms, existing behavior, constraints, and relevant files.
+- Phases: independently verifiable phases with observable outcomes.
+- Work Plan: exact edits and implementation sequence.
+- Validation: commands, manual checks, expected output, and acceptance criteria.
+- Living Log: progress, surprises, decisions, and retrospective.
+- Recovery: idempotence, rollback, cleanup, and how to resume.
+- Appendix: evidence, command transcripts, snippets, diagrams, or references.
+
+Prefer short paragraphs, compact tables, and focused callouts. Use `<details>` for large evidence blocks or secondary explanations. Do not hide the primary plan inside collapsed sections.
+
+## Required Sections
+
+Each plan must include these sections, with these purposes:
+
+### Purpose / Big Picture
+
+Explain why the work matters from the user or developer perspective. State the concrete behavior that will exist when the plan is complete and how someone can see it working.
+
+### Current Status
+
+Show whether the plan is proposed, in progress, blocked, validating, or complete. Include the next action. This should be visible near the top of the page.
+
+### Context And Orientation
+
+Describe the relevant code as if the reader knows nothing about this repository. Name files by full repository-relative path. Define terms. Explain how the parts fit together.
+
+### Phases
+
+Break the work into independently verifiable phases. Each phase needs a goal, specific edits, commands to run, expected observations, and acceptance criteria. Phases tell the story of the implementation; they are not just a checklist.
+
+### Work Plan
+
+Describe the exact sequence of edits. Name the files, functions, modules, components, types, and tests that should change. Make choices explicit. If you choose not to touch a related area, say why.
+
+### Validation And Acceptance
+
+List exact commands and manual checks. Include the working directory, expected results, and how to interpret failures. Acceptance must be behavior-based, such as "the Save Bank preset opens the late-game station without console errors" rather than "component refactored."
+
+### Progress
+
+Maintain a dated checklist of granular work. Every stopping point must be reflected here. Split partially completed work into completed and remaining pieces instead of leaving ambiguous items.
+
+### Surprises And Discoveries
+
+Record unexpected behavior, bugs, performance findings, library constraints, or design insights. Include concise evidence, such as test output or a relevant code reference.
+
+### Decision Log
+
+Record decisions in a durable format: decision, rationale, date, and author. Decisions should explain why the current approach is correct enough for the project.
+
+### Outcomes And Retrospective
+
+At major phases and completion, summarize what changed, what remains, what validation proved, and what future agents should remember.
+
+### Idempotence And Recovery
+
+Explain how to rerun commands safely, recover from partial edits, clean generated files, and resume if interrupted. If no destructive operations are expected, state that explicitly.
+
+## Visual And Readability Guidelines
+
+Use HTML features to improve comprehension:
+
+- Use a sticky `<nav>` so long plans are easy to scan.
+- Use compact summary cards for status, next action, risk, validation, and affected files.
+- Use tables for structured status, command lists, affected files, and acceptance criteria.
+- Use `<details><summary>...</summary>...</details>` for long transcripts, diffs, alternatives, or deep background.
+- Use `<figure>` and `<figcaption>` for screenshots, diagrams, or annotated references.
+- Use callout classes such as `note`, `risk`, `decision`, and `validation` to make important information scannable.
+- Use `<pre><code>` for commands, code snippets, and terminal output.
+- Keep CSS embedded in a single `<style>` tag in the document head.
+
+Do not use HTML as an excuse for noise. Avoid animations, decorative gradients, remote scripts, or layout tricks that make the plan harder to maintain. A useful plan should print reasonably, work offline, and remain readable in a plain browser.
+
+## Evidence And Examples
+
+Capture concise evidence. Good evidence includes:
+
+- A short test transcript showing the command and pass/fail count.
+- A browser observation with viewport and URL.
+- A small diff excerpt when it clarifies the key change.
+- A screenshot or annotated image that explains layout, hit areas, or visual state.
+- A performance measurement before and after a change.
+
+Do not paste huge logs or entire source files into the plan. Use summaries plus exact commands so the evidence can be reproduced.
+
+## Safe Implementation Standards
+
+Plans should prefer additive, testable steps. When a migration or destructive operation is necessary, describe the backup, retry, and rollback path. Commands should be safe to rerun when possible. If rerunning a command changes state, say exactly how and why.
+
+Respect VESTIGE repository constraints in every plan.
+
+If a future plan relies on a newer repository constraint, add it to `AGENTS.md` when it would help other developers discover the rule.
+
+## HTML ExecPlan Skeleton
+
+Copy this skeleton into a new `.docs/exec/<plan-name>.html` file and then replace every placeholder with concrete project knowledge. Keep the plan valid HTML.
+
+```html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Finish In-App Browser Verification</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f7f4;
+      --surface: #ffffff;
+      --text: #202124;
+      --muted: #5f6368;
+      --border: #d7d7d0;
+      --accent: #0f766e;
+      --accent-soft: #dff3ef;
+      --risk: #9a3412;
+      --risk-soft: #ffedd5;
+      --code: #111827;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #151716;
+        --surface: #202321;
+        --text: #f0f2ef;
+        --muted: #b8beb7;
+        --border: #3a403c;
+        --accent: #5eead4;
+        --accent-soft: #123b37;
+        --risk: #fdba74;
+        --risk-soft: #43230f;
+        --code: #0b0f0d;
+      }
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header, main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    header {
+      padding-top: 36px;
+    }
+    h1, h2, h3 {
+      line-height: 1.15;
+      margin: 0 0 12px;
+    }
+    h1 { font-size: clamp(2rem, 4vw, 3.25rem); }
+    h2 { margin-top: 36px; font-size: 1.55rem; }
+    h3 { margin-top: 24px; font-size: 1.1rem; }
+    p { margin: 0 0 14px; }
+    a { color: var(--accent); }
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-block: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+      backdrop-filter: blur(10px);
+    }
+    nav ul {
+      display: flex;
+      gap: 6px;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 8px 24px;
+      list-style: none;
+      overflow-x: auto;
+    }
+    nav a {
+      display: block;
+      padding: 6px 10px;
+      border-radius: 6px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    nav a:hover { background: var(--accent-soft); }
+    section {
+      padding: 22px;
+      margin: 18px 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 0.95rem;
+    }
+    th, td {
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+    th { color: var(--muted); font-weight: 650; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    pre {
+      overflow-x: auto;
+      padding: 14px;
+      border-radius: 8px;
+      background: var(--code);
+      color: #f8fafc;
+    }
+    details {
+      margin: 12px 0;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--surface) 88%, var(--bg));
+    }
+    summary {
+      cursor: pointer;
+      font-weight: 700;
+    }
+    figure { margin: 16px 0; }
+    img {
+      max-width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    figcaption {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 16px 0;
+      color: var(--muted);
+    }
+    .pill {
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface);
+    }
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 12px;
+      margin: 18px 0 0;
+    }
+    .card {
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+    .card strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    .callout {
+      margin: 14px 0;
+      padding: 12px 14px;
+      border-left: 4px solid var(--accent);
+      background: var(--accent-soft);
+      border-radius: 6px;
+    }
+    .risk {
+      border-left-color: var(--risk);
+      background: var(--risk-soft);
+    }
+    .status-table td:first-child {
+      width: 180px;
+      color: var(--muted);
+      font-weight: 650;
+    }
+
+    @media print {
+      nav { position: static; }
+      section, .card { break-inside: avoid; }
+      body { background: #fff; color: #000; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ExecPlan: Finish In-App Browser Verification</h1>
+    <p>A challenged custom site can be verified once, the app proves its own requests get through, the page closes by itself on success, and the source works immediately. The spike's loose state and rough page are gone.</p>
+    <div class="meta" aria-label="Plan metadata">
+      <span class="pill">Status: In progress</span>
+      <span class="pill">Owner: Claude (Opus plan and review, Sonnet implementation)</span>
+      <span class="pill">Created: 2026-11-08</span>
+      <span class="pill">Updated: 2026-11-08</span>
+      <span class="pill">Plan file: .docs/exec/finish-browser-verification.html</span>
+      <span class="pill">Branch: worktree-verify-in-browser-polish (from main 2883acc9)</span>
+    </div>
+    <div class="dashboard">
+      <div class="card"><strong>Next Action</strong>Phase 1: runtime model and tests.</div>
+      <div class="card"><strong>Main Risk</strong>A clearance that WebView earns may still be refused to OkHttp or HttpURLConnection because of TLS fingerprinting. The new check makes that visible; it cannot remove it.</div>
+      <div class="card"><strong>Validation</strong>Focused host tests, full app unit tests, detekt and lint, then a real challenge on pixbooru.com in the isolated <code>com.theoriacodex.acceptance</code> install.</div>
+      <div class="card"><strong>Affected Areas</strong><code>app/.../customsites</code>, <code>app/.../settings/sites</code>, <code>app-logic</code> controller, <code>res/xml</code> backup rules.</div>
+    </div>
+  </header>
+
+  <nav aria-label="Plan sections">
+    <ul>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#context">Context</a></li>
+      <li><a href="#phases">Phases</a></li>
+      <li><a href="#work-plan">Work Plan</a></li>
+      <li><a href="#validation">Validation</a></li>
+      <li><a href="#living-log">Living Log</a></li>
+      <li><a href="#recovery">Recovery</a></li>
+      <li><a href="#appendix">Appendix</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <section id="purpose">
+      <h2>Purpose / Big Picture</h2>
+      <p>"Done" currently means the person says it worked. After this plan, success means the app's own HTTP client got through. Completing verification is one operation that saves the User-Agent, clears the challenge outage, and reports the result. To see it: add <code>pixbooru.com</code> in Settings → Sites, pass its challenge in the page that opens, and watch the page close and the add flow move on.</p>
+    </section>
+
+    <section id="context">
+      <h2>Context And Orientation</h2>
+      <p><strong>Terms.</strong> A <em>challenge</em> is a page such as Cloudflare's "Just a moment" served instead of the API. A <em>clearance</em> is the cookie earned by passing it, usually bound to the User-Agent that earned it. A <em>probe</em> is <code>SiteProber</code>'s check of which booru family a site is; its HTTP client has no outage tracker, so it always sees raw answers. An <em>outage</em> is a <code>HostOutageTracker</code> entry, in memory for 10 minutes, during which requests to a host fail immediately and the source shows a red dot.</p>
+      <table>
+        <thead><tr><th>File or module</th><th>Role in this plan</th></tr></thead>
+        <tbody>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/customsites/BrowserVerifiedSites.kt</code></td><td>Spike. Replaced by <code>SiteCookieBridge.kt</code>.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/settings/sites/SiteVerificationPage.kt</code></td><td>Spike WebView page. Rebuilt in Phase 2.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/settings/sites/CustomSitesViewModel.kt</code>, <code>CustomSitesState.kt</code>, <code>CustomSitesCopy.kt</code></td><td>Verification state machine and copy.</td></tr>
+          <tr><td><code>app-logic/src/main/kotlin/com/theoriacodex/app/customsites/CustomSitesController.kt</code>, <code>app/.../di/CustomSitesControllerImpl.kt</code></td><td>Controller contract and the completion operation.</td></tr>
+          <tr><td><code>app/.../di/TheoriaAppContainer.kt</code>, <code>app/.../TheoriaApplication.kt</code>, <code>app/.../viewer/VideoHttpDataSource.kt</code>, <code>VideoPlaybackInfrastructure.kt</code></td><td>Bridge construction and wiring.</td></tr>
+          <tr><td><code>core-sources/.../http/HostOutageTracker.kt</code>, <code>.../custom/CustomSiteHttpClient.kt</code>, <code>app/.../source/SourceHealth.kt</code></td><td>Shared host normalization and same-site matching.</td></tr>
+          <tr><td><code>app/src/main/res/xml/backup_rules.xml</code>, <code>data_extraction_rules.xml</code></td><td>Exclude WebView data from backup and device transfer.</td></tr>
+        </tbody>
+      </table>
+      <div class="callout risk"><strong>Safety.</strong> Never install to or touch <code>com.theoriacodex</code>. Device work uses the <code>theoria-search-test</code> AVD and the isolated acceptance package. Provider pages can show harmful content: device checks use logs and accessibility text, not screenshots, on any screen showing provider media, including the WebView once a challenge passes.</div>
+    </section>
+
+    <section id="phases">
+      <h2>Phases</h2>
+      <article>
+        <h3>Phase 1: One source of truth and one completion operation</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Cookies, allowed hosts, User-Agent and outage can no longer drift. No visible page redesign yet.</td></tr>
+          <tr><td>Commands</td><td><code>JAVA_HOME=&lt;JDK 21+&gt; ./gradlew :app:testDebugUnitTest :core-sources:test --offline</code></td></tr>
+          <tr><td>Acceptance</td><td>Tests in the Validation table pass and the old <code>BrowserVerifiedSites</code> no longer exists.</td></tr>
+        </tbody></table>
+      </article>
+      <article>
+        <h3>Phase 2: Page and entry-point polish, self-closing</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>The page matches Settings, reports loading, failure and checking, and closes itself once a real check passes after a refusal.</td></tr>
+          <tr><td>Commands</td><td>As Phase 1, plus <code>./gradlew :app:detekt</code> and <code>./gradlew :app:lintDebug --offline --no-daemon</code> run alone.</td></tr>
+          <tr><td>Acceptance</td><td>Compose tests pass; no SPIKE text remains in source.</td></tr>
+        </tbody></table>
+      </article>
+      <article>
+        <h3>Phase 3: Real-device proof and closeout</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>The exact user path works against a live challenge.</td></tr>
+          <tr><td>Commands</td><td>See Validation. Done by the plan owner, not a subagent.</td></tr>
+          <tr><td>Acceptance</td><td>The manual rows in Validation are observed and recorded, or stated as not run.</td></tr>
+        </tbody></table>
+      </article>
+    </section>
+
+    <section id="work-plan">
+      <h2>Work Plan</h2>
+      <h3>Phase 1</h3>
+      <ol>
+        <li><strong>Shared host rules.</strong> Keep <code>HostOutageTracker.normalizeHost</code> as the only normalizer. Add one public helper beside it, <code>hostBelongsToSite(host, site)</code> (equal or a dot-subdomain, both normalized). Use it from <code>SourceKey.ownsHost</code> and the bridge. Make <code>CustomSiteHttpClient</code>'s private <code>siteHost(URI)</code> delegate to <code>normalizeHost</code>.</li>
+        <li><strong><code>app/.../customsites/SiteCookieBridge.kt</code>.</strong> Replaces the object. An <code>internal fun interface</code>-style port <code>BrowserCookieStore</code> (read cookie header for a URL, write a Set-Cookie for a URL, flush, expire all cookies for a URL) with an Android implementation whose every call, including <code>CookieManager.getInstance()</code>, is guarded so a missing or updating WebView means "no cookies", never an exception. <code>class SiteCookieBridge(store)</code> exposes <code>updateSiteHosts(Set&lt;String&gt;)</code>, <code>setSetupHost(String?)</code>, <code>flush()</code>, <code>forget(host)</code>, <code>cookieHandler: CookieHandler</code>, <code>cookieJar: CookieJar</code>. A host is allowed if it belongs to any saved site or to the one setup host. Same gate for read and write, as today.</li>
+        <li><strong>Allowed hosts come from saved sites.</strong> <code>TheoriaApplication</code> owns one bridge, created and passed to <code>CookieHandler.setDefault</code> in <code>onCreate</code> before the container is built, and hands it to Coil, <code>videoHttpClient(bridge)</code> and <code>DefaultTheoriaAppContainer</code>. Keep a default no-cookie path for existing test calls only if it avoids churn. The container seeds the hosts inside <code>awaitDurableStores</code> before the app is ready (a request racing an empty list would be challenged and trip a 10-minute outage), then keeps them current from <code>siteProfiles.observeProfiles()</code>. <code>onCreate</code> also deletes the obsolete <code>browser_verified_sites</code> prefs file with <code>deleteSharedPreferences</code>.</li>
+        <li><strong>Controller.</strong> Add to <code>CustomSitesController</code>: <code>setSetupHost(host: String?)</code> and <code>suspend fun completeVerification(sourceId: String, userAgent: String): SiteProbeResult</code>. For a saved site it probes with the saved keys and the new agent. Only if the challenge is cleared (see below) does it save the agent, stamp <code>verifiedAtEpochMs</code>, clear the site's outages via <code>clearSource</code>, and flush cookies. A refusal changes nothing. <code>remove</code> also calls <code>bridge.forget(host)</code>, best effort. <code>SiteProbeResult</code> gets an extension <code>clearedChallenge</code>: true for any answer from the site itself (<code>Supported</code>, <code>CredentialsRequired</code>, an unsupported-family answer), false for <code>Unreachable</code> and invalid input.</li>
+        <li><strong>ViewModel state.</strong> Replace <code>verifyingHost</code> with <code>verification: SiteVerification?</code> holding <code>host</code>, <code>checking</code>, <code>message</code>, <code>sawRefusal</code>. Actions: <code>StartVerification(host)</code>, <code>CancelVerification</code>, <code>ConfirmVerification(userAgent)</code> (the Done button), <code>VerificationPageLoaded(userAgent, cookies)</code>. The saved site is found by host; if none, the Add form is the target.</li>
+        <li><strong>The check loop.</strong> <code>VerificationPageLoaded</code> runs a check when <code>cookies</code> differ from those last checked, where the first load always counts. One check runs at a time; if cookies change during one, run again after it. A refused check sets <code>sawRefusal</code> silently. A passing check closes the page only if <code>sawRefusal</code> is already true. If the first check passes, the page stays open, showing that the site already lets Theoria through, so opening it voluntarily never snaps shut. <code>ConfirmVerification</code> always checks and always completes on a pass; on refusal it stays open with <code>message</code> set. Cancelling cancels the job.</li>
+        <li><strong>Completion by target.</strong> Saved site: <code>completeVerification</code>; on success sync the open Edit form's User-Agent field (otherwise a later Save reverts it) and set a success line. Add form: probe with the form's fields plus the WebView agent; on success store the agent and apply the result through the existing <code>applyProbe</code>. The setup host is set when verification starts and released on cancel, form close, new form, and successful save.</li>
+        <li><strong>Dropdown path.</strong> <code>SitesRequest.Verify</code> starts verification without opening the edit form. Success shows on the site's row through <code>retests</code> as Working.</li>
+        <li><strong>Copy.</strong> In <code>CustomSitesCopy.kt</code>: refused while blocked: "<code>$host</code> is still refusing Theoria. Finish its check, or try again in a moment." Other failures reuse <code>probeMessage</code>.</li>
+        <li><strong>Backup.</strong> Exclude <code>domain="root" path="app_webview/"</code> from full backup, cloud backup and device transfer.</li>
+      </ol>
+      <h3>Phase 2</h3>
+      <ol>
+        <li><strong>Page.</strong> <code>SettingsHeader("Verify $host", onBack = cancel)</code> with a reload icon action; thin <code>LinearProgressIndicator</code> while loading (via <code>WebChromeClient.onProgressChanged</code>); WebView filling the middle with the theme background; bottom bar with an <code>AnnouncedText</code> instruction or message, <code>Progress("Checking…")</code> while checking, and a Done <code>Button</code> disabled while checking. Drop <code>systemBarsPadding</code> if the shared scaffold already provides insets; confirm on device.</li>
+        <li><strong>WebView.</strong> Construct inside a guarded <code>remember(host)</code>; on failure show "The system browser isn't available right now" with a close path. <code>DisposableEffect</code> stops loading and destroys it. <code>allowContentAccess = false</code>, <code>allowFileAccess = false</code>. <code>onPageFinished</code> dispatches <code>VerificationPageLoaded</code> with the cookies for <code>https://$host/</code>, read through the bridge's store. Main-frame <code>onReceivedError</code> shows a failure state with Try again. HTTP 403 is normal for a challenge and is not an error.</li>
+        <li><strong>Edit page.</strong> Move "Verify in browser" out of the Save/Remove row into a <code>SettingsGroup("Browser check")</code> <code>SettingsRow</code> with a summary, and show the success line there.</li>
+        <li><strong>Sites list.</strong> <code>RetestStatus.Done</code> records when the result is a challenge block. Then the row shows a "Verify in browser" <code>TextButton</code>.</li>
+        <li><strong>Cleanup.</strong> Remove all SPIKE wording; update comments that name the old type or say video uses HttpURLConnection (<code>VideoHttpDataSource.kt</code> KDoc, <code>TheoriaApplication.kt</code>).</li>
+      </ol>
+      <p><strong>Left alone deliberately:</strong> the two cookie adapters' transport approach, navigation inside the WebView (no JS bridge, only allowed hosts' cookies are used, and challenges can hop domains), and any automated solving: the person always solves the challenge.</p>
+    </section>
+
+    <section id="validation">
+      <h2>Validation And Acceptance</h2>
+      <table>
+        <thead><tr><th>Check</th><th>Command or action</th><th>Expected result</th></tr></thead>
+        <tbody>
+          <tr><td>Bridge gate</td><td><code>SiteCookieBridgeTest</code></td><td>Other hosts read and write nothing; saved-site subdomains and <code>www.</code> match; setup host allowed then revoked; a throwing store yields no cookies.</td></tr>
+          <tr><td>Completion</td><td><code>CustomSitesControllerImplTest</code></td><td>A pass saves the agent and clears the outage; a refusal changes neither; removal forgets the host.</td></tr>
+          <tr><td>Check loop</td><td><code>CustomSitesViewModelTest</code></td><td>Unchanged cookies do not re-check; refusal then pass closes; first-check pass stays open; Done refused stays open with message; Edit field syncs; setup host is released.</td></tr>
+          <tr><td>UI</td><td><code>CustomSitesScreenTest</code></td><td>Blocked re-test offers verification; edit page has the Browser check row.</td></tr>
+          <tr><td>Static checks</td><td><code>./gradlew :app:detekt</code>, then lint alone</td><td>No new findings.</td></tr>
+          <tr><td>Real add path</td><td>Acceptance install; add <code>pixbooru.com</code></td><td>Blocked message offers verification; after the challenge the page closes and the add flow advances, or a clear refusal explains the TLS gap.</td></tr>
+          <tr><td>Expired path</td><td>Clear that site's clearance, trigger the red dot, verify again</td><td>After success the source loads at once and the dot is gone, with no 10-minute wait or browser loop.</td></tr>
+          <tr><td>Removal</td><td>Remove the site</td><td>Its cookies are no longer sent.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="living-log">
+      <h2>Living Log</h2>
+      <h3>Progress</h3>
+      <ul>
+        <li>[x] 2026-11-08 - Worktree from main 2883acc9; design and plan written.</li>
+        <li>[ ] Phase 1 implemented and reviewed.</li>
+        <li>[ ] Phase 2 implemented and reviewed.</li>
+        <li>[ ] Phase 3 device proof and changelog.</li>
+      </ul>
+      <h3>Surprises And Discoveries</h3>
+      <ul>
+        <li>Observation: pixbooru.com is a live Cloudflare challenge on the home page and API-shaped paths. Evidence: 2026-11-08 curl returned HTTP 403, <code>cf-mitigated: challenge</code>, "Just a moment".</li>
+      </ul>
+      <h3>Decision Log</h3>
+      <ul>
+        <li>Decision: Derive allowed hosts from saved sites plus one in-memory setup host. Rationale: removes a stored list that could drift; a site without a clearance has no cookies to send. Date/Author: 2026-11-08 / Claude.</li>
+        <li>Decision: Success means the app's own probe gets an answer from the site. Rationale: the only provider-agnostic proof, and it exposes the TLS gap. Date/Author: 2026-11-08 / Claude.</li>
+        <li>Decision: Self-close only after this session has seen a refusal. Rationale: a person opening the page voluntarily on an unchallenged site must not have it snap shut, and the first check supplies the baseline without a separate request. Date/Author: 2026-11-08 / Claude, self-closing requested by the developer.</li>
+        <li>Decision: Keep process-wide CookieHandler. Rationale: proven, and it covers every HttpURLConnection path, including offline downloads, with one line. Date/Author: 2026-11-08 / Claude.</li>
+      </ul>
+      <h3>Outcomes And Retrospective</h3>
+      <p>To be updated at each phase.</p>
+    </section>
+
+    <section id="recovery">
+      <h2>Idempotence And Recovery</h2>
+      <p>Each phase ends in commits on this branch, so a failed phase can be reset to the previous commit. Gradle commands are safe to rerun. The only deletion of saved data is the spike's <code>browser_verified_sites</code> prefs file, whose contents are replaced by derivation from saved sites. Fresh worktrees need <code>local.properties</code> copied from the main checkout.</p>
+    </section>
+
+    <section id="appendix">
+      <h2>Appendix: Evidence And Notes</h2>
+      <details>
+        <summary>pixbooru.com challenge check, 2026-11-08</summary>
+        <pre><code>HTTP/2 403
+cf-mitigated: challenge
+server: cloudflare
+Body contains: "Just a moment", "Enable JavaScript", challenge-platform
+/posts.json, /index.php?page=dapi, /post.json, /api/v1/posts: all 403 text/html</code></pre>
+      </details>
+    </section>
+  </main>
+</body>
+</html>
