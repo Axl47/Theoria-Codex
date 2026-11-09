@@ -30,6 +30,7 @@ SOURCES = [
 ]
 TIME_TICKS = [100, 250, 500, 1_000, 2_000, 5_000, 10_000, 20_000, 40_000]
 BYTE_TICKS = [10_000, 25_000, 50_000, 100_000, 250_000, 500_000, 1_000_000, 2_500_000, 5_000_000, 10_000_000, 25_000_000]
+MIN_TICK_SPACING_PERCENT = 12
 
 
 def load(directory: Path) -> dict[str, list[dict]]:
@@ -69,7 +70,10 @@ class Scale:
     def __init__(self, values: list[float], ticks: list[int]) -> None:
         self.low = min(values) * 0.8
         self.high = max(values) * 1.2
-        self.ticks = [tick for tick in ticks if self.low <= tick <= self.high]
+        self.ticks: list[int] = []
+        for tick in (candidate for candidate in ticks if self.low <= candidate <= self.high):
+            if not self.ticks or self.percent(tick) - self.percent(self.ticks[-1]) >= MIN_TICK_SPACING_PERCENT:
+                self.ticks.append(tick)
 
     def percent(self, value: float) -> float:
         return 100 * (math.log(value) - math.log(self.low)) / (math.log(self.high) - math.log(self.low))
@@ -214,7 +218,7 @@ STYLE = """
 .viz-root{background:var(--page);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:24px 16px 48px}
 .wrap{max-width:900px;margin:0 auto}h1{font-size:24px;margin:0 0 4px}h2{font-size:16px;margin:0 0 2px}
 .sub,.note{color:var(--ink2);margin:0}.note{font-size:13px;margin-bottom:12px}
-.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:20px 0}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:20px 0}
 .tile,section,details{background:var(--surface);border:1px solid var(--ring);border-radius:10px;padding:14px 16px}
 section,details{margin-top:12px}.label{font-size:13px;color:var(--ink2)}.value{font-size:30px;font-weight:600;line-height:1.25}.delta{font-size:13px;color:var(--ink2)}
 .legend{display:flex;gap:16px;font-size:13px;color:var(--ink2);margin:12px 0 0}.legend span{display:inline-flex;align-items:center;gap:6px}
@@ -253,6 +257,7 @@ EMBED_STYLE = """
 .viz-root{--surface:var(--card);--page:transparent;--ink:var(--foreground);--ink2:var(--muted-foreground);--muted:var(--muted-foreground);
   --grid:var(--border);--axis:var(--border);--after:var(--chart-1);--before:color-mix(in srgb,var(--chart-1) 42%,var(--card));--link:var(--border);--ring:var(--border);
   background:none;padding:0}
+.row{height:24px}.axis{height:20px}
 #tip{background:var(--popover);color:var(--popover-foreground);border:1px solid var(--border)}
 """
 
