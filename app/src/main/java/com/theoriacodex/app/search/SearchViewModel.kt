@@ -628,8 +628,40 @@ internal class SearchViewModel(
         expectedExecutionKey: String, persistAcceptedResult: Boolean, undo: Boolean,
         undoScrollState: SearchScrollState?, onSuccess: suspend () -> Unit,
     ) = withTimeout(rootRequestTimeoutMs) {
-        // Persisting the search and resetting the scroll target happen once, when results first reach the screen.
-        var acceptancePending = persistAcceptedResult
+        val publisher = RootResultPublisher(requestId, expectedExecutionKey, persistAcceptedResult, undo, undoScrollState)
+        val result = executionService.executeInitialProgressively(query, sourceScope) { publisher.publishPartial(it) }
+        coroutineContext.ensureActive()
+        if (!isAdmittedResult(requestId, result, expectedExecutionKey)) {
+            activeContinuation = null
+            cancelRequestIfCurrent(requestId)
+            return@withTimeout
+        }
+        val succeeded = publisher.publish(result) { completeRequest(requestId, result, expectedExecutionKey) } ?: return@withTimeout
+        rememberFirstPage(result)
+        persistDraftQuery()
+        if (persistAcceptedResult) withContext(NonCancellable) {
+            executionService.recordAcceptedSearch(result)
+        }
+        if (succeeded) onSuccess()
+    }
+
+    /** Puts one root request's results on screen; persisting it and resetting the scroll target happen only once. */
+    private inner class RootResultPublisher(
+        private val requestId: Long,
+        private val expectedExecutionKey: String,
+        persistAcceptedResult: Boolean,
+        private val undo: Boolean,
+        private val undoScrollState: SearchScrollState?,
+    ) {
+        private var acceptancePending = persistAcceptedResult
+
+        suspend fun publishPartial(partial: SearchExecutionResult.Success) {
+            if (!showingCachedFirstPage && isAdmittedResult(requestId, partial, expectedExecutionKey)) {
+                publish(partial) { showPartialResults(requestId, partial) }
+            }
+        }
+
+        /** Returns what [show] returned, or null when this request no longer owns the screen. */
         suspend fun publish(result: SearchExecutionResult, show: () -> Boolean): Boolean? {
             val accepting = acceptancePending
             if (accepting) scrollPersistence.reset(result.executionKey) {
@@ -642,27 +674,12 @@ internal class SearchViewModel(
             if (accepting) rememberAcceptedSearchNavigation(previous, undo, undoScrollState)
             return shown
         }
+    }
 
-        val result = executionService.executeInitialProgressively(query, sourceScope) { partial ->
-            if (!showingCachedFirstPage && isAdmittedResult(requestId, partial, expectedExecutionKey)) {
-                publish(partial) { showPartialResults(requestId, partial) }
-            }
-        }
-        coroutineContext.ensureActive()
-        if (!isAdmittedResult(requestId, result, expectedExecutionKey)) {
-            activeContinuation = null
-            cancelRequestIfCurrent(requestId)
-            return@withTimeout
-        }
-        val succeeded = publish(result) { completeRequest(requestId, result, expectedExecutionKey) } ?: return@withTimeout
+    private fun rememberFirstPage(result: SearchExecutionResult) {
         if (result is SearchExecutionResult.Success && result.posts.isNotEmpty()) {
             viewModelScope.launch { executionService.rememberFirstPage(result.executionKey, result.posts) }
         }
-        persistDraftQuery()
-        if (persistAcceptedResult) withContext(NonCancellable) {
-            executionService.recordAcceptedSearch(result)
-        }
-        if (succeeded) onSuccess()
     }
 
     /** Preserve Undo history and the accepted search's route scroll request together. */
