@@ -145,7 +145,7 @@ internal fun SourceIconMenu(
         tonalElevation = 0.dp,
     ) {
         val health = LocalSourceHealth.current
-        // A down source is retried when picked; a challenged custom site opens its verification instead.
+        // A down source is retried when picked; a challenged one opens its verification instead.
         val pick: (SourceKey?) -> Unit = { source ->
             if (source != null && health.onPick(source)) onDismiss() else onSelect(source)
         }

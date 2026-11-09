@@ -105,7 +105,7 @@ private fun StatsOverview(statistics: StatisticsSummary, onBack: () -> Unit, onO
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            item(key = "header") { SettingsHeader("Stats", onBack) }
+            item(key = "header") { SettingsHeader("Stats", onBack, SETTINGS_PATH) }
             item(key = "chips") {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     itemsIndexed(sections) { index, (label, _) ->
@@ -252,7 +252,7 @@ private fun CodicesSection(codices: List<CodexStatisticsSummary>, onOpen: (Strin
 private fun CodexStatsDetail(codex: CodexStatisticsSummary, onBack: () -> Unit) {
     var view by rememberSaveable(codex.codexId) { mutableStateOf(CodexPostView.OPENED) }
     SettingsPageColumn {
-        SettingsHeader(codex.name, onBack)
+        SettingsHeader(codex.name, onBack, SETTINGS_PATH + "Stats")
         StatsCard {
             StatsCaption("Time inside")
             StatsHeadline(formatStatsDuration(codex.browsingMs + codex.watchingMs))

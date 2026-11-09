@@ -41,7 +41,7 @@ class StatsScreenTest {
         compose.onNodeWithText("Favorites").performClick()
         compose.onNodeWithText("Evening harbor").assertExists()
         compose.onNodeWithContentDescription("Back").performClick()
-        compose.onNodeWithText("Stats").assertExists()
+        compose.onNodeWithText("Settings / Stats").assertExists()
     }
 
     private fun show(statistics: StatisticsSummary) {

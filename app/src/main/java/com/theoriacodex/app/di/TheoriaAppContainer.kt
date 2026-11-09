@@ -10,6 +10,8 @@ import com.theoriacodex.app.backup.SharedPreferencesAutoBackupStore
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.creator.CreatorProfileCoordinator
 import com.theoriacodex.app.customsites.CustomSitesController
+import com.theoriacodex.app.customsites.SharedPreferencesBuiltInAgentStore
+import com.theoriacodex.app.customsites.SiteCookieBridge
 import com.theoriacodex.app.media.BoundedMediaDurationProbe
 import com.theoriacodex.app.media.MediaDurationAcquisitionEngine
 import com.theoriacodex.app.media.MediaDurationCoordinator
@@ -77,12 +79,15 @@ import com.theoriacodex.data.android.room.RoomRecentsRepository
 import com.theoriacodex.data.android.room.RoomProfileBackupStore
 import com.theoriacodex.data.android.room.awaitProfileLibraryStores
 import com.theoriacodex.data.android.room.TheoriaRoomDatabase
+import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.source.SiteProfile
 import com.theoriacodex.sources.RealAdapterRegistry
 import com.theoriacodex.sources.custom.CustomSiteHttpClient
 import com.theoriacodex.sources.http.HostOutageTracker
+import com.theoriacodex.sources.http.SiteHealthCheck
 import com.theoriacodex.sources.custom.SiteFamilyRegistry
 import com.theoriacodex.sources.custom.SiteProber
 import com.theoriacodex.sources.http.DefaultSourceHttpClient
@@ -100,7 +105,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 data class DataDependencies(
     val storageDirectory: File,
@@ -130,6 +137,8 @@ data class SourceDependencies(
     val pixivTokens: PixivTokenCoordinator = PixivTokenCoordinator(accounts, pixivAuthApi),
     /** Hosts known to be down this session; shared by the built-in and custom-site clients. */
     val outages: HostOutageTracker = HostOutageTracker(),
+    /** The light per-site check, sharing the app's client so it carries browser-verified cookies. */
+    val healthCheck: SiteHealthCheck = SiteHealthCheck(outages),
 )
 
 data class UpdateDependencies(
@@ -180,6 +189,8 @@ interface TheoriaAppContainerOwner {
 
 internal class DefaultTheoriaAppContainer(
     context: Context,
+    private val cookieBridge: SiteCookieBridge,
+    private val httpClients: AppHttpClients,
 ) : TheoriaAppContainer {
     private val appContext = context.applicationContext
     private val storageDirectory = File(appContext.filesDir, "theoria_codex")
@@ -193,7 +204,13 @@ internal class DefaultTheoriaAppContainer(
     )
     private val networkOnline = NetworkMonitor(appContext).online
     private val hostOutages = HostOutageTracker(isOnline = { networkOnline.value })
-    private val sourceHttpClient = DefaultSourceHttpClient(outages = hostOutages, okHttpClient = AppHttpClients.sources)
+    private val siteHealthCheck = SiteHealthCheck(hostOutages, httpClients.sources)
+    private val builtInAgents = SharedPreferencesBuiltInAgentStore(appContext)
+    private val sourceHttpClient = DefaultSourceHttpClient(
+        outages = hostOutages,
+        userAgentFor = cookieBridge::userAgentFor,
+        okHttpClient = httpClients.sources,
+    )
     private val credentialStore = AndroidSecureSourceCredentialsStore(appContext)
     private val accountStore = ObservableSourceAccountStore(delegate = credentialStore)
     private val pixivAuthApi = PixivAuthApi(sourceHttpClient)
@@ -216,6 +233,7 @@ internal class DefaultTheoriaAppContainer(
             offlineStore.find(PostId(SourceKey.PIXIV, id))?.full?.localPath?.let(::File)
         },
         metadataCache = pixivUgoiraMetadataCache,
+        downloadClient = httpClients.downloads,
     )
     private val allPotentialSourceRegistry = RealAdapterRegistry(
         credentialsProvider = accountStore,
@@ -233,7 +251,7 @@ internal class DefaultTheoriaAppContainer(
         http = CustomSiteHttpClient(
             readTimeoutMs = CUSTOM_SITE_READ_TIMEOUT_MS,
             outages = hostOutages,
-            okHttpClient = AppHttpClients.sources,
+            okHttpClient = httpClients.sources,
         ),
         scope = durableStoreScope,
     )
@@ -380,6 +398,7 @@ internal class DefaultTheoriaAppContainer(
         networkOnline = networkOnline,
         pixivTokens = pixivTokenCoordinator,
         outages = hostOutages,
+        healthCheck = siteHealthCheck,
     )
 
     override val updates = UpdateDependencies(
@@ -438,15 +457,37 @@ internal class DefaultTheoriaAppContainer(
     override val customSites: CustomSitesController = CustomSitesControllerImpl(
         profiles = siteProfiles,
         credentials = credentialStore,
-        prober = SiteProber(siteFamilies, CustomSiteHttpClient(okHttpClient = AppHttpClients.sources)),
+        prober = SiteProber(siteFamilies, CustomSiteHttpClient(okHttpClient = httpClients.sources)),
         runtime = customSourceRuntime.snapshot,
         settings = settingsRepository,
         library = contentRepository,
         scope = durableStoreScope,
+        outages = hostOutages,
+        cookieBridge = cookieBridge,
+        builtInAgents = builtInAgents,
+        clearsChallenge = { url, userAgent -> siteHealthCheck.clearsChallenge(url, mapOf("User-Agent" to userAgent)) },
+        runBuiltInSearch = { source ->
+            sourceRegistry.adapterFor(source)?.let { adapter ->
+                adapter.search(adapter.quickQuery(QuickQueryKind.NEWEST), null)
+                true
+            } ?: false
+        },
     )
+
+    /** Keeps the bridge's allowed hosts equal to the saved sites; [awaitDurableStores] seeds them first. */
+    init {
+        durableStoreScope.launch {
+            siteProfiles.observeProfiles().map(::siteHosts).collect(cookieBridge::updateSiteHosts)
+        }
+    }
 
     /** Complete typed-store migration before any route can observe default placeholder state. */
     suspend fun awaitDurableStores() = coroutineScope {
+        // The old stored host list; allowed hosts now come from the saved sites.
+        appContext.deleteSharedPreferences("browser_verified_sites")
+        // Before the app is ready: a request racing an empty list would be challenged and trip a 10-minute outage.
+        cookieBridge.updateSiteHosts(siteHosts(siteProfiles.observeProfiles().first()))
+        cookieBridge.updateBuiltInAgents(builtInAgents.read())
         val settingsReady = async { settingsRepository.awaitReady() }
         val statisticsReady = async { statisticsStore.awaitReady() }
         val uiRestoreReady = async { uiRestoreRepository.awaitReady() }
@@ -467,6 +508,8 @@ internal class DefaultTheoriaAppContainer(
         awaitProfileLibraryStores(contentDatabase, storageDirectory, legacyJsonRecoveryRegistry)
     }
 }
+
+private fun siteHosts(profiles: List<SiteProfile>): Set<String> = profiles.mapTo(HashSet()) { it.address.host }
 
 /** Matches the built-in client's read timeout; probes keep the custom client's 10 s default. */
 private const val CUSTOM_SITE_READ_TIMEOUT_MS = 20_000

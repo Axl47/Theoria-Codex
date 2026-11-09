@@ -59,7 +59,6 @@ import com.theoriacodex.app.codex.LocalCodexSaveRelevanceLoader
 import com.theoriacodex.app.codex.SaveToCodexSheet
 import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.app.di.TheoriaAppContainer
-import com.theoriacodex.app.network.AppHttpClients
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.tags.PostTagContextProvider
@@ -385,7 +384,7 @@ private fun rememberSourceHealth(shell: TheoriaShell): SourceHealth {
     val outages = shell.sources.outages
     LaunchedEffect(shell.navReady) {
         if (shell.navReady) {
-            startSourceHealthCheck(shell.scope, SiteHealthCheck(outages, AppHttpClients.sources)) {
+            startSourceHealthCheck(shell.scope, shell.sources.healthCheck) {
                 shell.sources.availableSources.value.inPresentationOrder()
             }
             // An expired Pixiv token would otherwise refresh inside the first search. No account is not an error here.

@@ -43,6 +43,7 @@ import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import kotlin.math.max
 import kotlin.math.roundToInt
+import okhttp3.OkHttpClient
 
 @Suppress("LargeClass") // One lifecycle owner keeps archive, decoded-frame, export, and cancellation state coherent.
 class PixivUgoiraClient internal constructor(
@@ -64,8 +65,9 @@ class PixivUgoiraClient internal constructor(
     private val operationTimeoutMs: Long = 30_000L,
     private val offlineArchiveLookup: suspend (String) -> File? = { null },
     private val metadataCache: PixivUgoiraMetadataCache = PixivUgoiraMetadataCache(),
+    downloadClient: OkHttpClient = OkHttpClient(),
 ) {
-    private val transport = PixivUgoiraTransport()
+    private val transport = PixivUgoiraTransport(downloadClient)
     private val cacheLock = Any()
     private val loadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val playbackCache = LinkedHashMap<UgoiraLoadKey, UgoiraPlayback>(

@@ -12,17 +12,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -55,7 +53,7 @@ import com.theoriacodex.data.repository.SourceWeightSettings
 import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.domain.model.SourceKey
 
-private enum class SettingsSheet { PROFILE, SOURCE_MIX, PLAYBACK, CLASSIC_CONTROLS }
+private enum class SettingsSheet { PROFILE, SOURCE_MIX, PLAYBACK, CONTROLS }
 
 /** Settings hub: each row shows its current value; short choices use sheets, larger tasks use pages. */
 @Composable
@@ -77,8 +75,13 @@ fun SettingsScreen(
     ) { page ->
         when (page) {
             SettingsPage.HOME -> SettingsHome(state, statistics, onAction, searchSources, storageSummary, sites)
-            SettingsPage.ACCOUNTS -> AccountsPage(state, onAction, openHome)
-            SettingsPage.SITES -> sites?.page?.invoke(openHome)
+            SettingsPage.SITES -> sites?.page?.invoke(
+                openHome,
+                BuiltInAccounts(
+                    summary = { builtInAccountSummary(it, state.accounts) },
+                    controls = { BuiltInAccountControls(it, state.accounts, onAction) },
+                ),
+            )
             SettingsPage.HIDDEN_TAGS -> HiddenTagsPage(state, onAction, openHome)
             SettingsPage.STORAGE -> StoragePage(state, onAction, storageTools, openHome)
             SettingsPage.STATS -> StatsScreen(statistics, openHome)
@@ -158,14 +161,13 @@ private fun SettingsHomeGroups(
         })
     }
     SettingsGroup("Sources") {
-        SettingsRow("Accounts", sourceAccountsSummary(state.accounts), Icons.Default.AccountCircle, onClick = {
-            open(SettingsPage.ACCOUNTS)
-        })
         if (sites != null) {
+            SettingsRow(
+                "Sites", "${sites.summary} · ${sourceAccountsSummary(state.accounts)}", Icons.Default.Public,
+                onClick = { open(SettingsPage.SITES) },
+            )
             SettingsRowDivider()
-            SettingsRow("Sites", sites.summary, Icons.Default.Public, onClick = { open(SettingsPage.SITES) })
         }
-        SettingsRowDivider()
         OpenLinksRow()
     }
     SettingsGroup("Viewing") {
@@ -173,17 +175,8 @@ private fun SettingsHomeGroups(
             onSheet(SettingsSheet.PLAYBACK)
         })
         SettingsRowDivider()
-        SettingsRow(
-            "Invert scroll direction", "Reverse swipes within multi-media posts", Icons.Default.SwapVert,
-            trailing = {
-                Switch(state.settings.viewer.invertMultiImageScrollDirection, onCheckedChange = {
-                    onAction(SettingsAction.SetInvertScrollDirection(it))
-                })
-            },
-        )
-        SettingsRowDivider()
-        SettingsRow("Classic controls", "Old search bar, instant seek", Icons.Default.History, onClick = {
-            onSheet(SettingsSheet.CLASSIC_CONTROLS)
+        SettingsRow("Controls", "Search bar, seeking, swipe direction", Icons.Default.TouchApp, onClick = {
+            onSheet(SettingsSheet.CONTROLS)
         })
     }
     SettingsGroup("Storage & app") {
@@ -233,7 +226,7 @@ private fun SettingsHomeSheet(
                 onAction(SettingsAction.SetSourceWeights(searchSources, it))
             }
             SettingsSheet.PLAYBACK -> MediaPreferencesSection(state, onAction)
-            SettingsSheet.CLASSIC_CONTROLS -> PreferencesSection(state, onAction)
+            SettingsSheet.CONTROLS -> PreferencesSection(state, onAction)
         }
     }
 }
@@ -282,61 +275,9 @@ private fun ProfileCard(
 }
 
 @Composable
-private fun AccountsPage(state: SettingsUiState, onAction: (SettingsAction) -> Unit, onBack: () -> Unit) {
-    SettingsPageColumn {
-        SettingsHeader("Accounts", onBack)
-        SettingsGroup(null) {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Pixiv", style = MaterialTheme.typography.titleSmall)
-                Text(state.accounts.pixivStatusLabel, style = MaterialTheme.typography.bodySmall)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = { onAction(SettingsAction.ConnectPixiv) },
-                        enabled = state.accounts.pixivConnectEnabled,
-                    ) { Text("Connect") }
-                    TextButton(onClick = { onAction(SettingsAction.DisconnectPixiv) }) { Text("Disconnect") }
-                }
-            }
-        }
-        SettingsGroup(null) {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                CredentialAccountControls(
-                    name = "Gelbooru",
-                    statusLabel = state.accounts.gelbooruStatusLabel,
-                    configured = state.accounts.gelbooruConfigured,
-                    userIdInput = state.accounts.gelbooruUserIdInput,
-                    apiKeyInput = state.accounts.gelbooruApiKeyInput,
-                    enabled = state.accounts.mutationsEnabled,
-                    onUserIdChange = { onAction(SettingsAction.SetGelbooruUserId(it)) },
-                    onApiKeyChange = { onAction(SettingsAction.SetGelbooruApiKey(it)) },
-                    onSave = { onAction(SettingsAction.SaveGelbooruCredentials) },
-                    onDisconnect = { onAction(SettingsAction.ClearGelbooruCredentials) },
-                )
-            }
-        }
-        SettingsGroup(null) {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                CredentialAccountControls(
-                    name = "rule34.xxx",
-                    statusLabel = state.accounts.rule34XxxStatusLabel,
-                    configured = state.accounts.rule34XxxConfigured,
-                    userIdInput = state.accounts.rule34XxxUserIdInput,
-                    apiKeyInput = state.accounts.rule34XxxApiKeyInput,
-                    enabled = state.accounts.mutationsEnabled,
-                    onUserIdChange = { onAction(SettingsAction.SetRule34XxxUserId(it)) },
-                    onApiKeyChange = { onAction(SettingsAction.SetRule34XxxApiKey(it)) },
-                    onSave = { onAction(SettingsAction.SaveRule34XxxCredentials) },
-                    onDisconnect = { onAction(SettingsAction.ClearRule34XxxCredentials) },
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun HiddenTagsPage(state: SettingsUiState, onAction: (SettingsAction) -> Unit, onBack: () -> Unit) {
     SettingsPageColumn {
-        SettingsHeader("Hidden tags", onBack)
+        SettingsHeader("Hidden tags", onBack, SETTINGS_PATH)
         Text(
             "Hidden from For You on ${state.activeProfile.name}",
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -371,7 +312,7 @@ private fun StoragePage(
     onBack: () -> Unit,
 ) {
     SettingsPageColumn {
-        SettingsHeader("Storage & caching", onBack)
+        SettingsHeader("Storage & caching", onBack, SETTINGS_PATH)
         SettingsGroup(null) {
             SettingsRow("Keep media offline when saving", trailing = {
                 Switch(state.settings.cache.cacheFullImageOnSave, onCheckedChange = {
@@ -483,7 +424,7 @@ internal fun sourceAccountsSummary(accounts: SettingsAccountUiState): String {
         accounts.gelbooruConfigured,
         accounts.rule34XxxConfigured,
     ).count { it }
-    return "$configuredCount of 3 configured"
+    return "$configuredCount of 3 accounts"
 }
 
 internal fun cacheSummary(thumbnailCount: Int, fullImageCount: Int): String {

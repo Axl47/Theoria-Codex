@@ -1,10 +1,12 @@
 package com.theoriacodex.app.network
 
-import com.theoriacodex.app.customsites.BrowserVerifiedSites
+import android.content.Context
+import com.theoriacodex.app.TheoriaApplication
 import com.theoriacodex.sources.http.unexpectedFailuresAsIoExceptions
 import com.theoriacodex.sources.http.unqueuedSourceDispatcher
 import java.util.concurrent.TimeUnit
 import okhttp3.ConnectionPool
+import okhttp3.CookieJar
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 
@@ -13,12 +15,12 @@ import okhttp3.OkHttpClient
  * on each new connection, so a network with broken IPv6 costs a quarter of a second instead of a whole connect
  * timeout per address. Each client below differs only in how it queues requests and how long it waits.
  */
-internal object AppHttpClients {
+internal class AppHttpClients(cookieJar: CookieJar) {
     val shared: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .fastFallback(true)
             .connectionPool(ConnectionPool(MAX_IDLE_CONNECTIONS, IDLE_KEEP_ALIVE_MINUTES, TimeUnit.MINUTES))
-            .cookieJar(BrowserVerifiedSites.cookieJar)
+            .cookieJar(cookieJar)
             .addInterceptor(unexpectedFailuresAsIoExceptions)
             .build()
     }
@@ -55,3 +57,10 @@ private const val IDLE_KEEP_ALIVE_MINUTES = 5L
 private const val IMAGE_MAX_REQUESTS_PER_HOST = 16
 private const val DOWNLOAD_CONNECT_TIMEOUT_MS = 12_000L
 private const val DOWNLOAD_READ_TIMEOUT_MS = 30_000L
+
+/** Only a plain test application reaches this; the real one owns clients that carry its cookies. */
+private val cookielessHttpClients by lazy { AppHttpClients(CookieJar.NO_COOKIES) }
+
+/** The application's clients, for code that reaches them through a [Context]. */
+internal val Context.appHttpClients: AppHttpClients
+    get() = (applicationContext as? TheoriaApplication)?.httpClients ?: cookielessHttpClients

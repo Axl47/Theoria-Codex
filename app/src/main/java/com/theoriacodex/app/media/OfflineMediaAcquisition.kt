@@ -9,7 +9,7 @@ import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.PIXIV_UGOIRA_MIME
 import com.theoriacodex.domain.model.Post
-import com.theoriacodex.app.network.AppHttpClients
+import com.theoriacodex.app.network.appHttpClients
 import com.theoriacodex.sources.http.await
 import java.io.File
 import java.io.FileOutputStream
@@ -64,7 +64,7 @@ class OfflineMediaAcquisition(
             ugoira.copyArchiveForOffline(post.id.sourcePostId, destination)
         } else {
             val url = media.url?.takeIf(String::isNotBlank) ?: throw IOException("No full media URL is available")
-            downloadMediaFile(url, post.id.source.requestHeaders(), destination)
+            downloadMediaFile(url, post.id.source.requestHeaders(), destination, client = context.appHttpClients.downloads)
         }
     }
 
@@ -97,7 +97,7 @@ internal suspend fun downloadMediaFile(
     headers: Map<String, String>,
     destination: File,
     maxBytes: Long = MAX_OFFLINE_MEDIA_BYTES,
-    client: OkHttpClient = AppHttpClients.downloads,
+    client: OkHttpClient,
 ) {
     val parsed = requireNotNull(url.toHttpUrlOrNull()) { "Unsupported media URL" }
     val request = Request.Builder().url(parsed).apply {

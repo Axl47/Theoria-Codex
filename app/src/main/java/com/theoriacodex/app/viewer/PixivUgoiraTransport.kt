@@ -1,6 +1,5 @@
 package com.theoriacodex.app.viewer
 
-import com.theoriacodex.app.network.AppHttpClients
 import com.theoriacodex.sources.http.await
 import java.io.File
 import java.io.FileOutputStream
@@ -10,7 +9,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 
 /** Each request is cancelled when the last animation consumer leaves. */
-internal class PixivUgoiraTransport(private val client: OkHttpClient = AppHttpClients.downloads) {
+internal class PixivUgoiraTransport(private val client: OkHttpClient) {
     suspend fun fetchMetadata(postId: String, accessToken: String): TextResponse {
         val url = "${PIXIV_API_BASE}/v1/ugoira/metadata?illust_id=$postId"
         return client.newCall(request(url, accessToken)).await { response ->

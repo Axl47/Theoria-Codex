@@ -5,7 +5,8 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.decode.ImageDecoderDecoder
 import coil.disk.DiskCache
-import com.theoriacodex.app.customsites.BrowserVerifiedSites
+import com.theoriacodex.app.customsites.AndroidBrowserCookieStore
+import com.theoriacodex.app.customsites.SiteCookieBridge
 import com.theoriacodex.app.di.DefaultTheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
@@ -25,8 +26,14 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
     private lateinit var readiness: ApplicationDataReadiness<TheoriaAppContainer>
     private var initializingContainer: DefaultTheoriaAppContainer? = null
 
+    /** The one place browser cookies reach the app's own requests: every client in [httpClients] carries its jar. */
+    internal val siteCookieBridge = SiteCookieBridge(AndroidBrowserCookieStore)
+
+    /** Every HTTP client in the app, so they share one connection pool and these cookies. */
+    internal val httpClients = AppHttpClients(siteCookieBridge.cookieJar)
+
     internal val videoPlaybackInfrastructure: VideoPlaybackInfrastructure by lazy {
-        VideoPlaybackInfrastructure(this)
+        VideoPlaybackInfrastructure(this, httpClients.shared)
     }
 
     override val appContainerState: StateFlow<ApplicationDataState<TheoriaAppContainer>>
@@ -34,13 +41,12 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
 
     override fun onCreate() {
         super.onCreate()
-        BrowserVerifiedSites.install(this)
         readiness = ApplicationDataReadiness(
             applicationScope = applicationScope,
             initializationDispatcher = Dispatchers.IO,
         ) {
             val container = initializingContainer
-                ?: DefaultTheoriaAppContainer(this@TheoriaApplication).also { created ->
+                ?: DefaultTheoriaAppContainer(this@TheoriaApplication, siteCookieBridge, httpClients).also { created ->
                     initializingContainer = created
                 }
             container.awaitDurableStores()
@@ -95,7 +101,7 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
             // every Viewer page a prefetch had already downloaded; no-store responses were never cached.
             .respectCacheHeaders(false)
             .eventListener(UndecodableImageEviction(diskCache))
-            .okHttpClient { AppHttpClients.images }
+            .okHttpClient { httpClients.images }
             .build()
     }
 }

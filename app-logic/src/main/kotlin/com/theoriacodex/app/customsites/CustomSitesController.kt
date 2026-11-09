@@ -1,5 +1,6 @@
 package com.theoriacodex.app.customsites
 
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.ProtocolFamily
 import com.theoriacodex.domain.source.SiteCredentials
 import com.theoriacodex.domain.source.SiteHeaders
@@ -13,6 +14,30 @@ import kotlinx.coroutines.flow.StateFlow
 interface CustomSitesController {
     /** Every stored site in the order it was added, with live availability. */
     val sites: StateFlow<List<CustomSiteSummary>>
+
+    /** Stored sites proven to work since the app started: a real API answer, a passed re-test or browser check. */
+    val workingSourceIds: StateFlow<Set<String>>
+
+    /** The sources that ship with the app, in presentation order, with their live status. */
+    val builtInSites: StateFlow<List<BuiltInSiteSummary>>
+
+    /**
+     * Runs one real search through [source], retrying it even if it is in an outage, and records whether
+     * it works this session. The posts it finds are discarded.
+     */
+    suspend fun testBuiltIn(source: SourceKey): BuiltInTestResult
+
+    /**
+     * Whether [source]'s home page and any of its hosts now in an outage answer with [userAgent], the
+     * in-app browser's, and without a challenge. Changes nothing.
+     */
+    suspend fun checkBuiltInVerification(source: SourceKey, userAgent: String): Boolean
+
+    /**
+     * Records a passed [checkBuiltInVerification]: [source]'s requests send the browser's cookies and
+     * [userAgent] from now on, and its outage lifts so it works at once. Makes no request.
+     */
+    suspend fun completeBuiltInVerification(source: SourceKey, userAgent: String)
 
     /** Add, step 1: validate the address and probe known families. Persists nothing. */
     suspend fun probe(
@@ -29,6 +54,27 @@ interface CustomSitesController {
      * different family is reported, never switched to. [sourceId] must be stored.
      */
     suspend fun retest(sourceId: String): SiteProbeResult
+
+    /**
+     * Whether the app's own request gets through to a stored site with [userAgent], the in-app browser's,
+     * which its clearance cookies are usually bound to. Probes with the stored keys and the site's other
+     * headers and changes nothing. [sourceId] must be stored.
+     */
+    suspend fun checkVerification(sourceId: String, userAgent: String): SiteProbeResult
+
+    /**
+     * Records a passed [checkVerification]: saves [userAgent] (keeping the site's other headers), stamps
+     * the verified time, lifts the site's challenge outage and flushes the browser's cookies, so the
+     * source works at once. [working] is whether the check also found the expected booru rather than
+     * merely getting past the challenge. Makes no request. [sourceId] must be stored.
+     */
+    suspend fun completeVerification(sourceId: String, userAgent: String, working: Boolean)
+
+    /**
+     * Lets the browser's cookies reach requests to [host] while it is verified before being saved, or
+     * stops that when null. Saved sites always get their cookies.
+     */
+    fun setSetupHost(host: String?)
 
     suspend fun update(sourceId: String, edit: CustomSiteEdit): CustomSiteMutation
 
@@ -67,6 +113,18 @@ data class CustomSiteSummary(
     val includedInUnifiedAndForYou: Boolean,
     val verifiedAtEpochMs: Long?,
 )
+
+/** A source that ships with the app. [host] is the address its browser check opens. */
+data class BuiltInSiteSummary(
+    val source: SourceKey,
+    val label: String,
+    val host: String,
+    val working: Boolean,
+    val needsVerification: Boolean,
+)
+
+/** What a real search through a built-in source found. */
+enum class BuiltInTestResult { WORKING, NEEDS_BROWSER_CHECK, NEEDS_ACCOUNT, DOWN, UNREACHABLE, FAILED }
 
 enum class CustomSiteAvailability {
     AVAILABLE,

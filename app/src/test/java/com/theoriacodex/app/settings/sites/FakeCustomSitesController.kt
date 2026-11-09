@@ -1,5 +1,7 @@
 package com.theoriacodex.app.settings.sites
 
+import com.theoriacodex.app.customsites.BuiltInSiteSummary
+import com.theoriacodex.app.customsites.BuiltInTestResult
 import com.theoriacodex.app.customsites.CustomSiteAvailability
 import com.theoriacodex.app.customsites.CustomSiteDraft
 import com.theoriacodex.app.customsites.CustomSiteEdit
@@ -7,6 +9,7 @@ import com.theoriacodex.app.customsites.CustomSiteMutation
 import com.theoriacodex.app.customsites.SitesRequest
 import com.theoriacodex.app.customsites.CustomSiteSummary
 import com.theoriacodex.app.customsites.CustomSitesController
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.ProtocolFamily
 import com.theoriacodex.domain.source.SiteAddress
 import com.theoriacodex.domain.source.SiteAddressParse
@@ -20,6 +23,23 @@ internal class FakeCustomSitesController(initial: List<CustomSiteSummary> = empt
     data class ProbeCall(val input: String, val credentials: SiteCredentials?, val headers: SiteHeaders)
 
     override val sites: MutableStateFlow<List<CustomSiteSummary>> = MutableStateFlow(initial)
+    override val workingSourceIds = MutableStateFlow<Set<String>>(emptySet())
+    override val builtInSites = MutableStateFlow<List<BuiltInSiteSummary>>(emptyList())
+    var onCheckBuiltIn: suspend (SourceKey, String) -> Boolean = { _, _ -> error("No built-in check scripted") }
+
+    /** Source and agent of every [completeBuiltInVerification] call. */
+    val builtInCompletions = mutableListOf<Pair<SourceKey, String>>()
+
+    var onTestBuiltIn: suspend (SourceKey) -> BuiltInTestResult = { BuiltInTestResult.WORKING }
+
+    override suspend fun testBuiltIn(source: SourceKey): BuiltInTestResult = onTestBuiltIn(source)
+
+    override suspend fun checkBuiltInVerification(source: SourceKey, userAgent: String): Boolean = onCheckBuiltIn(source, userAgent)
+
+    override suspend fun completeBuiltInVerification(source: SourceKey, userAgent: String) {
+        builtInCompletions += source to userAgent
+    }
+
     override val setupRequest = MutableStateFlow<SitesRequest?>(null)
 
     override fun requestSetup(address: String) {
@@ -38,11 +58,19 @@ internal class FakeCustomSitesController(initial: List<CustomSiteSummary> = empt
     var onRetest: suspend (String) -> SiteProbeResult = { error("No re-test result scripted") }
     var onUpdate: suspend (String, CustomSiteEdit) -> CustomSiteMutation = { _, _ -> CustomSiteMutation.Success }
     var onRemove: suspend (String) -> CustomSiteMutation = { CustomSiteMutation.Success }
+    var onCheckVerification: suspend (String, String) -> SiteProbeResult = { _, _ -> error("No verification check scripted") }
 
     val probes = mutableListOf<ProbeCall>()
     val drafts = mutableListOf<CustomSiteDraft>()
     val edits = mutableListOf<Pair<String, CustomSiteEdit>>()
     val removals = mutableListOf<String>()
+
+    /** Source id and agent of every [checkVerification] and [completeVerification] call. */
+    val checks = mutableListOf<Pair<String, String>>()
+    val completions = mutableListOf<Pair<String, String>>()
+
+    /** Every [setSetupHost] value, in order. */
+    val setupHosts = mutableListOf<String?>()
 
     override suspend fun probe(input: String, credentials: SiteCredentials?, headers: SiteHeaders): SiteProbeResult =
         ProbeCall(input, credentials, headers).also(probes::add).let { onProbe(it) }
@@ -58,6 +86,19 @@ internal class FakeCustomSitesController(initial: List<CustomSiteSummary> = empt
     }
 
     override suspend fun retest(sourceId: String): SiteProbeResult = onRetest(sourceId)
+
+    override suspend fun checkVerification(sourceId: String, userAgent: String): SiteProbeResult {
+        checks += sourceId to userAgent
+        return onCheckVerification(sourceId, userAgent)
+    }
+
+    override suspend fun completeVerification(sourceId: String, userAgent: String, working: Boolean) {
+        completions += sourceId to userAgent
+    }
+
+    override fun setSetupHost(host: String?) {
+        setupHosts += host
+    }
 
     override suspend fun update(sourceId: String, edit: CustomSiteEdit): CustomSiteMutation {
         edits += sourceId to edit

@@ -18,6 +18,10 @@
 - New sites stay out of Unified search and For You until you turn that on for the site.
 - Each site can be re-tested, renamed, given new keys, or given its own User-Agent and Referer.
 - Removing a site keeps its likes, Codex items and history; they open again when you add the site back.
+- A site behind a browser challenge can be verified in the app: pass its check and the page closes by itself once Theoria gets through, and the source works right away.
+- Verify in browser tells you when a site still refuses Theoria after its check, instead of failing later.
+- A site whose re-test is blocked by a challenge offers Verify in browser on its row.
+- Removing a site also removes the browser cookies Theoria held for it.
 
 ### Changed
 
@@ -62,10 +66,18 @@
 - Scrub previews appear sooner when you drag a video's timeline, most of all on a second drag, and stop downloading as soon as you let go.
 - Letting go after scrubbing a video starts playback on the frame the preview showed, and much sooner when you scrub to a part of the video that hasn't loaded yet.
 - Videos in the Viewer start, and resume after a seek, once half a second has loaded instead of a full second. A video that has already had to stop and load waits for the full second again, so a slow connection doesn't stall more often.
+- Sites proven to work since you opened the app show a check mark on their row in Settings → Sites and beside Verify in browser, replacing the "Working" text.
+- A site's API keys sit behind a collapsed "API key" item on its page, which opens to show their options.
+- Invert scroll direction moved into Settings → Controls, the renamed Classic controls sheet, with more room between its options.
+- Accounts and Sites are now one Settings → Sites page, listing built-in and added sources with each one's account and browser check.
+- Built-in sources behind a browser challenge, like Iwara, can now be verified in the app; tapping a challenged source opens its check.
+- Settings pages show their full path in the title, such as Settings / Sites / Safebooru.
+- Test all in Settings → Sites checks every source with a real search, naming each one as it goes and marking the result on its row.
 
 ### Fixed
 
 - On networks with broken IPv6, sources no longer stall for up to 30 seconds or fail to connect, and one slow source no longer blanks a whole Unified search.
+- Sources no longer all start marked as "can't be found" after a brief network hiccup; a site is only marked missing once separate lookups have failed.
 - R34V videos play again in feeds and the Viewer; they previously failed to load on every Android device.
 - Videos are requested with the same User-Agent as the site's images, including a custom site's own User-Agent, so sites that check it serve their videos too.
 - A R34V or R34G search with excluded tags now shows its results when one post's details can't be read, instead of failing the whole page.

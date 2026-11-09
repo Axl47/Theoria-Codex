@@ -41,11 +41,15 @@ class SourceHealthTest {
         assertFalse(health.onPick(SourceKey.PIXIV))
     }
 
-    @Test fun `a challenged custom site opens verification instead of being selected`() {
+    @Test fun `a challenged source, built-in or added, opens verification instead of being selected`() {
         val custom = SourceKey.parse("custom_gated_example")!!
-        var verified: SourceKey? = null
-        val health = SourceHealth(issues = mapOf(custom to HostOutageKind.CHALLENGE), verify = { verified = it })
+        val verified = mutableListOf<SourceKey>()
+        val health = SourceHealth(
+            issues = mapOf(custom to HostOutageKind.CHALLENGE, SourceKey.IWARA to HostOutageKind.CHALLENGE),
+            verify = { verified += it },
+        )
         assertTrue(health.onPick(custom))
-        assertEquals(custom, verified)
+        assertTrue(health.onPick(SourceKey.IWARA))
+        assertEquals(listOf(custom, SourceKey.IWARA), verified)
     }
 }

@@ -1,6 +1,7 @@
 package com.theoriacodex.sources.custom
 
 import com.theoriacodex.domain.source.ProbeFailure
+import com.theoriacodex.sources.http.CONNECT_TIMEOUT_MS
 import com.theoriacodex.sources.http.DEFAULT_MAX_SOURCE_TEXT_BODY_BYTES
 import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.sources.http.HostOutageTracker
@@ -18,7 +19,6 @@ import com.theoriacodex.sources.http.withByteRange
 import java.io.IOException
 import java.net.URI
 import java.net.URISyntaxException
-import java.util.Locale
 import okhttp3.OkHttpClient
 
 /**
@@ -35,10 +35,10 @@ class CustomSiteHttpClient internal constructor(
     private val outages: HostOutageTracker? = null,
     private val transport: suspend (HttpRequestSpec) -> SourceByteResponse,
 ) : SourceHttpClient {
-    /** Probes use the 10 s defaults; adapters may pass a longer [readTimeoutMs] and an [outages] tracker. */
+    /** Probes use the defaults; adapters may pass a longer [readTimeoutMs] and an [outages] tracker. */
     constructor(
-        connectTimeoutMs: Int = DEFAULT_TIMEOUT_MS,
-        readTimeoutMs: Int = DEFAULT_TIMEOUT_MS,
+        connectTimeoutMs: Int = CONNECT_TIMEOUT_MS,
+        readTimeoutMs: Int = DEFAULT_READ_TIMEOUT_MS,
         outages: HostOutageTracker? = null,
         okHttpClient: OkHttpClient = defaultSourceOkHttpClient,
     ) : this(connectTimeoutMs, readTimeoutMs, MAX_REDIRECTS, outages, { spec -> executeHttpRequest(spec, okHttpClient) })
@@ -84,7 +84,8 @@ class CustomSiteHttpClient internal constructor(
 
     /**
      * Sends one hop and records outages: down statuses, a browser challenge served in place of the
-     * API (the same markup the prober reports as blocked), or an unresolvable domain.
+     * API (the same markup the prober reports as blocked), or an unresolvable domain. A real answer
+     * marks the site as working this session, and a refusal of its keys takes that back.
      */
     private suspend fun sendTracked(url: String, send: suspend () -> SourceByteResponse): SourceByteResponse {
         val tracker = outages ?: return send()
@@ -98,11 +99,12 @@ class CustomSiteHttpClient internal constructor(
             ?: HostOutageKind.CHALLENGE.takeIf { response.toTextResponse().isVerificationChallenge() }
                 ?.also { tracker.record(url, it) }
         if (kind != null) throw HostUnavailableException(HostOutageTracker.hostKey(url).orEmpty(), kind)
+        tracker.recordAnswer(url, response.statusCode)
         return response
     }
 
     private companion object {
-        const val DEFAULT_TIMEOUT_MS = 10_000
+        const val DEFAULT_READ_TIMEOUT_MS = 10_000
         const val MAX_REDIRECTS = 3
     }
 }
@@ -129,7 +131,7 @@ private fun SourceByteResponse.redirectLocation(): String? =
         ?.headers?.entries?.firstOrNull { (name, _) -> name.equals("Location", ignoreCase = true) }
         ?.value?.firstOrNull()?.takeIf(String::isNotBlank)
 
-private fun siteHost(uri: URI): String? = uri.host?.lowercase(Locale.ROOT)?.removePrefix("www.")
+private fun siteHost(uri: URI): String? = uri.host?.let(HostOutageTracker::normalizeHost)
 
 private fun effectivePort(uri: URI): Int = if (uri.port == -1) HTTPS_PORT else uri.port
 

@@ -136,4 +136,22 @@ class CustomSiteHttpClientTest {
         assertEquals(HostOutageKind.CHALLENGE, (second as HostUnavailableException).kind)
         assertEquals(1, requested.size)
     }
+
+    @Test
+    fun `a real answer proves the site works and a refusal of its keys takes that back`() = runTest {
+        val tracker = HostOutageTracker()
+        var status = 200
+        val http = CustomSiteHttpClient(1_000, 1_000, 3, tracker) { SourceByteResponse(status, "[]".toByteArray()) }
+
+        http.get("https://booru.example/index.php")
+        assertEquals(setOf("booru.example"), tracker.working.value)
+
+        status = 404
+        http.get("https://booru.example/index.php")
+        assertEquals("a missing post says nothing about the site", setOf("booru.example"), tracker.working.value)
+
+        status = 401
+        http.get("https://booru.example/index.php")
+        assertTrue(tracker.working.value.isEmpty())
+    }
 }
