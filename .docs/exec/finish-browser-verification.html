@@ -314,7 +314,7 @@ Copy this skeleton into a new `.docs/exec/<plan-name>.html` file and then replac
     <h1>ExecPlan: Finish In-App Browser Verification</h1>
     <p>A challenged custom site can be verified once, the app proves its own requests get through, the page closes by itself on success, and the source works immediately. The spike's loose state and rough page are gone.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: In progress</span>
+      <span class="pill">Status: Validating (one device path awaits the developer)</span>
       <span class="pill">Owner: Claude (Opus plan and review, Sonnet implementation)</span>
       <span class="pill">Created: 2026-11-08</span>
       <span class="pill">Updated: 2026-11-08</span>
@@ -322,7 +322,7 @@ Copy this skeleton into a new `.docs/exec/<plan-name>.html` file and then replac
       <span class="pill">Branch: worktree-verify-in-browser-polish (from main 2883acc9)</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Phase 1: runtime model and tests.</div>
+      <div class="card"><strong>Next Action</strong>Developer runs the expired-clearance path on a challenged supported booru, then decide on merge.</div>
       <div class="card"><strong>Main Risk</strong>A clearance that WebView earns may still be refused to OkHttp or HttpURLConnection because of TLS fingerprinting. The new check makes that visible; it cannot remove it.</div>
       <div class="card"><strong>Validation</strong>Focused host tests, full app unit tests, detekt and lint, then a real challenge on pixbooru.com in the isolated <code>com.theoriacodex.acceptance</code> install.</div>
       <div class="card"><strong>Affected Areas</strong><code>app/.../customsites</code>, <code>app/.../settings/sites</code>, <code>app-logic</code> controller, <code>res/xml</code> backup rules.</div>
@@ -442,12 +442,17 @@ Copy this skeleton into a new `.docs/exec/<plan-name>.html` file and then replac
       <h3>Progress</h3>
       <ul>
         <li>[x] 2026-11-08 - Worktree from main 2883acc9; design and plan written.</li>
-        <li>[ ] Phase 1 implemented and reviewed.</li>
-        <li>[ ] Phase 2 implemented and reviewed.</li>
-        <li>[ ] Phase 3 device proof and changelog.</li>
+        <li>[x] 2026-11-08 - Phase 1 implemented (Sonnet) and reviewed; review separated check from complete, armed self-closing from known refusals, removed per-request allocation and URI re-parsing.</li>
+        <li>[x] 2026-11-08 - Phase 2 implemented (Sonnet) and reviewed; review fixed WebView release order, WebView background, edge-to-edge layout, and moved prefs cleanup off the main thread.</li>
+        <li>[x] 2026-11-08 - Host validation: 1,208 app tests with 0 failures, plus core-sources and app-logic; lint passed; detekt reports only 2 findings in test files this branch does not touch.</li>
+        <li>[x] 2026-11-08 - Emulator, acceptance package: blocked add, self-close after a real challenge, voluntary visit stays open, Done completes, layout bounds, removal, no crash log entries.</li>
+        <li>[x] 2026-11-08 - Changelog entries added.</li>
+        <li>[ ] Expired-clearance path (red dot, verify, source loads at once) on a challenged site of a supported family.</li>
+        <li>[ ] Cookie expiry on removal observed on a real CookieManager; backup exclusion observed in a real backup.</li>
       </ul>
       <h3>Surprises And Discoveries</h3>
       <ul>
+        <li>Observation: pixbooru.com cannot be saved after its challenge clears: the probe reports it does not answer like a supported booru. The challenge cleared without interaction on the emulator and the page closed itself. Consequence: it proves the Add path but not the saved-site expiry path. Evidence: 2026-11-08 emulator accessibility text.</li>
         <li>Observation: pixbooru.com is a live Cloudflare challenge on the home page and API-shaped paths. Evidence: 2026-11-08 curl returned HTTP 403, <code>cf-mitigated: challenge</code>, "Just a moment".</li>
       </ul>
       <h3>Decision Log</h3>
@@ -458,7 +463,7 @@ Copy this skeleton into a new `.docs/exec/<plan-name>.html` file and then replac
         <li>Decision: Keep process-wide CookieHandler. Rationale: proven, and it covers every HttpURLConnection path, including offline downloads, with one line. Date/Author: 2026-11-08 / Claude.</li>
       </ul>
       <h3>Outcomes And Retrospective</h3>
-      <p>To be updated at each phase.</p>
+      <p>Implemented. Verification is now one checked operation, allowed hosts derive from saved sites, and the page closes itself on a real pass. Live proof covers the Add path; the expired-clearance path needs a challenged site of a supported family. Remember: a pass means the site answered at all, so an unsupported site still closes the page and reports itself as unsupported.</p>
     </section>
 
     <section id="recovery">

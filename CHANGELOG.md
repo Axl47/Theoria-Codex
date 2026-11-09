@@ -18,6 +18,10 @@
 - New sites stay out of Unified search and For You until you turn that on for the site.
 - Each site can be re-tested, renamed, given new keys, or given its own User-Agent and Referer.
 - Removing a site keeps its likes, Codex items and history; they open again when you add the site back.
+- A site behind a browser challenge can be verified in the app: pass its check and the page closes by itself once Theoria gets through, and the source works right away.
+- Verify in browser tells you when a site still refuses Theoria after its check, instead of failing later.
+- A site whose re-test is blocked by a challenge offers Verify in browser on its row.
+- Removing a site also removes the browser cookies Theoria held for it.
 
 ### Changed
 
