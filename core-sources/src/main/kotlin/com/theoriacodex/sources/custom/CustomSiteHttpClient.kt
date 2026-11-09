@@ -17,7 +17,6 @@ import com.theoriacodex.sources.http.withByteRange
 import java.io.IOException
 import java.net.URI
 import java.net.URISyntaxException
-import java.util.Locale
 
 /**
  * Transport for user-added sites, used by the prober and by custom-site adapters (plan C7). Requests
@@ -126,7 +125,7 @@ private fun SourceByteResponse.redirectLocation(): String? =
         ?.headers?.entries?.firstOrNull { (name, _) -> name.equals("Location", ignoreCase = true) }
         ?.value?.firstOrNull()?.takeIf(String::isNotBlank)
 
-private fun siteHost(uri: URI): String? = uri.host?.lowercase(Locale.ROOT)?.removePrefix("www.")
+private fun siteHost(uri: URI): String? = uri.host?.let(HostOutageTracker::normalizeHost)
 
 private fun effectivePort(uri: URI): Int = if (uri.port == -1) HTTPS_PORT else uri.port
 

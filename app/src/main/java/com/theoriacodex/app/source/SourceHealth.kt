@@ -41,7 +41,7 @@ internal val LocalSourceHealth = compositionLocalOf { SourceHealth() }
 /** The host outages that belong to [source]: its site host, or a subdomain of it such as an API host. */
 internal fun SourceKey.ownsHost(host: String): Boolean {
     val site = siteHost() ?: return false
-    return host == site || host.endsWith(".$site")
+    return HostOutageTracker.hostBelongsToSite(host, site)
 }
 
 /** Active outages by source, matched through each source's presentation (its site address). */

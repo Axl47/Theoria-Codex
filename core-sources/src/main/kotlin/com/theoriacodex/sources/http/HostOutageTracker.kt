@@ -76,6 +76,13 @@ class HostOutageTracker(
         /** The form outages are keyed by: lowercase, without `www.`. */
         fun normalizeHost(host: String): String = host.lowercase(Locale.ROOT).removePrefix("www.")
 
+        /** Whether [host] is [site] itself or a subdomain of it, such as a media CDN; both are normalized first. */
+        fun hostBelongsToSite(host: String, site: String): Boolean {
+            val candidate = normalizeHost(host)
+            val root = normalizeHost(site)
+            return candidate == root || candidate.endsWith(".$root")
+        }
+
         fun hostKey(url: String): String? = runCatching { URI(url).host }.getOrNull()?.let(::normalizeHost)
 
         /** What an answer's status and headers say about the host; null when it isn't down. */
