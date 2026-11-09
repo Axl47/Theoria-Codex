@@ -3,6 +3,7 @@ package com.theoriacodex.app.viewer
 import android.content.Context
 import coil.imageLoader
 import coil.request.CachePolicy
+import coil.request.ImageRequest
 import coil.request.SuccessResult
 import coil.size.Precision
 import com.theoriacodex.app.media.MediaRequestFactory
@@ -13,8 +14,14 @@ import com.theoriacodex.app.viewer.state.ViewerMediaKind
 import com.theoriacodex.app.viewer.state.ViewerMediaState
 import com.theoriacodex.app.viewer.state.ViewerPrefetchOutcome
 import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.VideoQuality
 import java.io.File
+import kotlin.math.abs
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 /** The Viewer route's prefetcher: how far from the current media a prefetch may stay decoded is decided here. */
 internal fun viewerMediaPrefetcher(context: Context, videoQuality: () -> VideoQuality) =
@@ -60,11 +67,7 @@ internal suspend fun prefetchViewerMedia(
             keepDecodedInMemory -> request
             // A far neighbour may reuse an existing memory entry but never adds one. Only its download matters,
             // so a static image decodes subsampled instead of as a full-size bitmap that is thrown away.
-            media.kind == ViewerMediaKind.IMAGE -> request.newBuilder()
-                .memoryCachePolicy(CachePolicy.READ_ONLY)
-                .size(DISK_WARM_DECODE_PX)
-                .precision(Precision.INEXACT)
-                .build()
+            media.kind == ViewerMediaKind.IMAGE -> request.diskWarmOnly()
             else -> request.newBuilder().memoryCachePolicy(CachePolicy.READ_ONLY).build()
         }
     }
@@ -80,6 +83,37 @@ internal suspend fun prefetchViewerMedia(
 
 /** A disk-only image warm decodes to about this edge; the decode is discarded. */
 private const val DISK_WARM_DECODE_PX = 64
+
+/** Pages of one post warmed at the same time. */
+private const val PAGE_THUMBNAIL_WARM_PARALLELISM = 8
+
+/** Reuses an existing memory entry but never adds one, and decodes subsampled: only the download matters. */
+private fun ImageRequest.diskWarmOnly() = newBuilder()
+    .memoryCachePolicy(CachePolicy.READ_ONLY)
+    .size(DISK_WARM_DECODE_PX)
+    .precision(Precision.INEXACT)
+    .build()
+
+/**
+ * Warms the disk cache with the dedicated page thumbnails of one post, pages nearest [fromPage] first.
+ * Pages whose thumbnail is just their poster are skipped, since posters can be heavy. Failed loads are ignored.
+ */
+internal suspend fun warmViewerPageThumbnails(context: Context, source: SourceKey, items: List<ViewerMediaOverviewItem>, fromPage: Int) {
+    val urls = items
+        .filter { it.thumbnailLocation != null && it.thumbnailLocation != it.posterLocation }
+        .sortedBy { abs(it.mediaIndex - fromPage) }
+        .mapNotNull { it.thumbnailLocation }
+    val slots = Semaphore(PAGE_THUMBNAIL_WARM_PARALLELISM)
+    coroutineScope {
+        for (url in urls) {
+            launch {
+                slots.withPermit {
+                    context.imageLoader.execute(MediaRequestFactory.imageRequest(context, url, source, crossfade = false).diskWarmOnly())
+                }
+            }
+        }
+    }
+}
 
 private suspend fun prefetchViewerVideoMedia(
     context: Context,

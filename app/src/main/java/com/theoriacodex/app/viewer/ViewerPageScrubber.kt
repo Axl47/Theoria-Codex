@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
@@ -52,6 +53,7 @@ import kotlinx.coroutines.delay
 /**
  * Seeks a multi-page post in whole-page steps, the way the video timeline seeks time. A drag floats the target
  * page and its neighbours and turns the page once, on release; with instant seek each step turns the page instead.
+ * The first touch warms the post's page thumbnails into the disk cache, nearest pages first, so later seeks are instant.
  * [mirrored] matches a right-to-left media pager, so dragging follows the direction pages swipe.
  */
 @Composable
@@ -72,6 +74,10 @@ internal fun ViewerPageScrubber(
     val scrub = remember { PageScrubState(callbacks) }
     DisposableEffect(Unit) { onDispose(scrub::abandon) }
     val shownPage = scrub.target ?: pageIndex
+    // The page first touched; setting it starts warming this post's thumbnails, which outlives the drag.
+    var warmFrom by remember { mutableStateOf<Int?>(null) }
+    val context = LocalContext.current
+    LaunchedEffect(warmFrom) { warmFrom?.let { warmViewerPageThumbnails(context, source, items, it) } }
 
     Box(
         modifier.fillMaxWidth().padding(horizontal = 16.dp).height(VIEWER_TIMELINE_TRACK_HEIGHT)
@@ -88,8 +94,10 @@ internal fun ViewerPageScrubber(
             .timelineScrubGestures(
                 pageCount, mirrored,
                 onBegin = { x ->
+                    val touched = viewerPageAt(x, scrub.widthPx, pageCount, mirrored)
+                    if (warmFrom == null && !instantSeek) warmFrom = touched
                     scrub.begin(latestPage)
-                    scrub.moveTo(viewerPageAt(x, scrub.widthPx, pageCount, mirrored), instantSeek)
+                    scrub.moveTo(touched, instantSeek)
                 },
                 onMove = { x -> scrub.moveTo(viewerPageAt(x, scrub.widthPx, pageCount, mirrored), instantSeek) },
                 onEnd = { released -> scrub.end(released, instantSeek) },
