@@ -38,7 +38,10 @@ import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.app.viewer.ViewerMediaOverviewKind
 import com.theoriacodex.app.viewer.buildViewerImageRequest
 import com.theoriacodex.app.viewer.viewerMediaOverviewItems
+import com.theoriacodex.domain.adapter.Page
+import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
@@ -68,6 +71,9 @@ import org.junit.runner.RunWith
  *
  * - `source:<ID>` searches one source, loads its first screen of card images, opens the first posts' Viewer images
  *   and, for multi-page posts, the page thumbnails the scrubber and gallery grid use.
+ * - `first:<ID>` brings the real app up first, so launch-time work runs, and searches that source a few seconds later,
+ *   as a person would. Run `source:<ID>` just before it so the source counts as recently used.
+ * - `pages:<ID>` reads the first posts' pages one at a time, as turning pages does, and reports each page's load time.
  * - `unified:cold` opens the real Search tab with empty image caches and a filterless unified query.
  *   `unified:warm` does the same keeping every cache, as reopening the app does.
  *
@@ -91,6 +97,8 @@ class LiveLatencyBenchmarkTest {
         val case = requireNotNull(InstrumentationRegistry.getArguments().getString(CASE)) { "Pass $CASE" }
         val report = when {
             case.startsWith(SOURCE_PREFIX) -> runBlocking { measureSource(case.removePrefix(SOURCE_PREFIX)) }
+            case.startsWith(FIRST_SEARCH_PREFIX) -> measureFirstSearch(case.removePrefix(FIRST_SEARCH_PREFIX))
+            case.startsWith(PAGES_PREFIX) -> runBlocking { measurePages(case.removePrefix(PAGES_PREFIX)) }
             case == UNIFIED_COLD -> measureUnified(clearCaches = true)
             case == UNIFIED_WARM -> measureUnified(clearCaches = false)
             else -> error("Unknown case $case")
@@ -112,19 +120,7 @@ class LiveLatencyBenchmarkTest {
         clearDisposableCaches(container)
         val report = JSONObject()
         val query = defaultQuery(QueryMode.Source(source))
-
-        val rxBeforeSearch = settledRxBytes()
-        val searchStart = clock()
-        val first = runCatching {
-            withTimeout(SEARCH_TIMEOUT_MS) { registry.unifiedOrchestrator().searchSource(adapter, query, null) }
-        }
-        report.put("search_ms", clock() - searchStart)
-        val page = first.getOrElse { error ->
-            return@withContext report.put("search_ok", false)
-                .put("failure", (error as? SourceAdapterException)?.reason?.name ?: error.javaClass.simpleName)
-                .put("failure_detail", (error.cause ?: error).let { "${it.javaClass.simpleName}: ${it.message}".take(FAILURE_DETAIL_CHARS) })
-        }
-        report.put("search_ok", true).put("posts", page.items.size).put("search_rx", settledRxBytes() - rxBeforeSearch)
+        val page = timedSearch(registry, adapter, query, report) ?: return@withContext report
 
         page.nextPageToken?.let { token ->
             val nextStart = clock()
@@ -135,6 +131,85 @@ class LiveLatencyBenchmarkTest {
         val cards = page.items.take(CARD_COUNT)
         loadAll("cards", cards.mapNotNull { cardRequest(it, source) }, report)
         measureViewer(cards, source, report, adapter::resolvePost)
+        report
+    }
+
+    /** Searches [adapter], reporting the time and traffic, or the failure when this returns null. */
+    private suspend fun timedSearch(
+        registry: SourceAdapterRegistry,
+        adapter: SourceAdapter,
+        query: Query,
+        report: JSONObject,
+    ): Page<Post>? {
+        val rxBeforeSearch = settledRxBytes()
+        val searchStart = clock()
+        val first = runCatching {
+            withTimeout(SEARCH_TIMEOUT_MS) { registry.unifiedOrchestrator().searchSource(adapter, query, null) }
+        }
+        report.put("search_ms", clock() - searchStart)
+        val page = first.getOrElse { error ->
+            report.put("search_ok", false)
+                .put("failure", (error as? SourceAdapterException)?.reason?.name ?: error.javaClass.simpleName)
+                .put("failure_detail", (error.cause ?: error).let { "${it.javaClass.simpleName}: ${it.message}".take(FAILURE_DETAIL_CHARS) })
+            return null
+        }
+        report.put("search_ok", true).put("posts", page.items.size).put("search_rx", settledRxBytes() - rxBeforeSearch)
+        return page
+    }
+
+    private fun measureFirstSearch(id: String): JSONObject {
+        val owner = runBlocking { container() }
+        val registry = owner.sources.registry
+        val source = registry.availableSources().firstOrNull { it.id == id } ?: return JSONObject().put("unavailable", true)
+        val adapter = requireNotNull(registry.adapterFor(source))
+        val tabs = owner.data.uiRestoreRepository
+        val previousTab = runBlocking {
+            clearDisposableCaches(owner)
+            tabs.getLastTab().also { tabs.setLastTab(TopLevelDestination.Settings.route) }
+        }
+        try {
+            val launch = requireNotNull(context.packageManager.getLaunchIntentForPackage(context.packageName))
+            context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+            requireNotNull(device.wait(Until.findObject(By.desc(NAVIGATION_CONTROL)), LAUNCH_TIMEOUT_MS)) { "The app did not open" }
+            SystemClock.sleep(FIRST_SEARCH_DELAY_MS)
+            return runBlocking(Dispatchers.IO) {
+                val report = JSONObject()
+                val page = timedSearch(registry, adapter, defaultQuery(QueryMode.Source(source)), report) ?: return@runBlocking report
+                loadAll("cards", page.items.take(CARD_COUNT).mapNotNull { cardRequest(it, source) }, report)
+                report
+            }
+        } finally {
+            runBlocking { previousTab?.let { tabs.setLastTab(it) } }
+        }
+    }
+
+    private suspend fun measurePages(id: String): JSONObject = withContext(Dispatchers.IO) {
+        val container = container()
+        val registry = container.sources.registry
+        val source = registry.availableSources().firstOrNull { it.id == id }
+            ?: return@withContext JSONObject().put("unavailable", true)
+        val adapter = requireNotNull(registry.adapterFor(source))
+        clearDisposableCaches(container)
+        val report = JSONObject()
+        val page = timedSearch(registry, adapter, defaultQuery(QueryMode.Source(source)), report) ?: return@withContext report
+        val requests = page.items.take(VIEWER_POSTS)
+            .mapNotNull { post -> runCatching { adapter.resolvePost(post.id) }.getOrNull() }
+            .flatMap { post ->
+                postMediaItems(post).take(PAGES_PER_POST).mapNotNull { media ->
+                    viewerMediaDeliveryPlan(post, media).primary?.location?.let { buildViewerImageRequest(context, it, source) }
+                }
+            }
+        val times = requests.map { request ->
+            val start = clock()
+            val loaded = context.imageLoader.execute(request) is SuccessResult
+            if (loaded) clock() - start else PAGE_FAILED
+        }
+        val loaded = times.filter { it != PAGE_FAILED }.sorted()
+        report.put("page_count", times.size).put("page_ok", loaded.size).put("page_times", times.joinToString(","))
+        if (loaded.isNotEmpty()) {
+            report.put("page_median_ms", loaded[loaded.size / 2]).put("page_max_ms", loaded.last())
+                .put("page_over_3s", loaded.count { it > SLOW_PAGE_MS })
+        }
         report
     }
 
@@ -340,6 +415,9 @@ class LiveLatencyBenchmarkTest {
         const val CASE = "theoriaCase"
         const val REPORT = "theoriaLatency"
         const val SOURCE_PREFIX = "source:"
+        const val FIRST_SEARCH_PREFIX = "first:"
+        const val PAGES_PREFIX = "pages:"
+        const val NAVIGATION_CONTROL = "Search"
         const val UNIFIED_COLD = "unified:cold"
         const val UNIFIED_WARM = "unified:warm"
         const val PRELOAD_PARAMETER = "theoria.feedPreload"
@@ -351,6 +429,10 @@ class LiveLatencyBenchmarkTest {
         const val VIEWER_POSTS = 4
         const val MIN_GALLERY_PAGES = 8
         const val GALLERY_PAGES = 24
+        const val PAGES_PER_POST = 12
+        const val PAGE_FAILED = -1L
+        const val SLOW_PAGE_MS = 3_000L
+        const val FIRST_SEARCH_DELAY_MS = 3_000L
         const val PAGE_EDGE_PX = 360
         const val FLINGS = 6
 
