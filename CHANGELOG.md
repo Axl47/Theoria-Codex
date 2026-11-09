@@ -18,6 +18,7 @@
 
 ### Changed
 
+- Collections saved for offline use now stay available in the released app, and copies saved before this update are recovered when the app starts.
 - Post cards show their like, count, duration, time and source as plain marks over soft edge shading instead of separate badges, so more of each post stays visible.
 - Galleries you have partly viewed show how far you got as a thin line along the bottom of the card.
 - Liking a post from a card now gives the same haptic tick, heart pop and pink heart as liking it in the Viewer.

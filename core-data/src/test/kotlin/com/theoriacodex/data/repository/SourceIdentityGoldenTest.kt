@@ -44,7 +44,7 @@ class SourceIdentityGoldenTest {
 
     @Test
     fun `offline manifest reflection keeps the post's source fields`() {
-        // OfflineMediaStore writes manifests with Gson reflection over the domain Post.
+        // Version 2 offline manifests were Gson reflection over the domain Post; OfflineMediaStore still reads that shape.
         assertGolden("offline-manifest-post.json", gson.toJson(gelbooruPost))
     }
 
