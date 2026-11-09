@@ -95,6 +95,7 @@
 - Paheal cards show their images again, with or without tags.
 - Rule34Gen cards show their thumbnails when browsing without tags.
 - Rule34Gen and Rule34Video searches show every card's thumbnail, not just the first few.
+- nhentai pages that stall partway through loading recover in a few seconds instead of hanging for up to half a minute.
 
 ## [1.3.0] - 2026-11-06
 

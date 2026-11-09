@@ -48,7 +48,13 @@ internal class AppHttpClients(
     val images: OkHttpClient by lazy {
         shared.newBuilder()
             .dispatcher(Dispatcher().apply { maxRequestsPerHost = IMAGE_MAX_REQUESTS_PER_HOST })
+            .addInterceptor(StalledPageRescue(rescue = { stalledPageRescue }))
             .build()
+    }
+
+    /** A pool of its own, because a stalled page's connection is the one thing a rescue must not reuse. */
+    private val stalledPageRescue: OkHttpClient by lazy {
+        shared.newBuilder().connectionPool(ConnectionPool(1, IDLE_KEEP_ALIVE_MINUTES, TimeUnit.MINUTES)).build()
     }
 
     /** Whole-file downloads: GIFs, Pixiv animations and offline saves. */
