@@ -39,6 +39,7 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
             SharedPreferencesRecentHostStore(this),
             activeNetwork = { getSystemService(ConnectivityManager::class.java).activeNetwork },
         ),
+        siteCookieBridge::userAgentFor,
     )
 
     internal val videoPlaybackInfrastructure: VideoPlaybackInfrastructure by lazy {

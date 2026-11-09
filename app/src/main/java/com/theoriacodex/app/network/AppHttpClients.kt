@@ -25,6 +25,7 @@ import okhttp3.Request
 internal class AppHttpClients(
     cookieJar: CookieJar,
     private val memory: ConnectionMemory = ConnectionMemory(NoRecentHosts, activeNetwork = { null }),
+    private val verifiedUserAgent: (url: String) -> String? = { null },
 ) {
     private val warmed = AtomicBoolean(false)
 
@@ -36,6 +37,12 @@ internal class AppHttpClients(
             .connectionPool(ConnectionPool(MAX_IDLE_CONNECTIONS, IDLE_KEEP_ALIVE_MINUTES, TimeUnit.MINUTES))
             .cookieJar(cookieJar)
             .addInterceptor(unexpectedFailuresAsIoExceptions)
+            // A site's clearance cookie only counts with the browser agent that earned it, on media as well as searches.
+            .addInterceptor { chain ->
+                val request = chain.request()
+                val agent = verifiedUserAgent(request.url.toString())
+                chain.proceed(if (agent == null) request else request.newBuilder().header("User-Agent", agent).build())
+            }
             .build()
     }
 
