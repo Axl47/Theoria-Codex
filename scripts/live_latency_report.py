@@ -92,10 +92,9 @@ def dumbbell(title: str, note: str, rows: list[dict], ticks: list[int], formatte
                 ring = " failed" if row.get(f"{side}_failed") else ""
                 marks.append(f'<i class="dot {side}{ring}" style="left:{scale.percent(value):.2f}%"></i>')
         grid = "".join(f'<i class="grid" style="left:{scale.percent(tick):.2f}%"></i>' for tick in scale.ticks)
-        reading = " → ".join(
-            ("failed at " if row.get(f"{side}_failed") else "") + formatter(row[side]) if row[side] is not None else "none"
-            for side in ("before", "after")
-        )
+        reading = " → ".join(formatter(row[side]) if row[side] is not None else "none" for side in ("before", "after"))
+        if row.get("before_failed") or row.get("after_failed"):
+            reading = f"failed: {reading}"
         body.append(
             f'<div class="row" tabindex="0" data-tip="{html.escape(row["name"])}: {html.escape(reading)}">'
             f'<div class="name">{html.escape(row["name"])}</div>'
@@ -144,17 +143,26 @@ def times_smaller(before: float | None, after: float | None) -> str:
 
 def tiles(before: dict, after: dict) -> str:
     built = []
-    for case, label in (("unified:cold", "Search, first card, empty caches"), ("unified:warm", "Reopening the app, first card")):
-        old, new = median_of(before.get(case, []), "first_card_ms"), median_of(after.get(case, []), "first_card_ms")
+    measures = (
+        ("unified:cold", "first_image_ms", "Search with empty caches, first image"),
+        ("unified:warm", "first_image_ms", "Reopening the app, first image"),
+        ("source:GELBOORU", "next_page_ms", "Gelbooru, loading the next page"),
+    )
+    for case, metric, label in measures:
+        old, new = median_of(before.get(case, []), metric), median_of(after.get(case, []), metric)
         if old and new:
             built.append(tile(label, seconds(old), seconds(new), times_faster(old, new)))
-    failing_before = [name for case, name in SOURCES if failed_share(before.get(case, [])) > 0.5]
-    failing_after = [name for case, name in SOURCES if failed_share(after.get(case, [])) > 0.5]
-    built.append(tile("Sources failing to load", str(len(failing_before)), str(len(failing_after)), ", ".join(failing_before) or "none"))
-    old, new = median_of(before.get("source:HITOMI", []), "cards_rx"), median_of(after.get("source:HITOMI", []), "cards_rx")
-    if old and new:
-        built.append(tile("12 Hitomi cards, data used", megabytes(old), megabytes(new), times_smaller(old, new)))
+    old, new = median_of(before.get("source:HITOMI", []), "cards_ok"), median_of(after.get("source:HITOMI", []), "cards_ok")
+    if old is not None and new is not None:
+        built.append(tile("Hitomi cards that loaded", f"{old:.0f} of 12", f"{new:.0f} of 12", "with empty caches"))
     return "".join(built)
+
+
+def case_rows(before: dict, after: dict, metric: str, cases: list[tuple[str, str]]) -> list[dict]:
+    return [
+        {"name": name, "before": median_of(before.get(case, []), metric), "after": median_of(after.get(case, []), metric)}
+        for case, name in cases
+    ]
 
 
 def table(before: dict, after: dict) -> str:
@@ -203,7 +211,7 @@ STYLE = """
 :root[data-theme="dark"] .viz-root{color-scheme:dark;--surface:#1a1a19;--page:#0d0d0d;--ink:#f0efec;--ink2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;
   --axis:#383835;--before:#256abf;--after:#9ec5f4;--link:#383835;--ring:rgba(255,255,255,.10)}
 *{box-sizing:border-box}body{margin:0}
-.viz-root{background:var(--page);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:24px 16px 48px;min-height:100vh}
+.viz-root{background:var(--page);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:24px 16px 48px}
 .wrap{max-width:900px;margin:0 auto}h1{font-size:24px;margin:0 0 4px}h2{font-size:16px;margin:0 0 2px}
 .sub,.note{color:var(--ink2);margin:0}.note{font-size:13px;margin-bottom:12px}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:20px 0}
@@ -240,15 +248,30 @@ document.querySelectorAll('.row[data-tip]').forEach(row=>{
 """
 
 
-def render(directory: Path, before_name: str, after_name: str) -> str:
+# For hosts that frame the page and supply their own theme variables and page background.
+EMBED_STYLE = """
+.viz-root{--surface:var(--card);--page:transparent;--ink:var(--foreground);--ink2:var(--muted-foreground);--muted:var(--muted-foreground);
+  --grid:var(--border);--axis:var(--border);--after:var(--chart-1);--before:color-mix(in srgb,var(--chart-1) 42%,var(--card));--link:var(--border);--ring:var(--border);
+  background:none;padding:0}
+#tip{background:var(--popover);color:var(--popover-foreground);border:1px solid var(--border)}
+"""
+
+
+def render(directory: Path, before_name: str, after_name: str, embed: bool = False) -> str:
     before, after = load(directory / before_name), load(directory / after_name)
     run_count = max(len(reports) for reports in after.values())
+    unified = [("unified:cold", "Empty caches"), ("unified:warm", "Reopened")]
     sections = [
-        dumbbell("Search: time until results arrive", "Fresh app, no open connections. A hollow dot means the search failed after that long.",
+        dumbbell("Unified search: first image on screen", "From tapping the app icon, including app startup.",
+                 case_rows(before, after, "first_image_ms", unified), TIME_TICKS, seconds),
+        dumbbell("Search: time until results arrive", "Fresh app, no open connections. A hollow dot means the search failed after that long: "
+                 "Danbooru was down for maintenance and Iwara demanded browser verification on both builds, so the gain there is failing sooner.",
                  source_rows(before, after, "search_ms", show_failures=True), TIME_TICKS, seconds),
         dumbbell("Cards: time until 12 card images have loaded", "Measured once results are in, with empty image caches.",
                  source_rows(before, after, "cards_all_ms"), TIME_TICKS, seconds),
-        dumbbell("Cards: data used for 12 card images", "The app's whole traffic over the step, including TLS and headers.",
+        dumbbell("Viewer: time until the first 4 posts' images load", "nhentai swings between about 1.5 and 6 seconds on both builds, in 11 repeat runs each.",
+                 source_rows(before, after, "viewer_all_ms"), TIME_TICKS, seconds),
+        dumbbell("Cards: data used for 12 card images", "The app's whole traffic over the step. Hitomi's before figure is low because only 4 of its 12 cards ever loaded.",
                  source_rows(before, after, "cards_rx"), BYTE_TICKS, megabytes),
         dumbbell("Galleries: data used for 24 page thumbnails", "What the page scrubber and gallery grid download.",
                  source_rows(before, after, "pages_rx"), BYTE_TICKS, megabytes),
@@ -256,7 +279,7 @@ def render(directory: Path, before_name: str, after_name: str) -> str:
     note = environment(directory / after_name)
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-        f'<title>Search speed results</title><style>{STYLE}</style></head><body><div class="viz-root"><div class="wrap">'
+        f'<title>Search speed results</title><style>{STYLE}{EMBED_STYLE if embed else ""}</style></head><body><div class="viz-root"><div class="wrap">'
         f'<h1>Search speed, before and after</h1><p class="sub">Samsung S24+, home Wi-Fi, live provider feeds. Median of {run_count} runs per build, on a debug build.</p>'
         f'<div class="tiles">{tiles(before, after)}</div>'
         '<div class="legend"><span><i class="key" style="background:var(--before)"></i>Before</span>'
@@ -272,9 +295,10 @@ def main() -> None:
     parser.add_argument("--before", required=True)
     parser.add_argument("--after", required=True)
     parser.add_argument("--html", type=Path, required=True)
+    parser.add_argument("--embed", action="store_true", help="Use the host page's theme variables instead of a standalone page.")
     arguments = parser.parse_args()
     arguments.html.parent.mkdir(parents=True, exist_ok=True)
-    arguments.html.write_text(render(arguments.directory, arguments.before, arguments.after))
+    arguments.html.write_text(render(arguments.directory, arguments.before, arguments.after, arguments.embed))
     print(arguments.html)
 
 

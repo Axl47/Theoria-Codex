@@ -26,7 +26,7 @@ pre{background:color-mix(in srgb,var(--bd) 45%,transparent);padding:10px;border-
 <p>Searches and first loads feel slow. An audit found twelve causes across three areas: connections stall on a dead IPv6 path, the screen waits for work it does not need to wait for, and several sources download full-size images where a thumbnail would do. After this work a fresh app opening Search shows cards sooner, each card costs fewer bytes, and a broken IPv6 network no longer costs seconds. Someone can see it working by running <code>scripts/live_latency_bench.py</code> against two builds on a real phone.</p>
 
 <h2 id="status">Current Status</h2>
-<div class="status"><strong>In progress.</strong> The benchmark and the baseline APK exist. Next action: implement the findings in the order below, then measure on the developer's phone once the developer says it is connected.</div>
+<div class="status"><strong>Validating.</strong> All findings and one found by measuring (A13) are committed. Results are in <a href="./assets/network-and-image-delivery/results.html">the before and after report</a>. Next action: the developer reviews the branch; nothing has been pushed or merged.</div>
 
 <h2 id="context">Context And Orientation</h2>
 <p><strong>Three HTTP stacks.</strong> Provider API calls go through <code>core-sources/.../http/DefaultSourceHttpClient.kt</code> and <code>CustomSiteHttpClient.kt</code>, both built on <code>executeHttpRequest</code> (<code>HttpURLConnection</code>). Images use Coil's OkHttp client from <code>app/.../TheoriaApplication.kt</code>. Video uses <code>app/.../viewer/VideoHttpDataSource.kt</code>. OkHttp is only present transitively at 4.12.</p>
@@ -56,7 +56,8 @@ pre{background:color-mix(in srgb,var(--bd) 45%,transparent);padding:10px;border-
 <tr><td>A8</td><td>The last search's first page is saved and painted at once on a cold start, then refreshed.</td></tr>
 <tr><td>A10</td><td>Card images for the next stretch of the feed start loading before they scroll into view, on unmetered networks only.</td></tr>
 <tr><td>A11</td><td>Feed cards decode to hardware bitmaps. Other paths keep software bitmaps until each is shown not to read pixels.</td></tr>
-<tr><td>A12</td><td>An expired Pixiv token refreshes at app start instead of inside the first search, and Gelbooru's term lookup stops delaying unified results.</td></tr></table>
+<tr><td>A12</td><td>An expired Pixiv token refreshes at app start instead of inside the first search, and a tag Gelbooru has already counted skips its lookup.</td></tr>
+<tr><td>A13</td><td>Found by the benchmark: the untagged Gelbooru feed stops sending <code>sort:id:desc</code>, which cost about 7 s per page and returned the same posts in the same order.</td></tr></table>
 
 <h2 id="validation">Validation And Acceptance</h2>
 <p>Host: <code>./gradlew :core-sources:test :core-domain:test :app-logic:test :app:testDebugUnitTest</code> and <code>:app:lintDebug --offline --no-daemon</code>, with <code>JAVA_HOME</code> on JDK 21 or newer.</p>
@@ -69,6 +70,10 @@ python3 scripts/live_latency_bench.py summarize build/live-latency/final</pre>
 <h2 id="progress">Progress</h2>
 <ul>
 <li>2026-11-09: Benchmark committed as <code>03135e09</code>; baseline APK built from it.</li>
+<li>2026-11-09: A1 to A12 committed one finding at a time; core, Android and release builds, R8 JSON contract and lint passed.</li>
+<li>2026-11-09: First device pass found the reopened-feed timer error and the Gelbooru sort cost; benchmark corrected and A13 committed.</li>
+<li>2026-11-09: Five alternating rounds of baseline against the final candidate on the S24+, with IPv6 dead for all 20 checks.</li>
+<li>2026-11-09: The fixture benchmark exposed an OkHttp crash on blocked network access; fixed and covered by a test.</li>
 </ul>
 
 <h2 id="surprises">Surprises And Discoveries</h2>
@@ -76,16 +81,38 @@ python3 scripts/live_latency_bench.py summarize build/live-latency/final</pre>
 <li>The phone has public IPv6 and tries it first, but TCP over IPv6 timed out on all four dual-stack hosts tested. IPv4 connected in 60 to 120 ms.</li>
 <li>Hitomi's <code>webpbigtn</code> is 640 px on its long edge, against originals up to 5600 px, which suits a card about 540 px wide.</li>
 <li>Compose 1.12.1's staggered grid has no cache-window option, so preloading has to go through Coil.</li>
+<li>Danbooru answered 503 (maintenance) and Iwara 403 (browser verification) on both builds, on HTTP/1.1 and HTTP/2. Those failures are the provider's; the fix only makes them fail in under a second instead of 20 to 30.</li>
+<li>Gelbooru's untagged list took about 8 s with <code>sort:id:desc</code> and about 1.5 s without. A probe with a real key saw the same 40 posts in the same order, untagged and tagged. Tagged searches were fast either way.</li>
+<li>The app reopens on its last tab, so the first version of the benchmark started its timer after a reopened feed had painted, and reported a false 25 s wait.</li>
+<li>OkHttp rethrows anything but IOException on its dispatcher threads. A SecurityException from DNS killed the fixture process, where <code>HttpURLConnection</code> had returned it to the caller.</li>
+<li>nhentai's Viewer images swing between about 1.5 s and 6 s on both builds: 2 of 11 baseline runs and 6 of 11 final runs hit the slow mode. The sample is too small to call a regression, and the slow mode exists without this work.</li>
+<li>Paheal's filterless feed gets no card images on either build, and rule34gen's card images fail 12 of 12 on either build. Neither is caused by this work.</li>
 </ul>
 
 <h2 id="decisions">Decision Log</h2>
 <table><tr><th>Decision</th><th>Why</th><th>Date</th></tr>
 <tr><td>Measure on the Debug package.</td><td>It holds an imported copy of the developer's accounts, which several sources need. Debug makes UI slower, so comparisons are between builds, never against the release app.</td><td>2026-11-09</td></tr>
-<tr><td>Commit the benchmark before any fix.</td><td>Both builds then run identical measuring code.</td><td>2026-11-09</td></tr>
+<tr><td>Commit the benchmark before any fix.</td><td>Both builds then run identical measuring code. When the timer was corrected, the baseline was rebuilt from its original commit with the corrected benchmark.</td><td>2026-11-09</td></tr>
+<tr><td>Late sources append below the first results instead of re-interleaving.</td><td>Cards already on screen must never move; the cost is a block of one source at the tail, only when that source is slow.</td><td>2026-11-09</td></tr>
+<tr><td>A cached first page is replaced when fresh results arrive, unless it has been scrolled.</td><td>Someone at the top sees the newest posts; someone reading keeps their place and gets new posts below.</td><td>2026-11-09</td></tr>
+<tr><td>Keep <code>sort:id:desc</code> on tagged Gelbooru searches.</td><td>Only the untagged list was slow, so the smallest change removes only that.</td><td>2026-11-09</td></tr>
+<tr><td>Do not teach the client to remember broken IPv6.</td><td>OkHttp's race already caps the cost near 250 ms per new connection. A learned filter adds state for a network the router setting can fix.</td><td>2026-11-09</td></tr>
 </table>
 
 <h2 id="outcomes">Outcomes And Retrospective</h2>
-<p>Not yet complete.</p>
+<p>Medians of five alternating rounds on a Samsung S24+ debug build, home Wi-Fi, live feeds, IPv6 dead throughout.</p>
+<table><tr><th>Measure</th><th>Before</th><th>After</th></tr>
+<tr><td>Unified search, first image, empty caches</td><td>16.8 s</td><td>2.7 s</td></tr>
+<tr><td>Reopening the app, first image</td><td>16.2 s</td><td>1.5 s</td></tr>
+<tr><td>Gelbooru search / next page</td><td>8.8 s / 8.2 s</td><td>1.1 s / 0.47 s</td></tr>
+<tr><td>AIBooru search / 12 cards</td><td>20.9 s / 20.8 s</td><td>1.1 s / 1.1 s</td></tr>
+<tr><td>Hitomi search / 12 cards</td><td>21.9 s / 11.4 s</td><td>1.6 s / 1.2 s</td></tr>
+<tr><td>Hitomi cards that loaded</td><td>4 of 12</td><td>12 of 12</td></tr>
+<tr><td>Hitomi data for 24 page thumbnails</td><td>1.0 MB, 7 of 24 loaded</td><td>0.17 MB, 24 of 24 loaded</td></tr>
+<tr><td>Paheal Viewer, first 4 posts</td><td>21.3 s</td><td>1.3 s</td></tr>
+<tr><td>Image wait while scrolling, median / 90th percentile</td><td>107 ms / 455 ms</td><td>0 ms / 232 ms</td></tr></table>
+<p>Pixiv, nhentai, rule34video and rule34gen search times did not change beyond noise. Preloading raises a reopened feed's first-screen traffic from about 0.15 MB to 0.46 MB on unmetered networks.</p>
+<p><strong>Autoplay.</strong> <code>mixedMediaFiveFeedJourney</code> on the minified final build passes the whole Search feed, with every visible video, GIF, WebP and Ugoira preview changing frames. It then fails on For You, where no Ugoira card appears, exactly as the untouched baseline does, so that journey cannot finish on either build.</p><p><strong>Frame timing.</strong> <code>searchConcurrentAutoplayScroll</code>, three alternating captures per build: 95th percentile frame time 7.13 ms before and 7.30 ms after, overrun 2.16 ms and 2.36 ms, within run-to-run spread. Those fixture cards are mostly video, so this shows no regression from A11 but cannot show its benefit. Measured evidence for the live benchmark is kept in <code>.docs/exec/assets/network-and-image-delivery/evidence/</code>.</p><p>To remember: measure from the point a person starts waiting, and run the minified fixture benchmark before trusting a change to the HTTP stack.</p>
 
 <h2 id="recovery">Recovery</h2>
 <p>Each finding is its own commit, so one that misbehaves can be reverted alone. Benchmark runs append to their output directory; use a new <code>--out</code> to start clean. The benchmark restores the Debug app's applied query after each unified case. If a run stops halfway, the Debug app's last query may be the filterless default, which is harmless.</p>
