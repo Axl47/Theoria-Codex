@@ -483,7 +483,8 @@ class IwaraSourceAdapter(
             ?.lowercase()
             ?.ifBlank { "jpg" }
             ?: "jpg"
-        return "https://i.iwara.tv/image/original/$assetId/$assetId.$fileExt"
+        // Used for cards: the original of a custom thumbnail is 1-7 MB, this rendition well under 100 KB.
+        return "https://i.iwara.tv/image/thumbnail/$assetId/$assetId.$fileExt"
     }
 
     private fun buildVideoThumbnailUrl(
