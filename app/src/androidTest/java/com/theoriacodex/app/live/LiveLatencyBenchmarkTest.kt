@@ -34,6 +34,7 @@ import com.theoriacodex.app.search.defaultQuery
 import com.theoriacodex.app.search.feedPreviewDecodeSize
 import com.theoriacodex.app.search.previewAspectRatio
 import com.theoriacodex.app.search.state.modeKey
+import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.app.viewer.ViewerMediaOverviewKind
 import com.theoriacodex.app.viewer.buildViewerImageRequest
 import com.theoriacodex.app.viewer.viewerMediaOverviewItems
@@ -44,6 +45,7 @@ import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -120,6 +122,7 @@ class LiveLatencyBenchmarkTest {
         val page = first.getOrElse { error ->
             return@withContext report.put("search_ok", false)
                 .put("failure", (error as? SourceAdapterException)?.reason?.name ?: error.javaClass.simpleName)
+                .put("failure_detail", (error.cause ?: error).let { "${it.javaClass.simpleName}: ${it.message}".take(FAILURE_DETAIL_CHARS) })
         }
         report.put("search_ok", true).put("posts", page.items.size).put("search_rx", settledRxBytes() - rxBeforeSearch)
 
@@ -194,36 +197,40 @@ class LiveLatencyBenchmarkTest {
         val owner = runBlocking { container() }
         val queries = owner.data.queryRepository
         val keys = listOf(LAST_ACTIVE_QUERY_KEY, modeKey(QueryMode.Unified))
+        val tabs = owner.data.uiRestoreRepository
+        val previousTab = runBlocking { tabs.getLastTab() }
         val previous: List<Pair<String, Query>> = runBlocking {
             if (clearCaches) clearDisposableCaches(owner)
             val saved = keys.mapNotNull { key -> queries.observeAppliedQuery(key).first()?.let { key to it } }
             keys.forEach { key -> queries.upsertAppliedQuery(key, defaultQuery()) }
+            // The app reopens on its last tab; every run must start on Search for launch timing to compare.
+            tabs.setLastTab(TopLevelDestination.Search.route)
             saved
         }
         try {
             return driveSearchTab(events)
         } finally {
-            runBlocking { previous.forEach { (key, query) -> queries.upsertAppliedQuery(key, query) } }
+            runBlocking {
+                previous.forEach { (key, query) -> queries.upsertAppliedQuery(key, query) }
+                previousTab?.let { tabs.setLastTab(it) }
+            }
         }
     }
 
+    /** Timed from launch, because a reopened app paints Search before anything could tap it. */
     private fun driveSearchTab(events: CardImageEvents): JSONObject {
         Coil.setImageLoader(context.imageLoader.newBuilder().eventListener(events).build())
         val launch = requireNotNull(context.packageManager.getLaunchIntentForPackage(context.packageName))
-        context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
-        val searchTab = requireNotNull(device.wait(Until.findObject(By.desc(SEARCH_TAB)), LAUNCH_TIMEOUT_MS)) {
-            "The app shell did not open"
-        }
         val report = JSONObject()
         val rxBefore = settledRxBytes()
-        // Whatever Home loaded before the tap is not Search's work.
         events.reset()
         val start = clock()
-        searchTab.click()
-        // Home's own cards must not count, so wait for a control only Search has.
-        device.wait(Until.hasObject(By.desc(SEARCH_ONLY_CONTROL)), ROUTE_TIMEOUT_MS)
+        context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+        requireNotNull(device.wait(Until.findObject(By.desc(SEARCH_ONLY_CONTROL)), LAUNCH_TIMEOUT_MS)) {
+            "Search did not open"
+        }
         report.put("first_card_ms", awaitFirstCard(start))
-        awaitImages(events, FIRST_SCREEN_IMAGES)
+        report.put("image_timeline", awaitImages(events, FIRST_SCREEN_IMAGES, start))
         report.put("first_image_ms", events.nthFinishedAt(1)?.minus(start))
             .put("screen_images_ms", events.nthFinishedAt(FIRST_SCREEN_IMAGES)?.minus(start))
             .put("cards_visible", device.findObjects(CARD).size)
@@ -240,9 +247,21 @@ class LiveLatencyBenchmarkTest {
         return null
     }
 
-    private fun awaitImages(events: CardImageEvents, count: Int) {
+    /** Waits for [count] images and returns a timeline of `seconds:started/finished/failed/cards`, to explain slow screens. */
+    private fun awaitImages(events: CardImageEvents, count: Int, start: Long): String {
         val deadline = clock() + RESULTS_TIMEOUT_MS
-        while (events.finishedCount() < count && clock() < deadline) SystemClock.sleep(CARD_POLL_MS)
+        val timeline = StringBuilder()
+        var nextSample = clock()
+        while (events.finishedCount() < count && clock() < deadline) {
+            if (clock() >= nextSample) {
+                timeline.append((clock() - start) / 1000).append(':').append(events.startedCount()).append('/')
+                    .append(events.finishedCount()).append('/').append(events.failedCount()).append('/')
+                    .append(device.findObjects(CARD).size).append(' ')
+                nextSample += TIMELINE_SAMPLE_MS
+            }
+            SystemClock.sleep(CARD_POLL_MS)
+        }
+        return timeline.toString().trim()
     }
 
     /** A card waiting less means its image was already on its way or on disk when it scrolled into view. */
@@ -279,17 +298,24 @@ class LiveLatencyBenchmarkTest {
         private val started = ConcurrentHashMap<ImageRequest, Long>()
         private val samples = ConcurrentLinkedQueue<Sample>()
         private val failures = ConcurrentLinkedQueue<Long>()
+        private val startedTotal = AtomicInteger()
 
         fun reset() {
             samples.clear()
             failures.clear()
+            startedTotal.set(0)
         }
+
+        fun startedCount(): Int = startedTotal.get()
 
         private fun ImageRequest.isCard() =
             data is String && precision == Precision.INEXACT && parameters.value<Boolean>(PRELOAD_PARAMETER) != true
 
         override fun onStart(request: ImageRequest) {
-            if (request.isCard()) started[request] = SystemClock.elapsedRealtime()
+            if (request.isCard()) {
+                started[request] = SystemClock.elapsedRealtime()
+                startedTotal.incrementAndGet()
+            }
         }
 
         override fun onSuccess(request: ImageRequest, result: SuccessResult) {
@@ -317,7 +343,6 @@ class LiveLatencyBenchmarkTest {
         const val UNIFIED_COLD = "unified:cold"
         const val UNIFIED_WARM = "unified:warm"
         const val PRELOAD_PARAMETER = "theoria.feedPreload"
-        const val SEARCH_TAB = "Search"
         const val SEARCH_ONLY_CONTROL = "Filter and sort"
         val CARD = By.clickable(true).longClickable(true)
 
@@ -332,9 +357,10 @@ class LiveLatencyBenchmarkTest {
         const val SEARCH_TIMEOUT_MS = 45_000L
         const val RESULTS_TIMEOUT_MS = 45_000L
         const val LAUNCH_TIMEOUT_MS = 30_000L
-        const val ROUTE_TIMEOUT_MS = 5_000L
         const val CARD_POLL_MS = 25L
         const val SCROLL_SETTLE_MS = 3_000L
         const val RX_SETTLE_MS = 1_000L
+        const val TIMELINE_SAMPLE_MS = 2_000L
+        const val FAILURE_DETAIL_CHARS = 160
     }
 }
