@@ -75,7 +75,7 @@ class InstalledJsonCompatibilityDeviceTest {
         )
         assertJsonKeys(
             ImageRefStorageRecord(),
-            "url", "localPath", "mime", "progressiveUrls", "videoVariants", "isAnimated",
+            "url", "localPath", "mime", "progressiveUrls", "videoVariants", "isAnimated", "thumbnailUrl",
         )
         assertJsonKeys(VideoVariantRecord(), "url", "height", "original", "mime")
         assertJsonKeys(
