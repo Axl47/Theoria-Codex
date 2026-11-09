@@ -15,10 +15,8 @@ import com.theoriacodex.app.search.state.SearchStateChange
 import com.theoriacodex.app.search.state.SearchStateReducer
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.search.state.allowsScrollPersistence
-import com.theoriacodex.app.search.state.withAutocompleteResult
 import com.theoriacodex.app.search.state.withResolvedPosts
 import com.theoriacodex.app.search.state.withSuggestionInput
-import com.theoriacodex.app.search.state.withTrendingSuggestions
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.search.state.modeKey
 import com.theoriacodex.app.related.RelatedPostsLoading
@@ -43,7 +41,6 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -108,10 +105,7 @@ internal class SearchViewModel(
     override val effects: Flow<SearchEffect> = effectChannel.receiveAsFlow()
 
     private var nextRequestId = 0L
-    private var nextAutocompleteGeneration = 0L
     private var activeRequestJob: Job? = null
-    private var autocompleteJob: Job? = null
-    private var trendingJob: Job? = null
     private var restorationJob: Job? = null
     private var pendingRootSearch: (() -> Unit)? = null
     private var activeContinuation: SearchContinuation? = null
@@ -122,6 +116,8 @@ internal class SearchViewModel(
     private var scrolledCachedFirstPage = false
     private var latestEnvironmentSettings: AppSettings? = null
     private val appliedByMode = mutableMapOf<String, Query>()
+    private val suggestionRefresh =
+        SearchSuggestionRefresher(viewModelScope, mutableState, coordinator, suggestionDispatcher, autocompleteDelayMs)
     private val scrollPersistence = coordinator.scrollPersistence(scrollPersistenceDispatcher, scrollPersistenceDelayMs)
     init {
         relatedDiagnostics.record("owner created", mutableState.value.relatedPosts)
@@ -146,12 +142,12 @@ internal class SearchViewModel(
 
             is SearchAction.SelectSuggestionScope -> selectSuggestionScope(action)
 
-            is SearchAction.AutocompleteChanged -> refreshAutocomplete(action.input)
+            is SearchAction.AutocompleteChanged -> suggestionRefresh.refreshAutocomplete(action.input)
 
-            SearchAction.RefreshAutocomplete -> refreshAutocomplete(mutableState.value.suggestions.input)
+            SearchAction.RefreshAutocomplete -> suggestionRefresh.refreshAutocomplete(mutableState.value.suggestions.input)
 
             SearchAction.ClearAutocomplete -> {
-                cancelAutocomplete()
+                suggestionRefresh.cancelAutocomplete()
                 clearSuggestionState()
             }
 
@@ -222,7 +218,7 @@ internal class SearchViewModel(
         val reduction = SearchDraftReducer.selectScope(mutableState.value, action.scope)
         if (reduction.accepted) {
             mutableState.value = reduction.state
-            refreshAutocomplete(mutableState.value.suggestions.input)
+            suggestionRefresh.refreshAutocomplete(mutableState.value.suggestions.input)
         }
     }
 
@@ -294,7 +290,7 @@ internal class SearchViewModel(
      * so the source, terms, filters, and results always describe the same search.
      */
     private fun selectMode(mode: QueryMode) {
-        cancelAutocomplete()
+        suggestionRefresh.cancelAutocomplete()
         val current = SearchDraftReducer.selectMode(
             state = mutableState.value,
             mode = mode,
@@ -303,7 +299,7 @@ internal class SearchViewModel(
         ).state
         mutableState.value = current
         persistDraftQuery()
-        refreshTrending()
+        suggestionRefresh.refreshTrending()
         if (current.content.hasExecutedSearch && current.hasPendingChanges) {
             launchRootSearch(
                 kind = SearchRequestKind.REPLACE,
@@ -323,7 +319,7 @@ internal class SearchViewModel(
             supportedScopes = coordinator::supportedSearchScopes,
         )
         if (!reduction.accepted) return
-        cancelAutocomplete()
+        suggestionRefresh.cancelAutocomplete()
         mutableState.value = reduction.state.copy(
             suggestions = reduction.state.suggestions.copy(
                 input = "",
@@ -331,8 +327,8 @@ internal class SearchViewModel(
             ),
         )
         persistDraftQuery()
-        if (input.isBlank()) refreshTrending()
-        refreshAutocomplete(input)
+        if (input.isBlank()) suggestionRefresh.refreshTrending()
+        suggestionRefresh.refreshAutocomplete(input)
     }
 
     private fun applyDraft() {
@@ -406,7 +402,7 @@ internal class SearchViewModel(
             effectChannel.trySend(SearchEffect.ShowMessage("Multi-Search sources are unavailable"))
             return
         }
-        cancelAutocomplete()
+        suggestionRefresh.cancelAutocomplete()
         mutableState.value = reduction.state.copy(
             query = reduction.state.query.copy(draftSourceScope = restoredScope),
         )
@@ -705,16 +701,7 @@ internal class SearchViewModel(
         val posts = executionService.cachedFirstPage(executionKey)
         if (posts.isEmpty() || mutableState.value.execution.activeRequestId != requestId) return
         showingCachedFirstPage = true
-        reduce(
-            SearchStateChange.PublishPartialResults(
-                requestId = requestId,
-                appliedQuery = query,
-                appliedSourceScope = sourceScope,
-                appliedQueryHash = executionKey,
-                results = posts,
-                statuses = emptyList(),
-            ),
-        )
+        reduce(SearchStateChange.PublishPartialResults(requestId, query, posts, emptyList(), sourceScope, executionKey))
     }
 
     /** Someone who has scrolled the cached page keeps their place: its posts stay put and new ones go below. */
@@ -729,12 +716,7 @@ internal class SearchViewModel(
         rememberAppliedQuery(result.query, result.sourceScope)
         reduce(
             SearchStateChange.PublishPartialResults(
-                requestId = requestId,
-                appliedQuery = result.query,
-                appliedSourceScope = result.sourceScope,
-                appliedQueryHash = result.executionKey,
-                results = result.posts,
-                statuses = result.statuses,
+                requestId, result.query, result.posts, result.statuses, result.sourceScope, result.executionKey,
             ),
         )
         return true
@@ -903,69 +885,6 @@ internal class SearchViewModel(
             appliedSourceScope = sourceScope, appliedQueryHash = executionKey))
     }
 
-    private fun refreshAutocomplete(input: String) {
-        cancelAutocomplete()
-        if (input.isNotBlank()) {
-            trendingJob?.cancel(CancellationException("Interactive autocomplete superseded trending refresh"))
-            trendingJob = null
-        }
-        updateSuggestionInput(input)
-        val generation = ++nextAutocompleteGeneration
-        val localState = mutableState.value
-        autocompleteJob = viewModelScope.launch {
-            val cached = withContext(suggestionDispatcher) {
-                coordinator.cachedAutocomplete(
-                    localState.query.draft, localState.query.draftSourceScope,
-                    localState.query.selectedScope, input, localState.suggestions.trending,
-                )
-            }
-            publishAutocompleteIfCurrent(generation, cached)
-            if (autocompleteDelayMs > 0) delay(autocompleteDelayMs)
-            val result = withContext(suggestionDispatcher) {
-                coordinator.fetchAutocomplete(
-                    localState.query.draft, localState.query.draftSourceScope,
-                    localState.query.selectedScope, input, localState.suggestions.trending,
-                    onUpdate = { update ->
-                        withContext(Dispatchers.Main.immediate) { publishAutocompleteIfCurrent(generation, update) }
-                    },
-                )
-            }
-            coroutineContext.ensureActive()
-            publishAutocompleteIfCurrent(generation, result)
-        }
-    }
-
-    private fun publishAutocompleteIfCurrent(generation: Long, result: SearchAutocompleteResult) {
-        if (generation != nextAutocompleteGeneration) return
-        mutableState.value = mutableState.value.withAutocompleteResult(result)
-    }
-
-    private fun cancelAutocomplete() {
-        nextAutocompleteGeneration += 1L
-        autocompleteJob?.cancel(CancellationException("Autocomplete superseded"))
-        autocompleteJob = null
-    }
-
-    private fun refreshTrending() {
-        trendingJob?.cancel(CancellationException("Trending refresh superseded"))
-        val requestState = mutableState.value
-        trendingJob = viewModelScope.launch {
-            val cached = withContext(suggestionDispatcher) {
-                coordinator.cachedTrending(requestState.query.draft, requestState.query.draftSourceScope)
-            }
-            if (cached.isNotEmpty()) mutableState.value = mutableState.value.withTrendingSuggestions(cached)
-            val trending = withContext(suggestionDispatcher) {
-                coordinator.fetchTrending(requestState.query.draft, requestState.query.draftSourceScope)
-            }
-            coroutineContext.ensureActive()
-            val current = mutableState.value
-            if (current.query.draft != requestState.query.draft ||
-                current.query.draftSourceScope != requestState.query.draftSourceScope
-            ) return@launch
-            mutableState.value = current.withTrendingSuggestions(trending)
-        }
-    }
-
     private fun restore() {
         if (restorationJob?.isActive == true) return
         if (mutableState.value.restoration is SearchRestorationUiState.Restored) return
@@ -996,7 +915,7 @@ internal class SearchViewModel(
                 )
                 savedStateHandle[SearchSavedStateKeys.RESTORATION_COMPLETED] = true
                 persistDraftQuery()
-                refreshTrending()
+                suggestionRefresh.refreshTrending()
                 val pendingSearch = pendingRootSearch.also { pendingRootSearch = null }
                 if (pendingSearch != null) {
                     pendingSearch()
@@ -1082,7 +1001,7 @@ internal class SearchViewModel(
     )
 
     private fun clearSuggestionState() {
-        cancelAutocomplete()
+        suggestionRefresh.cancelAutocomplete()
         val current = mutableState.value
         mutableState.value = current.copy(
             suggestions = current.suggestions.copy(

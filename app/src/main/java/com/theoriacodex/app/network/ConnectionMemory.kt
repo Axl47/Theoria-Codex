@@ -92,12 +92,14 @@ internal class ConnectionMemory(
         if (inetSocketAddress.address is Inet4Address) ipv6Answered()
     }
 
-    private fun remember(host: String) = synchronized(this) {
-        if (recent.firstOrNull() == host) return
-        recent.remove(host)
-        recent.add(0, host)
-        while (recent.size > MAX_RECENT_HOSTS) recent.removeAt(recent.lastIndex)
-        store.save(recent.toList())
+    private fun remember(host: String) {
+        synchronized(this) {
+            if (recent.firstOrNull() == host) return
+            recent.remove(host)
+            recent.add(0, host)
+            while (recent.size > MAX_RECENT_HOSTS) recent.removeAt(recent.lastIndex)
+            store.save(recent.toList())
+        }
     }
 
     private fun avoidingIpv6(): Boolean = synchronized(this) {
@@ -111,13 +113,15 @@ internal class ConnectionMemory(
         avoidIpv6Until = 0L
     }
 
-    private fun ipv4Won() = synchronized(this) {
-        forgetOtherNetworks()
-        if (clock() < avoidIpv6Until) return
-        ipv6Losses++
-        if (ipv6Losses >= IPV6_LOSSES_TO_AVOID) {
-            ipv6Losses = 0
-            avoidIpv6Until = clock() + IPV6_AVOID_MS
+    private fun ipv4Won() {
+        synchronized(this) {
+            forgetOtherNetworks()
+            if (clock() < avoidIpv6Until) return
+            ipv6Losses++
+            if (ipv6Losses >= IPV6_LOSSES_TO_AVOID) {
+                ipv6Losses = 0
+                avoidIpv6Until = clock() + IPV6_AVOID_MS
+            }
         }
     }
 
