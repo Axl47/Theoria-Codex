@@ -43,7 +43,7 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
     )
 
     internal val videoPlaybackInfrastructure: VideoPlaybackInfrastructure by lazy {
-        VideoPlaybackInfrastructure(this, httpClients.shared)
+        VideoPlaybackInfrastructure(this, httpClients.video)
     }
 
     override val appContainerState: StateFlow<ApplicationDataState<TheoriaAppContainer>>

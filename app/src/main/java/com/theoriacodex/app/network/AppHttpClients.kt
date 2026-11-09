@@ -37,7 +37,15 @@ internal class AppHttpClients(
             .connectionPool(ConnectionPool(MAX_IDLE_CONNECTIONS, IDLE_KEEP_ALIVE_MINUTES, TimeUnit.MINUTES))
             .cookieJar(cookieJar)
             .addInterceptor(unexpectedFailuresAsIoExceptions)
-            // A site's clearance cookie only counts with the browser agent that earned it, on media as well as searches.
+            .build()
+    }
+
+    /**
+     * Video playback, and the base of the other media clients. A site's clearance cookie only counts with the browser
+     * agent that earned it. Provider requests choose their own agent, and a browser check must keep the one it is testing.
+     */
+    val video: OkHttpClient by lazy {
+        shared.newBuilder()
             .addInterceptor { chain ->
                 val request = chain.request()
                 val agent = verifiedUserAgent(request.url.toString())
@@ -53,7 +61,7 @@ internal class AppHttpClients(
 
     /** Coil. OkHttp's default of five per host lets a few large GIFs stall every thumbnail behind them. */
     val images: OkHttpClient by lazy {
-        shared.newBuilder()
+        video.newBuilder()
             .dispatcher(Dispatcher().apply { maxRequestsPerHost = IMAGE_MAX_REQUESTS_PER_HOST })
             .addInterceptor(StalledPageRescue(rescue = { stalledPageRescue }))
             .build()
@@ -66,7 +74,7 @@ internal class AppHttpClients(
 
     /** Whole-file downloads: GIFs, Pixiv animations and offline saves. */
     val downloads: OkHttpClient by lazy {
-        shared.newBuilder()
+        video.newBuilder()
             .dispatcher(unqueuedSourceDispatcher())
             .connectTimeout(DOWNLOAD_CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
             .readTimeout(DOWNLOAD_READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
