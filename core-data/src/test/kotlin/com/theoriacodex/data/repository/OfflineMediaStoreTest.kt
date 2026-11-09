@@ -2,6 +2,7 @@ package com.theoriacodex.data.repository
 
 import com.google.gson.Gson
 import com.google.gson.JsonArray
+import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.theoriacodex.data.storage.PostStorageCodec
@@ -310,6 +311,32 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
     }
 
     @Test
+    fun `a version 2 manifest with the keys release builds wrote is read and upgraded`() = runTest {
+        val directory = tempDir("v2-shipped-keys")
+        val base = gallery()
+        val video = VideoVariant("https://example.test/720.mp4", height = 720, original = true, mime = "video/mp4")
+        val creator = CreatorProfile(SourceKey.PIXIV, "Artist", "7", "https://example.test/u/7", "user:7")
+        val post = base.copy(
+            title = "Title",
+            durationMs = 1_500L,
+            creatorProfile = creator,
+            creatorProfiles = listOf(creator),
+            taxonomy = listOf(PostTaxonomyTerm("term", SearchFacet.ARTIST, "artist", 3, "Translated")),
+            media = base.media.map { it.copy(progressiveUrls = listOf("https://example.test/p.jpg"), isAnimated = true, videoVariants = listOf(video)) },
+        )
+        val saved = OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes") }
+        downgradeToV2(directory) { manifest ->
+            for (name in listOf("post", "sourcePost")) manifest.add(name, renamedLikeReleaseBuilds(manifest.getAsJsonObject(name)))
+        }
+        assertTrue(manifestOf(directory).getAsJsonObject("post").has("d"))
+
+        // Stored previews never carry video variants.
+        val expected = saved.copy(preview = saved.preview.copy(videoVariants = emptyList()))
+        assertEquals(expected, OfflineMediaStore(directory).find(post.id))
+        assertEquals(3, manifestOf(directory).get("version").asInt)
+    }
+
+    @Test
     fun `a version 2 manifest that cannot be rewritten stays available and upgrades later`() = runTest {
         val directory = tempDir("v2-read-only")
         val post = gallery()
@@ -429,6 +456,38 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         root.addProperty("version", 2)
         edit(root)
         file.writeText(root.toString())
+    }
+
+    /** Applies the field names R8 assigned in shipped releases (v1.3.0 mapping.txt). */
+    private fun renamedLikeReleaseBuilds(post: JsonObject): JsonObject {
+        fun JsonObject.renamed(names: Map<String, String>, nested: (String, JsonElement) -> JsonElement = { _, value -> value }) =
+            JsonObject().also { out -> entrySet().forEach { (key, value) -> out.add(names.getValue(key), nested(key, value)) } }
+        val variant = mapOf("url" to "a", "height" to "b", "original" to "c", "mime" to "d")
+        val image = mapOf("url" to "a", "localPath" to "b", "mime" to "c", "progressiveUrls" to "d", "isAnimated" to "e", "videoVariants" to "f")
+        val creator = mapOf("source" to "a", "displayName" to "b", "profileId" to "c", "profileUrl" to "d", "uploadsQuery" to "e")
+        val term = mapOf("value" to "a", "facet" to "b", "sourceNamespace" to "c", "count" to "d", "translation" to "e")
+        fun list(value: JsonElement, each: (JsonObject) -> JsonObject) =
+            JsonArray().also { out -> value.asJsonArray.forEach { out.add(each(it.asJsonObject)) } }
+        fun renamedImage(ref: JsonObject) = ref.renamed(image) { key, value ->
+            if (key == "videoVariants") list(value) { it.renamed(variant) } else value
+        }
+        return post.renamed(
+            mapOf(
+                "id" to "a", "preview" to "b", "full" to "c", "media" to "d", "pageUrl" to "e", "width" to "f", "height" to "g",
+                "canonicalTags" to "h", "rawTags" to "i", "authorName" to "j", "createdAtEpochMs" to "k", "title" to "l",
+                "creatorProfile" to "m", "durationMs" to "n", "mediaCount" to "o", "taxonomy" to "p", "creatorProfiles" to "q",
+            ),
+        ) { key, value ->
+            when (key) {
+                "id" -> value.asJsonObject.renamed(mapOf("source" to "a", "sourcePostId" to "b"))
+                "preview", "full" -> renamedImage(value.asJsonObject)
+                "media" -> list(value, ::renamedImage)
+                "creatorProfile" -> value.asJsonObject.renamed(creator)
+                "creatorProfiles" -> list(value) { it.renamed(creator) }
+                "taxonomy" -> list(value) { it.renamed(term) }
+                else -> value
+            }
+        }
     }
 
     private fun gallery(): Post {

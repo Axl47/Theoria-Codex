@@ -10,8 +10,6 @@ import com.theoriacodex.data.storage.PostStorageRecord
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.PostTaxonomyTerm
-import com.theoriacodex.domain.model.SearchFacet
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
@@ -241,7 +239,7 @@ class OfflineMediaStore(
         val root = JsonParser.parseString(manifest.readText()).asJsonObject
         val version = root.get("version").asInt
         val (post, sourcePost) = decodePosts(root, version) ?: return null
-        // A v2 read of renamed fields can land on the wrong values; the folder name is derived from the id.
+        // The folder name is derived from the id, so a manifest decoded onto the wrong values cannot pass.
         if (folder.name != digest("${post.id.source.id}:${post.id.sourcePostId}")) return null
         if (!hasCanonicalSourceSnapshot(post, sourcePost) || !mediaMatchesManifest(folder, post, root)) return null
         val owners = root.getAsJsonArray("owners").map { it.asString }.toSet()
@@ -255,8 +253,7 @@ class OfflineMediaStore(
     private fun decodePosts(root: JsonObject, version: Int): Pair<Post, Post>? {
         val (post, sourcePost) = when (version) {
             MANIFEST_VERSION -> decodeStored(root.get("post")) to decodeStored(root.get("sourcePost"))
-            LEGACY_MANIFEST_VERSION -> gson.fromJson(root.get("post"), Post::class.java).withLegacyDefaults() to
-                gson.fromJson(root.get("sourcePost"), Post::class.java).withLegacyDefaults()
+            LEGACY_MANIFEST_VERSION -> decodeLegacyOfflinePost(root.get("post")) to decodeLegacyOfflinePost(root.get("sourcePost"))
             else -> return null
         }
         return if (post == null || sourcePost == null) null else post to sourcePost
@@ -283,26 +280,6 @@ class OfflineMediaStore(
         JsonParser.parseString(manifest.readText()).asJsonObject.getAsJsonArray("owners")
             .mapNotNull { element -> element.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString }.toSet()
     }.getOrDefault(emptySet())
-
-    /**
-     * Gson builds v2 posts without running constructors, so keys absent from older manifests leave null in
-     * non-null fields. Fill them with the constructors' own defaults before anything else touches the post.
-     */
-    @Suppress("USELESS_ELVIS", "SENSELESS_COMPARISON")
-    private fun Post.withLegacyDefaults(): Post {
-        fun ImageRef.fixed() = copy(progressiveUrls = progressiveUrls ?: emptyList(), videoVariants = videoVariants ?: emptyList())
-        val tags = canonicalTags ?: emptyList()
-        return copy(
-            preview = preview.fixed(),
-            full = full?.fixed(),
-            media = (media ?: emptyList()).map { it.fixed() },
-            canonicalTags = tags,
-            rawTags = rawTags ?: emptyList(),
-            taxonomy = (taxonomy ?: tags.map { PostTaxonomyTerm(value = it) })
-                .map { term -> if (term.facet == null) term.copy(facet = SearchFacet.TAG) else term },
-            creatorProfiles = creatorProfiles ?: listOfNotNull(creatorProfile),
-        )
-    }
 
     private fun hasCanonicalSourceSnapshot(offline: Post, source: Post): Boolean {
         if (source.id != offline.id) return false
@@ -386,7 +363,7 @@ class OfflineMediaStore(
     private companion object {
         const val MAX_MANIFEST_BYTES = 8L * 1024L * 1024L
         const val MANIFEST_NAME = "manifest.json"
-        /** v2 serialized the domain Post reflectively, so release builds wrote R8-renamed keys. */
+        /** v2 serialized the domain Post reflectively; see [decodeLegacyOfflinePost]. */
         const val LEGACY_MANIFEST_VERSION = 2
         /** v3 serializes the keep-ruled PostStorageRecord with stable keys. */
         const val MANIFEST_VERSION = 3

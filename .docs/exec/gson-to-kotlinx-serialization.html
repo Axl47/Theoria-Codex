@@ -240,7 +240,7 @@ Copy this skeleton into a new `.docs/exec/<plan-name>.html` file and then replac
       <span class="pill">Plan file: .docs/exec/gson-to-kotlinx-serialization.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Open the Phase 1 PR and run the minified acceptance job, then ship it in a release before any later phase changes the <code>Post</code> classes.</div>
+      <div class="card"><strong>Next Action</strong>Pass the minified acceptance job on PR #52, merge, and ship Phase 1 in a release before Phase 2 merges.</div>
       <div class="card"><strong>Main Risk</strong>A stricter decoder turning a repairable file into "corrupt", which resets settings or re-downloads offline media. Reduced by a Gson parity harness and one shared corrupt-JSON contract.</div>
       <div class="card"><strong>Validation</strong>Gson-vs-kotlinx parity tests on golden files, the full host gates, and the minified release-acceptance run on Android 16 and 17.</div>
       <div class="card"><strong>Affected Areas</strong><code>core-data</code>, <code>core-data-android</code>, <code>app</code> persistence, <code>app/proguard-rules.pro</code>, release verification.</div>
@@ -274,7 +274,7 @@ Copy this skeleton into a new `.docs/exec/<plan-name>.html` file and then replac
       <h2>Current Status</h2>
       <table class="status-table"><tbody>
         <tr><td>State</td><td>In progress. Investigation complete, Phase 1 underway on branch <code>fix/offline-manifest-stable-keys</code>.</td></tr>
-        <tr><td>Next action</td><td>Open the Phase 1 PR so CI runs the minified acceptance job, then release it before Phase 2 merges.</td></tr>
+        <tr><td>Next action</td><td>Pass the minified acceptance job on PR #52, merge, then release it before Phase 2 merges.</td></tr>
         <tr><td>Blocked by</td><td>Nothing. A local emulator failure on 2026-11-08 means device proof currently comes from CI (see Surprises).</td></tr>
       </tbody></table>
     </section>
@@ -332,7 +332,7 @@ val DurableJson = Json {
         <h3>Phase 1: Offline manifest schema v3 (no new library)</h3>
         <table class="status-table"><tbody>
           <tr><td>Goal</td><td>Manifests use stable keys, and existing manifests upgrade in place. Must ship in a release before Phase 2.</td></tr>
-          <tr><td>Edits</td><td><code>OfflineMediaStore</code> writes <code>version: 3</code> with <code>PostStorageCodec.encode</code> records. It reads v3, and reads v2 through the existing reflective path, rejecting a v2 result whose <code>id</code> does not hash to its folder name. <code>rebuildCatalog</code> rewrites readable v2 manifests as v3. When a manifest exists but its post cannot be decoded, <code>commit</code> carries its root <code>owners</code> forward, since those keys are never obfuscated.</td></tr>
+          <tr><td>Edits</td><td><code>OfflineMediaStore</code> writes <code>version: 3</code> with <code>PostStorageCodec.encode</code> records. It reads v3, and reads v2 by hand from the JSON tree (<code>LegacyOfflineManifestCodec.kt</code>) accepting plain keys and the frozen keys shipped builds wrote. Either version is rejected when its <code>id</code> does not hash to its folder name. <code>rebuildCatalog</code> rewrites readable v2 manifests as v3. When a manifest exists but its post cannot be decoded, <code>commit</code> carries its root <code>owners</code> forward, since those keys are never obfuscated.</td></tr>
           <tr><td>Commands</td><td><code>./gradlew :core-data:test :app:testDebugUnitTest --offline</code></td></tr>
           <tr><td>Acceptance</td><td>A real minified APK writes a v2 manifest with renamed keys, upgrades it, and after a process restart reads v3 keys. Existing offline copies stay available.</td></tr>
         </tbody></table>
@@ -410,7 +410,6 @@ val DurableJson = Json {
       <h2>Work Plan</h2>
       <ol>
         <li>Complete Phase 1 on its own branch and PR. A release must carry it before Phase 2 merges.</li>
-        <li>Until Phase 9, do not add, remove, or reorder fields on <code>Post</code>, <code>PostId</code>, <code>CreatorProfile</code>, <code>ImageRef</code>, <code>VideoVariant</code>, or <code>PostTaxonomyTerm</code> in a release that has not yet shipped Phase 1, because the v2 upgrade depends on their obfuscated names.</li>
         <li>Each later phase: capture golden files first and commit them, convert records from <code>@field:SerializedName("x")</code> to <code>@SerialName("x")</code> with <code>@Serializable</code>, switch the entry points, then remove that phase's classes from the keep rules and contract list.</li>
         <li>Convert a record and its nested records together. Keep <code>gson</code> on the test classpath of every module so the parity harness still runs after production stops using reflection.</li>
         <li>Update <code>.docs/DEVELOPMENT.md</code> in the phase that makes its current Gson sentences false.</li>
@@ -451,6 +450,8 @@ val DurableJson = Json {
         <li>Observation: nine keep-rule entries refer to classes that no longer exist, and five records are unused. Evidence: <code>app/proguard-rules.pro</code> keeps <code>SettingsStoreFile</code> and <code>CodexStoreFile</code>, which no longer exist, and nothing in production references <code>UiRestoreStoreFile</code> or <code>LikesStoreFile</code>.</li>
         <li>Observation: the local <code>theoria-search-test</code> emulator stayed adb-offline for over seven minutes on 2026-11-08 and <code>device_open</code> failed. Evidence: <code>adb devices</code> reported <code>emulator-5554 offline</code>. CI emulators passed the same day.</li>
         <li>Observation: <code>PostStorageCodec.decode</code> is not a strict inverse of <code>encode</code> (it trims taxonomy values and can add recovered Pixiv translations). Evidence: <code>PostStorageRecords.kt</code>. Harmless for manifests, since stored posts already go through it, and ordinary posts round-trip equal in <code>OfflineMediaStoreTest</code>.</li>
+        <li>Observation: reflective v2 reads cannot work on any release build. Evidence: the minified acceptance run returned no record for a valid v2 manifest, and <code>dexdump -a</code> shows no <code>Signature</code> annotation on <code>Post</code> in the acceptance APK or the shipped v1.3.0 APK, so Gson decodes <code>media</code> as raw maps and the first <code>ImageRef</code> access throws inside <code>runCatching</code>. Offline copies therefore could not be read back in release builds until this phase.</li>
+        <li>Observation: the acceptance fixture writes whichever names R8 assigns in the current build, while the reader table is frozen. Evidence: <code>ReleaseDataAcceptanceActivity.writeLegacyOfflineManifest</code>. If <code>Post</code> fields change before Phase 9 removes v2 support, replace that fixture with literal shipped keys.</li>
         <li>Observation: a v2 rewrite that throws inside <code>readRecord</code> must not hide a readable copy. Evidence: found in review and pinned by <code>a version 2 manifest that cannot be rewritten stays available and upgrades later</code>.</li>
       </ul>
 
@@ -458,7 +459,7 @@ val DurableJson = Json {
       <ul>
         <li>Decision: migrate reflective surfaces only and keep Gson's tree API. Rationale: the tree API has no reflection or R8 exposure, and rewriting about 190 provider parsing sites adds risk with no safety gain. Date/Author: 2026-11-08 / Claude.</li>
         <li>Decision: use <code>PostStorageRecord</code> for manifest v3 instead of annotating domain classes. Rationale: it is already the stable, tested mirror of <code>Post</code>, and no new library is needed. Date/Author: 2026-11-08 / Claude.</li>
-        <li>Decision: upgrade v2 manifests through the existing reflective reader. Rationale: the mapping comparison shows names are unchanged since v1.3.0, so this is the simplest correct reader. Date/Author: 2026-11-08 / Claude.</li>
+        <li>Decision: read v2 manifests by hand from the JSON tree with a frozen table of shipped key names. Rationale: the first approach, reusing the reflective reader, failed the minified acceptance run because R8 strips generic signatures from <code>Post</code>. The tree reader needs no reflection and no longer constrains changes to the domain classes. Date/Author: 2026-11-08 / Claude.</li>
         <li>Decision: use kotlinx.serialization rather than Moshi. Rationale: code generation is built into the Kotlin compiler toolchain, and its JSON tree is available if Gson's tree use is ever replaced. Date/Author: 2026-11-08 / Claude.</li>
         <li>Decision: do not delete legacy importers. Rationale: it cannot be shown that every install has finished archiving them. Date/Author: 2026-11-08 / Claude.</li>
       </ul>
