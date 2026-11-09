@@ -160,7 +160,12 @@ fun viewerMediaDeliveryPlan(post: Post, media: ImageRef): MediaDeliveryPlan {
     return mediaDeliveryPlan(
         post = post,
         refs = listOf(media) + samePageFallbacks,
-        qualityUpgradeRefs = if (post.id.source.upgradesViewerImageQuality()) setOf(media) else emptySet(),
+        // rule34.xxx's cards stay on their preview, but its Viewer shows the sample first and then the original.
+        qualityUpgradeRefs = if (post.id.source.upgradesImageQuality() || post.id.source == SourceKey.RULE34XXX) {
+            setOf(media)
+        } else {
+            emptySet()
+        },
         preferredUrlFirst = null,
     )
 }
@@ -295,9 +300,6 @@ private val IMAGE_EXTENSIONS = setOf("gif", "png", "webp", "jpg", "jpeg", "bmp",
 private val STATIC_IMAGE_EXTENSIONS = setOf("png", "jpg", "jpeg", "bmp")
 /** Custom sources are booru families, which serve a sample before the original like the built-in boorus. */
 private fun SourceKey.upgradesImageQuality(): Boolean = this in QUALITY_UPGRADE_IMAGE_SOURCES || isCustom
-
-/** rule34.xxx's cards stay on their preview, but its Viewer shows the sample first and then the original. */
-private fun SourceKey.upgradesViewerImageQuality(): Boolean = upgradesImageQuality() || this == SourceKey.RULE34XXX
 
 private val QUALITY_UPGRADE_IMAGE_SOURCES = setOf(
     SourceKey.PIXIV,
