@@ -698,7 +698,7 @@ internal class SearchViewModel(
         sourceScope: SearchSourceScope,
         executionKey: String,
     ) {
-        val posts = executionService.cachedFirstPage(executionKey)
+        val posts = executionService.cachedFirstPage(executionKey, sourceScope)
         if (posts.isEmpty() || mutableState.value.execution.activeRequestId != requestId) return
         showingCachedFirstPage = true
         reduce(SearchStateChange.PublishPartialResults(requestId, query, posts, emptyList(), sourceScope, executionKey))

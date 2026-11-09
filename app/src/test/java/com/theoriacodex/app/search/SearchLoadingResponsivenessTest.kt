@@ -126,7 +126,7 @@ internal class SearchLoadingResponsivenessTest : SearchViewModelTestFixture() {
         advanceUntilIdle()
         return viewModel(ViewModelSearchAdapter(), queryRepository = queries, executionService = { coordinator ->
             object : SearchExecutionService by coordinator {
-                override suspend fun cachedFirstPage(executionKey: String) = listOf(
+                override suspend fun cachedFirstPage(executionKey: String, sourceScope: SearchSourceScope) = listOf(
                     Post(
                         id = PostId(SourceKey.PIXIV, "cached"),
                         preview = ImageRef(url = "https://example.test/cached.jpg", localPath = null, mime = "image/jpeg"),

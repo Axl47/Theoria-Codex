@@ -177,8 +177,11 @@ class SearchCoordinator(
         onPartial: suspend (SearchExecutionResult.Success) -> Unit,
     ): SearchExecutionResult = executeRoot(query, sourceScope, onPartial)
 
-    override suspend fun cachedFirstPage(executionKey: String): List<Post> =
-        firstPageStore?.load(executionKey).orEmpty()
+    /** The key doesn't cover the enabled sources, so a source turned off or removed since is dropped here. */
+    override suspend fun cachedFirstPage(executionKey: String, sourceScope: SearchSourceScope): List<Post> {
+        val sources = effectiveEnabledSources(sourceScope)
+        return firstPageStore?.load(executionKey).orEmpty().filter { it.id.source in sources }
+    }
 
     override suspend fun rememberFirstPage(executionKey: String, posts: List<Post>) {
         firstPageStore?.save(executionKey, posts)
