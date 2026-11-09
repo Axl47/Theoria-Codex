@@ -4,6 +4,8 @@ import androidx.compose.runtime.getValue
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -17,8 +19,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -30,7 +32,11 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -48,7 +54,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.selected
@@ -56,12 +64,15 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.lerp
 import coil.compose.AsyncImage
 import com.theoriacodex.app.media.isAnimatedPost
 import com.theoriacodex.app.search.postMediaCount
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import kotlin.math.roundToInt
+import kotlin.math.sign
 
 internal const val VIEWER_PAGINATION_PREFETCH_RATIO = 0.8f
 
@@ -115,17 +126,25 @@ internal fun ViewerPostStrip(
         val gap = ((maxWidth - cell * 7) / 8).coerceAtLeast(0.dp)
         val unfolded = openPages?.takeIf { it.items.size > 1 && posts.getOrNull(selectedIndex)?.id == it.postId }
         val selectedWidth = unfolded?.let { viewerStripUnfoldedWidth(it.items.size, cell, gap) } ?: cell
-        CenterItem(list, selectedIndex, with(LocalDensity.current) { ((selectedWidth - cell) / 2).roundToPx() })
+        val cellPx = with(LocalDensity.current) { cell.toPx() }
+        val selectedWidthPx = with(LocalDensity.current) { selectedWidth.toPx() }
+        val motion = remember(list) { ViewerStripMotion(selectedIndex, selectedWidthPx) }
+        CenterSelectedPost(list, motion, selectedIndex, selectedWidthPx, cellPx)
         LazyRow(
             state = list,
             contentPadding = PaddingValues(start = (maxWidth - cell) / 2, end = (maxWidth - cell) / 2, top = STRIP_TOP_PADDING, bottom = STRIP_BOTTOM_PADDING),
             horizontalArrangement = Arrangement.spacedBy(gap),
         ) {
             itemsIndexed(posts, key = { _, post -> "${post.id.source}:${post.id.sourcePostId}" }) { index, post ->
-                if (unfolded != null && index == selectedIndex) {
-                    ViewerUnfoldedPages(post.id.source, unfolded, cell, onInteraction, Modifier.width(selectedWidth).height(cell))
-                } else {
-                    ViewerPostThumbnail(post, index == selectedIndex, Modifier.size(cell), pageCount = postMediaCount(post)) { onSelect(index) }
+                val width = { motion.width(index, cellPx) }
+                val pages = rememberPagesWhileOpen(unfolded?.takeIf { index == selectedIndex }) { width() > cellPx + 0.5f }
+                Box(Modifier.stripSlot(width, cell, clipPages = pages != null), contentAlignment = Alignment.Center) {
+                    if (pages != null) {
+                        val pagesWidth = viewerStripUnfoldedWidth(pages.items.size, cell, gap)
+                        ViewerUnfoldedPages(post.id.source, pages, cell, onInteraction, Modifier.requiredWidth(pagesWidth).height(cell))
+                    } else {
+                        ViewerPostThumbnail(post, index == selectedIndex, Modifier.size(cell), pageCount = postMediaCount(post)) { onSelect(index) }
+                    }
                 }
             }
         }
@@ -152,6 +171,81 @@ private fun ReportUserScroll(list: LazyListState, onInteraction: () -> Unit) {
     }
 }
 
+/**
+ * Every change of post as one eased motion: each slot's width and the centering read the same progress, so the row
+ * never jumps as one post folds and another unfolds, and a new tap carries on from wherever the last one had reached.
+ */
+private class ViewerStripMotion(selected: Int, selectedWidth: Float) {
+    private var selected by mutableIntStateOf(selected)
+    private var selectedWidth by mutableFloatStateOf(selectedWidth)
+    private var fromWidths by mutableStateOf(emptyMap<Int, Float>())
+    var progress by mutableFloatStateOf(1f)
+
+    fun width(index: Int, cell: Float): Float = lerp(fromWidths[index] ?: cell, if (index == selected) selectedWidth else cell, progress)
+
+    fun isAt(index: Int, width: Float): Boolean = selected == index && selectedWidth == width
+
+    fun moveTo(index: Int, width: Float, cell: Float) {
+        fromWidths = (fromWidths.keys + selected).associateWith { width(it, cell) }
+        selected = index
+        selectedWidth = width
+        progress = 0f
+    }
+}
+
+/** Centers the selected post, easing there from wherever it stands. Works per frame so widths and scroll land in the same layout; a finger on the strip wins. */
+@Composable
+private fun CenterSelectedPost(list: LazyListState, motion: ViewerStripMotion, index: Int, width: Float, cell: Float) {
+    LaunchedEffect(list, index, width) {
+        if (motion.isAt(index, width)) {
+            list.scrollToItem(index, ((width - cell) / 2).roundToInt())
+            return@LaunchedEffect
+        }
+        val startingError = list.distanceFromCenter(index, cell)
+        motion.moveTo(index, width, cell)
+        animate(0f, 1f, animationSpec = tween(TheoriaMotion.SCREEN_MS, easing = LinearOutSlowInEasing)) { value, _ ->
+            motion.progress = value
+            if (!list.isScrollInProgress) {
+                list.requestScrollToItem(index, ((motion.width(index, cell) - cell) / 2 - startingError * (1f - value)).roundToInt())
+            }
+        }
+    }
+}
+
+/** How far [index]'s center stands past the strip's; an item out of view counts as one viewport away on its side. */
+private fun LazyListState.distanceFromCenter(index: Int, cell: Float): Float {
+    val item = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
+    return if (item != null) item.offset + item.size / 2f - cell / 2f else (index - firstVisibleItemIndex).sign * layoutInfo.viewportSize.width.toFloat()
+}
+
+/** [pages] while the post is open, and its last pages for as long as it is still folding shut. */
+@Composable
+private fun rememberPagesWhileOpen(pages: ViewerStripPages?, isOpen: () -> Boolean): ViewerStripPages? {
+    val last = remember { arrayOfNulls<ViewerStripPages>(1) }
+    val latestIsOpen by rememberUpdatedState(isOpen)
+    val open by remember { derivedStateOf { latestIsOpen() } }
+    SideEffect { if (pages != null) last[0] = pages }
+    return pages ?: last[0].takeIf { open }
+}
+
+/** A slot [width] pixels wide, read at layout so folding does not recompose. Its backdrop fades over the last cell of folding. */
+private fun Modifier.stripSlot(width: () -> Float, cell: Dp, clipPages: Boolean): Modifier = this
+    .layout { measurable, constraints ->
+        val widthPx = width().roundToInt()
+        val placeable = measurable.measure(constraints.copy(minWidth = widthPx, maxWidth = widthPx))
+        layout(widthPx, placeable.height) { placeable.place(0, 0) }
+    }
+    .height(cell)
+    .drawBehind {
+        val opened = ((size.width - cell.toPx()) / cell.toPx()).coerceIn(0f, 1f)
+        if (opened > 0f) {
+            val bleed = UNFOLDED_PADDING.toPx()
+            drawRoundRect(UNFOLDED_BACKDROP.copy(alpha = UNFOLDED_BACKDROP.alpha * opened), Offset(0f, -bleed), Size(size.width, size.height + bleed * 2), CornerRadius(12.dp.toPx()))
+        }
+    }
+    // Pages are always laid out at full width and revealed by this clip, so opening never disturbs their own scroller.
+    .then(if (clipPages) Modifier.drawWithContent { clipRect(top = -size.height, bottom = size.height * 2) { this@drawWithContent.drawContent() } } else Modifier)
+
 /** Brings [index] to [offset] from the list's start: at once on first composition, animated after that. */
 @Composable
 private fun CenterItem(list: LazyListState, index: Int, offset: Int) {
@@ -173,12 +267,7 @@ internal fun viewerStripUnfoldedWidth(pageCount: Int, cell: Dp, gap: Dp): Dp {
 private fun ViewerUnfoldedPages(source: SourceKey, pages: ViewerStripPages, cell: Dp, onInteraction: () -> Unit, modifier: Modifier) {
     val list = rememberLazyListState(initialFirstVisibleItemIndex = pages.selectedIndex)
     ReportUserScroll(list, onInteraction)
-    BoxWithConstraints(
-        modifier.drawBehind {
-            val bleed = UNFOLDED_PADDING.toPx()
-            drawRoundRect(UNFOLDED_BACKDROP, Offset(0f, -bleed), Size(size.width, size.height + bleed * 2), CornerRadius(12.dp.toPx()))
-        },
-    ) {
+    BoxWithConstraints(modifier) {
         // A negative offset leaves the current page short of the viewport's start, which is what centers it.
         CenterItem(list, pages.selectedIndex, with(LocalDensity.current) { -((maxWidth - cell) / 2 - UNFOLDED_PADDING).roundToPx() })
         LazyRow(

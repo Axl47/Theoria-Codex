@@ -127,6 +127,34 @@ class ViewerPostStripTest {
         compose.onNodeWithContentDescription("Open post single").assert(!hasStateDescription("8 pages"))
     }
 
+    @Test fun `changing post moves the row smoothly, even when a second change interrupts the first`() {
+        var selected by mutableStateOf(3)
+        val image = ImageRef(null, "/missing/strip.jpg", "image/jpeg")
+        val posts = (0..9).map { testPost(sourcePostId = "strip-$it").copy(preview = image) }
+        val pages = stripPages(posts[3].id, 3, 0)
+        compose.setContent {
+            MaterialTheme { ViewerPostStrip(posts, selected, {}, Modifier.width(360.dp).testTag("strip"), openPages = pages) }
+        }
+        compose.waitForIdle()
+        fun tracked() = compose.onNodeWithContentDescription("Open post strip-5").fetchSemanticsNode().boundsInRoot.center.x
+        compose.mainClock.autoAdvance = false
+
+        var last = tracked()
+        fun advance(frames: Int) = repeat(frames) {
+            compose.mainClock.advanceTimeByFrame()
+            val now = tracked()
+            assertTrue("the row jumped ${now - last}px in one frame", kotlin.math.abs(now - last) < 23f)
+            last = now
+        }
+        compose.runOnUiThread { selected = 4 }
+        advance(5)
+        compose.runOnUiThread { selected = 3 }
+        advance(30)
+
+        val current = compose.onNodeWithContentDescription("Go to page 2 of 3").fetchSemanticsNode().boundsInRoot
+        assertTrue("the post is open and its pages are on screen", current.width > 0f)
+    }
+
     private fun setUnfolded(pageCount: Int, currentPage: Int, onSelect: (Int) -> Unit = {}) = setUnfolded(pageCount, { currentPage }, onSelect)
 
     private fun setUnfolded(pageCount: Int, currentPage: () -> Int, onSelect: (Int) -> Unit = {}) {
