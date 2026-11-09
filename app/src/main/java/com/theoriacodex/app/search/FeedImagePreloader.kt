@@ -15,6 +15,7 @@ import coil.request.ImageRequest
 import com.theoriacodex.app.media.isMediaNetworkMetered
 import com.theoriacodex.app.media.previewMediaDeliveryPlan
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 /**
@@ -29,7 +30,7 @@ internal fun FeedImagePreloadEffect(entries: List<Post?>, gridState: LazyStagger
     val currentEntries by rememberUpdatedState(entries)
     LaunchedEffect(gridState, screenWidthPx) {
         if (context.isMediaNetworkMetered()) return@LaunchedEffect
-        val requested = HashSet<String>()
+        val considered = HashSet<PostId>()
         val inFlight = ArrayList<Disposable>()
         try {
             snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
@@ -40,11 +41,8 @@ internal fun FeedImagePreloadEffect(entries: List<Post?>, gridState: LazyStagger
                     currentEntries.subList(
                         (lastVisible + 1).coerceAtMost(currentEntries.size),
                         (lastVisible + 1 + PRELOAD_CARDS_AHEAD).coerceAtMost(currentEntries.size),
-                    ).forEach { post ->
-                        val request = post?.let { preloadRequest(context, it, screenWidthPx) }
-                        if (request != null && requested.add(request.data as String)) {
-                            inFlight += context.imageLoader.enqueue(request)
-                        }
+                    ).filterNotNull().filter { post -> considered.add(post.id) }.forEach { post ->
+                        preloadRequest(context, post, screenWidthPx)?.let { inFlight += context.imageLoader.enqueue(it) }
                     }
                 }
         } finally {
