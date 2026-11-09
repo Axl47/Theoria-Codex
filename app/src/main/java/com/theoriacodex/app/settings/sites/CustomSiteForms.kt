@@ -83,7 +83,7 @@ private fun AddStageControls(form: SiteForm.Add, onAction: (CustomSitesAction) -
         is AddStage.Address -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { onAction(CustomSitesAction.Probe) }) { Text("Check site") }
             stage.blockedHost?.let { host ->
-                TextButton(onClick = { onAction(CustomSitesAction.StartVerification(host)) }) { Text("Verify in browser") }
+                TextButton(onClick = { onAction(CustomSitesAction.StartVerification(host, afterRefusal = true)) }) { Text("Verify in browser") }
             }
         }
         AddStage.Probing -> Progress("Checking site…")
@@ -146,7 +146,7 @@ internal fun EditSitePage(form: SiteForm.Edit, site: CustomSiteSummary, onAction
         form.message?.let { AnnouncedText(it, Modifier.padding(horizontal = 4.dp), error = true) }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = { onAction(CustomSitesAction.SaveEdit) }, enabled = editable) { Text("Save") }
-            TextButton(onClick = { onAction(CustomSitesAction.StartVerification(site.host)) }, enabled = editable) {
+            TextButton(onClick = { onAction(CustomSitesAction.StartVerification(site.host, afterRefusal = false)) }, enabled = editable) {
                 Text("Verify in browser")
             }
             TextButton(onClick = { onAction(CustomSitesAction.RequestRemove(site.sourceId)) }, enabled = editable) {

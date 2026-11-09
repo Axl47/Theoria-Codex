@@ -23,8 +23,8 @@ data class CustomSitesUiState(
 /**
  * A browser check in progress for [host], a saved site or the one in the Add form. [checking] while the
  * app tests whether its own requests get through; [message] explains the last refusal or a check that
- * found the site already open; [sawRefusal] once a check has been refused, so the page may close itself
- * on the next pass.
+ * found the site already open; [sawRefusal] once the app is known to have been refused (before the page
+ * opened, or by a check since), so the page closes itself on the next pass.
  */
 data class SiteVerification(
     val host: String,
@@ -116,7 +116,11 @@ sealed interface CustomSitesAction {
     data object ConfirmRemove : CustomSitesAction
     data object DismissNotice : CustomSitesAction
 
-    data class StartVerification(val host: String) : CustomSitesAction
+    /**
+     * Opens the browser check for [host]. [afterRefusal] when the app was just refused by it (a blocked
+     * add, re-test or source), so the first pass closes the page; false for a voluntary visit.
+     */
+    data class StartVerification(val host: String, val afterRefusal: Boolean) : CustomSitesAction
     data object CancelVerification : CustomSitesAction
 
     /** Done: the user says the check is passed. [userAgent] is the WebView's, which its clearance is bound to. */

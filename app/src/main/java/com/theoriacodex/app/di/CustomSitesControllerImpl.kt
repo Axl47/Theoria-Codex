@@ -22,7 +22,6 @@ import com.theoriacodex.domain.source.SiteCredentials
 import com.theoriacodex.domain.source.SiteHeaders
 import com.theoriacodex.domain.source.SiteProbeResult
 import com.theoriacodex.domain.source.SiteProfile
-import com.theoriacodex.domain.source.clearedChallenge
 import com.theoriacodex.sources.custom.SiteProber
 import com.theoriacodex.sources.http.HostOutageTracker
 import kotlinx.coroutines.CoroutineScope
@@ -40,7 +39,8 @@ import kotlinx.coroutines.flow.asStateFlow
  * Settings → Sites over the profile store, the encrypted key store, the prober and the runtime
  * (plan C9). The Unified/For You opt-in is the site's membership in `enabledSources` (plan D4).
  * Removing a site deletes its profile, keys and opt-in, never library data. Completing a browser check
- * ties the saved agent, the site's outage and the browser's cookies together in one step.
+ * ties the saved agent, the site's outage and the browser's cookies together in one step; checking it
+ * changes nothing.
  */
 internal class CustomSitesControllerImpl(
     private val profiles: SiteProfileRepository,
@@ -125,15 +125,16 @@ internal class CustomSitesControllerImpl(
         return result
     }
 
-    override suspend fun completeVerification(sourceId: String, userAgent: String): SiteProbeResult {
+    override suspend fun checkVerification(sourceId: String, userAgent: String): SiteProbeResult {
         val profile = requireNotNull(find(sourceId)) { "Verification needs a stored site" }
-        val result = prober.probe(profile.address.baseUrl, credentials.get(sourceId), profile.headers.copy(userAgent = userAgent))
-        if (result.clearedChallenge) {
-            profiles.update(sourceId) { it.copy(headers = it.headers.copy(userAgent = userAgent), verifiedAtEpochMs = clock()) }
-            outages.clearSource(SourceKey.of(profile))
-            cookieBridge.flush()
-        }
-        return result
+        return prober.probe(profile.address.baseUrl, credentials.get(sourceId), profile.headers.copy(userAgent = userAgent))
+    }
+
+    override suspend fun completeVerification(sourceId: String, userAgent: String) {
+        val profile = requireNotNull(find(sourceId)) { "Verification needs a stored site" }
+        profiles.update(sourceId) { it.copy(headers = it.headers.copy(userAgent = userAgent), verifiedAtEpochMs = clock()) }
+        outages.clearSource(SourceKey.of(profile))
+        cookieBridge.flush()
     }
 
     override fun setSetupHost(host: String?) = cookieBridge.setSetupHost(host)

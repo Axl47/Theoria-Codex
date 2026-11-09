@@ -40,11 +40,12 @@ internal object AndroidBrowserCookieStore : BrowserCookieStore {
 
     override fun expireAll(url: String) {
         val host = runCatching { URI(url).host }.getOrNull() ?: return
+        // A cookie set on the parent domain (a `www.` site's) only expires with the Domain it was created with.
+        val domains = setOf(host, HostOutageTracker.normalizeHost(host))
         val names = cookieHeader(url)?.split(';')?.map { it.substringBefore('=').trim() }.orEmpty()
-        // A cookie only expires when set with the same Domain attribute it was created with.
         names.forEach { name ->
             setCookie(url, "$name=; Max-Age=0; Path=/")
-            setCookie(url, "$name=; Max-Age=0; Path=/; Domain=$host")
+            domains.forEach { setCookie(url, "$name=; Max-Age=0; Path=/; Domain=$it") }
         }
         flush()
     }
@@ -87,35 +88,40 @@ internal class SiteCookieBridge(private val store: BrowserCookieStore) {
     }
 
     /** The cookies the in-app browser holds for [url], when its host is allowed. */
-    fun cookiesFor(url: String): String? =
-        url.takeIf { isAllowed(runCatching { URI(it).host }.getOrNull()) }?.let { runCatching { store.cookieHeader(it) }.getOrNull() }
+    fun cookiesFor(url: String): String? = cookiesFor(url, runCatching { URI(url).host }.getOrNull())
 
+    /** [host] is the already-parsed host of [url]; callers on the request path never re-parse it. */
+    private fun cookiesFor(url: String, host: String?): String? =
+        if (isAllowed(host)) runCatching { store.cookieHeader(url) }.getOrNull() else null
+
+    /** On every image and API request: no allocation, and no parsing beyond the host's normalization. */
     private fun isAllowed(host: String?): Boolean {
         if (host == null) return false
-        return (siteHosts + setupHost).any { it != null && HostOutageTracker.hostBelongsToSite(host, it) }
+        return siteHosts.any { HostOutageTracker.hostBelongsToSite(host, it) } ||
+            setupHost?.let { HostOutageTracker.hostBelongsToSite(host, it) } == true
     }
 
-    private fun storeCookie(url: String, setCookie: String) {
-        if (isAllowed(runCatching { URI(url).host }.getOrNull())) runCatching { store.setCookie(url, setCookie) }
+    private fun storeCookie(url: String, host: String?, setCookie: String) {
+        if (isAllowed(host)) runCatching { store.setCookie(url, setCookie) }
     }
 
     val cookieHandler: CookieHandler = object : CookieHandler() {
         override fun get(uri: URI, requestHeaders: Map<String, List<String>>): Map<String, List<String>> =
-            cookiesFor(uri.toString())?.let { mapOf("Cookie" to listOf(it)) } ?: emptyMap()
+            cookiesFor(uri.toString(), uri.host)?.let { mapOf("Cookie" to listOf(it)) } ?: emptyMap()
 
         // Refreshed clearance cookies go back to the browser's store, so both stay in step.
         override fun put(uri: URI, responseHeaders: Map<String, List<String>>) {
             responseHeaders.filterKeys { it.equals("Set-Cookie", ignoreCase = true) }
-                .values.flatten().forEach { storeCookie(uri.toString(), it) }
+                .values.flatten().forEach { storeCookie(uri.toString(), uri.host, it) }
         }
     }
 
     val cookieJar: CookieJar = object : CookieJar {
         override fun loadForRequest(url: HttpUrl): List<Cookie> =
-            cookiesFor(url.toString())?.split(';')?.mapNotNull { Cookie.parse(url, it.trim()) }.orEmpty()
+            cookiesFor(url.toString(), url.host)?.split(';')?.mapNotNull { Cookie.parse(url, it.trim()) }.orEmpty()
 
         override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
-            cookies.forEach { storeCookie(url.toString(), it.toString()) }
+            cookies.forEach { storeCookie(url.toString(), url.host, it.toString()) }
         }
     }
 }

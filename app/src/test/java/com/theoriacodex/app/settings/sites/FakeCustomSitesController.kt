@@ -38,15 +38,16 @@ internal class FakeCustomSitesController(initial: List<CustomSiteSummary> = empt
     var onRetest: suspend (String) -> SiteProbeResult = { error("No re-test result scripted") }
     var onUpdate: suspend (String, CustomSiteEdit) -> CustomSiteMutation = { _, _ -> CustomSiteMutation.Success }
     var onRemove: suspend (String) -> CustomSiteMutation = { CustomSiteMutation.Success }
-    var onCompleteVerification: suspend (String, String) -> SiteProbeResult = { _, _ -> error("No verification result scripted") }
+    var onCheckVerification: suspend (String, String) -> SiteProbeResult = { _, _ -> error("No verification check scripted") }
 
     val probes = mutableListOf<ProbeCall>()
     val drafts = mutableListOf<CustomSiteDraft>()
     val edits = mutableListOf<Pair<String, CustomSiteEdit>>()
     val removals = mutableListOf<String>()
 
-    /** Source id and agent of every completed-verification call. */
-    val verifications = mutableListOf<Pair<String, String>>()
+    /** Source id and agent of every [checkVerification] and [completeVerification] call. */
+    val checks = mutableListOf<Pair<String, String>>()
+    val completions = mutableListOf<Pair<String, String>>()
 
     /** Every [setSetupHost] value, in order. */
     val setupHosts = mutableListOf<String?>()
@@ -66,9 +67,13 @@ internal class FakeCustomSitesController(initial: List<CustomSiteSummary> = empt
 
     override suspend fun retest(sourceId: String): SiteProbeResult = onRetest(sourceId)
 
-    override suspend fun completeVerification(sourceId: String, userAgent: String): SiteProbeResult {
-        verifications += sourceId to userAgent
-        return onCompleteVerification(sourceId, userAgent)
+    override suspend fun checkVerification(sourceId: String, userAgent: String): SiteProbeResult {
+        checks += sourceId to userAgent
+        return onCheckVerification(sourceId, userAgent)
+    }
+
+    override suspend fun completeVerification(sourceId: String, userAgent: String) {
+        completions += sourceId to userAgent
     }
 
     override fun setSetupHost(host: String?) {

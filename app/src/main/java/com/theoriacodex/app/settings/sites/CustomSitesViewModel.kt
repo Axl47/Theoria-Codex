@@ -83,7 +83,7 @@ internal class CustomSitesViewModel(
                     }
                     // A challenged source: open its browser check; completing it saves the agent and shows on the row.
                     is SitesRequest.Verify ->
-                        state.value.sites.firstOrNull { it.sourceId == request.sourceId }?.let { startVerification(it.host) }
+                        state.value.sites.firstOrNull { it.sourceId == request.sourceId }?.let { startVerification(it.host, afterRefusal = true) }
                 }
             }
         }
@@ -114,7 +114,7 @@ internal class CustomSitesViewModel(
             CustomSitesAction.DismissRemove -> mutableState.update { if (it.removing) it else it.copy(removeTargetId = null) }
             CustomSitesAction.ConfirmRemove -> confirmRemove()
             CustomSitesAction.DismissNotice -> mutableState.update { it.copy(notice = null) }
-            is CustomSitesAction.StartVerification -> startVerification(action.host)
+            is CustomSitesAction.StartVerification -> startVerification(action.host, action.afterRefusal)
             CustomSitesAction.CancelVerification -> endVerification()
             is CustomSitesAction.ConfirmVerification -> requestCheck(VerificationCheck(action.userAgent, explicit = true))
             is CustomSitesAction.VerificationPageLoaded -> verificationPageLoaded(action.userAgent, action.cookies)
@@ -122,9 +122,9 @@ internal class CustomSitesViewModel(
     }
 
     /** Opens the browser check for [host] and lets its cookies through; a host with no saved site is the Add form's. */
-    private fun startVerification(host: String) {
+    private fun startVerification(host: String, afterRefusal: Boolean) {
         endVerification()
-        mutableState.update { it.copy(verification = SiteVerification(host), notice = null) }
+        mutableState.update { it.copy(verification = SiteVerification(host, sawRefusal = afterRefusal), notice = null) }
         controller.setSetupHost(host)
     }
 
@@ -159,18 +159,19 @@ internal class CustomSitesViewModel(
     }
 
     /**
-     * Tests whether the app's own request gets through with the browser's agent. A saved site completes
-     * verification on a pass; the Add form probes with its fields and applies the answer. A pass closes
-     * the page when the person said Done or a refusal was already seen; otherwise the page stays open.
+     * Tests whether the app's own request gets through with the browser's agent; a check changes nothing.
+     * A pass closes the page when the person said Done or a refusal is known, and only then completes:
+     * a saved site records the agent, the Add form takes its probe. Otherwise the page stays open.
      */
     private suspend fun runVerificationCheck(check: VerificationCheck) {
         val host = state.value.verification?.host ?: return
         val site = state.value.sites.firstOrNull { it.host == host }
         updateVerification { copy(checking = true, message = if (check.explicit) null else message) }
         val result = runCatchingPreservingCancellation {
-            if (site != null) controller.completeVerification(site.sourceId, check.userAgent) else probeAddTarget(check.userAgent)
+            if (site != null) controller.checkVerification(site.sourceId, check.userAgent) else probeAddTarget(check.userAgent)
         }.getOrNull()
-        if (result?.clearedChallenge == true) verificationPassed(host, site, check, result) else verificationRefused(host, check, result)
+        if (result?.clearedChallenge == true && verificationPassed(host, site, check, result)) return
+        verificationRefused(host, check, result)
     }
 
     private suspend fun probeAddTarget(userAgent: String): SiteProbeResult? {
@@ -180,10 +181,18 @@ internal class CustomSitesViewModel(
         return controller.probe(form.address, credentials.value, headers.value.copy(userAgent = userAgent))
     }
 
-    private fun verificationPassed(host: String, site: CustomSiteSummary?, check: VerificationCheck, result: SiteProbeResult) {
+    /** Returns false when completing failed, which then reads as a failed check. */
+    private suspend fun verificationPassed(host: String, site: CustomSiteSummary?, check: VerificationCheck, result: SiteProbeResult): Boolean {
         val closes = check.explicit || state.value.verification?.sawRefusal == true
+        if (!closes) {
+            updateVerification { copy(checking = false, message = verificationAlreadyOpenMessage(host)) }
+            return true
+        }
+        if (site != null) {
+            runCatchingPreservingCancellation { controller.completeVerification(site.sourceId, check.userAgent) }.getOrNull() ?: return false
+        }
         mutableState.update { current ->
-            val verification = current.verification ?: return@update current
+            if (current.verification == null) return@update current
             val applied = if (site != null) {
                 // The open Edit form's agent field follows, or a later Save would revert the saved agent.
                 current.copy(
@@ -196,12 +205,11 @@ internal class CustomSitesViewModel(
                     current.copy(form = add.copy(fields = add.fields.copy(userAgent = check.userAgent)).applyProbe(result))
                 } ?: current
             }
-            applied.copy(
-                verification = if (closes) null else verification.copy(checking = false, message = verificationAlreadyOpenMessage(host)),
-            )
+            applied.copy(verification = null)
         }
         // A saved site's cookies need no setup host; the Add form's stay allowed until it closes or saves.
-        if (closes && site != null) controller.setSetupHost(null)
+        if (site != null) controller.setSetupHost(null)
+        return true
     }
 
     private fun verificationRefused(host: String, check: VerificationCheck, result: SiteProbeResult?) {

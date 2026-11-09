@@ -16,7 +16,7 @@ internal class FakeBrowserCookieStore : BrowserCookieStore {
 
     override fun cookieHeader(url: String): String? {
         check(!throwing) { "WebView unavailable" }
-        return cookies[URI(url).host]
+        return cookies[url.toHttpUrl().host]
     }
 
     override fun setCookie(url: String, setCookie: String) {
@@ -63,6 +63,14 @@ class SiteCookieBridgeTest {
         assertTrue(store.written.isEmpty())
         bridge.cookieHandler.put(URI("https://cdn.safebooru.org/"), mapOf("set-cookie" to listOf("cf=y")))
         assertEquals(listOf("https://cdn.safebooru.org/" to "cf=y"), store.written)
+    }
+
+    @Test
+    fun `a URL with characters java net URI rejects still gets its cookies through the jar`() {
+        bridge.updateSiteHosts(setOf("safebooru.org"))
+        val url = "https://safebooru.org/index.php?tags=a|b".toHttpUrl()
+
+        assertEquals(1, bridge.cookieJar.loadForRequest(url).size)
     }
 
     @Test

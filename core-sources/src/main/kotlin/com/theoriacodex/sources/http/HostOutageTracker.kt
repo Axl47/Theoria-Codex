@@ -76,11 +76,16 @@ class HostOutageTracker(
         /** The form outages are keyed by: lowercase, without `www.`. */
         fun normalizeHost(host: String): String = host.lowercase(Locale.ROOT).removePrefix("www.")
 
-        /** Whether [host] is [site] itself or a subdomain of it, such as a media CDN; both are normalized first. */
+        /**
+         * Whether [host] is [site] itself or a subdomain of it, such as a media CDN; both are normalized first.
+         * Runs on every request that reaches the cookie bridge, so it builds no strings of its own.
+         */
         fun hostBelongsToSite(host: String, site: String): Boolean {
             val candidate = normalizeHost(host)
             val root = normalizeHost(site)
-            return candidate == root || candidate.endsWith(".$root")
+            if (candidate == root) return true
+            val dot = candidate.length - root.length - 1
+            return dot >= 0 && candidate[dot] == '.' && candidate.endsWith(root)
         }
 
         fun hostKey(url: String): String? = runCatching { URI(url).host }.getOrNull()?.let(::normalizeHost)
