@@ -26,7 +26,10 @@ internal class HitomiPostMapper(
         val filesToResolve = if (sparse || metadata.hasPlayableVideo) listOfNotNull(posterFile) else files
         val resolvedCandidates = filesToResolve.associateWith { file -> candidatesFor(file) }
         val poster = posterFile?.let { file ->
-            imageRef(file, resolvedCandidates[file].orEmpty(), metadata.animated, preview = true)
+            val candidates = resolvedCandidates[file].orEmpty()
+            val fullSize = imageRef(file, candidates, metadata.animated, preview = true)
+            // An animated card plays the animated file itself, so only still galleries can show a thumbnail.
+            if (metadata.animated) fullSize else fullSize.thumbnailFirst(thumbnailUrls(file, candidates, HitomiThumbnail.CARD))
         } ?: EMPTY_IMAGE_REF
         val media = mediaRefs(metadata, sparse, resolvedCandidates)
         val creatorProfiles = metadata.creators
@@ -77,6 +80,25 @@ internal class HitomiPostMapper(
         return metadata.files.map { file ->
             imageRef(file, candidates[file].orEmpty(), metadata.animated, preview = false)
         }
+    }
+
+    private fun thumbnailUrls(
+        file: ParsedHitomiFile,
+        candidates: List<HitomiMediaCandidate>,
+        rendition: HitomiThumbnail,
+    ): List<String> {
+        val primaryShard = candidates.firstOrNull { !it.isAlternateShard }?.shard ?: return emptyList()
+        return hitomiThumbnailUrls(file.hash, primaryShard, rendition)
+    }
+
+    /** Leads with [thumbnails] and keeps every full-size location behind them as a fallback. */
+    private fun ImageRef.thumbnailFirst(thumbnails: List<String>): ImageRef {
+        val thumbnail = thumbnails.firstOrNull() ?: return this
+        return copy(
+            url = thumbnail,
+            mime = "image/webp",
+            progressiveUrls = (thumbnails.drop(1) + listOfNotNull(url) + progressiveUrls).distinct(),
+        )
     }
 
     private suspend fun candidatesFor(file: ParsedHitomiFile): List<HitomiMediaCandidate> {
@@ -141,10 +163,11 @@ internal class HitomiPostMapper(
             url?.takeIf(String::isNotBlank)?.let(::add)
             addAll(progressiveUrls.filter(String::isNotBlank))
         }.distinct()
-        val failed = locations.firstOrNull()?.toHitomiCandidateIdentityOrNull() ?: return null
+        // Thumbnail locations carry no gg.js version, so the first full-size location identifies the media.
         val parsedLocations = locations.mapNotNull { location ->
             location.toHitomiCandidateIdentityOrNull()
         }
+        val failed = parsedLocations.firstOrNull() ?: return null
         val originalExtension = parsedLocations
             .firstOrNull { candidate -> candidate.format == HitomiMediaFormat.ORIGINAL }
             ?.extension
@@ -221,11 +244,12 @@ internal class HitomiPostMapper(
             val refCandidates = refreshedCandidates.preferFormat(refIdentity.failedFormat)
             if (refCandidates.isEmpty()) return ref
             replaced = true
+            val thumbnails = (listOfNotNull(ref.url) + ref.progressiveUrls).filter { HITOMI_THUMBNAIL_URL.containsMatchIn(it) }
             return ref.copy(
                 url = refCandidates.first().url,
                 mime = refCandidates.first().mime,
                 progressiveUrls = refCandidates.map(HitomiMediaCandidate::url).distinct(),
-            )
+            ).thumbnailFirst(thumbnails)
         }
 
         val recovered = post.copy(
@@ -260,6 +284,7 @@ internal class HitomiPostMapper(
         private val HITOMI_AVIF_HOST = Regex("""a[12]\.gold-usergeneratedcontent\.net""")
         private val HITOMI_WEBP_HOST = Regex("""w[12]\.gold-usergeneratedcontent\.net""")
         private val HITOMI_ORIGINAL_HOST = Regex("""[12]\.gold-usergeneratedcontent\.net""")
+        private val HITOMI_THUMBNAIL_URL = Regex("""^https://[ab]tn\.gold-usergeneratedcontent\.net/""")
         private val HITOMI_MEDIA_HASH = Regex("""[0-9a-f]{64}""")
         private val HITOMI_MEDIA_EXTENSION = Regex("""[a-z0-9]{1,10}""")
         private val EMPTY_IMAGE_REF = ImageRef(url = null, localPath = null, mime = null)
