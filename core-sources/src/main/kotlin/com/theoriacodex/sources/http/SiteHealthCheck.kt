@@ -17,20 +17,7 @@ class SiteHealthCheck internal constructor(
     constructor(tracker: HostOutageTracker) : this(tracker, ::executeHttpRequest)
 
     suspend fun check(url: String, headers: Map<String, String>, countChallenges: Boolean) {
-        val response = runCatchingPreservingCancellation {
-            transport(
-                HttpRequestSpec(
-                    method = "GET",
-                    url = url,
-                    headers = headers,
-                    body = null,
-                    maxBodyBytes = HOME_PAGE_MAX_BYTES,
-                    connectTimeoutMs = CONNECT_TIMEOUT_MS,
-                    readTimeoutMs = READ_TIMEOUT_MS,
-                    followRedirects = true,
-                ),
-            )
-        }.getOrElse { error ->
+        val response = runCatchingPreservingCancellation { fetch(url, headers) }.getOrElse { error ->
             // A page over the size limit still answered, so the site is up.
             if (error is IOException) tracker.recordFailure(url, error) else tracker.clear(hostOf(url))
             return
@@ -42,6 +29,32 @@ class SiteHealthCheck internal constructor(
         }
         if (down != null) tracker.record(url, down) else tracker.clear(hostOf(url))
     }
+
+    /**
+     * Whether [url] now answers without a challenge or an outage, for a browser check. Unlike [check],
+     * this leaves the tracker alone, so checking a site changes nothing until the check is completed.
+     */
+    suspend fun clearsChallenge(url: String, headers: Map<String, String>): Boolean {
+        val response = runCatchingPreservingCancellation { fetch(url, headers) }.getOrElse { error ->
+            // A page over the size limit still answered.
+            return error !is IOException
+        }
+        return HostOutageTracker.outageKindOf(response.statusCode, response.headers) == null &&
+            !response.toTextResponse().isVerificationChallenge()
+    }
+
+    private suspend fun fetch(url: String, headers: Map<String, String>): SourceByteResponse = transport(
+        HttpRequestSpec(
+            method = "GET",
+            url = url,
+            headers = headers,
+            body = null,
+            maxBodyBytes = HOME_PAGE_MAX_BYTES,
+            connectTimeoutMs = CONNECT_TIMEOUT_MS,
+            readTimeoutMs = READ_TIMEOUT_MS,
+            followRedirects = true,
+        ),
+    )
 
     private fun hostOf(url: String): String = HostOutageTracker.hostKey(url).orEmpty()
 

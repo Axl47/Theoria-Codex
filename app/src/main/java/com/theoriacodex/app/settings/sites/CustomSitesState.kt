@@ -1,12 +1,17 @@
 package com.theoriacodex.app.settings.sites
 
+import com.theoriacodex.app.customsites.BuiltInSiteSummary
 import com.theoriacodex.app.customsites.CustomSiteSummary
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.ProtocolFamily
 import com.theoriacodex.domain.source.SiteProbeResult
 
-/** Settings → Sites: the stored sites plus whichever add/edit form, dialog or inline result is open. */
+/** Settings → Sites: built-in and added sites, plus whichever page, form, dialog or inline result is open. */
 data class CustomSitesUiState(
     val sites: List<CustomSiteSummary> = emptyList(),
+    val builtInSites: List<BuiltInSiteSummary> = emptyList(),
+    /** The built-in source whose page is open, if any. */
+    val openBuiltIn: SourceKey? = null,
     val form: SiteForm? = null,
     /** Inline re-test status per source id; cleared when the site disappears. */
     val retests: Map<String, RetestStatus> = emptyMap(),
@@ -23,7 +28,7 @@ data class CustomSitesUiState(
 }
 
 /**
- * A browser check in progress for [host], a saved site or the one in the Add form. [checking] while the
+ * A browser check in progress for [host], a built-in source, a saved site or the one in the Add form. [checking] while the
  * app tests whether its own requests get through; [message] explains the last refusal or a check that
  * found the site already open; [sawRefusal] once the app is known to have been refused (before the page
  * opened, or by a check since), so the page closes itself on the next pass.
@@ -98,6 +103,8 @@ sealed interface CustomSitesAction {
     data object StartAdd : CustomSitesAction
     data class StartEdit(val sourceId: String) : CustomSitesAction
     data object CloseForm : CustomSitesAction
+    data class OpenBuiltIn(val source: SourceKey) : CustomSitesAction
+    data object CloseBuiltIn : CustomSitesAction
 
     data class SetAddress(val value: String) : CustomSitesAction
     data class SetLabel(val value: String) : CustomSitesAction

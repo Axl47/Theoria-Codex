@@ -53,10 +53,11 @@ internal object AndroidBrowserCookieStore : BrowserCookieStore {
 
 /**
  * Lets the clearance cookies a person earned in the in-app browser apply to the app's own requests, for
- * saved custom sites (and the one site being set up) and their subdomains, such as media CDNs. Every
- * other host gets no cookies, so built-in sources behave exactly as before. The allowed hosts come from
- * [updateSiteHosts] and [setSetupHost]; nothing is stored here. Every store call is guarded: a missing
- * or updating WebView means "no cookies", never an exception on a request thread.
+ * saved custom sites, built-in sites verified in the browser and the one site being set up, plus their
+ * subdomains, such as media CDNs. Every other host gets no cookies, so an unverified built-in source
+ * behaves exactly as before. The allowed hosts come from [updateSiteHosts], [updateBuiltInAgents] and
+ * [setSetupHost]; nothing is stored here. Every store call is guarded: a missing or updating WebView
+ * means "no cookies", never an exception on a request thread.
  *
  * [cookieHandler] covers `HttpURLConnection` (custom-site API and offline downloads) and [cookieJar]
  * covers OkHttp (Coil images and Media3 video). Both read and write only through the same gate.
@@ -65,12 +66,29 @@ internal class SiteCookieBridge(private val store: BrowserCookieStore) {
     @Volatile
     private var siteHosts: Set<String> = emptySet()
 
+    /** Verified built-in sites' hosts and the browser agent each clearance is bound to. */
+    @Volatile
+    private var builtInAgents: Map<String, String> = emptyMap()
+
     @Volatile
     private var setupHost: String? = null
 
     /** The hosts of every saved custom site. */
     fun updateSiteHosts(hosts: Set<String>) {
         siteHosts = hosts.mapTo(HashSet(), HostOutageTracker::normalizeHost)
+    }
+
+    /** The built-in sites verified in the browser, by host, with the agent that earned each clearance. */
+    fun updateBuiltInAgents(agents: Map<String, String>) {
+        builtInAgents = agents.mapKeys { (host, _) -> HostOutageTracker.normalizeHost(host) }
+    }
+
+    /** The agent a verified built-in site's clearance needs on [url], or null for any other site. */
+    fun userAgentFor(url: String): String? {
+        val agents = builtInAgents
+        if (agents.isEmpty()) return null
+        val host = runCatching { URI(url).host }.getOrNull() ?: return null
+        return agents.entries.firstOrNull { (site, _) -> HostOutageTracker.hostBelongsToSite(host, site) }?.value
     }
 
     /** The site being verified before it is saved, or null once that ends. */
@@ -98,6 +116,7 @@ internal class SiteCookieBridge(private val store: BrowserCookieStore) {
     private fun isAllowed(host: String?): Boolean {
         if (host == null) return false
         return siteHosts.any { HostOutageTracker.hostBelongsToSite(host, it) } ||
+            builtInAgents.keys.any { HostOutageTracker.hostBelongsToSite(host, it) } ||
             setupHost?.let { HostOutageTracker.hostBelongsToSite(host, it) } == true
     }
 

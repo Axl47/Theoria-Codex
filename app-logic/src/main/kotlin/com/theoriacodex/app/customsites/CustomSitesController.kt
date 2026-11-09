@@ -1,5 +1,6 @@
 package com.theoriacodex.app.customsites
 
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.ProtocolFamily
 import com.theoriacodex.domain.source.SiteCredentials
 import com.theoriacodex.domain.source.SiteHeaders
@@ -16,6 +17,21 @@ interface CustomSitesController {
 
     /** Stored sites proven to work since the app started: a real API answer, a passed re-test or browser check. */
     val workingSourceIds: StateFlow<Set<String>>
+
+    /** The sources that ship with the app, in presentation order, with their live status. */
+    val builtInSites: StateFlow<List<BuiltInSiteSummary>>
+
+    /**
+     * Whether [source]'s home page and any of its hosts now in an outage answer with [userAgent], the
+     * in-app browser's, and without a challenge. Changes nothing.
+     */
+    suspend fun checkBuiltInVerification(source: SourceKey, userAgent: String): Boolean
+
+    /**
+     * Records a passed [checkBuiltInVerification]: [source]'s requests send the browser's cookies and
+     * [userAgent] from now on, and its outage lifts so it works at once. Makes no request.
+     */
+    suspend fun completeBuiltInVerification(source: SourceKey, userAgent: String)
 
     /** Add, step 1: validate the address and probe known families. Persists nothing. */
     suspend fun probe(
@@ -90,6 +106,15 @@ data class CustomSiteSummary(
     val hasCredentials: Boolean,
     val includedInUnifiedAndForYou: Boolean,
     val verifiedAtEpochMs: Long?,
+)
+
+/** A source that ships with the app. [host] is the address its browser check opens. */
+data class BuiltInSiteSummary(
+    val source: SourceKey,
+    val label: String,
+    val host: String,
+    val working: Boolean,
+    val needsVerification: Boolean,
 )
 
 enum class CustomSiteAvailability {

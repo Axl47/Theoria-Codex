@@ -1,5 +1,7 @@
 package com.theoriacodex.app.di
 
+import com.theoriacodex.app.customsites.BuiltInAgentStore
+import com.theoriacodex.app.customsites.BuiltInSiteSummary
 import com.theoriacodex.app.customsites.CredentialEdit
 import com.theoriacodex.app.customsites.CustomSiteDraft
 import com.theoriacodex.app.customsites.CustomSiteEdit
@@ -10,6 +12,11 @@ import com.theoriacodex.app.customsites.SiteCookieBridge
 import com.theoriacodex.app.customsites.SitesRequest
 import com.theoriacodex.app.sourceauth.CredentialStoreUnavailableException
 import com.theoriacodex.app.source.clearSource
+import com.theoriacodex.app.source.displayName
+import com.theoriacodex.app.source.inPresentationOrder
+import com.theoriacodex.app.source.ownsHost
+import com.theoriacodex.app.source.presentation
+import com.theoriacodex.app.source.sourceIssues
 import com.theoriacodex.app.sourceauth.SiteCredentialsStore
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.SiteProfileAddResult
@@ -23,7 +30,10 @@ import com.theoriacodex.domain.source.SiteHeaders
 import com.theoriacodex.domain.source.SiteProbeResult
 import com.theoriacodex.domain.source.SiteProfile
 import com.theoriacodex.sources.custom.SiteProber
+import com.theoriacodex.sources.http.HostOutage
+import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.sources.http.HostOutageTracker
+import java.net.URI
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -52,6 +62,9 @@ internal class CustomSitesControllerImpl(
     scope: CoroutineScope,
     private val outages: HostOutageTracker,
     private val cookieBridge: SiteCookieBridge,
+    private val builtInAgents: BuiltInAgentStore,
+    /** Whether a URL answers a request with this User-Agent without a challenge or an outage. */
+    private val clearsChallenge: suspend (url: String, userAgent: String) -> Boolean,
     private val clock: () -> Long = System::currentTimeMillis,
 ) : CustomSitesController {
     override val sites: StateFlow<List<CustomSiteSummary>> =
@@ -63,6 +76,22 @@ internal class CustomSitesControllerImpl(
         combine(sites, outages.working) { stored, hosts ->
             stored.filter { HostOutageTracker.normalizeHost(it.host) in hosts }.map { it.sourceId }.toSet()
         }.stateIn(scope, SharingStarted.Eagerly, emptySet())
+
+    override val builtInSites: StateFlow<List<BuiltInSiteSummary>> =
+        combine(outages.outages, outages.working) { recorded, working ->
+            BUILT_IN_SOURCES.map { it.toBuiltInSummary(recorded, working) }
+        }.stateIn(scope, SharingStarted.Eagerly, BUILT_IN_SOURCES.map { it.toBuiltInSummary(emptyMap(), emptySet()) })
+
+    private fun SourceKey.toBuiltInSummary(recorded: Map<String, HostOutage>, working: Set<String>): BuiltInSiteSummary {
+        val issue = sourceIssues(recorded, listOf(this), clock())[this]
+        return BuiltInSiteSummary(
+            source = this,
+            label = displayName(),
+            host = URI(presentation().referer).host,
+            working = issue == null && working.any(::ownsHost),
+            needsVerification = issue == HostOutageKind.CHALLENGE,
+        )
+    }
 
     private val pendingSetup = MutableStateFlow<SitesRequest?>(null)
     override val setupRequest: StateFlow<SitesRequest?> = pendingSetup.asStateFlow()
@@ -145,6 +174,21 @@ internal class CustomSitesControllerImpl(
         cookieBridge.flush()
     }
 
+    override suspend fun checkBuiltInVerification(source: SourceKey, userAgent: String): Boolean {
+        // An API host is often what challenged, and it can stay challenged after the home page clears.
+        val outageHosts = outages.outages.value.keys.filter(source::ownsHost).map { "https://$it/" }
+        return (listOf(source.presentation().referer) + outageHosts).all { clearsChallenge(it, userAgent) }
+    }
+
+    override suspend fun completeBuiltInVerification(source: SourceKey, userAgent: String) {
+        val home = source.presentation().referer
+        builtInAgents.save(requireNotNull(HostOutageTracker.hostKey(home)), userAgent)
+        cookieBridge.updateBuiltInAgents(builtInAgents.read())
+        outages.clearSource(source)
+        outages.setWorking(home, true)
+        cookieBridge.flush()
+    }
+
     override fun setSetupHost(host: String?) = cookieBridge.setSetupHost(host)
 
     override suspend fun update(sourceId: String, edit: CustomSiteEdit): CustomSiteMutation {
@@ -196,6 +240,8 @@ internal class CustomSitesControllerImpl(
 
     private fun validLabel(raw: String): String? = raw.trim().takeIf { it.isNotEmpty() && it.length <= SiteProfile.MAX_LABEL_LENGTH }
 }
+
+private val BUILT_IN_SOURCES = SourceKey.builtIns.inPresentationOrder()
 
 private fun CustomSiteState.toSummary(included: Boolean) = CustomSiteSummary(
     sourceId = profile.sourceId,

@@ -26,22 +26,34 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.customsites.CustomSiteSummary
+import com.theoriacodex.app.settings.BuiltInAccounts
+import com.theoriacodex.app.settings.SETTINGS_PATH
 import com.theoriacodex.app.settings.SettingsGroup
 import com.theoriacodex.app.settings.SettingsHeader
 import com.theoriacodex.app.settings.SettingsPageColumn
 import com.theoriacodex.app.settings.SettingsRow
 import com.theoriacodex.app.settings.SettingsRowDivider
 
-/** Settings → Sites: the list of user-added boorus, or the add/edit form while one is open. */
+/** The pages above anything opened from the Sites list. */
+internal val SITES_PATH = SETTINGS_PATH + "Sites"
+
+/** Settings → Sites: built-in and user-added sites, or the page or add/edit form while one is open. */
 @Composable
-internal fun CustomSitesScreen(state: CustomSitesUiState, onAction: (CustomSitesAction) -> Unit, onBack: () -> Unit) {
+internal fun CustomSitesScreen(
+    state: CustomSitesUiState,
+    accounts: BuiltInAccounts,
+    onAction: (CustomSitesAction) -> Unit,
+    onBack: () -> Unit,
+) {
     BackHandler(enabled = state.form != null) { onAction(CustomSitesAction.CloseForm) }
+    BackHandler(enabled = state.form == null && state.openBuiltIn != null) { onAction(CustomSitesAction.CloseBuiltIn) }
     state.verification?.let { verification ->
-        SiteVerificationPage(verification, onAction)
+        SiteVerificationPage(verification, verificationSiteName(state, verification.host), onAction)
         return
     }
+    val builtIn = state.builtInSites.firstOrNull { it.source == state.openBuiltIn }
     when (val form = state.form) {
-        null -> SitesListPage(state, onAction, onBack)
+        null -> if (builtIn != null) BuiltInSitePage(builtIn, accounts, onAction) else SitesListPage(state, accounts, onAction, onBack)
         is SiteForm.Add -> AddSitePage(form, onAction)
         is SiteForm.Edit -> state.sites.firstOrNull { it.sourceId == form.sourceId }?.let { site ->
             EditSitePage(form, site, state.retests[site.sourceId], site.sourceId in state.workingSiteIds, onAction)
@@ -51,13 +63,32 @@ internal fun CustomSitesScreen(state: CustomSitesUiState, onAction: (CustomSites
     ReconnectDialog(state.form, onAction)
 }
 
+/** The page title's name for the site being verified: its label, or its address while it is being added. */
+private fun verificationSiteName(state: CustomSitesUiState, host: String): String =
+    state.sites.firstOrNull { it.host == host }?.label
+        ?: state.builtInSites.firstOrNull { it.host == host }?.label
+        ?: host
+
 @Composable
-private fun SitesListPage(state: CustomSitesUiState, onAction: (CustomSitesAction) -> Unit, onBack: () -> Unit) {
+private fun SitesListPage(
+    state: CustomSitesUiState,
+    accounts: BuiltInAccounts,
+    onAction: (CustomSitesAction) -> Unit,
+    onBack: () -> Unit,
+) {
     SettingsPageColumn {
-        SettingsHeader("Sites", onBack) {
+        SettingsHeader("Sites", onBack, SETTINGS_PATH) {
             IconButton(onClick = { onAction(CustomSitesAction.StartAdd) }) { Icon(Icons.Default.Add, "Add site") }
         }
         state.notice?.let { AnnouncedText(it, Modifier.padding(horizontal = 4.dp), error = true) }
+        if (state.builtInSites.isNotEmpty()) {
+            SettingsGroup("Built-in") {
+                state.builtInSites.forEachIndexed { index, site ->
+                    if (index > 0) SettingsRowDivider()
+                    BuiltInSiteRow(site, accounts, onAction)
+                }
+            }
+        }
         if (state.sites.isEmpty()) {
             Text(
                 "Add a booru by its address, like safebooru.org. Theoria checks which kind of site it is " +
@@ -67,7 +98,7 @@ private fun SitesListPage(state: CustomSitesUiState, onAction: (CustomSitesActio
             )
             Button(onClick = { onAction(CustomSitesAction.StartAdd) }) { Text("Add site") }
         } else {
-            SettingsGroup(null) {
+            SettingsGroup("Added") {
                 state.sites.forEachIndexed { index, site ->
                     if (index > 0) SettingsRowDivider()
                     SiteRow(site, state.retests[site.sourceId], site.sourceId in state.workingSiteIds, onAction)

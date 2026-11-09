@@ -8,33 +8,27 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.customsites.CustomSiteAvailability
 import com.theoriacodex.app.customsites.CustomSiteSummary
+import com.theoriacodex.app.settings.ExpandableSection
 import com.theoriacodex.app.settings.SettingsGroup
 import com.theoriacodex.app.settings.SettingsHeader
 import com.theoriacodex.app.settings.SettingsPageColumn
@@ -48,7 +42,7 @@ internal fun AddSitePage(form: SiteForm.Add, onAction: (CustomSitesAction) -> Un
     val stage = form.stage
     val editable = !stage.busy
     SettingsPageColumn {
-        SettingsHeader("Add site", onBack = { onAction(CustomSitesAction.CloseForm) })
+        SettingsHeader("Add site", onBack = { onAction(CustomSitesAction.CloseForm) }, parents = SITES_PATH)
         SettingsGroup(null) {
             FormColumn {
                 val addressMessage = (stage as? AddStage.Address)?.message
@@ -130,7 +124,7 @@ internal fun EditSitePage(
 ) {
     val editable = !form.saving
     SettingsPageColumn {
-        SettingsHeader(site.label, onBack = { onAction(CustomSitesAction.CloseForm) })
+        SettingsHeader(site.label, onBack = { onAction(CustomSitesAction.CloseForm) }, parents = SITES_PATH)
         SettingsGroup(null) {
             FormColumn {
                 Text(site.baseUrl, style = MaterialTheme.typography.bodyMedium)
@@ -156,11 +150,14 @@ internal fun EditSitePage(
                 AnnouncedText(it.message, Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp), error = true)
             }
         }
-        SettingsGroup("API key") {
-            FormColumn { EditCredentials(form, site.family, editable, onAction) }
-        }
         SettingsGroup(null) {
-            FormColumn { AdvancedHeaders(form.fields, editable, onAction) }
+            FormColumn {
+                // Opens by itself only when the site can't work without keys.
+                ExpandableSection("API key", initiallyExpanded = site.availability == CustomSiteAvailability.NEEDS_CREDENTIALS) {
+                    EditCredentials(form, site.family, editable, onAction)
+                }
+                AdvancedHeaders(form.fields, editable, onAction)
+            }
         }
         form.message?.let { AnnouncedText(it, Modifier.padding(horizontal = 4.dp), error = true) }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -187,43 +184,14 @@ private fun EditCredentials(
                 Text("Keep saved keys")
             }
         }
-        !form.hasCredentials -> {
-            Text("No keys saved.")
+        else -> {
+            Text(if (form.hasCredentials) "Keys saved. Enter new ones to replace them." else "No keys saved.")
             CredentialFields(form.fields, family, editable, onAction)
-        }
-        else -> SavedCredentials(form, family, editable, onAction)
-    }
-}
-
-/** Saved keys stay collapsed to one line until the person chooses to replace them. */
-@Composable
-private fun SavedCredentials(
-    form: SiteForm.Edit,
-    family: ProtocolFamily?,
-    editable: Boolean,
-    onAction: (CustomSitesAction) -> Unit,
-) {
-    var replacing by rememberSaveable(form.sourceId) { mutableStateOf(false) }
-    if (replacing) {
-        Text("Enter new keys to replace the saved ones.")
-        CredentialFields(form.fields, family, editable, onAction)
-    } else {
-        Text("Keys saved.")
-    }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        TextButton(
-            onClick = {
-                // Backing out drops anything typed, or Save would still replace the saved keys.
-                if (replacing) {
-                    onAction(CustomSitesAction.SetUser(""))
-                    onAction(CustomSitesAction.SetApiKey(""))
+            if (form.hasCredentials) {
+                TextButton(onClick = { onAction(CustomSitesAction.SetClearCredentials(true)) }, enabled = editable) {
+                    Text("Remove saved keys")
                 }
-                replacing = !replacing
-            },
-            enabled = editable,
-        ) { Text(if (replacing) "Keep saved keys" else "Replace keys") }
-        TextButton(onClick = { onAction(CustomSitesAction.SetClearCredentials(true)) }, enabled = editable) {
-            Text("Remove saved keys", color = MaterialTheme.colorScheme.error)
+            }
         }
     }
 }
@@ -290,34 +258,29 @@ private fun IncludeSwitch(checked: Boolean, enabled: Boolean, onAction: (CustomS
 /** Collapsed User-Agent and Referer overrides; blank fields use the defaults. */
 @Composable
 private fun AdvancedHeaders(fields: SiteFields, enabled: Boolean, onAction: (CustomSitesAction) -> Unit) {
-    var expanded by rememberSaveable { mutableStateOf(fields.userAgent.isNotEmpty() || fields.referer.isNotEmpty()) }
-    TextButton(
-        onClick = { expanded = !expanded },
-        modifier = Modifier.semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" },
-    ) {
-        Text("Advanced")
-        Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null)
+    // Read once: a value typed while open must not fold the section away under the person typing.
+    val startExpanded = rememberSaveable { fields.userAgent.isNotEmpty() || fields.referer.isNotEmpty() }
+    ExpandableSection("Advanced", initiallyExpanded = startExpanded) {
+        OutlinedTextField(
+            modifier = Modifier.fillMaxWidth(),
+            value = fields.userAgent,
+            onValueChange = { onAction(CustomSitesAction.SetUserAgent(it)) },
+            label = { Text("User-Agent") },
+            supportingText = { Text("Leave blank to use the default.") },
+            singleLine = true,
+            enabled = enabled,
+        )
+        OutlinedTextField(
+            modifier = Modifier.fillMaxWidth(),
+            value = fields.referer,
+            onValueChange = { onAction(CustomSitesAction.SetReferer(it)) },
+            label = { Text("Referer") },
+            supportingText = { Text("Leave blank to use the site's address.") },
+            singleLine = true,
+            enabled = enabled,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+        )
     }
-    if (!expanded) return
-    OutlinedTextField(
-        modifier = Modifier.fillMaxWidth(),
-        value = fields.userAgent,
-        onValueChange = { onAction(CustomSitesAction.SetUserAgent(it)) },
-        label = { Text("User-Agent") },
-        supportingText = { Text("Leave blank to use the default.") },
-        singleLine = true,
-        enabled = enabled,
-    )
-    OutlinedTextField(
-        modifier = Modifier.fillMaxWidth(),
-        value = fields.referer,
-        onValueChange = { onAction(CustomSitesAction.SetReferer(it)) },
-        label = { Text("Referer") },
-        supportingText = { Text("Leave blank to use the site's address.") },
-        singleLine = true,
-        enabled = enabled,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-    )
 }
 
 @Composable

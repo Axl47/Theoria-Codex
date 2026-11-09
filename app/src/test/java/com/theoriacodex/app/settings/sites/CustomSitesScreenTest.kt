@@ -2,6 +2,8 @@ package com.theoriacodex.app.settings.sites
 
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.hasClickAction
@@ -15,8 +17,10 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.theoriacodex.app.customsites.CredentialEdit
+import com.theoriacodex.app.customsites.BuiltInSiteSummary
 import com.theoriacodex.app.customsites.CustomSiteAvailability
+import com.theoriacodex.app.settings.BuiltInAccounts
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.ProbeFailure
 import com.theoriacodex.domain.source.ProtocolFamily
 import com.theoriacodex.domain.source.SiteProbeResult
@@ -32,11 +36,12 @@ import org.robolectric.annotation.Config
 class CustomSitesScreenTest {
     @get:Rule val compose = createComposeRule()
 
-    private fun show(controller: FakeCustomSitesController) {
+    private fun show(controller: FakeCustomSitesController, accountControls: @Composable (SourceKey) -> Unit = {}) {
         val owner = CustomSitesViewModel(controller)
+        val accounts = BuiltInAccounts(summary = { null }, controls = accountControls)
         compose.setContent {
             val state by owner.state.collectAsStateWithLifecycle()
-            MaterialTheme { CustomSitesScreen(state, owner::onAction, onBack = {}) }
+            MaterialTheme { CustomSitesScreen(state, accounts, owner::onAction, onBack = {}) }
         }
     }
 
@@ -122,20 +127,31 @@ class CustomSitesScreenTest {
     }
 
     @Test
-    fun `saved keys stay collapsed until replaced, and backing out drops what was typed`() {
-        val controller = FakeCustomSitesController(listOf(site().copy(hasCredentials = true)))
-        show(controller)
+    fun `saved keys sit behind the API key item, which opens to show their options`() {
+        show(FakeCustomSitesController(listOf(site().copy(hasCredentials = true))))
         compose.onNodeWithText("Safebooru").performClick()
-        compose.onNodeWithText("Keys saved.").performScrollTo().assertExists()
         compose.onNode(hasText("API key") and hasSetTextAction()).assertDoesNotExist()
+        compose.onNodeWithText("Remove saved keys").assertDoesNotExist()
 
-        compose.onNodeWithText("Replace keys").performScrollTo().performClick()
-        compose.onNode(hasText("API key") and hasSetTextAction()).performTextInput("secret")
-        compose.onNodeWithText("Keep saved keys").performScrollTo().performClick()
-        compose.onNodeWithText("Save").performScrollTo().performClick()
-        compose.waitForIdle()
+        compose.onNode(hasText("API key") and hasClickAction()).performScrollTo().performClick()
 
-        assertEquals(CredentialEdit.Keep, controller.edits.single().second.credentials)
+        compose.onNode(hasText("API key") and hasSetTextAction()).assertExists()
+        compose.onNodeWithText("Remove saved keys").assertExists()
+    }
+
+    @Test
+    fun `a built-in source opens its own page with the full path, browser check and account`() {
+        val iwara = BuiltInSiteSummary(SourceKey.IWARA, "Iwara", "www.iwara.tv", working = false, needsVerification = true)
+        val controller = FakeCustomSitesController().apply { builtInSites.value = listOf(iwara) }
+        show(controller, accountControls = { Text("Account for ${it.id}") })
+        compose.onNodeWithText("Settings / Sites").assertExists()
+        compose.onNodeWithText("www.iwara.tv · Needs browser verification").assertExists()
+
+        compose.onNodeWithText("Iwara").performClick()
+
+        compose.onNodeWithText("Settings / Sites / Iwara").assertExists()
+        compose.onNodeWithText("Verify in browser").assertExists()
+        compose.onNodeWithText("Account for IWARA").assertExists()
     }
 
     @Test

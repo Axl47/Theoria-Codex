@@ -7,6 +7,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.system.measureTimeMillis
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -117,6 +118,35 @@ class SiteHealthCheckTest {
         assertEquals(HostOutageKind.MAINTENANCE, tracker.outages.value["danbooru.donmai.us"]?.kind)
         check(200, "<html>ok</html>").check("https://danbooru.donmai.us/", emptyMap(), countChallenges = false)
         assertTrue(tracker.outages.value.isEmpty())
+    }
+
+    @Test fun `a browser check reports a challenge or outage and leaves the tracker alone`() = runBlocking {
+        tracker.record("https://site.example/", HostOutageKind.CHALLENGE)
+        val cf = mapOf("cf-mitigated" to listOf("challenge"))
+        assertFalse(check(403, headers = cf).clearsChallenge("https://site.example/", emptyMap()))
+        assertFalse(check(503).clearsChallenge("https://site.example/", emptyMap()))
+        assertTrue(check(200, "<html>ok</html>").clearsChallenge("https://site.example/", emptyMap()))
+        assertEquals(setOf("site.example"), tracker.outages.value.keys)
+    }
+
+    @Test fun `a verified site's browser agent replaces the request's own and proves the host works`() = runBlocking {
+        val seenAgents = mutableListOf<String?>()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+            createContext("/") { exchange ->
+                seenAgents += exchange.requestHeaders.getFirst("User-Agent")
+                exchange.sendResponseHeaders(200, -1)
+                exchange.close()
+            }
+            start()
+        }
+        val client = DefaultSourceHttpClient(outages = tracker, userAgentFor = { "WebView/2" })
+        try {
+            client.get("http://127.0.0.1:${server.address.port}/", headers = mapOf("user-agent" to "Mozilla/5.0"))
+        } finally {
+            server.stop(0)
+        }
+        assertEquals(listOf<String?>("WebView/2"), seenAgents)
+        assertEquals(setOf("127.0.0.1"), tracker.working.value)
     }
 
     @Test fun `challenges count only for user-added sites`() = runBlocking {

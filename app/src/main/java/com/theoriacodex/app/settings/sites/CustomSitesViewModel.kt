@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.theoriacodex.app.customsites.BuiltInSiteSummary
 import com.theoriacodex.app.customsites.CredentialEdit
 import com.theoriacodex.app.customsites.CustomSiteDraft
 import com.theoriacodex.app.customsites.CustomSiteEdit
@@ -39,7 +40,9 @@ internal class CustomSitesViewModel(
     coroutineScope: CoroutineScope? = null,
 ) : ViewModel() {
     private val scope = coroutineScope ?: viewModelScope
-    private val mutableState = MutableStateFlow(CustomSitesUiState(sites = controller.sites.value))
+    private val mutableState = MutableStateFlow(
+        CustomSitesUiState(sites = controller.sites.value, builtInSites = controller.builtInSites.value),
+    )
     val state: StateFlow<CustomSitesUiState> = mutableState.asStateFlow()
 
     /** The add form's probe or save; closing the form cancels it. */
@@ -76,6 +79,9 @@ internal class CustomSitesViewModel(
         scope.launch {
             controller.workingSourceIds.collect { ids -> mutableState.update { it.copy(workingSiteIds = ids) } }
         }
+        scope.launch {
+            controller.builtInSites.collect { sites -> mutableState.update { it.copy(builtInSites = sites) } }
+        }
     }
 
     init {
@@ -88,8 +94,7 @@ internal class CustomSitesViewModel(
                         probe()
                     }
                     // A challenged source: open its browser check; completing it saves the agent and shows on the row.
-                    is SitesRequest.Verify ->
-                        state.value.sites.firstOrNull { it.sourceId == request.sourceId }?.let { startVerification(it.host, afterRefusal = true) }
+                    is SitesRequest.Verify -> verificationHost(request.sourceId)?.let { startVerification(it, afterRefusal = true) }
                 }
             }
         }
@@ -100,6 +105,8 @@ internal class CustomSitesViewModel(
             CustomSitesAction.StartAdd -> openForm(SiteForm.Add())
             is CustomSitesAction.StartEdit -> startEdit(action.sourceId)
             CustomSitesAction.CloseForm -> closeForm()
+            is CustomSitesAction.OpenBuiltIn -> mutableState.update { it.copy(openBuiltIn = action.source, notice = null) }
+            CustomSitesAction.CloseBuiltIn -> mutableState.update { it.copy(openBuiltIn = null) }
             is CustomSitesAction.SetAddress -> setAddress(action.value)
             is CustomSitesAction.SetLabel -> setFields(ProbeReset.NEVER) { copy(label = action.value) }
             is CustomSitesAction.SetUser -> setCredentialField(action.value) { copy(user = it) }
@@ -126,6 +133,11 @@ internal class CustomSitesViewModel(
             is CustomSitesAction.VerificationPageLoaded -> verificationPageLoaded(action.userAgent, action.cookies)
         }
     }
+
+    /** The address the browser check opens for a stored or built-in source. */
+    private fun verificationHost(sourceId: String): String? =
+        state.value.sites.firstOrNull { it.sourceId == sourceId }?.host
+            ?: state.value.builtInSites.firstOrNull { it.source.id == sourceId }?.host
 
     /** Opens the browser check for [host] and lets its cookies through; a host with no saved site is the Add form's. */
     private fun startVerification(host: String, afterRefusal: Boolean) {
@@ -171,13 +183,42 @@ internal class CustomSitesViewModel(
      */
     private suspend fun runVerificationCheck(check: VerificationCheck) {
         val host = state.value.verification?.host ?: return
-        val site = state.value.sites.firstOrNull { it.host == host }
         updateVerification { copy(checking = true, message = if (check.explicit) null else message) }
+        state.value.builtInSites.firstOrNull { it.host == host }?.let { builtIn ->
+            runBuiltInCheck(builtIn, check)
+            return
+        }
+        val site = state.value.sites.firstOrNull { it.host == host }
         val result = runCatchingPreservingCancellation {
             if (site != null) controller.checkVerification(site.sourceId, check.userAgent) else probeAddTarget(check.userAgent)
         }.getOrNull()
         if (result?.clearedChallenge == true && verificationPassed(host, site, check, result)) return
-        verificationRefused(host, check, result)
+        verificationRefused(
+            host,
+            check,
+            blocked = (result as? SiteProbeResult.Unreachable)?.reason == ProbeFailure.BLOCKED,
+            failure = result?.let(::probeMessage) ?: UNEXPECTED_FAILURE_MESSAGE,
+        )
+    }
+
+    /** The built-in counterpart of a check: the same rules for closing the page, without a site to probe. */
+    private suspend fun runBuiltInCheck(site: BuiltInSiteSummary, check: VerificationCheck) {
+        val cleared = runCatchingPreservingCancellation { controller.checkBuiltInVerification(site.source, check.userAgent) }.getOrNull()
+        val passed = cleared == true && when {
+            check.explicit || state.value.verification?.sawRefusal == true -> completeBuiltIn(site, check.userAgent)
+            else -> {
+                updateVerification { copy(checking = false, message = verificationAlreadyOpenMessage(site.host), messageIsError = false) }
+                true
+            }
+        }
+        if (!passed) verificationRefused(site.host, check, blocked = cleared == false, failure = UNEXPECTED_FAILURE_MESSAGE)
+    }
+
+    private suspend fun completeBuiltIn(site: BuiltInSiteSummary, userAgent: String): Boolean {
+        runCatchingPreservingCancellation { controller.completeBuiltInVerification(site.source, userAgent) }.getOrNull() ?: return false
+        mutableState.update { it.copy(verification = null) }
+        controller.setSetupHost(null)
+        return true
     }
 
     private suspend fun probeAddTarget(userAgent: String): SiteProbeResult? {
@@ -221,8 +262,8 @@ internal class CustomSitesViewModel(
         return true
     }
 
-    private fun verificationRefused(host: String, check: VerificationCheck, result: SiteProbeResult?) {
-        val blocked = (result as? SiteProbeResult.Unreachable)?.reason == ProbeFailure.BLOCKED
+    /** [blocked] when a challenge answered; [failure] explains any other refusal to someone who tapped Done. */
+    private fun verificationRefused(host: String, check: VerificationCheck, blocked: Boolean, failure: String) {
         updateVerification {
             copy(
                 checking = false,
@@ -231,7 +272,7 @@ internal class CustomSitesViewModel(
                 message = when {
                     !check.explicit -> message
                     blocked -> verificationRefusedMessage(host)
-                    else -> result?.let(::probeMessage) ?: UNEXPECTED_FAILURE_MESSAGE
+                    else -> failure
                 },
             )
         }

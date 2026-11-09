@@ -1,5 +1,6 @@
 package com.theoriacodex.app.settings.sites
 
+import com.theoriacodex.app.customsites.BuiltInSiteSummary
 import com.theoriacodex.app.customsites.CustomSiteAvailability
 import com.theoriacodex.app.customsites.CustomSiteMutation
 import com.theoriacodex.app.customsites.CustomSiteSummary
@@ -136,6 +137,10 @@ internal fun availabilityLabel(availability: CustomSiteAvailability): String = w
     CustomSiteAvailability.UNSUPPORTED_FAMILY -> "Unsupported in this version"
 }
 
+/** Second line of a built-in source's row: host, its account status, and whether a browser check is needed. */
+internal fun builtInRowSummary(site: BuiltInSiteSummary, account: String?): String =
+    listOfNotNull(site.host, account, "Needs browser verification".takeIf { site.needsVerification }).joinToString(" · ")
+
 /** Second line of a row: host, then [siteStatusSummary]. */
 internal fun siteRowSummary(site: CustomSiteSummary): String = "${site.host} · ${siteStatusSummary(site)}"
 
@@ -149,7 +154,7 @@ internal fun siteStatusSummary(site: CustomSiteSummary): String = buildList {
 /** The Settings home row's value. */
 internal fun customSitesSummary(sites: List<CustomSiteSummary>): String {
     if (sites.isEmpty()) return "Add a booru by its address"
-    val count = "${sites.size} ${if (sites.size == 1) "site" else "sites"}"
+    val count = "${sites.size} added"
     val needingKeys = sites.count { it.availability == CustomSiteAvailability.NEEDS_CREDENTIALS }
     return if (needingKeys == 0) count else "$count · $needingKeys need an API key"
 }

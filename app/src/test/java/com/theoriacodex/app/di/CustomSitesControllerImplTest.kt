@@ -1,5 +1,6 @@
 package com.theoriacodex.app.di
 
+import com.theoriacodex.app.customsites.BuiltInAgentStore
 import com.theoriacodex.app.customsites.CredentialEdit
 import com.theoriacodex.app.customsites.CustomSiteAvailability
 import com.theoriacodex.app.customsites.CustomSiteDraft
@@ -65,6 +66,17 @@ class CustomSitesControllerImplTest {
     private val installs = mutableListOf<Pair<Set<SourceKey>, Set<SourceKey>>>()
     private val labels = mutableMapOf<SourceKey, String>()
 
+    private val bridge = SiteCookieBridge(cookieStore)
+    private val builtInAgents = object : BuiltInAgentStore {
+        val saved = mutableMapOf<String, String>()
+        override fun read(): Map<String, String> = saved
+        override fun save(host: String, userAgent: String) {
+            saved[host] = userAgent
+        }
+    }
+    private val clearanceChecks = mutableListOf<Pair<String, String>>()
+    private var challengeCleared = true
+
     private class Graph(val controller: CustomSitesControllerImpl, val registry: CompositeSourceAdapterRegistry)
 
     private fun TestScope.graph(): Graph {
@@ -85,7 +97,12 @@ class CustomSitesControllerImplTest {
             library = { libraryHasData },
             scope = scope,
             outages = outages,
-            cookieBridge = SiteCookieBridge(cookieStore),
+            cookieBridge = bridge,
+            builtInAgents = builtInAgents,
+            clearsChallenge = { url, agent ->
+                clearanceChecks += url to agent
+                challengeCleared
+            },
             clock = { now },
         )
         return Graph(controller, CompositeSourceAdapterRegistry(NoBuiltIns, NoBuiltIns, runtime.snapshot))
@@ -235,6 +252,47 @@ class CustomSitesControllerImplTest {
         assertTrue(outages.outages.value.isEmpty())
         assertEquals(1, cookieStore.flushes)
         assertNull("completing makes no request", family.probedWith)
+    }
+
+    @Test
+    fun `checking a built-in source tests its challenged hosts and changes nothing`() = runTest {
+        val graph = graph()
+        outages.record("https://api.iwara.tv/videos", HostOutageKind.CHALLENGE)
+
+        challengeCleared = false
+        assertFalse(graph.controller.checkBuiltInVerification(SourceKey.IWARA, "WebView/2"))
+        challengeCleared = true
+        clearanceChecks.clear()
+        assertTrue(graph.controller.checkBuiltInVerification(SourceKey.IWARA, "WebView/2"))
+
+        assertEquals(
+            listOf("https://www.iwara.tv/" to "WebView/2", "https://api.iwara.tv/" to "WebView/2"),
+            clearanceChecks,
+        )
+        assertTrue(graph.controller.builtInSites.value.first { it.source == SourceKey.IWARA }.needsVerification)
+        assertEquals(setOf("api.iwara.tv"), outages.outages.value.keys)
+        assertTrue(builtInAgents.saved.isEmpty())
+    }
+
+    @Test
+    fun `completing a built-in source sends its agent and cookies, lifts the outage and marks it working`() = runTest {
+        val graph = graph()
+        cookieStore.cookies["api.iwara.tv"] = "cf_clearance=abc"
+        outages.record("https://api.iwara.tv/videos", HostOutageKind.CHALLENGE)
+        assertNull(bridge.userAgentFor("https://api.iwara.tv/videos"))
+        assertNull(bridge.cookiesFor("https://api.iwara.tv/videos"))
+
+        graph.controller.completeBuiltInVerification(SourceKey.IWARA, "WebView/2")
+
+        assertEquals("WebView/2", bridge.userAgentFor("https://api.iwara.tv/videos"))
+        assertNull("other sources are untouched", bridge.userAgentFor("https://gelbooru.com/"))
+        assertEquals("cf_clearance=abc", bridge.cookiesFor("https://api.iwara.tv/videos"))
+        assertEquals(mapOf("iwara.tv" to "WebView/2"), builtInAgents.saved)
+        assertTrue(outages.outages.value.isEmpty())
+        val iwara = graph.controller.builtInSites.value.first { it.source == SourceKey.IWARA }
+        assertTrue(iwara.working)
+        assertFalse(iwara.needsVerification)
+        assertEquals(1, cookieStore.flushes)
     }
 
     @Test

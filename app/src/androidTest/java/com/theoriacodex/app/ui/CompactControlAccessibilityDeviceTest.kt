@@ -120,13 +120,13 @@ class CompactControlAccessibilityDeviceTest {
             }
         }
 
-        val row = composeRule.onNode(hasText("Accounts") and hasClickAction()).performScrollTo()
+        val row = composeRule.onNode(hasText("Hidden tags") and hasClickAction()).performScrollTo()
         row.assertRole(Role.Button)
         row.assertHeightIsAtLeast(48.dp)
         row.performClick()
 
         composeRule.runOnIdle {
-            assertTrue(received == SettingsAction.OpenPage(SettingsPage.ACCOUNTS))
+            assertTrue(received == SettingsAction.OpenPage(SettingsPage.HIDDEN_TAGS))
         }
     }
 

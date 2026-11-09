@@ -1,5 +1,6 @@
 package com.theoriacodex.app.settings.sites
 
+import com.theoriacodex.app.customsites.BuiltInSiteSummary
 import com.theoriacodex.app.customsites.CustomSiteAvailability
 import com.theoriacodex.app.customsites.CustomSiteDraft
 import com.theoriacodex.app.customsites.CustomSiteEdit
@@ -7,6 +8,7 @@ import com.theoriacodex.app.customsites.CustomSiteMutation
 import com.theoriacodex.app.customsites.SitesRequest
 import com.theoriacodex.app.customsites.CustomSiteSummary
 import com.theoriacodex.app.customsites.CustomSitesController
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.ProtocolFamily
 import com.theoriacodex.domain.source.SiteAddress
 import com.theoriacodex.domain.source.SiteAddressParse
@@ -21,6 +23,18 @@ internal class FakeCustomSitesController(initial: List<CustomSiteSummary> = empt
 
     override val sites: MutableStateFlow<List<CustomSiteSummary>> = MutableStateFlow(initial)
     override val workingSourceIds = MutableStateFlow<Set<String>>(emptySet())
+    override val builtInSites = MutableStateFlow<List<BuiltInSiteSummary>>(emptyList())
+    var onCheckBuiltIn: suspend (SourceKey, String) -> Boolean = { _, _ -> error("No built-in check scripted") }
+
+    /** Source and agent of every [completeBuiltInVerification] call. */
+    val builtInCompletions = mutableListOf<Pair<SourceKey, String>>()
+
+    override suspend fun checkBuiltInVerification(source: SourceKey, userAgent: String): Boolean = onCheckBuiltIn(source, userAgent)
+
+    override suspend fun completeBuiltInVerification(source: SourceKey, userAgent: String) {
+        builtInCompletions += source to userAgent
+    }
+
     override val setupRequest = MutableStateFlow<SitesRequest?>(null)
 
     override fun requestSetup(address: String) {

@@ -51,7 +51,7 @@ import com.theoriacodex.app.settings.SettingsHeader
  * reloads it; a missing system WebView and a failed load are states of this page, not separate routes.
  */
 @Composable
-internal fun SiteVerificationPage(verification: SiteVerification, onAction: (CustomSitesAction) -> Unit) {
+internal fun SiteVerificationPage(verification: SiteVerification, siteName: String, onAction: (CustomSitesAction) -> Unit) {
     val host = verification.host
     BackHandler { onAction(CustomSitesAction.CancelVerification) }
     val context = LocalContext.current
@@ -81,7 +81,7 @@ internal fun SiteVerificationPage(verification: SiteVerification, onAction: (Cus
 
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)) {
-            SettingsHeader("Verify $host", onBack = { onAction(CustomSitesAction.CancelVerification) }) {
+            SettingsHeader("Verify", onBack = { onAction(CustomSitesAction.CancelVerification) }, parents = SITES_PATH + siteName) {
                 IconButton(onClick = ::reload, enabled = webView != null) { Icon(Icons.Default.Refresh, "Reload") }
             }
         }

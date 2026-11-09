@@ -9,6 +9,7 @@ import com.theoriacodex.app.backup.SharedPreferencesAutoBackupStore
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.creator.CreatorProfileCoordinator
 import com.theoriacodex.app.customsites.CustomSitesController
+import com.theoriacodex.app.customsites.SharedPreferencesBuiltInAgentStore
 import com.theoriacodex.app.customsites.SiteCookieBridge
 import com.theoriacodex.app.media.BoundedMediaDurationProbe
 import com.theoriacodex.app.media.MediaDurationAcquisitionEngine
@@ -83,6 +84,7 @@ import com.theoriacodex.domain.source.SiteProfile
 import com.theoriacodex.sources.RealAdapterRegistry
 import com.theoriacodex.sources.custom.CustomSiteHttpClient
 import com.theoriacodex.sources.http.HostOutageTracker
+import com.theoriacodex.sources.http.SiteHealthCheck
 import com.theoriacodex.sources.custom.SiteFamilyRegistry
 import com.theoriacodex.sources.custom.SiteProber
 import com.theoriacodex.sources.http.DefaultSourceHttpClient
@@ -196,7 +198,8 @@ internal class DefaultTheoriaAppContainer(
     )
     private val networkOnline = NetworkMonitor(appContext).online
     private val hostOutages = HostOutageTracker(isOnline = { networkOnline.value })
-    private val sourceHttpClient = DefaultSourceHttpClient(outages = hostOutages)
+    private val builtInAgents = SharedPreferencesBuiltInAgentStore(appContext)
+    private val sourceHttpClient = DefaultSourceHttpClient(outages = hostOutages, userAgentFor = cookieBridge::userAgentFor)
     private val credentialStore = AndroidSecureSourceCredentialsStore(appContext)
     private val accountStore = ObservableSourceAccountStore(delegate = credentialStore)
     private val pixivAuthApi = PixivAuthApi(sourceHttpClient)
@@ -443,6 +446,8 @@ internal class DefaultTheoriaAppContainer(
         scope = durableStoreScope,
         outages = hostOutages,
         cookieBridge = cookieBridge,
+        builtInAgents = builtInAgents,
+        clearsChallenge = { url, userAgent -> SiteHealthCheck(hostOutages).clearsChallenge(url, mapOf("User-Agent" to userAgent)) },
     )
 
     /** Keeps the bridge's allowed hosts equal to the saved sites; [awaitDurableStores] seeds them first. */
@@ -458,6 +463,7 @@ internal class DefaultTheoriaAppContainer(
         appContext.deleteSharedPreferences("browser_verified_sites")
         // Before the app is ready: a request racing an empty list would be challenged and trip a 10-minute outage.
         cookieBridge.updateSiteHosts(siteHosts(siteProfiles.observeProfiles().first()))
+        cookieBridge.updateBuiltInAgents(builtInAgents.read())
         val settingsReady = async { settingsRepository.awaitReady() }
         val statisticsReady = async { statisticsStore.awaitReady() }
         val uiRestoreReady = async { uiRestoreRepository.awaitReady() }

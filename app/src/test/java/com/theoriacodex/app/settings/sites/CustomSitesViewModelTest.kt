@@ -1,8 +1,10 @@
 package com.theoriacodex.app.settings.sites
 
+import com.theoriacodex.app.customsites.BuiltInSiteSummary
 import com.theoriacodex.app.customsites.CredentialEdit
 import com.theoriacodex.app.customsites.CustomSiteAvailability
 import com.theoriacodex.app.customsites.CustomSiteMutation
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.ProbeFailure
 import com.theoriacodex.domain.source.ProtocolFamily
 import com.theoriacodex.domain.source.SiteAddressError
@@ -388,6 +390,27 @@ class CustomSitesViewModelTest {
         assertNull(owner.state.value.verification)
         assertEquals(RetestStatus.Done("Working", ok = true), owner.state.value.retests["custom_safebooru_org"])
         assertEquals(listOf("custom_safebooru_org" to "WebView/2"), controller.completions)
+    }
+
+    @Test fun `a built-in source's browser check follows the same rules and needs no saved site`() = runTest {
+        val iwara = BuiltInSiteSummary(SourceKey.IWARA, "Iwara", "www.iwara.tv", working = false, needsVerification = true)
+        controller.builtInSites.value = listOf(iwara)
+        val answers = ArrayDeque(listOf(false, true))
+        controller.onCheckBuiltIn = { _, _ -> answers.removeFirst() }
+        val owner = owner()
+
+        controller.requestVerification(SourceKey.IWARA.id)
+        runCurrent()
+        assertEquals("www.iwara.tv", owner.state.value.verification?.host)
+
+        pageLoaded(owner, cookies = null)
+        assertEquals(emptyList<Pair<SourceKey, String>>(), controller.builtInCompletions)
+        assertTrue(owner.state.value.verification != null)
+
+        pageLoaded(owner, cookies = "cf=1", userAgent = "WebView/2")
+        assertNull(owner.state.value.verification)
+        assertEquals(listOf(SourceKey.IWARA to "WebView/2"), controller.builtInCompletions)
+        assertNull(controller.setupHosts.last())
     }
 
     @Test fun `a first check that passes on a voluntary visit leaves the page open and writes nothing`() = runTest {

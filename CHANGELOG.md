@@ -60,8 +60,11 @@
 - Letting go after scrubbing a video starts playback on the frame the preview showed, and much sooner when you scrub to a part of the video that hasn't loaded yet.
 - Videos in the Viewer start, and resume after a seek, once half a second has loaded instead of a full second. A video that has already had to stop and load waits for the full second again, so a slow connection doesn't stall more often.
 - Sites proven to work since you opened the app show a check mark on their row in Settings → Sites and beside Verify in browser, replacing the "Working" text.
-- A site's saved API keys stay collapsed on its Edit page until you choose to replace them.
-- Invert scroll direction moved into Settings → Controls, the renamed Classic controls sheet.
+- A site's API keys sit behind a collapsed "API key" item on its page, which opens to show their options.
+- Invert scroll direction moved into Settings → Controls, the renamed Classic controls sheet, with more room between its options.
+- Accounts and Sites are now one Settings → Sites page, listing built-in and added sources with each one's account and browser check.
+- Built-in sources behind a browser challenge, like Iwara, can now be verified in the app; tapping a challenged source opens its check.
+- Settings pages show their full path in the title, such as Settings / Sites / Safebooru.
 
 ### Fixed
 

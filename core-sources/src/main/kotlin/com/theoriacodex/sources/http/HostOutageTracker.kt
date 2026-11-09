@@ -92,6 +92,14 @@ class HostOutageTracker(
         state.update { it + (host to HostOutage(kind, clock() + outageMs)) }
     }
 
+    /** A real answer from [url]'s host: success proves it works this session, a refusal of its keys takes that back. */
+    fun recordAnswer(url: String, statusCode: Int) {
+        when (statusCode) {
+            in HTTP_SUCCESS -> setWorking(url, true)
+            HTTP_UNAUTHORIZED, HTTP_FORBIDDEN -> setWorking(url, false)
+        }
+    }
+
     /** Records whether [url]'s host just proved it works, or stopped working, for the session's status marks. */
     fun setWorking(url: String, isWorking: Boolean) {
         val host = hostKey(url) ?: return
@@ -134,7 +142,9 @@ class HostOutageTracker(
             else -> null
         }
 
+        private const val HTTP_UNAUTHORIZED = 401
         private const val HTTP_FORBIDDEN = 403
+        private val HTTP_SUCCESS = 200..299
         private val OUTAGE_STATUSES = setOf(502, 503, 504) + (520..530)
     }
 }

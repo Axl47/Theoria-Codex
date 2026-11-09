@@ -23,6 +23,8 @@ class DefaultSourceHttpClient(
     private val shouldRetryStatus: (url: String, statusCode: Int) -> Boolean = ::defaultShouldRetryStatus,
     /** When set, known-down hosts fail at once and outage answers throw [HostUnavailableException]. */
     private val outages: HostOutageTracker? = null,
+    /** The User-Agent a site's browser clearance is bound to, replacing the request's own; null keeps it. */
+    private val userAgentFor: (url: String) -> String? = { null },
 ) : SourceHttpClient {
     override suspend fun get(
         url: String,
@@ -123,6 +125,7 @@ class DefaultSourceHttpClient(
                 if (!retry || attempt == maxRetries) {
                     outages?.recordResponse(requestUrl, response.statusCode, response.headers)
                         ?.let { kind -> throw HostUnavailableException(HostOutageTracker.hostKey(requestUrl).orEmpty(), kind) }
+                    outages?.recordAnswer(requestUrl, response.statusCode)
                     return response
                 }
                 attempt += 1
@@ -163,7 +166,9 @@ class DefaultSourceHttpClient(
         HttpRequestSpec(
             method = method,
             url = url,
-            headers = headers,
+            headers = userAgentFor(url)?.let { agent ->
+                headers.filterKeys { !it.equals("User-Agent", ignoreCase = true) } + ("User-Agent" to agent)
+            } ?: headers,
             body = body,
             maxBodyBytes = maxBodyBytes,
             connectTimeoutMs = connectTimeoutMs,

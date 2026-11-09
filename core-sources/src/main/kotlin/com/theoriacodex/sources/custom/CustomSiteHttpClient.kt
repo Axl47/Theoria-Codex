@@ -96,18 +96,13 @@ class CustomSiteHttpClient internal constructor(
             ?: HostOutageKind.CHALLENGE.takeIf { response.toTextResponse().isVerificationChallenge() }
                 ?.also { tracker.record(url, it) }
         if (kind != null) throw HostUnavailableException(HostOutageTracker.hostKey(url).orEmpty(), kind)
-        when (response.statusCode) {
-            in SUCCESS_STATUSES -> tracker.setWorking(url, true)
-            in KEY_REFUSED_STATUSES -> tracker.setWorking(url, false)
-        }
+        tracker.recordAnswer(url, response.statusCode)
         return response
     }
 
     private companion object {
         const val DEFAULT_READ_TIMEOUT_MS = 10_000
         const val MAX_REDIRECTS = 3
-        val SUCCESS_STATUSES = 200..299
-        val KEY_REFUSED_STATUSES = setOf(401, 403)
     }
 }
 
