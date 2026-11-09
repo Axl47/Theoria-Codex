@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.saveable.rememberSaveable
+import com.theoriacodex.app.search.FeedImagePreloadEffect
 import com.theoriacodex.app.viewer.LocalViewerReturnGrid
 import com.theoriacodex.app.viewer.ViewerReturnShelfId
 import com.theoriacodex.app.viewer.ViewerReturnGridEffect
@@ -66,6 +67,8 @@ fun TwoColumnProjectedPostStaggeredGrid(
     val shelfIds = remember(projection) {
         projection.entries.map { (it as? RelatedFeedEntry.ShelfEntry)?.state?.requestOrNull?.seed?.id?.let(ViewerReturnShelfId::Related) }
     }
+    val posts = remember(projection) { projection.entries.map { (it as? RelatedFeedEntry.PostEntry)?.post } }
+    FeedImagePreloadEffect(posts, state)
     AdaptivePostGrid(postIds = postIds, state = state, modifier = modifier, shelfIds = shelfIds) {
         itemsIndexed(
             items = projection.entries,
