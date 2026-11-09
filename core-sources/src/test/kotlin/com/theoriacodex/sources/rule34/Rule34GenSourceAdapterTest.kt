@@ -29,6 +29,22 @@ class Rule34GenSourceAdapterTest {
     }
 
     @Test
+    fun `no tags reads the listing page and finds thumbnails behind lazy-load placeholders`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(statusCode = 200, body = SAMPLE_RULE34GEN_LAZY_LISTING_HTML)
+        }
+        val adapter = Rule34GenSourceAdapter(httpClient = httpClient)
+
+        val page = adapter.search(sampleQuery(tags = emptyList()), pageToken = null)
+
+        assertEquals("https://rule34gen.com/latest-updates/", httpClient.lastGet?.url)
+        assertEquals(
+            listOf("https://rule34gen.com/thumbs/eager.jpg", "https://rule34gen.com/thumbs/lazy.jpg"),
+            page.items.map { it.preview.url },
+        )
+    }
+
+    @Test
     fun `resolve extracts direct mp4 and tags`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(statusCode = 200, body = SAMPLE_RULE34GEN_POST_HTML)
@@ -45,10 +61,10 @@ class Rule34GenSourceAdapterTest {
         assertTrue(post?.canonicalTags?.contains("3d") == true)
     }
 
-    private fun sampleQuery(): Query {
+    private fun sampleQuery(tags: List<String> = listOf("genshin")): Query {
         return Query(
             mode = QueryMode.Source(SourceKey.RULE34GEN),
-            includeTags = listOf("genshin"),
+            includeTags = tags,
             excludeTags = emptyList(),
             sort = SortMode.NEWEST,
             dateRange = null,
@@ -68,6 +84,20 @@ private const val SAMPLE_RULE34GEN_SEARCH_HTML = """
         </a>
       </div>
     </div>
+  </body>
+</html>
+"""
+
+private const val SAMPLE_RULE34GEN_LAZY_LISTING_HTML = """
+<html>
+  <body>
+    <div class="item thumb video_1"><a class="th" href="https://rule34gen.com/video/1/one/">
+      <div class="img wrap_image"><img class="thumb" src="https://rule34gen.com/thumbs/eager.jpg" data-rd-jpg="https://rule34gen.com/thumbs/missing.jpg" loading="eager" /></div>
+    </a></div>
+    <div class="item thumb video_2"><a class="th" href="https://rule34gen.com/video/2/two/">
+      <div class="img wrap_image"><img class="thumb" src="data:image/gif;base64,R0lGOD" data-rd-src="https://rule34gen.com/thumbs/lazy.jpg" data-rd-jpg="https://rule34gen.com/thumbs/missing.jpg" loading="lazy" /></div>
+    </a></div>
+    <div class="item thumb"><a class="th" href="https://rule34gen.com/v1/d.php?z=1"><img src="/ad.gif" /></a></div>
   </body>
 </html>
 """

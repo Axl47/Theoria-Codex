@@ -49,10 +49,7 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> {
         val queryText = compileRule34VideoSearchText(query)
-        if (queryText.isBlank()) {
-            val rssBody = request("$baseUrl/rss/")
-            return parseLatestRss(rssBody)
-        }
+        if (queryText.isBlank()) return latestPage()
 
         val url = pageToken ?: initialSearchUrl(queryText)
         val body = request(url)
@@ -171,6 +168,9 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
             )
         }
     }
+
+    /** The newest posts, for a search with no tags. */
+    protected open suspend fun latestPage(): Page<Post> = parseLatestRss(request("$baseUrl/rss/"))
 
     protected abstract fun initialSearchUrl(queryText: String): String
 

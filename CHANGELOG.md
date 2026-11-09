@@ -90,6 +90,9 @@
 - Typing a tag's English name in Pixiv search and pressing Enter now searches the matching Japanese tag instead of the English text.
 - Pixiv searches keep tags that include parentheses, such as ラム(リゼロ), instead of cutting them short.
 - Gelbooru and Rule34.xxx tags with apostrophes or ampersands, such as jojo's_bizarre_adventure, now display correctly and find their posts.
+- Paheal cards show their images again, with or without tags.
+- Rule34Gen cards show their thumbnails when browsing without tags.
+- Rule34Gen and Rule34Video searches show every card's thumbnail, not just the first few.
 
 ## [1.3.0] - 2026-11-06
 

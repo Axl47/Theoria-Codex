@@ -33,6 +33,36 @@ class Rule34PahealSourceAdapterTest {
     }
 
     @Test
+    fun `rss types extensionless files from data-mime and keeps thumbnails as images`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = SAMPLE_PAHEAL_RSS.replace("data-ext='png'", "data-mime='video/mp4'"),
+            )
+        }
+
+        val post = Rule34PahealSourceAdapter(httpClient = httpClient).search(sampleQuery(), pageToken = null).items.single()
+
+        assertEquals("image/jpeg", post.preview.mime)
+        assertEquals("video/mp4", post.full?.mime)
+    }
+
+    @Test
+    fun `no tags reads the listing page with the same file types`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(statusCode = 200, body = SAMPLE_PAHEAL_LISTING_HTML)
+        }
+
+        val post = Rule34PahealSourceAdapter(httpClient = httpClient)
+            .search(sampleQuery(tags = emptyList()), pageToken = null)
+            .items.single()
+
+        assertEquals("https://rule34.paheal.net/post/list", httpClient.lastGet?.url)
+        assertEquals("image/jpeg", post.preview.mime)
+        assertEquals("image/gif", post.full?.mime)
+    }
+
+    @Test
     fun `autocomplete parses browser search json`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(
@@ -93,10 +123,10 @@ class Rule34PahealSourceAdapterTest {
         assertTrue(thrown === expected)
     }
 
-    private fun sampleQuery(): Query {
+    private fun sampleQuery(tags: List<String> = listOf("genshin_impact")): Query {
         return Query(
             mode = QueryMode.Source(SourceKey.RULE34PAHEAL),
-            includeTags = listOf("genshin_impact"),
+            includeTags = tags,
             excludeTags = emptyList(),
             sort = SortMode.NEWEST,
             dateRange = null,
@@ -123,6 +153,17 @@ March 7, 2026; 05:55' src='https://r34t.paheal.net/b9/68/b968fffb55cb42905b457b6
     </item>
   </channel>
 </rss>
+"""
+
+private const val SAMPLE_PAHEAL_LISTING_HTML = """
+<html>
+  <body>
+    <div class="shm-thumb thumb" data-mime="image/gif; animated=true" data-post-id="1" data-tags="one two">
+      <a class="shm-thumb-link" href="/post/view/1"><img src="https://r34t.paheal.net/aa/bb/one" title="one two" /></a><br />
+      <a href="https://r34i.paheal-cdn.net/aa/bb/one">File Only</a>
+    </div>
+  </body>
+</html>
 """
 
 private const val SAMPLE_PAHEAL_POST_HTML = """

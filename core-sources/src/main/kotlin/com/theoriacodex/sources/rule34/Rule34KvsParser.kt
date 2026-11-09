@@ -2,6 +2,7 @@ package com.theoriacodex.sources.rule34
 
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
+import org.jsoup.nodes.Element
 import org.jsoup.nodes.Document
 
 internal data class Rule34KvsConfig(
@@ -160,3 +161,11 @@ private val RULE34_KVS_PAIR_REGEX = Regex("""([A-Za-z0-9_]+)\s*:\s*'((?:\\.|[^']
 private val RULE34_ALT_VIDEO_KEY_REGEX = Regex("""video_alt_url\d*""")
 private val RULE34_QUALITY_REGEX = Regex("""(\d{3,4})p?""")
 private val RULE34_DURATION_WORD_REGEX = Regex("""(\d+)\s*(hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)\b""")
+
+/**
+ * A listing card's thumbnail. All but the first few cards load lazily: their `src` is an inline placeholder and the
+ * real address waits in `data-rd-src`.
+ */
+internal fun Element.kvsThumbnailUrl(): String? = sequenceOf("data-original", "data-rd-src", "src")
+    .map(::attr)
+    .firstOrNull { it.isNotBlank() && !it.startsWith("data:") }

@@ -28,6 +28,7 @@ import com.theoriacodex.sources.media.mimeFromFileExt
 import java.io.IOException
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
+import org.jsoup.nodes.Element
 import org.jsoup.parser.Parser
 
 class Rule34PahealSourceAdapter(
@@ -167,7 +168,6 @@ class Rule34PahealSourceAdapter(
                         ?.attr("abs:href")
                         .orEmpty()
                 }
-                val ext = thumb?.attr("data-ext").orEmpty()
                 val tags = thumb?.attr("data-tags")
                     ?.split(' ')
                     ?.map(String::trim)
@@ -177,15 +177,14 @@ class Rule34PahealSourceAdapter(
                     ?.substringAfter(" - ", "")
                     ?.trim()
                     ?.takeIf(String::isNotBlank)
-                val mime = mimeFromFileExt(ext) ?: inferMimeFromUrl(fullUrl)
-                val previewMime = mimeFromFileExt(ext) ?: inferMimeFromUrl(previewUrl) ?: mime
+                val mime = thumb?.pahealFileMime() ?: inferMimeFromUrl(fullUrl)
                 val sizeMatch = RULE34PAHEAL_DIMENSION_REGEX.find(image?.attr("title").orEmpty())
                 val width = sizeMatch?.groupValues?.getOrNull(1)?.toIntOrNull()
                 val height = sizeMatch?.groupValues?.getOrNull(2)?.toIntOrNull()
 
                 Post(
                     id = PostId(source = SourceKey.RULE34PAHEAL, sourcePostId = sourcePostId),
-                    preview = ImageRef(url = previewUrl.ifBlank { null }, localPath = null, mime = previewMime),
+                    preview = ImageRef(url = previewUrl.ifBlank { null }, localPath = null, mime = PAHEAL_THUMBNAIL_MIME),
                     full = fullUrl.ifBlank { null }?.let { url ->
                         ImageRef(url = url, localPath = null, mime = mime)
                     },
@@ -214,7 +213,7 @@ class Rule34PahealSourceAdapter(
                 .firstOrNull { anchor -> anchor.text().contains("file only", ignoreCase = true) }
                 ?.attr("abs:href")
                 .orEmpty()
-            val ext = thumb.attr("data-ext")
+            val fileMime = thumb.pahealFileMime()
             val tags = thumb.attr("data-tags")
                 .split(' ')
                 .map(String::trim)
@@ -227,13 +226,9 @@ class Rule34PahealSourceAdapter(
 
             Post(
                 id = PostId(source = SourceKey.RULE34PAHEAL, sourcePostId = sourcePostId),
-                preview = ImageRef(
-                    url = previewUrl.ifBlank { null },
-                    localPath = null,
-                    mime = mimeFromFileExt(ext) ?: inferMimeFromUrl(previewUrl),
-                ),
+                preview = ImageRef(url = previewUrl.ifBlank { null }, localPath = null, mime = PAHEAL_THUMBNAIL_MIME),
                 full = fullUrl.ifBlank { null }?.let { url ->
-                    ImageRef(url = url, localPath = null, mime = mimeFromFileExt(ext) ?: inferMimeFromUrl(url))
+                    ImageRef(url = url, localPath = null, mime = fileMime ?: inferMimeFromUrl(url))
                 },
                 pageUrl = link.ifBlank { "$RULE34PAHEAL_BASE_URL/post/view/$sourcePostId" },
                 width = width,
@@ -287,7 +282,7 @@ class Rule34PahealSourceAdapter(
             )
         } else {
             val imageUrl = main.attr("abs:src").ifBlank { main.attr("src") }.ifBlank { return null }
-            val mime = main.attr("data-mime").ifBlank { inferMimeFromUrl(imageUrl) }
+            val mime = main.pahealFileMime() ?: inferMimeFromUrl(imageUrl)
             val imageRef = ImageRef(url = imageUrl, localPath = null, mime = mime)
             Post(
                 id = PostId(source = SourceKey.RULE34PAHEAL, sourcePostId = sourcePostId),
@@ -306,6 +301,12 @@ class Rule34PahealSourceAdapter(
     }
 }
 
+/** Paheal's URLs have no extensions, so this is the only word on a file's type: `image/gif; animated=true` or an older `data-ext`. */
+private fun Element.pahealFileMime(): String? =
+    attr("data-mime").substringBefore(';').trim().ifBlank { null } ?: mimeFromFileExt(attr("data-ext"))
+
+/** Paheal's thumbnails are JPEGs whatever the post is, and their URLs can't say so. */
+private const val PAHEAL_THUMBNAIL_MIME = "image/jpeg"
 private val RULE34PAHEAL_DIMENSION_REGEX = Regex("""(\d+)\s*x\s*(\d+)""")
 private val RULE34PAHEAL_STYLE_WIDTH_REGEX = Regex("""width:\s*(\d+)px""")
 private val RULE34PAHEAL_STYLE_HEIGHT_REGEX = Regex("""height:\s*(\d+)px""")

@@ -2,7 +2,9 @@ package com.theoriacodex.sources.rule34
 
 import com.google.gson.Gson
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.http.SourceHttpClient
+import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 
 class Rule34GenSourceAdapter(
@@ -18,6 +20,12 @@ class Rule34GenSourceAdapter(
     override fun initialSearchUrl(queryText: String): String {
         return "$baseUrl/search/${encodePathSegment(queryText)}/"
     }
+
+    // This site's RSS links thumbnails that answer 404, while its listing page has working ones.
+    override suspend fun latestPage() = canonicalPostPage(
+        items = parseSearchPage(Jsoup.parse(request("$baseUrl/latest-updates/"), baseUrl)),
+        nextPageToken = null,
+    )
 
     override fun nextPageToken(document: Document, queryText: String): String? {
         return document.selectFirst("[data-block-next]")?.attr("data-block-next")?.trim()?.takeIf(String::isNotBlank)
@@ -37,7 +45,7 @@ class Rule34GenSourceAdapter(
                 pageUrl = pageUrl,
                 sourcePostId = sourcePostId,
                 title = anchor.attr("title").trim().ifBlank { null },
-                previewUrl = image?.attr("data-original")?.ifBlank { image.attr("src") },
+                previewUrl = image?.kvsThumbnailUrl(),
                 previewVideoUrl = previewVideoUrl ?: image?.attr("data-preview")?.ifBlank { null },
                 durationMs = parseRule34DurationMs(
                     anchor.selectFirst(".duration, .time, time, [data-duration]")?.let { element ->
