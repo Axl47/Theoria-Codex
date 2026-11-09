@@ -78,7 +78,11 @@ internal class HitomiPostMapper(
         if (sparse) return listOfNotNull(video).takeIf { metadata.hasPlayableVideo }.orEmpty()
         if (video != null) return listOf(video)
         return metadata.files.map { file ->
-            imageRef(file, candidates[file].orEmpty(), metadata.animated, preview = false)
+            val fileCandidates = candidates[file].orEmpty()
+            imageRef(file, fileCandidates, metadata.animated, preview = false).copy(
+                thumbnailUrl = thumbnailUrls(file, fileCandidates, HitomiThumbnail.PAGE).firstOrNull()
+                    .takeUnless { metadata.animated },
+            )
         }
     }
 

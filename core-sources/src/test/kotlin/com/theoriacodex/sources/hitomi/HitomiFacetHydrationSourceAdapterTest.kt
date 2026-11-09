@@ -179,6 +179,7 @@ internal class HitomiFacetHydrationSourceAdapterTest : HitomiSourceAdapterTestFi
 
         assertTrue(post.preview.url.orEmpty().contains("tn.gold-usergeneratedcontent.net/webpbigtn/"))
         assertTrue(post.preview.progressiveUrls.any { it.contains("/1783681201/") })
+        assertTrue(post.media.all { it.thumbnailUrl.orEmpty().contains("tn.gold-usergeneratedcontent.net/webpsmalltn/") })
 
         http.textRoutes[HitomiMediaUrlResolver.GG_CONFIGURATION_URL] = config.replace("1783681201/", "1783689999/")
         val recovered = requireNotNull(adapter.recoverPostMedia(post, post.preview))
