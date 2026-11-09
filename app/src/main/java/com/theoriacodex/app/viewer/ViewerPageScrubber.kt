@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import coil.compose.AsyncImage
+import coil.memory.MemoryCache
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.domain.model.SourceKey
 import kotlin.math.abs
@@ -189,6 +190,8 @@ private fun ViewerPagePreview(
         delay(SCRUB_SHARP_SETTLE_MS)
         sharpPage = settled
     }
+    // A jump that replaces all three frames would leave the centre empty; its new frame starts from this instead.
+    var lastCentre by remember { mutableStateOf<MemoryCache.Key?>(null) }
     val frame = viewerPagePreviewFrame(aspectRatio, LocalConfiguration.current.screenWidthDp.dp - 16.dp)
     val sideFrame = frame * SIDE_FRAME_SCALE
     val decodeEdgePx = with(LocalDensity.current) { maxOf(frame.width, frame.height).roundToPx() }
@@ -201,44 +204,51 @@ private fun ViewerPagePreview(
                 val item = items.getOrNull(settled + slot * step)
                 // Keyed by page, not position, so a frame sliding from the side to the centre keeps its load.
                 key(item?.mediaIndex ?: (-1 - slot)) {
-                    val isCentre = slot == 0
-                    ViewerPagePreviewFrame(
-                        source, item,
-                        if (isCentre) frame else sideFrame,
-                        if (isCentre) ContentScale.Fit else ContentScale.Crop,
-                        if (isCentre) 1f else SIDE_FRAME_ALPHA,
-                        decodeEdgePx,
-                        sharp = isCentre && sharpPage == settled,
-                    )
+                    val look = if (slot == 0) {
+                        PreviewFrameLook(frame, ContentScale.Fit, 1f, CentreFrame(sharpPage == settled, lastCentre) { lastCentre = it })
+                    } else {
+                        PreviewFrameLook(sideFrame, ContentScale.Crop, SIDE_FRAME_ALPHA, centre = null)
+                    }
+                    ViewerPagePreviewFrame(source, item, look, decodeEdgePx)
                 }
             }
         }
     }
 }
 
+/** How a preview frame is drawn; [centre] is set only for the target page. */
+private class PreviewFrameLook(val size: DpSize, val scale: ContentScale, val opacity: Float, val centre: CentreFrame?)
+
+/**
+ * What only the target page's frame does: lay the original over its thumbnail once [sharp], start from [placeholder]
+ * (the last thumbnail that loaded there) while its own is loading, and report each thumbnail that loads.
+ */
+private class CentreFrame(val sharp: Boolean, val placeholder: MemoryCache.Key?, val onLoaded: (MemoryCache.Key?) -> Unit)
+
 /**
  * A past-the-end neighbour still holds its space, so the target page stays centred over the finger. Every frame
  * decodes at [decodeEdgePx], so a frame keeps the same request when it moves from one slot to another.
  */
 @Composable
-private fun ViewerPagePreviewFrame(
-    source: SourceKey,
-    item: ViewerMediaOverviewItem?,
-    frameSize: DpSize,
-    scale: ContentScale,
-    opacity: Float,
-    decodeEdgePx: Int,
-    sharp: Boolean,
-) {
+private fun ViewerPagePreviewFrame(source: SourceKey, item: ViewerMediaOverviewItem?, look: PreviewFrameLook, decodeEdgePx: Int) {
     if (item == null) {
-        Spacer(Modifier.size(frameSize))
+        Spacer(Modifier.size(look.size))
         return
     }
-    Box(Modifier.alpha(opacity).viewerScrubFrame(frameSize)) {
-        rememberViewerThumbnailRequest(source, item, decodeEdgePx)?.let { AsyncImage(it, null, Modifier.fillMaxSize(), contentScale = scale) }
+    val centre = look.centre
+    Box(Modifier.alpha(look.opacity).viewerScrubFrame(look.size)) {
+        val thumbnail = rememberViewerThumbnailRequest(source, item, decodeEdgePx)
+        // The placeholder is taken once, when the frame appears: rebuilding the request later would restart its load.
+        val request = remember(thumbnail) { thumbnail?.newBuilder()?.placeholderMemoryCacheKey(centre?.placeholder)?.build() }
+        request?.let {
+            AsyncImage(
+                it, null, Modifier.fillMaxSize(), contentScale = look.scale,
+                onSuccess = centre?.let { c -> { success -> c.onLoaded(success.result.memoryCacheKey) } },
+            )
+        }
         // The original goes over the thumbnail, which stays underneath until it has loaded.
-        if (sharp && item.posterLocation != item.thumbnailLocation) {
-            rememberViewerPosterRequest(source, item)?.let { AsyncImage(it, null, Modifier.fillMaxSize(), contentScale = scale) }
+        if (centre?.sharp == true && item.posterLocation != item.thumbnailLocation) {
+            rememberViewerPosterRequest(source, item)?.let { AsyncImage(it, null, Modifier.fillMaxSize(), contentScale = look.scale) }
         }
     }
 }
