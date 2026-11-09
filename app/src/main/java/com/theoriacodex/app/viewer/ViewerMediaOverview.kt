@@ -95,15 +95,25 @@ internal fun rememberViewerPosterRequest(source: SourceKey, item: ViewerMediaOve
 
 /** The small stand-in for page pickers (strip, seek preview); falls back to the poster when the provider has none. */
 @Composable
-internal fun rememberViewerThumbnailRequest(source: SourceKey, item: ViewerMediaOverviewItem): ImageRequest? =
-    rememberViewerOverviewRequest(source, item, item.thumbnailLocation)
+internal fun rememberViewerThumbnailRequest(source: SourceKey, item: ViewerMediaOverviewItem, decodeEdgePx: Int? = null): ImageRequest? =
+    rememberViewerOverviewRequest(source, item, item.thumbnailLocation, decodeEdgePx)
 
 @Composable
-private fun rememberViewerOverviewRequest(source: SourceKey, item: ViewerMediaOverviewItem, location: String?): ImageRequest? {
+private fun rememberViewerOverviewRequest(
+    source: SourceKey,
+    item: ViewerMediaOverviewItem,
+    location: String?,
+    decodeEdgePx: Int? = null,
+): ImageRequest? {
     val context = LocalContext.current
-    return remember(context, location, item.kind, source) {
+    return remember(context, location, item.kind, source, decodeEdgePx) {
         location?.let {
-            buildViewerImageRequest(context, it, source, staticAnimatedWebPFrame = shouldDecodeStaticOverviewFrame(item.kind))
+            buildViewerImageRequest(
+                context, it, source,
+                staticAnimatedWebPFrame = shouldDecodeStaticOverviewFrame(item.kind),
+                targetWidthPx = decodeEdgePx,
+                targetHeightPx = decodeEdgePx,
+            )
         }
     }
 }

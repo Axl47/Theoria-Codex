@@ -17,6 +17,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,6 +30,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -182,27 +184,49 @@ private fun ViewerPagePreview(
     }
     val frame = viewerPagePreviewFrame(aspectRatio, LocalConfiguration.current.screenWidthDp.dp - 16.dp)
     val sideFrame = frame * SIDE_FRAME_SCALE
+    val decodeEdgePx = with(LocalDensity.current) { maxOf(frame.width, frame.height).roundToPx() }
     val step = if (mirrored) -1 else 1
     val delta = target - startPage
     val centre = (target + 0.5f) / items.size
     ViewerScrubPopup("${target + 1} / ${items.size}", "${if (delta < 0) "-" else "+"}${abs(delta)}", if (mirrored) 1f - centre else centre) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(PREVIEW_FRAME_GAP)) {
-            ViewerPagePreviewFrame(source, items.getOrNull(settled - step), sideFrame, ContentScale.Crop, SIDE_FRAME_ALPHA)
-            ViewerPagePreviewFrame(source, items.getOrNull(settled), frame, ContentScale.Fit, 1f)
-            ViewerPagePreviewFrame(source, items.getOrNull(settled + step), sideFrame, ContentScale.Crop, SIDE_FRAME_ALPHA)
+            for (slot in -1..1) {
+                val item = items.getOrNull(settled + slot * step)
+                // Keyed by page, not position, so a frame sliding from the side to the centre keeps its load.
+                key(item?.mediaIndex ?: (-1 - slot)) {
+                    val isCentre = slot == 0
+                    ViewerPagePreviewFrame(
+                        source, item,
+                        if (isCentre) frame else sideFrame,
+                        if (isCentre) ContentScale.Fit else ContentScale.Crop,
+                        if (isCentre) 1f else SIDE_FRAME_ALPHA,
+                        decodeEdgePx,
+                    )
+                }
+            }
         }
     }
 }
 
-/** A past-the-end neighbour still holds its space, so the target page stays centred over the finger. */
+/**
+ * A past-the-end neighbour still holds its space, so the target page stays centred over the finger. Every frame
+ * decodes at [decodeEdgePx], so a frame keeps the same request when it moves from one slot to another.
+ */
 @Composable
-private fun ViewerPagePreviewFrame(source: SourceKey, item: ViewerMediaOverviewItem?, frameSize: DpSize, scale: ContentScale, opacity: Float) {
+private fun ViewerPagePreviewFrame(
+    source: SourceKey,
+    item: ViewerMediaOverviewItem?,
+    frameSize: DpSize,
+    scale: ContentScale,
+    opacity: Float,
+    decodeEdgePx: Int,
+) {
     if (item == null) {
         Spacer(Modifier.size(frameSize))
         return
     }
     Box(Modifier.alpha(opacity).viewerScrubFrame(frameSize)) {
-        rememberViewerThumbnailRequest(source, item)?.let { AsyncImage(it, null, Modifier.fillMaxSize(), contentScale = scale) }
+        rememberViewerThumbnailRequest(source, item, decodeEdgePx)?.let { AsyncImage(it, null, Modifier.fillMaxSize(), contentScale = scale) }
     }
 }
 

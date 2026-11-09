@@ -16,8 +16,17 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.percentOffset
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
+import androidx.test.core.app.ApplicationProvider
+import coil.Coil
+import coil.EventListener
+import coil.ImageLoader
+import coil.fetch.Fetcher
+import coil.request.ImageRequest
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -101,6 +110,50 @@ class ViewerPageScrubberTest {
         compose.runOnIdle { assertEquals(listOf(2, 4), selected) }
     }
 
+    @Test fun `moving one page keeps the loads of the frames that stay in the preview`() {
+        val loads = installHangingLoader()
+        setScrubber(pageIndex = 0)
+        scrubber { down(at(0.1f)) }
+        compose.mainClock.advanceTimeBy(SCRUB_FRAME_SETTLE_MS + 20)
+        compose.runOnIdle { assertEquals(listOf(0, 1, 2), loads.started.pages("/thumb/")) }
+
+        // Page 2 was the right-hand neighbour and becomes the centre.
+        scrubber { moveTo(at(0.2f)) }
+        compose.onNodeWithText("3 / 12").assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(SCRUB_FRAME_SETTLE_MS + 20)
+        compose.runOnIdle {
+            assertEquals("started ${loads.started}", 1, loads.started.count { it.endsWith("/thumb/3.jpg") })
+            assertEquals(1, loads.started.count { it.endsWith("/thumb/2.jpg") })
+            // Only page 0, which left the preview, is dropped.
+            assertEquals(listOf("/thumb/0.jpg"), loads.cancelled)
+        }
+    }
+
+    private fun List<String>.pages(prefix: String) = filter { prefix in it }.map { it.substringAfter(prefix).substringBefore(".").toInt() }.sorted()
+
+    /** Replaces Coil's loader with one whose requests never finish, recording which data started and was cancelled. */
+    private fun installHangingLoader(): LoadLog {
+        val log = LoadLog()
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        Coil.setImageLoader(
+            ImageLoader.Builder(context)
+                .dispatcher(Dispatchers.Unconfined)
+                .components { add(Fetcher.Factory<Any> { _, _, _ -> Fetcher { awaitCancellation() } }) }
+                .eventListener(log)
+                .build(),
+        )
+        return log
+    }
+
+    @After fun resetCoil() = Coil.reset()
+
+    private class LoadLog : EventListener {
+        val started = mutableListOf<String>()
+        val cancelled = mutableListOf<String>()
+        override fun onStart(request: ImageRequest) { started += request.data.toString() }
+        override fun onCancel(request: ImageRequest) { cancelled += request.data.toString() }
+    }
+
     private fun TouchInjectionScope.at(fraction: Float) = percentOffset(fraction, 0.5f)
 
     private fun scrubber(gesture: TouchInjectionScope.() -> Unit) {
@@ -108,7 +161,9 @@ class ViewerPageScrubberTest {
     }
 
     private fun setScrubber(pageIndex: Int, instantSeek: Boolean = false, shown: () -> Boolean = { true }) {
-        val items = List(12) { index -> ViewerMediaOverviewItem(index, ImageRef(null, "/missing/$index.jpg", "image/jpeg"), ViewerMediaOverviewKind.STILL_IMAGE, "/missing/$index.jpg") }
+        val items = List(12) { index ->
+            ViewerMediaOverviewItem(index, ImageRef(null, "/missing/$index.jpg", "image/jpeg"), ViewerMediaOverviewKind.STILL_IMAGE, "/missing/$index.jpg", "/thumb/$index.jpg")
+        }
         compose.setContent {
             MaterialTheme {
                 CompositionLocalProvider(LocalViewerInstantSeek provides instantSeek) {

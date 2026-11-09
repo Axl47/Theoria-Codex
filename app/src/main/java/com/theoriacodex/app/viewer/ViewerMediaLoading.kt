@@ -141,12 +141,16 @@ internal fun buildViewerImageRequest(
     url: String,
     sourceKey: SourceKey,
     staticAnimatedWebPFrame: Boolean = false,
+    targetWidthPx: Int? = null,
+    targetHeightPx: Int? = null,
 ): ImageRequest = MediaRequestFactory.imageRequest(
     context = context,
     url = url,
     sourceKey = sourceKey,
     crossfade = false,
     staticAnimatedWebPFrame = staticAnimatedWebPFrame,
+    targetWidthPx = targetWidthPx,
+    targetHeightPx = targetHeightPx,
 )
 
 internal const val GIF_FALLBACK_DURATION_MS = 1000L
