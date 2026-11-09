@@ -125,7 +125,30 @@ class ViewerPageScrubberTest {
             assertEquals("started ${loads.started}", 1, loads.started.count { it.endsWith("/thumb/3.jpg") })
             assertEquals(1, loads.started.count { it.endsWith("/thumb/2.jpg") })
             // Only page 0, which left the preview, is dropped.
-            assertEquals(listOf("/thumb/0.jpg"), loads.cancelled)
+            assertEquals(listOf("/thumb/0.jpg"), loads.cancelled.filter { "/thumb/" in it })
+        }
+    }
+
+    @Test fun `the original covers only the centre page, once the finger has rested`() {
+        val loads = installHangingLoader()
+        setScrubber(pageIndex = 0)
+        scrubber { down(at(0.1f)) }
+        compose.mainClock.advanceTimeBy(SCRUB_FRAME_SETTLE_MS + 20)
+        compose.runOnIdle {
+            assertEquals(listOf(0, 1, 2), loads.started.pages("/thumb/"))
+            assertTrue("started ${loads.started}", loads.started.pages("/missing/").isEmpty())
+        }
+
+        compose.mainClock.advanceTimeBy(250)
+        compose.runOnIdle { assertEquals(listOf(1), loads.started.pages("/missing/")) }
+
+        // Page 5 has no separate thumbnail, so its poster is loaded once, as the thumbnail.
+        scrubber { moveTo(at(0.45f)) }
+        compose.onNodeWithText("6 / 12").assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(SCRUB_FRAME_SETTLE_MS + 250 + 20)
+        compose.runOnIdle {
+            assertEquals("started ${loads.started}", listOf(1, 5), loads.started.pages("/missing/"))
+            assertEquals(1, loads.started.count { it.endsWith("/missing/5.jpg") })
         }
     }
 
@@ -162,7 +185,7 @@ class ViewerPageScrubberTest {
 
     private fun setScrubber(pageIndex: Int, instantSeek: Boolean = false, shown: () -> Boolean = { true }) {
         val items = List(12) { index ->
-            ViewerMediaOverviewItem(index, ImageRef(null, "/missing/$index.jpg", "image/jpeg"), ViewerMediaOverviewKind.STILL_IMAGE, "/missing/$index.jpg", "/thumb/$index.jpg")
+            ViewerMediaOverviewItem(index, ImageRef(null, "/missing/$index.jpg", "image/jpeg"), ViewerMediaOverviewKind.STILL_IMAGE, "/missing/$index.jpg", if (index == 5) "/missing/5.jpg" else "/thumb/$index.jpg")
         }
         compose.setContent {
             MaterialTheme {

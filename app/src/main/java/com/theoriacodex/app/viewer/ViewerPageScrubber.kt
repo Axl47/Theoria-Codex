@@ -182,6 +182,13 @@ private fun ViewerPagePreview(
         delay(SCRUB_FRAME_SETTLE_MS)
         settled = target
     }
+    // The original is heavy and waits for the finger to stay put longer than the thumbnails do. Compared with
+    // [settled] rather than reset, so the sharp page never flashes back to the thumbnail between pages.
+    var sharpPage by remember { mutableIntStateOf(-1) }
+    LaunchedEffect(settled) {
+        delay(SCRUB_SHARP_SETTLE_MS)
+        sharpPage = settled
+    }
     val frame = viewerPagePreviewFrame(aspectRatio, LocalConfiguration.current.screenWidthDp.dp - 16.dp)
     val sideFrame = frame * SIDE_FRAME_SCALE
     val decodeEdgePx = with(LocalDensity.current) { maxOf(frame.width, frame.height).roundToPx() }
@@ -201,6 +208,7 @@ private fun ViewerPagePreview(
                         if (isCentre) ContentScale.Fit else ContentScale.Crop,
                         if (isCentre) 1f else SIDE_FRAME_ALPHA,
                         decodeEdgePx,
+                        sharp = isCentre && sharpPage == settled,
                     )
                 }
             }
@@ -220,6 +228,7 @@ private fun ViewerPagePreviewFrame(
     scale: ContentScale,
     opacity: Float,
     decodeEdgePx: Int,
+    sharp: Boolean,
 ) {
     if (item == null) {
         Spacer(Modifier.size(frameSize))
@@ -227,6 +236,10 @@ private fun ViewerPagePreviewFrame(
     }
     Box(Modifier.alpha(opacity).viewerScrubFrame(frameSize)) {
         rememberViewerThumbnailRequest(source, item, decodeEdgePx)?.let { AsyncImage(it, null, Modifier.fillMaxSize(), contentScale = scale) }
+        // The original goes over the thumbnail, which stays underneath until it has loaded.
+        if (sharp && item.posterLocation != item.thumbnailLocation) {
+            rememberViewerPosterRequest(source, item)?.let { AsyncImage(it, null, Modifier.fillMaxSize(), contentScale = scale) }
+        }
     }
 }
 
@@ -238,6 +251,7 @@ internal fun viewerPagePreviewFrame(aspectRatio: Float?, availableWidth: Dp): Dp
 }
 
 private const val MAX_PAGE_SEGMENTS = 24
+private const val SCRUB_SHARP_SETTLE_MS = 250L
 private const val SIDE_FRAME_SCALE = 0.55f
 private const val SIDE_FRAME_ALPHA = 0.5f
 private val PREVIEW_FRAME_GAP = 6.dp
