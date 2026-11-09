@@ -13,6 +13,9 @@
         <exclude
             domain="sharedpref"
             path="theoria_auto_backup.xml" />
+        <exclude
+            domain="sharedpref"
+            path="connection_memory.xml" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="file" path="theoria_codex/offline_media/" />
@@ -27,5 +30,8 @@
         <exclude
             domain="sharedpref"
             path="theoria_auto_backup.xml" />
+        <exclude
+            domain="sharedpref"
+            path="connection_memory.xml" />
     </device-transfer>
 </data-extraction-rules>

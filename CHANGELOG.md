@@ -76,6 +76,8 @@
 - Unified search says when a site is down for maintenance, so you know the results are missing it. Dismiss the notice and it stays away until that outage ends.
 - Unified search says when a site needs browser verification, with Verify in browser and Dismiss.
 - In Settings → Sites, Test all sits in line with the Built-in header.
+- The first search after opening the app starts faster on Wi-Fi: Theoria reconnects to the sites you used last while the app comes up.
+- Networks whose IPv6 doesn't really work no longer slow down new connections once Theoria has noticed.
 
 ### Fixed
 

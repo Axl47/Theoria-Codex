@@ -2,23 +2,37 @@ package com.theoriacodex.app.network
 
 import android.content.Context
 import com.theoriacodex.app.TheoriaApplication
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.sources.http.await
 import com.theoriacodex.sources.http.unexpectedFailuresAsIoExceptions
 import com.theoriacodex.sources.http.unqueuedSourceDispatcher
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import okhttp3.ConnectionPool
 import okhttp3.CookieJar
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
+import okhttp3.Request
 
 /**
  * Every HTTP client in the app, derived from one so they share a connection pool. OkHttp 5 races IPv6 against IPv4
  * on each new connection, so a network with broken IPv6 costs a quarter of a second instead of a whole connect
- * timeout per address. Each client below differs only in how it queues requests and how long it waits.
+ * timeout per address, and [memory] removes even that once it has seen the pattern. Each client below differs only
+ * in how it queues requests and how long it waits.
  */
-internal class AppHttpClients(cookieJar: CookieJar) {
+internal class AppHttpClients(
+    cookieJar: CookieJar,
+    private val memory: ConnectionMemory = ConnectionMemory(NoRecentHosts, activeNetwork = { null }),
+) {
+    private val warmed = AtomicBoolean(false)
+
     val shared: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .fastFallback(true)
+            .dns(memory)
+            .eventListener(memory)
             .connectionPool(ConnectionPool(MAX_IDLE_CONNECTIONS, IDLE_KEEP_ALIVE_MINUTES, TimeUnit.MINUTES))
             .cookieJar(cookieJar)
             .addInterceptor(unexpectedFailuresAsIoExceptions)
@@ -46,6 +60,27 @@ internal class AppHttpClients(cookieJar: CookieJar) {
             .followSslRedirects(false)
             .build()
     }
+
+    /**
+     * Connects to the hosts used most recently, once per launch, so the first search finds its connections open
+     * instead of waiting on DNS, TCP and TLS for each. Only the pooled connection matters, so any answer will do.
+     */
+    suspend fun warmRecentHosts() {
+        if (!warmed.compareAndSet(false, true)) return
+        val client = shared.newBuilder().followRedirects(false).followSslRedirects(false)
+            .callTimeout(WARM_UP_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            .build()
+        coroutineScope {
+            memory.recentHosts().forEach { host ->
+                launch {
+                    runCatchingPreservingCancellation {
+                        val request = Request.Builder().url("https://$host/").head().header("User-Agent", WARM_UP_USER_AGENT).build()
+                        client.newCall(request).await { }
+                    }
+                }
+            }
+        }
+    }
 }
 
 /**
@@ -57,6 +92,8 @@ private const val IDLE_KEEP_ALIVE_MINUTES = 5L
 private const val IMAGE_MAX_REQUESTS_PER_HOST = 16
 private const val DOWNLOAD_CONNECT_TIMEOUT_MS = 12_000L
 private const val DOWNLOAD_READ_TIMEOUT_MS = 30_000L
+private const val WARM_UP_TIMEOUT_MS = 8_000L
+private const val WARM_UP_USER_AGENT = "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/131 Mobile Safari/537.36"
 
 /** Only a plain test application reaches this; the real one owns clients that carry its cookies. */
 private val cookielessHttpClients by lazy { AppHttpClients(CookieJar.NO_COOKIES) }

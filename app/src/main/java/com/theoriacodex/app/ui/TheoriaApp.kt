@@ -389,6 +389,7 @@ private fun rememberSourceHealth(shell: TheoriaShell): SourceHealth {
             startSourceHealthCheck(shell.scope, shell.sources.healthCheck) {
                 shell.sources.availableSources.value.inPresentationOrder()
             }
+            shell.scope.launch(kotlinx.coroutines.Dispatchers.IO) { shell.sources.warmConnections() }
             // An expired Pixiv token would otherwise refresh inside the first search. No account is not an error here.
             shell.scope.launch { runCatchingPreservingCancellation { shell.sources.pixivTokens.activeTokens() } }
         }

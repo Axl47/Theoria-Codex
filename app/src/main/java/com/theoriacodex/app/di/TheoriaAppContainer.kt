@@ -88,6 +88,7 @@ import com.theoriacodex.sources.RealAdapterRegistry
 import com.theoriacodex.sources.custom.CustomSiteHttpClient
 import com.theoriacodex.sources.http.HostOutageTracker
 import com.theoriacodex.sources.http.SiteHealthCheck
+import com.theoriacodex.app.media.isMediaNetworkMetered
 import com.theoriacodex.sources.custom.SiteFamilyRegistry
 import com.theoriacodex.sources.custom.SiteProber
 import com.theoriacodex.sources.http.DefaultSourceHttpClient
@@ -139,6 +140,8 @@ data class SourceDependencies(
     val outages: HostOutageTracker = HostOutageTracker(),
     /** The light per-site check, sharing the app's client so it carries browser-verified cookies. */
     val healthCheck: SiteHealthCheck = SiteHealthCheck(outages),
+    /** Opens connections to recently used hosts, on networks where the traffic costs nothing. */
+    val warmConnections: suspend () -> Unit = {},
 )
 
 data class UpdateDependencies(
@@ -399,6 +402,7 @@ internal class DefaultTheoriaAppContainer(
         pixivTokens = pixivTokenCoordinator,
         outages = hostOutages,
         healthCheck = siteHealthCheck,
+        warmConnections = { if (!appContext.isMediaNetworkMetered()) httpClients.warmRecentHosts() },
     )
 
     override val updates = UpdateDependencies(

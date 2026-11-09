@@ -1,5 +1,8 @@
 package com.theoriacodex.app
 
+import android.net.ConnectivityManager
+import com.theoriacodex.app.network.ConnectionMemory
+import com.theoriacodex.app.network.SharedPreferencesRecentHostStore
 import android.app.Application
 import coil.ImageLoader
 import coil.ImageLoaderFactory
@@ -30,7 +33,13 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
     internal val siteCookieBridge = SiteCookieBridge(AndroidBrowserCookieStore)
 
     /** Every HTTP client in the app, so they share one connection pool and these cookies. */
-    internal val httpClients = AppHttpClients(siteCookieBridge.cookieJar)
+    internal val httpClients = AppHttpClients(
+        siteCookieBridge.cookieJar,
+        ConnectionMemory(
+            SharedPreferencesRecentHostStore(this),
+            activeNetwork = { getSystemService(ConnectivityManager::class.java).activeNetwork },
+        ),
+    )
 
     internal val videoPlaybackInfrastructure: VideoPlaybackInfrastructure by lazy {
         VideoPlaybackInfrastructure(this, httpClients.shared)

@@ -12,4 +12,7 @@
     <exclude
         domain="sharedpref"
         path="theoria_auto_backup.xml" />
+    <exclude
+        domain="sharedpref"
+        path="connection_memory.xml" />
 </full-backup-content>
