@@ -37,11 +37,13 @@ import com.theoriacodex.app.ui.TopLevelDestination
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
@@ -114,20 +116,33 @@ internal fun SettingsPageColumn(content: @Composable ColumnScope.() -> Unit) {
     }
 }
 
-/** A small label above a card of related rows. */
+/** A small label above a card of related rows; [action] sits at the label's end without making it any taller. */
 @Composable
-internal fun SettingsGroup(title: String?, content: @Composable ColumnScope.() -> Unit) {
+internal fun SettingsGroup(
+    title: String?,
+    action: (@Composable () -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     if (title != null) {
-        Text(
-            title,
-            modifier = Modifier.padding(start = 4.dp, top = 12.dp),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Row(Modifier.fillMaxWidth().padding(start = 4.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                title,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            action?.let { Box(Modifier.claimingNoHeight()) { it() } }
+        }
     }
     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
         Column(Modifier.fillMaxWidth(), content = content)
     }
+}
+
+/** Keeps a full-size touch target centered in its row while leaving the row's height to its other children. */
+private fun Modifier.claimingNoHeight() = layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints.copy(minHeight = 0, maxHeight = Constraints.Infinity))
+    layout(placeable.width, 0) { placeable.place(0, -placeable.height / 2) }
 }
 
 /** Separates rows inside a [SettingsGroup]. */

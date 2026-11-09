@@ -82,9 +82,14 @@ private fun SitesListPage(
             IconButton(onClick = { onAction(CustomSitesAction.StartAdd) }) { Icon(Icons.Default.Add, "Add site") }
         }
         state.notice?.let { AnnouncedText(it, Modifier.padding(horizontal = 4.dp), error = true) }
-        TestAllBar(state.testProgress, state.testSummary, onAction)
+        TestAllStatus(state.testProgress, state.testSummary)
+        val testAll: @Composable () -> Unit = {
+            TextButton(onClick = { onAction(CustomSitesAction.TestAll) }, enabled = state.testProgress == null) {
+                Text("Test all")
+            }
+        }
         if (state.builtInSites.isNotEmpty()) {
-            SettingsGroup("Built-in") {
+            SettingsGroup("Built-in", action = testAll) {
                 state.builtInSites.forEachIndexed { index, site ->
                     if (index > 0) SettingsRowDivider()
                     BuiltInSiteRow(site, state.retests[site.source.id], accounts, onAction)
@@ -100,7 +105,7 @@ private fun SitesListPage(
             )
             Button(onClick = { onAction(CustomSitesAction.StartAdd) }) { Text("Add site") }
         } else {
-            SettingsGroup("Added") {
+            SettingsGroup("Added", action = testAll.takeIf { state.builtInSites.isEmpty() }) {
                 state.sites.forEachIndexed { index, site ->
                     if (index > 0) SettingsRowDivider()
                     SiteRow(site, state.retests[site.sourceId], site.sourceId in state.workingSiteIds, onAction)
@@ -156,17 +161,12 @@ internal fun RowSpinner(description: String) {
     )
 }
 
-/** Test all and the status line that says which site it is on, then how it went. */
+/** The status line that says which site Test all is on, then how it went. */
 @Composable
-private fun TestAllBar(progress: SitesTestProgress?, summary: String?, onAction: (CustomSitesAction) -> Unit) {
-    Row(Modifier.padding(start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.weight(1f)) {
-            when {
-                progress != null -> Progress(testProgressLine(progress))
-                summary != null -> AnnouncedText(summary)
-            }
-        }
-        TextButton(onClick = { onAction(CustomSitesAction.TestAll) }, enabled = progress == null) { Text("Test all") }
+private fun TestAllStatus(progress: SitesTestProgress?, summary: String?) {
+    when {
+        progress != null -> Box(Modifier.padding(start = 4.dp)) { Progress(testProgressLine(progress)) }
+        summary != null -> AnnouncedText(summary, Modifier.padding(start = 4.dp))
     }
 }
 
