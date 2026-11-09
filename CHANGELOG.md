@@ -73,6 +73,9 @@
 - Built-in sources behind a browser challenge, like Iwara, can now be verified in the app; tapping a challenged source opens its check.
 - Settings pages show their full path in the title, such as Settings / Sites / Safebooru.
 - Test all in Settings → Sites checks every source with a real search, naming each one as it goes and marking the result on its row.
+- Unified search says when a site is down for maintenance, so you know the results are missing it. Dismiss the notice and it stays away until that outage ends.
+- Unified search says when a site needs browser verification, with Verify in browser and Dismiss.
+- In Settings → Sites, Test all sits in line with the Built-in header.
 
 ### Fixed
 

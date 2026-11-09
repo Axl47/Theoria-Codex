@@ -17,12 +17,14 @@ import kotlinx.coroutines.launch
 /**
  * Which sources are down, for the source dropdowns, and what tapping one does. [recheck] forgets the
  * source's outage so the search it was picked for tries the network again; [verify] opens the
- * source's browser verification.
+ * source's browser verification. [dismissedNotices] are the sources whose outage notice was set aside.
  */
 internal class SourceHealth(
     val issues: Map<SourceKey, HostOutageKind> = emptyMap(),
     val recheck: (SourceKey) -> Unit = {},
     val verify: (SourceKey) -> Unit = {},
+    val dismissedNotices: Set<SourceKey> = emptySet(),
+    val dismissNotices: (Collection<SourceKey>) -> Unit = {},
 ) {
     /** What picking [source] should do first: verify a challenged source, else retry it. */
     fun onPick(source: SourceKey): Boolean {

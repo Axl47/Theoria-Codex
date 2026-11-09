@@ -4,11 +4,37 @@ import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.SourceRunStatus
+import com.theoriacodex.sources.http.HostOutageKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 class SourceFailureUiTextTest {
+    @Test
+    fun `sources down together share a notice while each challenge gets its own`() {
+        val failed = listOf(SourceKey.DANBOORU, SourceKey.GELBOORU, SourceKey.IWARA, SourceKey.PIXIV, SourceKey.NHENTAI)
+            .map { SourceRunStatus(it, SourceRunState.FAILED, failureReason = SourceFailureReason.NETWORK) }
+        val answered = SourceRunStatus(SourceKey.RULE34XXX, SourceRunState.SUCCESS)
+
+        val notices = sourceOutageNotices(
+            failed + answered,
+            mapOf(
+                SourceKey.DANBOORU to HostOutageKind.MAINTENANCE,
+                SourceKey.GELBOORU to HostOutageKind.MAINTENANCE,
+                SourceKey.IWARA to HostOutageKind.CHALLENGE,
+                SourceKey.NHENTAI to HostOutageKind.CHALLENGE,
+                SourceKey.RULE34XXX to HostOutageKind.MAINTENANCE,
+            ),
+        )
+
+        assertEquals(
+            listOf(SourceKey.IWARA, SourceKey.NHENTAI, null),
+            notices.map(SourceOutageNotice::verifiableSource),
+        )
+        assertEquals(listOf(SourceKey.DANBOORU, SourceKey.GELBOORU), notices.last().sources)
+        assertEquals("Danbooru, Gelbooru: Down for maintenance. Try again later.", notices.last().message)
+    }
+
     @Test
     fun `auth failures point users to source account settings`() {
         val message = buildSourceAuthErrorMessage(

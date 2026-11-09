@@ -19,12 +19,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.combine
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.setValue
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.http.SiteHealthCheck
 import com.theoriacodex.sources.http.HostOutageKind
@@ -396,7 +398,10 @@ private fun rememberSourceHealth(shell: TheoriaShell): SourceHealth {
             sourceIssues(recorded, sources, System.currentTimeMillis())
         }.collect { value = it }
     }
-    return remember(issues, shell) {
+    var dismissedNotices by remember { mutableStateOf(emptySet<SourceKey>()) }
+    // Forgotten when the outage ends, so the next one is announced.
+    LaunchedEffect(issues) { dismissedNotices = dismissedNotices intersect issues.keys }
+    return remember(issues, shell, dismissedNotices) {
         SourceHealth(
             issues = issues,
             recheck = outages::clearSource,
@@ -404,6 +409,8 @@ private fun rememberSourceHealth(shell: TheoriaShell): SourceHealth {
                 shell.container.customSites.requestVerification(source.id)
                 shell.owners.settings.onAction(SettingsAction.OpenCustomSites)
             },
+            dismissedNotices = dismissedNotices,
+            dismissNotices = { dismissedNotices = dismissedNotices + it },
         )
     }
 }

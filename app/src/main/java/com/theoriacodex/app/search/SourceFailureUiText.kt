@@ -4,6 +4,8 @@ import com.theoriacodex.app.source.displayName
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.SourceRunStatus
+import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.http.HostOutageKind
 
 internal fun sourceStatusChipText(status: SourceRunStatus): String {
     return when (status.state) {
@@ -33,6 +35,30 @@ internal fun SourceRunStatus.retriesOnReconnect(): Boolean =
 internal const val OFFLINE_FEED_TITLE = "You're offline"
 internal const val OFFLINE_FEED_MESSAGE = "This feed will retry when you reconnect."
 internal const val OFFLINE_STATUS_CHIP = "Offline, retries when you reconnect"
+
+/** Failed [sources] that share an outage [kind], which a multi-source search reports above its results. */
+internal data class SourceOutageNotice(val kind: HostOutageKind, val sources: List<SourceKey>) {
+    val message: String
+        get() = "${sources.joinToString(", ") { it.displayName() }}: ${kind.userMessage}"
+
+    /** Verification happens one site at a time, so a challenge is always a notice of its own. */
+    val verifiableSource: SourceKey?
+        get() = sources.singleOrNull()?.takeIf { kind == HostOutageKind.CHALLENGE }
+}
+
+/** Sources that failed because their host is [issues]-listed as down; other failures have only their chips. */
+internal fun sourceOutageNotices(
+    statuses: List<SourceRunStatus>,
+    issues: Map<SourceKey, HostOutageKind>,
+): List<SourceOutageNotice> {
+    val down = statuses.filter { it.state == SourceRunState.FAILED }
+        .mapNotNull { status -> issues[status.source]?.let { kind -> status.source to kind } }
+    val (challenged, unavailable) = down.partition { (_, kind) -> kind == HostOutageKind.CHALLENGE }
+    return challenged.map { (source, kind) -> SourceOutageNotice(kind, listOf(source)) } +
+        unavailable.groupBy({ (_, kind) -> kind }, { (source, _) -> source }).map { (kind, sources) ->
+            SourceOutageNotice(kind, sources)
+        }
+}
 
 internal fun buildSourceAuthErrorMessage(statuses: List<SourceRunStatus>): String? {
     val authSources = statuses
