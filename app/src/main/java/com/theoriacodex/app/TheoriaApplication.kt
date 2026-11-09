@@ -11,6 +11,7 @@ import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
 import com.theoriacodex.app.media.AnimatedWebPDecoder
 import com.theoriacodex.app.media.UndecodableImageEviction
+import com.theoriacodex.app.network.AppHttpClients
 import com.theoriacodex.app.viewer.VideoPlaybackInfrastructure
 import com.theoriacodex.data.storage.ApplicationDataReadiness
 import com.theoriacodex.data.storage.ApplicationDataState
@@ -18,8 +19,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.StateFlow
-import okhttp3.Dispatcher
-import okhttp3.OkHttpClient
 
 class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContainerOwner {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -96,18 +95,11 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
             // every Viewer page a prefetch had already downloaded; no-store responses were never cached.
             .respectCacheHeaders(false)
             .eventListener(UndecodableImageEviction(diskCache))
-            // OkHttp's default of five per host lets a few large GIFs stall every thumbnail behind them.
-            .okHttpClient {
-                OkHttpClient.Builder()
-                    .dispatcher(Dispatcher().apply { maxRequestsPerHost = IMAGE_MAX_REQUESTS_PER_HOST })
-                    .cookieJar(BrowserVerifiedSites.cookieJar)
-                    .build()
-            }
+            .okHttpClient { AppHttpClients.images }
             .build()
     }
 }
 
-private const val IMAGE_MAX_REQUESTS_PER_HOST = 16
 private const val IMAGE_DISK_CACHE_DIRECTORY = "image_cache"
 private const val IMAGE_DISK_CACHE_MAX_BYTES = 512L * 1024L * 1024L
 

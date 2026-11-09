@@ -3,6 +3,7 @@ package com.theoriacodex.sources.http
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.sources.custom.isVerificationChallenge
 import java.io.IOException
+import okhttp3.OkHttpClient
 
 /**
  * One light, untracked request to a site's home page that feeds [tracker]: down answers record an
@@ -14,7 +15,8 @@ class SiteHealthCheck internal constructor(
     private val tracker: HostOutageTracker,
     private val transport: suspend (HttpRequestSpec) -> SourceByteResponse,
 ) {
-    constructor(tracker: HostOutageTracker) : this(tracker, ::executeHttpRequest)
+    constructor(tracker: HostOutageTracker, okHttpClient: OkHttpClient = defaultSourceOkHttpClient) :
+        this(tracker, { spec -> executeHttpRequest(spec, okHttpClient) })
 
     suspend fun check(url: String, headers: Map<String, String>, countChallenges: Boolean) {
         val response = runCatchingPreservingCancellation {

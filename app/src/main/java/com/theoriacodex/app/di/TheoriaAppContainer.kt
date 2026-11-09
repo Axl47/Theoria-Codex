@@ -1,6 +1,7 @@
 package com.theoriacodex.app.di
 
 import com.theoriacodex.app.media.NetworkMonitor
+import com.theoriacodex.app.network.AppHttpClients
 import android.content.Context
 import androidx.core.net.toUri
 import com.theoriacodex.app.backup.AndroidAutoBackupFolder
@@ -191,7 +192,7 @@ internal class DefaultTheoriaAppContainer(
     )
     private val networkOnline = NetworkMonitor(appContext).online
     private val hostOutages = HostOutageTracker(isOnline = { networkOnline.value })
-    private val sourceHttpClient = DefaultSourceHttpClient(outages = hostOutages)
+    private val sourceHttpClient = DefaultSourceHttpClient(outages = hostOutages, okHttpClient = AppHttpClients.sources)
     private val credentialStore = AndroidSecureSourceCredentialsStore(appContext)
     private val accountStore = ObservableSourceAccountStore(delegate = credentialStore)
     private val pixivAuthApi = PixivAuthApi(sourceHttpClient)
@@ -228,7 +229,11 @@ internal class DefaultTheoriaAppContainer(
         profiles = siteProfiles,
         credentials = credentialStore,
         families = siteFamilies,
-        http = CustomSiteHttpClient(readTimeoutMs = CUSTOM_SITE_READ_TIMEOUT_MS, outages = hostOutages),
+        http = CustomSiteHttpClient(
+            readTimeoutMs = CUSTOM_SITE_READ_TIMEOUT_MS,
+            outages = hostOutages,
+            okHttpClient = AppHttpClients.sources,
+        ),
         scope = durableStoreScope,
     )
     private val sourceRegistry = CompositeSourceAdapterRegistry(
@@ -431,7 +436,7 @@ internal class DefaultTheoriaAppContainer(
     override val customSites: CustomSitesController = CustomSitesControllerImpl(
         profiles = siteProfiles,
         credentials = credentialStore,
-        prober = SiteProber(siteFamilies, CustomSiteHttpClient()),
+        prober = SiteProber(siteFamilies, CustomSiteHttpClient(okHttpClient = AppHttpClients.sources)),
         runtime = customSourceRuntime.snapshot,
         settings = settingsRepository,
         library = contentRepository,

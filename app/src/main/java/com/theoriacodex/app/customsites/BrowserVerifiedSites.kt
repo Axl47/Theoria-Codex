@@ -3,8 +3,6 @@ package com.theoriacodex.app.customsites
 import android.content.Context
 import android.content.SharedPreferences
 import android.webkit.CookieManager
-import java.net.CookieHandler
-import java.net.URI
 import java.util.Locale
 import okhttp3.Cookie
 import okhttp3.CookieJar
@@ -14,10 +12,7 @@ import okhttp3.HttpUrl
  * SPIKE: sites whose browser challenge the user passed in an in-app WebView. Requests to these
  * hosts (and their subdomains, for media CDNs) carry the WebView's cookies, so the clearance the
  * person earned applies to API, image and video requests. Every other host gets no cookies, so
- * built-in sources behave exactly as before.
- *
- * Covers HttpURLConnection (custom-site API and Media3 video) through [CookieHandler.setDefault],
- * and Coil's OkHttp through [cookieJar].
+ * built-in sources behave exactly as before. Every OkHttp client in the app carries [cookieJar].
  */
 object BrowserVerifiedSites {
     private lateinit var prefs: SharedPreferences
@@ -28,7 +23,6 @@ object BrowserVerifiedSites {
     fun install(context: Context) {
         prefs = context.getSharedPreferences("browser_verified_sites", Context.MODE_PRIVATE)
         hosts = prefs.getStringSet(KEY_HOSTS, emptySet()).orEmpty().toSet()
-        CookieHandler.setDefault(Handler)
     }
 
     /** Called after the user finishes the WebView check for [host]. */
@@ -46,21 +40,6 @@ object BrowserVerifiedSites {
     private fun cookiesFor(url: String): String? =
         runCatching { CookieManager.getInstance().getCookie(url) }.getOrNull()?.takeIf(String::isNotBlank)
 
-    private object Handler : CookieHandler() {
-        override fun get(uri: URI, requestHeaders: Map<String, List<String>>): Map<String, List<String>> {
-            if (!isVerified(uri.host)) return emptyMap()
-            return cookiesFor(uri.toString())?.let { mapOf("Cookie" to listOf(it)) } ?: emptyMap()
-        }
-
-        // Refreshed clearance cookies go back to the WebView store, so both stay in step.
-        override fun put(uri: URI, responseHeaders: Map<String, List<String>>) {
-            if (!isVerified(uri.host)) return
-            val manager = CookieManager.getInstance()
-            responseHeaders.filterKeys { it.equals("Set-Cookie", ignoreCase = true) }
-                .values.flatten().forEach { manager.setCookie(uri.toString(), it) }
-        }
-    }
-
     val cookieJar: CookieJar = object : CookieJar {
         override fun loadForRequest(url: HttpUrl): List<Cookie> {
             if (!isVerified(url.host)) return emptyList()
@@ -68,6 +47,7 @@ object BrowserVerifiedSites {
             return header.split(';').mapNotNull { Cookie.parse(url, it.trim()) }
         }
 
+        // Refreshed clearance cookies go back to the WebView store, so both stay in step.
         override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
             if (!isVerified(url.host)) return
             val manager = CookieManager.getInstance()

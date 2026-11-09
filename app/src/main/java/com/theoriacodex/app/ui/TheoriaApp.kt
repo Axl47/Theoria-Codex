@@ -59,6 +59,7 @@ import com.theoriacodex.app.codex.LocalCodexSaveRelevanceLoader
 import com.theoriacodex.app.codex.SaveToCodexSheet
 import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.app.di.TheoriaAppContainer
+import com.theoriacodex.app.network.AppHttpClients
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.tags.PostTagContextProvider
 import com.theoriacodex.app.ui.routes.ActiveProfileCoordinationEffect
@@ -383,7 +384,9 @@ private fun rememberSourceHealth(shell: TheoriaShell): SourceHealth {
     val outages = shell.sources.outages
     LaunchedEffect(shell.navReady) {
         if (shell.navReady) {
-            startSourceHealthCheck(shell.scope, SiteHealthCheck(outages)) { shell.sources.availableSources.value.inPresentationOrder() }
+            startSourceHealthCheck(shell.scope, SiteHealthCheck(outages, AppHttpClients.sources)) {
+                shell.sources.availableSources.value.inPresentationOrder()
+            }
         }
     }
     val issues by produceState(emptyMap<SourceKey, HostOutageKind>(), outages) {

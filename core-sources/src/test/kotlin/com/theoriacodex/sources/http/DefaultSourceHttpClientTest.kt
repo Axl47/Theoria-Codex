@@ -83,6 +83,27 @@ class DefaultSourceHttpClientTest {
     }
 
     @Test
+    fun `response headers are found whatever case the server used`() = runTest {
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+            createContext("/headers") { exchange ->
+                exchange.responseHeaders.add("Retry-After", "5")
+                exchange.sendResponseHeaders(200, -1)
+                exchange.close()
+            }
+            start()
+        }
+
+        val response = try {
+            DefaultSourceHttpClient(maxRetries = 0).get("http://127.0.0.1:${server.address.port}/headers")
+        } finally {
+            server.stop(0)
+        }
+
+        assertEquals(listOf("5"), response.headers["retry-after"])
+        assertEquals(listOf("5"), response.headers["Retry-After"])
+    }
+
+    @Test
     fun `post response uses the same default text ceiling`() = runTest {
         val oversizedLength = DEFAULT_MAX_SOURCE_TEXT_BODY_BYTES.toLong() + 1L
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {

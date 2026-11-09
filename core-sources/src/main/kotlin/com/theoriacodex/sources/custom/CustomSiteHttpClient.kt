@@ -11,6 +11,7 @@ import com.theoriacodex.sources.http.SourceByteResponse
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.http.buildUrl
+import com.theoriacodex.sources.http.defaultSourceOkHttpClient
 import com.theoriacodex.sources.http.executeHttpRequest
 import com.theoriacodex.sources.http.toTextResponse
 import com.theoriacodex.sources.http.withByteRange
@@ -18,6 +19,7 @@ import java.io.IOException
 import java.net.URI
 import java.net.URISyntaxException
 import java.util.Locale
+import okhttp3.OkHttpClient
 
 /**
  * Transport for user-added sites, used by the prober and by custom-site adapters (plan C7). Requests
@@ -38,7 +40,8 @@ class CustomSiteHttpClient internal constructor(
         connectTimeoutMs: Int = DEFAULT_TIMEOUT_MS,
         readTimeoutMs: Int = DEFAULT_TIMEOUT_MS,
         outages: HostOutageTracker? = null,
-    ) : this(connectTimeoutMs, readTimeoutMs, MAX_REDIRECTS, outages, ::executeHttpRequest)
+        okHttpClient: OkHttpClient = defaultSourceOkHttpClient,
+    ) : this(connectTimeoutMs, readTimeoutMs, MAX_REDIRECTS, outages, { spec -> executeHttpRequest(spec, okHttpClient) })
 
     override suspend fun get(url: String, query: Map<String, String>, headers: Map<String, String>): SourceHttpResponse =
         getBytes(url, query, headers, range = null, maxBodyBytes = DEFAULT_MAX_SOURCE_TEXT_BODY_BYTES).toTextResponse()

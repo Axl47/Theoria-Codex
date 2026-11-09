@@ -3,11 +3,19 @@ package com.theoriacodex.sources.http
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
-import java.net.HttpURLConnection
 import java.net.UnknownHostException
 import java.net.URLEncoder
 import java.net.URL
+import java.util.TreeMap
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.delay
+import okhttp3.Dispatcher
+import okhttp3.Headers
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 
 class DefaultSourceHttpClient(
     private val connectTimeoutMs: Int = 10_000,
@@ -17,6 +25,8 @@ class DefaultSourceHttpClient(
     private val shouldRetryStatus: (url: String, statusCode: Int) -> Boolean = ::defaultShouldRetryStatus,
     /** When set, known-down hosts fail at once and outage answers throw [HostUnavailableException]. */
     private val outages: HostOutageTracker? = null,
+    /** The app passes its shared client, so these calls reuse the process's connections. */
+    private val okHttpClient: OkHttpClient = defaultSourceOkHttpClient,
 ) : SourceHttpClient {
     override suspend fun get(
         url: String,
@@ -164,7 +174,24 @@ class DefaultSourceHttpClient(
             readTimeoutMs = readTimeoutMs,
             followRedirects = true,
         ),
+        okHttpClient,
     )
+}
+
+/**
+ * A dispatcher that never queues, for clients that make provider requests: whole pages of metadata arrive in bursts
+ * to one host, and queueing them behind OkHttp's default of five per host would serialize what HTTP/2 can multiplex.
+ */
+fun unqueuedSourceDispatcher(): Dispatcher = Dispatcher().apply {
+    maxRequests = MAX_CONCURRENT_SOURCE_REQUESTS
+    maxRequestsPerHost = MAX_CONCURRENT_SOURCE_REQUESTS
+}
+
+private const val MAX_CONCURRENT_SOURCE_REQUESTS = 128
+
+/** For callers outside the app: tests and the provider health CLI. */
+internal val defaultSourceOkHttpClient: OkHttpClient by lazy {
+    OkHttpClient.Builder().dispatcher(unqueuedSourceDispatcher()).build()
 }
 
 /** One HTTP exchange as [executeHttpRequest] performs it; shared by every [SourceHttpClient]. */
@@ -180,46 +207,52 @@ internal class HttpRequestSpec(
     val followRedirects: Boolean,
 )
 
-/** Performs one cancellable request with a bounded body; no retries. */
-internal suspend fun executeHttpRequest(spec: HttpRequestSpec): SourceByteResponse {
-    val connection = URL(spec.url).openConnection() as HttpURLConnection
-    return executeCancellableHttpConnection(connection) { executeBlockingRequest(connection, spec) }
+/** Performs one cancellable request with a bounded body on [client]; no retries. */
+internal suspend fun executeHttpRequest(
+    spec: HttpRequestSpec,
+    client: OkHttpClient = defaultSourceOkHttpClient,
+): SourceByteResponse {
+    val call = client.newBuilder()
+        .connectTimeout(spec.connectTimeoutMs.toLong(), TimeUnit.MILLISECONDS)
+        .readTimeout(spec.readTimeoutMs.toLong(), TimeUnit.MILLISECONDS)
+        .followRedirects(spec.followRedirects)
+        // A redirect never crosses between HTTPS and HTTP, so query-string API keys cannot leave TLS.
+        .followSslRedirects(false)
+        .build()
+        .newCall(spec.toRequest())
+    return call.await { response -> response.toSourceResponse(spec.maxBodyBytes) }
 }
 
-private fun executeBlockingRequest(connection: HttpURLConnection, spec: HttpRequestSpec): SourceByteResponse {
-    connection.requestMethod = spec.method
-    connection.connectTimeout = spec.connectTimeoutMs
-    connection.readTimeout = spec.readTimeoutMs
-    connection.instanceFollowRedirects = spec.followRedirects
-    connection.useCaches = false
-    spec.headers.forEach { (key, value) ->
-        connection.setRequestProperty(key, value)
+/** Malformed input surfaces as the transport failure adapters already handle. */
+private fun HttpRequestSpec.toRequest(): Request = try {
+    val builder = Request.Builder().url(requireNotNull(url.toHttpUrlOrNull()) { "Malformed URL" })
+    headers.forEach { (name, value) -> builder.header(name, value) }
+    if (headers.keys.none { it.equals(USER_AGENT_HEADER, ignoreCase = true) }) {
+        System.getProperty(PLATFORM_AGENT_PROPERTY)?.let { builder.header(USER_AGENT_HEADER, it) }
     }
+    builder.method(method, body?.toRequestBody()).build()
+} catch (error: IllegalArgumentException) {
+    throw IOException("Invalid request", error)
+}
 
-    if (spec.body != null) {
-        connection.doOutput = true
-        connection.outputStream.use { output ->
-            output.write(spec.body)
-        }
-    }
-
-    val status = connection.responseCode
-    val contentLength = connection.contentLengthLong
-    if (contentLength > spec.maxBodyBytes.toLong()) {
-        throw SourceHttpBodyTooLargeException(spec.maxBodyBytes)
-    }
-    val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-    val bodyBytes = stream?.use { it.readBoundedBytes(spec.maxBodyBytes) } ?: ByteArray(0)
-    val headersMap = connection.headerFields
-        .filterKeys { it != null }
-        .mapKeys { (key, _) -> requireNotNull(key) }
-
+private fun Response.toSourceResponse(maxBodyBytes: Int): SourceByteResponse {
+    if (body.contentLength() > maxBodyBytes.toLong()) throw SourceHttpBodyTooLargeException(maxBodyBytes)
     return SourceByteResponse(
-        statusCode = status,
-        body = bodyBytes,
-        headers = headersMap,
+        statusCode = code,
+        body = body.byteStream().readBoundedBytes(maxBodyBytes),
+        headers = headers.toCaseInsensitiveMap(),
     )
 }
+
+/** HTTP/2 sends lower-case names and HTTP/1.1 whatever the server wrote, so lookups must not depend on either. */
+private fun Headers.toCaseInsensitiveMap(): Map<String, List<String>> =
+    TreeMap<String, MutableList<String>>(String.CASE_INSENSITIVE_ORDER).also { map ->
+        forEach { (name, value) -> map.getOrPut(name) { mutableListOf() } += value }
+    }
+
+/** Keeps the agent these requests always sent where a source sets none; some providers reject library agents. */
+private const val PLATFORM_AGENT_PROPERTY = "http.agent"
+private const val USER_AGENT_HEADER = "User-Agent"
 
 internal fun SourceByteResponse.toTextResponse(): SourceHttpResponse {
     return SourceHttpResponse(
