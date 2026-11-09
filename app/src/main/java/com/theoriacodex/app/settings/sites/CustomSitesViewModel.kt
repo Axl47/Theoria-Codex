@@ -211,7 +211,7 @@ internal class CustomSitesViewModel(
                 true
             }
         }
-        if (!passed) verificationRefused(site.host, check, blocked = cleared == false, failure = UNEXPECTED_FAILURE_MESSAGE)
+        if (!passed) verificationRefused(site.host, check, blocked = cleared == false, failure = unreachableMessage(site.host, ProbeFailure.TIMEOUT))
     }
 
     private suspend fun completeBuiltIn(site: BuiltInSiteSummary, userAgent: String): Boolean {

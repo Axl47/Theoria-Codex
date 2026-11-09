@@ -31,16 +31,18 @@ class SiteHealthCheck internal constructor(
     }
 
     /**
-     * Whether [url] now answers without a challenge or an outage, for a browser check. Unlike [check],
-     * this leaves the tracker alone, so checking a site changes nothing until the check is completed.
+     * Whether [url] now answers without a challenge or an outage, for a built-in site's browser check.
+     * Judged like that site's real requests, by status and headers alone: an ordinary page can mention
+     * a challenge in its text. Unlike [check] this leaves the tracker alone, so checking changes nothing
+     * until the check is completed. Throws [IOException] when the site can't be reached at all.
      */
     suspend fun clearsChallenge(url: String, headers: Map<String, String>): Boolean {
         val response = runCatchingPreservingCancellation { fetch(url, headers) }.getOrElse { error ->
+            if (error is IOException) throw error
             // A page over the size limit still answered.
-            return error !is IOException
+            return true
         }
-        return HostOutageTracker.outageKindOf(response.statusCode, response.headers) == null &&
-            !response.toTextResponse().isVerificationChallenge()
+        return HostOutageTracker.outageKindOf(response.statusCode, response.headers) == null
     }
 
     private suspend fun fetch(url: String, headers: Map<String, String>): SourceByteResponse = transport(

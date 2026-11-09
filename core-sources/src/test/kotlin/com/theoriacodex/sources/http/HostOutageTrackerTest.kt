@@ -1,6 +1,7 @@
 package com.theoriacodex.sources.http
 
 import com.sun.net.httpserver.HttpServer
+import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.UnknownHostException
 import java.util.concurrent.atomic.AtomicInteger
@@ -125,8 +126,13 @@ class SiteHealthCheckTest {
         val cf = mapOf("cf-mitigated" to listOf("challenge"))
         assertFalse(check(403, headers = cf).clearsChallenge("https://site.example/", emptyMap()))
         assertFalse(check(503).clearsChallenge("https://site.example/", emptyMap()))
-        assertTrue(check(200, "<html>ok</html>").clearsChallenge("https://site.example/", emptyMap()))
+        assertTrue(check(200, "<html>Complete the challenge to show you are not a robot</html>").clearsChallenge("https://site.example/", emptyMap()))
         assertEquals(setOf("site.example"), tracker.outages.value.keys)
+    }
+
+    @Test fun `a browser check that can't reach the site says so instead of reporting a refusal`() = runBlocking {
+        val unreachable = SiteHealthCheck(tracker) { throw java.net.SocketTimeoutException() }
+        assertTrue(runCatching { unreachable.clearsChallenge("https://site.example/", emptyMap()) }.exceptionOrNull() is IOException)
     }
 
     @Test fun `a verified site's browser agent replaces the request's own and proves the host works`() = runBlocking {
