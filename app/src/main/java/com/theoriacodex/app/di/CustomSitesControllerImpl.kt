@@ -2,6 +2,7 @@ package com.theoriacodex.app.di
 
 import com.theoriacodex.app.customsites.BuiltInAgentStore
 import com.theoriacodex.app.customsites.BuiltInSiteSummary
+import com.theoriacodex.app.customsites.BuiltInTestResult
 import com.theoriacodex.app.customsites.CredentialEdit
 import com.theoriacodex.app.customsites.CustomSiteDraft
 import com.theoriacodex.app.customsites.CustomSiteEdit
@@ -23,6 +24,9 @@ import com.theoriacodex.data.repository.SiteProfileAddResult
 import com.theoriacodex.data.repository.SiteProfileRepository
 import com.theoriacodex.data.repository.SourceLibraryPresence
 import com.theoriacodex.data.repository.SourceWeightSettings
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceFailureReason
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.CustomSourceIds
 import com.theoriacodex.domain.source.SiteCredentials
@@ -33,8 +37,10 @@ import com.theoriacodex.sources.custom.SiteProber
 import com.theoriacodex.sources.http.HostOutage
 import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.sources.http.HostOutageTracker
+import java.io.IOException
 import java.net.URI
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -65,6 +71,8 @@ internal class CustomSitesControllerImpl(
     private val builtInAgents: BuiltInAgentStore,
     /** Whether a URL answers a request with this User-Agent without a challenge or an outage. */
     private val clearsChallenge: suspend (url: String, userAgent: String) -> Boolean,
+    /** Runs one real search through a built-in source; false when it needs an account to search at all. */
+    private val runBuiltInSearch: suspend (SourceKey) -> Boolean,
     private val clock: () -> Long = System::currentTimeMillis,
 ) : CustomSitesController {
     override val sites: StateFlow<List<CustomSiteSummary>> =
@@ -174,6 +182,29 @@ internal class CustomSitesControllerImpl(
         cookieBridge.flush()
     }
 
+    override suspend fun testBuiltIn(source: SourceKey): BuiltInTestResult {
+        outages.clearSource(source)
+        val searched = runCatchingPreservingCancellation { withTimeoutOrNull(BUILT_IN_TEST_TIMEOUT_MS) { runBuiltInSearch(source) } }
+        // The tracker goes first: a source with a fallback mirror can return posts while its own host is challenged.
+        val result = when (sourceIssues(outages.outages.value, listOf(source), clock())[source]) {
+            HostOutageKind.CHALLENGE -> BuiltInTestResult.NEEDS_BROWSER_CHECK
+            HostOutageKind.MAINTENANCE -> BuiltInTestResult.DOWN
+            HostOutageKind.UNRESOLVED -> BuiltInTestResult.UNREACHABLE
+            null -> searched.fold(
+                onSuccess = { finished ->
+                    when (finished) {
+                        true -> BuiltInTestResult.WORKING
+                        false -> BuiltInTestResult.NEEDS_ACCOUNT
+                        null -> BuiltInTestResult.UNREACHABLE
+                    }
+                },
+                onFailure = ::builtInTestFailure,
+            )
+        }
+        outages.setWorking(source.presentation().referer, result == BuiltInTestResult.WORKING)
+        return result
+    }
+
     override suspend fun checkBuiltInVerification(source: SourceKey, userAgent: String): Boolean {
         // An API host is often what challenged, and it can stay challenged after the home page clears.
         val outageHosts = outages.outages.value.keys.filter(source::ownsHost).map { "https://$it/" }
@@ -242,6 +273,15 @@ internal class CustomSitesControllerImpl(
 }
 
 private val BUILT_IN_SOURCES = SourceKey.builtIns.inPresentationOrder()
+
+/** Long enough for a slow first search, short enough that one stuck source doesn't stall Test all. */
+private const val BUILT_IN_TEST_TIMEOUT_MS = 20_000L
+
+private fun builtInTestFailure(error: Throwable): BuiltInTestResult = when ((error as? SourceAdapterException)?.reason) {
+    SourceFailureReason.AUTH_REQUIRED, SourceFailureReason.AUTH_EXPIRED -> BuiltInTestResult.NEEDS_ACCOUNT
+    SourceFailureReason.NETWORK -> BuiltInTestResult.UNREACHABLE
+    else -> if (error is IOException) BuiltInTestResult.UNREACHABLE else BuiltInTestResult.FAILED
+}
 
 private fun CustomSiteState.toSummary(included: Boolean) = CustomSiteSummary(
     sourceId = profile.sourceId,

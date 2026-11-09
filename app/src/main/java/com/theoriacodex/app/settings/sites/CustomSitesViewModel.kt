@@ -53,6 +53,8 @@ internal class CustomSitesViewModel(
     private var pendingCheck: VerificationCheck? = null
     private var seenCookies: CookieSnapshot? = null
 
+    private var testAllJob: Job? = null
+
     /** [explicit] for Done, which always completes on a pass; a page load only closes the page after a refusal. */
     private data class VerificationCheck(val userAgent: String, val explicit: Boolean)
 
@@ -65,9 +67,10 @@ internal class CustomSitesViewModel(
                 val ids = sites.mapTo(HashSet()) { it.sourceId }
                 mutableState.update { current ->
                     val editedSiteGone = (current.form as? SiteForm.Edit)?.sourceId?.let { it !in ids } == true
+                    val builtInIds = current.builtInSites.mapTo(HashSet()) { it.source.id }
                     current.copy(
                         sites = sites,
-                        retests = current.retests.filterKeys(ids::contains),
+                        retests = current.retests.filterKeys { it in ids || it in builtInIds },
                         form = if (editedSiteGone) null else current.form,
                     )
                 }
@@ -123,6 +126,7 @@ internal class CustomSitesViewModel(
             CustomSitesAction.DismissReconnect -> dismissReconnect()
             CustomSitesAction.SaveEdit -> saveEdit()
             is CustomSitesAction.Retest -> retest(action.sourceId)
+            CustomSitesAction.TestAll -> testAll()
             is CustomSitesAction.RequestRemove -> mutableState.update { it.copy(removeTargetId = action.sourceId, notice = null) }
             CustomSitesAction.DismissRemove -> mutableState.update { if (it.removing) it else it.copy(removeTargetId = null) }
             CustomSitesAction.ConfirmRemove -> confirmRemove()
@@ -466,14 +470,49 @@ internal class CustomSitesViewModel(
         if (state.value.retests[sourceId] == RetestStatus.Running) return
         if (state.value.sites.none { it.sourceId == sourceId }) return
         mutableState.update { it.copy(retests = it.retests + (sourceId to RetestStatus.Running)) }
-        scope.launch {
-            val result = runCatchingPreservingCancellation { controller.retest(sourceId) }.getOrNull()
-            mutableState.update { current ->
-                val site = current.sites.firstOrNull { it.sourceId == sourceId } ?: return@update current
-                val status = result?.let { retestStatus(site, it) } ?: RetestStatus.Done(UNEXPECTED_FAILURE_MESSAGE, ok = false)
-                current.copy(retests = current.retests + (sourceId to status))
-            }
+        scope.launch { runRetest(sourceId) }
+    }
+
+    private suspend fun runRetest(sourceId: String) {
+        val result = runCatchingPreservingCancellation { controller.retest(sourceId) }.getOrNull()
+        mutableState.update { current ->
+            val site = current.sites.firstOrNull { it.sourceId == sourceId } ?: return@update current
+            val status = result?.let { retestStatus(site, it) } ?: RetestStatus.Done(UNEXPECTED_FAILURE_MESSAGE, ok = false)
+            current.copy(retests = current.retests + (sourceId to status))
         }
+    }
+
+    /** Tests every site in list order, one at a time, naming each on the status line as it goes. */
+    private fun testAll() {
+        if (testAllJob?.isActive == true) return
+        val builtIns = state.value.builtInSites
+        val added = state.value.sites
+        val total = builtIns.size + added.size
+        testAllJob = scope.launch {
+            val builtInResults = builtIns.mapIndexed { index, site ->
+                testing(site.source.id, SitesTestProgress(site.label, index + 1, total)) { runBuiltInTest(site) }
+            }
+            val addedResults = added.mapIndexed { index, site ->
+                testing(site.sourceId, SitesTestProgress(site.label, builtIns.size + index + 1, total)) { runRetest(site.sourceId) }
+            }
+            val working = (builtInResults + addedResults).count { it }
+            mutableState.update { it.copy(testProgress = null, testSummary = testSummaryLine(working, total)) }
+        }
+    }
+
+    /** Runs one site's [test] under the status line; true when it left the site's row marked as passed. */
+    private suspend fun testing(sourceId: String, progress: SitesTestProgress, test: suspend () -> Unit): Boolean {
+        mutableState.update {
+            it.copy(testProgress = progress, testSummary = null, retests = it.retests + (sourceId to RetestStatus.Running))
+        }
+        test()
+        return (state.value.retests[sourceId] as? RetestStatus.Done)?.ok == true
+    }
+
+    private suspend fun runBuiltInTest(site: BuiltInSiteSummary) {
+        val result = runCatchingPreservingCancellation { controller.testBuiltIn(site.source) }.getOrNull()
+        val status = result?.let { builtInTestStatus(site, it) } ?: RetestStatus.Done(UNEXPECTED_FAILURE_MESSAGE, ok = false)
+        mutableState.update { it.copy(retests = it.retests + (site.source.id to status)) }
     }
 
     private fun confirmRemove() {

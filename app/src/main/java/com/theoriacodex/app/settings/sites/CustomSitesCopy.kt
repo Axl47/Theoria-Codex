@@ -1,6 +1,7 @@
 package com.theoriacodex.app.settings.sites
 
 import com.theoriacodex.app.customsites.BuiltInSiteSummary
+import com.theoriacodex.app.customsites.BuiltInTestResult
 import com.theoriacodex.app.customsites.CustomSiteAvailability
 import com.theoriacodex.app.customsites.CustomSiteMutation
 import com.theoriacodex.app.customsites.CustomSiteSummary
@@ -117,6 +118,23 @@ internal fun retestStatus(site: CustomSiteSummary, result: SiteProbeResult): Ret
         )
     }
 }
+
+/** What a real search through a built-in source found, in the shape its row shows. */
+internal fun builtInTestStatus(site: BuiltInSiteSummary, result: BuiltInTestResult): RetestStatus.Done = when (result) {
+    BuiltInTestResult.WORKING -> RetestStatus.Done("Working", ok = true)
+    BuiltInTestResult.NEEDS_BROWSER_CHECK -> RetestStatus.Done("Needs browser verification.", ok = false, blocked = true)
+    BuiltInTestResult.NEEDS_ACCOUNT -> RetestStatus.Done("Needs an account or API key.", ok = false)
+    BuiltInTestResult.DOWN -> RetestStatus.Done("Down for maintenance. Try again later.", ok = false)
+    BuiltInTestResult.UNREACHABLE -> RetestStatus.Done(unreachableMessage(site.host, ProbeFailure.TIMEOUT), ok = false)
+    BuiltInTestResult.FAILED -> RetestStatus.Done(unreachableMessage(site.host, ProbeFailure.HTTP_ERROR), ok = false)
+}
+
+/** The status line while Test all runs. */
+internal fun testProgressLine(progress: SitesTestProgress): String =
+    "Testing ${progress.label}… ${progress.position} of ${progress.total}"
+
+/** The status line once Test all has finished. */
+internal fun testSummaryLine(working: Int, total: Int): String = "$working of $total working"
 
 /** Explains a save, edit or removal that didn't happen. Null for [CustomSiteMutation.Success]. */
 internal fun mutationMessage(result: CustomSiteMutation): String? = when (result) {

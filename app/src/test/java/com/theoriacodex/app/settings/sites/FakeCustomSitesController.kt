@@ -1,6 +1,7 @@
 package com.theoriacodex.app.settings.sites
 
 import com.theoriacodex.app.customsites.BuiltInSiteSummary
+import com.theoriacodex.app.customsites.BuiltInTestResult
 import com.theoriacodex.app.customsites.CustomSiteAvailability
 import com.theoriacodex.app.customsites.CustomSiteDraft
 import com.theoriacodex.app.customsites.CustomSiteEdit
@@ -28,6 +29,10 @@ internal class FakeCustomSitesController(initial: List<CustomSiteSummary> = empt
 
     /** Source and agent of every [completeBuiltInVerification] call. */
     val builtInCompletions = mutableListOf<Pair<SourceKey, String>>()
+
+    var onTestBuiltIn: suspend (SourceKey) -> BuiltInTestResult = { BuiltInTestResult.WORKING }
+
+    override suspend fun testBuiltIn(source: SourceKey): BuiltInTestResult = onTestBuiltIn(source)
 
     override suspend fun checkBuiltInVerification(source: SourceKey, userAgent: String): Boolean = onCheckBuiltIn(source, userAgent)
 

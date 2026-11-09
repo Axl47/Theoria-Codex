@@ -175,6 +175,7 @@ class JourneyAppContainer(
             override fun save(host: String, userAgent: String) = Unit
         },
         clearsChallenge = { _, _ -> true },
+        runBuiltInSearch = { true },
     )
     suspend fun awaitReady() {
         settings.awaitReady()

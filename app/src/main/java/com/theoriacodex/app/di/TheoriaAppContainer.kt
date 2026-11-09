@@ -77,6 +77,7 @@ import com.theoriacodex.data.android.room.RoomRecentsRepository
 import com.theoriacodex.data.android.room.RoomProfileBackupStore
 import com.theoriacodex.data.android.room.awaitProfileLibraryStores
 import com.theoriacodex.data.android.room.TheoriaRoomDatabase
+import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.PostId
@@ -448,6 +449,12 @@ internal class DefaultTheoriaAppContainer(
         cookieBridge = cookieBridge,
         builtInAgents = builtInAgents,
         clearsChallenge = { url, userAgent -> SiteHealthCheck(hostOutages).clearsChallenge(url, mapOf("User-Agent" to userAgent)) },
+        runBuiltInSearch = { source ->
+            sourceRegistry.adapterFor(source)?.let { adapter ->
+                adapter.search(adapter.quickQuery(QuickQueryKind.NEWEST), null)
+                true
+            } ?: false
+        },
     )
 
     /** Keeps the bridge's allowed hosts equal to the saved sites; [awaitDurableStores] seeds them first. */

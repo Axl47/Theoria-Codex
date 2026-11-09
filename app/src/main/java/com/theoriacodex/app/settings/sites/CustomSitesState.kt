@@ -17,6 +17,10 @@ data class CustomSitesUiState(
     val retests: Map<String, RetestStatus> = emptyMap(),
     /** Source ids proven to work this session, which their rows show with a check mark. */
     val workingSiteIds: Set<String> = emptySet(),
+    /** The Test all run in progress, if any. */
+    val testProgress: SitesTestProgress? = null,
+    /** The last finished Test all run's result line. */
+    val testSummary: String? = null,
     val removeTargetId: String? = null,
     val removing: Boolean = false,
     /** A short failure message shown above the list until the next action. */
@@ -26,6 +30,9 @@ data class CustomSitesUiState(
 ) {
     val removeTarget: CustomSiteSummary? get() = removeTargetId?.let { id -> sites.firstOrNull { it.sourceId == id } }
 }
+
+/** Test all is on the [position]th of [total] sites, named [label]. */
+data class SitesTestProgress(val label: String, val position: Int, val total: Int)
 
 /**
  * A browser check in progress for [host], a built-in source, a saved site or the one in the Add form. [checking] while the
@@ -123,6 +130,7 @@ sealed interface CustomSitesAction {
     data object SaveEdit : CustomSitesAction
 
     data class Retest(val sourceId: String) : CustomSitesAction
+    data object TestAll : CustomSitesAction
     data class RequestRemove(val sourceId: String) : CustomSitesAction
     data object DismissRemove : CustomSitesAction
     data object ConfirmRemove : CustomSitesAction

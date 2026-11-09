@@ -1,6 +1,7 @@
 package com.theoriacodex.app.settings.sites
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
@@ -81,11 +82,12 @@ private fun SitesListPage(
             IconButton(onClick = { onAction(CustomSitesAction.StartAdd) }) { Icon(Icons.Default.Add, "Add site") }
         }
         state.notice?.let { AnnouncedText(it, Modifier.padding(horizontal = 4.dp), error = true) }
+        TestAllBar(state.testProgress, state.testSummary, onAction)
         if (state.builtInSites.isNotEmpty()) {
             SettingsGroup("Built-in") {
                 state.builtInSites.forEachIndexed { index, site ->
                     if (index > 0) SettingsRowDivider()
-                    BuiltInSiteRow(site, accounts, onAction)
+                    BuiltInSiteRow(site, state.retests[site.source.id], accounts, onAction)
                 }
             }
         }
@@ -117,10 +119,7 @@ private fun SiteRow(site: CustomSiteSummary, retest: RetestStatus?, working: Boo
             onClick = { onAction(CustomSitesAction.StartEdit(site.sourceId)) },
             trailing = {
                 if (retest == RetestStatus.Running) {
-                    CircularProgressIndicator(
-                        Modifier.padding(12.dp).size(24.dp).semantics { contentDescription = "Checking ${site.label}" },
-                        strokeWidth = 2.dp,
-                    )
+                    RowSpinner("Checking ${site.label}")
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (working) WorkingMark()
@@ -131,19 +130,43 @@ private fun SiteRow(site: CustomSiteSummary, retest: RetestStatus?, working: Boo
                 }
             },
         )
-        if (retest is RetestStatus.Done && !retest.ok) {
-            AnnouncedText(
-                retest.message,
-                Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
-                error = true,
-            )
-            if (retest.blocked) {
-                TextButton(
-                    onClick = { onAction(CustomSitesAction.StartVerification(site.host, afterRefusal = true)) },
-                    modifier = Modifier.padding(start = 4.dp),
-                ) { Text("Verify in browser") }
+        RetestFailure(retest, site.host, onAction)
+    }
+}
+
+/** Why a row's last test failed, with the way to verify when a challenge is the reason. */
+@Composable
+internal fun RetestFailure(retest: RetestStatus?, host: String, onAction: (CustomSitesAction) -> Unit) {
+    if (retest !is RetestStatus.Done || retest.ok) return
+    AnnouncedText(retest.message, Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp), error = true)
+    if (retest.blocked) {
+        TextButton(
+            onClick = { onAction(CustomSitesAction.StartVerification(host, afterRefusal = true)) },
+            modifier = Modifier.padding(start = 4.dp),
+        ) { Text("Verify in browser") }
+    }
+}
+
+/** A row's "being tested right now" spinner, sized like the button it stands in for. */
+@Composable
+internal fun RowSpinner(description: String) {
+    CircularProgressIndicator(
+        Modifier.padding(12.dp).size(24.dp).semantics { contentDescription = description },
+        strokeWidth = 2.dp,
+    )
+}
+
+/** Test all and the status line that says which site it is on, then how it went. */
+@Composable
+private fun TestAllBar(progress: SitesTestProgress?, summary: String?, onAction: (CustomSitesAction) -> Unit) {
+    Row(Modifier.padding(start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.weight(1f)) {
+            when {
+                progress != null -> Progress(testProgressLine(progress))
+                summary != null -> AnnouncedText(summary)
             }
         }
+        TextButton(onClick = { onAction(CustomSitesAction.TestAll) }, enabled = progress == null) { Text("Test all") }
     }
 }
 

@@ -18,6 +18,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.customsites.BuiltInSiteSummary
+import com.theoriacodex.app.customsites.BuiltInTestResult
 import com.theoriacodex.app.customsites.CustomSiteAvailability
 import com.theoriacodex.app.settings.BuiltInAccounts
 import com.theoriacodex.domain.model.SourceKey
@@ -137,6 +138,22 @@ class CustomSitesScreenTest {
 
         compose.onNode(hasText("API key") and hasSetTextAction()).assertExists()
         compose.onNodeWithText("Remove saved keys").assertExists()
+    }
+
+    @Test
+    fun `Test all reports on the status line and offers verification on a challenged row`() {
+        val iwara = BuiltInSiteSummary(SourceKey.IWARA, "Iwara", "www.iwara.tv", working = false, needsVerification = false)
+        val controller = FakeCustomSitesController().apply {
+            builtInSites.value = listOf(iwara)
+            onTestBuiltIn = { BuiltInTestResult.NEEDS_BROWSER_CHECK }
+        }
+        show(controller)
+
+        compose.onNodeWithText("Test all").performClick()
+
+        compose.onNodeWithText("0 of 1 working").assertExists()
+        compose.onNodeWithText("Needs browser verification.").assertExists()
+        compose.onNodeWithText("Verify in browser").assertExists()
     }
 
     @Test

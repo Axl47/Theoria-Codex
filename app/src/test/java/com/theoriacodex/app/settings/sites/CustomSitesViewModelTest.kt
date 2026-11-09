@@ -1,6 +1,7 @@
 package com.theoriacodex.app.settings.sites
 
 import com.theoriacodex.app.customsites.BuiltInSiteSummary
+import com.theoriacodex.app.customsites.BuiltInTestResult
 import com.theoriacodex.app.customsites.CredentialEdit
 import com.theoriacodex.app.customsites.CustomSiteAvailability
 import com.theoriacodex.app.customsites.CustomSiteMutation
@@ -390,6 +391,32 @@ class CustomSitesViewModelTest {
         assertNull(owner.state.value.verification)
         assertEquals(RetestStatus.Done("Working", ok = true), owner.state.value.retests["custom_safebooru_org"])
         assertEquals(listOf("custom_safebooru_org" to "WebView/2"), controller.completions)
+    }
+
+    @Test fun `Test all names each site in turn, built-in then added, and sums up how it went`() = runTest {
+        val iwara = BuiltInSiteSummary(SourceKey.IWARA, "Iwara", "www.iwara.tv", working = false, needsVerification = false)
+        controller.builtInSites.value = listOf(iwara)
+        controller.sites.value = listOf(site())
+        val builtInGate = CompletableDeferred<BuiltInTestResult>()
+        val retestGate = CompletableDeferred<SiteProbeResult>()
+        controller.onTestBuiltIn = { builtInGate.await() }
+        controller.onRetest = { retestGate.await() }
+        val owner = owner()
+
+        owner.onAction(CustomSitesAction.TestAll)
+        runCurrent()
+        assertEquals(SitesTestProgress("Iwara", 1, 2), owner.state.value.testProgress)
+        assertEquals(RetestStatus.Running, owner.state.value.retests[SourceKey.IWARA.id])
+
+        builtInGate.complete(BuiltInTestResult.NEEDS_BROWSER_CHECK)
+        runCurrent()
+        assertEquals(SitesTestProgress("Safebooru", 2, 2), owner.state.value.testProgress)
+        assertTrue((owner.state.value.retests[SourceKey.IWARA.id] as RetestStatus.Done).blocked)
+
+        retestGate.complete(supported())
+        runCurrent()
+        assertNull(owner.state.value.testProgress)
+        assertEquals("1 of 2 working", owner.state.value.testSummary)
     }
 
     @Test fun `a built-in source's browser check follows the same rules and needs no saved site`() = runTest {

@@ -1,6 +1,10 @@
 package com.theoriacodex.app.di
 
 import com.theoriacodex.app.customsites.BuiltInAgentStore
+import com.theoriacodex.app.customsites.BuiltInTestResult
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceFailureReason
+import java.net.SocketTimeoutException
 import com.theoriacodex.app.customsites.CredentialEdit
 import com.theoriacodex.app.customsites.CustomSiteAvailability
 import com.theoriacodex.app.customsites.CustomSiteDraft
@@ -76,6 +80,7 @@ class CustomSitesControllerImplTest {
     }
     private val clearanceChecks = mutableListOf<Pair<String, String>>()
     private var challengeCleared = true
+    private var builtInSearch: suspend () -> Boolean = { true }
 
     private class Graph(val controller: CustomSitesControllerImpl, val registry: CompositeSourceAdapterRegistry)
 
@@ -103,6 +108,7 @@ class CustomSitesControllerImplTest {
                 clearanceChecks += url to agent
                 challengeCleared
             },
+            runBuiltInSearch = { builtInSearch() },
             clock = { now },
         )
         return Graph(controller, CompositeSourceAdapterRegistry(NoBuiltIns, NoBuiltIns, runtime.snapshot))
@@ -252,6 +258,38 @@ class CustomSitesControllerImplTest {
         assertTrue(outages.outages.value.isEmpty())
         assertEquals(1, cookieStore.flushes)
         assertNull("completing makes no request", family.probedWith)
+    }
+
+    @Test
+    fun `testing a built-in source retries it and reports what the real search found`() = runTest {
+        val graph = graph()
+        outages.record("https://www.iwara.tv/", HostOutageKind.MAINTENANCE)
+        assertEquals(BuiltInTestResult.WORKING, graph.controller.testBuiltIn(SourceKey.IWARA))
+        assertTrue("the old outage must not refuse the retry", outages.outages.value.isEmpty())
+        assertTrue(graph.controller.builtInSites.value.first { it.source == SourceKey.IWARA }.working)
+
+        builtInSearch = { false }
+        assertEquals(BuiltInTestResult.NEEDS_ACCOUNT, graph.controller.testBuiltIn(SourceKey.IWARA))
+        assertFalse(graph.controller.builtInSites.value.first { it.source == SourceKey.IWARA }.working)
+
+        builtInSearch = { throw SourceAdapterException(SourceFailureReason.AUTH_REQUIRED) }
+        assertEquals(BuiltInTestResult.NEEDS_ACCOUNT, graph.controller.testBuiltIn(SourceKey.IWARA))
+        builtInSearch = { throw SocketTimeoutException() }
+        assertEquals(BuiltInTestResult.UNREACHABLE, graph.controller.testBuiltIn(SourceKey.IWARA))
+        builtInSearch = { error("parser broke") }
+        assertEquals(BuiltInTestResult.FAILED, graph.controller.testBuiltIn(SourceKey.IWARA))
+    }
+
+    @Test
+    fun `a challenge outranks a search that only succeeded through a fallback`() = runTest {
+        val graph = graph()
+        builtInSearch = {
+            outages.record("https://api.iwara.tv/videos", HostOutageKind.CHALLENGE)
+            true
+        }
+
+        assertEquals(BuiltInTestResult.NEEDS_BROWSER_CHECK, graph.controller.testBuiltIn(SourceKey.IWARA))
+        assertFalse(graph.controller.builtInSites.value.first { it.source == SourceKey.IWARA }.working)
     }
 
     @Test

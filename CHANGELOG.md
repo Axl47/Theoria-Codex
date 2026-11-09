@@ -65,6 +65,7 @@
 - Accounts and Sites are now one Settings → Sites page, listing built-in and added sources with each one's account and browser check.
 - Built-in sources behind a browser challenge, like Iwara, can now be verified in the app; tapping a challenged source opens its check.
 - Settings pages show their full path in the title, such as Settings / Sites / Safebooru.
+- Test all in Settings → Sites checks every source with a real search, naming each one as it goes and marking the result on its row.
 
 ### Fixed
 

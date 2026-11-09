@@ -22,6 +22,12 @@ interface CustomSitesController {
     val builtInSites: StateFlow<List<BuiltInSiteSummary>>
 
     /**
+     * Runs one real search through [source], retrying it even if it is in an outage, and records whether
+     * it works this session. The posts it finds are discarded.
+     */
+    suspend fun testBuiltIn(source: SourceKey): BuiltInTestResult
+
+    /**
      * Whether [source]'s home page and any of its hosts now in an outage answer with [userAgent], the
      * in-app browser's, and without a challenge. Changes nothing.
      */
@@ -116,6 +122,9 @@ data class BuiltInSiteSummary(
     val working: Boolean,
     val needsVerification: Boolean,
 )
+
+/** What a real search through a built-in source found. */
+enum class BuiltInTestResult { WORKING, NEEDS_BROWSER_CHECK, NEEDS_ACCOUNT, DOWN, UNREACHABLE, FAILED }
 
 enum class CustomSiteAvailability {
     AVAILABLE,

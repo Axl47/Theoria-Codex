@@ -1,5 +1,6 @@
 package com.theoriacodex.app.settings.sites
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import com.theoriacodex.app.customsites.BuiltInSiteSummary
 import com.theoriacodex.app.settings.BuiltInAccounts
@@ -8,15 +9,27 @@ import com.theoriacodex.app.settings.SettingsHeader
 import com.theoriacodex.app.settings.SettingsPageColumn
 import com.theoriacodex.app.settings.SettingsRow
 
-/** A built-in source in the Sites list; opens its page. */
+/** A built-in source in the Sites list, with its last test's result; opens its page. */
 @Composable
-internal fun BuiltInSiteRow(site: BuiltInSiteSummary, accounts: BuiltInAccounts, onAction: (CustomSitesAction) -> Unit) {
-    SettingsRow(
-        title = site.label,
-        summary = builtInRowSummary(site, accounts.summary(site.source)),
-        onClick = { onAction(CustomSitesAction.OpenBuiltIn(site.source)) },
-        trailing = if (site.working) { { WorkingMark() } } else null,
-    )
+internal fun BuiltInSiteRow(
+    site: BuiltInSiteSummary,
+    retest: RetestStatus?,
+    accounts: BuiltInAccounts,
+    onAction: (CustomSitesAction) -> Unit,
+) {
+    Column {
+        SettingsRow(
+            title = site.label,
+            summary = builtInRowSummary(site, accounts.summary(site.source)),
+            onClick = { onAction(CustomSitesAction.OpenBuiltIn(site.source)) },
+            trailing = when {
+                retest == RetestStatus.Running -> { { RowSpinner("Checking ${site.label}") } }
+                site.working -> { { WorkingMark() } }
+                else -> null
+            },
+        )
+        RetestFailure(retest, site.host, onAction)
+    }
 }
 
 /** A built-in source's page: its browser check, and its account when it has one. */
