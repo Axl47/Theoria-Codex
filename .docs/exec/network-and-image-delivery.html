@@ -121,6 +121,20 @@ python3 scripts/live_latency_bench.py summarize build/live-latency/final</pre>
 <p>Pixiv, nhentai, rule34video and rule34gen search times did not change beyond noise. Preloading raises a reopened feed's first-screen traffic from about 0.15 MB to 0.46 MB on unmetered networks.</p>
 <p><strong>Autoplay.</strong> <code>mixedMediaFiveFeedJourney</code> on the minified final build passes the whole Search feed, with every visible video, GIF, WebP and Ugoira preview changing frames. It then fails on For You, where no Ugoira card appears, exactly as the untouched baseline does, so that journey cannot finish on either build.</p><p><strong>Frame timing.</strong> <code>searchConcurrentAutoplayScroll</code>, three alternating captures per build: 95th percentile frame time 7.13 ms before and 7.30 ms after, overrun 2.16 ms and 2.36 ms, within run-to-run spread. Those fixture cards are mostly video, so this shows no regression from A11 but cannot show its benefit. Measured evidence for the live benchmark is kept in <code>.docs/exec/assets/network-and-image-delivery/evidence/</code>.</p><p>To remember: measure from the point a person starts waiting, and run the minified fixture benchmark before trusting a change to the HTTP stack.</p>
 
+<h3>Follow-up on the phone, 2026-11-09</h3>
+<p>Three alternating rounds on the Samsung S24+, debug builds, home Wi-Fi with IPv6 dead in every check. "Before" is 4d089417, with the card fixes but without the warm-up, IPv6 learning or page rescue. The feed journey passed once on the phone in dry-run mode. Raw results are in <code>assets/network-and-image-delivery/evidence/followup/</code>.</p>
+<table><tr><th>First search after launch, seconds to first image (recently used source)</th><th>Before</th><th>After</th></tr>
+<tr><td>Gelbooru</td><td>1.61</td><td>1.11</td></tr>
+<tr><td>AIBooru</td><td>1.50</td><td>0.74</td></tr>
+<tr><td>Hitomi</td><td>1.47</td><td>1.11</td></tr>
+<tr><td>nhentai</td><td>1.58</td><td>1.66</td></tr>
+<tr><td>Pixiv</td><td>3.73</td><td>2.95</td></tr>
+<tr><td>Iwara</td><td>0.96</td><td>0.37</td></tr>
+<tr><td>Paheal</td><td>1.96</td><td>0.78</td></tr>
+<tr><td>Rule34Video</td><td>0.69</td><td>0.39</td></tr>
+<tr><td>Rule34Gen</td><td>0.75</td><td>0.55</td></tr></table>
+<p>Paheal and Rule34Gen loaded every card on both builds. Searches in a process with no UI, where the warm-up doesn't run, showed no reliable change. No page stalled on either build, so the page rescue has not been exercised on the phone. In the last pass nhentai's image hosts began refusing connections from this network, which failed that pass's 48 pages; a separate client on the Mac was refused too, while nhentai's API kept answering.</p>
+
 <h2 id="recovery">Recovery</h2>
 <p>Each finding is its own commit, so one that misbehaves can be reverted alone. Benchmark runs append to their output directory; use a new <code>--out</code> to start clean. The benchmark restores the Debug app's applied query after each unified case. If a run stops halfway, the Debug app's last query may be the filterless default, which is harmless.</p>
 </main></body></html>
