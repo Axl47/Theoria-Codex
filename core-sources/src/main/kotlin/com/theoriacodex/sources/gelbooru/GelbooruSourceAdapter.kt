@@ -340,7 +340,8 @@ private class GelbooruFamilyAdapter(
         }
         val exclude = query.excludeTags.map(::normalizeBooruTag).filter(String::isNotBlank).map { "-$it" }
         val sort = when (query.sort) {
-            SortMode.NEWEST, SortMode.RANDOM -> site.newestSortTag
+            // With no other tags the site already lists newest first, and asking again costs about 7 s per page.
+            SortMode.NEWEST, SortMode.RANDOM -> site.newestSortTag.takeIf { include.isNotEmpty() || exclude.isNotEmpty() }
             SortMode.POPULAR, SortMode.TOP -> site.scoreSortTag
         }
         return (include + exclude + listOfNotNull(sort)).take(MAX_SEARCH_TAGS).joinToString(" ")
