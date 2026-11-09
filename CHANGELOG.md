@@ -59,9 +59,14 @@
 - Scrub previews appear sooner when you drag a video's timeline, most of all on a second drag, and stop downloading as soon as you let go.
 - Letting go after scrubbing a video starts playback on the frame the preview showed, and much sooner when you scrub to a part of the video that hasn't loaded yet.
 - Videos in the Viewer start, and resume after a seek, once half a second has loaded instead of a full second. A video that has already had to stop and load waits for the full second again, so a slow connection doesn't stall more often.
+- Sites proven to work since you opened the app show a check mark on their row in Settings → Sites and beside Verify in browser, replacing the "Working" text.
+- A site's saved API keys stay collapsed on its Edit page until you choose to replace them.
+- Invert scroll direction moved into Settings → Controls, the renamed Classic controls sheet.
 
 ### Fixed
 
+- Sources no longer all start marked as "can't be found" after a brief network hiccup; a site is only marked missing once separate lookups have failed.
+- Search sources respond sooner on networks with broken IPv6, where each site could wait 10 seconds before connecting.
 - R34V videos play again in feeds and the Viewer; they previously failed to load on every Android device.
 - Videos are requested with the same User-Agent as the site's images, including a custom site's own User-Agent, so sites that check it serve their videos too.
 - A R34V or R34G search with excluded tags now shows its results when one post's details can't be read, instead of failing the whole page.

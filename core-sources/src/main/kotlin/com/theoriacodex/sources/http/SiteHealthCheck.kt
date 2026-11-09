@@ -25,8 +25,8 @@ class SiteHealthCheck internal constructor(
                     headers = headers,
                     body = null,
                     maxBodyBytes = HOME_PAGE_MAX_BYTES,
-                    connectTimeoutMs = TIMEOUT_MS,
-                    readTimeoutMs = TIMEOUT_MS,
+                    connectTimeoutMs = CONNECT_TIMEOUT_MS,
+                    readTimeoutMs = READ_TIMEOUT_MS,
                     followRedirects = true,
                 ),
             )
@@ -47,6 +47,6 @@ class SiteHealthCheck internal constructor(
 
     private companion object {
         const val HOME_PAGE_MAX_BYTES = 256 * 1024
-        const val TIMEOUT_MS = 10_000
+        const val READ_TIMEOUT_MS = 10_000
     }
 }

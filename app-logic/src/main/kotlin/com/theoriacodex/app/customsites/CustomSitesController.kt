@@ -14,6 +14,9 @@ interface CustomSitesController {
     /** Every stored site in the order it was added, with live availability. */
     val sites: StateFlow<List<CustomSiteSummary>>
 
+    /** Stored sites proven to work since the app started: a real API answer, a passed re-test or browser check. */
+    val workingSourceIds: StateFlow<Set<String>>
+
     /** Add, step 1: validate the address and probe known families. Persists nothing. */
     suspend fun probe(
         input: String,
@@ -40,9 +43,10 @@ interface CustomSitesController {
     /**
      * Records a passed [checkVerification]: saves [userAgent] (keeping the site's other headers), stamps
      * the verified time, lifts the site's challenge outage and flushes the browser's cookies, so the
-     * source works at once. Makes no request. [sourceId] must be stored.
+     * source works at once. [working] is whether the check also found the expected booru rather than
+     * merely getting past the challenge. Makes no request. [sourceId] must be stored.
      */
-    suspend fun completeVerification(sourceId: String, userAgent: String)
+    suspend fun completeVerification(sourceId: String, userAgent: String, working: Boolean)
 
     /**
      * Lets the browser's cookies reach requests to [host] while it is verified before being saved, or

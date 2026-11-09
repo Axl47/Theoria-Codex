@@ -59,6 +59,11 @@ internal class CustomSitesControllerImpl(
             snapshot.sites.map { site -> site.toSummary(included = site.source in enabled) }
         }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
+    override val workingSourceIds: StateFlow<Set<String>> =
+        combine(sites, outages.working) { stored, hosts ->
+            stored.filter { HostOutageTracker.normalizeHost(it.host) in hosts }.map { it.sourceId }.toSet()
+        }.stateIn(scope, SharingStarted.Eagerly, emptySet())
+
     private val pendingSetup = MutableStateFlow<SitesRequest?>(null)
     override val setupRequest: StateFlow<SitesRequest?> = pendingSetup.asStateFlow()
 
@@ -118,10 +123,12 @@ internal class CustomSitesControllerImpl(
         val profile = requireNotNull(find(sourceId)) { "Re-test needs a stored site" }
         val result = prober.probe(profile.address.baseUrl, credentials.get(sourceId), profile.headers)
         // A different family is reported to the user, never adopted (remove and re-add to switch).
-        if (result is SiteProbeResult.Supported && result.family == profile.family) {
+        val working = result is SiteProbeResult.Supported && result.family == profile.family
+        if (working) {
             // Re-testing also picks up an icon the site declared since, or one missed before.
             profiles.update(sourceId) { it.copy(verifiedAtEpochMs = clock(), iconUrl = result.iconUrl ?: it.iconUrl) }
         }
+        outages.setWorking(profile.address.baseUrl, working)
         return result
     }
 
@@ -130,10 +137,11 @@ internal class CustomSitesControllerImpl(
         return prober.probe(profile.address.baseUrl, credentials.get(sourceId), profile.headers.copy(userAgent = userAgent))
     }
 
-    override suspend fun completeVerification(sourceId: String, userAgent: String) {
+    override suspend fun completeVerification(sourceId: String, userAgent: String, working: Boolean) {
         val profile = requireNotNull(find(sourceId)) { "Verification needs a stored site" }
         profiles.update(sourceId) { it.copy(headers = it.headers.copy(userAgent = userAgent), verifiedAtEpochMs = clock()) }
         outages.clearSource(SourceKey.of(profile))
+        outages.setWorking(profile.address.baseUrl, working)
         cookieBridge.flush()
     }
 
@@ -163,6 +171,7 @@ internal class CustomSitesControllerImpl(
         if (!profiles.remove(sourceId)) return CustomSiteMutation.NotFound
         setIncluded(SourceKey.of(profile), included = false)
         cookieBridge.forget(profile.address.host)
+        outages.setWorking(profile.address.baseUrl, false)
         return CustomSiteMutation.Success
     }
 

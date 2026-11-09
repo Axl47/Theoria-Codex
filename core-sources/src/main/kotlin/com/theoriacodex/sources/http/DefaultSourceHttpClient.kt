@@ -9,8 +9,14 @@ import java.net.URLEncoder
 import java.net.URL
 import kotlinx.coroutines.delay
 
+/**
+ * Android gives each of a host's addresses its own connect timeout and tries IPv6 first, so on a network
+ * whose IPv6 silently drops packets every dual-stack site waits this long before trying IPv4.
+ */
+internal const val CONNECT_TIMEOUT_MS = 3_000
+
 class DefaultSourceHttpClient(
-    private val connectTimeoutMs: Int = 10_000,
+    private val connectTimeoutMs: Int = CONNECT_TIMEOUT_MS,
     private val readTimeoutMs: Int = 20_000,
     private val maxRetries: Int = 2,
     private val retryBaseDelayMs: Long = 300L,

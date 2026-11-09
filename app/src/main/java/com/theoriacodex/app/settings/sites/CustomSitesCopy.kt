@@ -92,7 +92,7 @@ internal fun userFieldHint(family: ProtocolFamily?, user: String): UserFieldHint
 
 internal data class UserFieldHint(val text: String, val error: Boolean)
 
-/** The inline line shown under a row after re-testing it. Never suggests the profile changed. */
+/** What a re-test found; a failure's message shows under the row. Never suggests the profile changed. */
 internal fun retestStatus(site: CustomSiteSummary, result: SiteProbeResult): RetestStatus.Done {
     val answeredFamily = when (result) {
         is SiteProbeResult.Supported -> result.family

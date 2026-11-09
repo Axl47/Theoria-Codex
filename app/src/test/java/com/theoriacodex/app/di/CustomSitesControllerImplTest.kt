@@ -226,8 +226,9 @@ class CustomSitesControllerImplTest {
         outages.record("https://booru.example/posts.json", HostOutageKind.CHALLENGE)
         now = 5_000L
 
-        graph.controller.completeVerification(SITE.id, "WebView/2")
+        graph.controller.completeVerification(SITE.id, "WebView/2", working = true)
 
+        assertEquals(setOf("booru.example"), outages.working.value)
         val site = graph.controller.sites.value.single()
         assertEquals(SiteHeaders(userAgent = "WebView/2", referer = "https://ref.example/"), site.headers)
         assertEquals(5_000L, site.verifiedAtEpochMs)

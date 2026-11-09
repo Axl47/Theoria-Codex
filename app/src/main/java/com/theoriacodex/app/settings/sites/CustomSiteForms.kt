@@ -125,6 +125,7 @@ internal fun EditSitePage(
     form: SiteForm.Edit,
     site: CustomSiteSummary,
     retest: RetestStatus?,
+    working: Boolean,
     onAction: (CustomSitesAction) -> Unit,
 ) {
     val editable = !form.saving
@@ -148,10 +149,11 @@ internal fun EditSitePage(
                 summary = "Open this site to pass its browser check",
                 enabled = editable,
                 onClick = { onAction(CustomSitesAction.StartVerification(site.host, afterRefusal = false)) },
+                trailing = if (working) { { WorkingMark() } } else null,
             )
-            // The last check's answer, so "Working" is there after the page closes by itself.
-            (retest as? RetestStatus.Done)?.let {
-                AnnouncedText(it.message, Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp), error = !it.ok)
+            // Why the last check failed; a pass shows as the row's mark once the page closes itself.
+            (retest as? RetestStatus.Done)?.takeUnless { it.ok }?.let {
+                AnnouncedText(it.message, Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp), error = true)
             }
         }
         SettingsGroup("API key") {
@@ -185,14 +187,43 @@ private fun EditCredentials(
                 Text("Keep saved keys")
             }
         }
-        else -> {
-            Text(if (form.hasCredentials) "Keys saved. Enter new ones to replace them." else "No keys saved.")
+        !form.hasCredentials -> {
+            Text("No keys saved.")
             CredentialFields(form.fields, family, editable, onAction)
-            if (form.hasCredentials) {
-                TextButton(onClick = { onAction(CustomSitesAction.SetClearCredentials(true)) }, enabled = editable) {
-                    Text("Remove saved keys")
+        }
+        else -> SavedCredentials(form, family, editable, onAction)
+    }
+}
+
+/** Saved keys stay collapsed to one line until the person chooses to replace them. */
+@Composable
+private fun SavedCredentials(
+    form: SiteForm.Edit,
+    family: ProtocolFamily?,
+    editable: Boolean,
+    onAction: (CustomSitesAction) -> Unit,
+) {
+    var replacing by rememberSaveable(form.sourceId) { mutableStateOf(false) }
+    if (replacing) {
+        Text("Enter new keys to replace the saved ones.")
+        CredentialFields(form.fields, family, editable, onAction)
+    } else {
+        Text("Keys saved.")
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        TextButton(
+            onClick = {
+                // Backing out drops anything typed, or Save would still replace the saved keys.
+                if (replacing) {
+                    onAction(CustomSitesAction.SetUser(""))
+                    onAction(CustomSitesAction.SetApiKey(""))
                 }
-            }
+                replacing = !replacing
+            },
+            enabled = editable,
+        ) { Text(if (replacing) "Keep saved keys" else "Replace keys") }
+        TextButton(onClick = { onAction(CustomSitesAction.SetClearCredentials(true)) }, enabled = editable) {
+            Text("Remove saved keys", color = MaterialTheme.colorScheme.error)
         }
     }
 }

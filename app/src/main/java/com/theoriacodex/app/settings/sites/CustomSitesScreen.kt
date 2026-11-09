@@ -2,10 +2,12 @@ package com.theoriacodex.app.settings.sites
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -16,8 +18,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.customsites.CustomSiteSummary
@@ -39,7 +44,7 @@ internal fun CustomSitesScreen(state: CustomSitesUiState, onAction: (CustomSites
         null -> SitesListPage(state, onAction, onBack)
         is SiteForm.Add -> AddSitePage(form, onAction)
         is SiteForm.Edit -> state.sites.firstOrNull { it.sourceId == form.sourceId }?.let { site ->
-            EditSitePage(form, site, state.retests[site.sourceId], onAction)
+            EditSitePage(form, site, state.retests[site.sourceId], site.sourceId in state.workingSiteIds, onAction)
         }
     }
     RemoveSiteDialog(state, onAction)
@@ -65,7 +70,7 @@ private fun SitesListPage(state: CustomSitesUiState, onAction: (CustomSitesActio
             SettingsGroup(null) {
                 state.sites.forEachIndexed { index, site ->
                     if (index > 0) SettingsRowDivider()
-                    SiteRow(site, state.retests[site.sourceId], onAction)
+                    SiteRow(site, state.retests[site.sourceId], site.sourceId in state.workingSiteIds, onAction)
                 }
             }
         }
@@ -73,7 +78,7 @@ private fun SitesListPage(state: CustomSitesUiState, onAction: (CustomSitesActio
 }
 
 @Composable
-private fun SiteRow(site: CustomSiteSummary, retest: RetestStatus?, onAction: (CustomSitesAction) -> Unit) {
+private fun SiteRow(site: CustomSiteSummary, retest: RetestStatus?, working: Boolean, onAction: (CustomSitesAction) -> Unit) {
     Column {
         SettingsRow(
             title = site.label,
@@ -86,17 +91,20 @@ private fun SiteRow(site: CustomSiteSummary, retest: RetestStatus?, onAction: (C
                         strokeWidth = 2.dp,
                     )
                 } else {
-                    IconButton(onClick = { onAction(CustomSitesAction.Retest(site.sourceId)) }) {
-                        Icon(Icons.Default.Refresh, "Re-test ${site.label}")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (working) WorkingMark()
+                        IconButton(onClick = { onAction(CustomSitesAction.Retest(site.sourceId)) }) {
+                            Icon(Icons.Default.Refresh, "Re-test ${site.label}")
+                        }
                     }
                 }
             },
         )
-        if (retest is RetestStatus.Done) {
+        if (retest is RetestStatus.Done && !retest.ok) {
             AnnouncedText(
                 retest.message,
                 Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
-                error = !retest.ok,
+                error = true,
             )
             if (retest.blocked) {
                 TextButton(
@@ -106,6 +114,17 @@ private fun SiteRow(site: CustomSiteSummary, retest: RetestStatus?, onAction: (C
             }
         }
     }
+}
+
+/** A site's "proven to work this session" mark; TalkBack reads it as "Working" when it appears. */
+@Composable
+internal fun WorkingMark() {
+    Icon(
+        Icons.Default.CheckCircle,
+        contentDescription = "Working",
+        modifier = Modifier.size(24.dp).semantics { liveRegion = LiveRegionMode.Polite },
+        tint = MaterialTheme.colorScheme.primary,
+    )
 }
 
 @Composable

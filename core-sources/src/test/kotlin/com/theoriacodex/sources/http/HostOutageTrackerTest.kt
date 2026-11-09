@@ -41,12 +41,43 @@ class HostOutageTrackerTest {
 
     @Test fun `an unresolved domain counts only while online`() {
         var online = false
-        val gated = HostOutageTracker(isOnline = { online })
+        val gated = HostOutageTracker(clock = { now }, isOnline = { online })
+        gated.recordFailure("https://gone.example/", UnknownHostException("gone.example"))
+        now += 10_000L
         gated.recordFailure("https://gone.example/", UnknownHostException("gone.example"))
         assertTrue(gated.outages.value.isEmpty())
         online = true
         gated.recordFailure("https://gone.example/", UnknownHostException("gone.example"))
+        now += 10_000L
+        gated.recordFailure("https://gone.example/", UnknownHostException("gone.example"))
         assertEquals(HostOutageKind.UNRESOLVED, gated.outages.value["gone.example"]?.kind)
+    }
+
+    @Test fun `one blip of failed lookups marks nothing, separated failures do`() {
+        val miss = UnknownHostException("gone.example")
+        tracker.recordFailure("https://gone.example/", miss)
+        now += 1_000L
+        tracker.recordFailure("https://gone.example/", miss)
+        assertTrue("two misses in one blip", tracker.outages.value.isEmpty())
+
+        now += 10 * 60 * 1000L
+        tracker.recordFailure("https://gone.example/", miss)
+        assertTrue("too long after the first to relate to it", tracker.outages.value.isEmpty())
+
+        now += 10_000L
+        tracker.recordFailure("https://gone.example/", miss)
+        assertEquals(HostOutageKind.UNRESOLVED, tracker.outages.value["gone.example"]?.kind)
+    }
+
+    @Test fun `a working host stops being one on an outage or when taken back`() {
+        tracker.setWorking("https://www.a.example/posts.json", true)
+        assertEquals(setOf("a.example"), tracker.working.value)
+        tracker.record("https://a.example/", HostOutageKind.CHALLENGE)
+        assertTrue(tracker.working.value.isEmpty())
+
+        tracker.setWorking("https://b.example/", true)
+        tracker.setWorking("https://b.example/", false)
+        assertTrue(tracker.working.value.isEmpty())
     }
 
     @Test fun `a maintenance page fails at once and the next request never reaches the host`() = runBlocking {

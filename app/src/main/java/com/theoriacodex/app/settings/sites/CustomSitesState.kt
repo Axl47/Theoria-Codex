@@ -10,6 +10,8 @@ data class CustomSitesUiState(
     val form: SiteForm? = null,
     /** Inline re-test status per source id; cleared when the site disappears. */
     val retests: Map<String, RetestStatus> = emptyMap(),
+    /** Source ids proven to work this session, which their rows show with a check mark. */
+    val workingSiteIds: Set<String> = emptySet(),
     val removeTargetId: String? = null,
     val removing: Boolean = false,
     /** A short failure message shown above the list until the next action. */

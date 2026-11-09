@@ -15,6 +15,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.theoriacodex.app.customsites.CredentialEdit
 import com.theoriacodex.app.customsites.CustomSiteAvailability
 import com.theoriacodex.domain.source.ProbeFailure
 import com.theoriacodex.domain.source.ProtocolFamily
@@ -105,6 +106,36 @@ class CustomSitesScreenTest {
 
         compose.onNodeWithText(unreachableMessage("safebooru.org", ProbeFailure.BLOCKED)).assertExists()
         compose.onNodeWithText("Verify in browser").assertExists()
+    }
+
+    @Test
+    fun `a site proven to work shows the check mark on its row and Browser check row`() {
+        val controller = FakeCustomSitesController(listOf(site()))
+        controller.workingSourceIds.value = setOf("custom_safebooru_org")
+        show(controller)
+        compose.onNodeWithContentDescription("Working").assertExists()
+        compose.onNodeWithText("Working").assertDoesNotExist()
+
+        compose.onNodeWithText("Safebooru").performClick()
+
+        compose.onNodeWithContentDescription("Working").assertExists()
+    }
+
+    @Test
+    fun `saved keys stay collapsed until replaced, and backing out drops what was typed`() {
+        val controller = FakeCustomSitesController(listOf(site().copy(hasCredentials = true)))
+        show(controller)
+        compose.onNodeWithText("Safebooru").performClick()
+        compose.onNodeWithText("Keys saved.").performScrollTo().assertExists()
+        compose.onNode(hasText("API key") and hasSetTextAction()).assertDoesNotExist()
+
+        compose.onNodeWithText("Replace keys").performScrollTo().performClick()
+        compose.onNode(hasText("API key") and hasSetTextAction()).performTextInput("secret")
+        compose.onNodeWithText("Keep saved keys").performScrollTo().performClick()
+        compose.onNodeWithText("Save").performScrollTo().performClick()
+        compose.waitForIdle()
+
+        assertEquals(CredentialEdit.Keep, controller.edits.single().second.credentials)
     }
 
     @Test

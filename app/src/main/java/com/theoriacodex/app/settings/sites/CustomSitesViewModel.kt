@@ -74,6 +74,12 @@ internal class CustomSitesViewModel(
 
     init {
         scope.launch {
+            controller.workingSourceIds.collect { ids -> mutableState.update { it.copy(workingSiteIds = ids) } }
+        }
+    }
+
+    init {
+        scope.launch {
             controller.setupRequest.filterNotNull().collect { request ->
                 controller.clearSetupRequest()
                 when (request) {
@@ -191,7 +197,8 @@ internal class CustomSitesViewModel(
             return true
         }
         if (site != null) {
-            runCatchingPreservingCancellation { controller.completeVerification(site.sourceId, check.userAgent) }.getOrNull() ?: return false
+            val working = retestStatus(site, result).ok
+            runCatchingPreservingCancellation { controller.completeVerification(site.sourceId, check.userAgent, working) }.getOrNull() ?: return false
         }
         mutableState.update { current ->
             if (current.verification == null) return@update current

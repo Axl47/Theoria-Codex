@@ -20,6 +20,7 @@ internal class FakeCustomSitesController(initial: List<CustomSiteSummary> = empt
     data class ProbeCall(val input: String, val credentials: SiteCredentials?, val headers: SiteHeaders)
 
     override val sites: MutableStateFlow<List<CustomSiteSummary>> = MutableStateFlow(initial)
+    override val workingSourceIds = MutableStateFlow<Set<String>>(emptySet())
     override val setupRequest = MutableStateFlow<SitesRequest?>(null)
 
     override fun requestSetup(address: String) {
@@ -72,7 +73,7 @@ internal class FakeCustomSitesController(initial: List<CustomSiteSummary> = empt
         return onCheckVerification(sourceId, userAgent)
     }
 
-    override suspend fun completeVerification(sourceId: String, userAgent: String) {
+    override suspend fun completeVerification(sourceId: String, userAgent: String, working: Boolean) {
         completions += sourceId to userAgent
     }
 
