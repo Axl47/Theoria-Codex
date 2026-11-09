@@ -613,8 +613,10 @@ class HitomiSourceAdapter(
     companion object {
         private const val DEFAULT_PAGE_SIZE = 25
         private const val MAX_PAGE_SIZE = 100
-        private const val DEFAULT_HYDRATION_CONCURRENCY = 4
-        private const val MAX_HYDRATION_CONCURRENCY = 8
+
+        /** One per card: a page multiplexes over a single HTTP/2 connection, as Hitomi's own gallery list does. */
+        private const val DEFAULT_HYDRATION_CONCURRENCY = DEFAULT_PAGE_SIZE
+        private const val MAX_HYDRATION_CONCURRENCY = MAX_PAGE_SIZE
         private const val HITOMI_AUTOCOMPLETE_LIMIT = 10
         private const val MAX_PRIMARY_SCAN_IDS_PER_PAGE = 10_000
         internal const val DEFAULT_MEMBERSHIP_CACHE_BYTES = 8L * 1024L * 1024L

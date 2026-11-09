@@ -253,6 +253,9 @@ class GelbooruSourceAdapterTest {
 
         adapter.search(sampleQuery(), pageToken = null)
         assertEquals("landscape sort:id:desc", httpClient.lastGet?.query?.get("tags"))
+
+        adapter.search(sampleQuery().withIncludeTermGroups(emptyList()), pageToken = null)
+        assertEquals("", httpClient.lastGet?.query?.get("tags"))
     }
 
     @Test

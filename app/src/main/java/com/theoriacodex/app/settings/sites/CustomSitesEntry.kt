@@ -12,7 +12,7 @@ import com.theoriacodex.app.settings.SettingsSitesEntry
 internal fun rememberCustomSitesEntry(container: TheoriaAppContainer): SettingsSitesEntry {
     val owner = viewModel<CustomSitesViewModel>(key = "custom-sites", factory = CustomSitesViewModel.factory(container))
     val state by owner.state.collectAsStateWithLifecycle()
-    return SettingsSitesEntry(summary = customSitesSummary(state.sites)) { onBack ->
-        CustomSitesScreen(state, owner::onAction, onBack)
+    return SettingsSitesEntry(summary = customSitesSummary(state.sites)) { onBack, accounts ->
+        CustomSitesScreen(state, accounts, owner::onAction, onBack)
     }
 }

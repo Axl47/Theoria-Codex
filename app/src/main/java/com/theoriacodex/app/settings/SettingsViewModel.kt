@@ -367,10 +367,6 @@ internal class SettingsViewModel(
             is SettingsAction.PixivCallbackCompleted -> handlePixivCallback(action.errorMessage)
             SettingsAction.DismissCredentialRecovery -> updateAccounts { copy(showRecoveryDialog = false) }
             SettingsAction.ResetCredentialStore -> resetCredentialStore()
-            SettingsAction.OpenSourceAccounts -> {
-                updateState { copy(page = SettingsPage.ACCOUNTS) }
-                effectChannel.trySend(SettingsEffect.NavigateToSettings)
-            }
             SettingsAction.OpenCustomSites -> {
                 updateState { copy(page = SettingsPage.SITES) }
                 effectChannel.trySend(SettingsEffect.NavigateToSettings)

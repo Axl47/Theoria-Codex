@@ -28,7 +28,7 @@ class CredentialAccountControlsTest {
             MaterialTheme {
                 Column {
                     CredentialAccountControls(
-                        name = "Gelbooru", statusLabel = status.value, configured = configured.value,
+                        statusLabel = status.value, configured = configured.value,
                         userIdInput = "42", apiKeyInput = "", enabled = true,
                         onUserIdChange = {}, onApiKeyChange = {},
                         onSave = { saveRequested = true; status.value = "Missing user ID or API key" },

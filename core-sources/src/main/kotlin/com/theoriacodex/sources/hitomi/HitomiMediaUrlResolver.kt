@@ -21,6 +21,29 @@ data class HitomiMediaFile(
     val hasAvif: Boolean,
 )
 
+/** The two thumbnail sizes Hitomi's own pages use; [directory] names the rendition on its thumbnail CDN. */
+internal enum class HitomiThumbnail(val directory: String) {
+    /** 640 px on the long edge, for feed cards. */
+    CARD("webpbigtn"),
+
+    /** 300 px on the long edge, for choosing a page. */
+    PAGE("webpsmalltn"),
+}
+
+/**
+ * URLs of [rendition] for the file with [hash], the configured shard first. Thumbnail paths are derived from the
+ * hash alone, so they survive the dated `gg.js` base path changing, unlike full-size media.
+ */
+internal fun hitomiThumbnailUrls(hash: String, primaryShard: Int, rendition: HitomiThumbnail): List<String> {
+    val normalized = hash.lowercase(Locale.ROOT)
+    val path = "${rendition.directory}/${normalized.last()}/${normalized.takeLast(3).take(2)}/$normalized.webp"
+    return listOf(primaryShard, 3 - primaryShard).map { shard ->
+        "https://${'a' + (shard - 1)}tn.$HITOMI_CDN_DOMAIN/$path"
+    }
+}
+
+internal const val HITOMI_CDN_DOMAIN = "gold-usergeneratedcontent.net"
+
 data class HitomiCdnConfiguration(
     val basePath: String,
     val version: String,
@@ -174,7 +197,7 @@ class HitomiMediaUrlResolver(
         const val MAX_CONFIGURATION_RESPONSE_CHARS: Int = 512 * 1_024
         const val DEFAULT_FAILURE_VERSION_CACHE_BYTES: Long = 64L * 1024L
 
-        private const val CDN_DOMAIN = "gold-usergeneratedcontent.net"
+        private const val CDN_DOMAIN = HITOMI_CDN_DOMAIN
 
         private val GG_REQUEST_HEADERS = HitomiProtocol.requestHeaders +
             ("Accept" to "application/javascript, text/javascript, */*;q=0.8")

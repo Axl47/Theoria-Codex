@@ -16,7 +16,7 @@ class SettingsSummaryPresentationTest {
             gelbooruApiKeyInput = "secret",
         )
 
-        assertEquals("2 of 3 configured", sourceAccountsSummary(accounts))
+        assertEquals("2 of 3 accounts", sourceAccountsSummary(accounts))
     }
 
     @Test

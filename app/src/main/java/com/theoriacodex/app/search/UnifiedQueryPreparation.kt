@@ -11,7 +11,11 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** Reuses successful compatibility lookups; preparation belongs to the Gelbooru request only. */
-internal class UnifiedQueryPreparation(private val clock: () -> Long) {
+internal class UnifiedQueryPreparation(
+    /** True for a tag Gelbooru has already reported a count for, which is spelled as Gelbooru spells it. */
+    private val isKnownTag: (String) -> Boolean = { false },
+    private val clock: () -> Long,
+) {
     private val mutex = Mutex()
     private val cache = linkedMapOf<String, Mapping>()
 
@@ -29,6 +33,7 @@ internal class UnifiedQueryPreparation(private val clock: () -> Long) {
     private suspend fun resolve(adapter: SourceAdapter, value: String): String {
         val key = normalizeGelbooruToken(value)
         mutex.withLock { cache[key]?.takeIf { clock() - it.atMs < CACHE_TTL_MS } }?.let { return it.value }
+        if (isKnownTag(key)) return key
         val result = runCatchingPreservingCancellation {
             withTimeoutOrNull(LOOKUP_TIMEOUT_MS) { adapter.autocompleteTags(key, 1) }
         }.getOrNull() ?: return value

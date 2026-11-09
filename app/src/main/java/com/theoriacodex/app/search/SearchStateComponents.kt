@@ -13,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalUriHandler
+import com.theoriacodex.app.source.LocalSourceHealth
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.referer
 import com.theoriacodex.domain.model.SourceKey
@@ -108,6 +109,24 @@ internal fun ErrorBlock(
         actionLabel = actionLabel,
         onRetry = onRetry,
     )
+}
+
+/**
+ * Says which sources a multi-source search is missing and why. Their chips live in the composer, which is
+ * collapsed once results are showing. Each notice stays dismissed for as long as its outage lasts.
+ */
+@Composable
+internal fun SourceOutageNotices(notices: List<SourceOutageNotice>) {
+    val health = LocalSourceHealth.current
+    notices.filterNot { it.sources.all(health.dismissedNotices::contains) }.forEach { notice ->
+        FeedErrorTile(
+            title = "Results may be incomplete",
+            message = notice.message,
+            actionLabel = "Verify in browser",
+            onRetry = notice.verifiableSource?.let { source -> { health.verify(source) } },
+            onDismiss = { health.dismissNotices(notice.sources) },
+        )
+    }
 }
 
 @Composable

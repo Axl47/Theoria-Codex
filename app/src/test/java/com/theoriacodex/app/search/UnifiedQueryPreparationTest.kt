@@ -26,6 +26,15 @@ class UnifiedQueryPreparationTest {
     }
 
     @Test
+    fun `a tag Gelbooru already reported needs no lookup before searching`() = runTest {
+        val adapter = TestAdapter(SourceKey.GELBOORU)
+        val preparation = UnifiedQueryPreparation(isKnownTag = { it == "blue_hair" }, clock = { 0L })
+
+        assertEquals(listOf("blue_hair"), preparation.prepareGelbooru(adapter, unifiedQuery("blue_hair")).includeTags)
+        assertEquals(0, adapter.autocompletePrefixes.size)
+    }
+
+    @Test
     fun `timed out mappings fall back without poisoning the cache`() = runTest {
         val adapter = TestAdapter(SourceKey.GELBOORU).apply { autocompleteResponseDelayMs = 3_000L }
         val preparation = UnifiedQueryPreparation { testScheduler.currentTime }

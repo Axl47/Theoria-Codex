@@ -37,7 +37,7 @@ class Rule34VideoSourceAdapter(
                 pageUrl = pageUrl,
                 sourcePostId = sourcePostId,
                 title = anchor.attr("title").trim().ifBlank { null },
-                previewUrl = image?.attr("data-original")?.ifBlank { image.attr("src") },
+                previewUrl = image?.kvsThumbnailUrl(),
                 previewVideoUrl = previewVideoUrl,
                 durationMs = parseRule34DurationMs(
                     anchor.selectFirst(".duration, .time, time, [data-duration]")?.let { element ->

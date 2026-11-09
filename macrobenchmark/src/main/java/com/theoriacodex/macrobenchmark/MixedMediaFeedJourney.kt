@@ -23,12 +23,16 @@ import java.util.concurrent.TimeUnit
 private const val JOURNEY_TIMEOUT_MS = 15_000L
 private val MEDIA_PATTERN = Pattern.compile("search_media_pixiv_benchmark_(video|gif|webp|ugoira)_.*")
 private const val STATUS_TAG = "benchmark_journey_status"
+private val ANIMATED_KINDS = setOf("video", "gif", "webp", "ugoira")
+private const val SHELF_SCROLL_PERCENT = 0.5f
+private const val SHELF_SCROLL_SPEED_DP = 500
+private const val MAX_SHELF_STEPS = 8
 
 /** Uses the real bottom navigation, collection card and creator action; no synthetic feed switching. */
 internal fun UiDevice.completeFiveFeedJourney() {
     exerciseCurrentFeed("Search")
     clickDescription("For You")
-    exerciseCurrentFeed("For You")
+    exerciseCurrentFeed("For You", sideways = true)
     clickDescription("Recents")
     clickDescription("Filter Recents by section")
     clickText("Watched")
@@ -72,7 +76,8 @@ internal fun UiDevice.completeFiveFeedJourney() {
     requireMovingFeedPreviews("Search after background resume")
 }
 
-private fun UiDevice.exerciseCurrentFeed(label: String) {
+/** [sideways] is for feeds built from shelves, whose later cards only come into view by scrolling across. */
+private fun UiDevice.exerciseCurrentFeed(label: String, sideways: Boolean = false) {
     val observedKinds = mutableSetOf<String>()
     fun verify(step: String) {
         requireMovingFeedPreviews(step).keys.forEach { identity ->
@@ -89,7 +94,13 @@ private fun UiDevice.exerciseCurrentFeed(label: String) {
         flingFeed(Direction.UP)
         verify("$label up $it")
     }
-    check(observedKinds == setOf("video", "gif", "webp", "ugoira")) {
+    // Stops as soon as every kind was seen: past a shelf's end, a swipe moves to the next tab instead.
+    var step = 0
+    while (sideways && step < MAX_SHELF_STEPS && observedKinds != ANIMATED_KINDS) {
+        scrollShelf()
+        verify("$label across ${step++}")
+    }
+    check(observedKinds == ANIMATED_KINDS) {
         "$label did not exercise all four animated media kinds: $observedKinds"
     }
 }
@@ -99,6 +110,17 @@ private fun UiDevice.flingFeed(direction: Direction) {
         ?: error("Current real feed has no scrollable grid")
     grid.setGestureMargin(displayWidth / 6)
     grid.fling(direction)
+}
+
+/** Moves the largest visible shelf by about one card. */
+private fun UiDevice.scrollShelf() {
+    val shelf = findObjects(By.scrollable(true))
+        .filter { it.visibleBounds.width() > it.visibleBounds.height() }
+        .maxByOrNull { it.visibleBounds.height() }
+        ?: error("Current real feed has no horizontal shelf")
+    // Stays clear of the screen edges, where a swipe would be the system back gesture.
+    shelf.setGestureMargins(displayWidth / 6, 0, displayWidth / 6, 0)
+    shelf.scroll(Direction.RIGHT, SHELF_SCROLL_PERCENT, SHELF_SCROLL_SPEED_DP)
 }
 
 /**

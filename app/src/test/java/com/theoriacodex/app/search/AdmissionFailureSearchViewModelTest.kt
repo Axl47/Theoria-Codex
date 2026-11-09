@@ -149,6 +149,12 @@ internal class AdmissionFailureSearchViewModelTest : SearchViewModelTestFixture(
         var attempts = 0
         val viewModel = viewModel(adapter, reconnections = network.take(2).reconnections(), executionService = { coordinator ->
             object : SearchExecutionService by coordinator {
+                override suspend fun executeInitialProgressively(
+                    query: Query,
+                    sourceScope: SearchSourceScope,
+                    onPartial: suspend (SearchExecutionResult.Success) -> Unit,
+                ): SearchExecutionResult = executeInitial(query, sourceScope)
+
                 override suspend fun executeInitial(query: Query, sourceScope: SearchSourceScope): SearchExecutionResult {
                     if ("offline" !in query.includeTags || ++attempts > 1) return coordinator.executeInitial(query, sourceScope)
                     firstAttempt.await()
@@ -184,6 +190,12 @@ internal class AdmissionFailureSearchViewModelTest : SearchViewModelTestFixture(
             val viewModel = viewModel(adapter, rootRequestTimeoutMs = 100L, reconnections = network.take(2).reconnections(),
                 executionService = { coordinator ->
                     object : SearchExecutionService by coordinator {
+                        override suspend fun executeInitialProgressively(
+                            query: Query,
+                            sourceScope: SearchSourceScope,
+                            onPartial: suspend (SearchExecutionResult.Success) -> Unit,
+                        ): SearchExecutionResult = executeInitial(query, sourceScope)
+
                         override suspend fun executeInitial(query: Query, sourceScope: SearchSourceScope): SearchExecutionResult {
                             if ("second" in query.includeTags && hangSecond) awaitCancellation()
                             return coordinator.executeInitial(query, sourceScope)

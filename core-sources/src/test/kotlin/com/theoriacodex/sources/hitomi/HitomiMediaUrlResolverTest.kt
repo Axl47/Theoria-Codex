@@ -108,6 +108,19 @@ class HitomiMediaUrlResolverTest {
     }
 
     @Test
+    fun `thumbnail urls follow the hash path and lead with the configured shard`() {
+        val hash = "2733fb24ac9ec065e6af94adb500554e56093df4481a92e85425955f368fa7f1"
+
+        assertEquals(
+            listOf(
+                "https://btn.gold-usergeneratedcontent.net/webpbigtn/1/7f/$hash.webp",
+                "https://atn.gold-usergeneratedcontent.net/webpbigtn/1/7f/$hash.webp",
+            ),
+            hitomiThumbnailUrls(hash, primaryShard = 2, rendition = HitomiThumbnail.CARD),
+        )
+    }
+
+    @Test
     fun `caches configuration until invalidated`() = runTest {
         val client = QueueHttpClient(fixture(), fixture())
         val resolver = HitomiMediaUrlResolver(client)

@@ -11,6 +11,7 @@ kotlin {
 dependencies {
     implementation(project(":core-domain"))
     implementation(libs.kotlinx.coroutines.core)
+    api(libs.okhttp)
     implementation(libs.gson)
     implementation(libs.jsoup)
     compileOnly(libs.jspecify)

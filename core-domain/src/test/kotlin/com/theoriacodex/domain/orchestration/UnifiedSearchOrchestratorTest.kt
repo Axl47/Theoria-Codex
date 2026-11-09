@@ -427,6 +427,68 @@ class UnifiedSearchOrchestratorTest {
         assertEquals(expected.message, thrown?.message)
     }
 
+    @Test
+    fun `a slow source never holds back results and only appends below them`() = runTest {
+        val orchestrator = UnifiedSearchOrchestrator(
+            mapOf(
+                SourceKey.PIXIV to FakeAdapter(SourceKey.PIXIV, supportedCapabilities(), listOf(post(SourceKey.PIXIV, "fast"))),
+                SourceKey.GELBOORU to FakeAdapter(
+                    SourceKey.GELBOORU, supportedCapabilities(), listOf(post(SourceKey.GELBOORU, "slow")), delayMs = 10_000L,
+                ),
+            ),
+        )
+        val published = mutableListOf<Pair<Long, List<String>>>()
+
+        val result = orchestrator.search(
+            sampleQuery(), setOf(SourceKey.PIXIV, SourceKey.GELBOORU), emptyMap(), emptyMap(),
+            onPartial = { partial -> published += currentTime to partial.items.map { it.id.sourcePostId } },
+        )
+
+        assertEquals(listOf(400L to listOf("fast")), published)
+        assertEquals(listOf("fast", "slow"), result.items.map { it.id.sourcePostId })
+        assertEquals(10_000L, currentTime)
+    }
+
+    @Test
+    fun `sources answering together are interleaved without a partial publication`() = runTest {
+        val orchestrator = UnifiedSearchOrchestrator(
+            mapOf(
+                SourceKey.PIXIV to FakeAdapter(SourceKey.PIXIV, supportedCapabilities(), listOf(post(SourceKey.PIXIV, "a"))),
+                SourceKey.GELBOORU to FakeAdapter(
+                    SourceKey.GELBOORU, supportedCapabilities(), listOf(post(SourceKey.GELBOORU, "b")), delayMs = 200L,
+                ),
+            ),
+        )
+        var partials = 0
+
+        val result = orchestrator.search(
+            sampleQuery(), setOf(SourceKey.PIXIV, SourceKey.GELBOORU), emptyMap(), emptyMap(), onPartial = { partials++ },
+        )
+
+        assertEquals(0, partials)
+        assertEquals(2, result.items.size)
+    }
+
+    @Test
+    fun `a source failing late keeps the published results and reports its failure`() = runTest {
+        val orchestrator = UnifiedSearchOrchestrator(
+            mapOf(
+                SourceKey.PIXIV to FakeAdapter(SourceKey.PIXIV, supportedCapabilities(), listOf(post(SourceKey.PIXIV, "kept"))),
+                SourceKey.GELBOORU to FakeAdapter(
+                    SourceKey.GELBOORU, supportedCapabilities(), emptyList(),
+                    error = SourceAdapterException(SourceFailureReason.NETWORK, "down"), delayMs = 5_000L,
+                ),
+            ),
+        )
+
+        val result = orchestrator.search(
+            sampleQuery(), setOf(SourceKey.PIXIV, SourceKey.GELBOORU), emptyMap(), emptyMap(), onPartial = {},
+        )
+
+        assertEquals(listOf("kept"), result.items.map { it.id.sourcePostId })
+        assertEquals(SourceRunState.FAILED, result.statuses.single { it.source == SourceKey.GELBOORU }.state)
+    }
+
     private fun sampleQuery(): Query {
         return Query(
             mode = QueryMode.Unified,
@@ -471,11 +533,13 @@ class UnifiedSearchOrchestratorTest {
         override val capabilities: SourceCapabilities,
         private val posts: List<Post>,
         private val error: Throwable? = null,
+        private val delayMs: Long = 0L,
     ) : SourceAdapter {
         var lastSearchQuery: Query? = null
 
         override suspend fun search(query: Query, pageToken: String?): Page<Post> {
             lastSearchQuery = query
+            delay(delayMs)
             if (error != null) throw error
             return Page(items = posts, nextPageToken = null)
         }

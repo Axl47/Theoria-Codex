@@ -9,16 +9,18 @@ import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.PIXIV_UGOIRA_MIME
 import com.theoriacodex.domain.model.Post
-import com.theoriacodex.sources.http.executeCancellableHttpConnection
+import com.theoriacodex.app.network.appHttpClients
+import com.theoriacodex.sources.http.await
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
-import java.io.InterruptedIOException
-import java.net.HttpURLConnection
-import java.net.URL
+import java.io.InputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.OkHttpClient
+import okhttp3.Request
 
 /**
  * Provider resolution and network policy are shared by automatic saves and explicit collection downloads.
@@ -62,7 +64,7 @@ class OfflineMediaAcquisition(
             ugoira.copyArchiveForOffline(post.id.sourcePostId, destination)
         } else {
             val url = media.url?.takeIf(String::isNotBlank) ?: throw IOException("No full media URL is available")
-            downloadMediaFile(url, post.id.source.requestHeaders(), destination)
+            downloadMediaFile(url, post.id.source.requestHeaders(), destination, client = context.appHttpClients.downloads)
         }
     }
 
@@ -95,29 +97,22 @@ internal suspend fun downloadMediaFile(
     headers: Map<String, String>,
     destination: File,
     maxBytes: Long = MAX_OFFLINE_MEDIA_BYTES,
-    openConnection: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection },
+    client: OkHttpClient,
 ) {
-    val parsed = URL(url)
-    require(parsed.protocol == "https" || parsed.protocol == "http") { "Unsupported media URL" }
-    val connection = openConnection(parsed).apply {
-        connectTimeout = 12_000
-        readTimeout = 30_000
-        instanceFollowRedirects = true
-        useCaches = false
-        headers.forEach { (name, value) -> setRequestProperty(name, value) }
-        setRequestProperty("Accept-Encoding", "identity")
-    }
-    executeCancellableHttpConnection(connection) {
-        if (connection.responseCode != HttpURLConnection.HTTP_OK) {
-            throw IOException("Media download returned HTTP ${connection.responseCode}")
-        }
-        val contentType = connection.contentType.orEmpty().substringBefore(';').lowercase()
+    val parsed = requireNotNull(url.toHttpUrlOrNull()) { "Unsupported media URL" }
+    val request = Request.Builder().url(parsed).apply {
+        headers.forEach { (name, value) -> header(name, value) }
+        header("Accept-Encoding", "identity")
+    }.build()
+    client.newCall(request).await { response ->
+        if (response.code != MEDIA_HTTP_OK) throw IOException("Media download returned HTTP ${response.code}")
+        val contentType = response.header("Content-Type").orEmpty().substringBefore(';').lowercase()
         if (contentType.startsWith("text/") || contentType.contains("json") || contentType.contains("html")) {
             throw IOException("The provider returned a page instead of media")
         }
-        val expected = connection.getHeaderFieldLong("Content-Length", -1L)
+        val expected = response.body.contentLength()
         if (expected > maxBytes) throw mediaTooLarge(maxBytes)
-        val written = copyMediaResponse(connection, destination, maxBytes)
+        val written = copyMediaResponse(response.body.byteStream(), destination, maxBytes)
         if (written <= 0 || expected >= 0 && expected != written) {
             throw IOException("The media download was incomplete")
         }
@@ -125,13 +120,12 @@ internal suspend fun downloadMediaFile(
     }
 }
 
-private fun copyMediaResponse(connection: HttpURLConnection, destination: File, maxBytes: Long): Long {
+private fun copyMediaResponse(body: InputStream, destination: File, maxBytes: Long): Long {
     var written = 0L
-    connection.inputStream.use { input ->
+    body.use { input ->
         FileOutputStream(destination).use { output ->
             val buffer = ByteArray(64 * 1024)
             while (true) {
-                if (Thread.currentThread().isInterrupted) throw InterruptedIOException()
                 val count = input.read(buffer)
                 if (count < 0) break
                 written += count
@@ -143,6 +137,8 @@ private fun copyMediaResponse(connection: HttpURLConnection, destination: File, 
     }
     return written
 }
+
+private const val MEDIA_HTTP_OK = 200
 
 private fun mediaTooLarge(maxBytes: Long) = IOException(
     if (maxBytes == MAX_OFFLINE_MEDIA_BYTES) "This file exceeds the 2 GiB offline limit" else "Media exceeds its byte limit",

@@ -1,5 +1,7 @@
 package com.theoriacodex.app.settings.sites
 
+import com.theoriacodex.app.customsites.BuiltInSiteSummary
+import com.theoriacodex.app.customsites.BuiltInTestResult
 import com.theoriacodex.app.customsites.CustomSiteAvailability
 import com.theoriacodex.app.customsites.CustomSiteMutation
 import com.theoriacodex.app.customsites.CustomSiteSummary
@@ -29,6 +31,20 @@ internal fun probeMessage(result: SiteProbeResult): String? = when (result) {
     is SiteProbeResult.Unreachable -> unreachableMessage(result.address.host, result.reason)
     is SiteProbeResult.InvalidAddress -> invalidAddressMessage(result.error)
 }
+
+/** What Done says when the app's own request is still refused after the person's check. */
+internal fun verificationRefusedMessage(host: String): String =
+    "$host is still refusing Theoria. Finish its check, or try again in a moment."
+
+/** Shown when the first check passes, so a page opened voluntarily stays open. */
+internal fun verificationAlreadyOpenMessage(host: String): String =
+    "$host already lets Theoria through. Tap Done to save this browser for it."
+
+internal const val VERIFICATION_INSTRUCTION =
+    "Complete the site's check above. This closes by itself when Theoria gets through."
+internal const val BROWSER_UNAVAILABLE_MESSAGE = "The system browser isn't available right now."
+
+internal fun verificationLoadFailedMessage(host: String): String = "Couldn't load $host. Check your connection and try again."
 
 /** Names the shipped source when the id parses, e.g. "Danbooru is already built into Theoria." */
 internal fun alreadyBuiltInMessage(builtInSourceId: String): String =
@@ -78,7 +94,7 @@ internal fun userFieldHint(family: ProtocolFamily?, user: String): UserFieldHint
 
 internal data class UserFieldHint(val text: String, val error: Boolean)
 
-/** The inline line shown under a row after re-testing it. Never suggests the profile changed. */
+/** What a re-test found; a failure's message shows under the row. Never suggests the profile changed. */
 internal fun retestStatus(site: CustomSiteSummary, result: SiteProbeResult): RetestStatus.Done {
     val answeredFamily = when (result) {
         is SiteProbeResult.Supported -> result.family
@@ -95,9 +111,30 @@ internal fun retestStatus(site: CustomSiteSummary, result: SiteProbeResult): Ret
             if (result.rejected) "The saved keys were rejected." else "Needs an API key.",
             ok = false,
         )
-        else -> RetestStatus.Done(probeMessage(result).orEmpty(), ok = false)
+        else -> RetestStatus.Done(
+            probeMessage(result).orEmpty(),
+            ok = false,
+            blocked = result is SiteProbeResult.Unreachable && result.reason == ProbeFailure.BLOCKED,
+        )
     }
 }
+
+/** What a real search through a built-in source found, in the shape its row shows. */
+internal fun builtInTestStatus(site: BuiltInSiteSummary, result: BuiltInTestResult): RetestStatus.Done = when (result) {
+    BuiltInTestResult.WORKING -> RetestStatus.Done("Working", ok = true)
+    BuiltInTestResult.NEEDS_BROWSER_CHECK -> RetestStatus.Done("Needs browser verification.", ok = false, blocked = true)
+    BuiltInTestResult.NEEDS_ACCOUNT -> RetestStatus.Done("Needs an account or API key.", ok = false)
+    BuiltInTestResult.DOWN -> RetestStatus.Done("Down for maintenance. Try again later.", ok = false)
+    BuiltInTestResult.UNREACHABLE -> RetestStatus.Done(unreachableMessage(site.host, ProbeFailure.TIMEOUT), ok = false)
+    BuiltInTestResult.FAILED -> RetestStatus.Done(unreachableMessage(site.host, ProbeFailure.HTTP_ERROR), ok = false)
+}
+
+/** The status line while Test all runs. */
+internal fun testProgressLine(progress: SitesTestProgress): String =
+    "Testing ${progress.label}… ${progress.position} of ${progress.total}"
+
+/** The status line once Test all has finished. */
+internal fun testSummaryLine(working: Int, total: Int): String = "$working of $total working"
 
 /** Explains a save, edit or removal that didn't happen. Null for [CustomSiteMutation.Success]. */
 internal fun mutationMessage(result: CustomSiteMutation): String? = when (result) {
@@ -118,6 +155,10 @@ internal fun availabilityLabel(availability: CustomSiteAvailability): String = w
     CustomSiteAvailability.UNSUPPORTED_FAMILY -> "Unsupported in this version"
 }
 
+/** Second line of a built-in source's row: host, its account status, and whether a browser check is needed. */
+internal fun builtInRowSummary(site: BuiltInSiteSummary, account: String?): String =
+    listOfNotNull(site.host, account, "Needs browser verification".takeIf { site.needsVerification }).joinToString(" · ")
+
 /** Second line of a row: host, then [siteStatusSummary]. */
 internal fun siteRowSummary(site: CustomSiteSummary): String = "${site.host} · ${siteStatusSummary(site)}"
 
@@ -131,7 +172,7 @@ internal fun siteStatusSummary(site: CustomSiteSummary): String = buildList {
 /** The Settings home row's value. */
 internal fun customSitesSummary(sites: List<CustomSiteSummary>): String {
     if (sites.isEmpty()) return "Add a booru by its address"
-    val count = "${sites.size} ${if (sites.size == 1) "site" else "sites"}"
+    val count = "${sites.size} added"
     val needingKeys = sites.count { it.availability == CustomSiteAvailability.NEEDS_CREDENTIALS }
     return if (needingKeys == 0) count else "$count · $needingKeys need an API key"
 }

@@ -24,6 +24,10 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 
 enum class SourceRunState {
     SUCCESS,
@@ -57,6 +61,8 @@ class UnifiedSearchOrchestrator(
         weights: Map<SourceKey, Double>,
         queryOverridesBySource: Map<SourceKey, Query> = emptyMap(),
         prepareQuery: suspend (SourceKey, Query) -> Query = { _, sourceQuery -> sourceQuery },
+        /** When set, receives usable results before every source has answered; see [publishAsSourcesAnswer]. */
+        onPartial: (suspend (UnifiedSearchResult) -> Unit)? = null,
     ): UnifiedSearchResult = coroutineScope {
         val preparedQueries = ConcurrentHashMap<SourceKey, Query>()
         val portableQuery = query.portableTermsForUnified()
@@ -79,6 +85,7 @@ class UnifiedSearchOrchestrator(
                 reasons.any { reason -> reason != CapabilityExclusionReason.EXCLUDE_TAGS_UNSUPPORTED }
             }
 
+        val answered = MutableStateFlow(emptyList<SourceAnswer>())
         val jobs = candidateAdapters
             .filterKeys { source -> source !in hardExcluded }
             .map { (source, adapter) ->
@@ -86,24 +93,59 @@ class UnifiedSearchOrchestrator(
                     // A source with a term cap receives only the leading terms it accepts.
                     val sourceBaseQuery = sourceBaseQuery(query, portableQuery, queryOverridesBySource[source])
                         .withinTermLimit(adapter.capabilities.searchTermLimit)
-                    source to runCatchingPreservingCancellation {
+                    val answer = source to runCatchingPreservingCancellation {
                         searchPreparedSource(
                             source, adapter, sourceBaseQuery, source in clientSideExcludeSources,
                             pageTokens[source], prepareQuery, preparedQueries,
                         )
                     }
+                    answered.update { it + answer }
+                    answer
                 }
             }
-            .awaitAll()
 
-        combineResults(jobs, hardExcluded, weights, preparedQueries)
+        if (onPartial == null) {
+            combineResults(jobs.awaitAll(), hardExcluded, weights, preparedQueries)
+        } else {
+            publishAsSourcesAnswer(answered, jobs.size, hardExcluded, weights, preparedQueries, onPartial)
+        }
     }
 
-    private fun combineResults(
-        jobs: List<Pair<SourceKey, Result<Page<Post>>>>,
+    /**
+     * Publishes the first sources to answer, then appends each later source below them, so one slow or dead source
+     * cannot hold back results that already arrived, and cards already on screen never move. Sources answering within
+     * [FIRST_ANSWERS_SETTLE_MS] of the first success are interleaved exactly as a complete search would be.
+     */
+    private suspend fun publishAsSourcesAnswer(
+        answered: StateFlow<List<SourceAnswer>>,
+        expected: Int,
         hardExcluded: Map<SourceKey, Set<CapabilityExclusionReason>>,
         weights: Map<SourceKey, Double>,
         preparedQueries: Map<SourceKey, Query>,
+        onPartial: suspend (UnifiedSearchResult) -> Unit,
+    ): UnifiedSearchResult {
+        answered.first { answers -> answers.size == expected || answers.any { (_, result) -> result.isSuccess } }
+        withTimeoutOrNull(FIRST_ANSWERS_SETTLE_MS) { answered.first { answers -> answers.size == expected } }
+
+        var included = answered.value
+        var combined = combineResults(included, hardExcluded, weights, preparedQueries)
+        while (included.size < expected) {
+            if (combined.statuses.any { it.state == SourceRunState.SUCCESS }) onPartial(combined)
+            val latest = answered.first { answers -> answers.size > included.size }
+            val lateItems = latest.drop(included.size).flatMap { (_, result) -> result.getOrNull()?.items.orEmpty() }
+            combined = combineResults(latest, hardExcluded, weights, preparedQueries, items = combined.items + lateItems)
+            included = latest
+        }
+        return combined
+    }
+
+    /** Combines [jobs] into one result; [items] replaces the weighted interleave when order is already fixed. */
+    private fun combineResults(
+        jobs: List<SourceAnswer>,
+        hardExcluded: Map<SourceKey, Set<CapabilityExclusionReason>>,
+        weights: Map<SourceKey, Double>,
+        preparedQueries: Map<SourceKey, Query>,
+        items: List<Post>? = null,
     ): UnifiedSearchResult {
         val succeededPages = mutableMapOf<SourceKey, Page<Post>>()
         val statuses = mutableListOf<SourceRunStatus>()
@@ -133,13 +175,8 @@ class UnifiedSearchOrchestrator(
             )
         }
 
-        val interleaved = weightedInterleave(
-            pagesBySource = succeededPages,
-            weightsBySource = weights,
-        )
-
         return UnifiedSearchResult(
-            items = interleaved,
+            items = items ?: weightedInterleave(pagesBySource = succeededPages, weightsBySource = weights),
             nextPageTokens = succeededPages.mapValues { it.value.nextPageToken },
             statuses = statuses.sortedBy { it.source.id },
             queriesBySource = preparedQueries.toMap(),
@@ -337,5 +374,8 @@ class UnifiedSearchOrchestrator(
         const val MAX_FALLBACK_BRANCHES = 8
         const val GROUPED_TOKEN_PREFIX = "theoria-group-v1:"
         const val NULL_BRANCH_TOKEN = "~"
+        const val FIRST_ANSWERS_SETTLE_MS = 400L
     }
 }
+
+private typealias SourceAnswer = Pair<SourceKey, Result<Page<Post>>>

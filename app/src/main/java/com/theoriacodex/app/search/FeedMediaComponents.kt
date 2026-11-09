@@ -355,6 +355,8 @@ internal fun buildFeedImageRequest(
         url = url,
         sourceKey = sourceKey,
         crossfade = false,
+        // Cards only draw their bitmap, so it can skip the upload to the GPU on the frame it scrolls in.
+        allowHardware = true,
         targetWidthPx = decodeSize.widthPx,
         targetHeightPx = decodeSize.heightPx,
     ).newBuilder().placeholderMemoryCacheKey(placeholderMemoryCacheKey).build()

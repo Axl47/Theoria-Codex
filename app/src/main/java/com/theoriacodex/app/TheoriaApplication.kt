@@ -1,16 +1,21 @@
 package com.theoriacodex.app
 
+import android.net.ConnectivityManager
+import com.theoriacodex.app.network.ConnectionMemory
+import com.theoriacodex.app.network.SharedPreferencesRecentHostStore
 import android.app.Application
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.decode.ImageDecoderDecoder
 import coil.disk.DiskCache
-import com.theoriacodex.app.customsites.BrowserVerifiedSites
+import com.theoriacodex.app.customsites.AndroidBrowserCookieStore
+import com.theoriacodex.app.customsites.SiteCookieBridge
 import com.theoriacodex.app.di.DefaultTheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
 import com.theoriacodex.app.media.AnimatedWebPDecoder
 import com.theoriacodex.app.media.UndecodableImageEviction
+import com.theoriacodex.app.network.AppHttpClients
 import com.theoriacodex.app.viewer.VideoPlaybackInfrastructure
 import com.theoriacodex.data.storage.ApplicationDataReadiness
 import com.theoriacodex.data.storage.ApplicationDataState
@@ -18,16 +23,27 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.StateFlow
-import okhttp3.Dispatcher
-import okhttp3.OkHttpClient
 
 class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContainerOwner {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var readiness: ApplicationDataReadiness<TheoriaAppContainer>
     private var initializingContainer: DefaultTheoriaAppContainer? = null
 
+    /** The one place browser cookies reach the app's own requests: every client in [httpClients] carries its jar. */
+    internal val siteCookieBridge = SiteCookieBridge(AndroidBrowserCookieStore)
+
+    /** Every HTTP client in the app, so they share one connection pool and these cookies. */
+    internal val httpClients = AppHttpClients(
+        siteCookieBridge.cookieJar,
+        ConnectionMemory(
+            SharedPreferencesRecentHostStore(this),
+            activeNetwork = { getSystemService(ConnectivityManager::class.java).activeNetwork },
+        ),
+        siteCookieBridge::userAgentFor,
+    )
+
     internal val videoPlaybackInfrastructure: VideoPlaybackInfrastructure by lazy {
-        VideoPlaybackInfrastructure(this)
+        VideoPlaybackInfrastructure(this, httpClients.video)
     }
 
     override val appContainerState: StateFlow<ApplicationDataState<TheoriaAppContainer>>
@@ -35,13 +51,12 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
 
     override fun onCreate() {
         super.onCreate()
-        BrowserVerifiedSites.install(this)
         readiness = ApplicationDataReadiness(
             applicationScope = applicationScope,
             initializationDispatcher = Dispatchers.IO,
         ) {
             val container = initializingContainer
-                ?: DefaultTheoriaAppContainer(this@TheoriaApplication).also { created ->
+                ?: DefaultTheoriaAppContainer(this@TheoriaApplication, siteCookieBridge, httpClients).also { created ->
                     initializingContainer = created
                 }
             container.awaitDurableStores()
@@ -96,18 +111,11 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
             // every Viewer page a prefetch had already downloaded; no-store responses were never cached.
             .respectCacheHeaders(false)
             .eventListener(UndecodableImageEviction(diskCache))
-            // OkHttp's default of five per host lets a few large GIFs stall every thumbnail behind them.
-            .okHttpClient {
-                OkHttpClient.Builder()
-                    .dispatcher(Dispatcher().apply { maxRequestsPerHost = IMAGE_MAX_REQUESTS_PER_HOST })
-                    .cookieJar(BrowserVerifiedSites.cookieJar)
-                    .build()
-            }
+            .okHttpClient { httpClients.images }
             .build()
     }
 }
 
-private const val IMAGE_MAX_REQUESTS_PER_HOST = 16
 private const val IMAGE_DISK_CACHE_DIRECTORY = "image_cache"
 private const val IMAGE_DISK_CACHE_MAX_BYTES = 512L * 1024L * 1024L
 

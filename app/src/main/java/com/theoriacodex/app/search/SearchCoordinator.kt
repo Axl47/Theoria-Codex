@@ -9,6 +9,7 @@ import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.QueryRepository
 import com.theoriacodex.data.repository.RecentSearchKind
+import com.theoriacodex.data.repository.SearchFirstPageStore
 import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.SettingsRepository
@@ -71,6 +72,7 @@ class SearchCoordinator(
     private val recentsRepository: RecentsRepository,
     private val statisticsRepository: StatisticsRepository,
     private val tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
+    private val firstPageStore: SearchFirstPageStore? = null,
     private val clock: () -> Long = System::currentTimeMillis,
     private val computationDispatcher: CoroutineDispatcher = Dispatchers.Default,
     /** Runs seen-tag bookkeeping after results return; tests pass their scheduler-backed scope. */
@@ -91,7 +93,10 @@ class SearchCoordinator(
     private val searchTermCounts = SearchTermCountCoordinator(registry, clock, computationDispatcher)
     private val resolvedPostsByExecution = linkedMapOf<String, LinkedHashMap<PostId, Post>>()
     private val resolveFailuresByExecution = mutableMapOf<String, MutableMap<PostId, ResolveFailureRecord>>()
-    private val queryPreparation = UnifiedQueryPreparation(clock)
+    private val queryPreparation = UnifiedQueryPreparation(
+        isKnownTag = { tag -> tagSuggestionStore.getCount(SourceKey.GELBOORU, tag) != null },
+        clock = clock,
+    )
     private val appliedPersistenceMutex = Mutex()
     private val scrollPersistenceMutex = Mutex()
     private val persistedScrollStateByQuery = mutableMapOf<String, SearchScrollState>()
@@ -164,6 +169,28 @@ class SearchCoordinator(
     override suspend fun executeInitial(
         query: Query,
         sourceScope: SearchSourceScope,
+    ): SearchExecutionResult = executeRoot(query, sourceScope, onPartial = null)
+
+    override suspend fun executeInitialProgressively(
+        query: Query,
+        sourceScope: SearchSourceScope,
+        onPartial: suspend (SearchExecutionResult.Success) -> Unit,
+    ): SearchExecutionResult = executeRoot(query, sourceScope, onPartial)
+
+    /** The key doesn't cover the enabled sources, so a source turned off or removed since is dropped here. */
+    override suspend fun cachedFirstPage(executionKey: String, sourceScope: SearchSourceScope): List<Post> {
+        val sources = effectiveEnabledSources(sourceScope)
+        return firstPageStore?.load(executionKey).orEmpty().filter { it.id.source in sources }
+    }
+
+    override suspend fun rememberFirstPage(executionKey: String, posts: List<Post>) {
+        firstPageStore?.save(executionKey, posts)
+    }
+
+    private suspend fun executeRoot(
+        query: Query,
+        sourceScope: SearchSourceScope,
+        onPartial: (suspend (SearchExecutionResult.Success) -> Unit)?,
     ): SearchExecutionResult {
         currentCoroutineContext().ensureActive()
         val sanitized = query.normalizedForMode(sourceScope.queryMode()).query
@@ -180,6 +207,7 @@ class SearchCoordinator(
                     enabledSources = enabled,
                     availableSources = available,
                     weights = weights,
+                    onPartial = onPartial,
                 )
                 is QueryMode.Source -> executeSourceInitial(
                     query = sanitized,
@@ -217,6 +245,7 @@ class SearchCoordinator(
         enabledSources: Set<SourceKey>,
         availableSources: List<SourceKey>,
         weights: Map<SourceKey, Double>,
+        onPartial: (suspend (SearchExecutionResult.Success) -> Unit)?,
     ): SearchExecutionResult {
         val excluded = excludedStatuses(sourceScope, availableSources, enabledSources)
         if (enabledSources.isEmpty()) {
@@ -239,6 +268,16 @@ class SearchCoordinator(
                 if (source == SourceKey.GELBOORU) {
                     queryPreparation.prepareGelbooru(requireNotNull(registry.adapterFor(source)), sourceQuery)
                 } else sourceQuery
+            },
+            onPartial = onPartial?.let { publish ->
+                { partial ->
+                    publish(
+                        SearchExecutionResult.Success(
+                            executionKey, query, sourceScope, partial.items, mergeStatuses(excluded, partial.statuses),
+                            continuation(executionKey, query, sourceScope, enabledSources, availableSources, weights),
+                        ),
+                    )
+                }
             },
         )
         currentCoroutineContext().ensureActive()

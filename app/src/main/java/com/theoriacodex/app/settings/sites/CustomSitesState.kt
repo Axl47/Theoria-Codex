@@ -1,24 +1,52 @@
 package com.theoriacodex.app.settings.sites
 
+import com.theoriacodex.app.customsites.BuiltInSiteSummary
 import com.theoriacodex.app.customsites.CustomSiteSummary
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.ProtocolFamily
 import com.theoriacodex.domain.source.SiteProbeResult
 
-/** Settings → Sites: the stored sites plus whichever add/edit form, dialog or inline result is open. */
+/** Settings → Sites: built-in and added sites, plus whichever page, form, dialog or inline result is open. */
 data class CustomSitesUiState(
     val sites: List<CustomSiteSummary> = emptyList(),
+    val builtInSites: List<BuiltInSiteSummary> = emptyList(),
+    /** The built-in source whose page is open, if any. */
+    val openBuiltIn: SourceKey? = null,
     val form: SiteForm? = null,
     /** Inline re-test status per source id; cleared when the site disappears. */
     val retests: Map<String, RetestStatus> = emptyMap(),
+    /** Source ids proven to work this session, which their rows show with a check mark. */
+    val workingSiteIds: Set<String> = emptySet(),
+    /** The Test all run in progress, if any. */
+    val testProgress: SitesTestProgress? = null,
+    /** The last finished Test all run's result line. */
+    val testSummary: String? = null,
     val removeTargetId: String? = null,
     val removing: Boolean = false,
     /** A short failure message shown above the list until the next action. */
     val notice: String? = null,
-    /** SPIKE: host whose browser challenge is open in the in-app WebView. */
-    val verifyingHost: String? = null,
+    /** The in-app browser check that is open, if any. */
+    val verification: SiteVerification? = null,
 ) {
     val removeTarget: CustomSiteSummary? get() = removeTargetId?.let { id -> sites.firstOrNull { it.sourceId == id } }
 }
+
+/** Test all is on the [position]th of [total] sites, named [label]. */
+data class SitesTestProgress(val label: String, val position: Int, val total: Int)
+
+/**
+ * A browser check in progress for [host], a built-in source, a saved site or the one in the Add form. [checking] while the
+ * app tests whether its own requests get through; [message] explains the last refusal or a check that
+ * found the site already open; [sawRefusal] once the app is known to have been refused (before the page
+ * opened, or by a check since), so the page closes itself on the next pass.
+ */
+data class SiteVerification(
+    val host: String,
+    val checking: Boolean = false,
+    val message: String? = null,
+    val messageIsError: Boolean = false,
+    val sawRefusal: Boolean = false,
+)
 
 /** Text fields shared by the add and edit forms. Blank header fields mean "use the default". */
 data class SiteFields(
@@ -73,13 +101,17 @@ sealed interface AddStage {
 
 sealed interface RetestStatus {
     data object Running : RetestStatus
-    data class Done(val message: String, val ok: Boolean) : RetestStatus
+
+    /** [blocked] when a browser challenge refused the check, so the row offers browser verification. */
+    data class Done(val message: String, val ok: Boolean, val blocked: Boolean = false) : RetestStatus
 }
 
 sealed interface CustomSitesAction {
     data object StartAdd : CustomSitesAction
     data class StartEdit(val sourceId: String) : CustomSitesAction
     data object CloseForm : CustomSitesAction
+    data class OpenBuiltIn(val source: SourceKey) : CustomSitesAction
+    data object CloseBuiltIn : CustomSitesAction
 
     data class SetAddress(val value: String) : CustomSitesAction
     data class SetLabel(val value: String) : CustomSitesAction
@@ -98,14 +130,22 @@ sealed interface CustomSitesAction {
     data object SaveEdit : CustomSitesAction
 
     data class Retest(val sourceId: String) : CustomSitesAction
+    data object TestAll : CustomSitesAction
     data class RequestRemove(val sourceId: String) : CustomSitesAction
     data object DismissRemove : CustomSitesAction
     data object ConfirmRemove : CustomSitesAction
     data object DismissNotice : CustomSitesAction
 
-    data class StartVerification(val host: String) : CustomSitesAction
+    /**
+     * Opens the browser check for [host]. [afterRefusal] when the app was just refused by it (a blocked
+     * add, re-test or source), so the first pass closes the page; false for a voluntary visit.
+     */
+    data class StartVerification(val host: String, val afterRefusal: Boolean) : CustomSitesAction
     data object CancelVerification : CustomSitesAction
 
-    /** The user passed the challenge; [userAgent] is the WebView's, so requests match its clearance. */
-    data class FinishVerification(val userAgent: String) : CustomSitesAction
+    /** Done: the user says the check is passed. [userAgent] is the WebView's, which its clearance is bound to. */
+    data class ConfirmVerification(val userAgent: String) : CustomSitesAction
+
+    /** The page finished loading; [cookies] are the browser's for the site, to tell whether they changed. */
+    data class VerificationPageLoaded(val userAgent: String, val cookies: String?) : CustomSitesAction
 }

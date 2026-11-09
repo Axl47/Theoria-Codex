@@ -4,6 +4,7 @@
         <exclude domain="file" path="theoria_codex/offline_media/" />
         <exclude domain="file" path="theoria_codex/cache/" />
         <exclude domain="file" path="theoria_codex/updates/" />
+        <exclude domain="root" path="app_webview/" />
         <exclude domain="file" path="theoria_codex/download_jobs.json" />
         <exclude domain="file" path="theoria_codex/offline_jobs.json" />
         <exclude
@@ -12,11 +13,15 @@
         <exclude
             domain="sharedpref"
             path="theoria_auto_backup.xml" />
+        <exclude
+            domain="sharedpref"
+            path="connection_memory.xml" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="file" path="theoria_codex/offline_media/" />
         <exclude domain="file" path="theoria_codex/cache/" />
         <exclude domain="file" path="theoria_codex/updates/" />
+        <exclude domain="root" path="app_webview/" />
         <exclude domain="file" path="theoria_codex/download_jobs.json" />
         <exclude domain="file" path="theoria_codex/offline_jobs.json" />
         <exclude
@@ -25,5 +30,8 @@
         <exclude
             domain="sharedpref"
             path="theoria_auto_backup.xml" />
+        <exclude
+            domain="sharedpref"
+            path="connection_memory.xml" />
     </device-transfer>
 </data-extraction-rules>

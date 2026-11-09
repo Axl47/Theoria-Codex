@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Network and image delivery</title>
+<style>
+:root{color-scheme:light dark;--bg:#0f1115;--fg:#e8e8ea;--mut:#a0a2a8;--bd:#2c2f36;--acc:#8bc4ff}
+@media(prefers-color-scheme:light){:root{--bg:#fafaf7;--fg:#202124;--mut:#5f6368;--bd:#d7d7d0;--acc:#0f766e}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 system-ui,sans-serif;display:grid;grid-template-columns:210px minmax(0,1fr);gap:32px;padding:24px}
+nav{position:sticky;top:24px;align-self:start;font-size:13.5px}nav a{display:block;color:var(--mut);text-decoration:none;padding:3px 0}
+h1{margin:0 0 8px;font-size:26px}h2{margin:32px 0 8px;font-size:19px;border-top:1px solid var(--bd);padding-top:20px}
+table{border-collapse:collapse;width:100%;font-size:14px}td,th{border:1px solid var(--bd);padding:6px 9px;text-align:left;vertical-align:top}
+code{background:color-mix(in srgb,var(--bd) 45%,transparent);padding:1px 4px;border-radius:4px;font-size:13px}
+pre{background:color-mix(in srgb,var(--bd) 45%,transparent);padding:10px;border-radius:8px;overflow:auto}
+.status{border:1px solid var(--bd);border-radius:10px;padding:12px 14px}
+@media(max-width:760px){body{grid-template-columns:1fr}nav{position:static}}
+</style></head><body>
+<nav>
+<a href="#purpose">Purpose</a><a href="#status">Current status</a><a href="#context">Context</a><a href="#phases">Phases</a>
+<a href="#work">Work plan</a><a href="#validation">Validation</a><a href="#progress">Progress</a><a href="#surprises">Surprises</a>
+<a href="#decisions">Decisions</a><a href="#outcomes">Outcomes</a><a href="#recovery">Recovery</a>
+</nav>
+<main>
+<h1>Network and image delivery</h1>
+<p>Branch <code>perf/network-and-image-delivery</code>, cut from <code>origin/main</code> at <code>76ff418a</code>. Owner: Claude, for the developer.</p>
+
+<h2 id="purpose">Purpose / Big Picture</h2>
+<p>Searches and first loads feel slow. An audit found twelve causes across three areas: connections stall on a dead IPv6 path, the screen waits for work it does not need to wait for, and several sources download full-size images where a thumbnail would do. After this work a fresh app opening Search shows cards sooner, each card costs fewer bytes, and a broken IPv6 network no longer costs seconds. Someone can see it working by running <code>scripts/live_latency_bench.py</code> against two builds on a real phone.</p>
+
+<h2 id="status">Current Status</h2>
+<div class="status"><strong>Validating.</strong> All findings and one found by measuring (A13) are committed. Results are in <a href="./assets/network-and-image-delivery/results.html">the before and after report</a>. Next action: the developer reviews the branch; nothing has been pushed or merged.</div>
+
+<h2 id="context">Context And Orientation</h2>
+<p><strong>Three HTTP stacks.</strong> Provider API calls go through <code>core-sources/.../http/DefaultSourceHttpClient.kt</code> and <code>CustomSiteHttpClient.kt</code>, both built on <code>executeHttpRequest</code> (<code>HttpURLConnection</code>). Images use Coil's OkHttp client from <code>app/.../TheoriaApplication.kt</code>. Video uses <code>app/.../viewer/VideoHttpDataSource.kt</code>. OkHttp is only present transitively at 4.12.</p>
+<p><strong>Happy Eyeballs</strong> means trying IPv6 and IPv4 at nearly the same time and using whichever connects first. OkHttp 5 does this by default; <code>HttpURLConnection</code> and OkHttp 4 try one address at a time.</p>
+<p><strong>Dual-stack host</strong> means a host that publishes both IPv4 and IPv6 addresses. On 2026-11-09 these were Danbooru, Hitomi, Iwara and rule34.xxx. Gelbooru, nhentai, Pixiv, Paheal, rule34video and rule34gen published no IPv6, which makes them natural controls.</p>
+<p><strong>Unified search</strong> is <code>core-domain/.../orchestration/UnifiedSearchOrchestrator.kt</code>; <code>app/.../search/SearchViewModel.kt</code> publishes its result. <strong>Card image choice</strong> is <code>app/.../media/PostMedia.kt</code>. <strong>Hitomi URLs</strong> are built in <code>core-sources/.../hitomi/HitomiMediaUrlResolver.kt</code> and <code>HitomiPostMapper.kt</code>.</p>
+<p>Constraints from <code>AGENTS.md</code>: every visible animated or video card must keep autoplaying, so animated Hitomi galleries keep their animated preview. Protect <code>com.theoriacodex</code>. Do not screenshot or record provider feeds.</p>
+
+<h2 id="phases">Phases</h2>
+<table><tr><th>Phase</th><th>Findings</th><th>Observable outcome</th></tr>
+<tr><td>0. Measure</td><td>none</td><td>Benchmark committed before any fix; baseline APK built from that commit.</td></tr>
+<tr><td>1. Right-size images</td><td>A3, A4, A5, A9</td><td><code>cards_rx</code>, <code>pages_rx</code> and <code>viewer_rx</code> fall for Hitomi, Iwara and rule34.xxx.</td></tr>
+<tr><td>2. One network client</td><td>A1, A6, A7</td><td><code>search_ms</code> stops carrying a dead-IPv6 stall on dual-stack hosts; every source keeps succeeding.</td></tr>
+<tr><td>3. Stop waiting</td><td>A2, A8, A10, A11, A12</td><td><code>first_card_ms</code> and <code>scroll_wait_p50_ms</code> fall in the real Search tab.</td></tr>
+<tr><td>4. Prove</td><td>all</td><td>Baseline and final alternate on the phone; the developer gets a chart and a per-finding account.</td></tr></table>
+
+<h2 id="work">Work Plan</h2>
+<table><tr><th>ID</th><th>Change</th></tr>
+<tr><td>A3</td><td>Static Hitomi cards use the site's <code>webpbigtn</code>, with the full image as fallback. Animated galleries keep their animated preview.</td></tr>
+<tr><td>A4</td><td>Iwara custom thumbnails move from <code>/image/original/</code> to <code>/image/thumbnail/</code>.</td></tr>
+<tr><td>A5</td><td>Hitomi pages fill <code>thumbnailUrl</code> with <code>webpsmalltn</code>, as nhentai already does.</td></tr>
+<tr><td>A9</td><td>rule34.xxx turns on its sample step in the Viewer only, so its cards do not start downloading samples.</td></tr>
+<tr><td>A1</td><td><code>executeHttpRequest</code> moves to OkHttp 5. One shared client backs API, image and video calls, keeping cookies, redirects, timeouts, the default agent and case-insensitive headers as they were.</td></tr>
+<tr><td>A6</td><td>The shared connection pool keeps far more than five idle connections.</td></tr>
+<tr><td>A7</td><td>Hitomi hydrates a whole page at once now that it runs over HTTP/2.</td></tr>
+<tr><td>A2</td><td>Unified search publishes early and appends late sources below what is on screen, so shown cards keep their positions.</td></tr>
+<tr><td>A8</td><td>The last search's first page is saved and painted at once on a cold start, then refreshed.</td></tr>
+<tr><td>A10</td><td>Card images for the next stretch of the feed start loading before they scroll into view, on unmetered networks only.</td></tr>
+<tr><td>A11</td><td>Feed cards decode to hardware bitmaps. Other paths keep software bitmaps until each is shown not to read pixels.</td></tr>
+<tr><td>A12</td><td>An expired Pixiv token refreshes at app start instead of inside the first search, and a tag Gelbooru has already counted skips its lookup.</td></tr>
+<tr><td>A13</td><td>Found by the benchmark: the untagged Gelbooru feed stops sending <code>sort:id:desc</code>, which cost about 7 s per page and returned the same posts in the same order.</td></tr></table>
+
+<h2 id="validation">Validation And Acceptance</h2>
+<p>Host: <code>./gradlew :core-sources:test :core-domain:test :app-logic:test :app:testDebugUnitTest</code> and <code>:app:lintDebug --offline --no-daemon</code>, with <code>JAVA_HOME</code> on JDK 21 or newer.</p>
+<p>Device, from the worktree, with the phone on its normal Wi-Fi:</p>
+<pre>python3 scripts/live_latency_bench.py snapshot --label head
+python3 scripts/live_latency_bench.py run --serial SERIAL --out build/live-latency/final --runs 5 --variant baseline --variant head
+python3 scripts/live_latency_bench.py summarize build/live-latency/final</pre>
+<p>Acceptance: no source that succeeds on baseline fails on the final build; byte counts fall where Phase 1 says; on dual-stack sources, <code>search_ms</code> no longer shows a multi-second stall; <code>first_card_ms</code> in <code>unified:cold</code> and <code>unified:warm</code> improves. Differences smaller than the spread between baseline runs are reported as no change.</p>
+
+<h2 id="progress">Progress</h2>
+<ul>
+<li>2026-11-09: Benchmark committed as <code>03135e09</code>; baseline APK built from it.</li>
+<li>2026-11-09: A1 to A12 committed one finding at a time; core, Android and release builds, R8 JSON contract and lint passed.</li>
+<li>2026-11-09: First device pass found the reopened-feed timer error and the Gelbooru sort cost; benchmark corrected and A13 committed.</li>
+<li>2026-11-09: Five alternating rounds of baseline against the final candidate on the S24+, with IPv6 dead for all 20 checks.</li>
+<li>2026-11-09: The fixture benchmark exposed an OkHttp crash on blocked network access; fixed and covered by a test.</li>
+</ul>
+
+<h2 id="surprises">Surprises And Discoveries</h2>
+<ul>
+<li>The phone has public IPv6 and tries it first, but TCP over IPv6 timed out on all four dual-stack hosts tested. IPv4 connected in 60 to 120 ms.</li>
+<li>Hitomi's <code>webpbigtn</code> is 640 px on its long edge, against originals up to 5600 px, which suits a card about 540 px wide.</li>
+<li>Compose 1.12.1's staggered grid has no cache-window option, so preloading has to go through Coil.</li>
+<li>Danbooru answered 503 (maintenance) and Iwara 403 (browser verification) on both builds, on HTTP/1.1 and HTTP/2. Those failures are the provider's; the fix only makes them fail in under a second instead of 20 to 30.</li>
+<li>Gelbooru's untagged list took about 8 s with <code>sort:id:desc</code> and about 1.5 s without. A probe with a real key saw the same 40 posts in the same order, untagged and tagged. Tagged searches were fast either way.</li>
+<li>The app reopens on its last tab, so the first version of the benchmark started its timer after a reopened feed had painted, and reported a false 25 s wait.</li>
+<li>OkHttp rethrows anything but IOException on its dispatcher threads. A SecurityException from DNS killed the fixture process, where <code>HttpURLConnection</code> had returned it to the caller.</li>
+<li>nhentai's Viewer images swing between about 1.5 s and 6 s on both builds: 2 of 11 baseline runs and 6 of 11 final runs hit the slow mode. The sample is too small to call a regression, and the slow mode exists without this work.</li>
+<li>Paheal's filterless feed gets no card images on either build, and rule34gen's card images fail 12 of 12 on either build. Neither is caused by this work.</li>
+<li>The nhentai swing is the provider's: its page hosts sometimes stop sending partway through a file. On 88 pages from the Mac, 2 stalled for about 18 s while a second request on a new connection answered in about 1 s. Time didn't follow file size (correlation -0.07) or protocol (HTTP/2 and HTTP/1.1 stalled alike). The hosts honour Range, so the app resumes a silent page after 2.5 s.</li>
+<li>Paheal dropped <code>data-ext</code> for <code>data-mime</code> and its URLs have no extensions, so every file's type came out unknown, tagged searches included.</li>
+<li>rule34gen's RSS thumbnails answer 404 while its listing page's work. Separately, on both rule34gen and rule34video, listing cards after the first four carry an inline placeholder in <code>src</code> and the real address in <code>data-rd-src</code>.</li>
+<li>Follow-up validation on the AVD with isolated packages: the maintenance notice appeared against Danbooru's live 503 and stayed gone after Dismiss, and Test all sits in the Built-in header. The feed journey passed For You, then failed at Watched Recents with ten cards playing on software decoders. That step was never reached before, so a physical run must decide it. The warm-up, IPv6 learning and page rescue have not been measured on the phone.</li>
+<li>The For You autoplay failure was the journey's. For You is built from sideways shelves, and the journey only scrolled vertically, so the fourth card of a row, the Ugoira, never came on screen.</li>
+</ul>
+
+<h2 id="decisions">Decision Log</h2>
+<table><tr><th>Decision</th><th>Why</th><th>Date</th></tr>
+<tr><td>Measure on the Debug package.</td><td>It holds an imported copy of the developer's accounts, which several sources need. Debug makes UI slower, so comparisons are between builds, never against the release app.</td><td>2026-11-09</td></tr>
+<tr><td>Commit the benchmark before any fix.</td><td>Both builds then run identical measuring code. When the timer was corrected, the baseline was rebuilt from its original commit with the corrected benchmark.</td><td>2026-11-09</td></tr>
+<tr><td>Late sources append below the first results instead of re-interleaving.</td><td>Cards already on screen must never move; the cost is a block of one source at the tail, only when that source is slow.</td><td>2026-11-09</td></tr>
+<tr><td>A cached first page is replaced when fresh results arrive, unless it has been scrolled.</td><td>Someone at the top sees the newest posts; someone reading keeps their place and gets new posts below.</td><td>2026-11-09</td></tr>
+<tr><td>Keep <code>sort:id:desc</code> on tagged Gelbooru searches.</td><td>Only the untagged list was slow, so the smallest change removes only that.</td><td>2026-11-09</td></tr>
+<tr><td>Teach the client to set aside IPv6 that keeps losing, per network, for ten minutes at a time.</td><td>Replaces an earlier decision to leave this to the router. Other people's networks can be half-configured too, and they can't all fix them. Filtering never empties a host's addresses, and an IPv4 failure ends it at once.</td><td>2026-11-09</td></tr>
+<tr><td>Reconnect to the twelve most recently used hosts at launch, on unmetered networks.</td><td>The first search chains DNS, TCP and TLS for its API and then its image host. Hosts are learned rather than listed per source, so custom sites benefit too.</td><td>2026-11-09</td></tr>
+<tr><td>Fix the For You autoplay failure in the journey, not by dropping the expectation.</td><td>For You is built from shelves, and the journey only scrolled vertically, so a row's fourth card was never on screen. Scrolling sideways keeps Ugoira covered there.</td><td>2026-11-09</td></tr>
+</table>
+
+<h2 id="outcomes">Outcomes And Retrospective</h2>
+<p>Medians of five alternating rounds on a Samsung S24+ debug build, home Wi-Fi, live feeds, IPv6 dead throughout.</p>
+<table><tr><th>Measure</th><th>Before</th><th>After</th></tr>
+<tr><td>Unified search, first image, empty caches</td><td>16.8 s</td><td>2.7 s</td></tr>
+<tr><td>Reopening the app, first image</td><td>16.2 s</td><td>1.5 s</td></tr>
+<tr><td>Gelbooru search / next page</td><td>8.8 s / 8.2 s</td><td>1.1 s / 0.47 s</td></tr>
+<tr><td>AIBooru search / 12 cards</td><td>20.9 s / 20.8 s</td><td>1.1 s / 1.1 s</td></tr>
+<tr><td>Hitomi search / 12 cards</td><td>21.9 s / 11.4 s</td><td>1.6 s / 1.2 s</td></tr>
+<tr><td>Hitomi cards that loaded</td><td>4 of 12</td><td>12 of 12</td></tr>
+<tr><td>Hitomi data for 24 page thumbnails</td><td>1.0 MB, 7 of 24 loaded</td><td>0.17 MB, 24 of 24 loaded</td></tr>
+<tr><td>Paheal Viewer, first 4 posts</td><td>21.3 s</td><td>1.3 s</td></tr>
+<tr><td>Image wait while scrolling, median / 90th percentile</td><td>107 ms / 455 ms</td><td>0 ms / 232 ms</td></tr></table>
+<p>Pixiv, nhentai, rule34video and rule34gen search times did not change beyond noise. Preloading raises a reopened feed's first-screen traffic from about 0.15 MB to 0.46 MB on unmetered networks.</p>
+<p><strong>Autoplay.</strong> <code>mixedMediaFiveFeedJourney</code> on the minified final build passes the whole Search feed, with every visible video, GIF, WebP and Ugoira preview changing frames. It then fails on For You, where no Ugoira card appears, exactly as the untouched baseline does, so that journey cannot finish on either build.</p><p><strong>Frame timing.</strong> <code>searchConcurrentAutoplayScroll</code>, three alternating captures per build: 95th percentile frame time 7.13 ms before and 7.30 ms after, overrun 2.16 ms and 2.36 ms, within run-to-run spread. Those fixture cards are mostly video, so this shows no regression from A11 but cannot show its benefit. Measured evidence for the live benchmark is kept in <code>.docs/exec/assets/network-and-image-delivery/evidence/</code>.</p><p>To remember: measure from the point a person starts waiting, and run the minified fixture benchmark before trusting a change to the HTTP stack.</p>
+
+<h3>Follow-up on the phone, 2026-11-09</h3>
+<p>Three alternating rounds on the Samsung S24+, debug builds, home Wi-Fi with IPv6 dead in every check. "Before" is 4d089417, with the card fixes but without the warm-up, IPv6 learning or page rescue. The feed journey passed once on the phone in dry-run mode. Raw results are in <code>assets/network-and-image-delivery/evidence/followup/</code>.</p>
+<table><tr><th>First search after launch, seconds to first image (recently used source)</th><th>Before</th><th>After</th></tr>
+<tr><td>Gelbooru</td><td>1.61</td><td>1.11</td></tr>
+<tr><td>AIBooru</td><td>1.50</td><td>0.74</td></tr>
+<tr><td>Hitomi</td><td>1.47</td><td>1.11</td></tr>
+<tr><td>nhentai</td><td>1.58</td><td>1.66</td></tr>
+<tr><td>Pixiv</td><td>3.73</td><td>2.95</td></tr>
+<tr><td>Iwara</td><td>0.96</td><td>0.37</td></tr>
+<tr><td>Paheal</td><td>1.96</td><td>0.78</td></tr>
+<tr><td>Rule34Video</td><td>0.69</td><td>0.39</td></tr>
+<tr><td>Rule34Gen</td><td>0.75</td><td>0.55</td></tr></table>
+<p>Paheal and Rule34Gen loaded every card on both builds. Searches in a process with no UI, where the warm-up doesn't run, showed no reliable change. No page stalled on either build, so the page rescue has not been exercised on the phone. In the last pass nhentai's image hosts began refusing connections from this network, which failed that pass's 48 pages; a separate client on the Mac was refused too, while nhentai's API kept answering.</p>
+
+<h2 id="recovery">Recovery</h2>
+<p>Each finding is its own commit, so one that misbehaves can be reverted alone. Benchmark runs append to their output directory; use a new <code>--out</code> to start clean. The benchmark restores the Debug app's applied query after each unified case. If a run stops halfway, the Debug app's last query may be the filterless default, which is harmless.</p>
+</main></body></html>

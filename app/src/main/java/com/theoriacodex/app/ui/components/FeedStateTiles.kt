@@ -30,6 +30,7 @@ fun FeedLoadingState(modifier: Modifier = Modifier) {
     }
 }
 
+/** A failure card. [onDismiss] adds a way to set aside a failure that doesn't stop the screen. */
 @Composable
 fun FeedErrorTile(
     message: String,
@@ -37,6 +38,7 @@ fun FeedErrorTile(
     title: String? = null,
     actionLabel: String = "Retry",
     onRetry: (() -> Unit)? = null,
+    onDismiss: (() -> Unit)? = null,
 ) {
     Card(modifier = modifier.fillMaxWidth()) {
         Column(
@@ -54,8 +56,11 @@ fun FeedErrorTile(
                     MaterialTheme.typography.bodySmall
                 },
             )
-            onRetry?.let { retry ->
-                TextButton(onClick = retry) { Text(actionLabel) }
+            if (onRetry != null || onDismiss != null) {
+                Row {
+                    onDismiss?.let { TextButton(onClick = it) { Text("Dismiss") } }
+                    onRetry?.let { TextButton(onClick = it) { Text(actionLabel) } }
+                }
             }
         }
     }

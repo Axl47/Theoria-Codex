@@ -9,14 +9,20 @@ import com.theoriacodex.data.repository.ScenarioPreset
 import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.domain.model.SourceKey
 
-/** Pages inside the Settings tab; held by the owner so Search can open Accounts directly. */
-enum class SettingsPage { HOME, ACCOUNTS, SITES, HIDDEN_TAGS, STORAGE, STATS }
+/** Pages inside the Settings tab; held by the owner so other screens can open Sites directly. */
+enum class SettingsPage { HOME, SITES, HIDDEN_TAGS, STORAGE, STATS }
+
+/**
+ * What Sites shows of the accounts Settings owns: a built-in source's status line (null when it has no
+ * accounts) and its controls.
+ */
+class BuiltInAccounts(val summary: (SourceKey) -> String?, val controls: @Composable (SourceKey) -> Unit)
 
 /**
  * Settings → Sites, supplied by the app shell so Settings stays independent of the sites owner.
  * [summary] is the home row's value; [page] renders the page and calls its `onBack` to return home.
  */
-class SettingsSitesEntry(val summary: String, val page: @Composable (onBack: () -> Unit) -> Unit)
+class SettingsSitesEntry(val summary: String, val page: @Composable (onBack: () -> Unit, accounts: BuiltInAccounts) -> Unit)
 
 data class SettingsAccountUiState(
     val pixivStatusLabel: String = "Not connected",
@@ -94,7 +100,6 @@ sealed interface SettingsAction {
     data class PixivCallbackCompleted(val errorMessage: String? = null) : SettingsAction
     data object DismissCredentialRecovery : SettingsAction
     data object ResetCredentialStore : SettingsAction
-    data object OpenSourceAccounts : SettingsAction
 
     /** Opens Settings → Sites from elsewhere in the app. */
     data object OpenCustomSites : SettingsAction

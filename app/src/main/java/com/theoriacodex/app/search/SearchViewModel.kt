@@ -15,10 +15,8 @@ import com.theoriacodex.app.search.state.SearchStateChange
 import com.theoriacodex.app.search.state.SearchStateReducer
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.search.state.allowsScrollPersistence
-import com.theoriacodex.app.search.state.withAutocompleteResult
 import com.theoriacodex.app.search.state.withResolvedPosts
 import com.theoriacodex.app.search.state.withSuggestionInput
-import com.theoriacodex.app.search.state.withTrendingSuggestions
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.search.state.modeKey
 import com.theoriacodex.app.related.RelatedPostsLoading
@@ -30,6 +28,7 @@ import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
@@ -42,7 +41,6 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -107,16 +105,19 @@ internal class SearchViewModel(
     override val effects: Flow<SearchEffect> = effectChannel.receiveAsFlow()
 
     private var nextRequestId = 0L
-    private var nextAutocompleteGeneration = 0L
     private var activeRequestJob: Job? = null
-    private var autocompleteJob: Job? = null
-    private var trendingJob: Job? = null
     private var restorationJob: Job? = null
     private var pendingRootSearch: (() -> Unit)? = null
     private var activeContinuation: SearchContinuation? = null
     private var pageRetrySource: SourceKey? = null
+
+    /** Last run's first page is on screen awaiting its refresh, so partial results would only make it flicker. */
+    private var showingCachedFirstPage = false
+    private var scrolledCachedFirstPage = false
     private var latestEnvironmentSettings: AppSettings? = null
     private val appliedByMode = mutableMapOf<String, Query>()
+    private val suggestionRefresh =
+        SearchSuggestionRefresher(viewModelScope, mutableState, coordinator, suggestionDispatcher, autocompleteDelayMs)
     private val scrollPersistence = coordinator.scrollPersistence(scrollPersistenceDispatcher, scrollPersistenceDelayMs)
     init {
         relatedDiagnostics.record("owner created", mutableState.value.relatedPosts)
@@ -141,12 +142,12 @@ internal class SearchViewModel(
 
             is SearchAction.SelectSuggestionScope -> selectSuggestionScope(action)
 
-            is SearchAction.AutocompleteChanged -> refreshAutocomplete(action.input)
+            is SearchAction.AutocompleteChanged -> suggestionRefresh.refreshAutocomplete(action.input)
 
-            SearchAction.RefreshAutocomplete -> refreshAutocomplete(mutableState.value.suggestions.input)
+            SearchAction.RefreshAutocomplete -> suggestionRefresh.refreshAutocomplete(mutableState.value.suggestions.input)
 
             SearchAction.ClearAutocomplete -> {
-                cancelAutocomplete()
+                suggestionRefresh.cancelAutocomplete()
                 clearSuggestionState()
             }
 
@@ -217,7 +218,7 @@ internal class SearchViewModel(
         val reduction = SearchDraftReducer.selectScope(mutableState.value, action.scope)
         if (reduction.accepted) {
             mutableState.value = reduction.state
-            refreshAutocomplete(mutableState.value.suggestions.input)
+            suggestionRefresh.refreshAutocomplete(mutableState.value.suggestions.input)
         }
     }
 
@@ -289,7 +290,7 @@ internal class SearchViewModel(
      * so the source, terms, filters, and results always describe the same search.
      */
     private fun selectMode(mode: QueryMode) {
-        cancelAutocomplete()
+        suggestionRefresh.cancelAutocomplete()
         val current = SearchDraftReducer.selectMode(
             state = mutableState.value,
             mode = mode,
@@ -298,7 +299,7 @@ internal class SearchViewModel(
         ).state
         mutableState.value = current
         persistDraftQuery()
-        refreshTrending()
+        suggestionRefresh.refreshTrending()
         if (current.content.hasExecutedSearch && current.hasPendingChanges) {
             launchRootSearch(
                 kind = SearchRequestKind.REPLACE,
@@ -318,7 +319,7 @@ internal class SearchViewModel(
             supportedScopes = coordinator::supportedSearchScopes,
         )
         if (!reduction.accepted) return
-        cancelAutocomplete()
+        suggestionRefresh.cancelAutocomplete()
         mutableState.value = reduction.state.copy(
             suggestions = reduction.state.suggestions.copy(
                 input = "",
@@ -326,8 +327,8 @@ internal class SearchViewModel(
             ),
         )
         persistDraftQuery()
-        if (input.isBlank()) refreshTrending()
-        refreshAutocomplete(input)
+        if (input.isBlank()) suggestionRefresh.refreshTrending()
+        suggestionRefresh.refreshAutocomplete(input)
     }
 
     private fun applyDraft() {
@@ -401,7 +402,7 @@ internal class SearchViewModel(
             effectChannel.trySend(SearchEffect.ShowMessage("Multi-Search sources are unavailable"))
             return
         }
-        cancelAutocomplete()
+        suggestionRefresh.cancelAutocomplete()
         mutableState.value = reduction.state.copy(
             query = reduction.state.query.copy(draftSourceScope = restoredScope),
         )
@@ -571,6 +572,7 @@ internal class SearchViewModel(
             query = current.query.applied,
             sourceScope = current.query.appliedSourceScope,
             persistAcceptedResult = false,
+            paintCachedFirstPage = true,
         )
     }
 
@@ -583,16 +585,20 @@ internal class SearchViewModel(
         undoScrollState: SearchScrollState? = null,
         onSuccess: suspend () -> Unit = {},
         relatedResetReason: String = "root search ($kind)",
+        paintCachedFirstPage: Boolean = false,
     ) {
         relatedPosts.clear(relatedResetReason)
         cancelActiveRequest()
         activeContinuation = null
         pageRetrySource = null
+        showingCachedFirstPage = false
+        scrolledCachedFirstPage = false
         val expectedExecutionKey = executionService.executionKeyFor(query, sourceScope)
         val requestId = ++nextRequestId
         reduce(SearchStateChange.BeginRequest(requestId, kind, query))
         val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
             try {
+                if (paintCachedFirstPage) paintCachedFirstPage(requestId, query, sourceScope, expectedExecutionKey)
                 executeRootRequest(
                     requestId, query, sourceScope, expectedExecutionKey, persistAcceptedResult, undo, undoScrollState, onSuccess,
                 )
@@ -618,27 +624,58 @@ internal class SearchViewModel(
         expectedExecutionKey: String, persistAcceptedResult: Boolean, undo: Boolean,
         undoScrollState: SearchScrollState?, onSuccess: suspend () -> Unit,
     ) = withTimeout(rootRequestTimeoutMs) {
-        val result = executionService.executeInitial(query, sourceScope)
+        val publisher = RootResultPublisher(requestId, expectedExecutionKey, persistAcceptedResult, undo, undoScrollState)
+        val result = executionService.executeInitialProgressively(query, sourceScope) { publisher.publishPartial(it) }
         coroutineContext.ensureActive()
         if (!isAdmittedResult(requestId, result, expectedExecutionKey)) {
             activeContinuation = null
             cancelRequestIfCurrent(requestId)
             return@withTimeout
         }
-        if (persistAcceptedResult) scrollPersistence.reset(result.executionKey) {
-            executionService.persistAppliedSearch(result.query, result.sourceScope, result.executionKey)
-        }
-        if (!isAdmittedResult(requestId, result, expectedExecutionKey)) return@withTimeout
-        val previous = mutableState.value
-        val succeeded = completeRequest(requestId, result, expectedExecutionKey)
-        if (persistAcceptedResult) {
-            rememberAcceptedSearchNavigation(previous, undo, undoScrollState)
-        }
+        val succeeded = publisher.publish(result) { completeRequest(requestId, result, expectedExecutionKey) } ?: return@withTimeout
+        rememberFirstPage(result)
         persistDraftQuery()
         if (persistAcceptedResult) withContext(NonCancellable) {
             executionService.recordAcceptedSearch(result)
         }
         if (succeeded) onSuccess()
+    }
+
+    /** Puts one root request's results on screen; persisting it and resetting the scroll target happen only once. */
+    private inner class RootResultPublisher(
+        private val requestId: Long,
+        private val expectedExecutionKey: String,
+        persistAcceptedResult: Boolean,
+        private val undo: Boolean,
+        private val undoScrollState: SearchScrollState?,
+    ) {
+        private var acceptancePending = persistAcceptedResult
+
+        suspend fun publishPartial(partial: SearchExecutionResult.Success) {
+            if (!showingCachedFirstPage && isAdmittedResult(requestId, partial, expectedExecutionKey)) {
+                publish(partial) { showPartialResults(requestId, partial) }
+            }
+        }
+
+        /** Returns what [show] returned, or null when this request no longer owns the screen. */
+        suspend fun publish(result: SearchExecutionResult, show: () -> Boolean): Boolean? {
+            val accepting = acceptancePending
+            if (accepting) scrollPersistence.reset(result.executionKey) {
+                executionService.persistAppliedSearch(result.query, result.sourceScope, result.executionKey)
+            }
+            if (!isAdmittedResult(requestId, result, expectedExecutionKey)) return null
+            val previous = mutableState.value
+            val shown = show()
+            acceptancePending = false
+            if (accepting) rememberAcceptedSearchNavigation(previous, undo, undoScrollState)
+            return shown
+        }
+    }
+
+    private fun rememberFirstPage(result: SearchExecutionResult) {
+        if (result is SearchExecutionResult.Success && result.posts.isNotEmpty()) {
+            viewModelScope.launch { executionService.rememberFirstPage(result.executionKey, result.posts) }
+        }
     }
 
     /** Preserve Undo history and the accepted search's route scroll request together. */
@@ -653,6 +690,36 @@ internal class SearchViewModel(
             if (undoScrollState != null) SearchStateChange.RouteEntryScrollRestorationRequested(scrollState)
             else SearchStateChange.ScrollResetRequested,
         )
+    }
+
+    private suspend fun paintCachedFirstPage(
+        requestId: Long,
+        query: Query,
+        sourceScope: SearchSourceScope,
+        executionKey: String,
+    ) {
+        val posts = executionService.cachedFirstPage(executionKey, sourceScope)
+        if (posts.isEmpty() || mutableState.value.execution.activeRequestId != requestId) return
+        showingCachedFirstPage = true
+        reduce(SearchStateChange.PublishPartialResults(requestId, query, posts, emptyList(), sourceScope, executionKey))
+    }
+
+    /** Someone who has scrolled the cached page keeps their place: its posts stay put and new ones go below. */
+    private fun refreshedResults(fresh: List<Post>): List<Post> {
+        if (!showingCachedFirstPage || !scrolledCachedFirstPage) return fresh
+        val freshById = fresh.associateBy(Post::id)
+        val shown = mutableState.value.content.results.map { post -> freshById[post.id] ?: post }
+        return (shown + fresh).distinctBy(Post::id)
+    }
+
+    private fun showPartialResults(requestId: Long, result: SearchExecutionResult.Success): Boolean {
+        rememberAppliedQuery(result.query, result.sourceScope)
+        reduce(
+            SearchStateChange.PublishPartialResults(
+                requestId, result.query, result.posts, result.statuses, result.sourceScope, result.executionKey,
+            ),
+        )
+        return true
     }
 
     private fun completeRequest(
@@ -692,11 +759,12 @@ internal class SearchViewModel(
                         appliedQuery = result.query,
                         appliedSourceScope = result.sourceScope,
                         appliedQueryHash = result.executionKey,
-                        results = result.posts,
+                        results = refreshedResults(result.posts),
                         statuses = result.statuses,
                         canLoadMore = result.continuation.canLoadMore,
                     ),
                 )
+                showingCachedFirstPage = false
                 true
             }
         }
@@ -817,69 +885,6 @@ internal class SearchViewModel(
             appliedSourceScope = sourceScope, appliedQueryHash = executionKey))
     }
 
-    private fun refreshAutocomplete(input: String) {
-        cancelAutocomplete()
-        if (input.isNotBlank()) {
-            trendingJob?.cancel(CancellationException("Interactive autocomplete superseded trending refresh"))
-            trendingJob = null
-        }
-        updateSuggestionInput(input)
-        val generation = ++nextAutocompleteGeneration
-        val localState = mutableState.value
-        autocompleteJob = viewModelScope.launch {
-            val cached = withContext(suggestionDispatcher) {
-                coordinator.cachedAutocomplete(
-                    localState.query.draft, localState.query.draftSourceScope,
-                    localState.query.selectedScope, input, localState.suggestions.trending,
-                )
-            }
-            publishAutocompleteIfCurrent(generation, cached)
-            if (autocompleteDelayMs > 0) delay(autocompleteDelayMs)
-            val result = withContext(suggestionDispatcher) {
-                coordinator.fetchAutocomplete(
-                    localState.query.draft, localState.query.draftSourceScope,
-                    localState.query.selectedScope, input, localState.suggestions.trending,
-                    onUpdate = { update ->
-                        withContext(Dispatchers.Main.immediate) { publishAutocompleteIfCurrent(generation, update) }
-                    },
-                )
-            }
-            coroutineContext.ensureActive()
-            publishAutocompleteIfCurrent(generation, result)
-        }
-    }
-
-    private fun publishAutocompleteIfCurrent(generation: Long, result: SearchAutocompleteResult) {
-        if (generation != nextAutocompleteGeneration) return
-        mutableState.value = mutableState.value.withAutocompleteResult(result)
-    }
-
-    private fun cancelAutocomplete() {
-        nextAutocompleteGeneration += 1L
-        autocompleteJob?.cancel(CancellationException("Autocomplete superseded"))
-        autocompleteJob = null
-    }
-
-    private fun refreshTrending() {
-        trendingJob?.cancel(CancellationException("Trending refresh superseded"))
-        val requestState = mutableState.value
-        trendingJob = viewModelScope.launch {
-            val cached = withContext(suggestionDispatcher) {
-                coordinator.cachedTrending(requestState.query.draft, requestState.query.draftSourceScope)
-            }
-            if (cached.isNotEmpty()) mutableState.value = mutableState.value.withTrendingSuggestions(cached)
-            val trending = withContext(suggestionDispatcher) {
-                coordinator.fetchTrending(requestState.query.draft, requestState.query.draftSourceScope)
-            }
-            coroutineContext.ensureActive()
-            val current = mutableState.value
-            if (current.query.draft != requestState.query.draft ||
-                current.query.draftSourceScope != requestState.query.draftSourceScope
-            ) return@launch
-            mutableState.value = current.withTrendingSuggestions(trending)
-        }
-    }
-
     private fun restore() {
         if (restorationJob?.isActive == true) return
         if (mutableState.value.restoration is SearchRestorationUiState.Restored) return
@@ -910,7 +915,7 @@ internal class SearchViewModel(
                 )
                 savedStateHandle[SearchSavedStateKeys.RESTORATION_COMPLETED] = true
                 persistDraftQuery()
-                refreshTrending()
+                suggestionRefresh.refreshTrending()
                 val pendingSearch = pendingRootSearch.also { pendingRootSearch = null }
                 if (pendingSearch != null) {
                     pendingSearch()
@@ -958,6 +963,7 @@ internal class SearchViewModel(
     }
 
     private fun persistScroll(action: SearchAction.ScrollChanged) {
+        if (showingCachedFirstPage && action.firstVisibleItemIndex > 0) scrolledCachedFirstPage = true
         if (!mutableState.value.restoration.allowsScrollPersistence) return
         val index = action.firstVisibleItemIndex.coerceAtLeast(0)
         val offset = action.firstVisibleItemOffsetPx.coerceAtLeast(0)
@@ -995,7 +1001,7 @@ internal class SearchViewModel(
     )
 
     private fun clearSuggestionState() {
-        cancelAutocomplete()
+        suggestionRefresh.cancelAutocomplete()
         val current = mutableState.value
         mutableState.value = current.copy(
             suggestions = current.suggestions.copy(

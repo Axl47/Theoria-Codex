@@ -255,3 +255,21 @@ sealed interface SiteProbeResult {
     /** The input is not a usable HTTPS site address; nothing was requested. */
     data class InvalidAddress(val error: SiteAddressError) : SiteProbeResult
 }
+
+/**
+ * Whether the site itself answered, so a browser challenge in front of it is no longer refusing the app.
+ * An answer counts even when it is not usable (keys needed, unknown family); a transport failure, a
+ * refusal and input that was never requested do not. No `else`: a new variant must be decided here.
+ */
+val SiteProbeResult.clearedChallenge: Boolean
+    get() = when (this) {
+        is SiteProbeResult.Supported,
+        is SiteProbeResult.CredentialsRequired,
+        is SiteProbeResult.UnsupportedFamily,
+        is SiteProbeResult.NotABooru,
+        -> true
+        is SiteProbeResult.AlreadyBuiltIn,
+        is SiteProbeResult.Unreachable,
+        is SiteProbeResult.InvalidAddress,
+        -> false
+    }

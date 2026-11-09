@@ -63,6 +63,9 @@ class RealProviderPageContractTest {
         val rssItems = listOf(42, 42, 43).joinToString("") { id ->
             "<item><link>https://example.com/video/$id/title/</link><title>Clip $id</title></item>"
         }
+        val listingCards = listOf(42, 42, 43).joinToString("") { id ->
+            """<div class="item thumb"><a class="th" href="https://example.com/video/$id/title/"><img src="https://example.com/$id.jpg"></a></div>"""
+        }
         val pahealItems = listOf("42", "42#sample", "43").joinToString("") { id ->
             "<item><link>https://rule34.paheal.net/post/view/$id</link><title>Post</title></item>"
         }
@@ -76,7 +79,7 @@ class RealProviderPageContractTest {
             Fixture(SourceKey.NHENTAI, nhentai, "2"),
             Fixture(SourceKey.IWARA, iwara, "1"),
             Fixture(SourceKey.RULE34VIDEO, "<rss><channel>$rssItems</channel></rss>", null),
-            Fixture(SourceKey.RULE34GEN, "<rss><channel>$rssItems</channel></rss>", null),
+            Fixture(SourceKey.RULE34GEN, "<html><body>$listingCards</body></html>", null),
             Fixture(SourceKey.RULE34PAHEAL, "<rss><channel>$pahealItems</channel></rss>", null),
         )
     }

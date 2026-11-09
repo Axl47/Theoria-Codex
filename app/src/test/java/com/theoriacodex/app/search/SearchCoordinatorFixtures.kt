@@ -20,6 +20,7 @@ internal fun testSearchCoordinator(
     recentsRepository: RecentsRepository = InMemoryRecentsRepository(),
     statisticsRepository: StatisticsRepository = InMemoryStatisticsRepository(),
     tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
+    firstPageStore: com.theoriacodex.data.repository.SearchFirstPageStore? = null,
     clock: () -> Long = System::currentTimeMillis,
     computationDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.Default,
     seenTagScope: kotlinx.coroutines.CoroutineScope =
@@ -33,6 +34,7 @@ internal fun testSearchCoordinator(
         recentsRepository = recentsRepository,
         statisticsRepository = statisticsRepository,
         tagSuggestionStore = tagSuggestionStore,
+        firstPageStore = firstPageStore,
         clock = clock,
         computationDispatcher = computationDispatcher,
         seenTagScope = seenTagScope,

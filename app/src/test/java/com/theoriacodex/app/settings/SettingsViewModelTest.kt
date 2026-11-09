@@ -45,14 +45,14 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `source accounts request opens the Accounts page and navigates to Settings`() = runTest {
+    fun `opening Sites from elsewhere selects the page and navigates to Settings`() = runTest {
         val owner = settingsOwner()
         runCurrent()
 
-        owner.onAction(SettingsAction.OpenSourceAccounts)
+        owner.onAction(SettingsAction.OpenCustomSites)
         runCurrent()
 
-        assertEquals(SettingsPage.ACCOUNTS, owner.state.value.page)
+        assertEquals(SettingsPage.SITES, owner.state.value.page)
         assertEquals(SettingsEffect.NavigateToSettings, owner.effects.first())
     }
 

@@ -27,6 +27,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.R
+import com.theoriacodex.app.source.LocalSourceHealth
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.search.state.SearchUiState
@@ -59,6 +60,13 @@ internal fun ColumnScope.SearchResultsBody(
         .clickable(interactionSource = clearFocusInteraction, indication = null) { inputFocus.clear() }
     val sourceAuthErrorMessage = remember(state.content.statuses) { buildSourceAuthErrorMessage(state.content.statuses) }
     val retrySearch = { inputFocus.clear(); onAction(SearchAction.Retry) }
+    val issues = LocalSourceHealth.current.issues
+    val scope = state.query.appliedSourceScope
+    val outageNotices = remember(state.content.statuses, issues, scope) {
+        // A single source already says so in its own error, with a Retry that makes sense there.
+        if (scope is SearchSourceScope.Single) emptyList() else sourceOutageNotices(state.content.statuses, issues)
+    }
+    SourceOutageNotices(outageNotices)
     state.pageFailure?.let { SearchFailureSurface(it, retrySearch) }
     // Results show the pull indicator instead; this keeps refreshes of an emptied feed visible.
     if (state.retainsResultsWhileRefreshing && feed.related.projection.entries.isEmpty()) SearchRefreshProgress()
@@ -68,14 +76,14 @@ internal fun ColumnScope.SearchResultsBody(
             SearchFailureSurface(requireNotNull(state.content.error), retrySearch, tapToClearFocus)
         }
         feed.related.projection.entries.isEmpty() -> Box(modifier = tapToClearFocus) {
-            SearchEmptyResults(state, feed, pageDemand, sourceAuthErrorMessage, retrySearch)
+            SearchEmptyResults(state, feed, pageDemand, sourceAuthErrorMessage, outageNotices, retrySearch)
         }
         else -> Column(modifier = tapToClearFocus, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             sourceAuthErrorMessage?.let { authMessage ->
                 ErrorBlock(title = "Source account required", message = authMessage)
             }
             PullToRefreshBox(
-                isRefreshing = state.retainsResultsWhileRefreshing,
+                isRefreshing = state.retainsResultsWhileRefreshing && !state.execution.showingPartialResults,
                 onRefresh = retrySearch,
                 modifier = Modifier.weight(1f),
             ) {
@@ -91,9 +99,13 @@ private fun SearchEmptyResults(
     feed: SearchFeed,
     pageDemand: FeedPageDemandControl,
     sourceAuthErrorMessage: String?,
+    outageNotices: List<SourceOutageNotice>,
     onRetry: () -> Unit,
 ) {
-    val sourceFailureMessage = remember(state.content.statuses) { buildSourceFailureMessage(state.content.statuses) }
+    val sourceFailureMessage = remember(state.content.statuses, outageNotices) {
+        val announced = outageNotices.flatMap(SourceOutageNotice::sources)
+        buildSourceFailureMessage(state.content.statuses.filterNot { it.source in announced })
+    }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         FeedContinueLoading(pageDemand)
         sourceAuthErrorMessage?.let { authMessage ->

@@ -90,7 +90,7 @@ private fun SearchDestination(shell: TheoriaShell) {
                 },
                 onSaveSearch = shell.owners.savedSearches::save,
                 onManageSavedSearches = { shell.overlays.showSavedSearchManagement = true },
-                onOpenSourceAccounts = { shell.owners.settings.onAction(SettingsAction.OpenSourceAccounts) },
+                onOpenSourceAccounts = { shell.owners.settings.onAction(SettingsAction.OpenCustomSites) },
                 onOpenViewer = { effect -> shell.openSearchViewer(effect) },
                 onShowMessage = { message -> Toast.makeText(shell.appContext, message, Toast.LENGTH_SHORT).show() },
                 onToggleLike = { post -> shell.searchLikeAction()(post) },
@@ -167,7 +167,7 @@ private fun ForYouDestination(shell: TheoriaShell) {
             callbacks = ForYouRouteCallbacks(
                 onOpenViewer = { effect -> shell.openForYouViewer(effect) },
                 onNavigateToSearch = { navigation.showTab(TopLevelDestination.Search) },
-                onOpenSourceAccounts = { shell.owners.settings.onAction(SettingsAction.OpenSourceAccounts) },
+                onOpenSourceAccounts = { shell.owners.settings.onAction(SettingsAction.OpenCustomSites) },
                 onShowMessage = { message -> Toast.makeText(shell.appContext, message, Toast.LENGTH_SHORT).show() },
                 onSeedHidden = { _, _ -> shell.showActionableFeedback("Seed hidden", "Undo") },
                 onToggleLike = { post -> shell.forYouLikeAction()(post) },

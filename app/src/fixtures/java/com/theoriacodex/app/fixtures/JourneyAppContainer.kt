@@ -7,7 +7,11 @@ import com.theoriacodex.app.creator.CreatorProfileCoordinator
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.di.FeatureDependencies
 import com.theoriacodex.app.di.SourceDependencies
+import com.theoriacodex.app.customsites.AndroidBrowserCookieStore
+import com.theoriacodex.app.customsites.BuiltInAgentStore
 import com.theoriacodex.app.customsites.CustomSitesController
+import com.theoriacodex.app.customsites.SiteCookieBridge
+import com.theoriacodex.sources.http.HostOutageTracker
 import com.theoriacodex.app.di.CustomSitesControllerImpl
 import com.theoriacodex.app.di.CustomSourceRuntime
 import com.theoriacodex.app.di.TheoriaAppContainer
@@ -164,6 +168,14 @@ class JourneyAppContainer(
         settings = settings,
         library = content,
         scope = ownerScope,
+        outages = HostOutageTracker(),
+        cookieBridge = SiteCookieBridge(AndroidBrowserCookieStore),
+        builtInAgents = object : BuiltInAgentStore {
+            override fun read(): Map<String, String> = emptyMap()
+            override fun save(host: String, userAgent: String) = Unit
+        },
+        clearsChallenge = { _, _ -> true },
+        runBuiltInSearch = { true },
     )
     suspend fun awaitReady() {
         settings.awaitReady()

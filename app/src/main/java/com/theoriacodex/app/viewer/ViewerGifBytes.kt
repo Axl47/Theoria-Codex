@@ -4,6 +4,7 @@ import android.content.Context
 import com.theoriacodex.app.media.copyCachedMediaBytes
 import com.theoriacodex.app.media.downloadMediaFile
 import com.theoriacodex.app.media.normalizeMediaUrl
+import com.theoriacodex.app.network.appHttpClients
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.SourceKey
@@ -123,7 +124,7 @@ private suspend fun fillRemoteGif(context: Context, source: SourceKey, url: Stri
     if (copyCachedMediaBytes(context, source, url, destination, MAX_VIEWER_GIF_BYTES.toLong())) return
     // The connection's read timeout catches stalls; this bound must leave room for large files on slow links.
     withTimeout(GIF_DOWNLOAD_TIMEOUT_MS) {
-        downloadMediaFile(url, source.requestHeaders(), destination, MAX_VIEWER_GIF_BYTES.toLong())
+        downloadMediaFile(url, source.requestHeaders(), destination, MAX_VIEWER_GIF_BYTES.toLong(), context.appHttpClients.downloads)
     }
 }
 

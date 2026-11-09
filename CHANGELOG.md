@@ -18,9 +18,20 @@
 - New sites stay out of Unified search and For You until you turn that on for the site.
 - Each site can be re-tested, renamed, given new keys, or given its own User-Agent and Referer.
 - Removing a site keeps its likes, Codex items and history; they open again when you add the site back.
+- A site behind a browser challenge can be verified in the app: pass its check and the page closes by itself once Theoria gets through, and the source works right away.
+- Verify in browser tells you when a site still refuses Theoria after its check, instead of failing later.
+- A site whose re-test is blocked by a challenge offers Verify in browser on its row.
+- Removing a site also removes the browser cookies Theoria held for it.
 
 ### Changed
 
+- Unified search shows results as soon as the first sources answer; slower sources add their posts below without moving what is already on screen.
+- Reopening the app shows your last search right away while it refreshes.
+- Hitomi cards, and Iwara cards with a custom thumbnail, now load small thumbnails instead of full-size images.
+- Choosing a page in a Hitomi gallery loads small page thumbnails instead of full pages.
+- Feeds start loading the next card images before you reach them when you are on an unmetered network.
+- rule34.xxx posts show a lighter sample in the Viewer first, then the original.
+- Gelbooru's untagged feed loads several times faster, including every further page.
 - The Viewer's page bar now fills up to the current page, like video progress.
 - On nhentai, a post's page gallery fills in right away with small previews, and each page sharpens once it stays on screen.
 - Collections saved for offline use now stay available in the released app, and copies saved before this update are recovered when the app starts.
@@ -55,9 +66,23 @@
 - Scrub previews appear sooner when you drag a video's timeline, most of all on a second drag, and stop downloading as soon as you let go.
 - Letting go after scrubbing a video starts playback on the frame the preview showed, and much sooner when you scrub to a part of the video that hasn't loaded yet.
 - Videos in the Viewer start, and resume after a seek, once half a second has loaded instead of a full second. A video that has already had to stop and load waits for the full second again, so a slow connection doesn't stall more often.
+- Sites proven to work since you opened the app show a check mark on their row in Settings → Sites and beside Verify in browser, replacing the "Working" text.
+- A site's API keys sit behind a collapsed "API key" item on its page, which opens to show their options.
+- Invert scroll direction moved into Settings → Controls, the renamed Classic controls sheet, with more room between its options.
+- Accounts and Sites are now one Settings → Sites page, listing built-in and added sources with each one's account and browser check.
+- Built-in sources behind a browser challenge, like Iwara, can now be verified in the app; tapping a challenged source opens its check.
+- Settings pages show their full path in the title, such as Settings / Sites / Safebooru.
+- Test all in Settings → Sites checks every source with a real search, naming each one as it goes and marking the result on its row.
+- Unified search says when a site is down for maintenance, so you know the results are missing it. Dismiss the notice and it stays away until that outage ends.
+- Unified search says when a site needs browser verification, with Verify in browser and Dismiss.
+- In Settings → Sites, Test all sits in line with the Built-in header.
+- The first search after opening the app starts faster on Wi-Fi: Theoria reconnects to the sites you used last while the app comes up.
+- Networks whose IPv6 doesn't really work no longer slow down new connections once Theoria has noticed.
 
 ### Fixed
 
+- On networks with broken IPv6, sources no longer stall for up to 30 seconds or fail to connect, and one slow source no longer blanks a whole Unified search.
+- Sources no longer all start marked as "can't be found" after a brief network hiccup; a site is only marked missing once separate lookups have failed.
 - R34V videos play again in feeds and the Viewer; they previously failed to load on every Android device.
 - Videos are requested with the same User-Agent as the site's images, including a custom site's own User-Agent, so sites that check it serve their videos too.
 - A R34V or R34G search with excluded tags now shows its results when one post's details can't be read, instead of failing the whole page.
@@ -67,6 +92,10 @@
 - Typing a tag's English name in Pixiv search and pressing Enter now searches the matching Japanese tag instead of the English text.
 - Pixiv searches keep tags that include parentheses, such as ラム(リゼロ), instead of cutting them short.
 - Gelbooru and Rule34.xxx tags with apostrophes or ampersands, such as jojo's_bizarre_adventure, now display correctly and find their posts.
+- Paheal cards show their images again, with or without tags.
+- Rule34Gen cards show their thumbnails when browsing without tags.
+- Rule34Gen and Rule34Video searches show every card's thumbnail, not just the first few.
+- nhentai pages that stall partway through loading recover in a few seconds instead of hanging for up to half a minute.
 
 ## [1.3.0] - 2026-11-06
 

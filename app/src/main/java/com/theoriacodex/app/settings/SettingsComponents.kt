@@ -18,30 +18,84 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
 import com.theoriacodex.app.ui.TopLevelDestination
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 
-/** Header shared by the Settings home and its pages; [onBack] adds the back arrow. */
+/** The path of every page directly under the Settings home. */
+internal val SETTINGS_PATH = listOf("Settings")
+
+/**
+ * Header shared by the Settings home and its pages; [onBack] adds the back arrow. [parents] are the
+ * pages above this one, shown dimmed before [title]. The path stays on one line and loses its start
+ * first, so the current page is always readable.
+ */
 @Composable
-internal fun SettingsHeader(title: String, onBack: (() -> Unit)? = null, action: @Composable () -> Unit = {}) {
+internal fun SettingsHeader(
+    title: String,
+    onBack: (() -> Unit)? = null,
+    parents: List<String> = emptyList(),
+    action: @Composable () -> Unit = {},
+) {
+    val parentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = PARENT_PATH_ALPHA)
     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
         onBack?.let { IconButton(onClick = it) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } }
-        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+        Text(
+            buildAnnotatedString {
+                withStyle(SpanStyle(color = parentColor)) { parents.forEach { append("$it / ") } }
+                append(title)
+            },
+            Modifier.weight(1f).semantics { heading() },
+            style = MaterialTheme.typography.titleLarge,
+            maxLines = 1,
+            overflow = TextOverflow.StartEllipsis,
+        )
         action()
     }
+}
+
+/**
+ * A collapsed item that reveals [content] when tapped, like Advanced. It returns to
+ * [initiallyExpanded] when that changes, so saving keys folds their section away.
+ */
+@Composable
+internal fun ExpandableSection(label: String, initiallyExpanded: Boolean, content: @Composable () -> Unit) {
+    var expanded by rememberSaveable(initiallyExpanded) { mutableStateOf(initiallyExpanded) }
+    TextButton(
+        onClick = { expanded = !expanded },
+        modifier = Modifier.semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" },
+    ) {
+        Text(label)
+        Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null)
+    }
+    if (expanded) content()
 }
 
 /** Centered scrolling column used by every Settings page except the lazy Stats list. */
@@ -62,20 +116,33 @@ internal fun SettingsPageColumn(content: @Composable ColumnScope.() -> Unit) {
     }
 }
 
-/** A small label above a card of related rows. */
+/** A small label above a card of related rows; [action] sits at the label's end without making it any taller. */
 @Composable
-internal fun SettingsGroup(title: String?, content: @Composable ColumnScope.() -> Unit) {
+internal fun SettingsGroup(
+    title: String?,
+    action: (@Composable () -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     if (title != null) {
-        Text(
-            title,
-            modifier = Modifier.padding(start = 4.dp, top = 12.dp),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Row(Modifier.fillMaxWidth().padding(start = 4.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                title,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            action?.let { Box(Modifier.claimingNoHeight()) { it() } }
+        }
     }
     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
         Column(Modifier.fillMaxWidth(), content = content)
     }
+}
+
+/** Keeps a full-size touch target centered in its row while leaving the row's height to its other children. */
+private fun Modifier.claimingNoHeight() = layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints.copy(minHeight = 0, maxHeight = Constraints.Infinity))
+    layout(placeable.width, 0) { placeable.place(0, -placeable.height / 2) }
 }
 
 /** Separates rows inside a [SettingsGroup]. */
@@ -83,6 +150,8 @@ internal fun SettingsGroup(title: String?, content: @Composable ColumnScope.() -
 internal fun SettingsRowDivider() {
     HorizontalDivider(color = MaterialTheme.colorScheme.background)
 }
+
+private const val PARENT_PATH_ALPHA = 0.7f
 
 /** A row that shows its current value in [summary]; without [trailing] it shows a chevron. */
 @Composable

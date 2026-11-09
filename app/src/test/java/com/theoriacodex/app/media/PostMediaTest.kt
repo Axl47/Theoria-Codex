@@ -146,6 +146,25 @@ class PostMediaTest {
     }
 
     @Test
+    fun `rule34xxx keeps cards on the preview and shows the sample first in the Viewer`() {
+        val full = ref("full.jpg", "image/jpeg").copy(
+            progressiveUrls = listOf("https://example.test/sample.jpg"),
+        )
+        val post = post(SourceKey.RULE34XXX, full)
+
+        assertEquals(
+            listOf(MediaDeliveryActivation.PRIMARY, MediaDeliveryActivation.FAILURE_FALLBACK, MediaDeliveryActivation.FAILURE_FALLBACK),
+            previewMediaDeliveryPlan(post).candidates.map { it.activation },
+        )
+        val viewer = viewerMediaDeliveryPlan(post, full)
+        assertEquals(
+            listOf("https://example.test/sample.jpg", "https://example.test/full.jpg"),
+            viewer.candidates.take(2).map { it.location },
+        )
+        assertEquals(MediaDeliveryActivation.QUALITY_UPGRADE, viewer.candidates[1].activation)
+    }
+
+    @Test
     fun `remote gif paints its poster first and never upgrades to a static sample`() {
         val gif = ref("file.gif", "image/gif").copy(progressiveUrls = listOf("https://example.test/sample.jpg"))
 

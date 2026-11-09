@@ -160,7 +160,12 @@ fun viewerMediaDeliveryPlan(post: Post, media: ImageRef): MediaDeliveryPlan {
     return mediaDeliveryPlan(
         post = post,
         refs = listOf(media) + samePageFallbacks,
-        qualityUpgradeRefs = if (post.id.source.upgradesImageQuality()) setOf(media) else emptySet(),
+        // rule34.xxx's cards stay on their preview, but its Viewer shows the sample first and then the original.
+        qualityUpgradeRefs = if (post.id.source.upgradesImageQuality() || post.id.source == SourceKey.RULE34XXX) {
+            setOf(media)
+        } else {
+            emptySet()
+        },
         preferredUrlFirst = null,
     )
 }

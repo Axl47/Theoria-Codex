@@ -21,7 +21,19 @@ interface SearchExecutionService {
         sourceScope: com.theoriacodex.app.search.state.SearchSourceScope,
     ): SearchExecutionResult
 
+    /** Like [executeInitial], handing [onPartial] usable results before every source has answered. */
+    suspend fun executeInitialProgressively(
+        query: Query,
+        sourceScope: com.theoriacodex.app.search.state.SearchSourceScope,
+        onPartial: suspend (SearchExecutionResult.Success) -> Unit,
+    ): SearchExecutionResult = executeInitial(query, sourceScope)
+
     suspend fun executePage(continuation: SearchContinuation): SearchPageResult
+
+    /** The first page last remembered for [executionKey], shown while it refreshes; empty when there is none. */
+    suspend fun cachedFirstPage(executionKey: String, sourceScope: com.theoriacodex.app.search.state.SearchSourceScope): List<Post> = emptyList()
+
+    suspend fun rememberFirstPage(executionKey: String, posts: List<Post>) = Unit
 
     suspend fun recordAcceptedSearch(result: SearchExecutionResult) = Unit
 

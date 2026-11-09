@@ -167,6 +167,28 @@ internal class HitomiFacetHydrationSourceAdapterTest : HitomiSourceAdapterTestFi
     }
 
     @Test
+    fun `still gallery cards lead with a thumbnail that survives media recovery`() = runTest {
+        val config = fixture("gg-shape.js")
+        val http = RoutingHitomiHttpClient().apply {
+            textRoutes[HitomiMediaUrlResolver.GG_CONFIGURATION_URL] = config
+            galleryBodies[4_042_375] = fixture("gallery-4042375.js").replace("\"tag\":\"animated\"", "\"tag\":\"still\"")
+        }
+        val adapter = HitomiSourceAdapter(httpClient = http, mediaUrlResolver = HitomiMediaUrlResolver(http))
+
+        val post = requireNotNull(adapter.resolvePost(PostId(SourceKey.HITOMI, "4042375")))
+
+        assertTrue(post.preview.url.orEmpty().contains("tn.gold-usergeneratedcontent.net/webpbigtn/"))
+        assertTrue(post.preview.progressiveUrls.any { it.contains("/1783681201/") })
+        assertTrue(post.media.all { it.thumbnailUrl.orEmpty().contains("tn.gold-usergeneratedcontent.net/webpsmalltn/") })
+
+        http.textRoutes[HitomiMediaUrlResolver.GG_CONFIGURATION_URL] = config.replace("1783681201/", "1783689999/")
+        val recovered = requireNotNull(adapter.recoverPostMedia(post, post.preview))
+
+        assertEquals(post.preview.url, recovered.preview.url)
+        assertTrue(recovered.preview.progressiveUrls.any { it.contains("/1783689999/") })
+    }
+
+    @Test
     fun `smallest typed include drives popular range intersection and exclusions`() = runTest {
         val artistAutocomplete = HitomiProtocol.autocompleteUrl("artist", "najar")
         val typeAutocomplete = HitomiProtocol.autocompleteUrl("type", "artistcg")
