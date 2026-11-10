@@ -228,6 +228,7 @@ private fun feedPreviewPlayerListener(
         override fun onPlayerError(error: PlaybackException) {
             if (state.didNotifyError) return
             state.didNotifyError = true
+            com.theoriacodex.domain.diagnostics.Diagnostics.report("playback", "Feed video error: ${error.errorCodeName}", error)
             onPlaybackError()
         }
     }

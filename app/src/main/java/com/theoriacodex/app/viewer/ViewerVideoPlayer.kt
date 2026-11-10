@@ -229,6 +229,7 @@ private fun viewerVideoListener(
         }
         override fun onPlayerError(error: PlaybackException) {
             if (state.player !== player) return
+            com.theoriacodex.domain.diagnostics.Diagnostics.report("playback", "Viewer video error: ${error.errorCodeName}", error)
             state.handleError(error, recovery, events)
         }
         override fun onRenderedFirstFrame() {

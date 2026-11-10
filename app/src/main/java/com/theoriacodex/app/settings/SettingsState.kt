@@ -1,16 +1,19 @@
 package com.theoriacodex.app.settings
 
 import androidx.compose.runtime.Composable
+import com.theoriacodex.app.diagnostics.DiagnosticSection
+import com.theoriacodex.app.statistics.StatsShareFile
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.CacheSnapshot
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.ScenarioPreset
 import com.theoriacodex.data.storage.CorruptionRecovery
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 
 /** Pages inside the Settings tab; held by the owner so other screens can open Sites directly. */
-enum class SettingsPage { HOME, SITES, HIDDEN_TAGS, STORAGE, STATS }
+enum class SettingsPage { HOME, SITES, HIDDEN_TAGS, STORAGE, STATS, DIAGNOSTICS }
 
 /**
  * What Sites shows of the accounts Settings owns: a built-in source's status line (null when it has no
@@ -22,6 +25,19 @@ class BuiltInAccounts(val summary: (SourceKey) -> String?, val controls: @Compos
  * Settings → Sites, supplied by the app shell so Settings stays independent of the sites owner.
  * [summary] is the home row's value; [page] renders the page and calls its `onBack` to return home.
  */
+/** What the Stats page asks of the app shell: leaving Settings for the Viewer and exchanging files. */
+class StatsActions(
+    val openPost: suspend (PostId) -> Unit = {},
+    val share: suspend (StatsShareFile) -> Unit = {},
+    val readFile: suspend (document: String) -> StatsShareFile? = { null },
+)
+
+class SettingsDiagnosticsEntry(
+    val build: suspend (Set<DiagnosticSection>) -> String,
+    val share: suspend (String) -> Unit,
+    val clear: suspend () -> Unit,
+)
+
 class SettingsSitesEntry(val summary: String, val page: @Composable (onBack: () -> Unit, accounts: BuiltInAccounts) -> Unit)
 
 data class SettingsAccountUiState(
@@ -57,10 +73,13 @@ data class SettingsUiState(
     val showClearCacheOptions: Boolean = false,
     val changelogLoading: Boolean = false,
     val legacyJsonRecoveries: List<CorruptionRecovery> = emptyList(),
+    /** Someone else's stats file while it is being compared; deliberately never written to storage. */
+    val statsComparison: StatsShareFile? = null,
 )
 
 sealed interface SettingsAction {
     data class OpenPage(val page: SettingsPage) : SettingsAction
+    data class SetStatsComparison(val file: StatsShareFile?) : SettingsAction
     data class SetActiveProfile(val profileId: String) : SettingsAction
     data class AddProfile(val name: String) : SettingsAction
     data class RenameProfile(val profileId: String, val name: String) : SettingsAction

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.codex.transfer
 
+import com.theoriacodex.app.codex.CODEX_SHARE_MAX_BYTES
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -15,19 +16,19 @@ class CodexDocumentIoTest {
         val stream = java.io.ByteArrayInputStream(ByteArray(100))
         assertEquals(true, runCatching { com.theoriacodex.data.repository.readBoundedDocument(stream, 16) }.isFailure)
         assertEquals(83, stream.available())
-        assertEquals(true, runCatching { readCodexDocument { byteArrayOf(0xC3.toByte(), 0x28).inputStream() } }.isFailure)
+        assertEquals(true, runCatching { readBoundedTextDocument(CODEX_SHARE_MAX_BYTES) { byteArrayOf(0xC3.toByte(), 0x28).inputStream() } }.isFailure)
     }
 
     @Test
     fun `document provider opens off caller thread and exported text round trips`() = runBlocking {
         val caller = Thread.currentThread()
-        val payload = CodexExportPayload("Saved", "saved.json", "{\"title\":\"Saved\"}")
-        val file = writeCodexDocument(folder.root.resolve("exports"), payload)
-        val text = readCodexDocument {
+        val payload = ExportDocument("Saved", "saved.json", "{\"title\":\"Saved\"}")
+        val file = writeExportDocument(folder.root.resolve("exports"), payload)
+        val text = readBoundedTextDocument(CODEX_SHARE_MAX_BYTES) {
             assertNotEquals(caller, Thread.currentThread())
             file.inputStream()
         }
-        assertEquals(payload.json, text)
-        assertEquals(null, readCodexDocument { null })
+        assertEquals(payload.text, text)
+        assertEquals(null, readBoundedTextDocument(CODEX_SHARE_MAX_BYTES) { null })
     }
 }

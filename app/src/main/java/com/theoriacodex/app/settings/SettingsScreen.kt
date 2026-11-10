@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Tune
@@ -51,7 +52,6 @@ import com.theoriacodex.app.ui.components.ActionMenuSheet
 import com.theoriacodex.data.repository.ScenarioPreset
 import com.theoriacodex.data.repository.SourceWeightSettings
 import com.theoriacodex.data.storage.CorruptionRecovery
-import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 
 private enum class SettingsSheet { PROFILE, SOURCE_MIX, PLAYBACK, CONTROLS }
@@ -65,7 +65,8 @@ fun SettingsScreen(
     searchSources: Set<SourceKey> = emptySet(),
     storageSummary: String? = null,
     sites: SettingsSitesEntry? = null,
-    onOpenStatisticsPost: suspend (PostId) -> Unit = {},
+    statsActions: StatsActions = StatsActions(),
+    diagnostics: SettingsDiagnosticsEntry? = null,
     storageTools: (@Composable () -> Unit)? = null,
 ) {
     val openHome = { onAction(SettingsAction.OpenPage(SettingsPage.HOME)) }
@@ -76,7 +77,7 @@ fun SettingsScreen(
         label = "Settings page",
     ) { page ->
         when (page) {
-            SettingsPage.HOME -> SettingsHome(state, statistics, onAction, searchSources, storageSummary, sites)
+            SettingsPage.HOME -> SettingsHome(state, statistics, onAction, searchSources, storageSummary, sites, diagnostics != null)
             SettingsPage.SITES -> sites?.page?.invoke(
                 openHome,
                 BuiltInAccounts(
@@ -86,7 +87,11 @@ fun SettingsScreen(
             )
             SettingsPage.HIDDEN_TAGS -> HiddenTagsPage(state, onAction, openHome)
             SettingsPage.STORAGE -> StoragePage(state, onAction, storageTools, openHome)
-            SettingsPage.STATS -> StatsScreen(statistics, onOpenStatisticsPost, openHome)
+            SettingsPage.STATS -> StatsScreen(
+                statistics, statsActions, state.statsComparison, state.availableSources,
+                { onAction(SettingsAction.SetStatsComparison(it)) }, openHome,
+            )
+            SettingsPage.DIAGNOSTICS -> diagnostics?.let { DiagnosticsPage(it, openHome) }
         }
     }
     ProfileDeleteDialog(state, onAction)
@@ -100,6 +105,7 @@ private fun SettingsHome(
     searchSources: Set<SourceKey>,
     storageSummary: String?,
     sites: SettingsSitesEntry?,
+    showDiagnostics: Boolean,
 ) {
     var sheet by rememberSaveable { mutableStateOf<SettingsSheet?>(null) }
     var showAddProfile by remember { mutableStateOf(false) }
@@ -113,7 +119,7 @@ private fun SettingsHome(
                 open(SettingsPage.STATS)
             })
         }
-        SettingsHomeGroups(state, onAction, searchSources, storageSummary, sites, { sheet = it }, open)
+        SettingsHomeGroups(state, onAction, searchSources, storageSummary, sites, showDiagnostics, { sheet = it }, open)
         if (state.showDeveloperScenarios) DeveloperScenarios(state, onAction)
     }
     if (showAddProfile) {
@@ -150,6 +156,7 @@ private fun SettingsHomeGroups(
     searchSources: Set<SourceKey>,
     storageSummary: String?,
     sites: SettingsSitesEntry?,
+    showDiagnostics: Boolean,
     onSheet: (SettingsSheet) -> Unit,
     open: (SettingsPage) -> Unit,
 ) {
@@ -196,6 +203,15 @@ private fun SettingsHomeGroups(
             enabled = !state.changelogLoading,
             onClick = { onAction(SettingsAction.OpenChangelog) },
         )
+        if (showDiagnostics) {
+            SettingsRowDivider()
+            SettingsRow(
+                "Diagnostics report",
+                "Share recent errors to help fix a problem",
+                Icons.Default.BugReport,
+                onClick = { open(SettingsPage.DIAGNOSTICS) },
+            )
+        }
     }
 }
 

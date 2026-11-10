@@ -1,6 +1,9 @@
 package com.theoriacodex.app.journeys
 
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.isDisplayed
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -30,6 +33,27 @@ class StatsTopPostJourneyTest : AppJourneyFixture() {
 
         openFromTopPosts("Gelbooru journey-3", saved)
         openFromTopPosts("Gelbooru journey-4", noLongerSaved)
+    }
+
+    @Test
+    fun aCodexLeftOutOfAShareLeavesTheTotalsAndStaysPrivate() {
+        val post = posts.getValue(SourceKey.GELBOORU)[5]
+        io {
+            val codex = container.content.ensureCodex(profileScopedCodexId("profile-main", "journey"), "Landscapes")
+            container.content.addItems(codex.codexId, listOf(post))
+            container.data.statisticsRepository.recordCodexPostOpen(codex.codexId, statisticsPostKey(post.id), "Gelbooru journey-5")
+        }
+        launch()
+        tab("Settings")
+        activate(compose.onNodeWithText("Your stats"))
+        activate(compose.onNodeWithText("Share my stats"))
+        compose.waitUntil(10_000) { compose.onNodeWithText("1").isDisplayed() }
+        compose.onNodeWithText("Share file").assertIsEnabled()
+
+        activate(compose.onNodeWithText("Landscapes"))
+
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("1").fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithText("Share file").assertIsNotEnabled()
     }
 
     private fun openFromTopPosts(label: String, post: Post) {

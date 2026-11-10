@@ -16,6 +16,7 @@ import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.data.repository.UiRestoreRepository
 import com.theoriacodex.data.repository.ViewerLaunchContext
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
@@ -400,11 +401,11 @@ class SearchCoordinator(
             error.message ?: "Could not retry source")
     }
 
-    private fun sourceFailureStatus(source: SourceKey, error: Throwable) = SourceRunStatus(
-        source, SourceRunState.FAILED,
-        failureReason = (error as? SourceAdapterException)?.reason ?: SourceFailureReason.UNKNOWN,
-        errorMessage = error.message,
-    )
+    private fun sourceFailureStatus(source: SourceKey, error: Throwable): SourceRunStatus {
+        val reason = (error as? SourceAdapterException)?.reason ?: SourceFailureReason.UNKNOWN
+        Diagnostics.report("source", "${source.id} failed: $reason", error)
+        return SourceRunStatus(source, SourceRunState.FAILED, failureReason = reason, errorMessage = error.message)
+    }
 
     override suspend fun executePage(continuation: SearchContinuation): SearchPageResult {
         currentCoroutineContext().ensureActive()

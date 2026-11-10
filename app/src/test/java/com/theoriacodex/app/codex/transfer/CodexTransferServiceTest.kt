@@ -50,7 +50,7 @@ class CodexTransferServiceTest {
         repository.addItem("source", testPost())
         val transactions = InMemoryCodexLikesTransactions(codices = repository)
         val exporter = CodexTransferService(repository, transactions, InMemoryCacheRepository(), emptyRegistry())
-        val payload = (exporter.export("source") as CodexExportResult.Success).payload.json
+        val payload = (exporter.export("source") as CodexExportResult.Success).payload.text
         val broken = object : CodexRepository by repository {
             override fun observeCodex(codexId: String) = error("storage unavailable")
         }
@@ -124,7 +124,7 @@ class CodexTransferServiceTest {
             targetCache,
             emptyRegistry(),
         )
-        val imported = importer.import(exported.payload.json, "target") as CodexImportResult.Success
+        val imported = importer.import(exported.payload.text, "target") as CodexImportResult.Success
 
         assertEquals(2, imported.imported)
         assertEquals(0, imported.skipped)
@@ -170,7 +170,7 @@ class CodexTransferServiceTest {
             InMemoryCodexLikesTransactions(codices = target),
             failingThumbnailCache(),
             emptyRegistry(),
-        ).import(exported.payload.json, "target") as CodexImportResult.Success
+        ).import(exported.payload.text, "target") as CodexImportResult.Success
 
         assertEquals(1, imported.imported)
         assertEquals(
