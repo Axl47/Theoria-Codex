@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-10
+
 ### Changed
 
 - When a link leads you to set up a site, that post now opens once the site is added, instead of the link being forgotten.
