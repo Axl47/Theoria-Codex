@@ -73,6 +73,8 @@ sealed interface SiteForm {
         val sourceId: String,
         override val fields: SiteFields,
         val hasCredentials: Boolean,
+        /** Opens the API key section, for someone sent here because the site refused their access. */
+        val expandKeys: Boolean = false,
         /** Saved keys will be cleared on save; new key fields are ignored while set. */
         val clearCredentials: Boolean = false,
         val saving: Boolean = false,
@@ -111,7 +113,7 @@ sealed interface RetestStatus {
 
 sealed interface CustomSitesAction {
     data object StartAdd : CustomSitesAction
-    data class StartEdit(val sourceId: String) : CustomSitesAction
+    data class StartEdit(val sourceId: String, val expandKeys: Boolean = false) : CustomSitesAction
     data object CloseForm : CustomSitesAction
     data class OpenBuiltIn(val source: SourceKey) : CustomSitesAction
     data object CloseBuiltIn : CustomSitesAction

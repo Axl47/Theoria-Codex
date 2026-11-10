@@ -98,6 +98,7 @@ internal class CustomSitesViewModel(
                     }
                     // A challenged source: open its browser check; completing it saves the agent and shows on the row.
                     is SitesRequest.Verify -> verificationHost(request.sourceId)?.let { startVerification(it, afterRefusal = true) }
+                    is SitesRequest.EnterKey -> startEdit(request.sourceId, expandKeys = true)
                 }
             }
         }
@@ -106,7 +107,7 @@ internal class CustomSitesViewModel(
     fun onAction(action: CustomSitesAction) {
         when (action) {
             CustomSitesAction.StartAdd -> openForm(SiteForm.Add())
-            is CustomSitesAction.StartEdit -> startEdit(action.sourceId)
+            is CustomSitesAction.StartEdit -> startEdit(action.sourceId, action.expandKeys)
             CustomSitesAction.CloseForm -> closeForm()
             is CustomSitesAction.OpenBuiltIn -> mutableState.update { it.copy(openBuiltIn = action.source, notice = null) }
             CustomSitesAction.CloseBuiltIn -> mutableState.update { it.copy(openBuiltIn = null) }
@@ -256,7 +257,8 @@ internal class CustomSitesViewModel(
                 )
             } else {
                 (current.form as? SiteForm.Add)?.let { add ->
-                    current.copy(form = add.copy(fields = add.fields.copy(userAgent = check.userAgent)).applyProbe(result))
+                    // A site that made the app prove itself may limit visitors without an account, so offer the key now.
+                    current.copy(form = add.copy(fields = add.fields.copy(userAgent = check.userAgent), showCredentials = true).applyProbe(result))
                 } ?: current
             }
             applied.copy(verification = null)
@@ -292,7 +294,7 @@ internal class CustomSitesViewModel(
         mutableState.update { it.copy(form = form, notice = null) }
     }
 
-    private fun startEdit(sourceId: String) {
+    private fun startEdit(sourceId: String, expandKeys: Boolean) {
         val site = state.value.sites.firstOrNull { it.sourceId == sourceId } ?: return
         openForm(
             SiteForm.Edit(
@@ -304,6 +306,7 @@ internal class CustomSitesViewModel(
                     includeInUnifiedAndForYou = site.includedInUnifiedAndForYou,
                 ),
                 hasCredentials = site.hasCredentials,
+                expandKeys = expandKeys,
             ),
         )
     }
@@ -319,7 +322,7 @@ internal class CustomSitesViewModel(
     }
 
     /** Which field edits invalidate a finished probe, so a draft always matches what was checked. */
-    private enum class ProbeReset { NEVER, ALWAYS, IF_KEYS_VERIFIED }
+    private enum class ProbeReset { NEVER, ALWAYS, IF_CONFIRMING }
 
     private fun setFields(reset: ProbeReset, transform: SiteFields.() -> SiteFields) {
         mutableState.update { current ->
@@ -338,7 +341,7 @@ internal class CustomSitesViewModel(
     /** A pasted snippet (`user_id=…&api_key=…` or `login=…&api_key=…`) in either field fills both. */
     private fun setCredentialField(value: String, assign: SiteFields.(String) -> SiteFields) {
         val snippet = parseCredentialSnippet(value)
-        setFields(ProbeReset.IF_KEYS_VERIFIED) {
+        setFields(ProbeReset.IF_CONFIRMING) {
             snippet?.let { copy(user = it.user, apiKey = it.apiKey) } ?: assign(value)
         }
     }
@@ -346,7 +349,7 @@ internal class CustomSitesViewModel(
     private fun ProbeReset.invalidates(stage: AddStage): Boolean = when (this) {
         ProbeReset.NEVER -> false
         ProbeReset.ALWAYS -> true
-        ProbeReset.IF_KEYS_VERIFIED -> stage is AddStage.Confirm && stage.probe.credentialsRequired
+        ProbeReset.IF_CONFIRMING -> stage is AddStage.Confirm
     }
 
     private fun probe() {

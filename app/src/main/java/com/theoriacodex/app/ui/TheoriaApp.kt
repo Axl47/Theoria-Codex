@@ -412,6 +412,10 @@ private fun rememberSourceHealth(shell: TheoriaShell): SourceHealth {
                 shell.container.customSites.requestVerification(source.id)
                 shell.owners.settings.onAction(SettingsAction.OpenCustomSites)
             },
+            addKey = { source ->
+                shell.container.customSites.requestKeyEntry(source.id)
+                shell.owners.settings.onAction(SettingsAction.OpenCustomSites)
+            },
             dismissedNotices = dismissedNotices,
             dismissNotices = { dismissedNotices = dismissedNotices + it },
         )

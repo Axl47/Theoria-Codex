@@ -348,6 +348,40 @@ class CustomSitesViewModelTest {
         assertNull(controller.setupRequest.value)
     }
 
+    @Test fun `a key request opens that site's page with its key section open`() = runTest {
+        controller.sites.value = listOf(site())
+        val owner = owner()
+
+        controller.requestKeyEntry("custom_safebooru_org")
+        runCurrent()
+
+        assertTrue((owner.state.value.form as SiteForm.Edit).expandKeys)
+        assertNull(controller.setupRequest.value)
+    }
+
+    @Test fun `a key entered at the confirm step sends the form back to be checked`() = runTest {
+        controller.onProbe = { supported() }
+        val owner = owner()
+        probeAddress(owner)
+        assertEquals(AddStage.Confirm(supported()), owner.add.stage)
+
+        owner.onAction(CustomSitesAction.SetApiKey("k"))
+
+        assertEquals(AddStage.Address(), owner.add.stage)
+    }
+
+    @Test fun `passing a browser check while adding offers the key fields`() = runTest {
+        controller.onProbe = { call -> if (call.headers.userAgent == "WebView/1") supported() else blocked }
+        val owner = owner()
+        probeAddress(owner)
+        owner.onAction(CustomSitesAction.StartVerification("safebooru.org", afterRefusal = true))
+        owner.onAction(CustomSitesAction.ConfirmVerification("WebView/1"))
+        runCurrent()
+
+        assertTrue(owner.add.stage is AddStage.Confirm)
+        assertTrue(owner.add.showCredentials)
+    }
+
     private val blocked = SiteProbeResult.Unreachable(address("safebooru.org"), ProbeFailure.BLOCKED)
 
     private fun TestScope.startVerification(owner: CustomSitesViewModel, afterRefusal: Boolean = false) {

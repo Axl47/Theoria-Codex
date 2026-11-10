@@ -56,7 +56,7 @@ internal fun unreachableMessage(host: String, reason: ProbeFailure): String = wh
     ProbeFailure.TLS -> "Couldn't connect securely to $host."
     ProbeFailure.TIMEOUT -> "$host took too long to answer. Try again."
     ProbeFailure.HTTP_ERROR -> "$host answered with an error. Try again later."
-    ProbeFailure.BLOCKED -> "$host blocked the check, possibly with a browser challenge."
+    ProbeFailure.BLOCKED -> "$host blocked the check, possibly with a browser challenge. If you have an account there, your API key may get through."
     ProbeFailure.INSECURE_REDIRECT -> "$host redirected to an insecure address."
     ProbeFailure.CROSS_HOST_REDIRECT -> "$host redirected to a different site."
 }
@@ -186,6 +186,7 @@ internal fun reconnectConfirmationText(hostLabel: String): String =
     "Reconnect your existing likes and history from $hostLabel? Only do this if it is the same site."
 
 internal val HEADER_ERROR_MESSAGE = "Header values must be a single line of up to ${SiteHeaders.MAX_HEADER_LENGTH} characters."
+internal const val ADD_API_KEY_LABEL = "Add API key"
 internal const val KEYS_REJECTED_MESSAGE = "Those keys didn't work. Check them, and that the account has API access."
 internal const val CONFIRM_KEY_HINT = "This site checks visitors first. If you have an account there, add your API key so browsing isn't limited."
 internal const val PARTIAL_CREDENTIALS_MESSAGE = "Enter both the user and the API key, or leave both blank."

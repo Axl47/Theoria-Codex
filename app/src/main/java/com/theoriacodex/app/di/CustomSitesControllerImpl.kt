@@ -112,6 +112,10 @@ internal class CustomSitesControllerImpl(
         pendingSetup.value = SitesRequest.Verify(sourceId)
     }
 
+    override fun requestKeyEntry(sourceId: String) {
+        pendingSetup.value = SitesRequest.EnterKey(sourceId)
+    }
+
     override fun clearSetupRequest() {
         pendingSetup.value = null
     }

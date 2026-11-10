@@ -50,6 +50,10 @@ internal class FakeCustomSitesController(initial: List<CustomSiteSummary> = empt
         setupRequest.value = SitesRequest.Verify(sourceId)
     }
 
+    override fun requestKeyEntry(sourceId: String) {
+        setupRequest.value = SitesRequest.EnterKey(sourceId)
+    }
+
     override fun clearSetupRequest() {
         setupRequest.value = null
     }

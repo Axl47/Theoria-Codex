@@ -69,8 +69,16 @@ internal fun buildSourceAuthErrorMessage(statuses: List<SourceRunStatus>): Strin
 
     val names = authSources.joinToString(", ")
     val verb = if (authSources.size == 1) "needs" else "need"
-    return "$names $verb account setup. Connect or refresh the account in Settings > Accounts."
+    return "$names $verb account setup. Connect or refresh the account, or add its API key, in Settings > Sites."
 }
+
+/** The first added site that refused this identity, whose API key field can fix it. */
+internal fun List<SourceRunStatus>.siteNeedingKey(): SourceKey? =
+    firstOrNull { it.requiresAccount() && it.source.isCustom }?.source
+
+/** A failed search on an added site: the site's own words, then what to do about them. */
+internal fun siteKeyFailureMessage(providerMessage: String, statuses: List<SourceRunStatus>): String =
+    listOfNotNull(providerMessage.takeIf(String::isNotBlank), buildSourceAuthErrorMessage(statuses)).joinToString("\n")
 
 internal fun buildSourceFailureMessage(statuses: List<SourceRunStatus>): String? {
     val failures = statuses.filter { status ->

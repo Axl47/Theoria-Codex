@@ -88,7 +88,10 @@ private fun AddStageControls(form: SiteForm.Add, onAction: (CustomSitesAction) -
             )
             Button(onClick = { onAction(CustomSitesAction.Probe) }) { Text("Check again") }
         }
-        is AddStage.Confirm -> ConfirmSection(form, stage.probe.family, stage.message, saving = false, onAction)
+        is AddStage.Confirm -> {
+            if (form.showCredentials && form.fields.apiKey.isBlank() && !stage.probe.credentialsRequired) AnnouncedText(CONFIRM_KEY_HINT)
+            ConfirmSection(form, stage.probe.family, stage.message, saving = false, onAction)
+        }
         is AddStage.Saving -> ConfirmSection(form, stage.probe.family, null, saving = true, onAction)
         is AddStage.Reconnect -> ConfirmSection(form, stage.probe.family, null, saving = true, onAction)
     }
@@ -152,8 +155,8 @@ internal fun EditSitePage(
         }
         SettingsGroup(null) {
             FormColumn {
-                // Opens by itself only when the site can't work without keys.
-                ExpandableSection("API key", initiallyExpanded = site.availability == CustomSiteAvailability.NEEDS_CREDENTIALS) {
+                // Opens by itself when the site can't work without keys, or the person was sent here to enter them.
+                ExpandableSection("API key", initiallyExpanded = form.expandKeys || site.availability == CustomSiteAvailability.NEEDS_CREDENTIALS) {
                     EditCredentials(form, site.family, editable, onAction)
                 }
                 AdvancedHeaders(form.fields, editable, onAction)

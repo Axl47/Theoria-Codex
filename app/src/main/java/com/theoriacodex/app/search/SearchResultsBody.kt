@@ -67,21 +67,19 @@ internal fun ColumnScope.SearchResultsBody(
         if (scope is SearchSourceScope.Single) emptyList() else sourceOutageNotices(state.content.statuses, issues)
     }
     SourceOutageNotices(outageNotices)
-    state.pageFailure?.let { SearchFailureSurface(it, retrySearch) }
+    state.pageFailure?.let { SearchFailureSurface(it, state.content.statuses, retrySearch) }
     // Results show the pull indicator instead; this keeps refreshes of an emptied feed visible.
     if (state.retainsResultsWhileRefreshing && feed.related.projection.entries.isEmpty()) SearchRefreshProgress()
     when {
         state.loading && !state.retainsResultsWhileRefreshing -> FeedLoadingState(modifier = tapToClearFocus.fillMaxWidth())
         state.content.error != null && state.pageFailure == null -> {
-            SearchFailureSurface(requireNotNull(state.content.error), retrySearch, tapToClearFocus)
+            SearchFailureSurface(requireNotNull(state.content.error), state.content.statuses, retrySearch, tapToClearFocus)
         }
         feed.related.projection.entries.isEmpty() -> Box(modifier = tapToClearFocus) {
             SearchEmptyResults(state, feed, pageDemand, sourceAuthErrorMessage, outageNotices, retrySearch)
         }
         else -> Column(modifier = tapToClearFocus, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            sourceAuthErrorMessage?.let { authMessage ->
-                ErrorBlock(title = "Source account required", message = authMessage)
-            }
+            sourceAuthErrorMessage?.let { SourceAccountNotice(it, state.content.statuses) }
             PullToRefreshBox(
                 isRefreshing = state.retainsResultsWhileRefreshing && !state.execution.showingPartialResults,
                 onRefresh = retrySearch,
@@ -108,9 +106,7 @@ private fun SearchEmptyResults(
     }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         FeedContinueLoading(pageDemand)
-        sourceAuthErrorMessage?.let { authMessage ->
-            ErrorBlock(title = "Source account required", message = authMessage)
-        }
+        sourceAuthErrorMessage?.let { SourceAccountNotice(it, state.content.statuses) }
         sourceFailureMessage?.let { failureMessage -> ErrorBlock(message = failureMessage, onRetry = onRetry) }
         if (feed.durationMetadata.readiness.isResolving) {
             EmptyBlock(hasPendingChanges = false, messageOverride = "Resolving durations…")
