@@ -102,7 +102,9 @@ class SiteProberTest {
     fun `a good key on an open site leaves the site usable without keys`() = runTest {
         val result = SiteProber(SiteFamilyRegistry.default(), danbooruSite(anonymous = null)).probe("booru.example", GOOD_KEYS)
 
-        assertEquals(false, (result as SiteProbeResult.Supported).credentialsRequired)
+        result as SiteProbeResult.Supported
+        assertEquals(false, result.credentialsRequired)
+        assertEquals("the guest limit, which still holds without the key", 4, result.searchTermLimit)
     }
 
     @Test
@@ -235,7 +237,7 @@ class SiteProberTest {
                     SourceHttpResponse(401, """{"success":false,"error":"SessionLoader::AuthenticationFailure","message":"Invalid API key"}""")
                 key == null && anonymous != null && url.endsWith(".json") -> anonymous
                 url.endsWith("/counts/posts.json") -> SourceHttpResponse(200, """{"counts":{"posts":3}}""")
-                url.endsWith("/profile.json") -> SourceHttpResponse(200, """{"tag_query_limit":4}""")
+                url.endsWith("/profile.json") -> SourceHttpResponse(200, """{"tag_query_limit":${if (key == null) 4 else 12}}""")
                 url.endsWith("/posts.json") -> SourceHttpResponse(200, "[]")
                 else -> SourceHttpResponse(404, "")
             }

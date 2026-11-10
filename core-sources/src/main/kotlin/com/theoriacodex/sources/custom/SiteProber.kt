@@ -85,8 +85,10 @@ class SiteProber(
         for (family in registry.families.sortedBy { it.family != knownFamily }) {
             when (val result = family.probe(address, keyed)) {
                 is FamilyProbe.Match -> {
-                    val required = knownFamily == null && family.probe(address, anonymous).refusesAnonymousUse()
-                    return supported(address, anonymous, family.family, result, keyed = required)
+                    val withoutKeys = if (knownFamily == null) family.probe(address, anonymous) else null
+                    // An open site keeps its guest limits, which still hold if the key is later removed.
+                    val match = withoutKeys as? FamilyProbe.Match ?: result
+                    return supported(address, anonymous, family.family, match, keyed = withoutKeys?.refusesAnonymousUse() == true)
                 }
                 FamilyProbe.NoMatch -> Unit
                 is FamilyProbe.Failed -> failure = failure ?: result.reason
