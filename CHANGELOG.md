@@ -20,6 +20,9 @@
 
 ### Added
 
+- Share or download your Codex stats as a file across any of your profiles, leaving out any profile, Codex or post first, and the totals are recalculated to match.
+- Compare your Codex stats with a file a friend sent you, including top posts you can open in the Viewer.
+- Settings has a Diagnostics report that shares or downloads recent crashes and errors as a file, with web addresses and account details removed.
 - Posts in a Codex's Top posts list in Stats now open in the Viewer when you tap them.
 - When a site refuses your account in search, a re-test or a shared link, a button takes you straight to that site's API key field.
 - A site that needed a browser check shows its API key fields before you add it.

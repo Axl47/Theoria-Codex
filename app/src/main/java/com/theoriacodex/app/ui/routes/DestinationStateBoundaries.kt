@@ -39,7 +39,9 @@ import com.theoriacodex.app.di.SourceDependencies
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsScreen
+import com.theoriacodex.app.settings.SettingsDiagnosticsEntry
 import com.theoriacodex.app.settings.SettingsSitesEntry
+import com.theoriacodex.app.settings.StatsActions
 import com.theoriacodex.app.settings.SettingsViewModel
 import com.theoriacodex.app.source.creatorBrowsingSources
 import com.theoriacodex.app.ui.findActivity
@@ -400,7 +402,8 @@ internal fun SettingsDestinationStateBoundary(
     searchOwner: SearchRouteOwnerHandle?,
     storageSummary: String? = null,
     sites: SettingsSitesEntry? = null,
-    onOpenStatisticsPost: suspend (PostId) -> Unit = {},
+    statsActions: StatsActions = StatsActions(),
+    diagnostics: SettingsDiagnosticsEntry? = null,
     storageTools: (@Composable () -> Unit)? = null,
 ) {
     val state = owner.state.collectAsStateWithLifecycle()
@@ -413,7 +416,7 @@ internal fun SettingsDestinationStateBoundary(
         SettingsScreen(
             state = it, onAction = owner::onAction, statistics = statistics.value,
             searchSources = selectedSources.intersect(it.availableSources.toSet()),
-            storageSummary = storageSummary, sites = sites, onOpenStatisticsPost = onOpenStatisticsPost,
+            storageSummary = storageSummary, sites = sites, statsActions = statsActions, diagnostics = diagnostics,
             storageTools = storageTools,
         )
     }

@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -32,6 +33,7 @@ import com.theoriacodex.app.ui.routes.RecentsDestinationStateBoundary
 import com.theoriacodex.app.ui.routes.SearchRoute
 import com.theoriacodex.app.ui.routes.SearchRouteCallbacks
 import com.theoriacodex.app.ui.routes.SearchRouteConfig
+import com.theoriacodex.app.settings.StatsActions
 import com.theoriacodex.app.ui.routes.SettingsDestinationStateBoundary
 import com.theoriacodex.app.viewer.ViewerRelatedBinding
 import com.theoriacodex.app.viewer.ViewerSession
@@ -62,7 +64,10 @@ internal fun HomePager(shell: TheoriaShell) {
                 SettingsDestinationStateBoundary(
                     shell.owners.settings, shell.routes.searchOwner, libraryStorageSummary(shell.transfers),
                     sites = rememberCustomSitesEntry(shell.container),
-                    onOpenStatisticsPost = shell::openStatisticsPost,
+                    statsActions = remember(shell) {
+                        StatsActions(shell::openStatisticsPost, shell::shareStats, shell::readStatsFile, shell.data.codexRepository::getPost, shell::downloadStats)
+                    },
+                    diagnostics = shell.diagnosticsEntry,
                 ) {
                     LibraryTransferSettings(shell.transfers)
                 }

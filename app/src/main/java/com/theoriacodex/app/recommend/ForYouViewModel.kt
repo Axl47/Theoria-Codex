@@ -423,6 +423,7 @@ internal class ForYouViewModel(
                 throw error
             } catch (error: Throwable) {
                 val message = error.message ?: "Could not load recommendations"
+                com.theoriacodex.domain.diagnostics.Diagnostics.report("for-you", "Recommendations failed to load", error)
                 if (identity.kind == ForYouRequestKind.REFRESH) {
                     onAction(ForYouAction.RefreshFailed(identity, message))
                 } else {

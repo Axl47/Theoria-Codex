@@ -231,6 +231,18 @@
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
+-keepclassmembers class com.theoriacodex.app.statistics.StatsShareFile {
+    <init>();
+    @com.google.gson.annotations.SerializedName <fields>;
+}
+-keepclassmembers class com.theoriacodex.app.statistics.StatsShareCodex {
+    <init>();
+    @com.google.gson.annotations.SerializedName <fields>;
+}
+-keepclassmembers class com.theoriacodex.app.statistics.StatsSharePost {
+    <init>();
+    @com.google.gson.annotations.SerializedName <fields>;
+}
 -keepclassmembers class com.theoriacodex.app.codex.CodexShareFile {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;

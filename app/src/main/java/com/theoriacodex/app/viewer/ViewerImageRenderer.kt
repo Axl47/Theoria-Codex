@@ -127,7 +127,10 @@ private class ViewerImageState {
         }
         loading = false
         if (!visible && index < count - 1) index += 1
-        else if (!visible) events.onError(error.message ?: "Could not load image")
+        else if (!visible) {
+            com.theoriacodex.domain.diagnostics.Diagnostics.report("viewer-image", "${post.id.source.id} image failed to load", error)
+            events.onError(error.message ?: "Could not load image")
+        }
     }
 }
 

@@ -218,6 +218,7 @@ internal class AppShellViewModel @JvmOverloads constructor(
     }
 
     private suspend fun failUpdate(message: String) {
+        com.theoriacodex.domain.diagnostics.Diagnostics.report("update", "Update failed: $message")
         event(StartupUpdateWorkflowEvent.Failed(message))
         delay(1_200)
         event(StartupUpdateWorkflowEvent.ContinuedToApp())

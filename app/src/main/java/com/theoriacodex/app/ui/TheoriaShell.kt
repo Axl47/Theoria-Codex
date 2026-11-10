@@ -45,8 +45,11 @@ import com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID
 import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.app.codex.transfer.CodexExportResult
 import com.theoriacodex.app.codex.transfer.CodexImportViewModel
-import com.theoriacodex.app.codex.transfer.readCodexDocument
-import com.theoriacodex.app.codex.transfer.writeCodexDocument
+import com.theoriacodex.app.codex.CODEX_SHARE_MAX_BYTES
+import com.theoriacodex.app.codex.transfer.ExportDocument
+import com.theoriacodex.app.codex.transfer.readBoundedTextDocument
+import com.theoriacodex.app.codex.transfer.saveExportToDownloads
+import com.theoriacodex.app.codex.transfer.writeExportDocument
 import com.theoriacodex.app.creator.CreatorFollowsViewModel
 import com.theoriacodex.app.creator.CreatorOpeningWorkflow
 import com.theoriacodex.app.creator.state.CreatorAction
@@ -65,6 +68,12 @@ import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsViewModel
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.parseExternalCreatorDeepLink
+import com.theoriacodex.app.TheoriaApplication
+import com.theoriacodex.app.settings.SettingsDiagnosticsEntry
+import com.theoriacodex.app.statistics.STATS_SHARE_MAX_BYTES
+import com.theoriacodex.app.statistics.StatsShareFile
+import com.theoriacodex.app.statistics.encodeStatsShare
+import com.theoriacodex.app.statistics.parseStatsShare
 import com.theoriacodex.app.statistics.statisticsPostKey
 import com.theoriacodex.app.source.SharedPostFix
 import com.theoriacodex.app.source.parseCustomSitePostDeepLink
@@ -92,6 +101,7 @@ import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.app.tags.PostTagSearchActions
 import com.theoriacodex.domain.model.Post
@@ -100,6 +110,8 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -313,7 +325,9 @@ private fun rememberShellOwners(container: TheoriaAppContainer, appContext: Cont
             initializer {
                 CodexImportViewModel(
                     transfer = workflows.codexTransfer,
-                    readDocument = { document -> readCodexDocument { appContext.contentResolver.openInputStream(document.toUri()) } },
+                    readDocument = { document ->
+                        readBoundedTextDocument(CODEX_SHARE_MAX_BYTES) { appContext.contentResolver.openInputStream(document.toUri()) }
+                    },
                     newTargetCodexId = { profileScopedCodexId(data.currentActiveRecommendationProfile().profileId) },
                 )
             }
@@ -539,25 +553,67 @@ internal class TheoriaShell(
             toast(if (export is CodexExportResult.NotFound) "Codex not found" else "Could not export codex")
             return
         }
-        val payload = export.payload
+        if (!shareExportDocument(export.payload, "application/json", "Share codex")) toast("Could not export codex")
+    }
+
+    suspend fun shareStats(file: StatsShareFile) {
+        if (!shareExportDocument(statsDocument(file), "application/json", "Share stats")) toast("Could not share stats")
+    }
+
+    suspend fun downloadStats(file: StatsShareFile) = downloadExportDocument(statsDocument(file), "application/json")
+
+    private fun statsDocument(file: StatsShareFile) = ExportDocument("Theoria stats", "theoria-stats.json", encodeStatsShare(file))
+
+    /** Reads a stats file someone sent, or explains why it can't be compared. */
+    suspend fun readStatsFile(document: String): StatsShareFile? {
+        val file = runCatchingPreservingCancellation {
+            readBoundedTextDocument(STATS_SHARE_MAX_BYTES) { appContext.contentResolver.openInputStream(document.toUri()) }
+                ?.let { raw -> withContext(Dispatchers.Default) { parseStatsShare(raw) } }
+        }.onFailure { Diagnostics.report("stats-share", "Could not read a stats file", it) }.getOrNull()
+        if (file == null) toast("That isn't a Theoria stats file")
+        return file
+    }
+
+    private suspend fun shareDiagnosticsReport(report: String) {
+        if (!shareExportDocument(diagnosticsDocument(report), "text/plain", "Share diagnostics")) toast("Could not share the report")
+    }
+
+    private fun diagnosticsDocument(report: String) = ExportDocument("Theoria diagnostics", "theoria-diagnostics.txt", report)
+
+    private suspend fun downloadExportDocument(document: ExportDocument, mimeType: String) {
+        runCatchingPreservingCancellation { saveExportToDownloads(appContext.contentResolver, document, mimeType) }
+            .onSuccess { toast("Saved to Downloads/TheoriaCodex") }
+            .onFailure {
+                Diagnostics.report("share", "Could not save a file to Downloads", it)
+                toast("Could not save the file")
+            }
+    }
+
+    private suspend fun shareExportDocument(document: ExportDocument, mimeType: String, chooserTitle: String): Boolean {
         val exportsDirectory = data.storageDirectory.resolve("exports")
-        runCatchingPreservingCancellation {
-            val exportFile = writeCodexDocument(exportsDirectory, payload)
+        return runCatchingPreservingCancellation {
+            val exportFile = writeExportDocument(exportsDirectory, document)
             val contentUri = FileProvider.getUriForFile(appContext, "${appContext.packageName}.fileprovider", exportFile)
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                type = "application/json"
+                type = mimeType
                 putExtra(Intent.EXTRA_STREAM, contentUri)
-                putExtra(Intent.EXTRA_SUBJECT, payload.title)
-                clipData = ClipData.newRawUri("codex_export", contentUri)
+                putExtra(Intent.EXTRA_SUBJECT, document.title)
+                clipData = ClipData.newRawUri(document.fileName, contentUri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            val chooser = Intent.createChooser(shareIntent, "Share codex").apply {
+            val chooser = Intent.createChooser(shareIntent, chooserTitle).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             appContext.startActivity(chooser)
-        }.onFailure {
-            toast("Could not export codex")
-        }
+        }.onFailure { Diagnostics.report("share", "Could not open the share sheet", it) }.isSuccess
+    }
+
+    /** Absent when the host application keeps no diagnostics, as in fixture graphs without [TheoriaApplication]. */
+    val diagnosticsEntry: SettingsDiagnosticsEntry? = (appContext as? TheoriaApplication)?.diagnosticReporter?.let { reporter ->
+        SettingsDiagnosticsEntry(
+            reporter::build, ::shareDiagnosticsReport,
+            { report -> downloadExportDocument(diagnosticsDocument(report), "text/plain") }, reporter::clear,
+        )
     }
 
     suspend fun completeAppStartup() {

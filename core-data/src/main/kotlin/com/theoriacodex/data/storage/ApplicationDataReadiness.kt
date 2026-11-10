@@ -79,6 +79,7 @@ class ApplicationDataReadiness<T>(
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (failure: Throwable) {
+                com.theoriacodex.domain.diagnostics.Diagnostics.report("startup", "Saved data could not be opened", failure)
                 mutableState.value = ApplicationDataState.Failed(failure)
                 AttemptResult.Failure(failure)
             }

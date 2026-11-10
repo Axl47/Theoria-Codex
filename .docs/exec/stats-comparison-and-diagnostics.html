@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stats Comparison and Diagnostics</title>
+<style>
+body { font: 16px/1.5 system-ui, sans-serif; margin: 0 auto; max-width: 980px; padding: 16px; color: #1c2430; background: #fff; }
+nav { position: sticky; top: 0; background: #eef2f7; padding: 8px 12px; border-radius: 8px; font-size: 14px; }
+nav a { margin-right: 12px; }
+h2 { margin-top: 32px; border-bottom: 1px solid #d5dce6; padding-bottom: 4px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+td, th { border: 1px solid #d5dce6; padding: 6px 8px; text-align: left; vertical-align: top; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
+.card { border: 1px solid #d5dce6; border-radius: 8px; padding: 10px; font-size: 14px; }
+.risk { border-left: 4px solid #b3541e; padding: 6px 12px; background: #fbf1ea; }
+code, pre { font-family: ui-monospace, monospace; font-size: 13px; }
+pre { background: #f4f6f9; padding: 10px; overflow-x: auto; }
+@media (prefers-color-scheme: dark) { body { color: #e4e9f0; background: #151a21; } nav, pre { background: #222a35; } td, th, .card, h2 { border-color: #3a4554; } .risk { background: #33261c; } }
+</style>
+</head>
+<body>
+<h1>Stats Comparison and Diagnostics</h1>
+<p>Status: <strong>validating</strong>. Started and implemented 2026-11-10 on <code>feat/stats-comparison-and-diagnostics</code>. Two people can compare Codex stats by exchanging a file, and anyone can send a redacted diagnostics report, with no server involved.</p>
+<nav><a href="#purpose">Purpose</a><a href="#context">Context</a><a href="#phases">Phases</a><a href="#work">Work Plan</a><a href="#validation">Validation</a><a href="#progress">Progress</a><a href="#surprises">Surprises</a><a href="#decisions">Decisions</a><a href="#outcomes">Outcomes</a><a href="#recovery">Recovery</a></nav>
+
+<h2 id="status">Current Status</h2>
+<div class="cards">
+<div class="card"><strong>State</strong><br>Implemented and committed on the branch.</div>
+<div class="card"><strong>Next action</strong><br>Pick a real stats file on a device, then open a PR.</div>
+<div class="card"><strong>Risk</strong><br>The report leaves the device, so redaction is the safety boundary.</div>
+<div class="card"><strong>Unverified</strong><br>The system file picker did not respond to automated taps on the emulator.</div>
+</div>
+
+<h2 id="purpose">Purpose / Big Picture</h2>
+<p>In Settings &gt; Your stats, <em>Share my stats</em> opens a preview where a person unchecks any Codex or post. The totals are recalculated and the result is sent as a JSON file. <em>Compare with a friend</em> opens such a file and shows both people's time and open counts, each Codex side by side, and their top posts, which open in the Viewer.</p>
+<p>Settings &gt; Diagnostics report shows a redacted plain-text report of crashes, Android exit reasons, recorded failures and the app's system log. The person chooses its sections and shares it as a file.</p>
+
+<h2 id="context">Context And Orientation</h2>
+<table>
+<tr><th>Term or file</th><th>Meaning</th></tr>
+<tr><td>Codex</td><td>A user collection of posts. Saved, Followed and Saved Searches appear in stats as Codices too.</td></tr>
+<tr><td>Post key</td><td><code>source:sourcePostId</code>, produced by <code>statisticsPostKey</code> and read by <code>decodeViewerPostId</code>.</td></tr>
+<tr><td><code>app/src/main/java/com/theoriacodex/app/statistics/StatsShare.kt</code></td><td>File format, leave-out rules, validation of received files, and the comparison.</td></tr>
+<tr><td><code>app/src/main/java/com/theoriacodex/app/settings/StatsSharePreview.kt</code>, <code>StatsComparisonScreen.kt</code>, <code>DiagnosticsPage.kt</code></td><td>The three new pages.</td></tr>
+<tr><td><code>core-domain/src/main/kotlin/com/theoriacodex/domain/diagnostics/Diagnostics.kt</code></td><td><code>Diagnostics.report</code>, callable from any module, and <code>DiagnosticRedaction</code>.</td></tr>
+<tr><td><code>app/src/main/java/com/theoriacodex/app/diagnostics/</code></td><td><code>DiagnosticLogStore</code> (bounded redacted files, crash capture) and <code>DiagnosticReporter</code> (report assembly).</td></tr>
+<tr><td><code>TheoriaShell</code></td><td>App-level coordinator. Owns the Viewer launch and the share sheet.</td></tr>
+</table>
+<p>Constraints: stats exchange must stay local files, because likes and follows are local actions and no remote service is allowed. Received files are untrusted. JSON classes must be listed in <code>app/proguard-rules.pro</code> and <code>app/src/test/resources/r8-json-contracts.txt</code>.</p>
+
+<h2 id="phases">Phases</h2>
+<table>
+<tr><th>Phase</th><th>Goal</th><th>Acceptance</th></tr>
+<tr><td>1. File and rules</td><td>Build, validate and compare share files.</td><td><code>StatsShareTest</code> passes.</td></tr>
+<tr><td>2. Stats pages</td><td>Preview and comparison reachable from Stats.</td><td><code>StatsScreenTest</code> and <code>StatsTopPostJourneyTest</code> pass.</td></tr>
+<tr><td>3. Diagnostics</td><td>Permanent bounded log, crash capture, report page.</td><td>A forced crash appears in the report after relaunch.</td></tr>
+</table>
+
+<h2 id="work">Work Plan</h2>
+<ol>
+<li>Expose every recorded post on <code>CodexStatisticsSummary.posts</code>, so a leave-out can rerank without a new data path.</li>
+<li>Add <code>StatsShare.kt</code>, its R8 rules and tests.</li>
+<li>Generalize Codex export into <code>ExportDocument</code>, <code>writeExportDocument</code> and <code>readBoundedTextDocument</code>, with one <code>shareExportDocument</code> in the shell.</li>
+<li>Add the pages and route them through <code>StatsActions</code> and <code>SettingsDiagnosticsEntry</code>.</li>
+<li>Start diagnostics first in <code>TheoriaApplication.onCreate</code>, main process only.</li>
+<li>Report from failure points: HTTP terminal failures, source failures, For You, feed and Viewer playback, Viewer images, update failures, data-open failures, Codex transfer.</li>
+<li>Exclude <code>theoria_codex/diagnostics/</code> and <code>exports/</code> from Android backups.</li>
+</ol>
+
+<h2 id="validation">Validation And Acceptance</h2>
+<pre><code>./gradlew :core-domain:test --offline --tests 'com.theoriacodex.domain.diagnostics.*'
+./gradlew :app:testDebugUnitTest --offline --tests 'com.theoriacodex.app.statistics.StatsShareTest' \
+  --tests 'com.theoriacodex.app.diagnostics.*' --tests 'com.theoriacodex.app.settings.StatsScreenTest'
+scripts/check.sh --record   # before a PR</code></pre>
+<p>Device runs use the <code>theoria-search-test</code> emulator and verified isolated APKs. JDK 21 or newer is required. Manual remaining check: send a stats file to a second device, open <em>Compare with a friend</em>, pick it, and confirm the comparison appears.</p>
+
+<h2 id="progress">Progress</h2>
+<ul>
+<li>[x] 2026-11-10 File format, leave-out rules, validation and comparison.</li>
+<li>[x] 2026-11-10 Preview and comparison pages.</li>
+<li>[x] 2026-11-10 Diagnostics store, crash capture, report page and failure reporting.</li>
+<li>[x] 2026-11-10 Unit tests, Stats journeys, forced-crash device check, share sheet device check.</li>
+<li>[ ] Pick a stats file through the system picker on a device.</li>
+</ul>
+
+<h2 id="surprises">Surprises And Discoveries</h2>
+<ul>
+<li>The app had almost no logging: four main-source files use <code>android.util.Log</code>, and most failures are converted to UI state. A log alone would have been nearly empty, so failure points report explicitly.</li>
+<li>Android's <code>ApplicationExitInfo</code> already records exit reasons and freeze traces, so those need no capture code.</li>
+<li>The report's actions sat below a long scrolling preview, so they moved above it.</li>
+<li>Automated taps on the emulator's DocumentsUI file rows did not pick the file, in grid or list view.</li>
+</ul>
+
+<h2 id="decisions">Decision Log</h2>
+<table>
+<tr><th>Decision</th><th>Rationale</th></tr>
+<tr><td>The comparison is held in memory only.</td><td>Another person's numbers must never mix into local statistics. It survives a Viewer visit because it lives in <code>SettingsViewModel</code>.</td></tr>
+<tr><td>Leaving out a post subtracts its opens and viewing time and promotes the next post.</td><td>The user asked that the stats change accordingly, and nothing should reveal a removal.</td></tr>
+<tr><td>Codices pair by name.</td><td>Ids are private to each library and are never exported.</td></tr>
+<tr><td>Logs were built in this pass.</td><td>User decision on 2026-11-10: missing logs cost more later than building them now.</td></tr>
+<tr><td>Redaction happens before disk and again on the report.</td><td>Stored files never hold secrets, and system-log text gets the same treatment.</td></tr>
+<tr><td>Share and Compare are rows under Your stats on Settings home.</td><td>User asked for them at the top level on 2026-11-10; a separate hub page would only add a tap.</td></tr>
+<tr><td>The post picker is a Stats-style list: the row opens the Viewer and a separate checkbox decides sharing.</td><td>User needed to inspect posts before leaving them out. Reuses the Top posts row.</td></tr>
+<tr><td>Sharing spans every recommendation profile, starting with only the active one included.</td><td>User asked for profile tabs with bulk selection on 2026-11-10. Another profile may be private, so it needs a deliberate tap. The comparison's own side covers every profile.</td></tr>
+<tr><td>Download writes straight to Downloads/TheoriaCodex.</td><td>Needs no permission on supported Android versions and no extra picker step.</td></tr>
+<tr><td>Failure messages name the action, never the file.</td><td>Export file names come from Codex names, and redaction cannot recognize those.</td></tr>
+<tr><td>One commit for both features.</td><td>They share the same shell and Settings wiring, so a split commit would not build.</td></tr>
+</table>
+
+<h2 id="outcomes">Outcomes And Retrospective</h2>
+<p>Both features work in the running app apart from the unverified picker step. A forced crash appeared in the report with its stack after relaunch. Future failure points should call <code>Diagnostics.report</code> with text that names what failed and never includes browsing content.</p>
+
+<h2 id="recovery">Idempotence And Recovery</h2>
+<p>All commands can be rerun. No migration exists: the new files appear on demand, and deleting <code>theoria_codex/diagnostics/</code> is safe. Use Settings &gt; Diagnostics report &gt; Delete saved logs to clear them. Device checks must restore any acceptance APK they replace.</p>
+<div class="risk">Never test on <code>com.theoriacodex</code>. Use logs and accessibility text instead of screenshots where provider media can appear.</div>
+</body>
+</html>

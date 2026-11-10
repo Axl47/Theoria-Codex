@@ -13,6 +13,7 @@ import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -25,14 +26,15 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withTimeoutOrNull
 import com.theoriacodex.domain.model.Post
 
-data class CodexExportPayload(
+/** A finished file waiting to be handed to the system share sheet. */
+data class ExportDocument(
     val title: String,
     val fileName: String,
-    val json: String,
+    val text: String,
 )
 
 sealed interface CodexExportResult {
-    data class Success(val payload: CodexExportPayload) : CodexExportResult
+    data class Success(val payload: ExportDocument) : CodexExportResult
     data object NotFound : CodexExportResult
     data object Failure : CodexExportResult
 }
@@ -69,17 +71,19 @@ class CodexTransferService internal constructor(
     private val canonicalizePost: (Post) -> Post = { it },
 ) {
     suspend fun export(codexId: String): CodexExportResult = withContext(workerDispatcher) {
-        runCatchingPreservingCancellation { exportInside(codexId) }.getOrDefault(CodexExportResult.Failure)
+        runCatchingPreservingCancellation { exportInside(codexId) }
+            .onFailure { Diagnostics.report("codex-transfer", "Codex export failed", it) }
+            .getOrDefault(CodexExportResult.Failure)
     }
 
     private suspend fun exportInside(codexId: String): CodexExportResult {
         val codex = codexRepository.observeCodex(codexId).first() ?: return CodexExportResult.NotFound
         val posts = codexRepository.observeCodexPosts(codexId, CodexSortMode.NEWEST_SAVED).first()
         return CodexExportResult.Success(
-            CodexExportPayload(
+            ExportDocument(
                 title = codex.name,
                 fileName = "${sanitizeCodexExportName(codex.name)}.json",
-                json = gson.toJson(buildCodexShareFile(title = codex.name, posts = posts)),
+                text = gson.toJson(buildCodexShareFile(title = codex.name, posts = posts)),
             )
         )
     }
@@ -89,7 +93,9 @@ class CodexTransferService internal constructor(
         targetCodexId: String,
         onProgress: (CodexImportProgress) -> Unit = {},
     ): CodexImportResult = withContext(workerDispatcher) {
-        runCatchingPreservingCancellation { importInside(raw, targetCodexId, onProgress) }.getOrDefault(CodexImportResult.Failure)
+        runCatchingPreservingCancellation { importInside(raw, targetCodexId, onProgress) }
+            .onFailure { Diagnostics.report("codex-transfer", "Codex import failed", it) }
+            .getOrDefault(CodexImportResult.Failure)
     }
 
     private suspend fun importInside(raw: String?, targetCodexId: String, onProgress: (CodexImportProgress) -> Unit): CodexImportResult {

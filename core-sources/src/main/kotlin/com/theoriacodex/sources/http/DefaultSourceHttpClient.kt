@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.net.UnknownHostException
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import java.net.URLEncoder
 import java.net.URL
 import java.util.TreeMap
@@ -61,7 +62,7 @@ class DefaultSourceHttpClient(
         require(maxBodyBytes > 0) { "maxBodyBytes must be positive" }
         val requestUrl = buildUrl(url, query)
         val requestHeaders = headers.withByteRange(range)
-        return executeBytesWithRetry(requestUrl) {
+        return executeReportingFailure(requestUrl) {
             executeRequest(
                 method = "GET",
                 url = requestUrl,
@@ -83,7 +84,7 @@ class DefaultSourceHttpClient(
         } else {
             headers + ("Content-Type" to "application/x-www-form-urlencoded")
         }
-        val response = executeBytesWithRetry(url) {
+        val response = executeReportingFailure(url) {
             executeRequest(
                 method = "POST",
                 url = url,
@@ -105,7 +106,7 @@ class DefaultSourceHttpClient(
         } else {
             headers + ("Content-Type" to "application/json")
         }
-        val response = executeBytesWithRetry(url) {
+        val response = executeReportingFailure(url) {
             executeRequest(
                 method = "POST",
                 url = url,
@@ -161,6 +162,22 @@ class DefaultSourceHttpClient(
             }
         }
         throw IllegalStateException("Unexpected HTTP retry state", lastError)
+    }
+
+    /** Records only the outcome after retries, so a request that recovers leaves nothing in the log. */
+    private suspend fun executeReportingFailure(
+        requestUrl: String,
+        block: suspend () -> SourceByteResponse,
+    ): SourceByteResponse {
+        val host = HostOutageTracker.hostKey(requestUrl) ?: "unknown host"
+        return try {
+            executeBytesWithRetry(requestUrl, block).also { response ->
+                if (response.statusCode >= 400) Diagnostics.report("http", "$host: HTTP ${response.statusCode}")
+            }
+        } catch (error: IOException) {
+            Diagnostics.report("http", "$host: request failed", error)
+            throw error
+        }
     }
 
     private suspend fun executeRequest(

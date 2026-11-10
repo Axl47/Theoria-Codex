@@ -49,6 +49,9 @@ data class CodexStatisticsSummary(
     val topOpened: List<CodexPostStatistic>,
     val topVideos: List<CodexPostStatistic>,
     val topImages: List<CodexPostStatistic>,
+    /** Every recorded post, which is what lets a shared copy leave one out and rerank the rest. */
+    val posts: Map<String, CodexPostStatistics> = emptyMap(),
+    val thumbnails: Map<String, String> = emptyMap(),
 )
 
 data class CodexPostStatistic(
@@ -71,9 +74,17 @@ data class DailyStatistic(
     val searchCount: Long = 0L,
 )
 
+/** One recommendation profile's Codices, for the surfaces that span every profile. */
+data class ProfileStatistics(
+    val profileId: String,
+    val name: String,
+    val codices: List<CodexStatisticsSummary>,
+)
+
 data class StatisticsSummary(
     val history: List<DailyStatistic> = emptyList(),
     val codices: List<CodexStatisticsSummary> = emptyList(),
+    val profiles: List<ProfileStatistics> = emptyList(),
     val appOpenCount: Long = 0L,
     val totalForegroundMs: Long = 0L,
     val browsingMs: Long = 0L,
@@ -246,6 +257,8 @@ fun codexStatistics(lifetime: LifetimeStatistics, codices: List<Codex>): List<Co
             codexPostRows(stats.posts, lifetime.thumbnails) { it.opens },
             codexPostRows(stats.posts, lifetime.thumbnails) { it.videoMs },
             codexPostRows(stats.posts, lifetime.thumbnails) { it.imageMs },
+            stats.posts,
+            lifetime.thumbnails,
         )
     }.sortedWith(compareByDescending<CodexStatisticsSummary> { it.watchingMs }
         .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }.thenBy { it.codexId })

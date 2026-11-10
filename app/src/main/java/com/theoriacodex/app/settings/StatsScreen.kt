@@ -47,6 +47,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -66,12 +67,12 @@ import java.time.LocalDate
 import kotlinx.coroutines.launch
 
 // Validated against the Theoria surface with the dataviz palette checks (lightness, CVD, contrast).
-private val BrowsingColor = Color(0xFF5A99DD)
-private val WatchingColor = Color(0xFFCC689C)
+internal val BrowsingColor = Color(0xFF5A99DD)
+internal val WatchingColor = Color(0xFFCC689C)
 private val CodexColor = Color(0xFFA58C3A)
 private val OtherColor = Color(0xFF6F7A8C)
 
-private data class TimeSegment(val label: String, val ms: Long, val color: Color)
+internal data class TimeSegment(val label: String, val ms: Long, val color: Color)
 
 private enum class PostSourceView(val label: String) { WATCHED("Watched"), SAVED("Saved") }
 private enum class TagView(val label: String) { WATCHED("Watched"), SAVED("Saved") }
@@ -79,7 +80,7 @@ private enum class CodexPostView(val label: String) { OPENED("Opened"), VIDEOS("
 
 /** Lifetime totals and daily trends. A selected Codex replaces the list until Back. */
 @Composable
-internal fun StatsScreen(statistics: StatisticsSummary, onOpenPost: suspend (PostId) -> Unit, onBack: () -> Unit) {
+internal fun StatsScreen(statistics: StatisticsSummary, onOpenPost: (PostId) -> Unit, onBack: () -> Unit) {
     var selectedCodexId by rememberSaveable { mutableStateOf<String?>(null) }
     val selected = statistics.codices.firstOrNull { it.codexId == selectedCodexId }
     if (selected != null) {
@@ -87,6 +88,19 @@ internal fun StatsScreen(statistics: StatisticsSummary, onOpenPost: suspend (Pos
         CodexStatsDetail(selected, onOpenPost) { selectedCodexId = null }
     } else {
         StatsOverview(statistics, onBack) { selectedCodexId = it }
+    }
+}
+
+/** A source lookup can take a moment; one post opens at a time so a second tap cannot stack Viewers. */
+@Composable
+internal fun rememberPostOpener(openPost: suspend (PostId) -> Unit): (PostId) -> Unit {
+    val scope = rememberCoroutineScope()
+    var opening by remember { mutableStateOf(false) }
+    return { postId ->
+        if (!opening) {
+            opening = true
+            scope.launch { try { openPost(postId) } finally { opening = false } }
+        }
     }
 }
 
@@ -253,17 +267,8 @@ private fun CodicesSection(codices: List<CodexStatisticsSummary>, onOpen: (Strin
 }
 
 @Composable
-private fun CodexStatsDetail(codex: CodexStatisticsSummary, onOpenPost: suspend (PostId) -> Unit, onBack: () -> Unit) {
+private fun CodexStatsDetail(codex: CodexStatisticsSummary, onOpenPost: (PostId) -> Unit, onBack: () -> Unit) {
     var view by rememberSaveable(codex.codexId) { mutableStateOf(CodexPostView.OPENED) }
-    val scope = rememberCoroutineScope()
-    // A source lookup can take a moment; one post opens at a time so a second tap cannot stack Viewers.
-    var opening by remember { mutableStateOf(false) }
-    val open = { postId: PostId ->
-        if (!opening) {
-            opening = true
-            scope.launch { try { onOpenPost(postId) } finally { opening = false } }
-        }
-    }
     SettingsPageColumn {
         SettingsHeader(codex.name, onBack, SETTINGS_PATH + "Stats")
         StatsCard {
@@ -286,30 +291,52 @@ private fun CodexStatsDetail(codex: CodexStatisticsSummary, onOpenPost: suspend 
                 CodexPostView.IMAGES -> codex.topImages
             }
             if (rows.isEmpty()) StatsCaption("No activity yet.")
-            rows.forEach { row -> TopPostRow(row, duration = view != CodexPostView.OPENED, open) }
+            rows.forEach { row -> TopPostRow(row, duration = view != CodexPostView.OPENED, onOpenPost) }
         }
     }
 }
 
-/** Opens the post in the Viewer. Promoted posts carry a local thumbnail; posts without one yet stay label-only. */
+/** Promoted posts carry a local thumbnail; posts without one yet stay label-only. */
 @Composable
 private fun TopPostRow(row: CodexPostStatistic, duration: Boolean, onOpen: (PostId) -> Unit) {
     val amount = if (duration) formatStatsDuration(row.value) else row.value.toString()
-    val postId = remember(row.key) { decodeViewerPostId(row.key) }
-    Row(
-        Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).clip(RoundedCornerShape(10.dp))
-            .clickable(enabled = postId != null, role = Role.Button, onClickLabel = "Open post") { postId?.let(onOpen) },
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        row.thumbnail?.let { path ->
-            AsyncImage(
-                model = File(path), contentDescription = null, contentScale = ContentScale.Crop,
-                modifier = Modifier.size(44.dp).clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-            )
+    StatsPostRow(row.key, row.label, "${row.percentage}% · $amount", row.percentage, row.thumbnail?.let(::File), onOpen = onOpen)
+}
+
+/**
+ * One ranked post: thumbnail, label and share bar, which open it in the Viewer. [trailing] sits outside that target,
+ * so it can hold its own control. [reserveThumbnail] keeps labels aligned in a list where thumbnails arrive later.
+ */
+@Composable
+internal fun StatsPostRow(
+    postKey: String,
+    label: String,
+    value: String,
+    percentage: Int,
+    thumbnail: Any?,
+    reserveThumbnail: Boolean = false,
+    onOpen: (PostId) -> Unit,
+    trailing: @Composable () -> Unit = {},
+) {
+    val postId = remember(postKey) { decodeViewerPostId(postKey) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.weight(1f).sizeIn(minHeight = 48.dp).clip(RoundedCornerShape(10.dp))
+                .clickable(enabled = postId != null, role = Role.Button, onClickLabel = "Open post") { postId?.let(onOpen) },
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (thumbnail != null || reserveThumbnail) {
+                AsyncImage(
+                    model = thumbnail, contentDescription = null, contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(44.dp).clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .then(if (thumbnail != null) Modifier.testTag("stats-post-thumbnail:$postKey") else Modifier),
+                )
+            }
+            Box(Modifier.weight(1f)) { StatBar(label, value, percentage) }
         }
-        Box(Modifier.weight(1f)) { StatBar(row.label, "${row.percentage}% · $amount", row.percentage) }
+        trailing()
     }
 }
 
@@ -338,7 +365,7 @@ private fun StatBar(label: String, value: String, percentage: Int) {
 }
 
 @Composable
-private fun TimeSplit(segments: List<TimeSegment>) {
+internal fun TimeSplit(segments: List<TimeSegment>) {
     val visible = segments.filter { it.ms > 0L }
     if (visible.isEmpty()) return
     Row(Modifier.fillMaxWidth().height(12.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -359,7 +386,7 @@ private fun TimeSplit(segments: List<TimeSegment>) {
 }
 
 @Composable
-private fun StatTiles(vararg tiles: Pair<String, Long>) {
+internal fun StatTiles(vararg tiles: Pair<String, Long>) {
     val locale = LocalConfiguration.current.locales[0]
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         tiles.toList().chunked(2).forEach { row ->
@@ -378,7 +405,7 @@ private fun StatTiles(vararg tiles: Pair<String, Long>) {
 }
 
 @Composable
-private fun <T> StatsSegments(options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit) {
+internal fun <T> StatsSegments(options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit) {
     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
         options.forEachIndexed { index, option ->
             SegmentedButton(
@@ -393,19 +420,19 @@ private fun <T> StatsSegments(options: List<T>, selected: T, label: (T) -> Strin
 }
 
 @Composable
-private fun StatsCard(content: @Composable ColumnScope.() -> Unit) {
+internal fun StatsCard(content: @Composable ColumnScope.() -> Unit) {
     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
     }
 }
 
 @Composable
-private fun StatsHeadline(text: String) {
+internal fun StatsHeadline(text: String) {
     Text(text, style = MaterialTheme.typography.displaySmall)
 }
 
 @Composable
-private fun StatsSectionTitle(text: String) {
+internal fun StatsSectionTitle(text: String) {
     Text(
         text,
         modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
@@ -415,6 +442,6 @@ private fun StatsSectionTitle(text: String) {
 }
 
 @Composable
-private fun StatsCaption(text: String) {
+internal fun StatsCaption(text: String) {
     Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }

@@ -1,6 +1,8 @@
 package com.theoriacodex.app.settings
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.animation.AnimatedContent
 import com.theoriacodex.app.ui.motion.depthTransform
 import androidx.compose.foundation.horizontalScroll
@@ -19,6 +21,9 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
+import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Tune
@@ -33,6 +38,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.videoQualityLabel
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.statistics.StatisticsSummary
+import com.theoriacodex.app.statistics.allProfileCodices
 import com.theoriacodex.app.ui.components.ActionMenuRow
 import com.theoriacodex.app.ui.components.NameEntryDialog
 import com.theoriacodex.data.repository.RecommendationProfile
@@ -51,8 +58,8 @@ import com.theoriacodex.app.ui.components.ActionMenuSheet
 import com.theoriacodex.data.repository.ScenarioPreset
 import com.theoriacodex.data.repository.SourceWeightSettings
 import com.theoriacodex.data.storage.CorruptionRecovery
-import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.launch
 
 private enum class SettingsSheet { PROFILE, SOURCE_MIX, PLAYBACK, CONTROLS }
 
@@ -65,10 +72,16 @@ fun SettingsScreen(
     searchSources: Set<SourceKey> = emptySet(),
     storageSummary: String? = null,
     sites: SettingsSitesEntry? = null,
-    onOpenStatisticsPost: suspend (PostId) -> Unit = {},
+    statsActions: StatsActions = StatsActions(),
+    diagnostics: SettingsDiagnosticsEntry? = null,
     storageTools: (@Composable () -> Unit)? = null,
 ) {
     val openHome = { onAction(SettingsAction.OpenPage(SettingsPage.HOME)) }
+    val openPost = rememberPostOpener(statsActions.openPost)
+    val scope = rememberCoroutineScope()
+    val chooseStatsFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch { statsActions.readFile(uri.toString())?.let { onAction(SettingsAction.SetStatsComparison(it)) } }
+    }
     BackHandler(enabled = state.page != SettingsPage.HOME, onBack = openHome)
     AnimatedContent(
         targetState = state.page,
@@ -76,7 +89,9 @@ fun SettingsScreen(
         label = "Settings page",
     ) { page ->
         when (page) {
-            SettingsPage.HOME -> SettingsHome(state, statistics, onAction, searchSources, storageSummary, sites)
+            SettingsPage.HOME -> SettingsHome(state, statistics, onAction, searchSources, storageSummary, sites, diagnostics != null) {
+                chooseStatsFile.launch(arrayOf("application/json", "application/octet-stream", "text/plain"))
+            }
             SettingsPage.SITES -> sites?.page?.invoke(
                 openHome,
                 BuiltInAccounts(
@@ -86,7 +101,14 @@ fun SettingsScreen(
             )
             SettingsPage.HIDDEN_TAGS -> HiddenTagsPage(state, onAction, openHome)
             SettingsPage.STORAGE -> StoragePage(state, onAction, storageTools, openHome)
-            SettingsPage.STATS -> StatsScreen(statistics, onOpenStatisticsPost, openHome)
+            SettingsPage.STATS -> StatsScreen(statistics, openPost, openHome)
+            SettingsPage.STATS_SHARE -> StatsSharePreview(statistics.profiles, state.activeProfile.profileId, statsActions, openPost, openHome)
+            SettingsPage.STATS_COMPARE -> state.statsComparison?.let { theirs ->
+                val close = { onAction(SettingsAction.SetStatsComparison(null)) }
+                BackHandler(onBack = close)
+                StatsComparisonScreen(allProfileCodices(statistics.profiles), theirs, state.availableSources, openPost, close)
+            }
+            SettingsPage.DIAGNOSTICS -> diagnostics?.let { DiagnosticsPage(it, openHome) }
         }
     }
     ProfileDeleteDialog(state, onAction)
@@ -100,6 +122,8 @@ private fun SettingsHome(
     searchSources: Set<SourceKey>,
     storageSummary: String?,
     sites: SettingsSitesEntry?,
+    showDiagnostics: Boolean,
+    onCompareStats: () -> Unit,
 ) {
     var sheet by rememberSaveable { mutableStateOf<SettingsSheet?>(null) }
     var showAddProfile by remember { mutableStateOf(false) }
@@ -112,8 +136,14 @@ private fun SettingsHome(
             SettingsRow("Your stats", statsSummary(statistics), Icons.Default.BarChart, onClick = {
                 open(SettingsPage.STATS)
             })
+            SettingsRowDivider()
+            SettingsRow("Share my stats", "Choose what to include and send it as a file", Icons.Default.Share, onClick = {
+                open(SettingsPage.STATS_SHARE)
+            })
+            SettingsRowDivider()
+            SettingsRow("Compare with a friend", "Open a stats file someone sent you", Icons.AutoMirrored.Filled.CompareArrows, onClick = onCompareStats)
         }
-        SettingsHomeGroups(state, onAction, searchSources, storageSummary, sites, { sheet = it }, open)
+        SettingsHomeGroups(state, onAction, searchSources, storageSummary, sites, showDiagnostics, { sheet = it }, open)
         if (state.showDeveloperScenarios) DeveloperScenarios(state, onAction)
     }
     if (showAddProfile) {
@@ -150,6 +180,7 @@ private fun SettingsHomeGroups(
     searchSources: Set<SourceKey>,
     storageSummary: String?,
     sites: SettingsSitesEntry?,
+    showDiagnostics: Boolean,
     onSheet: (SettingsSheet) -> Unit,
     open: (SettingsPage) -> Unit,
 ) {
@@ -196,6 +227,15 @@ private fun SettingsHomeGroups(
             enabled = !state.changelogLoading,
             onClick = { onAction(SettingsAction.OpenChangelog) },
         )
+        if (showDiagnostics) {
+            SettingsRowDivider()
+            SettingsRow(
+                "Diagnostics report",
+                "Share recent errors to help fix a problem",
+                Icons.Default.BugReport,
+                onClick = { open(SettingsPage.DIAGNOSTICS) },
+            )
+        }
     }
 }
 

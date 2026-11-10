@@ -32,6 +32,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -183,7 +184,10 @@ internal class SettingsViewModel(
         statisticsRepository = dependencies.statisticsRepository,
         codexRepository = dependencies.codexRepository,
         appUsageTracker = dependencies.appUsageTracker,
-    ).observe(dependencies.settingsRepository.observeSettings().map { settings -> settings.activeProfileId })
+    ).observe(
+        dependencies.settingsRepository.observeSettings().map { settings -> settings.activeProfileId },
+        dependencies.settingsRepository.observeSettings().map { settings -> settings.recommendationProfiles }.distinctUntilChanged(),
+    )
         .stateIn(ownerScope, SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000), StatisticsSummary())
 
     init {
@@ -243,6 +247,9 @@ internal class SettingsViewModel(
     private fun handleProfileAction(action: SettingsAction): Boolean {
         when (action) {
             is SettingsAction.OpenPage -> updateState { copy(page = action.page) }
+            is SettingsAction.SetStatsComparison -> updateState {
+                copy(statsComparison = action.file, page = if (action.file != null) SettingsPage.STATS_COMPARE else SettingsPage.HOME)
+            }
             is SettingsAction.SetActiveProfile -> launchMutation {
                 check(!dependencies.profileMutations.isRemoving(action.profileId)) { "This profile is being removed" }
                 dependencies.settingsRepository.setActiveProfile(action.profileId)

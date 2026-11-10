@@ -13,6 +13,10 @@ import com.theoriacodex.app.customsites.SiteCookieBridge
 import com.theoriacodex.app.di.DefaultTheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
+import com.theoriacodex.app.diagnostics.DiagnosticLogStore
+import com.theoriacodex.app.diagnostics.DiagnosticReporter
+import com.theoriacodex.app.diagnostics.installCrashCapture
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.app.media.AnimatedWebPDecoder
 import com.theoriacodex.app.media.UndecodableImageEviction
 import com.theoriacodex.app.network.AppHttpClients
@@ -51,8 +55,13 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
     override val appContainerState: StateFlow<ApplicationDataState<TheoriaAppContainer>>
         get() = readiness.state
 
+    /** Null outside the main process, which alone owns the log files. */
+    internal var diagnosticReporter: DiagnosticReporter? = null
+        private set
+
     override fun onCreate() {
         super.onCreate()
+        if (getProcessName() == packageName) startDiagnostics()
         readiness = ApplicationDataReadiness(
             applicationScope = applicationScope,
             initializationDispatcher = Dispatchers.IO,
@@ -71,6 +80,14 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
             processName = getProcessName(),
             start = ::startAppContainer,
         )
+    }
+
+    private fun startDiagnostics() {
+        val store = DiagnosticLogStore(filesDir.resolve("theoria_codex/diagnostics"))
+        Diagnostics.install(store)
+        installCrashCapture(store)
+        diagnosticReporter = DiagnosticReporter(this, store)
+        Diagnostics.report("app", "Started ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
     }
 
     override fun startAppContainer() = readiness.start()
