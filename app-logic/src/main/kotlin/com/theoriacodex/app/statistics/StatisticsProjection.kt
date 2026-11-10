@@ -51,6 +51,7 @@ data class CodexStatisticsSummary(
     val topImages: List<CodexPostStatistic>,
     /** Every recorded post, which is what lets a shared copy leave one out and rerank the rest. */
     val posts: Map<String, CodexPostStatistics> = emptyMap(),
+    val thumbnails: Map<String, String> = emptyMap(),
 )
 
 data class CodexPostStatistic(
@@ -249,6 +250,7 @@ fun codexStatistics(lifetime: LifetimeStatistics, codices: List<Codex>): List<Co
             codexPostRows(stats.posts, lifetime.thumbnails) { it.videoMs },
             codexPostRows(stats.posts, lifetime.thumbnails) { it.imageMs },
             stats.posts,
+            lifetime.thumbnails,
         )
     }.sortedWith(compareByDescending<CodexStatisticsSummary> { it.watchingMs }
         .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }.thenBy { it.codexId })

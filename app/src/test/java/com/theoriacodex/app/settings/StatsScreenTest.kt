@@ -17,6 +17,7 @@ import com.theoriacodex.app.statistics.StatisticsSummary
 import com.theoriacodex.app.statistics.StatsShareCodex
 import com.theoriacodex.app.statistics.StatsShareFile
 import com.theoriacodex.app.statistics.StatsSharePost
+import com.theoriacodex.data.repository.CodexPostStatistics
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
@@ -52,16 +53,29 @@ class StatsScreenTest {
     }
 
     @Test
-    fun `leaving a Codex out of a share removes it from what they will see`() {
+    fun `a post can be inspected without changing what is shared and unchecked separately`() {
         val shared = mutableListOf<StatsShareFile>()
-        show(StatisticsSummary(codices = listOf(codex("a", "Landscapes", 3_600_000L), codex("b", "Portraits", 60_000L))),
-            StatsActions(share = { shared += it }))
-        compose.onNodeWithText("Share my stats").performClick()
+        val opened = mutableListOf<PostId>()
+        val posts = mapOf("GELBOORU:1" to CodexPostStatistics("First", opens = 5L), "GELBOORU:2" to CodexPostStatistics("Second", opens = 3L))
+        val codices = listOf(codex("a", "Landscapes", 3_600_000L, posts), codex("b", "Portraits", 60_000L))
+        compose.setContent {
+            MaterialTheme { StatsSharePreview(codices, { shared += it }, { null }, { opened += it }, onBack = {}) }
+        }
         compose.onNodeWithText("Landscapes").performScrollTo().performClick()
+
+        compose.onNodeWithText("First").performClick()
+        compose.waitUntil(5_000) { opened.isNotEmpty() }
+        assertEquals(listOf(PostId(SourceKey.GELBOORU, "1")), opened)
+
+        compose.onNodeWithContentDescription("Include First").performClick()
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.onNodeWithContentDescription("Include Portraits").performScrollTo().performClick()
         compose.onNodeWithText("Share file").performScrollTo().performClick()
         compose.waitUntil(5_000) { shared.isNotEmpty() }
 
-        assertEquals(listOf("Portraits"), shared.single().codices.orEmpty().map { it?.name })
+        val codex = shared.single().codices.orEmpty().single()
+        assertEquals("Landscapes", codex?.name)
+        assertEquals(listOf("GELBOORU:2"), codex?.posts.orEmpty().map { it?.key })
     }
 
     @Test
@@ -71,30 +85,24 @@ class StatsScreenTest {
             StatsSharePost(key = "GELBOORU:7", label = "Ready post", opens = 4L),
             StatsSharePost(key = "PIXIV:9", label = "Missing site post", opens = 2L),
         ))))
-        show(StatisticsSummary(), StatsActions(openPost = { opened += it }), theirs, setOf(SourceKey.GELBOORU))
+        compose.setContent {
+            MaterialTheme { StatsComparisonScreen(emptyList(), theirs, setOf(SourceKey.GELBOORU), { opened += it }, onBack = {}) }
+        }
         compose.onNodeWithText("You vs Sam", substring = true).assertExists()
-        compose.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(hasText("Theirs"))
-        compose.onNodeWithText("Theirs").performClick()
-        compose.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(hasText("Missing site post"))
+        compose.onNodeWithText("Theirs").performScrollTo().performClick()
 
-        compose.onNodeWithText("Missing site post").performClick()
+        compose.onNodeWithText("Missing site post").performScrollTo().performClick()
         compose.onNodeWithText("This site isn't set up here").assertExists()
-        compose.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(hasText("Ready post"))
-        compose.onNodeWithText("Ready post").performClick()
+        compose.onNodeWithText("Ready post").performScrollTo().performClick()
         compose.waitUntil(5_000) { opened.isNotEmpty() }
 
         assertEquals(listOf(PostId(SourceKey.GELBOORU, "7")), opened)
     }
 
-    private fun codex(id: String, name: String, watchingMs: Long) =
-        CodexStatisticsSummary(id, name, 1L, 0L, watchingMs, 0L, emptyList(), emptyList(), emptyList())
+    private fun codex(id: String, name: String, watchingMs: Long, posts: Map<String, CodexPostStatistics> = emptyMap()) =
+        CodexStatisticsSummary(id, name, 1L, 0L, watchingMs, 0L, emptyList(), emptyList(), emptyList(), posts)
 
-    private fun show(
-        statistics: StatisticsSummary,
-        actions: StatsActions = StatsActions(),
-        comparison: StatsShareFile? = null,
-        sources: Set<SourceKey> = emptySet(),
-    ) {
-        compose.setContent { MaterialTheme { StatsScreen(statistics, actions, comparison, sources, {}, onBack = {}) } }
+    private fun show(statistics: StatisticsSummary) {
+        compose.setContent { MaterialTheme { StatsScreen(statistics, onOpenPost = {}, onBack = {}) } }
     }
 }

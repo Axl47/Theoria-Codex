@@ -1,8 +1,6 @@
 package com.theoriacodex.app.settings
 
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,9 +23,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CompareArrows
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.LinearProgressIndicator
@@ -52,6 +47,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -63,22 +59,20 @@ import com.theoriacodex.app.statistics.CodexPostStatistic
 import com.theoriacodex.app.statistics.CodexStatisticsSummary
 import com.theoriacodex.app.statistics.SourceStatistic
 import com.theoriacodex.app.statistics.StatisticsSummary
-import com.theoriacodex.app.statistics.StatsShareFile
 import com.theoriacodex.app.statistics.TagStatistic
 import com.theoriacodex.app.viewer.decodeViewerPostId
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.SourceKey
 import java.io.File
 import java.time.LocalDate
 import kotlinx.coroutines.launch
 
 // Validated against the Theoria surface with the dataviz palette checks (lightness, CVD, contrast).
-private val BrowsingColor = Color(0xFF5A99DD)
-private val WatchingColor = Color(0xFFCC689C)
+internal val BrowsingColor = Color(0xFF5A99DD)
+internal val WatchingColor = Color(0xFFCC689C)
 private val CodexColor = Color(0xFFA58C3A)
 private val OtherColor = Color(0xFF6F7A8C)
 
-private data class TimeSegment(val label: String, val ms: Long, val color: Color)
+internal data class TimeSegment(val label: String, val ms: Long, val color: Color)
 
 private enum class PostSourceView(val label: String) { WATCHED("Watched"), SAVED("Saved") }
 private enum class TagView(val label: String) { WATCHED("Watched"), SAVED("Saved") }
@@ -86,45 +80,20 @@ private enum class CodexPostView(val label: String) { OPENED("Opened"), VIDEOS("
 
 /** Lifetime totals and daily trends. A selected Codex replaces the list until Back. */
 @Composable
-internal fun StatsScreen(
-    statistics: StatisticsSummary,
-    actions: StatsActions,
-    comparison: StatsShareFile?,
-    availableSources: Collection<SourceKey>,
-    onComparisonChange: (StatsShareFile?) -> Unit,
-    onBack: () -> Unit,
-) {
+internal fun StatsScreen(statistics: StatisticsSummary, onOpenPost: (PostId) -> Unit, onBack: () -> Unit) {
     var selectedCodexId by rememberSaveable { mutableStateOf<String?>(null) }
-    var sharing by rememberSaveable { mutableStateOf(false) }
     val selected = statistics.codices.firstOrNull { it.codexId == selectedCodexId }
-    val openPost = rememberPostOpener(actions.openPost)
-    val scope = rememberCoroutineScope()
-    val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) scope.launch { actions.readFile(uri.toString())?.let(onComparisonChange) }
-    }
-    when {
-        comparison != null -> {
-            BackHandler { onComparisonChange(null) }
-            StatsComparisonScreen(statistics.codices, comparison, availableSources, openPost) { onComparisonChange(null) }
-        }
-        sharing -> {
-            BackHandler { sharing = false }
-            StatsSharePreview(statistics.codices, actions.share) { sharing = false }
-        }
-        selected != null -> {
-            BackHandler { selectedCodexId = null }
-            CodexStatsDetail(selected, openPost) { selectedCodexId = null }
-        }
-        else -> StatsOverview(
-            statistics, onBack, { selectedCodexId = it }, { sharing = true },
-            { pickFile.launch(arrayOf("application/json", "application/octet-stream", "text/plain")) },
-        )
+    if (selected != null) {
+        BackHandler { selectedCodexId = null }
+        CodexStatsDetail(selected, onOpenPost) { selectedCodexId = null }
+    } else {
+        StatsOverview(statistics, onBack) { selectedCodexId = it }
     }
 }
 
 /** A source lookup can take a moment; one post opens at a time so a second tap cannot stack Viewers. */
 @Composable
-private fun rememberPostOpener(openPost: suspend (PostId) -> Unit): (PostId) -> Unit {
+internal fun rememberPostOpener(openPost: suspend (PostId) -> Unit): (PostId) -> Unit {
     val scope = rememberCoroutineScope()
     var opening by remember { mutableStateOf(false) }
     return { postId ->
@@ -136,13 +105,7 @@ private fun rememberPostOpener(openPost: suspend (PostId) -> Unit): (PostId) -> 
 }
 
 @Composable
-private fun StatsOverview(
-    statistics: StatisticsSummary,
-    onBack: () -> Unit,
-    onOpenCodex: (String) -> Unit,
-    onShare: () -> Unit,
-    onCompare: () -> Unit,
-) {
+private fun StatsOverview(statistics: StatisticsSummary, onBack: () -> Unit, onOpenCodex: (String) -> Unit) {
     val list = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val sections = listOf<Pair<String, @Composable () -> Unit>>(
@@ -152,7 +115,7 @@ private fun StatsOverview(
         "Tags" to { TagsSection(statistics) },
         "Codices" to { CodicesSection(statistics.codices, onOpenCodex) },
     )
-    val firstSectionIndex = 3
+    val firstSectionIndex = 2
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
             state = list,
@@ -161,13 +124,6 @@ private fun StatsOverview(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item(key = "header") { SettingsHeader("Stats", onBack, SETTINGS_PATH) }
-            item(key = "compare") {
-                SettingsGroup(null) {
-                    SettingsRow("Share my stats", "Choose what to include and send it as a file", Icons.Default.Share, onClick = onShare)
-                    SettingsRowDivider()
-                    SettingsRow("Compare with a friend", "Open a stats file someone sent you", Icons.Default.CompareArrows, onClick = onCompare)
-                }
-            }
             item(key = "chips") {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     itemsIndexed(sections) { index, (label, _) ->
@@ -340,25 +296,47 @@ private fun CodexStatsDetail(codex: CodexStatisticsSummary, onOpenPost: (PostId)
     }
 }
 
-/** Opens the post in the Viewer. Promoted posts carry a local thumbnail; posts without one yet stay label-only. */
+/** Promoted posts carry a local thumbnail; posts without one yet stay label-only. */
 @Composable
 private fun TopPostRow(row: CodexPostStatistic, duration: Boolean, onOpen: (PostId) -> Unit) {
     val amount = if (duration) formatStatsDuration(row.value) else row.value.toString()
-    val postId = remember(row.key) { decodeViewerPostId(row.key) }
-    Row(
-        Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).clip(RoundedCornerShape(10.dp))
-            .clickable(enabled = postId != null, role = Role.Button, onClickLabel = "Open post") { postId?.let(onOpen) },
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        row.thumbnail?.let { path ->
-            AsyncImage(
-                model = File(path), contentDescription = null, contentScale = ContentScale.Crop,
-                modifier = Modifier.size(44.dp).clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-            )
+    StatsPostRow(row.key, row.label, "${row.percentage}% · $amount", row.percentage, row.thumbnail?.let(::File), onOpen = onOpen)
+}
+
+/**
+ * One ranked post: thumbnail, label and share bar, which open it in the Viewer. [trailing] sits outside that target,
+ * so it can hold its own control. [reserveThumbnail] keeps labels aligned in a list where thumbnails arrive later.
+ */
+@Composable
+internal fun StatsPostRow(
+    postKey: String,
+    label: String,
+    value: String,
+    percentage: Int,
+    thumbnail: Any?,
+    reserveThumbnail: Boolean = false,
+    onOpen: (PostId) -> Unit,
+    trailing: @Composable () -> Unit = {},
+) {
+    val postId = remember(postKey) { decodeViewerPostId(postKey) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.weight(1f).sizeIn(minHeight = 48.dp).clip(RoundedCornerShape(10.dp))
+                .clickable(enabled = postId != null, role = Role.Button, onClickLabel = "Open post") { postId?.let(onOpen) },
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (thumbnail != null || reserveThumbnail) {
+                AsyncImage(
+                    model = thumbnail, contentDescription = null, contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(44.dp).clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .then(if (thumbnail != null) Modifier.testTag("stats-post-thumbnail:$postKey") else Modifier),
+                )
+            }
+            Box(Modifier.weight(1f)) { StatBar(label, value, percentage) }
         }
-        Box(Modifier.weight(1f)) { StatBar(row.label, "${row.percentage}% · $amount", row.percentage) }
+        trailing()
     }
 }
 
@@ -387,7 +365,7 @@ private fun StatBar(label: String, value: String, percentage: Int) {
 }
 
 @Composable
-private fun TimeSplit(segments: List<TimeSegment>) {
+internal fun TimeSplit(segments: List<TimeSegment>) {
     val visible = segments.filter { it.ms > 0L }
     if (visible.isEmpty()) return
     Row(Modifier.fillMaxWidth().height(12.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -408,7 +386,7 @@ private fun TimeSplit(segments: List<TimeSegment>) {
 }
 
 @Composable
-private fun StatTiles(vararg tiles: Pair<String, Long>) {
+internal fun StatTiles(vararg tiles: Pair<String, Long>) {
     val locale = LocalConfiguration.current.locales[0]
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         tiles.toList().chunked(2).forEach { row ->
@@ -449,7 +427,7 @@ internal fun StatsCard(content: @Composable ColumnScope.() -> Unit) {
 }
 
 @Composable
-private fun StatsHeadline(text: String) {
+internal fun StatsHeadline(text: String) {
     Text(text, style = MaterialTheme.typography.displaySmall)
 }
 

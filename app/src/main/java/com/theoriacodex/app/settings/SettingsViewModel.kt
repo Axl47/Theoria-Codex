@@ -243,7 +243,9 @@ internal class SettingsViewModel(
     private fun handleProfileAction(action: SettingsAction): Boolean {
         when (action) {
             is SettingsAction.OpenPage -> updateState { copy(page = action.page) }
-            is SettingsAction.SetStatsComparison -> updateState { copy(statsComparison = action.file) }
+            is SettingsAction.SetStatsComparison -> updateState {
+                copy(statsComparison = action.file, page = if (action.file != null) SettingsPage.STATS_COMPARE else SettingsPage.HOME)
+            }
             is SettingsAction.SetActiveProfile -> launchMutation {
                 check(!dependencies.profileMutations.isRemoving(action.profileId)) { "This profile is being removed" }
                 dependencies.settingsRepository.setActiveProfile(action.profileId)

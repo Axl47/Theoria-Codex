@@ -44,7 +44,7 @@ internal fun StatsComparisonScreen(
     val theirName = theirs.name ?: "Them"
     var view by rememberSaveable { mutableStateOf(ComparedPostView.BOTH) }
     SettingsPageColumn {
-        SettingsHeader("You vs $theirName", onBack, SETTINGS_PATH + "Stats")
+        SettingsHeader("You vs $theirName", onBack, SETTINGS_PATH)
         StatsCard {
             ComparedValue("Time watching", comparison.yours.watchingMs, comparison.theirs.watchingMs, theirName, ::formatStatsDuration)
             ComparedValue("Time browsing", comparison.yours.browsingMs, comparison.theirs.browsingMs, theirName, ::formatStatsDuration)

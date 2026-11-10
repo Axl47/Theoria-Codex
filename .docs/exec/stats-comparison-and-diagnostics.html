@@ -100,6 +100,8 @@ scripts/check.sh --record   # before a PR</code></pre>
 <tr><td>Codices pair by name.</td><td>Ids are private to each library and are never exported.</td></tr>
 <tr><td>Logs were built in this pass.</td><td>User decision on 2026-11-10: missing logs cost more later than building them now.</td></tr>
 <tr><td>Redaction happens before disk and again on the report.</td><td>Stored files never hold secrets, and system-log text gets the same treatment.</td></tr>
+<tr><td>Share and Compare are rows under Your stats on Settings home.</td><td>User asked for them at the top level on 2026-11-10; a separate hub page would only add a tap.</td></tr>
+<tr><td>The post picker is a Stats-style list: the row opens the Viewer and a separate checkbox decides sharing.</td><td>User needed to inspect posts before leaving them out. Reuses the Top posts row.</td></tr>
 <tr><td>One commit for both features.</td><td>They share the same shell and Settings wiring, so a split commit would not build.</td></tr>
 </table>
 

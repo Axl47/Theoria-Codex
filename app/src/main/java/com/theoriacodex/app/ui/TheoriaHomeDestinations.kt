@@ -65,7 +65,7 @@ internal fun HomePager(shell: TheoriaShell) {
                     shell.owners.settings, shell.routes.searchOwner, libraryStorageSummary(shell.transfers),
                     sites = rememberCustomSitesEntry(shell.container),
                     statsActions = remember(shell) {
-                        StatsActions(shell::openStatisticsPost, shell::shareStats, shell::readStatsFile)
+                        StatsActions(shell::openStatisticsPost, shell::shareStats, shell::readStatsFile, shell.data.codexRepository::getPost)
                     },
                     diagnostics = shell.diagnosticsEntry,
                 ) {

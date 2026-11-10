@@ -9,11 +9,12 @@ import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.ScenarioPreset
 import com.theoriacodex.data.storage.CorruptionRecovery
+import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 
 /** Pages inside the Settings tab; held by the owner so other screens can open Sites directly. */
-enum class SettingsPage { HOME, SITES, HIDDEN_TAGS, STORAGE, STATS, DIAGNOSTICS }
+enum class SettingsPage { HOME, SITES, HIDDEN_TAGS, STORAGE, STATS, STATS_SHARE, STATS_COMPARE, DIAGNOSTICS }
 
 /**
  * What Sites shows of the accounts Settings owns: a built-in source's status line (null when it has no
@@ -30,6 +31,7 @@ class StatsActions(
     val openPost: suspend (PostId) -> Unit = {},
     val share: suspend (StatsShareFile) -> Unit = {},
     val readFile: suspend (document: String) -> StatsShareFile? = { null },
+    val storedPost: suspend (PostId) -> Post? = { null },
 )
 
 class SettingsDiagnosticsEntry(

@@ -1,12 +1,15 @@
 package com.theoriacodex.app.settings
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -20,7 +23,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.diagnostics.DiagnosticSection
@@ -49,9 +54,9 @@ internal fun DiagnosticsPage(entry: SettingsDiagnosticsEntry, onBack: () -> Unit
         )
         StatsCard {
             DiagnosticSection.entries.forEach { section ->
-                ShareCheckRow(section.label, section.summary, section in sections, { included ->
+                DiagnosticSectionRow(section, section in sections) { included ->
                     sections = if (included) sections + section else sections - section
-                })
+                }
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -86,6 +91,22 @@ internal fun DiagnosticsPage(entry: SettingsDiagnosticsEntry, onBack: () -> Unit
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = FontFamily.Monospace,
             )
+        }
+    }
+}
+
+@Composable
+private fun DiagnosticSectionRow(section: DiagnosticSection, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 48.dp)
+            .toggleable(value = checked, role = Role.Checkbox, onValueChange = onCheckedChange),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(checked = checked, onCheckedChange = null)
+        Column(Modifier.weight(1f)) {
+            Text(section.label, style = MaterialTheme.typography.bodyMedium)
+            StatsCaption(section.summary)
         }
     }
 }
