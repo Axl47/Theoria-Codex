@@ -69,6 +69,9 @@ internal class SiteCookieBridge(private val store: BrowserCookieStore) {
     private var builtInAgents: Map<String, String> = emptyMap()
 
     @Volatile
+    private var mediaAuthorizations: Map<String, String> = emptyMap()
+
+    @Volatile
     private var setupHost: String? = null
 
     /** The hosts of every saved custom site. */
@@ -87,6 +90,20 @@ internal class SiteCookieBridge(private val store: BrowserCookieStore) {
         if (agents.isEmpty()) return null
         val host = runCatching { URI(url).host }.getOrNull() ?: return null
         return agents.entries.firstOrNull { (site, _) -> HostOutageTracker.hostBelongsToSite(host, site) }?.value
+    }
+
+    /** The `Authorization` value of each saved site whose API accepts its key that way, by host. */
+    fun updateMediaAuthorizations(byHost: Map<String, String>) {
+        mediaAuthorizations = byHost.mapKeys { (host, _) -> HostOutageTracker.normalizeHost(host) }
+    }
+
+    /** The value a media request to [url] may offer: HTTPS only, and only on the site's own hosts. */
+    fun mediaAuthorizationFor(url: String): String? {
+        val byHost = mediaAuthorizations
+        if (byHost.isEmpty()) return null
+        val uri = runCatching { URI(url) }.getOrNull()?.takeIf { it.scheme.equals("https", ignoreCase = true) } ?: return null
+        val host = uri.host ?: return null
+        return byHost.entries.firstOrNull { (site, _) -> HostOutageTracker.hostBelongsToSite(host, site) }?.value
     }
 
     /** The site being verified before it is saved, or null once that ends. */

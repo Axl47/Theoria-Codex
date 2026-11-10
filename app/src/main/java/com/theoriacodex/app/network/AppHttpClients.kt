@@ -28,6 +28,7 @@ internal class AppHttpClients(
     private val verifiedUserAgent: (url: String) -> String? = { null },
     /** Hosts whose requests carry a browser identity, which a warm-up's fixed agent would misrepresent. */
     private val sharesBrowserIdentity: (host: String) -> Boolean = { false },
+    private val siteAuthorization: (url: String) -> String? = { null },
 ) {
     private val warmed = AtomicBoolean(false)
 
@@ -53,6 +54,7 @@ internal class AppHttpClients(
                 val agent = verifiedUserAgent(request.url.toString())
                 chain.proceed(if (agent == null) request else request.newBuilder().header("User-Agent", agent).build())
             }
+            .addInterceptor(RefusedMediaKeyRetry(siteAuthorization))
             .build()
     }
 

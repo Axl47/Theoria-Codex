@@ -41,6 +41,7 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
         ),
         siteCookieBridge::userAgentFor,
         siteCookieBridge::isAllowed,
+        siteCookieBridge::mediaAuthorizationFor,
     )
 
     internal val videoPlaybackInfrastructure: VideoPlaybackInfrastructure by lazy {

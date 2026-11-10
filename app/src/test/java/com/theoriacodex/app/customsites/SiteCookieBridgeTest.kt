@@ -103,4 +103,14 @@ class SiteCookieBridgeTest {
         bridge.flush()
         bridge.forget("safebooru.org")
     }
+
+    @Test
+    fun `a media key is offered only over HTTPS on the site's own hosts`() {
+        bridge.updateMediaAuthorizations(mapOf("www.booru.example" to "Basic key"))
+
+        assertEquals("Basic key", bridge.mediaAuthorizationFor("https://booru.example/data/a.jpg"))
+        assertEquals("Basic key", bridge.mediaAuthorizationFor("https://cdn.booru.example/a.jpg"))
+        assertEquals(null, bridge.mediaAuthorizationFor("http://booru.example/a.jpg"))
+        assertEquals(null, bridge.mediaAuthorizationFor("https://notbooru.example/a.jpg"))
+    }
 }
