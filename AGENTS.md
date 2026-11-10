@@ -2,6 +2,8 @@
 
 ## Development Rules
 
+*Before every PR:* commit your work, then run `scripts/check.sh --record` and fix anything it reports before pushing. It runs the same checks as GitHub's Verify, usually in a few minutes, and GitHub reuses the result for that exact code.
+
 Keep Detekt's own `parallel` setting disabled: concurrent Kotlin 2.4 FIR/PSI traversal can hang or report missing declarations. Android Debug analysis receives its module's public `JavaCompile.destinationDirectory` after AGP registers variant tasks, so generated BuildConfig and Room Java types resolve. Run lint after multi-variant coverage/code generation finishes; otherwise lint can read Room-generated Java files while another variant regenerates them. Offline lint retains source checks while avoiding dependency-version network lookups. If a reused daemon reports a Kotlin FIR/UAST internal resolver crash after other analysis/build work, finish code generation and retry lint alone with `./gradlew :app:lintDebug --offline --no-daemon`; the fresh-process lane retains every source check and passed the loading-remediation audit without suppressions.
 
 Robolectric tests need Java 21 or newer because the Android SDK 36 sandbox refuses older JVMs, failing at class setup with `UnsupportedOperationException`. Set `JAVA_HOME` to a compatible JDK before running them; on the Mac, the default JDK is 19 and Homebrew's works: `JAVA_HOME=/opt/homebrew/Cellar/openjdk/26.0.2.1/libexec/openjdk.jdk/Contents/Home`.
@@ -72,5 +74,5 @@ Keep `AGENTS.md` limited to durable product intent, safety boundaries, and accep
 
 - Builds, mocks, and host tests do not establish live provider authentication, hardware playback, PiP, or TalkBack behavior. Performance acceptance requires physical-device measurements, simultaneous-autoplay coverage, and retained complete iteration evidence. Calibration requires three complete runs of the same APK under matching conditions.
 - Use `.codex/skills/theoria-release/SKILL.md` for releases. Approving the version and release notes authorizes the agent to commit the release files straight to `main`, run the Release workflow, and publish.
-- There are two gates. Before opening a PR, run `scripts/check.sh --record` from a clean commit; GitHub then reuses that result for the same code. Release runs emulator acceptance, and creates the tag only after everything passes.
+- There are two gates: the pre-PR check, and the Release workflow. Release runs emulator acceptance, and creates the tag only after everything passes.
 - Emulator tests do not run on PRs. For a risky change, such as a database migration, navigation, or playback, also run `gh workflow run device-validation.yml --ref <branch>`.
