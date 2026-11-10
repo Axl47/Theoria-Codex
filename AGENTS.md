@@ -71,4 +71,6 @@ Keep `AGENTS.md` limited to durable product intent, safety boundaries, and accep
 ## Acceptance and Releases
 
 - Builds, mocks, and host tests do not establish live provider authentication, hardware playback, PiP, or TalkBack behavior. Performance acceptance requires physical-device measurements, simultaneous-autoplay coverage, and retained complete iteration evidence. Calibration requires three complete runs of the same APK under matching conditions.
-- Use `.codex/skills/theoria-release/SKILL.md` for release preparation and publishing. Preparing a release does not authorize creating or pushing its tag; publishing requires a separate explicit instruction.
+- Use `.codex/skills/theoria-release/SKILL.md` for releases. Approving the version and release notes authorizes the agent to commit the release files straight to `main`, run the Release workflow, and publish.
+- There are two gates. Before opening a PR, run `scripts/check.sh --record` from a clean commit; GitHub then reuses that result for the same code. Release runs emulator acceptance, and creates the tag only after everything passes.
+- Emulator tests do not run on PRs. For a risky change, such as a database migration, navigation, or playback, also run `gh workflow run device-validation.yml --ref <branch>`.

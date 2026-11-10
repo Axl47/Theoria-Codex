@@ -39,6 +39,10 @@ export ANDROID_SERIAL="$serial"
 adb_command=("${ADB:-adb}" -s "$serial")
 finite_adb() { run_with_timeout "$probe_timeout" "${adb_command[@]}" "$@"; }
 [[ "$(finite_adb shell getprop ro.kernel.qemu | tr -d '\r')" == 1 ]]
+# Cold boots on CI runners regularly freeze System UI long enough for Android's "isn't responding"
+# dialog, which arrives shortly after this point. It cannot be cancelled and stays on top for the
+# whole run, swallowing system Back and covering screen pixels. App crashes still fail their tests.
+finite_adb shell settings put global hide_error_dialogs 1
 readonly evidence="build/reports/ci-emulator/$owner"
 mkdir -p "$evidence"
 "${adb_command[@]}" logcat -b all -v threadtime > "$evidence/logcat.txt" 2>&1 &

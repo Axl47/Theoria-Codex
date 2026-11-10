@@ -55,7 +55,7 @@ One retained startup owner manages update choices and downloads. Release history
 
 Shipping releases enable R8 and resource shrinking. Durable Gson field names are explicit and every release assembly verifies the optimizer mapping against the checked contract manifest. Checked-in baseline/startup profiles cover cold start and all five top-level destinations. The separate `releaseAcceptance` variant keeps the same optimizer behavior but uses a debug key and updater-disabled package identity for non-debuggable device acceptance.
 
-Main-channel releases are deliberate, not made for every push to `main`. A release commit updates `versionName`, its matching SemVer-derived `versionCode`, and `release-notes/v<major>.<minor>.<patch>.md`; pushing the matching annotated `v<major>.<minor>.<patch>` tag starts `.github/workflows/main-prerelease.yml`. The workflow verifies those three pieces agree, signs the APK, and publishes the checked-in user-facing notes. The Android code uses `1_500_000_000 + major * 10_000 + minor * 100 + patch`, preserving the updater’s existing ordering contract.
+Main-channel releases are deliberate, not made for every push to `main`. A release commit updates `versionName`, its matching SemVer-derived `versionCode`, and `release-notes/v<major>.<minor>.<patch>.md`. Dispatching `.github/workflows/release.yml` on `main` verifies those three pieces agree, runs emulator acceptance, signs the APK, and only then creates the `v<major>.<minor>.<patch>` tag and publishes the checked-in user-facing notes. A failed run creates no tag, so the same version can be retried. The Android code uses `1_500_000_000 + major * 10_000 + minor * 100 + patch`, preserving the updater’s existing ordering contract.
 
 ## Local Development
 
@@ -219,9 +219,11 @@ iterations, metrics, three-run calibration and packaged preflight. The default r
 Raw evidence must remain available through comparison; deleting it afterwards preserves the small
 comparison reports but prevents later trace inspection or independent revalidation of those runs.
 
-Android-related pull requests and main pushes, including `app-logic` changes, run device tests on
-Android 16 and 17 (API 36 and 37), including scheduled/manual runs. Tagged
-releases require both Verify and Device Validation, including isolated minified acceptance. That
+`scripts/check.sh` is the single definition of a verified change. With `--record` it publishes the
+pass under `refs/verified/<tree>`, keyed by the exact code tested, so GitHub's Verify and Release
+reuse it instead of repeating it. Device tests run on Android 16 and 17 (API 36 and 37) in every
+release, weekly, and on request with `gh workflow run device-validation.yml --ref <branch>`,
+including isolated minified acceptance. That
 lane verifies package ID, debuggability and the actual debug signing certificate before install,
 then checks startup/callback and persisted JSON data across two separate process launches.
 Provider-live instrumentation remains opt-in. Viewer OCR and translation have been retired.
