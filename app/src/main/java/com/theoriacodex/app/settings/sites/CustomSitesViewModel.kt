@@ -93,7 +93,7 @@ internal class CustomSitesViewModel(
                 controller.clearSetupRequest()
                 when (request) {
                     is SitesRequest.Add -> {
-                        openForm(SiteForm.Add(address = request.address))
+                        openForm(SiteForm.Add(address = request.address, linkAfterSetup = request.linkAfterSetup))
                         probe()
                     }
                     // A challenged source: open its browser check; completing it saves the agent and shows on the row.
@@ -318,7 +318,8 @@ internal class CustomSitesViewModel(
     }
 
     private fun setAddress(value: String) = updateAdd {
-        if (stage.busy) this else copy(address = value, stage = AddStage.Address())
+        // A different address is a different site, which the waiting link doesn't belong to.
+        if (stage.busy) this else copy(address = value, stage = AddStage.Address(), linkAfterSetup = null)
     }
 
     /** Which field edits invalidate a finished probe, so a draft always matches what was checked. */
@@ -405,6 +406,7 @@ internal class CustomSitesViewModel(
             headers = headers.value,
             includeInUnifiedAndForYou = form.fields.includeInUnifiedAndForYou,
             confirmReconnect = confirmReconnect,
+            linkAfterSetup = form.linkAfterSetup,
         )
         updateAdd { copy(stage = AddStage.Saving(probe)) }
         formJob = scope.launch {

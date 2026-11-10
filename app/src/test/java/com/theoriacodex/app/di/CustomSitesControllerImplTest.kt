@@ -207,6 +207,19 @@ class CustomSitesControllerImplTest {
     }
 
     @Test
+    fun `a link that led to setup is ready once the live source has its keys`() = runTest {
+        val graph = graph()
+        val link = "https://booru.example/index.php?page=post&s=view&id=7"
+
+        graph.controller.add(draft().copy(credentials = SiteCredentials("name", "key"), linkAfterSetup = link))
+
+        assertEquals(link, graph.controller.linkAfterSetup.value)
+        assertTrue(graph.controller.sites.value.single().hasCredentials)
+        graph.controller.clearLinkAfterSetup()
+        assertNull(graph.controller.linkAfterSetup.value)
+    }
+
+    @Test
     fun `adding a site, changing its keys and a passing re-test each lift its down mark`() = runTest {
         val graph = graph()
         val markDown = { outages.record("https://booru.example/posts.json", HostOutageKind.CHALLENGE) }
