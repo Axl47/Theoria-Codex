@@ -584,7 +584,7 @@ internal class TheoriaShell(
         runCatchingPreservingCancellation { saveExportToDownloads(appContext.contentResolver, document, mimeType) }
             .onSuccess { toast("Saved to Downloads/TheoriaCodex") }
             .onFailure {
-                Diagnostics.report("share", "Could not save ${document.fileName}", it)
+                Diagnostics.report("share", "Could not save a file to Downloads", it)
                 toast("Could not save the file")
             }
     }
@@ -605,7 +605,7 @@ internal class TheoriaShell(
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             appContext.startActivity(chooser)
-        }.onFailure { Diagnostics.report("share", "Could not open the share sheet for ${document.fileName}", it) }.isSuccess
+        }.onFailure { Diagnostics.report("share", "Could not open the share sheet", it) }.isSuccess
     }
 
     /** Absent when the host application keeps no diagnostics, as in fixture graphs without [TheoriaApplication]. */

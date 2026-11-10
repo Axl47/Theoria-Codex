@@ -104,6 +104,7 @@ scripts/check.sh --record   # before a PR</code></pre>
 <tr><td>The post picker is a Stats-style list: the row opens the Viewer and a separate checkbox decides sharing.</td><td>User needed to inspect posts before leaving them out. Reuses the Top posts row.</td></tr>
 <tr><td>Sharing spans every recommendation profile, starting with only the active one included.</td><td>User asked for profile tabs with bulk selection on 2026-11-10. Another profile may be private, so it needs a deliberate tap. The comparison's own side covers every profile.</td></tr>
 <tr><td>Download writes straight to Downloads/TheoriaCodex.</td><td>Needs no permission on supported Android versions and no extra picker step.</td></tr>
+<tr><td>Failure messages name the action, never the file.</td><td>Export file names come from Codex names, and redaction cannot recognize those.</td></tr>
 <tr><td>One commit for both features.</td><td>They share the same shell and Settings wiring, so a split commit would not build.</td></tr>
 </table>
 

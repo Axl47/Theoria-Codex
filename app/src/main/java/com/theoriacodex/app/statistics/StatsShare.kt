@@ -15,14 +15,15 @@ private const val MAX_POSTS_PER_CODEX = 64
 private const val MAX_NAME_CHARS = 120
 private const val MAX_LABEL_CHARS = 300
 private const val MAX_POST_KEY_CHARS = 256
-// Large enough for any real total, small enough that summing every entry of a hostile file cannot overflow.
+// Large enough for any real total. Totals across MAX_CODICES stay in range, and merged posts are capped again as they add up.
 private const val MAX_STAT_VALUE = 1_000_000_000_000_000L
 private const val MAX_COMPARED_POSTS = 20
 
 /** The shared-file format. Holds only what the person left in; Codex ids and profile details never enter it. */
 data class StatsShareFile(
-    @field:SerializedName("format") val format: String? = STATS_SHARE_FORMAT,
-    @field:SerializedName("version") val version: Int? = STATS_SHARE_VERSION,
+    // No defaults: a file that omits these must fail validation, and Gson would otherwise fill them in.
+    @field:SerializedName("format") val format: String? = null,
+    @field:SerializedName("version") val version: Int? = null,
     @field:SerializedName("name") val name: String? = null,
     @field:SerializedName("codices") val codices: List<StatsShareCodex?>? = null,
 )
@@ -89,6 +90,8 @@ internal fun buildStatsShare(
     selection: StatsShareSelection = StatsShareSelection(),
     name: String? = null,
 ): StatsShareFile = StatsShareFile(
+    format = STATS_SHARE_FORMAT,
+    version = STATS_SHARE_VERSION,
     name = name?.trim()?.takeIf(String::isNotEmpty),
     codices = codices.filter { it.hasShareableActivity && it.codexId !in selection.excludedCodexIds }
         .map { shareCodex(it, selection.excludedPostKeys) },
@@ -199,8 +202,8 @@ private fun mergedPosts(codices: List<StatsShareCodex>): Map<String, MergedPost>
         val previous = merged[key]
         merged[key] = MergedPost(
             label = previous?.label ?: post.label ?: key,
-            opens = (previous?.opens ?: 0L) + post.opens,
-            viewingMs = (previous?.viewingMs ?: 0L) + post.videoMs + post.imageMs,
+            opens = ((previous?.opens ?: 0L) + post.opens).boundedStat(),
+            viewingMs = ((previous?.viewingMs ?: 0L) + post.videoMs + post.imageMs).boundedStat(),
         )
     }
     return merged

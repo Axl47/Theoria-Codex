@@ -77,8 +77,8 @@ internal class DiagnosticLogStore(
         listOf(previous, current).filter(File::isFile).joinToString(separator = "") { it.readText() }
     }
 
-    /** Newest report first. */
-    fun readCrashes(): List<String> = crashFiles().map(File::readText)
+    /** Newest report first. Runs on the writer so [clear] cannot delete a file partway through. */
+    fun readCrashes(): List<String> = onWriter { crashFiles().map(File::readText) }
 
     fun clear() = onWriter {
         directory.listFiles().orEmpty().forEach(File::delete)

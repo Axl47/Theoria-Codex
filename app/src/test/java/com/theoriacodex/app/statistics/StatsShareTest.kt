@@ -38,6 +38,9 @@ class StatsShareTest {
         assertNull(parseStatsShare("""{"format":"something-else","version":1}"""))
         assertNull(parseStatsShare("""{"format":"theoria-codex-stats","version":99}"""))
         assertNull(parseStatsShare("not json"))
+        assertNull(parseStatsShare("{}"))
+        assertNull(parseStatsShare("""{"format":"theoria-codex-stats"}"""))
+        assertNull(parseStatsShare("""{"version":1}"""))
     }
 
     @Test
@@ -53,6 +56,18 @@ class StatsShareTest {
         assertEquals(1_000_000_000_000_000L, codex.entries)
         assertEquals(listOf("GELBOORU:2"), codex.posts.orEmpty().map { it?.key })
         assertEquals(0L, codex.posts.orEmpty().single()?.opens)
+    }
+
+    @Test
+    fun `one post repeated across a hostile file cannot overflow the comparison`() {
+        val post = StatsSharePost(key = "GELBOORU:1", label = "Repeated", opens = 1_000_000_000_000_000L, videoMs = 1_000_000_000_000_000L)
+        val codex = StatsShareCodex(name = "Repeated", posts = List(64) { post })
+        val theirs = StatsShareFile(codices = List(500) { codex })
+
+        val compared = compareStats(StatsShareFile(), theirs).theirTopPosts.single()
+
+        assertEquals(1_000_000_000_000_000L, compared.theirOpens)
+        assertEquals(1_000_000_000_000_000L, compared.theirViewingMs)
     }
 
     @Test
