@@ -65,6 +65,7 @@ import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsViewModel
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.parseExternalCreatorDeepLink
+import com.theoriacodex.app.statistics.statisticsPostKey
 import com.theoriacodex.app.source.SharedPostFix
 import com.theoriacodex.app.source.parseCustomSitePostDeepLink
 import com.theoriacodex.app.source.sharedPostFix
@@ -675,10 +676,22 @@ internal class TheoriaShell(
 
     /** Opens a finished download in a fresh Viewer session at the page that was saved. */
     suspend fun openDownloadedPost(item: PostDownloadItem) {
-        val resolved = runCatchingPreservingCancellation {
+        openSinglePostViewer("downloads:${item.id}", item.request.selectedMedia?.pageIndex ?: 0) {
             viewerRouteWorkflow.resolvePost(item.request.post.id, ViewerStreamSource.RECENTS)
-        }.getOrNull()
-        if (resolved == null) {
+        }
+    }
+
+    /** Opens a ranked Stats post. A saved copy works offline; the source is only asked for posts no longer saved. */
+    suspend fun openStatisticsPost(postId: PostId) {
+        openSinglePostViewer("stats:${statisticsPostKey(postId)}") {
+            data.codexRepository.getPost(postId) ?: viewerRouteWorkflow.resolvePost(postId, ViewerStreamSource.RECENTS)
+        }
+    }
+
+    /** Replaces any open Viewer with a session holding one post, or reports that the post could not be loaded. */
+    private suspend fun openSinglePostViewer(queryHash: String, initialMediaIndex: Int = 0, load: suspend () -> Post?) {
+        val post = runCatchingPreservingCancellation { load() }.getOrNull()
+        if (post == null) {
             snackbarHostState.showSnackbar("This post could not be opened. Try again.")
             return
         }
@@ -687,13 +700,13 @@ internal class TheoriaShell(
             viewerSessions.clear()
             navController.popBackStack(AppRoute.Viewer, inclusive = true)
         }
-        val context = ViewerLaunchContext("downloads:${item.id}", 0, ViewerStreamSource.RECENTS, 0)
+        val context = ViewerLaunchContext(queryHash, 0, ViewerStreamSource.RECENTS, 0)
         viewerSessions.retain(
             ViewerSession(
-                posts = listOf(resolved),
+                posts = listOf(post),
                 context = context,
                 liveSearchBinding = false,
-                initialMediaIndex = item.request.selectedMedia?.pageIndex ?: 0,
+                initialMediaIndex = initialMediaIndex,
             ),
         )
         data.uiRestoreRepository.setViewerLaunchContext(context)

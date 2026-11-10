@@ -16,6 +16,7 @@ import com.theoriacodex.app.codex.CodexCoverCandidate
 import com.theoriacodex.app.codex.resolveNamedCodexCoverCandidates
 import com.theoriacodex.app.ui.routes.decodeCreatorNavigationIdentity
 import com.theoriacodex.app.ui.routes.encodeCreatorNavigationIdentity
+import com.theoriacodex.app.statistics.statisticsPostKey
 import com.theoriacodex.app.viewer.decodeViewerPostId
 import com.theoriacodex.app.viewer.encodeViewerPostId
 import com.theoriacodex.domain.model.CreatorProfile
@@ -57,6 +58,8 @@ class SourceIdentityEncodingTest {
     fun `viewer and creator restoration encodings keep custom ids`() {
         val postId = PostId(custom, "123")
         assertEquals(postId, decodeViewerPostId(encodeViewerPostId(postId)))
+        // Stats rows are opened by decoding the key the statistics store recorded.
+        assertEquals(postId, decodeViewerPostId(statisticsPostKey(postId)))
 
         val creator = CreatorProfile(custom, "uploader", "uploader", null, "user:uploader")
         assertEquals(creator, decodeCreatorNavigationIdentity(encodeCreatorNavigationIdentity(creator)))

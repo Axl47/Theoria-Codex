@@ -51,6 +51,7 @@ import com.theoriacodex.app.ui.components.ActionMenuSheet
 import com.theoriacodex.data.repository.ScenarioPreset
 import com.theoriacodex.data.repository.SourceWeightSettings
 import com.theoriacodex.data.storage.CorruptionRecovery
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 
 private enum class SettingsSheet { PROFILE, SOURCE_MIX, PLAYBACK, CONTROLS }
@@ -64,6 +65,7 @@ fun SettingsScreen(
     searchSources: Set<SourceKey> = emptySet(),
     storageSummary: String? = null,
     sites: SettingsSitesEntry? = null,
+    onOpenStatisticsPost: suspend (PostId) -> Unit = {},
     storageTools: (@Composable () -> Unit)? = null,
 ) {
     val openHome = { onAction(SettingsAction.OpenPage(SettingsPage.HOME)) }
@@ -84,7 +86,7 @@ fun SettingsScreen(
             )
             SettingsPage.HIDDEN_TAGS -> HiddenTagsPage(state, onAction, openHome)
             SettingsPage.STORAGE -> StoragePage(state, onAction, storageTools, openHome)
-            SettingsPage.STATS -> StatsScreen(statistics, openHome)
+            SettingsPage.STATS -> StatsScreen(statistics, onOpenStatisticsPost, openHome)
         }
     }
     ProfileDeleteDialog(state, onAction)
