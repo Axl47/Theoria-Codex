@@ -31,4 +31,17 @@ class CodexDocumentIoTest {
         assertEquals(payload.text, text)
         assertEquals(null, readBoundedTextDocument(CODEX_SHARE_MAX_BYTES) { null })
     }
+
+    @Test
+    fun `each share keeps its own file and old shares are removed`() = runBlocking {
+        val directory = folder.root.resolve("exports")
+        val first = writeExportDocument(directory, ExportDocument("Stats", "stats.json", "limited"))
+        val second = writeExportDocument(directory, ExportDocument("Stats", "stats.json", "everything"))
+        assertNotEquals(first, second)
+        assertEquals("limited", first.readText())
+
+        val later = writeExportDocument(directory, ExportDocument("Stats", "stats.json", "new"), now = { System.currentTimeMillis() + 2 * 86_400_000L })
+        assertEquals(false, first.exists())
+        assertEquals(true, later.exists())
+    }
 }

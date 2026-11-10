@@ -45,7 +45,11 @@ internal fun DiagnosticsPage(entry: SettingsDiagnosticsEntry, onBack: () -> Unit
     var generation by remember { mutableIntStateOf(0) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val report by produceState<String?>(null, sections, generation) { value = entry.build(sections) }
+    val built by produceState<BuiltReport?>(null, sections, generation) {
+        value = BuiltReport(sections, generation, entry.build(sections))
+    }
+    // A rebuild keeps showing its previous value, so only text built for the current choices may be used.
+    val report = built?.takeIf { it.sections == sections && it.generation == generation }?.text
     SettingsPageColumn {
         SettingsHeader("Diagnostics report", onBack, SETTINGS_PATH)
         StatsCaption(
@@ -94,6 +98,8 @@ internal fun DiagnosticsPage(entry: SettingsDiagnosticsEntry, onBack: () -> Unit
         }
     }
 }
+
+private data class BuiltReport(val sections: Set<DiagnosticSection>, val generation: Int, val text: String)
 
 @Composable
 private fun DiagnosticSectionRow(section: DiagnosticSection, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {

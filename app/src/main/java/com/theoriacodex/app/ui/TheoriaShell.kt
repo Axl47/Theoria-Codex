@@ -555,7 +555,6 @@ internal class TheoriaShell(
         if (!shareExportDocument(export.payload, "application/json", "Share codex")) toast("Could not export codex")
     }
 
-    /** The fixed file name means a new share replaces the last one instead of piling up private copies. */
     suspend fun shareStats(file: StatsShareFile) {
         val document = ExportDocument("Theoria stats", "theoria-stats.json", encodeStatsShare(file))
         if (!shareExportDocument(document, "application/json", "Share stats")) toast("Could not share stats")
