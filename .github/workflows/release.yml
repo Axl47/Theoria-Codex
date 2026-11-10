@@ -5,9 +5,6 @@ name: Release
 # same version. Runs from any other branch are rehearsals: they stop short of publishing.
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - ci/two-gate-release
 
 permissions:
   contents: read
