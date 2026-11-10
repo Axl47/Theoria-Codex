@@ -1,6 +1,7 @@
 package com.theoriacodex.app.di
 
 import com.theoriacodex.app.customsites.CustomSiteAvailability
+import com.theoriacodex.app.customsites.SiteMediaKey
 import com.theoriacodex.app.source.CUSTOM_PRESENTATION_ORDER_START
 import com.theoriacodex.app.source.SourcePresentation
 import com.theoriacodex.app.source.SourcePresentationCatalog
@@ -57,8 +58,8 @@ internal class CustomSourceRuntime(
     /** A [com.theoriacodex.sources.custom.CustomSiteHttpClient]: HTTPS only, vetted redirects. */
     private val http: SourceHttpClient,
     scope: CoroutineScope,
-    /** Receives the `Authorization` value of each site whose API accepts its key that way, by host. */
-    private val publishMediaAuthorizations: (Map<String, String>) -> Unit = {},
+    /** Receives the saved sites whose API accepts their key in an `Authorization` header. */
+    private val publishMediaKeys: (List<SiteMediaKey>) -> Unit = {},
     private val installPresentations: (List<SourcePresentation>) -> Unit = SourcePresentationCatalog::installCustom,
 ) {
     private val revisions = AtomicLong()
@@ -87,11 +88,11 @@ internal class CustomSourceRuntime(
     }
 
     private suspend fun build(profiles: List<SiteProfile>): CustomSourceSnapshot {
-        val mediaAuthorizations = HashMap<String, String>()
+        val mediaKeys = ArrayList<SiteMediaKey>()
         val sites = profiles.map { profile ->
             val keys = credentials.get(profile.sourceId)
             if (keys != null && profile.family == ProtocolFamily.DANBOORU) {
-                mediaAuthorizations[profile.address.host] = Credentials.basic(keys.user, keys.apiKey, Charsets.UTF_8)
+                mediaKeys += SiteMediaKey(profile.address, Credentials.basic(keys.user, keys.apiKey, Charsets.UTF_8))
             }
             val family = profile.family?.let(families::familyFor)
             val usable = family != null && (!profile.credentialsRequired || keys != null)
@@ -102,7 +103,7 @@ internal class CustomSourceRuntime(
             )
             CustomSiteState(profile, hasCredentials = keys != null, adapter = adapter)
         }
-        publishMediaAuthorizations(mediaAuthorizations)
+        publishMediaKeys(mediaKeys)
         return CustomSourceSnapshot(revision = revisions.incrementAndGet(), sites = sites)
     }
 }

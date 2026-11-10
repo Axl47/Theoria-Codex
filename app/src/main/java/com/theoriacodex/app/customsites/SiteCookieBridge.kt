@@ -1,6 +1,7 @@
 package com.theoriacodex.app.customsites
 
 import android.webkit.CookieManager
+import com.theoriacodex.domain.source.SiteAddress
 import com.theoriacodex.sources.http.HostOutageTracker
 import java.net.URI
 import okhttp3.Cookie
@@ -50,6 +51,9 @@ internal object AndroidBrowserCookieStore : BrowserCookieStore {
     }
 }
 
+/** One saved site's `Authorization` value. A plain class, so the value can't reach a log through `toString`. */
+internal class SiteMediaKey(val address: SiteAddress, val authorization: String)
+
 /**
  * Lets the clearance cookies a person earned in the in-app browser apply to the app's own requests, for
  * saved custom sites, built-in sites verified in the browser and the one site being set up, plus their
@@ -69,7 +73,7 @@ internal class SiteCookieBridge(private val store: BrowserCookieStore) {
     private var builtInAgents: Map<String, String> = emptyMap()
 
     @Volatile
-    private var mediaAuthorizations: Map<String, String> = emptyMap()
+    private var mediaKeys: List<SiteMediaKey> = emptyList()
 
     @Volatile
     private var setupHost: String? = null
@@ -92,18 +96,28 @@ internal class SiteCookieBridge(private val store: BrowserCookieStore) {
         return agents.entries.firstOrNull { (site, _) -> HostOutageTracker.hostBelongsToSite(host, site) }?.value
     }
 
-    /** The `Authorization` value of each saved site whose API accepts its key that way, by host. */
-    fun updateMediaAuthorizations(byHost: Map<String, String>) {
-        mediaAuthorizations = byHost.mapKeys { (host, _) -> HostOutageTracker.normalizeHost(host) }
+    /** The saved sites whose API accepts their key in an `Authorization` header. */
+    fun updateMediaKeys(keys: List<SiteMediaKey>) {
+        mediaKeys = keys
     }
 
-    /** The value a media request to [url] may offer: HTTPS only, and only on the site's own hosts. */
+    /**
+     * The value a media request to [url] may offer: HTTPS only, on one saved site's own port and hosts, and under
+     * its install path on its main host. Installs that can't be told apart get no key, so none reaches another.
+     */
     fun mediaAuthorizationFor(url: String): String? {
-        val byHost = mediaAuthorizations
-        if (byHost.isEmpty()) return null
+        val keys = mediaKeys
+        if (keys.isEmpty()) return null
         val uri = runCatching { URI(url) }.getOrNull()?.takeIf { it.scheme.equals("https", ignoreCase = true) } ?: return null
         val host = uri.host ?: return null
-        return byHost.entries.firstOrNull { (site, _) -> HostOutageTracker.hostBelongsToSite(host, site) }?.value
+        val port = uri.port.takeUnless { it == -1 || it == HTTPS_PORT }
+        return keys.singleOrNull { it.address.port == port && it.covers(host, uri.rawPath.orEmpty()) }?.authorization
+    }
+
+    private fun SiteMediaKey.covers(host: String, path: String): Boolean {
+        val siteHost = HostOutageTracker.normalizeHost(address.host)
+        if (HostOutageTracker.normalizeHost(host) != siteHost) return HostOutageTracker.hostBelongsToSite(host, siteHost)
+        return path == address.path || path.startsWith("${address.path}/")
     }
 
     /** The site being verified before it is saved, or null once that ends. */
@@ -149,3 +163,5 @@ internal class SiteCookieBridge(private val store: BrowserCookieStore) {
         }
     }
 }
+
+private const val HTTPS_PORT = 443

@@ -1,5 +1,7 @@
 package com.theoriacodex.app.customsites
 
+import com.theoriacodex.domain.source.SiteAddress
+import com.theoriacodex.domain.source.SiteAddressParse
 import okhttp3.Cookie
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.assertEquals
@@ -44,6 +46,25 @@ class SiteCookieBridgeTest {
         cookies["other.example"] = "cf=5"
     }
     private val bridge = SiteCookieBridge(store)
+
+    @Test
+    fun `installs sharing a host keep their keys apart`() {
+        bridge.updateMediaKeys(
+            listOf(
+                SiteMediaKey(address("booru.example/one"), "Basic one"),
+                SiteMediaKey(address("booru.example/two"), "Basic two"),
+                SiteMediaKey(address("booru.example:8443"), "Basic port"),
+            ),
+        )
+
+        assertEquals("Basic one", bridge.mediaAuthorizationFor("https://booru.example/one/data/a.jpg"))
+        assertEquals("Basic two", bridge.mediaAuthorizationFor("https://booru.example/two/data/a.jpg"))
+        assertEquals("Basic port", bridge.mediaAuthorizationFor("https://booru.example:8443/data/a.jpg"))
+        assertEquals("not under either install", null, bridge.mediaAuthorizationFor("https://booru.example/three/a.jpg"))
+        assertEquals("a shared CDN can't be attributed", null, bridge.mediaAuthorizationFor("https://cdn.booru.example/a.jpg"))
+    }
+
+    private fun address(input: String): SiteAddress = (SiteAddress.parse(input) as SiteAddressParse.Valid).address
 
     private fun sent(url: String): Map<String, List<String>> =
         bridge.cookiesFor(url)?.let { mapOf("Cookie" to listOf(it)) } ?: emptyMap()
@@ -106,7 +127,7 @@ class SiteCookieBridgeTest {
 
     @Test
     fun `a media key is offered only over HTTPS on the site's own hosts`() {
-        bridge.updateMediaAuthorizations(mapOf("www.booru.example" to "Basic key"))
+        bridge.updateMediaKeys(listOf(SiteMediaKey(address("www.booru.example"), "Basic key")))
 
         assertEquals("Basic key", bridge.mediaAuthorizationFor("https://booru.example/data/a.jpg"))
         assertEquals("Basic key", bridge.mediaAuthorizationFor("https://cdn.booru.example/a.jpg"))

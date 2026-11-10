@@ -257,7 +257,7 @@ internal class DefaultTheoriaAppContainer(
             okHttpClient = httpClients.sources,
         ),
         scope = durableStoreScope,
-        publishMediaAuthorizations = cookieBridge::updateMediaAuthorizations,
+        publishMediaKeys = cookieBridge::updateMediaKeys,
     )
     private val sourceRegistry = CompositeSourceAdapterRegistry(
         builtIn = AvailabilityAwareSourceAdapterRegistry(
