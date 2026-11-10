@@ -233,14 +233,14 @@ Copy this skeleton into a new `.docs/exec/<plan-name>.html` file and then replac
     <h1>ExecPlan: Two-Gate CI And Release</h1>
     <p>A change is verified once, on the Mac or on GitHub, and a release is one approval followed by one workflow that creates the tag last.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill" id="status-pill">Status: Validating</span>
+      <span class="pill" id="status-pill">Status: In review</span>
       <span class="pill">Owner: Claude</span>
       <span class="pill">Created: 2026-11-10</span>
       <span class="pill">Updated: 2026-11-10</span>
       <span class="pill">Plan file: .docs/exec/two-gate-ci-and-release.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Merge the PR, then run the first real release through <code>.github/workflows/release.yml</code>.</div>
+      <div class="card"><strong>Next Action</strong>Merge PR #64, then run the first real release through <code>.github/workflows/release.yml</code>.</div>
       <div class="card"><strong>Main Risk</strong>Release can only be dispatched from <code>main</code> after merge, so its publish step is unproven until the first real release.</div>
       <div class="card"><strong>Validation</strong>A Release rehearsal from the branch, the PR's Verify on GitHub, and <code>scripts/check.sh --record</code> on the Mac.</div>
       <div class="card"><strong>Affected Areas</strong><code>.github/workflows/</code>, <code>scripts/check.sh</code>, <code>scripts/release_gate.py</code>, <code>scripts/verify_ci_emulator.sh</code>, the release skill.</div>
@@ -346,6 +346,9 @@ Copy this skeleton into a new `.docs/exec/<plan-name>.html` file and then replac
         <li>[x] 2026-11-10 - Measured usage, per-stage timing, and failure history.</li>
         <li>[x] 2026-11-10 - Found the cause of the two still-failing journey tests.</li>
         <li>[x] 2026-11-10 - Implemented the shared check, Release, and the skill rewrite.</li>
+        <li>[x] 2026-11-10 - Rehearsed Release from the branch, and proved Verify's full and reuse paths on PR #64.</li>
+        <li>[ ] Merge PR #64, then confirm tag creation and publishing on the first real release.</li>
+        <li>[ ] Confirm the dialog fix the next time a run logs <code>am_anr</code> for <code>com.android.systemui</code>.</li>
       </ul>
       <h3>Surprises And Discoveries</h3>
       <ul>
@@ -353,6 +356,9 @@ Copy this skeleton into a new `.docs/exec/<plan-name>.html` file and then replac
         <li>Observation: The offline and grouped-search journeys fail as a pair because of a system dialog. Evidence: the failure screenshot shows "System UI isn't responding" over a correctly rendered image, the sampled pixel matches the dialog in all three inspected runs, and logcat shows the dialog taking input focus. The dialog cannot be cancelled, so the grouped test's real Back press never reaches the app.</li>
         <li>Observation: The emulator lane also catches real problems. Evidence: a stale <code>Saved</code> heading, a new JSON field, and R8 acceptance read failures on Nov 8 and Nov 10.</li>
         <li>Observation: <code>main</code> has no branch protection. Evidence: <code>GET branches/main/protection</code> returns 404, and three PRs were merged with red checks.</li>
+      </ul>
+      <ul>
+        <li>Observation: Offline lint fails on a runner with a cold Gradle home, because the lint tool itself is not cached. Evidence: <code>No cached version of com.android.tools.lint:lint-gradle:32.3.3 available for offline mode</code>. A dry run now fetches it first. The Mac's warm cache had hidden this.</li>
       </ul>
       <h3>Decision Log</h3>
       <ul>
@@ -379,6 +385,10 @@ Copy this skeleton into a new `.docs/exec/<plan-name>.html` file and then replac
         <tbody id="evidence">
           <tr><td>Verify set on the Mac, one-line app change</td><td>About 5 minutes, versus 10 to 12 on GitHub</td></tr>
           <tr><td>Main-gate failures traced to their PR</td><td>12 commits: 6 direct pushes, 3 from red PRs, 3 from green PRs that look like flakes</td></tr>
+          <tr><td>Release rehearsal from the branch</td><td>About 11 minutes. Every emulator job and the signed build passed, publish was skipped, and the signed APK was deleted.</td></tr>
+          <tr><td>Verify with no recorded pass, cold GitHub runner</td><td>Passed in about 14 minutes and recorded the tree.</td></tr>
+          <tr><td>Verify with a recorded pass</td><td>Lookup took 5 seconds and the full check was skipped.</td></tr>
+          <tr><td>Emulator jobs after the dialog fix</td><td>16 of 16 passed, but System UI did not freeze in any of them, so the fix itself is not yet observed.</td></tr>
           <tr><td>Failed emulator jobs, Nov 1 to 10</td><td>82: 69 test failures, 12 emulator infrastructure, 1 other</td></tr>
         </tbody>
       </table>
