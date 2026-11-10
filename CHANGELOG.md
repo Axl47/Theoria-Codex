@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- When a link leads you to set up a site, that post now opens once the site is added, instead of the link being forgotten.
+- The message for rejected API keys now mentions keys limited by IP address or permissions.
+
 ### Fixed
 
 - A site's API key is now tried first when you add, re-test or browser-check it, so a valid key works even where visitors without an account are refused.
