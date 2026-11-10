@@ -13,10 +13,20 @@ import okhttp3.Response
 internal class RefusedMediaKeyRetry(private val authorizationFor: (url: String) -> String?) : Interceptor {
     private val hostsNeedingKey = ConcurrentHashMap.newKeySet<String>()
 
+    /**
+     * For the network side, which sees every redirect hop: OkHttp keeps the header on a same-host redirect, and that
+     * can lead to another install on the host. Only keys added here are judged; other sources' headers are left alone.
+     */
+    val redirectGuard = Interceptor { chain ->
+        val request = chain.request()
+        val stale = request.tag(SiteKeyTag::class.java) != null && authorizationFor(request.url.toString()) != request.header(AUTHORIZATION)
+        chain.proceed(if (stale) request.newBuilder().removeHeader(AUTHORIZATION).build() else request)
+    }
+
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         val authorization = authorizationFor(request.url.toString()) ?: return chain.proceed(request)
-        val keyed = request.newBuilder().header("Authorization", authorization).build()
+        val keyed = request.newBuilder().header(AUTHORIZATION, authorization).tag(SiteKeyTag::class.java, SiteKeyTag).build()
         if (request.url.host in hostsNeedingKey) return chain.proceed(keyed)
         val response = chain.proceed(request)
         if (!response.isRefusal()) return response
@@ -30,7 +40,10 @@ internal class RefusedMediaKeyRetry(private val authorizationFor: (url: String) 
     private fun Response.isRefusal(): Boolean =
         code == HTTP_UNAUTHORIZED || code == HTTP_FORBIDDEN || (isSuccessful && header("Content-Type").orEmpty().startsWith("text/html", ignoreCase = true))
 
+    private object SiteKeyTag
+
     private companion object {
+        const val AUTHORIZATION = "Authorization"
         const val HTTP_UNAUTHORIZED = 401
         const val HTTP_FORBIDDEN = 403
     }

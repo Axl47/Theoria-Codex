@@ -19,7 +19,12 @@ class AppHttpClientsTest {
             agents += exchange.requestHeaders.getFirst("User-Agent")
             val authorization = exchange.requestHeaders.getFirst("Authorization")
             authorizations += authorization
-            exchange.sendResponseHeaders(if (refuseWithoutKey && authorization == null) 403 else 200, -1)
+            if (exchange.requestURI.path == "/moved.jpg" && authorization != null) {
+                exchange.responseHeaders.add("Location", "/elsewhere.jpg")
+                exchange.sendResponseHeaders(302, -1)
+            } else {
+                exchange.sendResponseHeaders(if (refuseWithoutKey && authorization == null) 403 else 200, -1)
+            }
             exchange.close()
         }
         start()
@@ -74,6 +79,16 @@ class AppHttpClientsTest {
         assertEquals(403, status(clients.images, "other.jpg"))
 
         assertEquals(listOf<String?>(null), authorizations.toList())
+    }
+
+    @Test
+    fun `a redirect to an address the key isn't for loses the key`() {
+        refuseWithoutKey = true
+        val clients = AppHttpClients(CookieJar.NO_COOKIES, siteAuthorization = { url -> "Basic key".takeIf { "moved" in url } })
+
+        assertEquals(403, status(clients.images, "moved.jpg"))
+
+        assertEquals(listOf(null, "Basic key", null), authorizations.toList())
     }
 
     private fun status(client: OkHttpClient, path: String): Int {

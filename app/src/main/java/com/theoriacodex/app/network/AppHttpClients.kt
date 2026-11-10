@@ -48,13 +48,15 @@ internal class AppHttpClients(
      * agent that earned it. Provider requests choose their own agent, and a browser check must keep the one it is testing.
      */
     val video: OkHttpClient by lazy {
+        val keyRetry = RefusedMediaKeyRetry(siteAuthorization)
         shared.newBuilder()
             .addInterceptor { chain ->
                 val request = chain.request()
                 val agent = verifiedUserAgent(request.url.toString())
                 chain.proceed(if (agent == null) request else request.newBuilder().header("User-Agent", agent).build())
             }
-            .addInterceptor(RefusedMediaKeyRetry(siteAuthorization))
+            .addInterceptor(keyRetry)
+            .addNetworkInterceptor(keyRetry.redirectGuard)
             .build()
     }
 
