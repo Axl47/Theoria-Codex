@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
 import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.app.statistics.statisticsPostKey
 import com.theoriacodex.domain.model.Post
@@ -47,21 +48,23 @@ class StatsTopPostJourneyTest : AppJourneyFixture() {
         launch()
         tab("Settings")
         activate(compose.onNodeWithText("Share my stats"))
-        compose.waitUntil(10_000) { compose.onNodeWithText("1").isDisplayed() }
+        compose.waitUntil(10_000) { compose.onNodeWithText("1 opens", substring = true).isDisplayed() }
         compose.onNodeWithText("Share file").assertIsEnabled()
 
         // The saved preview stands in until a ranked post has its own Stats thumbnail, and Back keeps this page.
-        activate(compose.onNodeWithText("Landscapes"))
+        activate(compose.onNodeWithText("Landscapes").performScrollTo())
         val thumbnail = compose.onNodeWithTag("stats-post-thumbnail:${statisticsPostKey(post.id)}", useUnmergedTree = true)
         compose.waitUntil(10_000) { thumbnail.isDisplayed() }
         openFromTopPosts("Gelbooru journey-5", post, returnTo = "Tap a post to look at it. Uncheck it to leave it out.")
         activate(compose.onNodeWithContentDescription("Include Gelbooru journey-5"))
         scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
 
-        compose.waitUntil(10_000) { compose.onNodeWithText("Share file").isDisplayed() }
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("1").fetchSemanticsNodes().isEmpty() }
-        activate(compose.onNodeWithContentDescription("Include Landscapes"))
-        compose.onNodeWithText("Left out").assertIsDisplayed()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("0 opens", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        activate(compose.onNodeWithContentDescription("Include Landscapes").performScrollTo())
+        compose.onNodeWithText("Left out").performScrollTo().assertIsDisplayed()
+        // Overall stats alone still make a file, so the button disables only once they are left out too.
+        compose.onNodeWithText("Share file").assertIsEnabled()
+        activate(compose.onNodeWithContentDescription("Include overall stats").performScrollTo())
         compose.onNodeWithText("Share file").assertIsNotEnabled()
     }
 
