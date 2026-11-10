@@ -8,6 +8,7 @@ internal data class ReleaseChangelogEntry(
     val publishedAtEpochMs: Long?,
     val changelogMarkdown: String,
     val changelogSections: List<ChangelogSection>,
+    val assetSizeBytes: Long? = null,
 )
 
 internal fun mergeReleaseHistory(
@@ -43,6 +44,7 @@ internal fun RemoteUpdate.toReleaseHistoryEntry() = ReleaseChangelogEntry(
     publishedAtEpochMs = publishedAtEpochMs,
     changelogMarkdown = changelogMarkdown,
     changelogSections = changelogSections,
+    assetSizeBytes = assetSizeBytes,
 )
 
 internal fun releaseChangelogNewestFirstComparator(): Comparator<ReleaseChangelogEntry> {

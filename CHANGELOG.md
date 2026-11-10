@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- The update prompt now shows the new version, its download size and its release date, instead of the word "unknown".
 - A site's API key is now tried first when you add, re-test or browser-check it, so a valid key works even where visitors without an account are refused.
 - A wrong API key is reported when you enter it, instead of being saved without being tested.
 - Saving a new API key lets the site's requests through again right away, instead of waiting out a "site is down" mark.
