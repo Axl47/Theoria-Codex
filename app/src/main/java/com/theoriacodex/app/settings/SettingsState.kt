@@ -31,7 +31,8 @@ class StatsActions(
     val openPost: suspend (PostId) -> Unit = {},
     val share: suspend (StatsShareFile) -> Unit = {},
     val readFile: suspend (document: String) -> StatsShareFile? = { null },
-    val storedPost: suspend (PostId) -> Post? = { null },
+    /** A post for showing its thumbnail: the saved copy, or one looked up on its site without saving it. */
+    val previewPost: suspend (PostId) -> Post? = { null },
     val download: suspend (StatsShareFile) -> Unit = {},
 )
 

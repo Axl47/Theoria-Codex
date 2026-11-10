@@ -34,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -52,15 +53,20 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.statistics.CodexPostStatistic
 import com.theoriacodex.app.statistics.CodexStatisticsSummary
 import com.theoriacodex.app.statistics.SourceStatistic
 import com.theoriacodex.app.statistics.StatisticsSummary
+import com.theoriacodex.app.statistics.StatsShareOverall
+import com.theoriacodex.app.statistics.shareOverall
 import com.theoriacodex.app.statistics.TagStatistic
 import com.theoriacodex.app.viewer.decodeViewerPostId
+import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import java.io.File
 import java.time.LocalDate
@@ -141,22 +147,28 @@ private fun StatsOverview(statistics: StatisticsSummary, onBack: () -> Unit, onO
 
 @Composable
 private fun TimeSection(statistics: StatisticsSummary) {
-    val categorized = statistics.browsingMs + statistics.watchingMs + statistics.codexMs
+    OverallTimeCard("All-time in Theoria", remember(statistics) { statistics.shareOverall() })
+    Box(Modifier.padding(top = 8.dp)) { TrendCard(statistics) }
+}
+
+/** All time spent in the app and how it divides; the share preview shows the same card. */
+@Composable
+internal fun OverallTimeCard(caption: String, overall: StatsShareOverall) {
+    val categorized = overall.browsingMs + overall.watchingMs + overall.codexMs
     StatsCard {
-        StatsCaption("All-time in Theoria")
-        StatsHeadline(formatStatsDuration(statistics.totalForegroundMs))
-        StatsCaption("across ${statistics.appOpenCount} opens")
+        StatsCaption(caption)
+        StatsHeadline(formatStatsDuration(overall.timeInAppMs))
+        StatsCaption("across ${overall.appOpens} opens")
         TimeSplit(
             listOf(
-                TimeSegment("Browsing", statistics.browsingMs, BrowsingColor),
-                TimeSegment("Watching", statistics.watchingMs, WatchingColor),
-                TimeSegment("In Codices", statistics.codexMs, CodexColor),
+                TimeSegment("Browsing", overall.browsingMs, BrowsingColor),
+                TimeSegment("Watching", overall.watchingMs, WatchingColor),
+                TimeSegment("In Codices", overall.codexMs, CodexColor),
                 // Foreground time also counts screens without a category, such as Settings.
-                TimeSegment("Other", (statistics.totalForegroundMs - categorized).coerceAtLeast(0L), OtherColor),
+                TimeSegment("Other", (overall.timeInAppMs - categorized).coerceAtLeast(0L), OtherColor),
             ),
         )
     }
-    Box(Modifier.padding(top = 8.dp)) { TrendCard(statistics) }
 }
 
 @Composable
@@ -326,17 +338,40 @@ internal fun StatsPostRow(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (thumbnail != null || reserveThumbnail) {
-                AsyncImage(
-                    model = thumbnail, contentDescription = null, contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(44.dp).clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .then(if (thumbnail != null) Modifier.testTag("stats-post-thumbnail:$postKey") else Modifier),
-                )
-            }
+            if (thumbnail != null || reserveThumbnail) StatsPostThumbnail(postKey, thumbnail)
             Box(Modifier.weight(1f)) { StatBar(label, value, percentage) }
         }
         trailing()
+    }
+}
+
+/** A post's square preview; an empty placeholder while [thumbnail] is still loading or unavailable. */
+@Composable
+internal fun StatsPostThumbnail(postKey: String, thumbnail: Any?) {
+    AsyncImage(
+        model = thumbnail, contentDescription = null, contentScale = ContentScale.Crop,
+        modifier = Modifier.size(44.dp).clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .then(if (thumbnail != null) Modifier.testTag("stats-post-thumbnail:$postKey") else Modifier),
+    )
+}
+
+/**
+ * Stats keeps thumbnails only for ranked posts, so any other post falls back to [loadPost]: the saved copy, or the
+ * post looked up on its site. The result is an image model for [StatsPostThumbnail].
+ */
+@Composable
+internal fun rememberStatsPostThumbnail(key: String, retainedPath: String?, loadPost: suspend (PostId) -> Post?): Any? {
+    val context = LocalContext.current
+    val loaded by produceState<Post?>(null, key, retainedPath) {
+        if (retainedPath == null) value = decodeViewerPostId(key)?.let { loadPost(it) }
+    }
+    return remember(retainedPath, loaded, context) {
+        retainedPath?.let(::File) ?: loaded?.let { post ->
+            post.preview.localPath?.let(::File) ?: post.preview.url?.let {
+                MediaRequestFactory.imageRequest(context, it, post.id.source, crossfade = false, staticAnimatedWebPFrame = true)
+            }
+        }
     }
 }
 

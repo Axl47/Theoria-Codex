@@ -26,6 +26,20 @@ data class StatsShareFile(
     @field:SerializedName("version") val version: Int? = null,
     @field:SerializedName("name") val name: String? = null,
     @field:SerializedName("codices") val codices: List<StatsShareCodex?>? = null,
+    /** App-wide totals, absent when the person left them out or the file predates them. */
+    @field:SerializedName("overall") val overall: StatsShareOverall? = null,
+)
+
+/** The Stats page's app-wide numbers, which count everything and not only time inside Codices. */
+data class StatsShareOverall(
+    @field:SerializedName("timeInAppMs") val timeInAppMs: Long = 0L,
+    @field:SerializedName("browsingMs") val browsingMs: Long = 0L,
+    @field:SerializedName("watchingMs") val watchingMs: Long = 0L,
+    @field:SerializedName("codexMs") val codexMs: Long = 0L,
+    @field:SerializedName("appOpens") val appOpens: Long = 0L,
+    @field:SerializedName("postsWatched") val postsWatched: Long = 0L,
+    @field:SerializedName("postsSaved") val postsSaved: Long = 0L,
+    @field:SerializedName("searches") val searches: Long = 0L,
 )
 
 data class StatsShareCodex(
@@ -49,6 +63,17 @@ data class StatsSharePost(
 internal data class StatsShareSelection(
     val excludedCodexIds: Set<String> = emptySet(),
     val excludedPostKeys: Set<String> = emptySet(),
+)
+
+internal fun StatisticsSummary.shareOverall() = StatsShareOverall(
+    timeInAppMs = totalForegroundMs,
+    browsingMs = browsingMs,
+    watchingMs = watchingMs,
+    codexMs = codexMs,
+    appOpens = appOpenCount,
+    postsWatched = watchedPostCount,
+    postsSaved = savedPostCount,
+    searches = searchCount,
 )
 
 /** Every profile's Codices once each; the app-wide Codices appear under all of them. */
@@ -89,12 +114,14 @@ internal fun buildStatsShare(
     codices: List<CodexStatisticsSummary>,
     selection: StatsShareSelection = StatsShareSelection(),
     name: String? = null,
+    overall: StatsShareOverall? = null,
 ): StatsShareFile = StatsShareFile(
     format = STATS_SHARE_FORMAT,
     version = STATS_SHARE_VERSION,
     name = name?.trim()?.takeIf(String::isNotEmpty),
     codices = codices.filter { it.hasShareableActivity && it.codexId !in selection.excludedCodexIds }
         .map { shareCodex(it, selection.excludedPostKeys) },
+    overall = overall,
 )
 
 internal fun encodeStatsShare(file: StatsShareFile): String = Gson().toJson(file)
@@ -110,8 +137,20 @@ internal fun parseStatsShare(raw: String): StatsShareFile? {
     return file.copy(
         name = file.name?.cleanText(MAX_NAME_CHARS)?.takeIf(String::isNotEmpty),
         codices = file.codices.orEmpty().take(MAX_CODICES).mapNotNull(::sanitizedCodex),
+        overall = file.overall?.let(::sanitizedOverall),
     )
 }
+
+private fun sanitizedOverall(overall: StatsShareOverall) = StatsShareOverall(
+    timeInAppMs = overall.timeInAppMs.boundedStat(),
+    browsingMs = overall.browsingMs.boundedStat(),
+    watchingMs = overall.watchingMs.boundedStat(),
+    codexMs = overall.codexMs.boundedStat(),
+    appOpens = overall.appOpens.boundedStat(),
+    postsWatched = overall.postsWatched.boundedStat(),
+    postsSaved = overall.postsSaved.boundedStat(),
+    searches = overall.searches.boundedStat(),
+)
 
 private fun sanitizedCodex(codex: StatsShareCodex?): StatsShareCodex? {
     val name = codex?.name?.cleanText(MAX_NAME_CHARS)?.takeIf(String::isNotEmpty) ?: return null

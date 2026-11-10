@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -16,16 +17,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.statistics.CodexStatisticsSummary
 import com.theoriacodex.app.statistics.ComparedPost
 import com.theoriacodex.app.statistics.StatsShareFile
+import com.theoriacodex.app.statistics.StatsShareOverall
 import com.theoriacodex.app.statistics.buildStatsShare
 import com.theoriacodex.app.statistics.compareStats
 import com.theoriacodex.app.viewer.decodeViewerPostId
+import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 
@@ -35,16 +40,25 @@ private enum class ComparedPostView(val label: String) { BOTH("Both"), THEIRS("T
 @Composable
 internal fun StatsComparisonScreen(
     codices: List<CodexStatisticsSummary>,
+    yourOverall: StatsShareOverall,
     theirs: StatsShareFile,
     availableSources: Collection<SourceKey>,
+    previewPost: suspend (PostId) -> Post?,
     onOpenPost: (PostId) -> Unit,
     onBack: () -> Unit,
 ) {
     val comparison = remember(codices, theirs) { compareStats(buildStatsShare(codices), theirs) }
     val theirName = theirs.name ?: "Them"
     var view by rememberSaveable { mutableStateOf(ComparedPostView.BOTH) }
+    // Every Codex summary carries the same retained Stats thumbnails.
+    val thumbnails = remember(codices) { codices.firstOrNull { it.thumbnails.isNotEmpty() }?.thumbnails.orEmpty() }
+    // Switching tabs shows the same posts again, so each is looked up on its site at most once per visit.
+    val loadPost = remember(previewPost) { memoizedPostLoader(previewPost) }
     SettingsPageColumn {
         SettingsHeader("You vs $theirName", onBack, SETTINGS_PATH)
+        StatsSectionTitle("Overall")
+        ComparedOverall(yourOverall, theirs.overall, theirName)
+        StatsSectionTitle("In Codices")
         StatsCard {
             ComparedValue("Time watching", comparison.yours.watchingMs, comparison.theirs.watchingMs, theirName, ::formatStatsDuration)
             ComparedValue("Time browsing", comparison.yours.browsingMs, comparison.theirs.browsingMs, theirName, ::formatStatsDuration)
@@ -67,8 +81,36 @@ internal fun StatsComparisonScreen(
                 ComparedPostView.YOURS -> comparison.yourTopPosts
             }
             if (posts.isEmpty()) StatsCaption(if (view == ComparedPostView.BOTH) "No top posts in common yet." else "No top posts yet.")
-            posts.forEach { post -> ComparedPostRow(post, theirName, availableSources, onOpenPost) }
+            posts.forEach { post ->
+                ComparedPostRow(post, theirName, availableSources, thumbnails[post.key], loadPost, onOpenPost)
+            }
         }
+    }
+}
+
+private fun memoizedPostLoader(load: suspend (PostId) -> Post?): suspend (PostId) -> Post? {
+    val loaded = HashMap<PostId, Post?>()
+    return { id -> if (id in loaded) loaded[id] else load(id).also { loaded[id] = it } }
+}
+
+/** Files from before overall stats existed, or with them left out, compare Codex activity only. */
+@Composable
+private fun ComparedOverall(yours: StatsShareOverall, theirs: StatsShareOverall?, theirName: String) {
+    StatsCard {
+        if (theirs == null) {
+            StatsCaption("$theirName didn't share overall stats.")
+            return@StatsCard
+        }
+        listOf<Triple<String, (StatsShareOverall) -> Long, (Long) -> String>>(
+            Triple("Time in the app", { it.timeInAppMs }, ::formatStatsDuration),
+            Triple("Time browsing", { it.browsingMs }, ::formatStatsDuration),
+            Triple("Time watching", { it.watchingMs }, ::formatStatsDuration),
+            Triple("Time in Codices", { it.codexMs }, ::formatStatsDuration),
+            Triple("App opens", { it.appOpens }, Long::toString),
+            Triple("Posts watched", { it.postsWatched }, Long::toString),
+            Triple("Posts saved", { it.postsSaved }, Long::toString),
+            Triple("Searches", { it.searches }, Long::toString),
+        ).forEach { (label, value, format) -> ComparedValue(label, value(yours), value(theirs), theirName, format) }
     }
 }
 
@@ -105,16 +147,24 @@ private fun ComparedPostRow(
     post: ComparedPost,
     theirName: String,
     availableSources: Collection<SourceKey>,
+    retainedThumbnail: String?,
+    loadPost: suspend (PostId) -> Post?,
     onOpenPost: (PostId) -> Unit,
 ) {
     val postId = remember(post.key) { decodeViewerPostId(post.key) }
     val openable = postId != null && postId.source in availableSources
-    Column(
-        Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp)
+    val thumbnail = rememberStatsPostThumbnail(post.key, retainedThumbnail) { id -> if (openable) loadPost(id) else null }
+    Row(
+        Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).clip(RoundedCornerShape(10.dp))
             .clickable(enabled = openable, role = Role.Button, onClickLabel = "Open post") { postId?.let(onOpenPost) },
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(post.label, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        StatsCaption("You ${post.yourOpens} · $theirName ${post.theirOpens} opens")
-        if (!openable) StatsCaption("This site isn't set up here")
+        StatsPostThumbnail(post.key, thumbnail)
+        Column(Modifier.weight(1f)) {
+            Text(post.label, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            StatsCaption("You ${post.yourOpens} · $theirName ${post.theirOpens} opens")
+            if (!openable) StatsCaption("This site isn't set up here")
+        }
     }
 }

@@ -744,6 +744,11 @@ internal class TheoriaShell(
         }
     }
 
+    /** Never saves a looked-up post, so a friend's stats leave nothing behind in this library. */
+    suspend fun previewStatisticsPost(postId: PostId): Post? = runCatchingPreservingCancellation {
+        data.codexRepository.getPost(postId) ?: viewerRouteWorkflow.resolvePostWithoutSaving(postId)
+    }.getOrNull()
+
     /** Replaces any open Viewer with a session holding one post, or reports that the post could not be loaded. */
     private suspend fun openSinglePostViewer(queryHash: String, initialMediaIndex: Int = 0, load: suspend () -> Post?) {
         val post = runCatchingPreservingCancellation { load() }.getOrNull()

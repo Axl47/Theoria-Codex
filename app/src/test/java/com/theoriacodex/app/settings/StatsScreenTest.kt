@@ -18,6 +18,7 @@ import com.theoriacodex.app.statistics.ProfileStatistics
 import com.theoriacodex.app.statistics.StatisticsSummary
 import com.theoriacodex.app.statistics.StatsShareCodex
 import com.theoriacodex.app.statistics.StatsShareFile
+import com.theoriacodex.app.statistics.StatsShareOverall
 import com.theoriacodex.app.statistics.StatsSharePost
 import com.theoriacodex.data.repository.CodexPostStatistics
 import com.theoriacodex.domain.model.PostId
@@ -62,7 +63,7 @@ class StatsScreenTest {
         val codices = listOf(codex("a", "Landscapes", 3_600_000L, posts), codex("b", "Portraits", 60_000L))
         compose.setContent {
             MaterialTheme {
-                StatsSharePreview(listOf(ProfileStatistics("p", "Main", codices)), "p", StatsActions(share = { shared += it }), { opened += it }, onBack = {})
+                StatsSharePreview(listOf(ProfileStatistics("p", "Main", codices)), StatsShareOverall(), "p", StatsActions(share = { shared += it }), { opened += it }, onBack = {})
             }
         }
         compose.onNodeWithText("Landscapes").performScrollTo().performClick()
@@ -90,32 +91,43 @@ class StatsScreenTest {
             ProfileStatistics("alt", "Alt", listOf(codex("b", "Private", 2_000L), codex("system:saved", "Saved", 500L))),
         )
         compose.setContent {
-            MaterialTheme { StatsSharePreview(profiles, "main", StatsActions(download = { downloaded += it }), {}, onBack = {}) }
+            MaterialTheme { StatsSharePreview(profiles, StatsShareOverall(), "main", StatsActions(download = { downloaded += it }), {}, onBack = {}) }
         }
         compose.onNodeWithText("Alt").performClick()
         compose.onNodeWithContentDescription("Include profile Alt").performScrollTo().assertIsOff()
         compose.onNodeWithText("Download").performScrollTo().performClick()
         compose.waitUntil(5_000) { downloaded.size == 1 }
         assertEquals(setOf("Landscapes", "Saved"), downloaded.last().codices.orEmpty().map { it?.name }.toSet())
+        assertEquals(StatsShareOverall(), downloaded.last().overall)
 
         compose.onNodeWithContentDescription("Include profile Alt").performScrollTo().performClick()
         compose.waitForIdle()
         compose.onNodeWithText("Download").performScrollTo().performClick()
         compose.waitUntil(5_000) { downloaded.size == 2 }
         assertEquals(listOf("Landscapes", "Private", "Saved"), downloaded.last().codices.orEmpty().map { it?.name }.sortedBy { it })
+
+        compose.onNodeWithContentDescription("Include overall stats").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Download").performScrollTo().performClick()
+        compose.waitUntil(5_000) { downloaded.size == 3 }
+        assertEquals(null, downloaded.last().overall)
     }
 
     @Test
-    fun `a compared post opens only when its site is set up here`() {
+    fun `a compared post opens and looks up its thumbnail only when its site is set up here`() {
         val opened = mutableListOf<PostId>()
+        val looked = mutableListOf<PostId>()
         val theirs = StatsShareFile(name = "Sam", codices = listOf(StatsShareCodex(name = "Favorites", posts = listOf(
             StatsSharePost(key = "GELBOORU:7", label = "Ready post", opens = 4L),
             StatsSharePost(key = "PIXIV:9", label = "Missing site post", opens = 2L),
         ))))
         compose.setContent {
-            MaterialTheme { StatsComparisonScreen(emptyList(), theirs, setOf(SourceKey.GELBOORU), { opened += it }, onBack = {}) }
+            MaterialTheme { StatsComparisonScreen(
+                emptyList(), StatsShareOverall(), theirs, setOf(SourceKey.GELBOORU), { looked += it; null }, { opened += it }, onBack = {},
+            ) }
         }
         compose.onNodeWithText("You vs Sam", substring = true).assertExists()
+        compose.onNodeWithText("Sam didn't share overall stats.").assertExists()
         compose.onNodeWithText("Theirs").performScrollTo().performClick()
 
         compose.onNodeWithText("Missing site post").performScrollTo().performClick()
@@ -124,6 +136,7 @@ class StatsScreenTest {
         compose.waitUntil(5_000) { opened.isNotEmpty() }
 
         assertEquals(listOf(PostId(SourceKey.GELBOORU, "7")), opened)
+        assertEquals(listOf(PostId(SourceKey.GELBOORU, "7")), looked)
     }
 
     private fun codex(id: String, name: String, watchingMs: Long, posts: Map<String, CodexPostStatistics> = emptyMap()) =

@@ -23,7 +23,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.listSaver
@@ -31,15 +30,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.app.statistics.CodexStatisticsSummary
 import com.theoriacodex.app.statistics.ProfileStatistics
 import com.theoriacodex.app.statistics.StatsShareFile
+import com.theoriacodex.app.statistics.StatsShareOverall
 import com.theoriacodex.app.statistics.StatsShareSelection
 import com.theoriacodex.app.statistics.StatsShareTotals
 import com.theoriacodex.app.statistics.allProfileCodices
@@ -48,10 +46,8 @@ import com.theoriacodex.app.statistics.codexIdsOutsideProfiles
 import com.theoriacodex.app.statistics.compareStats
 import com.theoriacodex.app.statistics.hasShareableActivity
 import com.theoriacodex.app.statistics.shareCodex
-import com.theoriacodex.app.viewer.decodeViewerPostId
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import java.io.File
 import kotlinx.coroutines.launch
 
 private val StringSetSaver = listSaver<Set<String>, String>({ it.toList() }, { it.toSet() })
@@ -63,6 +59,7 @@ private fun Set<String>.withMember(key: String, present: Boolean): Set<String> =
 @Composable
 internal fun StatsSharePreview(
     profiles: List<ProfileStatistics>,
+    overall: StatsShareOverall,
     activeProfileId: String,
     actions: StatsActions,
     onOpenPost: (PostId) -> Unit,
@@ -71,6 +68,7 @@ internal fun StatsSharePreview(
     var name by rememberSaveable { mutableStateOf("") }
     // Starts with the profile in use: another profile may be private, so including it takes a deliberate tap.
     var includedProfiles by rememberSaveable(stateSaver = StringSetSaver) { mutableStateOf(setOf(activeProfileId)) }
+    var includeOverall by rememberSaveable { mutableStateOf(true) }
     var excludedCodices by rememberSaveable(stateSaver = StringSetSaver) { mutableStateOf(emptySet<String>()) }
     var excludedPosts by rememberSaveable(stateSaver = StringSetSaver) { mutableStateOf(emptySet<String>()) }
     var openCodexId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -80,21 +78,25 @@ internal fun StatsSharePreview(
     if (openCodex != null) {
         BackHandler { openCodexId = null }
         ShareCodexPosts(
-            openCodex, excludedPosts, actions.storedPost, onOpenPost,
+            openCodex, excludedPosts, actions.previewPost, onOpenPost,
             onIncludedChange = { key, included -> excludedPosts = excludedPosts.withMember(key, !included) },
             onBack = { openCodexId = null },
         )
         return
     }
     val outsideProfiles = remember(profiles, includedProfiles) { codexIdsOutsideProfiles(profiles, includedProfiles) }
-    val file = remember(codices, outsideProfiles, excludedCodices, excludedPosts, name) {
-        buildStatsShare(codices, StatsShareSelection(excludedCodices + outsideProfiles, excludedPosts), name)
+    val file = remember(codices, outsideProfiles, excludedCodices, excludedPosts, name, includeOverall, overall) {
+        val selection = StatsShareSelection(excludedCodices + outsideProfiles, excludedPosts)
+        buildStatsShare(codices, selection, name, overall.takeIf { includeOverall })
     }
     val totals = remember(file) { compareStats(file, StatsShareFile()).yours }
     val selected = profiles.firstOrNull { it.profileId == selectedProfileId } ?: profiles.firstOrNull()
     SettingsPageColumn {
         SettingsHeader("Share my stats", onBack, SETTINGS_PATH)
-        StatsCaption("The file holds Codex names, time, open counts and your top posts. Uncheck anything you'd rather keep private.")
+        StatsCaption(
+            "The file holds your overall time and counts, Codex names, time, open counts and your top posts. " +
+                "Uncheck anything you'd rather keep private.",
+        )
         if (profiles.size > 1 && selected != null) {
             ShareProfileTabs(profiles, selected.profileId, includedProfiles) { selectedProfileId = it }
             ShareProfileToggle(selected, selected.profileId in includedProfiles) { included ->
@@ -102,6 +104,7 @@ internal fun StatsSharePreview(
             }
         }
         ShareNameCard(name) { name = it.take(60) }
+        ShareOverall(overall, includeOverall) { includeOverall = it }
         ShareTotalsCard(totals, codexCount = file.codices.orEmpty().size, profileCount = includedProfiles.size)
         StatTiles("Codex opens" to totals.entries, "Post opens" to totals.postOpens)
         ShareCodices(
@@ -158,7 +161,7 @@ private fun ShareProfileToggle(profile: ProfileStatistics, included: Boolean, on
 private fun ShareButtons(file: StatsShareFile, actions: StatsActions) {
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val enabled = !busy && file.codices.orEmpty().isNotEmpty()
+    val enabled = !busy && (file.codices.orEmpty().isNotEmpty() || file.overall != null)
     val run = { action: suspend (StatsShareFile) -> Unit ->
         busy = true
         scope.launch { try { action(file) } finally { busy = false } }
@@ -189,11 +192,34 @@ private fun ShareNameCard(name: String, onNameChange: (String) -> Unit) {
     }
 }
 
+/** App-wide totals, which hold time outside Codices too; they can be left out as a whole. */
+@Composable
+private fun ShareOverall(overall: StatsShareOverall, included: Boolean, onIncludedChange: (Boolean) -> Unit) {
+    if (included) {
+        OverallTimeCard("They'll see overall", overall)
+        StatTiles("Watched" to overall.postsWatched, "Saved" to overall.postsSaved, "Searches" to overall.searches)
+    }
+    SettingsGroup(null) {
+        SettingsRow(
+            "Include overall stats",
+            "Time in the app, app opens, posts watched and saved, and searches",
+            onClick = { onIncludedChange(!included) },
+            trailing = {
+                Checkbox(
+                    checked = included,
+                    onCheckedChange = onIncludedChange,
+                    modifier = Modifier.semantics { contentDescription = "Include overall stats" },
+                )
+            },
+        )
+    }
+}
+
 @Composable
 private fun ShareTotalsCard(totals: StatsShareTotals, codexCount: Int, profileCount: Int) {
     val codexText = if (codexCount == 1) "1 Codex" else "$codexCount Codices"
     StatsCard {
-        StatsCaption("They'll see")
+        StatsCaption("Codex time they'll see")
         StatsHeadline(formatStatsDuration(totals.browsingMs + totals.watchingMs))
         StatsCaption(if (profileCount > 1) "across $codexText from $profileCount profiles" else "across $codexText")
         TimeSplit(
@@ -250,7 +276,7 @@ private fun ShareCodices(
 private fun ShareCodexPosts(
     codex: CodexStatisticsSummary,
     excludedPosts: Set<String>,
-    storedPost: suspend (PostId) -> Post?,
+    previewPost: suspend (PostId) -> Post?,
     onOpenPost: (PostId) -> Unit,
     onIncludedChange: (String, Boolean) -> Unit,
     onBack: () -> Unit,
@@ -274,7 +300,7 @@ private fun ShareCodexPosts(
                     label = label,
                     value = if (post.opens > 0L) "$percentage% · ${post.opens}" else formatStatsDuration(post.videoMs + post.imageMs),
                     percentage = percentage,
-                    thumbnail = rememberShareThumbnail(key, codex.thumbnails[key], storedPost),
+                    thumbnail = rememberStatsPostThumbnail(key, codex.thumbnails[key], previewPost),
                     reserveThumbnail = true,
                     onOpen = onOpenPost,
                 ) {
@@ -284,22 +310,6 @@ private fun ShareCodexPosts(
                         modifier = Modifier.padding(start = 2.dp).semantics { contentDescription = "Include $label" },
                     )
                 }
-            }
-        }
-    }
-}
-
-/** Only ranked posts keep a Stats thumbnail, so a post that just moved up falls back to its saved preview. */
-@Composable
-private fun rememberShareThumbnail(key: String, retainedPath: String?, storedPost: suspend (PostId) -> Post?): Any? {
-    val context = LocalContext.current
-    val saved by produceState<Post?>(null, key, retainedPath) {
-        if (retainedPath == null) value = decodeViewerPostId(key)?.let { storedPost(it) }
-    }
-    return remember(retainedPath, saved, context) {
-        retainedPath?.let(::File) ?: saved?.let { post ->
-            post.preview.localPath?.let(::File) ?: post.preview.url?.let {
-                MediaRequestFactory.imageRequest(context, it, post.id.source, crossfade = false, staticAnimatedWebPFrame = true)
             }
         }
     }

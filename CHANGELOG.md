@@ -22,6 +22,8 @@
 
 - Share or download your Codex stats as a file across any of your profiles, leaving out any profile, Codex or post first, and the totals are recalculated to match.
 - Compare your Codex stats with a file a friend sent you, including top posts you can open in the Viewer.
+- Shared stats now include your overall time in the app, app opens, posts watched and saved, and searches, which you can leave out, and the comparison shows them side by side.
+- Top posts in a stats comparison now show thumbnails.
 - Settings has a Diagnostics report that shares or downloads recent crashes and errors as a file, with web addresses and account details removed.
 - Posts in a Codex's Top posts list in Stats now open in the Viewer when you tap them.
 - When a site refuses your account in search, a re-test or a shared link, a button takes you straight to that site's API key field.

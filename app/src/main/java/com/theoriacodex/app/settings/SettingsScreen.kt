@@ -51,6 +51,7 @@ import com.theoriacodex.app.media.videoQualityLabel
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.statistics.StatisticsSummary
 import com.theoriacodex.app.statistics.allProfileCodices
+import com.theoriacodex.app.statistics.shareOverall
 import com.theoriacodex.app.ui.components.ActionMenuRow
 import com.theoriacodex.app.ui.components.NameEntryDialog
 import com.theoriacodex.data.repository.RecommendationProfile
@@ -102,11 +103,16 @@ fun SettingsScreen(
             SettingsPage.HIDDEN_TAGS -> HiddenTagsPage(state, onAction, openHome)
             SettingsPage.STORAGE -> StoragePage(state, onAction, storageTools, openHome)
             SettingsPage.STATS -> StatsScreen(statistics, openPost, openHome)
-            SettingsPage.STATS_SHARE -> StatsSharePreview(statistics.profiles, state.activeProfile.profileId, statsActions, openPost, openHome)
+            SettingsPage.STATS_SHARE -> StatsSharePreview(
+                statistics.profiles, statistics.shareOverall(), state.activeProfile.profileId, statsActions, openPost, openHome,
+            )
             SettingsPage.STATS_COMPARE -> state.statsComparison?.let { theirs ->
                 val close = { onAction(SettingsAction.SetStatsComparison(null)) }
                 BackHandler(onBack = close)
-                StatsComparisonScreen(allProfileCodices(statistics.profiles), theirs, state.availableSources, openPost, close)
+                StatsComparisonScreen(
+                    allProfileCodices(statistics.profiles), statistics.shareOverall(), theirs, state.availableSources,
+                    statsActions.previewPost, openPost, close,
+                )
             }
             SettingsPage.DIAGNOSTICS -> diagnostics?.let { DiagnosticsPage(it, openHome) }
         }

@@ -193,7 +193,7 @@ internal class ViewerRouteWorkflow(
         }
         val selected = restored[selectedId]
         if (selected == null || request.selectedMediaIndex >= selected.media.size.coerceAtLeast(1)) {
-            val resolved = resolveRestoredPost(selectedId)
+            val resolved = resolvePostWithoutSaving(selectedId)
             if (resolved != null) restored[selectedId] = resolved
         }
         if (selectedId !in restored) return null
@@ -229,7 +229,7 @@ internal class ViewerRouteWorkflow(
         val mediaNumber = if (startOver) 1 else (mediaIndices[selected.id] ?: 0) + 1
         val prepared = preparePostsForLaunch(posts, context).toMutableList()
         if (mediaNumber > prepared[index].media.size.coerceAtLeast(1)) {
-            resolveRestoredPost(selected.id)?.let { prepared[index] = it }
+            resolvePostWithoutSaving(selected.id)?.let { prepared[index] = it }
         }
         if (startOver) {
             runCatchingPreservingCancellation {
@@ -249,7 +249,8 @@ internal class ViewerRouteWorkflow(
                 .associate { it.postId to it.mediaNumber - 1 }
         }.getOrDefault(emptyMap())
 
-    private suspend fun resolveRestoredPost(postId: PostId): Post? = withTimeoutOrNull(15_000L) {
+    /** Finds a post offline or on its site, giving up after 15 seconds; unlike [resolvePost] it records nothing. */
+    suspend fun resolvePostWithoutSaving(postId: PostId): Post? = withTimeoutOrNull(15_000L) {
         offlineMedia?.find(postId)
             ?: runCatchingPreservingCancellation {
                 withContext(providerDispatcher) { sources.registry.adapterFor(postId.source)?.resolvePost(postId) }
