@@ -90,6 +90,9 @@ fi
   --warning-mode=all \
   --console=plain
 
+# Offline lint cannot download its own tool on a fresh machine. A dry run fetches it.
+./gradlew :app:lint :core-data-android:lintDebug --dry-run --console=plain
+
 # Finish all source generation before lint reads Room's generated Java.
 ./gradlew :app:lint :core-data-android:lintDebug --offline --no-daemon --warning-mode=all --console=plain
 
