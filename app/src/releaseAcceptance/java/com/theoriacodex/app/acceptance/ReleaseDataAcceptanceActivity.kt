@@ -117,7 +117,7 @@ private fun verifyVideoPost(json: String) {
     check(fullVariants.size() == 2)
     fullVariants.forEach { check(it.asJsonObject.keySet() == setOf("url", "height", "original", "mime")) }
     val galleryMedia = wire.getAsJsonArray("media").single().asJsonObject
-    check(galleryMedia.keySet() == setOf("url", "localPath", "mime", "progressiveUrls", "videoVariants", "isAnimated"))
+    check(galleryMedia.keySet() == setOf("url", "localPath", "mime", "progressiveUrls", "videoVariants", "isAnimated", "thumbnailUrl"))
     check(galleryMedia.getAsJsonArray("videoVariants").single().asJsonObject.keySet() == setOf("url", "height", "original", "mime"))
     val restored = requireNotNull(PostStorageCodec.decode(gson.fromJson(json, PostStorageRecord::class.java)))
     check(restored == videoPostFixture())
