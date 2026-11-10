@@ -104,8 +104,8 @@ internal class CustomSitesControllerImpl(
     private val pendingSetup = MutableStateFlow<SitesRequest?>(null)
     override val setupRequest: StateFlow<SitesRequest?> = pendingSetup.asStateFlow()
 
-    override fun requestSetup(address: String) {
-        pendingSetup.value = SitesRequest.Add(address)
+    override fun requestSetup(address: String, linkAfterSetup: String?) {
+        pendingSetup.value = SitesRequest.Add(address, linkAfterSetup)
     }
 
     override fun requestVerification(sourceId: String) {
@@ -118,6 +118,13 @@ internal class CustomSitesControllerImpl(
 
     override fun clearSetupRequest() {
         pendingSetup.value = null
+    }
+
+    private val pendingLink = MutableStateFlow<String?>(null)
+    override val linkAfterSetup: StateFlow<String?> = pendingLink.asStateFlow()
+
+    override fun clearLinkAfterSetup() {
+        pendingLink.value = null
     }
 
     override suspend fun probe(input: String, credentials: SiteCredentials?, headers: SiteHeaders): SiteProbeResult =
@@ -159,6 +166,13 @@ internal class CustomSitesControllerImpl(
         if (draft.includeInUnifiedAndForYou) setIncluded(source, included = true)
         // The check that led here just got an answer, so a mark from before a removal no longer applies.
         outages.clear(address.host)
+        draft.linkAfterSetup?.let { link ->
+            // The link opens straight through the live source, which is rebuilt just after the keys are written.
+            withTimeoutOrNull(LIVE_SOURCE_WAIT_MS) {
+                sites.first { live -> live.any { it.sourceId == profile.sourceId && it.hasCredentials == (draft.credentials != null) } }
+            }
+            pendingLink.value = link
+        }
         return CustomSiteMutation.Success
     }
 
@@ -290,6 +304,7 @@ private val BUILT_IN_SOURCES = SourceKey.builtIns.inPresentationOrder()
 
 /** Long enough for a slow first search, short enough that one stuck source doesn't stall Test all. */
 private const val BUILT_IN_TEST_TIMEOUT_MS = 20_000L
+private const val LIVE_SOURCE_WAIT_MS = 5_000L
 
 private fun builtInTestFailure(error: Throwable): BuiltInTestResult = when ((error as? SourceAdapterException)?.reason) {
     SourceFailureReason.AUTH_REQUIRED, SourceFailureReason.AUTH_EXPIRED -> BuiltInTestResult.NEEDS_ACCOUNT

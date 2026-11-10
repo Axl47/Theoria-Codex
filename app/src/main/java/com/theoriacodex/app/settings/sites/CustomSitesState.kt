@@ -67,6 +67,8 @@ sealed interface SiteForm {
         /** True once the probe asked for keys or the user chose to enter them. */
         val showCredentials: Boolean = false,
         val stage: AddStage = AddStage.Address(),
+        /** The link that led here, which opens once this site is saved. */
+        val linkAfterSetup: String? = null,
     ) : SiteForm
 
     data class Edit(

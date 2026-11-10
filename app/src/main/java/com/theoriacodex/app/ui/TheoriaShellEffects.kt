@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui
 
+import kotlinx.coroutines.flow.filterNotNull
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -158,6 +159,14 @@ internal fun ShellIncomingUriEffects(
         }
         shell.owners.codexImports.start(uri.toString())
         appShellOwner.onAction(AppShellAction.ConsumeIncomingUri(pending))
+    }
+    LaunchedEffect(shell.navReady) {
+        if (!shell.navReady) return@LaunchedEffect
+        val customSites = shell.container.customSites
+        customSites.linkAfterSetup.filterNotNull().collect { link ->
+            customSites.clearLinkAfterSetup()
+            shell.openExternalContent(link.toUri())
+        }
     }
     val pendingExternalContent = appShellState.pendingIncomingUri?.takeIf { it.kind == IncomingUriKind.EXTERNAL_CONTENT }
     LaunchedEffect(shell.navReady, pendingExternalContent) {

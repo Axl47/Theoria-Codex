@@ -585,7 +585,7 @@ internal class TheoriaShell(
             // A post on a booru that isn't added yet: offer the Sites setup with its address filled in.
             val unaddedHost = unaddedBooruPostHost(uri.toString(), customSites)
             if (unaddedHost != null) {
-                container.customSites.requestSetup(unaddedHost)
+                container.customSites.requestSetup(unaddedHost, linkAfterSetup = uri.toString())
                 owners.settings.onAction(SettingsAction.OpenCustomSites)
             } else {
                 toast("Unsupported URL format")

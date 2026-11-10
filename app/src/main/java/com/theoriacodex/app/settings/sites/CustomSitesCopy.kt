@@ -187,7 +187,7 @@ internal fun reconnectConfirmationText(hostLabel: String): String =
 
 internal val HEADER_ERROR_MESSAGE = "Header values must be a single line of up to ${SiteHeaders.MAX_HEADER_LENGTH} characters."
 internal const val ADD_API_KEY_LABEL = "Add API key"
-internal const val KEYS_REJECTED_MESSAGE = "Those keys didn't work. Check them, and that the account has API access."
+internal const val KEYS_REJECTED_MESSAGE = "Those keys didn't work. Check them, and that the key isn't limited by IP address or permissions."
 internal const val CONFIRM_KEY_HINT = "This site checks visitors first. If you have an account there, add your API key so browsing isn't limited."
 internal const val PARTIAL_CREDENTIALS_MESSAGE = "Enter both the user and the API key, or leave both blank."
 internal const val UNEXPECTED_FAILURE_MESSAGE = "Something went wrong. Try again."

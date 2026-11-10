@@ -88,17 +88,23 @@ interface CustomSitesController {
      */
     val setupRequest: StateFlow<SitesRequest?>
 
-    fun requestSetup(address: String)
+    /** [linkAfterSetup] is opened once the site is saved; abandoning the form discards it. */
+    fun requestSetup(address: String, linkAfterSetup: String? = null)
 
     fun requestVerification(sourceId: String)
 
     fun requestKeyEntry(sourceId: String)
 
     fun clearSetupRequest()
+
+    /** A link waiting on the site just saved for it, ready to open. The app opens it and calls [clearLinkAfterSetup]. */
+    val linkAfterSetup: StateFlow<String?>
+
+    fun clearLinkAfterSetup()
 }
 
 sealed interface SitesRequest {
-    data class Add(val address: String) : SitesRequest
+    data class Add(val address: String, val linkAfterSetup: String? = null) : SitesRequest
     data class Verify(val sourceId: String) : SitesRequest
     data class EnterKey(val sourceId: String) : SitesRequest
 }
@@ -150,6 +156,7 @@ data class CustomSiteDraft(
     val headers: SiteHeaders = SiteHeaders(),
     val includeInUnifiedAndForYou: Boolean = false,
     val confirmReconnect: Boolean = false,
+    val linkAfterSetup: String? = null,
 )
 
 /** Null fields keep their current value. */

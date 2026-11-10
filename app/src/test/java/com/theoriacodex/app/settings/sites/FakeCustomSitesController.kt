@@ -42,8 +42,8 @@ internal class FakeCustomSitesController(initial: List<CustomSiteSummary> = empt
 
     override val setupRequest = MutableStateFlow<SitesRequest?>(null)
 
-    override fun requestSetup(address: String) {
-        setupRequest.value = SitesRequest.Add(address)
+    override fun requestSetup(address: String, linkAfterSetup: String?) {
+        setupRequest.value = SitesRequest.Add(address, linkAfterSetup)
     }
 
     override fun requestVerification(sourceId: String) {
@@ -52,6 +52,12 @@ internal class FakeCustomSitesController(initial: List<CustomSiteSummary> = empt
 
     override fun requestKeyEntry(sourceId: String) {
         setupRequest.value = SitesRequest.EnterKey(sourceId)
+    }
+
+    override val linkAfterSetup = MutableStateFlow<String?>(null)
+
+    override fun clearLinkAfterSetup() {
+        linkAfterSetup.value = null
     }
 
     override fun clearSetupRequest() {

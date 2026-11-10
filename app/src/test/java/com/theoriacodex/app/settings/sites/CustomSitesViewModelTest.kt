@@ -348,6 +348,23 @@ class CustomSitesViewModelTest {
         assertNull(controller.setupRequest.value)
     }
 
+    @Test fun `a link that led to setup travels with the saved site, unless the address changes`() = runTest {
+        controller.onProbe = { supported() }
+        val owner = owner()
+        val link = "https://safebooru.org/index.php?page=post&s=view&id=7"
+
+        controller.requestSetup("safebooru.org", link)
+        runCurrent()
+        owner.onAction(CustomSitesAction.SaveNew)
+        runCurrent()
+        assertEquals(link, controller.drafts.single().linkAfterSetup)
+
+        controller.requestSetup("safebooru.org", link)
+        runCurrent()
+        owner.onAction(CustomSitesAction.SetAddress("other.example"))
+        assertNull(owner.add.linkAfterSetup)
+    }
+
     @Test fun `a key request opens that site's page with its key section open`() = runTest {
         controller.sites.value = listOf(site())
         val owner = owner()
