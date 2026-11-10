@@ -110,8 +110,8 @@ internal class SiteCookieBridge(private val store: BrowserCookieStore) {
     private fun cookiesFor(url: String, host: String?): String? =
         if (isAllowed(host)) runCatching { store.cookieHeader(url) }.getOrNull() else null
 
-    /** On every image and API request: no allocation, and no parsing beyond the host's normalization. */
-    private fun isAllowed(host: String?): Boolean {
+    /** Whether [host] shares the browser's identity. On every image and API request: no allocation, and no parsing beyond the host's normalization. */
+    fun isAllowed(host: String?): Boolean {
         if (host == null) return false
         return siteHosts.any { HostOutageTracker.hostBelongsToSite(host, it) } ||
             builtInAgents.keys.any { HostOutageTracker.hostBelongsToSite(host, it) } ||

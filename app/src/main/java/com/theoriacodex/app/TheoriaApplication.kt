@@ -40,6 +40,7 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
             activeNetwork = { getSystemService(ConnectivityManager::class.java).activeNetwork },
         ),
         siteCookieBridge::userAgentFor,
+        siteCookieBridge::isAllowed,
     )
 
     internal val videoPlaybackInfrastructure: VideoPlaybackInfrastructure by lazy {

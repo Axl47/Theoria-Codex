@@ -71,14 +71,21 @@ internal fun HostOutageTracker.clearSource(source: SourceKey) {
  */
 internal fun startSourceHealthCheck(scope: CoroutineScope, check: SiteHealthCheck, sources: () -> List<SourceKey>) {
     if (!startupCheckStarted.compareAndSet(false, true)) return
-    scope.launch(Dispatchers.IO) { checkSourcesInBackground(check, sources()) }
+    scope.launch(Dispatchers.IO) { checkSourcesInBackground(check, sources) }
 }
 
 private val startupCheckStarted = AtomicBoolean(false)
 
-private suspend fun checkSourcesInBackground(check: SiteHealthCheck, sources: List<SourceKey>) {
+/**
+ * The sources the startup check may visit. A site with a saved key is left out: the check sends no key, so it
+ * would spend an anonymous request and could mark down a site that its keyed requests get through to.
+ */
+internal fun startupCheckSources(sources: List<SourceKey>, keyedSiteIds: Set<String>): List<SourceKey> =
+    sources.filterNot { it.id in keyedSiteIds }
+
+private suspend fun checkSourcesInBackground(check: SiteHealthCheck, sources: () -> List<SourceKey>) {
     delay(STARTUP_CHECK_DELAY_MS)
-    sources.forEach { source ->
+    sources().forEach { source ->
         val presentation = source.presentation()
         runCatchingPreservingCancellation {
             check.check(presentation.referer, mapOf("User-Agent" to presentation.userAgent), countChallenges = source.isCustom)

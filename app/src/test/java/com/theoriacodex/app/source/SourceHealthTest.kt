@@ -52,4 +52,10 @@ class SourceHealthTest {
         assertTrue(health.onPick(SourceKey.IWARA))
         assertEquals(listOf(custom, SourceKey.IWARA), verified)
     }
+
+    @Test
+    fun `the startup check leaves out sites with a saved key`() {
+        val keyed = requireNotNull(SourceKey.parse("custom_booru_example"))
+        assertEquals(listOf(SourceKey.DANBOORU), startupCheckSources(listOf(SourceKey.DANBOORU, keyed), setOf(keyed.id)))
+    }
 }
