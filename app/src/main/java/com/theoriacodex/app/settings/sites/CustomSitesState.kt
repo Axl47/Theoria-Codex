@@ -102,8 +102,11 @@ sealed interface AddStage {
 sealed interface RetestStatus {
     data object Running : RetestStatus
 
-    /** [blocked] when a browser challenge refused the check, so the row offers browser verification. */
-    data class Done(val message: String, val ok: Boolean, val blocked: Boolean = false) : RetestStatus
+    /**
+     * [blocked] when a browser challenge refused the check, so the row offers browser verification;
+     * [needsKey] when the site asked for keys or refused the saved ones, so it offers the key field.
+     */
+    data class Done(val message: String, val ok: Boolean, val blocked: Boolean = false, val needsKey: Boolean = false) : RetestStatus
 }
 
 sealed interface CustomSitesAction {

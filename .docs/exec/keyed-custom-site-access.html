@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Keyed Custom Site Access</title>
+  <style>
+    :root { color-scheme: light dark; --bg: #f7f7f4; --surface: #ffffff; --text: #202124; --muted: #5f6368; --border: #d7d7d0; --accent: #0f766e; --accent-soft: #dff3ef; --risk: #9a3412; --risk-soft: #ffedd5; --code: #111827; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #151716; --surface: #202321; --text: #f0f2ef; --muted: #b8beb7; --border: #3a403c; --accent: #5eead4; --accent-soft: #123b37; --risk: #fdba74; --risk-soft: #43230f; --code: #0b0f0d; } }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+    header, main { max-width: 1180px; margin: 0 auto; padding: 24px; }
+    h1, h2, h3 { line-height: 1.15; margin: 0 0 12px; }
+    h1 { font-size: clamp(2rem, 4vw, 3rem); } h2 { margin-top: 12px; font-size: 1.55rem; } h3 { margin-top: 24px; font-size: 1.1rem; }
+    p { margin: 0 0 14px; } a { color: var(--accent); }
+    nav { position: sticky; top: 0; z-index: 10; border-block: 1px solid var(--border); background: var(--surface); }
+    nav ul { display: flex; gap: 6px; max-width: 1180px; margin: 0 auto; padding: 8px 24px; list-style: none; overflow-x: auto; }
+    nav a { display: block; padding: 6px 10px; border-radius: 6px; text-decoration: none; white-space: nowrap; }
+    section { padding: 22px; margin: 18px 0; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.95rem; }
+    th, td { padding: 9px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+    th { color: var(--muted); }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }
+    pre { overflow-x: auto; padding: 14px; border-radius: 8px; background: var(--code); color: #f8fafc; }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; color: var(--muted); }
+    .pill { padding: 4px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); }
+    .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin: 18px 0 0; }
+    .card { padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+    .card strong { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.82rem; text-transform: uppercase; }
+    .callout { margin: 14px 0; padding: 12px 14px; border-left: 4px solid var(--accent); background: var(--accent-soft); border-radius: 6px; }
+    .risk { border-left-color: var(--risk); background: var(--risk-soft); }
+    @media print { nav { position: static; } section, .card { break-inside: avoid; } body { background: #fff; color: #000; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ExecPlan: Keyed Custom Site Access</h1>
+    <p>A user-added site that restricts anonymous visitors works as soon as a valid API key is entered, a bad key is reported instead of silently saved, and any account refusal leads straight to that site's key field.</p>
+    <div class="meta">
+      <span class="pill">Status: In progress</span>
+      <span class="pill">Owner: Claude</span>
+      <span class="pill">Created: 2026-11-10</span>
+      <span class="pill">Updated: 2026-11-10</span>
+      <span class="pill">Branch: fix/keyed-site-access</span>
+    </div>
+    <div class="dashboard">
+      <div class="card"><strong>Next Action</strong>Implement Phase 1, the key-first site check.</div>
+      <div class="card"><strong>Main Risk</strong>The real site is confidential and must not be stressed, so behavior is proven against simulated responses until someone runs it with a valid key.</div>
+      <div class="card"><strong>Validation</strong>Focused host tests for prober, controller, ViewModel, HTTP clients and failure copy; compile, lint and Detekt for the touched modules.</div>
+      <div class="card"><strong>Affected Areas</strong><code>core-sources</code> custom sites, <code>app</code> Settings → Sites, search failure surfaces, shared-link opening, HTTP clients.</div>
+    </div>
+  </header>
+
+  <nav aria-label="Plan sections">
+    <ul>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#context">Context</a></li>
+      <li><a href="#phases">Phases</a></li>
+      <li><a href="#work-plan">Work Plan</a></li>
+      <li><a href="#validation">Validation</a></li>
+      <li><a href="#living-log">Living Log</a></li>
+      <li><a href="#recovery">Recovery</a></li>
+      <li><a href="#appendix">Appendix</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <section id="purpose">
+      <h2>Purpose / Big Picture</h2>
+      <p>A friend added a Danbooru fork that challenges anonymous requests but lets accounts through. The site looked fine, then answered "Access denied" after a little browsing. Removing it and adding it again with the correct key did not help. After this work:</p>
+      <ul>
+        <li>Adding, re-testing or browser-checking a site with a key uses that key first, so the key gets its chance even when anonymous access is closed.</li>
+        <li>A wrong key is reported at the moment it is entered.</li>
+        <li>A site that only let the app in after a browser check shows the API key fields before it is saved.</li>
+        <li>An account refusal in search, in a re-test or from a shared post offers a button that opens that site's page with its API key section open.</li>
+        <li>Saving a key clears any "site is down" mark and re-tests with the key.</li>
+        <li>A site with a saved key is not marked down by an anonymous launch request, and its images and videos can use the key when the site refuses them.</li>
+      </ul>
+    </section>
+
+    <section id="context">
+      <h2>Context And Orientation</h2>
+      <p><strong>Terms.</strong> A <em>probe</em> is the bounded set of read-only requests that identifies which booru API a site speaks. A <em>family</em> is one such API, Danbooru or Gelbooru 0.2. An <em>outage</em> is an in-memory, 10-minute "this host is down" mark that makes requests fail without touching the network. A <em>browser check</em> is the in-app WebView page where a person passes a site's challenge; its cookies then reach the app's requests through the cookie bridge.</p>
+      <table>
+        <thead><tr><th>File</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr><td><code>core-sources/src/main/kotlin/com/theoriacodex/sources/custom/SiteProber.kt</code></td><td>Runs the probe. Before this work it went anonymous first and tried keys only after an API-shaped refusal.</td></tr>
+          <tr><td><code>core-sources/.../http/HostOutageTracker.kt</code>, <code>SiteHealthCheck.kt</code></td><td>Outage marks and the anonymous launch check that can set one.</td></tr>
+          <tr><td><code>core-sources/.../danbooru/DanbooruSourceAdapter.kt</code></td><td>Sends <code>login</code> and <code>api_key</code> on API calls. A post without a file URL used to look like a missing post.</td></tr>
+          <tr><td><code>app/.../di/CustomSitesControllerImpl.kt</code>, <code>CustomSourceRuntime.kt</code></td><td>Add, update, re-test and remove; builds live adapters from profiles and keys.</td></tr>
+          <tr><td><code>app/.../settings/sites/*</code></td><td>Add and Edit forms, browser check, user-facing copy.</td></tr>
+          <tr><td><code>app/.../customsites/SiteCookieBridge.kt</code>, <code>app/.../network/AppHttpClients.kt</code></td><td>Which hosts share browser identity; the media clients and connection warm-up.</td></tr>
+          <tr><td><code>app/.../search/SourceFailureUiText.kt</code>, <code>SearchResultsBody.kt</code>, <code>SearchStateComponents.kt</code>, <code>app/.../ui/TheoriaShell.kt</code></td><td>Where refusals reach the person.</td></tr>
+        </tbody>
+      </table>
+      <p>Constraints: only the signed-in site's own hosts may ever see a key, keys stay out of URLs for media, and no live probing of the reported site.</p>
+    </section>
+
+    <section id="phases">
+      <h2>Phases</h2>
+      <h3>Phase 1: Key-first probe</h3>
+      <p>With keys, <code>SiteProber</code> probes families with the keys first. A saved site names its family, which is tried first, and no anonymous request is made. Only adding a site makes one extra anonymous probe after a keyed match, to learn whether the site can work without keys. Acceptance: anonymous HTML refusal with a working key is <code>Supported</code>; a refused key on an open site is <code>CredentialsRequired(rejected = true)</code>.</p>
+      <h3>Phase 2: Stale marks and anonymous background traffic</h3>
+      <p>Adding a site and changing its keys clear its outage. Sites with saved keys skip the anonymous launch check. Connection warm-up skips hosts that share browser identity, because it used a hard-coded agent with those cookies. Acceptance: controller and client tests.</p>
+      <h3>Phase 3: Key entry where it is needed</h3>
+      <p>New <code>SitesRequest.EnterKey</code> opens a site's page with the API key section open. Re-test failures, the Confirm step after a browser check, search failures, source chips and shared-link failures all lead there. Editing keys on the Confirm step sends the form back to Check site, so what is saved was tested. Acceptance: ViewModel, copy and failure tests.</p>
+      <h3>Phase 4: Shared posts and media</h3>
+      <p>A Danbooru post hidden from this identity becomes an account failure rather than "not found". Image, video and download requests refused on a Danbooru site's own host retry once with the key in an HTTP Basic header, and later requests to that host send it at once. Acceptance: client tests prove same-site only, HTTPS only, one retry.</p>
+    </section>
+
+    <section id="work-plan">
+      <h2>Work Plan</h2>
+      <ol>
+        <li><code>SiteProber.probe</code> gains <code>knownFamily</code>; split the anonymous and keyed walks. Update <code>SiteProberTest</code>.</li>
+        <li><code>CustomSitesControllerImpl</code>: pass the family from <code>retest</code> and <code>checkVerification</code>; clear outages in <code>add</code> and on key edits.</li>
+        <li><code>startSourceHealthCheck</code> filters keyed custom sources; <code>AppHttpClients.warmRecentHosts</code> skips bridged hosts.</li>
+        <li><code>CustomSitesController.requestKeyEntry</code>, <code>SitesRequest.EnterKey</code>, <code>SiteForm.Edit.expandKeys</code>, retest key action, Confirm-step key fields and notice.</li>
+        <li><code>SourceHealth.addKey</code>; use it from search failures, source chips and <code>openExternalPost</code>. Fix the outdated "Settings &gt; Accounts" text.</li>
+        <li><code>DanbooruSourceAdapter.resolvePost</code> throws an account failure for a hidden post.</li>
+        <li><code>CustomSiteState.mediaAuthorization</code> feeds <code>SiteCookieBridge</code>; <code>AppHttpClients.video</code> gets the refusal retry.</li>
+        <li>Changelog, this plan's log.</li>
+      </ol>
+      <p>Deliberately unchanged: cookies and connections are not dropped when a key is added, because the challenge cookie is still useful. Search still drops individual posts without a file URL, since one restricted post on a page is normal.</p>
+    </section>
+
+    <section id="validation">
+      <h2>Validation And Acceptance</h2>
+      <p>Run from the repository root with a Java 21+ <code>JAVA_HOME</code>.</p>
+      <table>
+        <thead><tr><th>Check</th><th>Command or action</th><th>Expected</th></tr></thead>
+        <tbody>
+          <tr><td>Source tests</td><td><code>./gradlew :core-sources:test --offline</code></td><td>Pass.</td></tr>
+          <tr><td>App tests</td><td><code>./gradlew :app:testDebugUnitTest --offline</code></td><td>Pass.</td></tr>
+          <tr><td>Static checks</td><td><code>./gradlew :core-sources:detekt :app:detektDebug --offline</code>, then <code>./gradlew :app:lintDebug --offline --no-daemon</code></td><td>Clean.</td></tr>
+          <tr><td>Real site (needs a person)</td><td>On the isolated acceptance build, add the site with a valid key, browse several pages, open a shared post, relaunch.</td><td>No anonymous refusal; a bad key is reported at entry.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="living-log">
+      <h2>Living Log</h2>
+      <h3>Progress</h3>
+      <ul>
+        <li>[x] 2026-11-10 - Investigation finished and plan written.</li>
+        <li>[ ] 2026-11-10 - Phases 1 to 4.</li>
+        <li>[ ] 2026-11-10 - Static checks and changelog.</li>
+      </ul>
+      <h3>Surprises And Discoveries</h3>
+      <ul>
+        <li>Observation: the anonymous-first probe saved keys it had never tested. Evidence: the old <code>probeFamilies</code> returned on the first anonymous match.</li>
+        <li>Observation: an HTML refusal never triggered a keyed attempt. Evidence: <code>ProbeEvidenceTest</code> pins an "Access denied" page as <code>BLOCKED</code>, and only <code>NeedsCredentials</code> led to keys.</li>
+        <li>Observation: Chrome denied the friend logged out on Wi-Fi and mobile data, so the refusal does not come from app state or one IP.</li>
+      </ul>
+      <h3>Decision Log</h3>
+      <ul>
+        <li>Decision: keep one anonymous probe, only when adding a keyed site. Rationale: <code>credentialsRequired</code> must stay accurate, or an open site would become unusable once its key is removed or absent after a restore. Date/Author: 2026-11-10 / Claude.</li>
+        <li>Decision: media gets the key only after a refusal, by HTTP Basic, on the site's own HTTPS hosts. Rationale: no evidence yet that media needs it, so working sites keep exactly their current requests, and an added header can stop CDNs caching. Date/Author: 2026-11-10 / Claude.</li>
+        <li>Decision: one message for rejected keys that also names account access. Rationale: a 401 bad key and a 403 not-permitted key need the same action from the person. Date/Author: 2026-11-10 / Claude.</li>
+      </ul>
+      <h3>Outcomes And Retrospective</h3>
+      <p>Not complete yet.</p>
+    </section>
+
+    <section id="recovery">
+      <h2>Idempotence And Recovery</h2>
+      <p>No migrations or destructive operations. All commands are safe to rerun. Each change is its own commit on <code>fix/keyed-site-access</code>, so any can be reverted alone. The unrelated <code>.gitignore</code> edit in the working tree stays uncommitted.</p>
+    </section>
+
+    <section id="appendix">
+      <h2>Appendix: Evidence And Notes</h2>
+      <details>
+        <summary>Safe manual key test, no anonymous traffic</summary>
+        <pre><code>https://SITE/counts/posts.json?login=USERNAME&amp;api_key=KEY   (private tab, logged out)
+Post count JSON      the key passes alone
+Challenge or HTML    the key does not pass the gate; browser check still needed
+"Invalid API key"    wrong username or key
+JSON "Access denied" key recognized, account or key not permitted</code></pre>
+      </details>
+    </section>
+  </main>
+</body>
+</html>

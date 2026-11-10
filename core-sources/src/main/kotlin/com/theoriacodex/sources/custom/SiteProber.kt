@@ -32,10 +32,16 @@ class SiteProber(
     private val deadlineMs: Long = DEADLINE_MS,
     private val maxRequests: Int = MAX_REQUESTS,
 ) {
+    /**
+     * With [credentials] the keys are what get tested, so a key works even where anonymous access is closed
+     * and a bad one is reported instead of saved unseen. [knownFamily] is a saved site's: it is tried first,
+     * and no anonymous request is made, because only adding a site needs to know if it works without keys.
+     */
     suspend fun probe(
         input: String,
         credentials: SiteCredentials? = null,
         headers: SiteHeaders = SiteHeaders(),
+        knownFamily: ProtocolFamily? = null,
     ): SiteProbeResult {
         val address = when (val parsed = SiteAddress.parse(input)) {
             is SiteAddressParse.Invalid -> return SiteProbeResult.InvalidAddress(parsed.error)
@@ -43,15 +49,16 @@ class SiteProber(
         }
         builtInHosts[address.host.removePrefix("www.")]?.let { return SiteProbeResult.AlreadyBuiltIn(it) }
         val anonymous = SiteRequestContext(http = BudgetedHttpClient(http, maxRequests), headers = headers)
-        return withTimeoutOrNull(deadlineMs) { probeFamilies(address, anonymous, credentials) }
-            ?: SiteProbeResult.Unreachable(address, ProbeFailure.TIMEOUT)
+        return withTimeoutOrNull(deadlineMs) {
+            if (credentials != null) {
+                probeWithKeys(address, anonymous, credentials, knownFamily)
+            } else {
+                probeAnonymously(address, anonymous)
+            }
+        } ?: SiteProbeResult.Unreachable(address, ProbeFailure.TIMEOUT)
     }
 
-    private suspend fun probeFamilies(
-        address: SiteAddress,
-        anonymous: SiteRequestContext,
-        credentials: SiteCredentials?,
-    ): SiteProbeResult {
+    private suspend fun probeAnonymously(address: SiteAddress, anonymous: SiteRequestContext): SiteProbeResult {
         var refused: SiteProbeResult.CredentialsRequired? = null
         var failure: ProbeFailure? = null
         for (family in registry.families) {
@@ -59,16 +66,47 @@ class SiteProber(
                 is FamilyProbe.Match -> return supported(address, anonymous, family.family, result, keyed = false)
                 FamilyProbe.NoMatch -> Unit
                 is FamilyProbe.Failed -> failure = failure ?: result.reason
-                FamilyProbe.NeedsCredentials -> {
-                    // Anonymous first; supplied keys are tried once, and only on a family that refused.
-                    val withKeys = credentials?.let { family.probe(address, anonymous.copy(credentials = it)) }
-                    if (withKeys is FamilyProbe.Match) {
-                        return supported(address, anonymous, family.family, withKeys, keyed = true)
-                    }
-                    refused = refused ?: SiteProbeResult.CredentialsRequired(address, family.family, rejected = withKeys != null)
-                }
+                FamilyProbe.NeedsCredentials ->
+                    refused = refused ?: SiteProbeResult.CredentialsRequired(address, family.family, rejected = false)
             }
         }
+        return unclaimedResult(address, anonymous, refused, failure)
+    }
+
+    private suspend fun probeWithKeys(
+        address: SiteAddress,
+        anonymous: SiteRequestContext,
+        credentials: SiteCredentials,
+        knownFamily: ProtocolFamily?,
+    ): SiteProbeResult {
+        val keyed = anonymous.copy(credentials = credentials)
+        var refused: SiteProbeResult.CredentialsRequired? = null
+        var failure: ProbeFailure? = null
+        for (family in registry.families.sortedBy { it.family != knownFamily }) {
+            when (val result = family.probe(address, keyed)) {
+                is FamilyProbe.Match -> {
+                    val required = knownFamily == null && family.probe(address, anonymous).refusesAnonymousUse()
+                    return supported(address, anonymous, family.family, result, keyed = required)
+                }
+                FamilyProbe.NoMatch -> Unit
+                is FamilyProbe.Failed -> failure = failure ?: result.reason
+                FamilyProbe.NeedsCredentials ->
+                    refused = refused ?: SiteProbeResult.CredentialsRequired(address, family.family, rejected = true)
+            }
+        }
+        return unclaimedResult(address, anonymous, refused, failure)
+    }
+
+    private fun FamilyProbe.refusesAnonymousUse(): Boolean =
+        this == FamilyProbe.NeedsCredentials || this == FamilyProbe.Failed(ProbeFailure.BLOCKED)
+
+    /** What a probe reports when no family matched. */
+    private suspend fun unclaimedResult(
+        address: SiteAddress,
+        anonymous: SiteRequestContext,
+        refused: SiteProbeResult.CredentialsRequired?,
+        failure: ProbeFailure?,
+    ): SiteProbeResult {
         registry.unsupported.firstOrNull { it.matches(address, anonymous) }
             ?.let { return SiteProbeResult.UnsupportedFamily(address, it.displayName) }
         return refused
@@ -98,8 +136,8 @@ class SiteProber(
         const val DEADLINE_MS = 30_000L
 
         /**
-         * Worst case is 7: two families refusing then retried with keys, a signature or adapter page,
-         * the home page, and the conventional touch icon.
+         * Worst case is 8: a keyed Danbooru match and its anonymous repeat (three requests each), the
+         * home page, and the conventional touch icon.
          */
         const val MAX_REQUESTS = 8
 

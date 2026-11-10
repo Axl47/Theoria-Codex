@@ -83,7 +83,7 @@ private fun AddStageControls(form: SiteForm.Add, onAction: (CustomSitesAction) -
         AddStage.Probing -> Progress("Checking site…")
         is AddStage.Credentials -> {
             AnnouncedText(
-                if (stage.rejected) "Those keys didn't work. Check them and try again." else "This site needs an API key.",
+                if (stage.rejected) KEYS_REJECTED_MESSAGE else "This site needs an API key.",
                 error = stage.rejected,
             )
             Button(onClick = { onAction(CustomSitesAction.Probe) }) { Text("Check again") }

@@ -77,8 +77,47 @@ class SiteProberTest {
 
         assertEquals(SiteProbeResult.CredentialsRequired(address("https://gelbooru.com"), ProtocolFamily.GELBOORU_02, rejected = true), result)
         assertTrue(transport.requested.any { "user_id=1" in it && "api_key=invalid" in it })
-        // Danbooru answered with a plain 404, so the keys never went to it.
-        assertTrue(transport.requested.none { "/counts/posts.json" in it && "api_key" in it })
+    }
+
+    @Test
+    fun `a working key gets through where anonymous access is refused with a page`() = runTest {
+        val site = danbooruSite(anonymous = SourceHttpResponse(403, "<!DOCTYPE html><html><title>Access denied</title></html>"))
+
+        val result = SiteProber(SiteFamilyRegistry.default(), site).probe("booru.example", GOOD_KEYS) as SiteProbeResult.Supported
+
+        assertEquals(ProtocolFamily.DANBOORU, result.family)
+        assertTrue("the site can't work without its keys", result.credentialsRequired)
+    }
+
+    @Test
+    fun `a bad key is reported even on a site open to everyone`() = runTest {
+        val site = danbooruSite(anonymous = null)
+
+        val result = SiteProber(SiteFamilyRegistry.default(), site).probe("booru.example", SiteCredentials("name", "wrong"))
+
+        assertEquals(SiteProbeResult.CredentialsRequired(address("https://booru.example"), ProtocolFamily.DANBOORU, rejected = true), result)
+    }
+
+    @Test
+    fun `a good key on an open site leaves the site usable without keys`() = runTest {
+        val result = SiteProber(SiteFamilyRegistry.default(), danbooruSite(anonymous = null)).probe("booru.example", GOOD_KEYS)
+
+        assertEquals(false, (result as SiteProbeResult.Supported).credentialsRequired)
+    }
+
+    @Test
+    fun `a saved site is checked with its keys alone`() = runTest {
+        val site = danbooruSite(anonymous = SourceHttpResponse(403, "<!DOCTYPE html><html></html>"))
+
+        val result = SiteProber(SiteFamilyRegistry.default(), site)
+            .probe("booru.example", GOOD_KEYS, knownFamily = ProtocolFamily.DANBOORU)
+
+        assertTrue(result is SiteProbeResult.Supported)
+        assertEquals(
+            "only the home page and its icon go out without keys",
+            setOf("https://booru.example/", "https://booru.example/apple-touch-icon.png"),
+            site.requests.filterNot { (_, query) -> query["api_key"] == GOOD_KEYS.apiKey }.mapTo(mutableSetOf()) { (url, _) -> url },
+        )
     }
 
     @Test
@@ -184,6 +223,25 @@ class SiteProberTest {
 
     private fun address(url: String): SiteAddress = (SiteAddress.parse(url) as SiteAddressParse.Valid).address
 
+    /** A Danbooru site that accepts [GOOD_KEYS] and answers its API with [anonymous] when no key is sent; null when it is open. */
+    private fun danbooruSite(anonymous: SourceHttpResponse?) = object : SourceHttpClient by NoWrites {
+        val requests = mutableListOf<Pair<String, Map<String, String>>>()
+
+        override suspend fun get(url: String, query: Map<String, String>, headers: Map<String, String>): SourceHttpResponse {
+            requests += url to query
+            val key = query["api_key"]
+            return when {
+                key != null && key != GOOD_KEYS.apiKey ->
+                    SourceHttpResponse(401, """{"success":false,"error":"SessionLoader::AuthenticationFailure","message":"Invalid API key"}""")
+                key == null && anonymous != null && url.endsWith(".json") -> anonymous
+                url.endsWith("/counts/posts.json") -> SourceHttpResponse(200, """{"counts":{"posts":3}}""")
+                url.endsWith("/profile.json") -> SourceHttpResponse(200, """{"tag_query_limit":4}""")
+                url.endsWith("/posts.json") -> SourceHttpResponse(200, "[]")
+                else -> SourceHttpResponse(404, "")
+            }
+        }
+    }
+
     private object NoWrites : SourceHttpClient {
         override suspend fun get(url: String, query: Map<String, String>, headers: Map<String, String>): SourceHttpResponse =
             error("unused")
@@ -193,6 +251,7 @@ class SiteProberTest {
     }
 
     companion object {
+        private val GOOD_KEYS = SiteCredentials("name", "good-key")
         val FIXTURE_SITES = arrayOf("danbooru", "aibooru", "safebooru", "gelbooru", "rule34xxx", "sakugabooru", "sakugabooru_apex", "challenge_gate", "example")
     }
 }

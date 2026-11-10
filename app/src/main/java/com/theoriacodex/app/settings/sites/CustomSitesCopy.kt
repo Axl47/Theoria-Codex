@@ -20,7 +20,7 @@ import com.theoriacodex.domain.source.SiteProfile
 internal fun probeMessage(result: SiteProbeResult): String? = when (result) {
     is SiteProbeResult.Supported -> null
     is SiteProbeResult.CredentialsRequired -> if (result.rejected) {
-        "Those keys didn't work. Check them and try again."
+        KEYS_REJECTED_MESSAGE
     } else {
         "${result.address.host} needs a ${userFieldLabel(result.family).lowercase()} and API key."
     }
@@ -108,8 +108,9 @@ internal fun retestStatus(site: CustomSiteSummary, result: SiteProbeResult): Ret
         )
         result is SiteProbeResult.Supported -> RetestStatus.Done("Working", ok = true)
         result is SiteProbeResult.CredentialsRequired -> RetestStatus.Done(
-            if (result.rejected) "The saved keys were rejected." else "Needs an API key.",
+            if (result.rejected) KEYS_REJECTED_MESSAGE else "Needs an API key.",
             ok = false,
+            needsKey = true,
         )
         else -> RetestStatus.Done(
             probeMessage(result).orEmpty(),
@@ -185,5 +186,7 @@ internal fun reconnectConfirmationText(hostLabel: String): String =
     "Reconnect your existing likes and history from $hostLabel? Only do this if it is the same site."
 
 internal val HEADER_ERROR_MESSAGE = "Header values must be a single line of up to ${SiteHeaders.MAX_HEADER_LENGTH} characters."
+internal const val KEYS_REJECTED_MESSAGE = "Those keys didn't work. Check them, and that the account has API access."
+internal const val CONFIRM_KEY_HINT = "This site checks visitors first. If you have an account there, add your API key so browsing isn't limited."
 internal const val PARTIAL_CREDENTIALS_MESSAGE = "Enter both the user and the API key, or leave both blank."
 internal const val UNEXPECTED_FAILURE_MESSAGE = "Something went wrong. Try again."
