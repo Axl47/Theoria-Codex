@@ -1,58 +1,12 @@
 name: Device Validation
 
+# Runs inside every release, weekly to catch drift in the Android images, and on request for a
+# risky change: gh workflow run device-validation.yml --ref <branch>
 on:
   workflow_call:
-    inputs:
-      # A tag runs R8 acceptance. It also runs debug connected tests when main never ran them for its
-      # commit (a push the path filters skipped, or a run a newer push cancelled).
-      connected-tests:
-        type: boolean
-        default: false
     secrets:
       GRADLE_ENCRYPTION_KEY:
         required: false
-  pull_request:
-    branches:
-      - main
-    paths:
-      - 'app/**'
-      - 'app-logic/**'
-      - 'macrobenchmark/**'
-      - 'core-*/**'
-      - 'baseline-profile/**'
-      - 'gradle/**'
-      - 'build.gradle.kts'
-      - 'settings.gradle.kts'
-      - 'gradle.properties'
-      - 'scripts/verify_release_acceptance_device.sh'
-      - 'scripts/verify_device_apk.py'
-      - 'scripts/verify_debug_device.sh'
-      - 'scripts/device_validation_common.sh'
-      - 'scripts/free_ci_disk.sh'
-      - 'scripts/prepare_ci_android_sdk.sh'
-      - 'scripts/verify_ci_emulator.sh'
-      - '.github/workflows/device-validation.yml'
-  push:
-    branches:
-      - main
-    paths:
-      - 'app/**'
-      - 'app-logic/**'
-      - 'macrobenchmark/**'
-      - 'core-*/**'
-      - 'baseline-profile/**'
-      - 'gradle/**'
-      - 'build.gradle.kts'
-      - 'settings.gradle.kts'
-      - 'gradle.properties'
-      - 'scripts/verify_release_acceptance_device.sh'
-      - 'scripts/verify_device_apk.py'
-      - 'scripts/verify_debug_device.sh'
-      - 'scripts/device_validation_common.sh'
-      - 'scripts/free_ci_disk.sh'
-      - 'scripts/prepare_ci_android_sdk.sh'
-      - 'scripts/verify_ci_emulator.sh'
-      - '.github/workflows/device-validation.yml'
   schedule:
     - cron: '23 07 * * 6'
   workflow_dispatch:
@@ -67,7 +21,6 @@ concurrency:
 jobs:
   connected-tests:
     name: Connected tests (API ${{ matrix.api-level }})
-    if: ${{ !startsWith(github.ref, 'refs/tags/') || inputs.connected-tests }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -149,7 +102,6 @@ jobs:
 
   release-acceptance:
     name: R8 release acceptance (API ${{ matrix.api-level }})
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 75
 

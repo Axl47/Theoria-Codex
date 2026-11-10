@@ -32,6 +32,7 @@ PACKAGE_PATTERN = re.compile(
     flags=re.MULTILINE,
 )
 TRAVERSAL_EXCLUSIONS = {
+    ".claude",
     ".git",
     ".gradle",
     ".kotlin",

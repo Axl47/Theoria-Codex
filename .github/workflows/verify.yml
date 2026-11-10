@@ -1,12 +1,14 @@
 name: Verify
 
+# Runs scripts/check.sh unless that exact code already passed it, on a Mac or in an earlier run.
 on:
   pull_request:
     branches:
       - main
-  push:
-    branches:
-      - main
+  workflow_call:
+    secrets:
+      GRADLE_ENCRYPTION_KEY:
+        required: false
 
 permissions:
   contents: read
@@ -16,153 +18,53 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  core-tests:
-    name: Core module tests
+  lookup:
+    name: Look for an existing result
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
+    outputs:
+      verified: ${{ steps.lookup.outputs.verified }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7.0.1
-        with:
-          fetch-depth: 0
-
-      - name: Setup Java
-        uses: actions/setup-java@v6.1.0
-        with:
-          distribution: temurin
-          java-version: |
-            17
-            21
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6.4.0
-        with:
-          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
-
-      - name: Test core modules
-        run: >-
-          ./gradlew
-          :core-domain:test
-          :core-data:test
-          :core-sources:test
-          :core-stubs:test
-          :app-logic:test
-          --warning-mode=all
-
-  android:
-    name: Android lint, tests, and assemblies
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7.0.1
-        with:
-          fetch-depth: 0
-
-      - name: Setup Java
-        uses: actions/setup-java@v6.1.0
-        with:
-          distribution: temurin
-          java-version: |
-            17
-            21
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6.4.0
-        with:
-          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
-
-      - name: Verify Android data ownership
-        run: >-
-          ./gradlew
-          :core-data-android:testDebugUnitTest
-          :core-data-android:compileDebugAndroidTestKotlin
-          --warning-mode=all
-
-      - name: Verify Android app
-        run: >-
-          ./gradlew
-          :app:testDebugUnitTest
-          :app:compileDebugAndroidTestKotlin
-          :app:assembleDebug
-          :app:assembleRelease
-          --warning-mode=all
-
-      # Finish all source generation before lint reads Room's generated Java.
-      - name: Lint generated Android sources
-        run: ./gradlew :app:lint :core-data-android:lintDebug --offline --no-daemon --warning-mode=all
-
-      - name: Upload Android test and lint reports
-        if: always()
-        uses: actions/upload-artifact@v7.0.2
-        with:
-          name: android-test-and-lint-reports
-          path: |
-            app/build/test-results/
-            app/build/reports/tests/
-            app/build/reports/lint-results-*
-            core-data-android/build/test-results/
-            core-data-android/build/reports/tests/
-            core-data-android/build/reports/lint-results-*
-          if-no-files-found: warn
-          retention-days: 14
-
-  maintainability:
-    name: Maintainability
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7.0.1
-        with:
-          fetch-depth: 0
-
-      - name: Setup Java
-        uses: actions/setup-java@v6.1.0
-        with:
-          distribution: temurin
-          java-version: |
-            17
-            21
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6.4.0
-        with:
-          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
-
-      - name: Verify strict configuration-cache store and reuse
-        shell: bash
+      - name: Find a recorded pass for this code
+        id: lookup
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          set -euo pipefail
-          project_cache="$RUNNER_TEMP/theoria-config-cache"
-          reuse_log="$RUNNER_TEMP/theoria-config-cache-reuse.log"
-          reuse_signal="Configuration cache entry reused."
-          ./gradlew help \
-            --project-cache-dir "$project_cache" \
-            --configuration-cache \
-            --configuration-cache-problems=fail \
-            --console=plain
-          ./gradlew help \
-            --project-cache-dir "$project_cache" \
-            --configuration-cache \
-            --configuration-cache-problems=fail \
-            --console=plain 2>&1 | tee "$reuse_log"
-          if ! grep -Fqx "$reuse_signal" "$reuse_log"; then
-            echo "::error::Second strict Gradle help invocation did not reuse configuration cache."
-            exit 1
+          tree="$(gh api "repos/${GITHUB_REPOSITORY}/git/commits/${HEAD_SHA}" --jq .tree.sha)"
+          if [[ -n "$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}" "refs/verified/${tree}")" ]]; then
+            echo "verified=true" >> "$GITHUB_OUTPUT"
+            echo "This exact code already passed scripts/check.sh, so the full check was skipped." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # Release JSON contracts finalize assembleRelease in the android job; release-acceptance
-      # contracts finalize assembleReleaseAcceptance in Device Validation. Strict configuration
-      # cache is the gradle.properties default, so these owners run under it too.
-      - name: Verify benchmark and macrobenchmark runner artifacts
-        run: >-
-          ./gradlew
-          :app:verifyBenchmarkFixtureArtifact
-          :macrobenchmark:verifyMacrobenchmarkRunnerArtifact
+  check:
+    name: Full check
+    needs: lookup
+    if: ${{ needs.lookup.outputs.verified != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@v6.1.0
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6.4.0
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
       - name: Setup Node
         uses: actions/setup-node@v7.1.0
@@ -170,73 +72,31 @@ jobs:
           node-version: '24'
           cache: npm
 
-      - name: Install quality tooling
-        run: npm ci
+      - name: Run the shared check
+        run: bash scripts/check.sh
 
-      - name: Enforce hotspot and Detekt debt budgets
-        env:
-          HOTSPOT_BASE: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
-        run: |
-          base="$HOTSPOT_BASE"
-          if [[ "$base" =~ ^0+$ ]]; then
-            base="$(git rev-parse HEAD^ 2>/dev/null || true)"
-          fi
-          args=()
-          if [[ -n "$base" ]]; then
-            args+=(--base "$base")
-          fi
-          python3 scripts/check_hotspots.py "${args[@]}"
+      # Best effort: Dependabot and fork runs get a read-only token and simply skip recording.
+      - name: Record the pass
+        continue-on-error: true
+        run: git push --quiet origin "+HEAD:refs/verified/$(git rev-parse 'HEAD^{tree}')"
 
-      - name: Enforce production duplication budget
-        run: npm run audit:duplicates
-
-      - name: Verify quality helper tests
-        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
-
-      - name: Verify translation gateway HTTP and upstream contracts
-        run: python3 -m unittest discover -s deploy/libretranslate -p 'test_*.py'
-
-      - name: Enforce production complexity and coroutine rules
-        run: >-
-          ./gradlew
-          :app:detektDebug
-          :app-logic:detektMain
-          :core-data-android:detektDebug
-          :core-domain:detektMain
-          :core-data:detektMain
-          :core-sources:detektMain
-          :core-stubs:detektMain
-          --stacktrace
-          --warning-mode=all
-
-      - name: Generate aggregate coverage report
-        run: ./gradlew :koverXmlReportQuality :koverVerifyQuality --warning-mode=all
-
-      - name: Enforce changed production coverage
-        env:
-          COVERAGE_BASE: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
-        run: |
-          base="$COVERAGE_BASE"
-          if [[ "$base" =~ ^0+$ ]]; then
-            base="$(git rev-parse HEAD^ 2>/dev/null || true)"
-          fi
-          python3 scripts/check_changed_coverage.py \
-            --xml build/reports/kover/quality.xml \
-            --base "$base" \
-            --boundaries config/quality/coverage-boundaries.json \
-            --minimum 60
-
-      - name: Upload maintainability reports
+      - name: Upload reports
         if: always()
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: maintainability-reports
+          name: verify-reports
           path: |
-            build/reports/quality/
-            build/reports/jscpd/
-            build/reports/kover/
+            app/build/test-results/
+            app/build/reports/tests/
+            app/build/reports/lint-results-*
             app/build/reports/detekt/
             app-logic/build/reports/detekt/
             core-*/build/reports/detekt/
+            core-data-android/build/test-results/
+            core-data-android/build/reports/tests/
+            core-data-android/build/reports/lint-results-*
+            build/reports/quality/
+            build/reports/jscpd/
+            build/reports/kover/
           if-no-files-found: warn
           retention-days: 14

@@ -9,6 +9,7 @@
   "output": "build/reports/jscpd",
   "pattern": "**/*.kt",
   "ignore": [
+    "**/.claude/**",
     "**/build/**",
     "**/.gradle/**",
     "**/.kotlin/**",
