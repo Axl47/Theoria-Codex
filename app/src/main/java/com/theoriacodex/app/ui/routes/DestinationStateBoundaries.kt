@@ -400,6 +400,7 @@ internal fun SettingsDestinationStateBoundary(
     searchOwner: SearchRouteOwnerHandle?,
     storageSummary: String? = null,
     sites: SettingsSitesEntry? = null,
+    onOpenStatisticsPost: suspend (PostId) -> Unit = {},
     storageTools: (@Composable () -> Unit)? = null,
 ) {
     val state = owner.state.collectAsStateWithLifecycle()
@@ -412,7 +413,8 @@ internal fun SettingsDestinationStateBoundary(
         SettingsScreen(
             state = it, onAction = owner::onAction, statistics = statistics.value,
             searchSources = selectedSources.intersect(it.availableSources.toSet()),
-            storageSummary = storageSummary, sites = sites, storageTools = storageTools,
+            storageSummary = storageSummary, sites = sites, onOpenStatisticsPost = onOpenStatisticsPost,
+            storageTools = storageTools,
         )
     }
 }

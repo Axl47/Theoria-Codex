@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- The update prompt now shows the new version, its download size and its release date, instead of the word "unknown".
 - A site's API key is now tried first when you add, re-test or browser-check it, so a valid key works even where visitors without an account are refused.
 - A wrong API key is reported when you enter it, instead of being saved without being tested.
 - Saving a new API key lets the site's requests through again right away, instead of waiting out a "site is down" mark.
@@ -19,6 +20,7 @@
 
 ### Added
 
+- Posts in a Codex's Top posts list in Stats now open in the Viewer when you tap them.
 - When a site refuses your account in search, a re-test or a shared link, a button takes you straight to that site's API key field.
 - A site that needed a browser check shows its API key fields before you add it.
 - Images and videos that a Danbooru-type site refuses are retried once with your API key, on that site's own addresses only.

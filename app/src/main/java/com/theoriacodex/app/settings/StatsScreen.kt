@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -45,6 +46,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -57,6 +59,8 @@ import com.theoriacodex.app.statistics.CodexStatisticsSummary
 import com.theoriacodex.app.statistics.SourceStatistic
 import com.theoriacodex.app.statistics.StatisticsSummary
 import com.theoriacodex.app.statistics.TagStatistic
+import com.theoriacodex.app.viewer.decodeViewerPostId
+import com.theoriacodex.domain.model.PostId
 import java.io.File
 import java.time.LocalDate
 import kotlinx.coroutines.launch
@@ -75,12 +79,12 @@ private enum class CodexPostView(val label: String) { OPENED("Opened"), VIDEOS("
 
 /** Lifetime totals and daily trends. A selected Codex replaces the list until Back. */
 @Composable
-internal fun StatsScreen(statistics: StatisticsSummary, onBack: () -> Unit) {
+internal fun StatsScreen(statistics: StatisticsSummary, onOpenPost: suspend (PostId) -> Unit, onBack: () -> Unit) {
     var selectedCodexId by rememberSaveable { mutableStateOf<String?>(null) }
     val selected = statistics.codices.firstOrNull { it.codexId == selectedCodexId }
     if (selected != null) {
         BackHandler { selectedCodexId = null }
-        CodexStatsDetail(selected) { selectedCodexId = null }
+        CodexStatsDetail(selected, onOpenPost) { selectedCodexId = null }
     } else {
         StatsOverview(statistics, onBack) { selectedCodexId = it }
     }
@@ -249,8 +253,17 @@ private fun CodicesSection(codices: List<CodexStatisticsSummary>, onOpen: (Strin
 }
 
 @Composable
-private fun CodexStatsDetail(codex: CodexStatisticsSummary, onBack: () -> Unit) {
+private fun CodexStatsDetail(codex: CodexStatisticsSummary, onOpenPost: suspend (PostId) -> Unit, onBack: () -> Unit) {
     var view by rememberSaveable(codex.codexId) { mutableStateOf(CodexPostView.OPENED) }
+    val scope = rememberCoroutineScope()
+    // A source lookup can take a moment; one post opens at a time so a second tap cannot stack Viewers.
+    var opening by remember { mutableStateOf(false) }
+    val open = { postId: PostId ->
+        if (!opening) {
+            opening = true
+            scope.launch { try { onOpenPost(postId) } finally { opening = false } }
+        }
+    }
     SettingsPageColumn {
         SettingsHeader(codex.name, onBack, SETTINGS_PATH + "Stats")
         StatsCard {
@@ -273,16 +286,22 @@ private fun CodexStatsDetail(codex: CodexStatisticsSummary, onBack: () -> Unit) 
                 CodexPostView.IMAGES -> codex.topImages
             }
             if (rows.isEmpty()) StatsCaption("No activity yet.")
-            rows.forEach { row -> TopPostRow(row, duration = view != CodexPostView.OPENED) }
+            rows.forEach { row -> TopPostRow(row, duration = view != CodexPostView.OPENED, open) }
         }
     }
 }
 
-/** Promoted posts carry a local thumbnail; posts without one yet stay label-only. */
+/** Opens the post in the Viewer. Promoted posts carry a local thumbnail; posts without one yet stay label-only. */
 @Composable
-private fun TopPostRow(row: CodexPostStatistic, duration: Boolean) {
+private fun TopPostRow(row: CodexPostStatistic, duration: Boolean, onOpen: (PostId) -> Unit) {
     val amount = if (duration) formatStatsDuration(row.value) else row.value.toString()
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+    val postId = remember(row.key) { decodeViewerPostId(row.key) }
+    Row(
+        Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp).clip(RoundedCornerShape(10.dp))
+            .clickable(enabled = postId != null, role = Role.Button, onClickLabel = "Open post") { postId?.let(onOpen) },
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         row.thumbnail?.let { path ->
             AsyncImage(
                 model = File(path), contentDescription = null, contentScale = ContentScale.Crop,

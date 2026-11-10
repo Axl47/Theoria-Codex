@@ -62,6 +62,7 @@ internal fun HomePager(shell: TheoriaShell) {
                 SettingsDestinationStateBoundary(
                     shell.owners.settings, shell.routes.searchOwner, libraryStorageSummary(shell.transfers),
                     sites = rememberCustomSitesEntry(shell.container),
+                    onOpenStatisticsPost = shell::openStatisticsPost,
                 ) {
                     LibraryTransferSettings(shell.transfers)
                 }

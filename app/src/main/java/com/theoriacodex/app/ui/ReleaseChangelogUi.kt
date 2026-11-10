@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui
 
+import android.text.format.Formatter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,11 +29,16 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.update.ChangelogSection
 import com.theoriacodex.app.update.ReleaseChangelogEntry
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @Composable
 internal fun StartupUpdatePromptCard(
@@ -50,12 +56,11 @@ internal fun StartupUpdatePromptCard(
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(text = "Update available", style = MaterialTheme.typography.titleLarge)
             if (latestRelease != null) {
-                val subtitleParts = buildList {
-                    add(releaseDisplayTitle(latestRelease.releaseName, latestRelease.versionCode))
-                    add("vc${latestRelease.versionCode}")
-                    add(latestRelease.commitShaShort)
-                }
-                Text(subtitleParts.joinToString(separator = " • "), style = MaterialTheme.typography.bodySmall)
+                val context = LocalContext.current
+                Text(
+                    releaseSummary(latestRelease, formatSize = { Formatter.formatShortFileSize(context, it) }),
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
             ReleaseChangelogList(releases, installedVersionCode, 240.dp, 10.dp)
             StartupUpdatePromptActions(actionEnabled, onYes, onNo, onRemindLater)
@@ -201,6 +206,20 @@ private fun ReleaseChangelogSection(section: ChangelogSection) {
         section.bullets.forEach { ChangelogBulletText(it) }
     }
 }
+
+/** Summarizes a release for the update prompt. Size and date appear only when GitHub supplied them. */
+internal fun releaseSummary(
+    release: ReleaseChangelogEntry,
+    formatSize: (Long) -> String,
+    zone: ZoneId = ZoneId.systemDefault(),
+    locale: Locale = Locale.getDefault(),
+): String = listOfNotNull(
+    releaseDisplayTitle(release.releaseName, release.versionCode),
+    release.assetSizeBytes?.takeIf { it > 0 }?.let(formatSize),
+    release.publishedAtEpochMs?.let {
+        DateTimeFormatter.ofPattern("MMM d", locale).format(Instant.ofEpochMilli(it).atZone(zone))
+    },
+).joinToString(separator = " • ")
 
 internal fun releaseDisplayTitle(releaseName: String?, versionCode: Int): String {
     return releaseName?.trim()?.takeIf(String::isNotBlank) ?: "vc$versionCode"

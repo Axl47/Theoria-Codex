@@ -45,6 +45,6 @@ class StatsScreenTest {
     }
 
     private fun show(statistics: StatisticsSummary) {
-        compose.setContent { MaterialTheme { StatsScreen(statistics, onBack = {}) } }
+        compose.setContent { MaterialTheme { StatsScreen(statistics, onOpenPost = {}, onBack = {}) } }
     }
 }
