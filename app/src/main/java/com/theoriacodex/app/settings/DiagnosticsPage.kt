@@ -9,6 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -45,6 +46,11 @@ internal fun DiagnosticsPage(entry: SettingsDiagnosticsEntry, onBack: () -> Unit
     var generation by remember { mutableIntStateOf(0) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val run = { action: suspend () -> Unit ->
+        busy = true
+        scope.launch { try { action() } finally { busy = false } }
+        Unit
+    }
     val built by produceState<BuiltReport?>(null, sections, generation) {
         value = BuiltReport(sections, generation, entry.build(sections))
     }
@@ -65,37 +71,40 @@ internal fun DiagnosticsPage(entry: SettingsDiagnosticsEntry, onBack: () -> Unit
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
-                enabled = !busy,
+                enabled = !busy && !report.isNullOrBlank(),
                 modifier = Modifier.weight(1f),
-                onClick = {
-                    busy = true
-                    scope.launch { try { entry.clear(); generation += 1 } finally { busy = false } }
-                },
-            ) { Text("Delete saved logs") }
+                onClick = { run { entry.download(report.orEmpty()) } },
+            ) { Text("Download") }
             Button(
                 enabled = !busy && !report.isNullOrBlank(),
                 modifier = Modifier.weight(1f),
-                onClick = {
-                    val text = report.orEmpty()
-                    busy = true
-                    scope.launch { try { entry.share(text) } finally { busy = false } }
-                },
+                onClick = { run { entry.share(report.orEmpty()) } },
             ) { Text("Share report") }
         }
         StatsSectionTitle("Preview")
-        StatsCard {
-            val text = report
-            Text(
-                when {
-                    text == null -> "Preparing report…"
-                    text.isBlank() -> "Nothing selected."
-                    else -> text.take(PREVIEW_CHARS) + if (text.length > PREVIEW_CHARS) "\n…and ${text.length - PREVIEW_CHARS} more characters" else ""
-                },
-                modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp).verticalScroll(rememberScrollState()),
-                style = MaterialTheme.typography.bodySmall,
-                fontFamily = FontFamily.Monospace,
-            )
-        }
+        DiagnosticPreview(report)
+        OutlinedButton(
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            onClick = { run { entry.clear(); generation += 1 } },
+        ) { Text("Delete saved logs") }
+    }
+}
+
+@Composable
+private fun DiagnosticPreview(report: String?) {
+    StatsCard {
+        Text(
+            when {
+                report == null -> "Preparing report…"
+                report.isBlank() -> "Nothing selected."
+                else -> report.take(PREVIEW_CHARS) + if (report.length > PREVIEW_CHARS) "\n…and ${report.length - PREVIEW_CHARS} more characters" else ""
+            },
+            modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp).verticalScroll(rememberScrollState()),
+            style = MaterialTheme.typography.bodySmall,
+            fontFamily = FontFamily.Monospace,
+        )
     }
 }
 

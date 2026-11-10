@@ -32,11 +32,13 @@ class StatsActions(
     val share: suspend (StatsShareFile) -> Unit = {},
     val readFile: suspend (document: String) -> StatsShareFile? = { null },
     val storedPost: suspend (PostId) -> Post? = { null },
+    val download: suspend (StatsShareFile) -> Unit = {},
 )
 
 class SettingsDiagnosticsEntry(
     val build: suspend (Set<DiagnosticSection>) -> String,
     val share: suspend (String) -> Unit,
+    val download: suspend (String) -> Unit,
     val clear: suspend () -> Unit,
 )
 

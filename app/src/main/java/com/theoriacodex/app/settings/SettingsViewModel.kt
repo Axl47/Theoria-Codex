@@ -32,6 +32,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -183,7 +184,10 @@ internal class SettingsViewModel(
         statisticsRepository = dependencies.statisticsRepository,
         codexRepository = dependencies.codexRepository,
         appUsageTracker = dependencies.appUsageTracker,
-    ).observe(dependencies.settingsRepository.observeSettings().map { settings -> settings.activeProfileId })
+    ).observe(
+        dependencies.settingsRepository.observeSettings().map { settings -> settings.activeProfileId },
+        dependencies.settingsRepository.observeSettings().map { settings -> settings.recommendationProfiles }.distinctUntilChanged(),
+    )
         .stateIn(ownerScope, SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000), StatisticsSummary())
 
     init {

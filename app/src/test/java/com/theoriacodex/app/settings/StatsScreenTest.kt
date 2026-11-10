@@ -3,6 +3,7 @@ package com.theoriacodex.app.settings
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -13,6 +14,7 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.hasScrollAction
 import com.theoriacodex.app.statistics.CodexPostStatistic
 import com.theoriacodex.app.statistics.CodexStatisticsSummary
+import com.theoriacodex.app.statistics.ProfileStatistics
 import com.theoriacodex.app.statistics.StatisticsSummary
 import com.theoriacodex.app.statistics.StatsShareCodex
 import com.theoriacodex.app.statistics.StatsShareFile
@@ -59,7 +61,9 @@ class StatsScreenTest {
         val posts = mapOf("GELBOORU:1" to CodexPostStatistics("First", opens = 5L), "GELBOORU:2" to CodexPostStatistics("Second", opens = 3L))
         val codices = listOf(codex("a", "Landscapes", 3_600_000L, posts), codex("b", "Portraits", 60_000L))
         compose.setContent {
-            MaterialTheme { StatsSharePreview(codices, { shared += it }, { null }, { opened += it }, onBack = {}) }
+            MaterialTheme {
+                StatsSharePreview(listOf(ProfileStatistics("p", "Main", codices)), "p", StatsActions(share = { shared += it }), { opened += it }, onBack = {})
+            }
         }
         compose.onNodeWithText("Landscapes").performScrollTo().performClick()
 
@@ -76,6 +80,29 @@ class StatsScreenTest {
         val codex = shared.single().codices.orEmpty().single()
         assertEquals("Landscapes", codex?.name)
         assertEquals(listOf("GELBOORU:2"), codex?.posts.orEmpty().map { it?.key })
+    }
+
+    @Test
+    fun `another profile joins the file only when included, and Download saves the same selection`() {
+        val downloaded = mutableListOf<StatsShareFile>()
+        val profiles = listOf(
+            ProfileStatistics("main", "Main", listOf(codex("a", "Landscapes", 1_000L), codex("system:saved", "Saved", 500L))),
+            ProfileStatistics("alt", "Alt", listOf(codex("b", "Private", 2_000L), codex("system:saved", "Saved", 500L))),
+        )
+        compose.setContent {
+            MaterialTheme { StatsSharePreview(profiles, "main", StatsActions(download = { downloaded += it }), {}, onBack = {}) }
+        }
+        compose.onNodeWithText("Alt").performClick()
+        compose.onNodeWithContentDescription("Include profile Alt").performScrollTo().assertIsOff()
+        compose.onNodeWithText("Download").performScrollTo().performClick()
+        compose.waitUntil(5_000) { downloaded.size == 1 }
+        assertEquals(setOf("Landscapes", "Saved"), downloaded.last().codices.orEmpty().map { it?.name }.toSet())
+
+        compose.onNodeWithContentDescription("Include profile Alt").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Download").performScrollTo().performClick()
+        compose.waitUntil(5_000) { downloaded.size == 2 }
+        assertEquals(listOf("Landscapes", "Private", "Saved"), downloaded.last().codices.orEmpty().map { it?.name }.sortedBy { it })
     }
 
     @Test

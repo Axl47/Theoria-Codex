@@ -48,6 +48,7 @@ import com.theoriacodex.app.codex.transfer.CodexImportViewModel
 import com.theoriacodex.app.codex.CODEX_SHARE_MAX_BYTES
 import com.theoriacodex.app.codex.transfer.ExportDocument
 import com.theoriacodex.app.codex.transfer.readBoundedTextDocument
+import com.theoriacodex.app.codex.transfer.saveExportToDownloads
 import com.theoriacodex.app.codex.transfer.writeExportDocument
 import com.theoriacodex.app.creator.CreatorFollowsViewModel
 import com.theoriacodex.app.creator.CreatorOpeningWorkflow
@@ -556,9 +557,12 @@ internal class TheoriaShell(
     }
 
     suspend fun shareStats(file: StatsShareFile) {
-        val document = ExportDocument("Theoria stats", "theoria-stats.json", encodeStatsShare(file))
-        if (!shareExportDocument(document, "application/json", "Share stats")) toast("Could not share stats")
+        if (!shareExportDocument(statsDocument(file), "application/json", "Share stats")) toast("Could not share stats")
     }
+
+    suspend fun downloadStats(file: StatsShareFile) = downloadExportDocument(statsDocument(file), "application/json")
+
+    private fun statsDocument(file: StatsShareFile) = ExportDocument("Theoria stats", "theoria-stats.json", encodeStatsShare(file))
 
     /** Reads a stats file someone sent, or explains why it can't be compared. */
     suspend fun readStatsFile(document: String): StatsShareFile? {
@@ -571,8 +575,18 @@ internal class TheoriaShell(
     }
 
     private suspend fun shareDiagnosticsReport(report: String) {
-        val document = ExportDocument("Theoria diagnostics", "theoria-diagnostics.txt", report)
-        if (!shareExportDocument(document, "text/plain", "Share diagnostics")) toast("Could not share the report")
+        if (!shareExportDocument(diagnosticsDocument(report), "text/plain", "Share diagnostics")) toast("Could not share the report")
+    }
+
+    private fun diagnosticsDocument(report: String) = ExportDocument("Theoria diagnostics", "theoria-diagnostics.txt", report)
+
+    private suspend fun downloadExportDocument(document: ExportDocument, mimeType: String) {
+        runCatchingPreservingCancellation { saveExportToDownloads(appContext.contentResolver, document, mimeType) }
+            .onSuccess { toast("Saved to Downloads/TheoriaCodex") }
+            .onFailure {
+                Diagnostics.report("share", "Could not save ${document.fileName}", it)
+                toast("Could not save the file")
+            }
     }
 
     private suspend fun shareExportDocument(document: ExportDocument, mimeType: String, chooserTitle: String): Boolean {
@@ -596,7 +610,10 @@ internal class TheoriaShell(
 
     /** Absent when the host application keeps no diagnostics, as in fixture graphs without [TheoriaApplication]. */
     val diagnosticsEntry: SettingsDiagnosticsEntry? = (appContext as? TheoriaApplication)?.diagnosticReporter?.let { reporter ->
-        SettingsDiagnosticsEntry(reporter::build, ::shareDiagnosticsReport, reporter::clear)
+        SettingsDiagnosticsEntry(
+            reporter::build, ::shareDiagnosticsReport,
+            { report -> downloadExportDocument(diagnosticsDocument(report), "text/plain") }, reporter::clear,
+        )
     }
 
     suspend fun completeAppStartup() {

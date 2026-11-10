@@ -74,9 +74,17 @@ data class DailyStatistic(
     val searchCount: Long = 0L,
 )
 
+/** One recommendation profile's Codices, for the surfaces that span every profile. */
+data class ProfileStatistics(
+    val profileId: String,
+    val name: String,
+    val codices: List<CodexStatisticsSummary>,
+)
+
 data class StatisticsSummary(
     val history: List<DailyStatistic> = emptyList(),
     val codices: List<CodexStatisticsSummary> = emptyList(),
+    val profiles: List<ProfileStatistics> = emptyList(),
     val appOpenCount: Long = 0L,
     val totalForegroundMs: Long = 0L,
     val browsingMs: Long = 0L,

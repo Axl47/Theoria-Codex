@@ -50,6 +50,16 @@ internal data class StatsShareSelection(
     val excludedPostKeys: Set<String> = emptySet(),
 )
 
+/** Every profile's Codices once each; the app-wide Codices appear under all of them. */
+internal fun allProfileCodices(profiles: List<ProfileStatistics>): List<CodexStatisticsSummary> =
+    profiles.flatMap { it.codices }.distinctBy { it.codexId }
+
+/** Codices that only unchecked profiles hold. One shown under several profiles stays in while any is included. */
+internal fun codexIdsOutsideProfiles(profiles: List<ProfileStatistics>, included: Set<String>): Set<String> {
+    val reachable = profiles.filter { it.profileId in included }.flatMapTo(hashSetOf()) { profile -> profile.codices.map { it.codexId } }
+    return allProfileCodices(profiles).mapTo(hashSetOf()) { it.codexId } - reachable
+}
+
 /** Codices with nothing to compare stay out of the file and the preview. */
 internal val CodexStatisticsSummary.hasShareableActivity: Boolean
     get() = entries > 0L || browsingMs > 0L || watchingMs > 0L || posts.isNotEmpty()
