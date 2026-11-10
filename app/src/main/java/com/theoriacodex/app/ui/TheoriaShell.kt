@@ -65,7 +65,9 @@ import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsViewModel
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.parseExternalCreatorDeepLink
+import com.theoriacodex.app.source.SharedPostFix
 import com.theoriacodex.app.source.parseCustomSitePostDeepLink
+import com.theoriacodex.app.source.sharedPostFix
 import com.theoriacodex.app.source.parseExternalPostDeepLink
 import com.theoriacodex.app.source.unaddedBooruPostHost
 import com.theoriacodex.app.source.ExternalPostDeepLink
@@ -610,6 +612,12 @@ internal class TheoriaShell(
             throw error
         } catch (error: Throwable) {
             toast(error.message ?: "Could not open ${deepLink.sourceLabel} URL")
+            when (sharedPostFix(deepLink.source, error)) {
+                SharedPostFix.ADD_KEY -> container.customSites.requestKeyEntry(deepLink.source.id)
+                SharedPostFix.VERIFY -> container.customSites.requestVerification(deepLink.source.id)
+                null -> return
+            }
+            owners.settings.onAction(SettingsAction.OpenCustomSites)
             return
         }
         if (resolved == null) {

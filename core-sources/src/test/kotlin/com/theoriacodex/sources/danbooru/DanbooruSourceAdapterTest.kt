@@ -1,6 +1,7 @@
 package com.theoriacodex.sources.danbooru
 
 import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
@@ -78,6 +79,15 @@ class DanbooruSourceAdapterTest {
         assertEquals(emptyList<String>(), post.full?.progressiveUrls)
         assertEquals(12_500L, post.durationMs)
         assertEquals("https://danbooru.donmai.us/posts/7", post.pageUrl)
+    }
+
+    @Test
+    fun `a post whose files are withheld is an account failure, not a missing post`() = runTest {
+        val http = FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(200, """{"id":7,"file_ext":"jpg"}""") }
+
+        val failure = runCatching { danbooru(http).resolvePost(PostId(SourceKey.DANBOORU, "7")) }.exceptionOrNull()
+
+        assertEquals(SourceFailureReason.AUTH_REQUIRED, (failure as SourceAdapterException).reason)
     }
 
     @Test
