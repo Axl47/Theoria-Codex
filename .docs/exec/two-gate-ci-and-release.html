@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Two-Gate CI And Release</title>
+  <style>` tag in the document head.
+
+Do not use HTML as an excuse for noise. Avoid animations, decorative gradients, remote scripts, or layout tricks that make the plan harder to maintain. A useful plan should print reasonably, work offline, and remain readable in a plain browser.
+
+## Evidence And Examples
+
+Capture concise evidence. Good evidence includes:
+
+- A short test transcript showing the command and pass/fail count.
+- A browser observation with viewport and URL.
+- A small diff excerpt when it clarifies the key change.
+- A screenshot or annotated image that explains layout, hit areas, or visual state.
+- A performance measurement before and after a change.
+
+Do not paste huge logs or entire source files into the plan. Use summaries plus exact commands so the evidence can be reproduced.
+
+## Safe Implementation Standards
+
+Plans should prefer additive, testable steps. When a migration or destructive operation is necessary, describe the backup, retry, and rollback path. Commands should be safe to rerun when possible. If rerunning a command changes state, say exactly how and why.
+
+Respect VESTIGE repository constraints in every plan.
+
+If a future plan relies on a newer repository constraint, add it to `AGENTS.md` when it would help other developers discover the rule.
+
+## HTML ExecPlan Skeleton
+
+Copy this skeleton into a new `.docs/exec/<plan-name>.html` file and then replace every placeholder with concrete project knowledge. Keep the plan valid HTML.
+
+```html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Short Action-Oriented Title</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f7f4;
+      --surface: #ffffff;
+      --text: #202124;
+      --muted: #5f6368;
+      --border: #d7d7d0;
+      --accent: #0f766e;
+      --accent-soft: #dff3ef;
+      --risk: #9a3412;
+      --risk-soft: #ffedd5;
+      --code: #111827;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #151716;
+        --surface: #202321;
+        --text: #f0f2ef;
+        --muted: #b8beb7;
+        --border: #3a403c;
+        --accent: #5eead4;
+        --accent-soft: #123b37;
+        --risk: #fdba74;
+        --risk-soft: #43230f;
+        --code: #0b0f0d;
+      }
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header, main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    header {
+      padding-top: 36px;
+    }
+    h1, h2, h3 {
+      line-height: 1.15;
+      margin: 0 0 12px;
+    }
+    h1 { font-size: clamp(2rem, 4vw, 3.25rem); }
+    h2 { margin-top: 36px; font-size: 1.55rem; }
+    h3 { margin-top: 24px; font-size: 1.1rem; }
+    p { margin: 0 0 14px; }
+    a { color: var(--accent); }
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-block: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+      backdrop-filter: blur(10px);
+    }
+    nav ul {
+      display: flex;
+      gap: 6px;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 8px 24px;
+      list-style: none;
+      overflow-x: auto;
+    }
+    nav a {
+      display: block;
+      padding: 6px 10px;
+      border-radius: 6px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    nav a:hover { background: var(--accent-soft); }
+    section {
+      padding: 22px;
+      margin: 18px 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 0.95rem;
+    }
+    th, td {
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+    th { color: var(--muted); font-weight: 650; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    pre {
+      overflow-x: auto;
+      padding: 14px;
+      border-radius: 8px;
+      background: var(--code);
+      color: #f8fafc;
+    }
+    details {
+      margin: 12px 0;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--surface) 88%, var(--bg));
+    }
+    summary {
+      cursor: pointer;
+      font-weight: 700;
+    }
+    figure { margin: 16px 0; }
+    img {
+      max-width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    figcaption {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 16px 0;
+      color: var(--muted);
+    }
+    .pill {
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface);
+    }
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 12px;
+      margin: 18px 0 0;
+    }
+    .card {
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+    .card strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    .callout {
+      margin: 14px 0;
+      padding: 12px 14px;
+      border-left: 4px solid var(--accent);
+      background: var(--accent-soft);
+      border-radius: 6px;
+    }
+    .risk {
+      border-left-color: var(--risk);
+      background: var(--risk-soft);
+    }
+    .status-table td:first-child {
+      width: 180px;
+      color: var(--muted);
+      font-weight: 650;
+    }
+
+    @media print {
+      nav { position: static; }
+      section, .card { break-inside: avoid; }
+      body { background: #fff; color: #000; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ExecPlan: Two-Gate CI And Release</h1>
+    <p>A change is verified once, on the Mac or on GitHub, and a release is one approval followed by one workflow that creates the tag last.</p>
+    <div class="meta" aria-label="Plan metadata">
+      <span class="pill" id="status-pill">Status: In review</span>
+      <span class="pill">Owner: Claude</span>
+      <span class="pill">Created: 2026-11-10</span>
+      <span class="pill">Updated: 2026-11-10</span>
+      <span class="pill">Plan file: .docs/exec/two-gate-ci-and-release.html</span>
+    </div>
+    <div class="dashboard">
+      <div class="card"><strong>Next Action</strong>Merge PR #64, then run the first real release through <code>.github/workflows/release.yml</code>.</div>
+      <div class="card"><strong>Main Risk</strong>Release can only be dispatched from <code>main</code> after merge, so its publish step is unproven until the first real release.</div>
+      <div class="card"><strong>Validation</strong>A Release rehearsal from the branch, the PR's Verify on GitHub, and <code>scripts/check.sh --record</code> on the Mac.</div>
+      <div class="card"><strong>Affected Areas</strong><code>.github/workflows/</code>, <code>scripts/check.sh</code>, <code>scripts/release_gate.py</code>, <code>scripts/verify_ci_emulator.sh</code>, the release skill.</div>
+    </div>
+  </header>
+
+  <nav aria-label="Plan sections">
+    <ul>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#context">Context</a></li>
+      <li><a href="#phases">Phases</a></li>
+      <li><a href="#work-plan">Work Plan</a></li>
+      <li><a href="#validation">Validation</a></li>
+      <li><a href="#living-log">Living Log</a></li>
+      <li><a href="#recovery">Recovery</a></li>
+      <li><a href="#appendix">Appendix</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <section id="purpose">
+      <h2>Purpose / Big Picture</h2>
+      <p>A small fix used to pass five gates in sequence: a PR gate, a main gate, the same two again for a version-bump PR, then a tag gate. That was about 50 minutes of CI and several approvals. After this plan there are two gates. To see it working, approve release notes and watch one Release run create the tag and publish.</p>
+      <p><strong>Verified code</strong> means the exact file contents, identified by Git's tree hash, passed <code>scripts/check.sh</code>. The result is stored under <code>refs/verified/&lt;tree&gt;</code>, so identical code is never checked twice.</p>
+    </section>
+
+    <section id="context">
+      <h2>Context And Orientation</h2>
+      <table>
+        <thead><tr><th>File</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr><td><code>scripts/check.sh</code></td><td>The single definition of verified. Policy checks, then one Gradle batch, then lint and changed coverage. <code>--record</code> publishes the pass.</td></tr>
+          <tr><td><code>.github/workflows/verify.yml</code></td><td>PR gate. Looks up the head commit's tree and runs the shared check only if no pass is recorded.</td></tr>
+          <tr><td><code>scripts/release_gate.py</code></td><td>Validates version, code, notes, and that the version is new. Also reports whether the code is already verified, including across a release-only commit.</td></tr>
+          <tr><td><code>.github/workflows/release.yml</code></td><td>Release gate. Runs the check if needed, emulator acceptance, and the signed build side by side, then tags and publishes from <code>main</code> only.</td></tr>
+          <tr><td><code>.github/workflows/device-validation.yml</code></td><td>Emulator tests on API 36 and 37. Called by Release, weekly, or by hand for a risky change.</td></tr>
+          <tr><td><code>scripts/verify_ci_emulator.sh</code></td><td>Prepares the disposable CI emulator. Now hides Android's error dialogs.</td></tr>
+          <tr><td><code>.codex/skills/theoria-release/SKILL.md</code></td><td>The agent's release procedure. One approval, then full control.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="phases">
+      <h2>Phases</h2>
+      <article>
+        <h3>Phase 1: Make emulator failures trustworthy</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>The recurring pair of journey failures stops, because it was the emulator and not the app.</td></tr>
+          <tr><td>Commands</td><td>Inspect a Device Validation artifact's <code>build/reports/ci-emulator/*/logcat.txt</code>.</td></tr>
+          <tr><td>Acceptance</td><td>No <code>Application Not Responding</code> window appears, even in runs where <code>am_anr</code> is logged.</td></tr>
+        </tbody></table>
+      </article>
+      <article>
+        <h3>Phase 2: One reusable check</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>The same command verifies code on the Mac and on GitHub.</td></tr>
+          <tr><td>Commands</td><td><code>scripts/check.sh --record</code> from a clean commit.</td></tr>
+          <tr><td>Acceptance</td><td>A PR with a recorded tree shows the full check as skipped.</td></tr>
+        </tbody></table>
+      </article>
+      <article>
+        <h3>Phase 3: One release run</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Approving notes leads to a published prerelease with no other human step.</td></tr>
+          <tr><td>Commands</td><td><code>gh workflow run release.yml --ref main</code></td></tr>
+          <tr><td>Acceptance</td><td>A rehearsal from a branch runs everything, publishes nothing, and deletes its signed APK.</td></tr>
+        </tbody></table>
+      </article>
+    </section>
+
+    <section id="work-plan">
+      <h2>Work Plan</h2>
+      <ol>
+        <li>Set <code>hide_error_dialogs</code> in <code>scripts/verify_ci_emulator.sh</code>, the first emulator change after confirming it is an emulator.</li>
+        <li>Move every Verify step into <code>scripts/check.sh</code>, and reduce <code>verify.yml</code> to a lookup plus one full-check job.</li>
+        <li>Add <code>scripts/release_gate.py</code> and <code>release.yml</code>, and delete <code>main-prerelease.yml</code>.</li>
+        <li>Remove PR and push triggers from <code>device-validation.yml</code>, and make both of its jobs unconditional.</li>
+        <li>Retarget the workflow contract tests to the new owners, and exclude <code>.claude/</code> from duplication and coverage scans so nested worktrees are ignored.</li>
+        <li>Rewrite the release skill, and update <code>AGENTS.md</code>, <code>.docs/DEVELOPMENT.md</code>, and <code>release-notes/README.md</code>.</li>
+      </ol>
+      <p>The Mac does not run emulator tests in this plan. Its AVD is arm64 and API 36 only, and it is shared between worktrees.</p>
+    </section>
+
+    <section id="validation">
+      <h2>Validation And Acceptance</h2>
+      <table>
+        <thead><tr><th>Check</th><th>Command or action</th><th>Expected result</th></tr></thead>
+        <tbody>
+          <tr><td>Script tests</td><td><code>python3 -m unittest discover -s scripts/tests -p 'test_*.py'</code></td><td>All pass.</td></tr>
+          <tr><td>Workflow lint</td><td><code>actionlint .github/workflows/*.yml</code></td><td>No output.</td></tr>
+          <tr><td>Full check on GitHub</td><td>Open the PR with no recorded pass.</td><td>Full check passes and records the tree.</td></tr>
+          <tr><td>Reuse</td><td>Re-run the PR's Verify.</td><td>The lookup finds the pass and the full check is skipped.</td></tr>
+          <tr><td>Mac check</td><td><code>scripts/check.sh --record</code></td><td>Passes in about 5 minutes on a warm cache.</td></tr>
+          <tr><td>Release rehearsal</td><td>Run <code>release.yml</code> from a branch.</td><td>All jobs run, publish is skipped, the signed APK is deleted.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="living-log">
+      <h2>Living Log</h2>
+      <h3>Progress</h3>
+      <ul id="progress">
+        <li>[x] 2026-11-10 - Measured usage, per-stage timing, and failure history.</li>
+        <li>[x] 2026-11-10 - Found the cause of the two still-failing journey tests.</li>
+        <li>[x] 2026-11-10 - Implemented the shared check, Release, and the skill rewrite.</li>
+        <li>[x] 2026-11-10 - Rehearsed Release from the branch, and proved Verify's full and reuse paths on PR #64.</li>
+        <li>[ ] Merge PR #64, then confirm tag creation and publishing on the first real release.</li>
+        <li>[ ] Confirm the dialog fix the next time a run logs <code>am_anr</code> for <code>com.android.systemui</code>.</li>
+      </ul>
+      <h3>Surprises And Discoveries</h3>
+      <ul>
+        <li>Observation: Two of the four most-failing tests had already been fixed. Evidence: <code>collectionActionsRename…</code> last failed Nov 4 and <code>coldGraphRelaunch…</code> last failed Nov 2.</li>
+        <li>Observation: The offline and grouped-search journeys fail as a pair because of a system dialog. Evidence: the failure screenshot shows "System UI isn't responding" over a correctly rendered image, the sampled pixel matches the dialog in all three inspected runs, and logcat shows the dialog taking input focus. The dialog cannot be cancelled, so the grouped test's real Back press never reaches the app.</li>
+        <li>Observation: The emulator lane also catches real problems. Evidence: a stale <code>Saved</code> heading, a new JSON field, and R8 acceptance read failures on Nov 8 and Nov 10.</li>
+        <li>Observation: <code>main</code> has no branch protection. Evidence: <code>GET branches/main/protection</code> returns 404, and three PRs were merged with red checks.</li>
+      </ul>
+      <ul>
+        <li>Observation: Offline lint fails on a runner with a cold Gradle home, because the lint tool itself is not cached. Evidence: <code>No cached version of com.android.tools.lint:lint-gradle:32.3.3 available for offline mode</code>. A dry run now fetches it first. The Mac's warm cache had hidden this.</li>
+      </ul>
+      <h3>Decision Log</h3>
+      <ul>
+        <li>Decision: Run emulator tests only in Release, weekly, or on request. Rationale: they are the slowest and most failure-prone lane, and releases are frequent enough to find a break quickly. Date/Author: 2026-11-10 / user.</li>
+        <li>Decision: Create the tag last, from the workflow. Rationale: a failed release no longer uses up its version number. Date/Author: 2026-11-10 / Claude.</li>
+        <li>Decision: Commit release files straight to <code>main</code>. Rationale: a PR would add a gate for files that cannot change behavior, and the gate script proves that is all the commit touched. Date/Author: 2026-11-10 / Claude.</li>
+        <li>Decision: Key results by tree hash in a Git ref, not a commit status. Rationale: squash and merge commits change the SHA but not the tree, and <code>git ls-remote</code> needs no checkout. Date/Author: 2026-11-10 / Claude.</li>
+        <li>Decision: Handle emulator infrastructure failures with <code>gh run rerun --failed</code>, not automatic retries. Rationale: passing jobs are kept, it needs no code, and retrying assertions could hide races. Date/Author: 2026-11-10 / Claude.</li>
+        <li>Decision: Baseline profiles refresh only when startup or journeys changed. Rationale: the step needs a free emulator and would otherwise block a fully automated release. Date/Author: 2026-11-10 / Claude.</li>
+      </ul>
+      <h3>Outcomes And Retrospective</h3>
+      <p id="outcomes">Pending the first real release.</p>
+    </section>
+
+    <section id="recovery">
+      <h2>Idempotence And Recovery</h2>
+      <p><code>scripts/check.sh</code> is safe to rerun. Records are force-pushed, so re-recording a tree is harmless. A failed Release creates no tag and can be dispatched again. To roll back, revert this plan's commits, which restores the old workflows. Stale <code>refs/verified/*</code> entries are small and can be left in place.</p>
+    </section>
+
+    <section id="appendix">
+      <h2>Appendix: Evidence And Notes</h2>
+      <table>
+        <thead><tr><th>Measurement (Nov 2026)</th><th>Result</th></tr></thead>
+        <tbody id="evidence">
+          <tr><td>Verify set on the Mac, one-line app change</td><td>About 5 minutes, versus 10 to 12 on GitHub</td></tr>
+          <tr><td>Main-gate failures traced to their PR</td><td>12 commits: 6 direct pushes, 3 from red PRs, 3 from green PRs that look like flakes</td></tr>
+          <tr><td>Release rehearsal from the branch</td><td>About 11 minutes. Every emulator job and the signed build passed, publish was skipped, and the signed APK was deleted.</td></tr>
+          <tr><td>Verify with no recorded pass, cold GitHub runner</td><td>Passed in about 14 minutes and recorded the tree.</td></tr>
+          <tr><td>Verify with a recorded pass</td><td>Lookup took 5 seconds and the full check was skipped.</td></tr>
+          <tr><td>Emulator jobs after the dialog fix</td><td>16 of 16 passed, but System UI did not freeze in any of them, so the fix itself is not yet observed.</td></tr>
+          <tr><td>Failed emulator jobs, Nov 1 to 10</td><td>82: 69 test failures, 12 emulator infrastructure, 1 other</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>

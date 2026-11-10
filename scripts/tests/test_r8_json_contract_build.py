@@ -5,8 +5,9 @@ import unittest
 
 REPOSITORY_ROOT = pathlib.Path(__file__).resolve().parents[2]
 APP_BUILD = REPOSITORY_ROOT / "app" / "build.gradle.kts"
-VERIFY_WORKFLOW = REPOSITORY_ROOT / ".github" / "workflows" / "verify.yml"
-RELEASE_WORKFLOW = REPOSITORY_ROOT / ".github" / "workflows" / "main-prerelease.yml"
+CHECK_SCRIPT = REPOSITORY_ROOT / "scripts" / "check.sh"
+WORKFLOWS = REPOSITORY_ROOT / ".github" / "workflows"
+RELEASE_WORKFLOW = WORKFLOWS / "release.yml"
 
 
 class R8JsonContractBuildTest(unittest.TestCase):
@@ -43,14 +44,14 @@ class R8JsonContractBuildTest(unittest.TestCase):
         self.assertIn('task.name == "assemble$capitalizedVariant"', build)
         self.assertIn("finalizedBy(verification)", build)
 
-    def test_ci_and_tagged_release_use_public_gradle_owners(self) -> None:
-        verify = VERIFY_WORKFLOW.read_text(encoding="utf-8")
+    def test_check_and_release_use_public_gradle_owners(self) -> None:
+        check = CHECK_SCRIPT.read_text(encoding="utf-8")
         release = RELEASE_WORKFLOW.read_text(encoding="utf-8")
 
-        device_validation = (VERIFY_WORKFLOW.parent / "device-validation.yml").read_text(encoding="utf-8")
+        device_validation = (WORKFLOWS / "device-validation.yml").read_text(encoding="utf-8")
 
         # Both contract verifiers finalize their assembly task, so CI runs them through it.
-        self.assertIn(":app:assembleRelease", verify)
+        self.assertIn(":app:assembleRelease", check)
         self.assertIn(":app:assembleReleaseAcceptance", device_validation)
         self.assertIn(":app:assembleRelease", release)
         self.assertNotIn("verify_r8_json_contract.py", release)

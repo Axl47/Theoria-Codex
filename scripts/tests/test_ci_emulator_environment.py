@@ -50,6 +50,7 @@ class CiEmulatorEnvironmentTest(unittest.TestCase):
                 print('system log fixture',flush=True)
                 time.sleep(60)
             elif args==['shell','getprop','ro.kernel.qemu']:print('1')
+            elif args==['shell','settings','put','global','hide_error_dialogs','1']:pathlib.Path('dialogs-hidden').touch()
             elif args==['shell','getprop','ro.build.version.sdk']:print('37')
             elif args==['shell','am','get-current-user']:print('0')
             elif args==['shell','am','get-started-user-state','0']:print('RUNNING_UNLOCKED')
@@ -75,6 +76,7 @@ class CiEmulatorEnvironmentTest(unittest.TestCase):
         result = self.run_wrapper(FAKE_TEST_EXIT="23")
         self.assertEqual(23, result.returncode, result.stderr)
         self.assertEqual("all", (self.root / "delegated").read_text())
+        self.assertTrue((self.root / "dialogs-hidden").exists())
         evidence = self.root / "build/reports/ci-emulator/debug"
         for name in ("avd.ini", "avd-config.ini", "logcat.txt", "memory-before.txt", "memory-after.txt", "system-server-crash.txt"):
             self.assertTrue((evidence / name).is_file(), name)
