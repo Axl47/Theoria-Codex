@@ -2,10 +2,12 @@ import com.android.build.api.artifact.SingleArtifact
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
@@ -14,6 +16,55 @@ import org.gradle.process.ExecOperations
 import javax.inject.Inject
 import java.awt.image.BufferedImage
 import javax.imageio.ImageIO
+
+/**
+ * Lets links to private custom sites open in the app. Android only reads link filters from the manifest, so
+ * this build's hosts are written into one here; they stay out of the source, but any APK still shows them.
+ * Each site's family is found when it is set up, so the paths cover every family's post page.
+ */
+abstract class GenerateLinkHostsManifestTask : DefaultTask() {
+    @get:Input
+    abstract val hosts: ListProperty<String>
+
+    @get:OutputFile
+    abstract val manifest: RegularFileProperty
+
+    @TaskAction
+    fun generate() {
+        val hostData = hosts.get().joinToString("\n") { host -> "                <data android:host=\"$host\" />" }
+        manifest.get().asFile.writeText(
+            """
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+                <application>
+                    <activity android:name="com.theoriacodex.app.MainActivity">
+                        <intent-filter tools:ignore="AppLinkWarning">
+                            <action android:name="android.intent.action.VIEW" />
+                            <category android:name="android.intent.category.DEFAULT" />
+                            <category android:name="android.intent.category.BROWSABLE" />
+                            <data android:scheme="https" />
+            $hostData
+                            <data android:pathPrefix="/posts/" />
+                            <data android:path="/index.php" />
+                        </intent-filter>
+                    </activity>
+                </application>
+            </manifest>
+            """.trimIndent(),
+        )
+    }
+}
+
+private val LINK_HOST = Regex("""([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]([a-z0-9-]*[a-z0-9])?""")
+
+/**
+ * The hosts in a comma- or line-separated list, each with its `www.` twin. A bad entry fails the build, and
+ * its position is all the message names, because build logs can be public.
+ */
+fun parseLinkHosts(raw: String): List<String> =
+    raw.split(',', '\n').map { it.trim().lowercase() }.filter(String::isNotEmpty).flatMapIndexed { index, host ->
+        require(LINK_HOST.matches(host)) { "THEORIA_LINK_HOSTS entry ${index + 1} is not a plain host name" }
+        listOf(host, if (host.startsWith("www.")) host.removePrefix("www.") else "www.$host")
+    }.distinct().sorted()
 
 abstract class GenerateMonochromeLauncherIconTask : DefaultTask() {
     @get:InputFile
@@ -287,6 +338,18 @@ tasks.matching {
 }
 
 androidComponents {
+    // Set only by the Release workflow, so every other build carries no private hosts.
+    val linkHosts = parseLinkHosts(providers.environmentVariable("THEORIA_LINK_HOSTS").getOrElse(""))
+    if (linkHosts.isNotEmpty()) {
+        onVariants(selector().all()) { variant ->
+            val capitalizedVariant = variant.name.replaceFirstChar(Char::uppercaseChar)
+            val linkHostsManifest = tasks.register<GenerateLinkHostsManifestTask>("generate${capitalizedVariant}LinkHostsManifest") {
+                hosts.set(linkHosts)
+                manifest.set(layout.buildDirectory.file("generated/linkHosts/${variant.name}/AndroidManifest.xml"))
+            }
+            variant.sources.manifests.addGeneratedManifestFile(linkHostsManifest, GenerateLinkHostsManifestTask::manifest)
+        }
+    }
     onVariants(selector().all()) { variant ->
         // Production-ID APKs include the signed personal update lane.
         if (variant.applicationId.get() != android.defaultConfig.applicationId) {
