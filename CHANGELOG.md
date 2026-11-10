@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-09
+
 ### Added
 
 - In the Viewer, drag the page bar of a multi-page post to move page by page, with a floating preview of the target page and its neighbours.
@@ -22,6 +24,11 @@
 - Verify in browser tells you when a site still refuses Theoria after its check, instead of failing later.
 - A site whose re-test is blocked by a challenge offers Verify in browser on its row.
 - Removing a site also removes the browser cookies Theoria held for it.
+- Search now has saved searches alongside saved tags. Save the search on screen and run it again with a tap.
+- Hold a tag in a post's tag sheet to save or unsave it.
+- Like a post from the Viewer's info sheet without closing it.
+- Share a post link from an added site to open it in Theoria.
+- Importing a Codex with posts from a site you haven't added offers to set that site up.
 
 ### Changed
 
@@ -78,6 +85,11 @@
 - In Settings → Sites, Test all sits in line with the Built-in header.
 - The first search after opening the app starts faster on Wi-Fi: Theoria reconnects to the sites you used last while the app comes up.
 - Networks whose IPv6 doesn't really work no longer slow down new connections once Theoria has noticed.
+- Source menus show a red dot on sources that are down or need verification.
+- The save picker suggests Codices you just saved to from the same search.
+- Fullscreen brightness and volume carry over between videos for the rest of your session.
+- The creator's name in the Viewer's info sheet is now a link to their page.
+- For You uses a sparkle icon, matching For You searches in Recents.
 
 ### Fixed
 
@@ -96,6 +108,7 @@
 - Rule34Gen cards show their thumbnails when browsing without tags.
 - Rule34Gen and Rule34Video searches show every card's thumbnail, not just the first few.
 - nhentai pages that stall partway through loading recover in a few seconds instead of hanging for up to half a minute.
+- When a site is down, searches fail quickly instead of waiting about a minute.
 
 ## [1.3.0] - 2026-11-06
 
