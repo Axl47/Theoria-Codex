@@ -1,5 +1,9 @@
 package com.theoriacodex.app.source
 
+import com.theoriacodex.sources.http.HostUnavailableException
+import com.theoriacodex.sources.http.HostOutageKind
+import com.theoriacodex.domain.adapter.SourceFailureReason
+import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.model.SourceKey
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -295,6 +299,22 @@ class ExternalPostDeepLinksTest {
         assertEquals(creatorId, parsed.creatorId)
         assertEquals(profileUrl, parsed.profileUrl)
         assertEquals(source.displayName(), parsed.sourceLabel)
+    }
+
+    @Test
+    fun `a shared post on an added site leads to the fix for why it failed`() {
+        val site = requireNotNull(SourceKey.parse("custom_booru_example"))
+        val refused = SourceAdapterException(SourceFailureReason.AUTH_REQUIRED, "Access denied")
+        val challenged = SourceAdapterException(
+            SourceFailureReason.NETWORK,
+            "Needs browser verification",
+            HostUnavailableException("booru.example", HostOutageKind.CHALLENGE),
+        )
+
+        assertEquals(SharedPostFix.ADD_KEY, sharedPostFix(site, refused))
+        assertEquals(SharedPostFix.VERIFY, sharedPostFix(site, challenged))
+        assertEquals(null, sharedPostFix(SourceKey.DANBOORU, refused))
+        assertEquals(null, sharedPostFix(site, IllegalStateException("other")))
     }
 
     private fun encodePathSegment(value: String): String {

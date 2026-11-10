@@ -26,6 +26,9 @@ internal class AppHttpClients(
     cookieJar: CookieJar,
     private val memory: ConnectionMemory = ConnectionMemory(NoRecentHosts, activeNetwork = { null }),
     private val verifiedUserAgent: (url: String) -> String? = { null },
+    /** Hosts whose requests carry a browser identity, which a warm-up's fixed agent would misrepresent. */
+    private val sharesBrowserIdentity: (host: String) -> Boolean = { false },
+    private val siteAuthorization: (url: String) -> String? = { null },
 ) {
     private val warmed = AtomicBoolean(false)
 
@@ -45,12 +48,15 @@ internal class AppHttpClients(
      * agent that earned it. Provider requests choose their own agent, and a browser check must keep the one it is testing.
      */
     val video: OkHttpClient by lazy {
+        val keyRetry = RefusedMediaKeyRetry(siteAuthorization)
         shared.newBuilder()
             .addInterceptor { chain ->
                 val request = chain.request()
                 val agent = verifiedUserAgent(request.url.toString())
                 chain.proceed(if (agent == null) request else request.newBuilder().header("User-Agent", agent).build())
             }
+            .addInterceptor(keyRetry)
+            .addNetworkInterceptor(keyRetry.redirectGuard)
             .build()
     }
 
@@ -85,6 +91,7 @@ internal class AppHttpClients(
     /**
      * Connects to the hosts used most recently, once per launch, so the first search finds its connections open
      * instead of waiting on DNS, TCP and TLS for each. Only the pooled connection matters, so any answer will do.
+     * A clearance cookie only counts with the agent that earned it, so hosts holding one are left alone.
      */
     suspend fun warmRecentHosts() {
         if (!warmed.compareAndSet(false, true)) return
@@ -92,7 +99,7 @@ internal class AppHttpClients(
             .callTimeout(WARM_UP_TIMEOUT_MS, TimeUnit.MILLISECONDS)
             .build()
         coroutineScope {
-            memory.recentHosts().forEach { host ->
+            memory.recentHosts().filterNot(sharesBrowserIdentity).forEach { host ->
                 launch {
                     runCatchingPreservingCancellation {
                         val request = Request.Builder().url("https://$host/").head().header("User-Agent", WARM_UP_USER_AGENT).build()

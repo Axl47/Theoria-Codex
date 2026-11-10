@@ -207,6 +207,26 @@ class CustomSitesControllerImplTest {
     }
 
     @Test
+    fun `adding a site, changing its keys and a passing re-test each lift its down mark`() = runTest {
+        val graph = graph()
+        val markDown = { outages.record("https://booru.example/posts.json", HostOutageKind.CHALLENGE) }
+
+        markDown()
+        graph.controller.add(draft())
+        assertTrue("add", outages.outages.value.isEmpty())
+
+        markDown()
+        graph.controller.update(SITE.id, CustomSiteEdit(label = "Renamed"))
+        assertFalse("keys unchanged", outages.outages.value.isEmpty())
+        graph.controller.update(SITE.id, CustomSiteEdit(credentials = CredentialEdit.Replace(SiteCredentials("name", "key"))))
+        assertTrue("new keys", outages.outages.value.isEmpty())
+
+        markDown()
+        graph.controller.retest(SITE.id)
+        assertTrue("re-test", outages.outages.value.isEmpty())
+    }
+
+    @Test
     fun `re-test refreshes the verified time on the same family and never switches family`() = runTest {
         val graph = graph()
         graph.controller.add(draft())

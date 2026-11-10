@@ -130,7 +130,12 @@ class DanbooruSourceAdapter(
 
     override suspend fun resolvePost(id: PostId): Post? {
         if (id.source != sourceKey) return null
-        return parsePost(parseJsonObject(request(path = "/posts/${id.sourcePostId}.json"), gson, site.label))
+        val record = parseJsonObject(request(path = "/posts/${id.sourcePostId}.json"), gson, site.label)
+        if (record.has("id") && record.stringValue("file_url").isNullOrBlank()) {
+            // The post exists but its files are withheld, which "not found" would misreport.
+            throw SourceAdapterException(SourceFailureReason.AUTH_REQUIRED, "${site.label} doesn't show this post to this account")
+        }
+        return parsePost(record)
     }
 
     private suspend fun searchTags(tags: String, sort: SortMode, pageToken: String?): Page<Post> {

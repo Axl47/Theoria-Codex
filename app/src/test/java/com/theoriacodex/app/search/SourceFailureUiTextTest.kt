@@ -53,7 +53,7 @@ class SourceFailureUiTextTest {
         )
 
         assertEquals(
-            "Pixiv, R34X need account setup. Connect or refresh the account in Settings > Accounts.",
+            "Pixiv, R34X need account setup. Connect or refresh the account, or add its API key, in Settings > Sites.",
             message,
         )
     }
@@ -165,5 +165,16 @@ class SourceFailureUiTextTest {
                 ),
             ),
         )
+    }
+
+    @Test
+    fun `an added site that refused the account is the one offered a key`() {
+        val site = requireNotNull(SourceKey.parse("custom_booru_example"))
+        val refused = SourceRunStatus(site, SourceRunState.FAILED, failureReason = SourceFailureReason.AUTH_REQUIRED)
+        val builtIn = SourceRunStatus(SourceKey.PIXIV, SourceRunState.FAILED, failureReason = SourceFailureReason.AUTH_REQUIRED)
+        val offline = SourceRunStatus(site, SourceRunState.FAILED, failureReason = SourceFailureReason.NETWORK)
+
+        assertEquals(site, listOf(builtIn, refused).siteNeedingKey())
+        assertNull(listOf(builtIn, offline).siteNeedingKey())
     }
 }

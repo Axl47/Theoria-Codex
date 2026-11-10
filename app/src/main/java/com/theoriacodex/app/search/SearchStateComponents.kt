@@ -13,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalUriHandler
+import com.theoriacodex.app.settings.sites.ADD_API_KEY_LABEL
 import com.theoriacodex.app.source.LocalSourceHealth
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.referer
@@ -33,10 +34,12 @@ internal fun StatusRow(
     onOpenAccounts: (() -> Unit)? = null,
 ) {
     var selected by remember { mutableStateOf<SourceKey?>(null) }
+    val health = LocalSourceHealth.current
     val uriHandler = LocalUriHandler.current
     val selectedStatus = statuses.firstOrNull { it.source == selected }
     selectedStatus?.let { status ->
         val requiresAccount = onOpenAccounts != null && status.requiresAccount()
+        val keyableSite = status.source.takeIf { requiresAccount && it.isCustom }
         AlertDialog(
             onDismissRequest = { selected = null },
             title = { Text(status.source.displayName()) },
@@ -52,8 +55,12 @@ internal fun StatusRow(
             confirmButton = {
                 TextButton(enabled = retryEnabled || requiresAccount, onClick = {
                     selected = null
-                    if (requiresAccount) onOpenAccounts() else onRetrySource(status.source)
-                }) { Text(if (requiresAccount) "Source accounts" else "Retry this source") }
+                    when {
+                        keyableSite != null -> health.addKey(keyableSite)
+                        requiresAccount -> onOpenAccounts()
+                        else -> onRetrySource(status.source)
+                    }
+                }) { Text(if (keyableSite != null) ADD_API_KEY_LABEL else if (requiresAccount) "Source accounts" else "Retry this source") }
             },
             dismissButton = { TextButton(onClick = { selected = null }) { Text("Close") } },
         )
@@ -99,15 +106,29 @@ internal fun ErrorBlock(
     onRetry: (() -> Unit)? = null,
     title: String = "Could not load results",
     actionLabel: String = "Retry",
+    /** An account problem, which reconnecting won't fix even when it has an action. */
+    accountProblem: Boolean = false,
 ) {
     val online by LocalNetworkOnline.current.collectAsStateWithLifecycle()
-    // Without a retry this is an account problem, which reconnecting won't fix.
-    val offline = !online && onRetry != null
+    val offline = !online && onRetry != null && !accountProblem
     FeedErrorTile(
         message = if (offline) OFFLINE_FEED_MESSAGE else message,
         title = if (offline) OFFLINE_FEED_TITLE else title,
         actionLabel = actionLabel,
         onRetry = onRetry,
+    )
+}
+
+/** Says a source needs an account, with a way straight to the key field when it is an added site. */
+@Composable
+internal fun SourceAccountNotice(message: String, statuses: List<SourceRunStatus>) {
+    val health = LocalSourceHealth.current
+    ErrorBlock(
+        title = "Source account required",
+        message = message,
+        onRetry = statuses.siteNeedingKey()?.let { site -> { health.addKey(site) } },
+        actionLabel = ADD_API_KEY_LABEL,
+        accountProblem = true,
     )
 }
 

@@ -12,10 +12,19 @@ import org.junit.Test
 
 class AppHttpClientsTest {
     private val agents = CopyOnWriteArrayList<String?>()
+    private val authorizations = CopyOnWriteArrayList<String?>()
+    @Volatile private var refuseWithoutKey = false
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
         createContext("/") { exchange ->
             agents += exchange.requestHeaders.getFirst("User-Agent")
-            exchange.sendResponseHeaders(200, -1)
+            val authorization = exchange.requestHeaders.getFirst("Authorization")
+            authorizations += authorization
+            if (exchange.requestURI.path == "/moved.jpg" && authorization != null) {
+                exchange.responseHeaders.add("Location", "/elsewhere.jpg")
+                exchange.sendResponseHeaders(302, -1)
+            } else {
+                exchange.sendResponseHeaders(if (refuseWithoutKey && authorization == null) 403 else 200, -1)
+            }
             exchange.close()
         }
         start()
@@ -38,5 +47,52 @@ class AppHttpClientsTest {
         get(clients.sources, "verified.json")
 
         assertEquals(listOf("browser", "browser", "browser", "catalog", "catalog"), agents.toList())
+    }
+
+    @Test
+    fun `a refused media request retries once with the key, and the host then gets it straight away`() {
+        refuseWithoutKey = true
+        val clients = AppHttpClients(CookieJar.NO_COOKIES, siteAuthorization = { "Basic key" })
+
+        assertEquals(200, status(clients.images, "first.jpg"))
+        assertEquals(200, status(clients.images, "second.jpg"))
+
+        assertEquals(listOf(null, "Basic key", "Basic key"), authorizations.toList())
+    }
+
+    @Test
+    fun `media a site serves normally never carries the key, and other clients never offer it`() {
+        val clients = AppHttpClients(CookieJar.NO_COOKIES, siteAuthorization = { "Basic key" })
+
+        assertEquals(200, status(clients.images, "open.jpg"))
+        refuseWithoutKey = true
+        assertEquals(403, status(clients.sources, "api.json"))
+
+        assertEquals(listOf<String?>(null, null), authorizations.toList())
+    }
+
+    @Test
+    fun `a url with no key allowed is left refused`() {
+        refuseWithoutKey = true
+        val clients = AppHttpClients(CookieJar.NO_COOKIES, siteAuthorization = { null })
+
+        assertEquals(403, status(clients.images, "other.jpg"))
+
+        assertEquals(listOf<String?>(null), authorizations.toList())
+    }
+
+    @Test
+    fun `a redirect to an address the key isn't for loses the key`() {
+        refuseWithoutKey = true
+        val clients = AppHttpClients(CookieJar.NO_COOKIES, siteAuthorization = { url -> "Basic key".takeIf { "moved" in url } })
+
+        assertEquals(403, status(clients.images, "moved.jpg"))
+
+        assertEquals(listOf(null, "Basic key", null), authorizations.toList())
+    }
+
+    private fun status(client: OkHttpClient, path: String): Int {
+        val request = Request.Builder().url("http://127.0.0.1:${server.address.port}/$path").build()
+        return client.newCall(request).execute().use { it.code }
     }
 }

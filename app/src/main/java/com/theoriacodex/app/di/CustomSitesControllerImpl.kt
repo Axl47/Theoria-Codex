@@ -112,6 +112,10 @@ internal class CustomSitesControllerImpl(
         pendingSetup.value = SitesRequest.Verify(sourceId)
     }
 
+    override fun requestKeyEntry(sourceId: String) {
+        pendingSetup.value = SitesRequest.EnterKey(sourceId)
+    }
+
     override fun clearSetupRequest() {
         pendingSetup.value = null
     }
@@ -153,15 +157,18 @@ internal class CustomSitesControllerImpl(
             }
         }
         if (draft.includeInUnifiedAndForYou) setIncluded(source, included = true)
+        // The check that led here just got an answer, so a mark from before a removal no longer applies.
+        outages.clear(address.host)
         return CustomSiteMutation.Success
     }
 
     override suspend fun retest(sourceId: String): SiteProbeResult {
         val profile = requireNotNull(find(sourceId)) { "Re-test needs a stored site" }
-        val result = prober.probe(profile.address.baseUrl, credentials.get(sourceId), profile.headers)
+        val result = prober.probe(profile.address.baseUrl, credentials.get(sourceId), profile.headers, knownFamily = profile.family)
         // A different family is reported to the user, never adopted (remove and re-add to switch).
         val working = result is SiteProbeResult.Supported && result.family == profile.family
         if (working) {
+            outages.clear(profile.address.host)
             // Re-testing also picks up an icon the site declared since, or one missed before.
             profiles.update(sourceId) { it.copy(verifiedAtEpochMs = clock(), iconUrl = result.iconUrl ?: it.iconUrl) }
         }
@@ -171,7 +178,12 @@ internal class CustomSitesControllerImpl(
 
     override suspend fun checkVerification(sourceId: String, userAgent: String): SiteProbeResult {
         val profile = requireNotNull(find(sourceId)) { "Verification needs a stored site" }
-        return prober.probe(profile.address.baseUrl, credentials.get(sourceId), profile.headers.copy(userAgent = userAgent))
+        return prober.probe(
+            profile.address.baseUrl,
+            credentials.get(sourceId),
+            profile.headers.copy(userAgent = userAgent),
+            knownFamily = profile.family,
+        )
     }
 
     override suspend fun completeVerification(sourceId: String, userAgent: String, working: Boolean) {
@@ -231,6 +243,8 @@ internal class CustomSitesControllerImpl(
             is CredentialEdit.Replace -> writeKeys { credentials.save(sourceId, keys.credentials) }
         }
         if (!keysWritten) return CustomSiteMutation.CredentialStoreUnavailable
+        // New keys may be what the site was waiting for, so requests should reach it again.
+        if (edit.credentials != CredentialEdit.Keep) outages.clear(profile.address.host)
         if (label != null || edit.headers != null) {
             val updated = profiles.update(sourceId) { it.copy(label = label ?: it.label, headers = edit.headers ?: it.headers) }
             if (!updated) return CustomSiteMutation.NotFound

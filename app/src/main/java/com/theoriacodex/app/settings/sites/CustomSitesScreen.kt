@@ -135,20 +135,31 @@ private fun SiteRow(site: CustomSiteSummary, retest: RetestStatus?, working: Boo
                 }
             },
         )
-        RetestFailure(retest, site.host, onAction)
+        RetestFailure(retest, site.host, onAction, KeyAction(site.sourceId, site.hasCredentials))
     }
 }
 
-/** Why a row's last test failed, with the way to verify when a challenge is the reason. */
+/** The row's way to the key field of [sourceId]; [hasKey] when one is saved, so the button says to check it. */
+internal data class KeyAction(val sourceId: String, val hasKey: Boolean)
+
+/**
+ * Why a row's last test failed, with the ways to fix it: a browser check for a challenge, and the key field
+ * through [keyAction] when the site refused the keys or an account could get past the challenge.
+ */
 @Composable
-internal fun RetestFailure(retest: RetestStatus?, host: String, onAction: (CustomSitesAction) -> Unit) {
+internal fun RetestFailure(retest: RetestStatus?, host: String, onAction: (CustomSitesAction) -> Unit, keyAction: KeyAction? = null) {
     if (retest !is RetestStatus.Done || retest.ok) return
     AnnouncedText(retest.message, Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp), error = true)
-    if (retest.blocked) {
-        TextButton(
-            onClick = { onAction(CustomSitesAction.StartVerification(host, afterRefusal = true)) },
-            modifier = Modifier.padding(start = 4.dp),
-        ) { Text("Verify in browser") }
+    val offeredKey = keyAction?.takeIf { retest.needsKey || (retest.blocked && !it.hasKey) }
+    Row(Modifier.padding(start = 4.dp)) {
+        if (retest.blocked) {
+            TextButton(onClick = { onAction(CustomSitesAction.StartVerification(host, afterRefusal = true)) }) { Text("Verify in browser") }
+        }
+        offeredKey?.let { action ->
+            TextButton(onClick = { onAction(CustomSitesAction.StartEdit(action.sourceId, expandKeys = true)) }) {
+                Text(if (action.hasKey) "Check API key" else ADD_API_KEY_LABEL)
+            }
+        }
     }
 }
 

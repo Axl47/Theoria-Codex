@@ -2,11 +2,15 @@ package com.theoriacodex.app.source
 
 import android.net.Uri
 import com.theoriacodex.app.customsites.CustomSiteSummary
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.encoding.decodePercentEncodedUtf8Strict
 import com.theoriacodex.domain.model.HITOMI_ARTIST_IDENTITY_MAX_CODE_POINTS
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.canonicalHitomiArtistIdentity
 import com.theoriacodex.domain.source.ProtocolFamily
+import com.theoriacodex.sources.http.HostOutageKind
+import com.theoriacodex.sources.http.HostUnavailableException
 import java.net.URI
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -296,6 +300,20 @@ fun parseCustomSitePostDeepLink(rawUrl: String, sites: List<CustomSiteSummary>):
         if (!uri.encodedPath.startsWith(installPath)) return@firstNotNullOfOrNull null
         familyPostId(site.family, uri, uri.encodedPath.removePrefix(installPath))
             ?.let { ExternalPostDeepLink(source = source, sourceLabel = site.label, postId = it) }
+    }
+}
+
+/** Where a shared post that failed to open should send the person, on an added site they can fix. */
+enum class SharedPostFix { ADD_KEY, VERIFY }
+
+/** Null for a failure Settings → Sites can't help with, which only the message can explain. */
+fun sharedPostFix(source: SourceKey, error: Throwable): SharedPostFix? {
+    if (!source.isCustom) return null
+    val failure = error as? SourceAdapterException ?: return null
+    return when {
+        failure.reason == SourceFailureReason.AUTH_REQUIRED || failure.reason == SourceFailureReason.AUTH_EXPIRED -> SharedPostFix.ADD_KEY
+        (failure.cause as? HostUnavailableException)?.kind == HostOutageKind.CHALLENGE -> SharedPostFix.VERIFY
+        else -> null
     }
 }
 

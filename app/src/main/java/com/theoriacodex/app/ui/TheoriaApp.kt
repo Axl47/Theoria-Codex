@@ -32,6 +32,7 @@ import com.theoriacodex.sources.http.SiteHealthCheck
 import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.app.source.startSourceHealthCheck
+import com.theoriacodex.app.source.startupCheckSources
 import com.theoriacodex.app.source.sourceIssues
 import com.theoriacodex.app.source.clearSource
 import com.theoriacodex.app.source.SourceHealth
@@ -387,7 +388,8 @@ private fun rememberSourceHealth(shell: TheoriaShell): SourceHealth {
     LaunchedEffect(shell.navReady) {
         if (shell.navReady) {
             startSourceHealthCheck(shell.scope, shell.sources.healthCheck) {
-                shell.sources.availableSources.value.inPresentationOrder()
+                val keyedSiteIds = shell.container.customSites.sites.value.filter { it.hasCredentials }.mapTo(HashSet()) { it.sourceId }
+                startupCheckSources(shell.sources.availableSources.value.inPresentationOrder(), keyedSiteIds)
             }
             shell.scope.launch(kotlinx.coroutines.Dispatchers.IO) { shell.sources.warmConnections() }
             // An expired Pixiv token would otherwise refresh inside the first search. No account is not an error here.
@@ -408,6 +410,10 @@ private fun rememberSourceHealth(shell: TheoriaShell): SourceHealth {
             recheck = outages::clearSource,
             verify = { source ->
                 shell.container.customSites.requestVerification(source.id)
+                shell.owners.settings.onAction(SettingsAction.OpenCustomSites)
+            },
+            addKey = { source ->
+                shell.container.customSites.requestKeyEntry(source.id)
                 shell.owners.settings.onAction(SettingsAction.OpenCustomSites)
             },
             dismissedNotices = dismissedNotices,
