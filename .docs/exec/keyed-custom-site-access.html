@@ -37,14 +37,14 @@
     <h1>ExecPlan: Keyed Custom Site Access</h1>
     <p>A user-added site that restricts anonymous visitors works as soon as a valid API key is entered, a bad key is reported instead of silently saved, and any account refusal leads straight to that site's key field.</p>
     <div class="meta">
-      <span class="pill">Status: In progress</span>
+      <span class="pill">Status: Complete, awaiting a real-site run</span>
       <span class="pill">Owner: Claude</span>
       <span class="pill">Created: 2026-11-10</span>
       <span class="pill">Updated: 2026-11-10</span>
       <span class="pill">Branch: fix/keyed-site-access</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Implement Phase 1, the key-first site check.</div>
+      <div class="card"><strong>Next Action</strong>Run the release-acceptance build against the reported site with a valid key.</div>
       <div class="card"><strong>Main Risk</strong>The real site is confidential and must not be stressed, so behavior is proven against simulated responses until someone runs it with a valid key.</div>
       <div class="card"><strong>Validation</strong>Focused host tests for prober, controller, ViewModel, HTTP clients and failure copy; compile, lint and Detekt for the touched modules.</div>
       <div class="card"><strong>Affected Areas</strong><code>core-sources</code> custom sites, <code>app</code> Settings → Sites, search failure surfaces, shared-link opening, HTTP clients.</div>
@@ -142,13 +142,17 @@
       <h3>Progress</h3>
       <ul>
         <li>[x] 2026-11-10 - Investigation finished and plan written.</li>
-        <li>[ ] 2026-11-10 - Phases 1 to 4.</li>
-        <li>[ ] 2026-11-10 - Static checks and changelog.</li>
+        <li>[x] 2026-11-10 - Phases 1 to 4, each committed on its own.</li>
+        <li>[x] 2026-11-10 - Host tests, Detekt, lint and changelog.</li>
+        <li>[x] 2026-11-10 - Emulator run of the keyed Add and Edit paths against a public Danbooru test site, test site removed afterwards.</li>
+        <li>[ ] Real-site run with a valid key, on the isolated acceptance build. Needs someone with access.</li>
       </ul>
       <h3>Surprises And Discoveries</h3>
       <ul>
         <li>Observation: the anonymous-first probe saved keys it had never tested. Evidence: the old <code>probeFamilies</code> returned on the first anonymous match.</li>
         <li>Observation: an HTML refusal never triggered a keyed attempt. Evidence: <code>ProbeEvidenceTest</code> pins an "Access denied" page as <code>BLOCKED</code>, and only <code>NeedsCredentials</code> led to keys.</li>
+        <li>Observation: a Danbooru post whose files are withheld was reported as not found, and a shared post's failure was only a brief toast. Evidence: <code>parsePost</code> returns null without <code>file_url</code>; <code>openExternalPost</code> only called <code>toast</code>.</li>
+        <li>Observation: a passing re-test left an active outage mark, so the row said Working while requests still failed unsent. Evidence: <code>retest</code> only called <code>setWorking</code>.</li>
         <li>Observation: Chrome denied the friend logged out on Wi-Fi and mobile data, so the refusal does not come from app state or one IP.</li>
       </ul>
       <h3>Decision Log</h3>
@@ -158,7 +162,8 @@
         <li>Decision: one message for rejected keys that also names account access. Rationale: a 401 bad key and a 403 not-permitted key need the same action from the person. Date/Author: 2026-11-10 / Claude.</li>
       </ul>
       <h3>Outcomes And Retrospective</h3>
-      <p>Not complete yet.</p>
+      <p>Every planned behavior is implemented. 326 <code>core-sources</code> and 1269 <code>app</code> host tests passed, and Detekt and lint are clean. On the <code>theoria-search-test</code> emulator with the verified <code>com.theoriacodex.acceptance</code> APK, testbooru.donmai.us reported a wrong key at Add, accepted the site without one, sent a key typed at Confirm back to Check site, reported a wrong saved key on the row, and Check API key opened the page with its key section expanded.</p>
+      <p>Not proven: the reported site itself, a working key passing its gate, media actually needing or accepting the key, the search-failure button and shared-link routing on a device, and the launch-check exclusion on a device. Those last paths have host tests only, because no safe live site refuses an account on demand.</p>
     </section>
 
     <section id="recovery">

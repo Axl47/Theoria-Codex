@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- A site's API key is now tried first when you add, re-test or browser-check it, so a valid key works even where visitors without an account are refused.
+- A wrong API key is reported when you enter it, instead of being saved without being tested.
+- Saving a new API key lets the site's requests through again right away, instead of waiting out a "site is down" mark.
+- Adding a site back after removing it no longer leaves it marked as down for up to 10 minutes.
+- A site with a saved key is no longer marked as needing verification by the check that runs at launch.
+- A shared post whose files a site withholds from your account now says so, instead of "post was not found".
+- Error text now points to Settings > Sites, instead of an Accounts page that no longer exists.
+
+### Added
+
+- When a site refuses your account in search, a re-test or a shared link, a button takes you straight to that site's API key field.
+- A site that needed a browser check shows its API key fields before you add it.
+- Images and videos that a Danbooru-type site refuses are retried once with your API key, on that site's own addresses only.
+
 ## [1.4.0] - 2026-11-09
 
 ### Added
