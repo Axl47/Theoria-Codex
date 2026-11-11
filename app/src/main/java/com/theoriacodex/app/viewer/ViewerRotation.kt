@@ -70,12 +70,12 @@ internal fun rememberViewerRotation(selection: ViewerSelection, rotation: Viewer
     LaunchedEffect(key, fill, isVideo, autoRotate, inPictureInPicture) {
         val opening = openingKey ?: return@LaunchedEffect
         when {
-            key != opening || !autoRotate || !isVideo || inPictureInPicture -> openingKey = null
-            fill != null -> {
+            key != opening || !autoRotate || inPictureInPicture -> openingKey = null
+            isVideo && fill != null -> {
                 if (fill != screen) rotation.held = fill
                 openingKey = null
             }
-            // Otherwise the size is still unknown: wait for the video to report it.
+            // Otherwise wait: some sources resolve the video, or its size, only after the post opens.
         }
     }
     DisposableEffect(rotation) {
