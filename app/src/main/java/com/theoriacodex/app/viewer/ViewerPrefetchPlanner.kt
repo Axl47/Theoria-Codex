@@ -9,7 +9,7 @@ import kotlin.math.abs
 internal const val VIEWER_PREFETCH_LEFT_COUNT = 3
 internal const val VIEWER_PREFETCH_RIGHT_COUNT = 3
 
-/** Videos warm only the immediate neighbours; each one can cost megabytes of the shared video cache. */
+/** Videos and ugoira archives warm only the immediate neighbours; each one can cost megabytes of disk cache. */
 internal const val VIEWER_VIDEO_PREFETCH_DISTANCE = 1
 
 /**
@@ -20,7 +20,7 @@ internal const val VIEWER_MEMORY_PREFETCH_DISTANCE = 1
 
 /**
  * Orders speculative Viewer work: nearest right neighbours first, then nearest left ones. Images use the
- * full window; videos beyond [VIEWER_VIDEO_PREFETCH_DISTANCE] are left to load when they are shown.
+ * full window; videos and ugoira beyond [VIEWER_VIDEO_PREFETCH_DISTANCE] are left to load when they are shown.
  */
 internal fun planAdjacentViewerPrefetch(
     pages: List<ViewerPageState>,
@@ -34,7 +34,8 @@ internal fun planAdjacentViewerPrefetch(
     if (currentIndex < 0) return emptyList()
 
     fun neighbour(offset: Int) = flattened.getOrNull(currentIndex + offset)?.takeUnless { media ->
-        media.kind == ViewerMediaKind.VIDEO && abs(offset) > VIEWER_VIDEO_PREFETCH_DISTANCE
+        (media.kind == ViewerMediaKind.VIDEO || media.kind == ViewerMediaKind.UGOIRA) &&
+            abs(offset) > VIEWER_VIDEO_PREFETCH_DISTANCE
     }?.key
 
     return buildList {

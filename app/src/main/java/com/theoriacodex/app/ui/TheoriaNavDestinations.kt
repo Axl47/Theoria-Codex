@@ -305,7 +305,7 @@ private fun ViewerDestination(shell: TheoriaShell) {
                 sessionRetentionOwner = shell.viewerSessions,
                 canonicalizePost = { post -> shell.features.offlineMedia?.withoutOfflineLocations(post) ?: post },
                 postResolver = shell.viewerRouteWorkflow,
-                mediaPrefetcher = viewerMediaPrefetcher(shell.appContext) { state.browsing.settings.viewer.videoQuality },
+                mediaPrefetcher = viewerMediaPrefetcher(shell.appContext, shell.sources.pixivUgoiraClient) { state.browsing.settings.viewer.videoQuality },
                 mediaDurationCoordinator = shell.features.mediaDurationCoordinator,
                 restoreSession = shell.viewerRouteWorkflow::restoreSession,
             ),

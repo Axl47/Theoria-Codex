@@ -189,6 +189,35 @@ class PixivUgoiraClientTest {
     }
 
     @Test
+    fun `warming an archive lets a later load play from disk without another download`() = runTest {
+        val downloads = AtomicInteger()
+        val client = fixtureClient(download = { _, _, file ->
+            downloads.incrementAndGet()
+            writeFrameZip(file)
+            BinaryResponse(200)
+        })
+
+        assertTrue(client.warmArchive("warm"))
+        assertTrue(client.load("warm", UgoiraSizeBucket.CARD).isSuccess)
+
+        assertEquals(1, downloads.get())
+    }
+
+    @Test
+    fun `a failed warm reports false and leaves playback able to retry`() = runTest {
+        val downloads = AtomicInteger()
+        val client = fixtureClient(download = { _, _, file ->
+            if (downloads.incrementAndGet() == 1) BinaryResponse(404) else {
+                writeFrameZip(file)
+                BinaryResponse(200)
+            }
+        })
+
+        assertFalse(client.warmArchive("flaky"))
+        assertTrue(client.load("flaky", UgoiraSizeBucket.CARD).isSuccess)
+    }
+
+    @Test
     fun `memory pressure drops decoded frames and playback recovers from the disk archive`() = runTest {
         val directory = temporaryFolder.newFolder("pressure")
         val client = fixtureClient(directory)
