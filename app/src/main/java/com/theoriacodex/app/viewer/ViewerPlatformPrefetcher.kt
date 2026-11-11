@@ -26,7 +26,7 @@ import kotlinx.coroutines.sync.withPermit
 /** The Viewer route's prefetcher: how far from the current media a prefetch may stay decoded is decided here. */
 internal fun viewerMediaPrefetcher(
     context: Context,
-    ugoiraClient: PixivUgoiraClient,
+    ugoiraClient: PixivUgoiraClient? = null,
     videoQuality: () -> VideoQuality,
 ) = ViewerMediaPrefetcher { _, media, distance ->
     prefetchViewerMedia(
