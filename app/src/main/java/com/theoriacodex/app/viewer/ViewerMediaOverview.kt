@@ -24,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,6 +45,7 @@ import com.theoriacodex.app.media.mediaKind
 import com.theoriacodex.app.media.postMediaItems
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.delay
 
@@ -113,6 +115,22 @@ private fun ViewerOverviewOriginal(source: SourceKey, item: ViewerMediaOverviewI
 
 /** How long a page must stay put before its heavy original replaces its thumbnail. */
 internal const val VIEWER_SHARP_SETTLE_MS = 250L
+
+/**
+ * Once the Viewer rests on a multi-page post, warms all its page thumbnails into the disk cache, nearest pages
+ * first, so the page grid, page strip, seek preview and loading pages paint from disk instead of the network.
+ * Leaving the post cancels the warm; turning pages within it does not restart it.
+ */
+@Composable
+internal fun WarmViewerPageThumbnails(postId: PostId, items: List<ViewerMediaOverviewItem>, mediaIndex: Int) {
+    val context = LocalContext.current
+    val currentPage by rememberUpdatedState(mediaIndex)
+    LaunchedEffect(postId, items) {
+        if (!viewerMediaOverviewAvailable(items)) return@LaunchedEffect
+        delay(VIEWER_SHARP_SETTLE_MS)
+        warmViewerPageThumbnails(context, postId.source, items, currentPage)
+    }
+}
 
 /** The still that stands for one page wherever the Viewer lists a post's pages; null when the page has none. */
 @Composable
