@@ -50,11 +50,13 @@ class InstalledJsonCompatibilityDeviceTest {
             "previewLocalPath",
             "previewMime",
             "previewProgressiveUrls",
+            "previewFallbackUrls",
             "previewIsAnimated",
             "fullUrl",
             "fullLocalPath",
             "fullMime",
             "fullProgressiveUrls",
+            "fullFallbackUrls",
             "fullVideoVariants",
             "fullIsAnimated",
             "pageUrl",
@@ -75,7 +77,7 @@ class InstalledJsonCompatibilityDeviceTest {
         )
         assertJsonKeys(
             ImageRefStorageRecord(),
-            "url", "localPath", "mime", "progressiveUrls", "videoVariants", "isAnimated", "thumbnailUrl",
+            "url", "localPath", "mime", "progressiveUrls", "fallbackUrls", "videoVariants", "isAnimated", "thumbnailUrl",
         )
         assertJsonKeys(VideoVariantRecord(), "url", "height", "original", "mime")
         assertJsonKeys(
