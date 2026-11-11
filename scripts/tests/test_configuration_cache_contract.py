@@ -18,7 +18,7 @@ class ConfigurationCacheContractTest(unittest.TestCase):
 
     def test_check_proves_an_isolated_strict_entry_can_be_reused(self) -> None:
         check = CHECK_SCRIPT.read_text(encoding="utf-8")
-        loop = check[check.index("for _ in store reuse; do"):check.index("# One invocation")]
+        loop = check[check.index("for _ in store reuse; do"):check.index("run_tests()")]
 
         self.assertIn("set -euo pipefail", check)
         self.assertEqual(1, loop.count("./gradlew help"))

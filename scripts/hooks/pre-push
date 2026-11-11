@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Rejects a push in seconds when the checked-out code breaks a line budget or, once
+# scripts/detekt_changed.sh exists, a Detekt rule in changed Kotlin files. It checks the working tree,
+# not each pushed commit. scripts/check.sh installs it through core.hooksPath; bypass with --no-verify.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+# git passes "<local ref> <local sha> <remote ref> <remote sha>" per ref. Deletions and result refs
+# describe code that is already checked.
+needed=false
+while read -r _ local_sha remote_ref _; do
+  [[ "$local_sha" =~ ^0+$ || "$remote_ref" == refs/verified* ]] && continue
+  needed=true
+done
+[[ "$needed" == true ]] || exit 0
+
+source scripts/policy_checks.sh
+
+fail() {
+  echo "pre-push: $1 failed (see above). Fix it, or push with --no-verify to skip this hook." >&2
+  exit 1
+}
+
+line_budgets "$(diff_base 2>/dev/null || true)" > /dev/null || fail 'Line budget check'
+if [[ -x scripts/detekt_changed.sh ]]; then
+  scripts/detekt_changed.sh || fail 'Detekt on changed files'
+fi
