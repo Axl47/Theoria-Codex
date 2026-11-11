@@ -33,7 +33,7 @@ concurrency:
 
 jobs:
   plan:
-    name: Verify / lookup
+    name: lookup
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -71,7 +71,7 @@ jobs:
           echo "parts=[$(IFS=,; echo "${parts[*]}")]" >> "$GITHUB_OUTPUT"
 
   part:
-    name: Verify / ${{ matrix.part }}
+    name: ${{ matrix.part }}
     needs: plan
     if: needs.plan.outputs.parts != '[]'
     runs-on: ubuntu-latest
