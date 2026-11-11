@@ -101,6 +101,7 @@ internal fun ViewerMediaPage(
     val isUgoira = isPixivUgoiraMedia(post, media) && pixivUgoiraClient != null
     val animated = viewerMediaIsAnimated(post, media, pixivUgoiraClient != null)
     val interactions = remember(key) { ViewerMediaInteractions() }
+    val holdScrub = LocalViewerHoldScrub.current?.takeIf { controls.isActive }
     // The transform changes every pinch event, so it is read only while drawing, never in composition.
     val transformModifier = remember(transform) {
         Modifier.graphicsLayer {
@@ -123,7 +124,7 @@ internal fun ViewerMediaPage(
                 .viewerDismissDrag(dismissDrag, returnProgress),
             contentAlignment = Alignment.Center,
         ) {
-            CompositionLocalProvider(LocalViewerMediaAspectRatio provides viewerAspectRatio(post)) {
+            CompositionLocalProvider(LocalViewerMediaAspectRatio provides viewerAspectRatio(post), LocalViewerHoldScrub provides holdScrub) {
                 ViewerMediaContent(
                     post, media, key,
                     controls.copy(
@@ -136,9 +137,9 @@ internal fun ViewerMediaPage(
             }
             FittedSeekJumpFeedbackOverlay(interactions.feedback, viewerAspectRatio(post), interactions::clearFeedback, Modifier.matchParentSize())
         }
-        ViewerMediaGestureLayer(key, isVideo || isGif || isUgoira, animated, interactions, controls,
+        ViewerMediaGestureLayer(key, isVideo || isGif || isUgoira, animated, interactions, holdScrub, controls,
             transform, transformBounds, onTransformChanged, layout, onAction, onInteraction, onToggleChrome, onPassiveInteraction)
-        if (controls.isActive && isVideo && !layout.pictureInPicture && levelControls != null) {
+        if (controls.isActive && !layout.pictureInPicture && levelControls != null) {
             ViewerLevelFeedbackOverlay(levelControls, Modifier.matchParentSize())
         }
         ViewerHoldSpeedLabel(interactions.holdingSpeed, Modifier.align(Alignment.TopCenter))
@@ -192,7 +193,7 @@ internal fun viewerAspectRatio(post: Post): Float? {
 @Composable
 private fun ViewerMediaGestureLayer(
     key: ViewerMediaKey, seekable: Boolean, animated: Boolean,
-    interactions: ViewerMediaInteractions, controls: ViewerRendererControls,
+    interactions: ViewerMediaInteractions, holdScrub: ViewerHoldScrub?, controls: ViewerRendererControls,
     transform: State<ViewerTransformState>, bounds: ViewerTransformBounds, onTransformChanged: (ViewerTransformState) -> Unit,
     layout: ViewerMediaLayout, onAction: (ViewerAction) -> Unit, onInteraction: () -> Unit,
     onToggleChrome: () -> Unit, onPassiveInteraction: () -> Unit,
@@ -230,6 +231,7 @@ private fun ViewerMediaGestureLayer(
             hold = if (seekable) { holding ->
                 if (holding && !interactions.holdingSpeed) haptics.performHapticFeedback(TheoriaHaptics.Hold)
                 interactions.holdingSpeed = holding
+                holdScrub?.holding = holding
             } else null,
         ),
     )
