@@ -2,7 +2,7 @@
 
 ## Development Rules
 
-*Before every PR:* commit your work, then run `scripts/check.sh --record` and fix anything it reports before pushing. It runs the same checks as GitHub's Verify, usually in a few minutes, and GitHub reuses the result for that exact code.
+*Before every PR:* commit your work, then run `scripts/check.sh --record` and fix anything it reports before pushing. It runs the policy checks, unit tests with coverage, and static analysis (Detekt, lint, duplicates), the same checks as GitHub's Verify, and GitHub reuses the result for any commit with the same build inputs (`scripts/release_gate.py input-key`; docs-only commits reuse their parent's). R8, release and benchmark builds (`--part release`) and emulator tests run on GitHub after merge to `main`. `check.sh` also installs `scripts/hooks/pre-push`, which rejects line-budget and changed-file Detekt failures in seconds; bypass it only with `--no-verify`.
 
 Keep Detekt's own `parallel` setting disabled: concurrent Kotlin 2.4 FIR/PSI traversal can hang or report missing declarations. Android Debug analysis receives its module's public `JavaCompile.destinationDirectory` after AGP registers variant tasks, so generated BuildConfig and Room Java types resolve. Run lint after multi-variant coverage/code generation finishes; otherwise lint can read Room-generated Java files while another variant regenerates them. Offline lint retains source checks while avoiding dependency-version network lookups. If a reused daemon reports a Kotlin FIR/UAST internal resolver crash after other analysis/build work, finish code generation and retry lint alone with `./gradlew :app:lintDebug --offline --no-daemon`; the fresh-process lane retains every source check and passed the loading-remediation audit without suppressions.
 
@@ -74,5 +74,6 @@ Keep `AGENTS.md` limited to durable product intent, safety boundaries, and accep
 
 - Builds, mocks, and host tests do not establish live provider authentication, hardware playback, PiP, or TalkBack behavior. Performance acceptance requires physical-device measurements, simultaneous-autoplay coverage, and retained complete iteration evidence. Calibration requires three complete runs of the same APK under matching conditions.
 - Use `.codex/skills/theoria-release/SKILL.md` for releases. Approving the version and release notes authorizes the agent to commit the release files straight to `main`, run the Release workflow, and publish.
-- There are two gates: the pre-PR check, and the Release workflow. Release runs emulator acceptance, and creates the tag only after everything passes.
-- Emulator tests do not run on PRs. For a risky change, such as a database migration, navigation, or playback, also run `gh workflow run device-validation.yml --ref <branch>`.
+- Results are recorded per code, not per commit: the pre-PR check (`scripts/check.sh --record`, or Verify on the PR), the R8 release part, and the emulator tests on Android 16 and 17. PRs run only the pre-PR check, skip it when it is already recorded, and only read caches.
+- Every push to `main` runs all three in the Main workflow, even when the pre-PR check is recorded, and is the only run that saves caches. Release only promotes: it requires all three results for the commit, runs any missing one itself rather than failing, and creates the tag only after everything passes.
+- Emulator tests do not run on PRs. For a risky change, such as a database migration, navigation, or playback, also run `gh workflow run device-validation.yml --ref <branch>`; branch runs never record a result.

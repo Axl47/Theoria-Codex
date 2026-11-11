@@ -1,9 +1,16 @@
 name: Device Validation
 
-# Runs inside every release, weekly to catch drift in the Android images, and on request for a
-# risky change: gh workflow run device-validation.yml --ref <branch>
+# Runs on every push to main (called by Main), inside a release whose commit has no recorded device
+# result, weekly to catch drift in the Android images, and on request for a risky change:
+# gh workflow run device-validation.yml --ref <branch>
+# Only the Main and Release callers pass `record`, and only a run on main records the result.
 on:
   workflow_call:
+    inputs:
+      record:
+        description: Record the result for the checked-out commit when every test passes on main.
+        type: boolean
+        default: false
     secrets:
       GRADLE_ENCRYPTION_KEY:
         required: false
@@ -14,8 +21,9 @@ on:
 permissions:
   contents: read
 
+# The caller's name keeps a Release fallback from queueing behind (or replacing) Main's run.
 concurrency:
-  group: device-validation-${{ github.ref }}
+  group: device-validation-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -47,6 +55,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v6.4.0
         with:
           cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+          cache-read-only: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
 
       - name: Enable KVM
         run: |
@@ -127,6 +136,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v6.4.0
         with:
           cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+          cache-read-only: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
 
       - name: Enable KVM
         run: |
@@ -180,3 +190,24 @@ jobs:
             app/build/outputs/mapping/releaseAcceptance/
           if-no-files-found: warn
           retention-days: 14
+
+  record:
+    name: Record device result
+    needs: [connected-tests, release-acceptance]
+    if: inputs.record && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+
+    steps:
+      # The workflow's own commit, which is exactly what the jobs above tested.
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 2
+
+      # Best effort inside a release, so a recording problem never blocks publishing.
+      - name: Record the device result
+        continue-on-error: ${{ github.event_name != 'push' }}
+        run: python3 scripts/release_gate.py record device

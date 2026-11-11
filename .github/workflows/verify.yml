@@ -1,11 +1,25 @@
 name: Verify
 
-# Runs scripts/check.sh unless that exact code already passed it, on a Mac or in an earlier run.
+# Runs the parts of scripts/check.sh in parallel jobs, then records the result.
+# - Pull requests run `tests` and `static`, unless this exact code already passed them (on a Mac
+#   with `scripts/check.sh --record`, or in an earlier run). They never run R8 and only read caches.
+# - Main and Release call this workflow and choose the parts themselves: Main always runs all of
+#   them, Release only the ones whose result is missing.
+# The final `Verify` job always reports, so it can be the single required status check.
 on:
   pull_request:
     branches:
       - main
   workflow_call:
+    inputs:
+      check:
+        description: Run the pre-PR check (tests and static) and record it.
+        type: boolean
+        default: true
+      release:
+        description: Run the release part (minified/R8 builds) and record it.
+        type: boolean
+        default: false
     secrets:
       GRADLE_ENCRYPTION_KEY:
         required: false
@@ -18,39 +32,61 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  lookup:
-    name: Look for an existing result
+  plan:
+    name: lookup
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      verified: ${{ steps.lookup.outputs.verified }}
+      check: ${{ steps.plan.outputs.check }}
+      parts: ${{ steps.plan.outputs.parts }}
 
     steps:
-      - name: Find a recorded pass for this code
-        id: lookup
-        env:
-          GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: |
-          tree="$(gh api "repos/${GITHUB_REPOSITORY}/git/commits/${HEAD_SHA}" --jq .tree.sha)"
-          if [[ -n "$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}" "refs/verified/${tree}")" ]]; then
-            echo "verified=true" >> "$GITHUB_OUTPUT"
-            echo "This exact code already passed scripts/check.sh, so the full check was skipped." >> "$GITHUB_STEP_SUMMARY"
-          fi
+      - name: Checkout
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 2
 
-  check:
-    name: Full check
-    needs: lookup
-    if: ${{ needs.lookup.outputs.verified != 'true' }}
+      - name: Choose the parts to run
+        id: plan
+        env:
+          IS_PR: ${{ github.event_name == 'pull_request' }}
+          RUN_CHECK: ${{ inputs.check }}
+          RUN_RELEASE: ${{ inputs.release }}
+        run: |
+          if [[ "$IS_PR" == true ]]; then
+            RUN_RELEASE=false
+            if python3 scripts/release_gate.py has check; then
+              RUN_CHECK=false
+              echo "This exact code already passed scripts/check.sh, so the check was skipped." >> "$GITHUB_STEP_SUMMARY"
+            else
+              RUN_CHECK=true
+            fi
+          fi
+          parts=()
+          [[ "$RUN_CHECK" == true ]] && parts+=('"tests"' '"static"')
+          [[ "$RUN_RELEASE" == true ]] && parts+=('"release"')
+          echo "check=$RUN_CHECK" >> "$GITHUB_OUTPUT"
+          echo "parts=[$(IFS=,; echo "${parts[*]}")]" >> "$GITHUB_OUTPUT"
+
+  part:
+    name: ${{ matrix.part }}
+    needs: plan
+    if: needs.plan.outputs.parts != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    permissions:
-      contents: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        part: ${{ fromJSON(needs.plan.outputs.parts) }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
 
       - name: Setup Java
@@ -61,10 +97,12 @@ jobs:
             17
             21
 
+      # Only the run for a push to main saves caches; everything else restores them.
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6.4.0
         with:
           cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+          cache-read-only: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
 
       - name: Setup Node
         uses: actions/setup-node@v7.1.0
@@ -72,23 +110,24 @@ jobs:
           node-version: '24'
           cache: npm
 
-      - name: Run the shared check
-        run: bash scripts/check.sh
+      - name: Run the ${{ matrix.part }} part
+        run: bash scripts/check.sh --part "${{ matrix.part }}"
 
-      # Best effort: Dependabot and fork runs get a read-only token and simply skip recording.
-      - name: Record the pass
-        continue-on-error: true
-        run: git push --quiet origin "+HEAD:refs/verified/$(git rev-parse 'HEAD^{tree}')"
+      # Tells the final job, which records results, that this part passed.
+      - name: Mark the part passed
+        run: touch build/reports/timings/passed
 
-      # Machine-readable phase and Gradle task durations, tracked over time by an external dashboard.
+      # Combined into one `ci-timings` artifact by the final job.
       - name: Upload timings
         if: always()
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: ci-timings
-          path: build/reports/timings/ci-timings.json
+          name: ci-timings-${{ matrix.part }}
+          path: |
+            build/reports/timings/ci-timings.json
+            build/reports/timings/passed
           if-no-files-found: warn
-          retention-days: 90
+          retention-days: 1
 
       - name: Summarize timings
         if: always() && hashFiles('build/reports/timings/ci-timings.json') != ''
@@ -104,7 +143,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: verify-reports
+          name: verify-reports-${{ matrix.part }}
           path: |
             app/build/test-results/
             app/build/reports/tests/
@@ -120,3 +159,74 @@ jobs:
             build/reports/kover/
           if-no-files-found: warn
           retention-days: 14
+
+  verify:
+    name: Verify
+    needs: [plan, part]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        if: needs.plan.outputs.parts != '[]'
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 2
+
+      # Each part's timings, plus a `passed` marker when the part succeeded.
+      - name: Download part results
+        if: needs.plan.outputs.parts != '[]'
+        continue-on-error: true
+        uses: actions/download-artifact@v8.0.2
+        with:
+          pattern: ci-timings-*
+          path: timings
+
+      # Each result is recorded on its own, so a failed release part never withholds the check.
+      # Best effort outside main: Dependabot and fork runs get a read-only token and skip recording,
+      # and a recording problem never blocks a release.
+      - name: Record the pre-PR check
+        if: >-
+          needs.plan.outputs.check == 'true'
+          && hashFiles('timings/ci-timings-tests/passed') != ''
+          && hashFiles('timings/ci-timings-static/passed') != ''
+        continue-on-error: ${{ github.event_name != 'push' }}
+        run: python3 scripts/release_gate.py record check
+
+      - name: Record the release part
+        if: hashFiles('timings/ci-timings-release/passed') != ''
+        continue-on-error: ${{ github.event_name != 'push' }}
+        run: python3 scripts/release_gate.py record release
+
+      - name: Require every part that ran to pass
+        if: always()
+        env:
+          PLAN: ${{ needs.plan.result }}
+          PARTS: ${{ needs.plan.outputs.parts }}
+          PART: ${{ needs.part.result }}
+        run: |
+          [[ "$PLAN" == success ]] || { echo "::error::The lookup failed."; exit 1; }
+          [[ "$PARTS" == '[]' || "$PART" == success ]] || { echo "::error::A part of the check failed."; exit 1; }
+
+      # One `ci-timings` artifact per run, as the external dashboard expects. Phase names carry
+      # their part, because the cheap policy checks run in every part.
+      - name: Combine timings
+        if: always() && hashFiles('timings/*/ci-timings.json') != ''
+        run: |
+          for file in timings/ci-timings-*/ci-timings.json; do
+            part="${file#timings/ci-timings-}"
+            jq --arg part "${part%%/*}" '.phases |= map(.name = "\($part): \(.name)")' "$file"
+          done | jq -s '{version: 1, phases: map(.phases[]), tasks: map(.tasks[])}' > ci-timings.json
+
+      # Machine-readable phase and Gradle task durations, tracked over time by an external dashboard.
+      - name: Upload timings
+        if: always() && hashFiles('ci-timings.json') != ''
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: ci-timings
+          path: ci-timings.json
+          retention-days: 90
