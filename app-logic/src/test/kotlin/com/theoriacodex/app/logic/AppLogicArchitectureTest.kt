@@ -112,23 +112,20 @@ class AppLogicArchitectureTest {
         assertTrue("app-logic/build/reports/detekt/" in workflow)
     }
 
+    /** Cross-source parity: delivery plans decide quality upgrades from the media, not from lists of sources. */
     @Test
-    fun `app integration reuses quality upgrade source policy across delivery plans`() {
+    fun `media delivery plans upgrade quality from what the media offers, for every source`() {
         val postMedia = File(
             root,
             "app/src/main/java/com/theoriacodex/app/media/PostMedia.kt",
         ).readText()
-        val previewPlan = postMedia
+        val plans = postMedia
             .substringAfter("fun previewMediaDeliveryPlan")
-            .substringBefore("fun viewerMediaDeliveryPlan")
-        val viewerPlan = postMedia
-            .substringAfter("fun viewerMediaDeliveryPlan")
-            .substringBefore("private fun mediaDeliveryPlan")
+            .substringBefore("private fun ImageRef.hasLighterRenditions")
 
-        assertTrue("upgradesImageQuality()" in previewPlan)
-        assertTrue("upgradesImageQuality()" in viewerPlan)
-        assertTrue("private fun SourceKey.upgradesImageQuality(): Boolean = this in QUALITY_UPGRADE_IMAGE_SOURCES" in postMedia)
-        assertTrue("private val QUALITY_UPGRADE_IMAGE_SOURCES = setOf(" in postMedia)
+        assertTrue("hasLighterRenditions()" in plans.substringAfter("private fun mediaDeliveryPlan"))
+        assertFalse("SourceKey." in plans)
+        assertFalse(Regex("""setOf\(\s*SourceKey""").containsMatchIn(postMedia))
     }
 
     private fun sourceFiles(): Sequence<File> = File(root, "app-logic/src/main/kotlin")
