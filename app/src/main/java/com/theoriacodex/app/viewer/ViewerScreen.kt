@@ -175,6 +175,7 @@ private fun ViewerLoadedScreen(
         loadingMoreFromSource, loadMoreFromStrip, onAction, onVisiblePostChanged,
     )
     val viewerAccent = rememberViewerAccent(selection.post, enabled = !opening && !returning)
+    val rotationOffer = rememberViewerRotation(selection, activity?.viewerRotation, inPictureInPicture)
     CompositionLocalProvider(
         LocalViewerPostStripInset provides if (chromeVisible && !frame.mediaOverviewVisible) VIEWER_POST_STRIP_HEIGHT else 0.dp,
         LocalViewerAccent provides viewerAccent,
@@ -193,6 +194,14 @@ private fun ViewerLoadedScreen(
                 frame, postPagerState, screen, controls, swipe, activity, quality, qualityHeight, pendingPostId, likedPostIds,
                 invertMultiImageScrollDirection, onAction, loadMoreFromStrip, onIncludeRelatedPosts, onDismissRelatedPosts, onRetryRelatedPosts,
             )
+            rotationOffer?.let { offer ->
+                val bottomBar = if (selection.isAnimated || selection.overviewItems.size > 1) VIEWER_TIMELINE_HEIGHT else 0.dp
+                ViewerRotateButton(
+                    offer,
+                    visible = chromeVisible && !frame.mediaOverviewVisible && !screen.timelineInteractionActive,
+                    bottomInset = LocalViewerPostStripInset.current + bottomBar,
+                )
+            }
         }
     }
     if (uiState.controls.metadataVisible && !inPictureInPicture) {

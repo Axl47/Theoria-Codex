@@ -92,6 +92,7 @@ internal fun ViewerVideoPlayer(
         context.videoPlaybackInfrastructure().feedPositionHandoff.publish(mediaKey, it)
     }
     ViewerVideoSystemBindings(state.player, controls.isActive && controls.systemControlsReady, events)
+    ReportViewerVideoShape(state.player, controls.isActive, mediaKey)
     ViewerVideoCommands(state, controls)
     ViewerVideoLifecycle(state, controls)
     ViewerVideoProgress(state, events)

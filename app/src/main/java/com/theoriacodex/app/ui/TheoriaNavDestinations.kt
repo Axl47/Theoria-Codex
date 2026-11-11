@@ -317,6 +317,7 @@ private fun ViewerDestination(shell: TheoriaShell) {
                 fetchTagVideoCounts = shell.features.search::fetchTagVideoCounts,
                 invertMultiImageScrollDirection = state.browsing.settings.viewer.invertMultiImageScrollDirection,
                 instantSeek = state.browsing.settings.viewer.instantSeek,
+                autoRotateVideos = state.browsing.settings.viewer.autoRotateVideos,
                 likedPostIds = state.browsing.likedPostIds,
                 creatorBrowsingSources = state.browsing.creatorBrowsingSources,
             ),
