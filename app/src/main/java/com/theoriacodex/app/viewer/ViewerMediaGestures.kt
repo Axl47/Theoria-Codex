@@ -18,6 +18,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
@@ -48,7 +49,7 @@ internal fun Modifier.viewerMediaGestures(
     val currentZoomed by rememberUpdatedState(zoomed)
     val gestures = pointerInput(mediaKey, seekable, touchExplorationEnabled) {
         detectTapGestures(
-            onDoubleTap = { offset -> currentActions.doubleTap(offset, size.width, seekable, currentZoomed) },
+            onDoubleTap = { offset -> currentActions.doubleTap(offset, size, seekable, currentZoomed) },
             onTap = { if (!touchExplorationEnabled) currentActions.toggleControls() },
             onLongPress = { currentActions.hold?.invoke(true) ?: currentActions.showInfo() },
             onPress = {
@@ -68,19 +69,21 @@ internal fun Modifier.viewerMediaGestures(
 /** The Viewer's one spatial map: double-tap and vertical swipes both read these columns. */
 internal enum class ViewerGestureColumn { Leading, Center, Trailing }
 
-internal fun viewerGestureColumn(x: Float, width: Int): ViewerGestureColumn {
-    val ratio = if (width > 0) x / width.toFloat() else 0.5f
+/** A wide area keeps its outer columns to a thumb's reach, so most of a landscape screen stays centre. */
+internal fun viewerGestureColumn(x: Float, size: IntSize): ViewerGestureColumn {
+    val ratio = if (size.width > 0) x / size.width.toFloat() else 0.5f
+    val outer = if (size.width > size.height) 0.22f else 0.35f
     return when {
-        ratio <= 0.35f -> ViewerGestureColumn.Leading
-        ratio >= 0.65f -> ViewerGestureColumn.Trailing
+        ratio <= outer -> ViewerGestureColumn.Leading
+        ratio >= 1f - outer -> ViewerGestureColumn.Trailing
         else -> ViewerGestureColumn.Center
     }
 }
 
 /** Only seekable media reserves the outer columns; zoomed media always double-taps back to fit. */
-private fun ViewerMediaGestureActions.doubleTap(offset: Offset, width: Int, seekable: Boolean, zoomed: Boolean) {
+private fun ViewerMediaGestureActions.doubleTap(offset: Offset, size: IntSize, seekable: Boolean, zoomed: Boolean) {
     if (zoomed || !seekable) return zoom(offset)
-    when (viewerGestureColumn(offset.x, width)) {
+    when (viewerGestureColumn(offset.x, size)) {
         ViewerGestureColumn.Leading -> seek(-10_000L)
         ViewerGestureColumn.Center -> zoom(offset)
         ViewerGestureColumn.Trailing -> seek(10_000L)
@@ -109,7 +112,12 @@ private fun mediaAccessibilityActions(
 /** What the Viewer's recognizer may do for the gesture that is starting. */
 internal data class ViewerGestureConfig(
     val enabled: Boolean,
+    /** Brightness on the leading column, for every kind of media. */
     val levels: ViewerLevelControls? = null,
+    /** Whether the trailing column adjusts volume; media without sound keeps it for closing and info. */
+    val volumeAdjustable: Boolean = false,
+    /** While a hold-to-speed-up lasts, a horizontal drag scrubs the timeline instead of navigating. */
+    val holdScrub: ViewerHoldScrub? = null,
     /** Height kept free at the bottom for the timeline and post strip, which handle their own drags. */
     val reservedBottomPx: Float = 0f,
 )
@@ -126,6 +134,8 @@ internal interface ViewerGestureHandler {
     /** The gesture ended without a horizontal release: a tap, a vertical drag, or a second finger. */
     fun onGestureEnd()
     fun onLevelLimit()
+    /** A held press became a timeline scrub; the timeline has to be on screen to follow it. */
+    fun onScrubStart()
 }
 
 /**
@@ -160,13 +170,14 @@ private sealed interface ViewerGestureEnd {
     data object None : ViewerGestureEnd
 }
 
-private enum class ViewerGestureMode { Pending, Horizontal, Level, Dismiss, Info }
+private enum class ViewerGestureMode { Pending, Horizontal, Scrub, Level, Dismiss, Info }
 
-/** The outer columns adjust levels on video; everywhere else a pull closes and a push opens info. */
-private fun viewerVerticalMode(column: ViewerGestureColumn, y: Float, config: ViewerGestureConfig): ViewerGestureMode = when {
-    config.levels != null && column != ViewerGestureColumn.Center -> ViewerGestureMode.Level
-    y > 0f -> ViewerGestureMode.Dismiss
-    else -> ViewerGestureMode.Info
+/** The level a vertical drag from [this] column adjusts, if any. */
+private fun ViewerGestureColumn.levelControl(config: ViewerGestureConfig): ViewerLevelControl? = when {
+    config.levels == null -> null
+    this == ViewerGestureColumn.Leading -> ViewerLevelControl.Brightness
+    this == ViewerGestureColumn.Trailing && config.volumeAdjustable -> ViewerLevelControl.Volume
+    else -> null
 }
 
 /** Follows one finger until it lifts and reports how the gesture ended. */
@@ -177,7 +188,7 @@ private suspend fun AwaitPointerEventScope.readViewerGesture(
 ): ViewerGestureEnd {
     val tracker = VelocityTracker().apply { addPosition(down.uptimeMillis, down.position) }
     val gesture = ViewerGestureTracker(
-        column = viewerGestureColumn(down.position.x, size.width),
+        column = viewerGestureColumn(down.position.x, size),
         config = config,
         handler = handler,
         touchSlop = viewConfiguration.touchSlop,
@@ -196,6 +207,7 @@ private suspend fun AwaitPointerEventScope.readViewerGesture(
         }
     } finally {
         config.levels?.end()
+        config.holdScrub?.end(released = false)
     }
 }
 
@@ -208,6 +220,7 @@ private class ViewerGestureTracker(
     private val levelRange: Float,
     private val height: Float,
 ) {
+    private val levelControl = column.levelControl(config)
     private var mode = ViewerGestureMode.Pending
     private var x = 0f
     private var y = 0f
@@ -221,6 +234,10 @@ private class ViewerGestureTracker(
         if (locking) mode = lockedMode()
         when (mode) {
             ViewerGestureMode.Horizontal -> handler().onHorizontalDrag(x)
+            ViewerGestureMode.Scrub -> {
+                if (locking) handler().onScrubStart()
+                config.holdScrub?.drag(x)
+            }
             ViewerGestureMode.Level -> followLevel(if (locking) y else delta.y, begin = locking)
             ViewerGestureMode.Dismiss -> handler().onDismissDrag(x, y, height)
             ViewerGestureMode.Info -> Unit
@@ -229,15 +246,22 @@ private class ViewerGestureTracker(
         change.consume()
     }
 
+    /** Outer columns adjust their level; everywhere else a pull closes and a push opens info. */
     private fun lockedMode(): ViewerGestureMode = when {
-        abs(x) > touchSlop && abs(x) > abs(y) * 1.25f -> ViewerGestureMode.Horizontal
-        abs(y) > touchSlop && abs(y) > abs(x) * 1.25f -> viewerVerticalMode(column, y, config)
+        abs(x) > touchSlop && abs(x) > abs(y) * 1.25f ->
+            if (config.holdScrub?.holding == true) ViewerGestureMode.Scrub else ViewerGestureMode.Horizontal
+        abs(y) > touchSlop && abs(y) > abs(x) * 1.25f -> when {
+            levelControl != null -> ViewerGestureMode.Level
+            y > 0f -> ViewerGestureMode.Dismiss
+            else -> ViewerGestureMode.Info
+        }
         else -> ViewerGestureMode.Pending
     }
 
     private fun followLevel(deltaY: Float, begin: Boolean) {
         val levels = config.levels ?: return
-        if (begin) levels.begin(if (column == ViewerGestureColumn.Leading) ViewerLevelControl.Brightness else ViewerLevelControl.Volume)
+        val control = levelControl ?: return
+        if (begin) levels.begin(control)
         levels.drag(-deltaY / levelRange)
         val limit = levels.isAtLimit()
         if (limit && !atLimit && !begin) handler().onLevelLimit()
@@ -246,6 +270,10 @@ private class ViewerGestureTracker(
 
     fun end(velocity: Velocity, infoDistance: Float, flingVelocity: Float): ViewerGestureEnd = when (mode) {
         ViewerGestureMode.Horizontal -> ViewerGestureEnd.Horizontal(x, velocity.x)
+        ViewerGestureMode.Scrub -> {
+            config.holdScrub?.end(released = true)
+            ViewerGestureEnd.None
+        }
         ViewerGestureMode.Dismiss -> ViewerGestureEnd.Dismiss(velocity.y)
         ViewerGestureMode.Info ->
             if (y <= -infoDistance || velocity.y <= -flingVelocity) ViewerGestureEnd.Info else ViewerGestureEnd.None

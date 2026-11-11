@@ -36,6 +36,7 @@ class MediaTimelineBarTest {
     private val seeks = mutableListOf<Long>()
     private var cancelled = 0
     private var dragging = false
+    private val holdScrub = ViewerHoldScrub()
 
     @Test fun `drag previews changing targets and seeks only once on release`() {
         showTimeline()
@@ -116,10 +117,24 @@ class MediaTimelineBarTest {
         compose.runOnIdle { assertEquals(75_000L, seeks.last()); assertEquals(0, cancelled) }
     }
 
+    @Test fun `a hold scrub moves the handle by the finger's distance and seeks on release`() {
+        showTimeline()
+        val width = track().fetchSemanticsNode().size.width
+        compose.runOnIdle { holdScrub.drag(width * 0.25f) }
+        compose.onNodeWithText("Frame 35000").assertIsDisplayed()
+        compose.runOnIdle {
+            assertTrue(dragging)
+            assertTrue(seeks.isEmpty())
+            holdScrub.end(released = true)
+        }
+        compose.onNodeWithTag("viewer-scrub-preview").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(listOf(35_000L), seeks) }
+    }
+
     private fun showTimeline(instantSeek: Boolean = false) {
         compose.setContent {
             MaterialTheme {
-                CompositionLocalProvider(LocalViewerInstantSeek provides instantSeek) {
+                CompositionLocalProvider(LocalViewerInstantSeek provides instantSeek, LocalViewerHoldScrub provides holdScrub) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     if (visible.value) ViewerPlaybackFooter(Modifier.width(360.dp).testTag("footer")) {
                         MediaTimelineBar(

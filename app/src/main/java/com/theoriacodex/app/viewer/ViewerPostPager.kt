@@ -72,7 +72,9 @@ internal fun ViewerPostPagerSurface(
                 ViewerGestureConfig(
                     enabled = !zoomed && !frame.inPictureInPicture && !frame.touchExplorationEnabled &&
                         !screen.pendingDismiss && !frame.returning && !frame.opening,
-                    levels = levelControls.takeIf { selection.media?.let(::isVideoMediaRef) == true },
+                    levels = levelControls,
+                    volumeAdjustable = selection.media?.let(::isVideoMediaRef) == true,
+                    holdScrub = LocalViewerHoldScrub.current,
                     reservedBottomPx = reservedBottom,
                 ),
                 viewerGestureHandler(swipe, dismissDrag, screen, controls, haptics, flingVelocity, scope),
@@ -125,6 +127,7 @@ private fun viewerGestureHandler(
         if (dismissDrag.active && !screen.pendingDismiss) scope.launch { dismissDrag.recoil() }
     }
     override fun onLevelLimit() = haptics.performHapticFeedback(TheoriaHaptics.Limit)
+    override fun onScrubStart() = controls.markInteraction()
 }
 
 /** One post's media pager, with the effects that keep it in step with the selection. */
