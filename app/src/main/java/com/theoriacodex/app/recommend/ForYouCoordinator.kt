@@ -1,5 +1,6 @@
 package com.theoriacodex.app.recommend
 
+import com.theoriacodex.app.source.PostResolutionFlights
 import com.theoriacodex.app.search.NoOpTagSuggestionStore
 import com.theoriacodex.app.search.TagSuggestionStore
 import com.theoriacodex.app.source.inPresentationOrder
@@ -42,6 +43,8 @@ class ForYouCoordinator(
     private val savedSearches: com.theoriacodex.data.repository.SavedSearchRepository =
         com.theoriacodex.data.repository.InMemorySavedSearchRepository(),
     private val computationDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    /** Shared with the Viewer, so a card and the Viewer asking for one post at once fetch it once. */
+    private val postResolutions: PostResolutionFlights = PostResolutionFlights(),
 ) : ForYouRouteEngine {
     private val sections = ForYouSectionsLoader(registry, tagSuggestionStore, likesRepository, savedSearches, ::runFeedSeed)
 
@@ -120,8 +123,10 @@ class ForYouCoordinator(
         runCatchingPreservingCancellation { statisticsRepository.recordForYouSearch() }
     }
 
-    override suspend fun resolvePost(postId: PostId): Post? =
-        registry.adapterFor(postId.source)?.resolvePost(postId)
+    override suspend fun resolvePost(postId: PostId): Post? {
+        val adapter = registry.adapterFor(postId.source) ?: return null
+        return postResolutions.resolve(postId) { adapter.resolvePost(postId) }
+    }
 
     private suspend fun runFeedSeed(
         request: ForYouFeedRequest,

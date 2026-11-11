@@ -1,5 +1,6 @@
 package com.theoriacodex.app.creator
 
+import com.theoriacodex.app.source.PostResolutionFlights
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.data.repository.CreatorFollowsRepository
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
@@ -21,6 +22,8 @@ interface CreatorRouteEngine {
 class CreatorProfileCoordinator(
     private val registry: SourceAdapterRegistry,
     private val follows: CreatorFollowsRepository? = null,
+    /** Shared with the Viewer, so a card and the Viewer asking for one post at once fetch it once. */
+    private val postResolutions: PostResolutionFlights = PostResolutionFlights(),
 ) : CreatorRouteEngine {
     override fun supports(creator: CreatorProfile): Boolean = adapterFor(creator) != null
 
@@ -37,8 +40,10 @@ class CreatorProfileCoordinator(
         follows?.recordVisit(creator, posts)
     }
 
-    override suspend fun resolvePost(postId: PostId): Post? =
-        registry.adapterFor(postId.source)?.resolvePost(postId)
+    override suspend fun resolvePost(postId: PostId): Post? {
+        val adapter = registry.adapterFor(postId.source) ?: return null
+        return postResolutions.resolve(postId) { adapter.resolvePost(postId) }
+    }
 
     private fun adapterFor(creator: CreatorProfile): CreatorPostsSourceAdapter? =
         registry.adapterFor(creator.source) as? CreatorPostsSourceAdapter
