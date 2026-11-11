@@ -1,6 +1,7 @@
 package com.theoriacodex.app.ui
 
 import kotlinx.coroutines.flow.filterNotNull
+import com.theoriacodex.app.MainActivity
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -299,6 +300,7 @@ internal fun ShellPlatformEffects(shell: TheoriaShell, currentRoute: String?) {
     TheoriaAppPlatformEffects(
         hostActivity = hostActivity,
         viewerActive = currentRoute == AppRoute.Viewer,
+        viewerHeldOrientation = (hostActivity as? MainActivity)?.viewerRotation?.held,
         orientation = LocalConfiguration.current.orientation,
     )
     val lifecycleOwner = LocalLifecycleOwner.current

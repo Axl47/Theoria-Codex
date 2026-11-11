@@ -7,19 +7,25 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.theoriacodex.app.viewer.ViewerOrientation
 
-/** Owns only Android window policy; route and navigation state remain app-shell-owned. */
+/**
+ * Owns only Android window policy; route and navigation state remain app-shell-owned. The Viewer follows
+ * the phone's rotation unless it holds [viewerHeldOrientation] to fit a video.
+ */
 @Composable
 internal fun TheoriaAppPlatformEffects(
     hostActivity: Activity?,
     viewerActive: Boolean,
+    viewerHeldOrientation: ViewerOrientation?,
     orientation: Int,
 ) {
-    DisposableEffect(hostActivity, viewerActive) {
-        hostActivity?.requestedOrientation = if (viewerActive) {
-            ActivityInfo.SCREEN_ORIENTATION_FULL_USER
-        } else {
-            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    DisposableEffect(hostActivity, viewerActive, viewerHeldOrientation) {
+        hostActivity?.requestedOrientation = when {
+            !viewerActive -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            viewerHeldOrientation == ViewerOrientation.LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
+            viewerHeldOrientation == ViewerOrientation.PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
+            else -> ActivityInfo.SCREEN_ORIENTATION_FULL_USER
         }
         onDispose {
             hostActivity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED

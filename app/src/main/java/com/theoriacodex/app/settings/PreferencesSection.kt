@@ -22,6 +22,8 @@ internal fun PreferencesSection(state: SettingsUiState, onAction: (SettingsActio
             state.settings.viewer.instantSeek) { onAction(SettingsAction.SetInstantSeek(it)) }
         PreferenceToggle("Invert Scroll Direction", "Reverse swipes within multi-media posts.",
             state.settings.viewer.invertMultiImageScrollDirection) { onAction(SettingsAction.SetInvertScrollDirection(it)) }
+        PreferenceToggle("Auto-Rotate Videos", "Rotate to fit the video you open.",
+            state.settings.viewer.autoRotateVideos) { onAction(SettingsAction.SetAutoRotateVideos(it)) }
     }
 }
 
