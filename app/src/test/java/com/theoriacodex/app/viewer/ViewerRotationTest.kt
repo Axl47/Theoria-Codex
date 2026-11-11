@@ -9,7 +9,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.unit.dp
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -70,9 +69,7 @@ class ViewerRotationTest {
             if (shown.value) {
                 CompositionLocalProvider(LocalViewerAutoRotateVideos provides autoRotate) {
                     Box(Modifier.fillMaxSize()) {
-                        rememberViewerRotation(selection.value, rotation, inPictureInPicture = false)?.let { offer ->
-                            ViewerRotateButton(offer, visible = true, bottomInset = 0.dp)
-                        }
+                        ViewerRotationControl(selection.value, rotation, inPictureInPicture = false, visible = true)
                     }
                 }
             }
