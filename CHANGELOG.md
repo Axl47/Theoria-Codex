@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Custom booru sites now show a post's smaller sample image first and then the original, like the built-in boorus.
+- Gallery pages show their thumbnail while the full page loads, for every source.
+- The Viewer now prepares the previous post as well as the next one, so swiping back starts sooner.
+- Pixiv animations next to the one you are viewing now download ahead of time when you are not on mobile data.
+- Brief network errors and server hiccups are retried automatically, on Custom Sites too.
+- Opening a post while its card is still loading details reuses that request instead of sending a second one.
+- Cards no longer download a duplicate copy of an nhentai or Hitomi image as if it were a sharper version.
+
+### Fixed
+
+- Hitomi video cards now autoplay in search results.
+- Iwara video cards now autoplay once their details load, in search, For You and creator pages.
+- A post whose site answers with a different post now shows an error, instead of loading forever.
+
 ## [1.5.0] - 2026-11-10
 
 ### Changed
