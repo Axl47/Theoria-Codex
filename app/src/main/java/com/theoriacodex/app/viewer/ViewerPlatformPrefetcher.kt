@@ -57,6 +57,14 @@ internal suspend fun prefetchViewerMedia(
         val bytes = warmRemoteViewerGif(context, media.key.postId.source, location)
         return ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED, bytes)
     }
+    if (media.kind == ViewerMediaKind.IMAGE) {
+        // The page's small thumbnail lands first: it is what the page shows while its original downloads.
+        viewerPrefetchThumbnailLocation(media.ref, location)?.let { thumbnail ->
+            context.imageLoader.execute(
+                MediaRequestFactory.imageRequest(context, thumbnail, media.key.postId.source, crossfade = false).diskWarmOnly(),
+            )
+        }
+    }
     val request = MediaRequestFactory.imageRequest(
         context = context,
         url = location,
