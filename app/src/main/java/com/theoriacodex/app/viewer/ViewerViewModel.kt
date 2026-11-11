@@ -303,6 +303,16 @@ internal class ViewerViewModel(
                             recoverable = false,
                         )
                     )
+                } else if (resolved.id != effect.postId) {
+                    // A provider that ignores the requested id would otherwise leave the page requesting forever.
+                    onAction(
+                        ViewerAction.ResolutionFailed(
+                            session = effect.session,
+                            postId = effect.postId,
+                            message = "Provider returned a different post",
+                            recoverable = false,
+                        )
+                    )
                 } else {
                     applyResolvedPost(resolved)
                 }

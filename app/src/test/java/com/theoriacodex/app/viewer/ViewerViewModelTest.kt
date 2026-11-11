@@ -415,6 +415,26 @@ class ViewerViewModelTest {
     }
 
     @Test
+    fun `resolution returning a different post fails instead of staying requested`() = runTest {
+        val owner = ViewerViewModel(
+            savedStateHandle = SavedStateHandle(),
+            postResolver = ViewerPostResolver { _, _ -> post("newest", source = SourceKey.GELBOORU) },
+            scopeOverride = this,
+        )
+        owner.replaceSession(
+            session("mismatch", listOf(post("asked", source = SourceKey.GELBOORU, media = listOf(video("asked.mp4")))))
+        )
+
+        owner.onAction(ViewerAction.RequestCurrentPageResolution)
+        advanceUntilIdle()
+
+        val resolution = requireNotNull(owner.state.value.currentPage?.resolution)
+        assertEquals(ViewerResolutionStatus.FAILED, resolution.status)
+        assertFalse(resolution.recoverable)
+        assertEquals("asked", owner.state.value.currentPage?.post?.id?.sourcePostId)
+    }
+
+    @Test
     fun `provider resolution failure remains recoverable and distinct from deletion`() = runTest {
         val owner = ViewerViewModel(
             savedStateHandle = SavedStateHandle(),
