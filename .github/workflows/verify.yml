@@ -1,7 +1,7 @@
 name: Verify
 
 # Runs the parts of scripts/check.sh in parallel jobs, then records the result.
-# - Pull requests run `tests` and `static`, unless this exact code already passed them (on a Mac
+# - Pull requests run `tests`, `static` and `lint`, unless this exact code already passed them (on a Mac
 #   with `scripts/check.sh --record`, or in an earlier run). They never run R8 and only read caches.
 # - Main and Release call this workflow and choose the parts themselves: Main always runs all of
 #   them, Release only the ones whose result is missing.
@@ -13,7 +13,7 @@ on:
   workflow_call:
     inputs:
       check:
-        description: Run the pre-PR check (tests and static) and record it.
+        description: Run the pre-PR check (tests, static and lint) and record it.
         type: boolean
         default: true
       release:
@@ -65,7 +65,7 @@ jobs:
             fi
           fi
           parts=()
-          [[ "$RUN_CHECK" == true ]] && parts+=('"tests"' '"static"')
+          [[ "$RUN_CHECK" == true ]] && parts+=('"tests"' '"static"' '"lint"')
           [[ "$RUN_RELEASE" == true ]] && parts+=('"release"')
           echo "check=$RUN_CHECK" >> "$GITHUB_OUTPUT"
           echo "parts=[$(IFS=,; echo "${parts[*]}")]" >> "$GITHUB_OUTPUT"
@@ -203,6 +203,7 @@ jobs:
           needs.plan.outputs.check == 'true'
           && hashFiles('timings/ci-timings-tests/passed') != ''
           && hashFiles('timings/ci-timings-static/passed') != ''
+          && hashFiles('timings/ci-timings-lint/passed') != ''
         continue-on-error: ${{ github.event_name != 'push' }}
         run: python3 scripts/release_gate.py record check
 
