@@ -137,20 +137,25 @@ private fun FollowHoldScrub(scrub: TimelineScrubState, durationMs: Long, instant
     LaunchedEffect(holdScrub, scrub) {
         // The handle's x when this drag took hold; null until then, and again once it ends.
         var originX: Float? = null
+        // Snapshot state conflates updates, so a quick release can arrive without a Dragging state before it.
+        fun follow(offsetPx: Float) {
+            // A timeline that just appeared has not measured its track yet; the next move begins it.
+            if (originX == null && scrub.widthPx > 1f) {
+                val start = position().coerceIn(0L, duration)
+                scrub.begin(start)
+                originX = start.toFloat() / duration * scrub.widthPx
+            }
+            originX?.let { scrub.moveTo(it + offsetPx, duration, instant) }
+        }
         snapshotFlow { holdScrub.phase }.collect { phase ->
             when (phase) {
-                is ViewerHoldScrubPhase.Dragging -> {
-                    // A timeline that just appeared has not measured its track yet; the next move begins it.
-                    if (originX == null && scrub.widthPx > 1f) {
-                        val start = position().coerceIn(0L, duration)
-                        scrub.begin(start)
-                        originX = start.toFloat() / duration * scrub.widthPx
+                is ViewerHoldScrubPhase.Dragging -> follow(phase.offsetPx)
+                is ViewerHoldScrubPhase.Ended -> {
+                    follow(phase.offsetPx)
+                    if (originX != null) {
+                        originX = null
+                        scrub.end(phase.released)
                     }
-                    originX?.let { scrub.moveTo(it + phase.offsetPx, duration, instant) }
-                }
-                is ViewerHoldScrubPhase.Ended -> if (originX != null) {
-                    originX = null
-                    scrub.end(phase.released)
                 }
                 ViewerHoldScrubPhase.Idle -> Unit
             }
