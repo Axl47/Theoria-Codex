@@ -128,14 +128,12 @@ class ViewerViewModelTest {
     @Test
     fun `lookahead resolves the previous sparse post after the next and plans its prefetch`() = runTest {
         val started = mutableListOf<PostId>()
-        val posts = listOf(post("prev", SourceKey.HITOMI, emptyList()), post("current"),
-            post("next", SourceKey.HITOMI, emptyList()))
+        val posts = listOf(post("prev", SourceKey.HITOMI, emptyList()), post("current"), post("next", SourceKey.HITOMI, emptyList()))
         val owner = ViewerViewModel(SavedStateHandle(), postResolver = ViewerPostResolver { _, id ->
             started += id
             post(id.sourcePostId, id.source, listOf(video("${id.sourcePostId}.mp4")))
         }, scopeOverride = this)
-        val opened = session("previous", posts)
-        owner.replaceSession(opened.copy(context = opened.context.copy(startIndex = 1)))
+        owner.replaceSession(session("previous", posts, startIndex = 1))
         advanceUntilIdle()
 
         assertEquals(listOf(posts[2].id, posts[0].id), started)
@@ -441,9 +439,7 @@ class ViewerViewModelTest {
             postResolver = ViewerPostResolver { _, _ -> post("newest", source = SourceKey.GELBOORU) },
             scopeOverride = this,
         )
-        owner.replaceSession(
-            session("mismatch", listOf(post("asked", source = SourceKey.GELBOORU, media = listOf(video("asked.mp4")))))
-        )
+        owner.replaceSession(session("mismatch", listOf(post("asked", SourceKey.GELBOORU, listOf(video("asked.mp4"))))))
 
         owner.onAction(ViewerAction.RequestCurrentPageResolution)
         advanceUntilIdle()
@@ -666,18 +662,12 @@ class ViewerViewModelTest {
         assertTrue(owner.state.value.prefetch.inFlight.isEmpty())
     }
 
-    private fun session(id: String, posts: List<Post>): ViewerSession {
-        return ViewerSession(
-            posts = posts,
-            context = ViewerLaunchContext(
-                queryHash = "query:$id",
-                startIndex = 0,
-                streamSource = ViewerStreamSource.SEARCH,
-                scrollOffsetHint = 0,
-            ),
-            sessionId = id,
-        )
-    }
+    private fun session(id: String, posts: List<Post>, startIndex: Int = 0) = ViewerSession(
+        posts = posts,
+        context = ViewerLaunchContext(queryHash = "query:$id", startIndex = startIndex,
+            streamSource = ViewerStreamSource.SEARCH, scrollOffsetHint = 0),
+        sessionId = id,
+    )
 
     private fun post(
         id: String,
@@ -702,15 +692,7 @@ class ViewerViewModelTest {
         )
     }
 
-    private fun image(path: String) = ImageRef(
-        url = "https://example.test/$path",
-        localPath = null,
-        mime = "image/jpeg",
-    )
+    private fun image(path: String) = ImageRef(url = "https://example.test/$path", localPath = null, mime = "image/jpeg")
 
-    private fun video(path: String) = ImageRef(
-        url = "https://example.test/$path",
-        localPath = null,
-        mime = "video/mp4",
-    )
+    private fun video(path: String) = ImageRef(url = "https://example.test/$path", localPath = null, mime = "video/mp4")
 }
