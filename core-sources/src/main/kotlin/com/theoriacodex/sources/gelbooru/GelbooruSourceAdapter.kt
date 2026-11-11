@@ -287,6 +287,8 @@ private class GelbooruFamilyAdapter(
             .orEmpty()
         val fullUrl = normalizeGelbooruMediaUrl(raw.stringValue("file_url"))
         val sampleUrl = normalizeGelbooruMediaUrl(raw.stringValue("sample_url"))
+            // Forks that report `sample: false` may still fill `sample_url` with a path that was never generated.
+            ?.takeUnless { raw.stringValue("sample")?.lowercase() in NO_SAMPLE_FLAGS }
         val previewUrl = normalizeGelbooruMediaUrl(raw.stringValue("preview_url")) ?: sampleUrl ?: fullUrl
         val fullMime = mimeFromUrlOrExt(fullUrl, raw.stringValue("file_ext"))
         val creator = parseCreator(raw)
@@ -298,7 +300,8 @@ private class GelbooruFamilyAdapter(
                     url = url,
                     localPath = null,
                     mime = fullMime,
-                    progressiveUrls = listOfNotNull(sampleUrl.takeIf { site.progressiveSample }).filter { it != url },
+                    // A distinct sample is a lighter rendition on every fork, so it loads before the original.
+                    progressiveUrls = listOfNotNull(sampleUrl).filter { it != url },
                 )
             },
             pageUrl = "${site.siteUrl}/index.php?page=post&s=view&id=$id",
@@ -403,6 +406,7 @@ private const val MAX_RELATED_POSTS = 6
 private const val RELATED_HYDRATION_CONCURRENCY = 2
 private const val POST_ENVELOPE = "post"
 private const val TAG_ENVELOPE = "tag"
+private val NO_SAMPLE_FLAGS = setOf("false", "0")
 private val GELBOORU_NUMBERED_VIDEO_CDN_PREFIX =
     Regex("^https://video-cdn\\d+\\.gelbooru\\.com/", RegexOption.IGNORE_CASE)
 private val TRAILING_COUNT_REGEX = Regex("\\(([-\\d,]+)\\)\\s*$")

@@ -51,7 +51,38 @@ class GelbooruCustomProfileTest {
         assertEquals("https://safebooru.example/autocomplete.php", httpClient.lastGet?.url)
         assertEquals(9927, suggestion.count)
     }
+
+    @Test
+    fun `a custom profile loads a generated sample before the original and skips one the fork disowns`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(statusCode = 200, body = SAMPLED_POSTS)
+        }
+        val adapter = GelbooruSourceAdapter(SAFEBOORU_SHAPED_SITE, httpClient)
+
+        val (sampled, disowned) = adapter.search(newestQuery(), pageToken = null).items
+
+        assertEquals(listOf("https://booru.example/samples/1/sample_a.jpg"), sampled.full?.progressiveUrls)
+        assertEquals(emptyList<String>(), disowned.full?.progressiveUrls)
+    }
 }
+
+private fun newestQuery() = Query(
+    mode = QueryMode.Source(SourceKey.GELBOORU),
+    includeTags = emptyList(),
+    excludeTags = emptyList(),
+    sort = SortMode.NEWEST,
+    dateRange = null,
+    minScore = null,
+)
+
+private val SAMPLED_POSTS = """
+    [{"id":1,"preview_url":"https://booru.example/thumbnails/1/thumbnail_a.jpg",
+      "sample_url":"https://booru.example/samples/1/sample_a.jpg","file_url":"https://booru.example/images/1/a.jpg",
+      "sample":true,"tags":"sky"},
+     {"id":2,"preview_url":"https://booru.example/thumbnails/1/thumbnail_b.jpg",
+      "sample_url":"https://booru.example/samples/1/sample_b.jpg","file_url":"https://booru.example/images/1/b.jpg",
+      "sample":false,"tags":"sky"}]
+""".trimIndent()
 
 /**
  * Safebooru answers posts as a bare JSON array with `directory` + `image` beside `file_url`, no

@@ -94,7 +94,7 @@ object GelbooruFamily : SiteFamily {
     /**
      * A conservative profile for an unknown fork: OR groups are expanded by the search orchestrator
      * (forks disagree on `{a ~ b}` versus `( a ~ b )`), the tag list format is learned on first use,
-     * and Gelbooru-only extras (related posts, uploader pages, samples first) stay off.
+     * and Gelbooru-only extras (related posts, uploader pages) stay off. Samples load first, as on every fork.
      */
     override fun createAdapter(profile: SiteProfile, source: SourceKey, context: SiteRequestContext): SourceAdapter =
         GelbooruSourceAdapter(
