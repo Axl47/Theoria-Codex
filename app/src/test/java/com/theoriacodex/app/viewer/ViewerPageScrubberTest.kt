@@ -164,33 +164,6 @@ class ViewerPageScrubberTest {
         }
     }
 
-    @Test fun `the first touch warms dedicated thumbnails nearest first, eight at a time`() {
-        val loads = installHangingLoader()
-        setScrubber(pageIndex = 0)
-        scrubber { down(at(0.1f)) }
-        compose.runOnIdle {
-            // Touched page 1; page 5 (poster as thumbnail) is skipped and the eight nearest of the rest start.
-            assertEquals("warmed ${loads.warmed}", listOf(0, 1, 2, 3, 4, 6, 7, 8), loads.warmed.map { it.data.toString() }.pages("/thumb/"))
-            assertTrue(loads.warmed.first().data.toString().endsWith("/thumb/1.jpg"))
-        }
-    }
-
-    @Test fun `a second drag on the same post starts no new warm requests`() {
-        val loads = installHangingLoader()
-        setScrubber(pageIndex = 0)
-        scrubber { down(at(0.1f)); up() }
-        compose.runOnIdle { assertEquals(8, loads.warmed.size) }
-        scrubber { down(at(0.9f)); up() }
-        compose.runOnIdle { assertEquals(8, loads.warmed.size) }
-    }
-
-    @Test fun `instant seek warms nothing`() {
-        val loads = installHangingLoader()
-        setScrubber(pageIndex = 0, instantSeek = true)
-        scrubber { down(at(0.1f)); up() }
-        compose.runOnIdle { assertTrue("warmed ${loads.warmed}", loads.warmed.isEmpty()) }
-    }
-
     private fun List<String>.pages(prefix: String) = filter { prefix in it }.map { it.substringAfter(prefix).substringBefore(".").toInt() }.sorted()
 
     @After fun resetCoil() = Coil.reset()

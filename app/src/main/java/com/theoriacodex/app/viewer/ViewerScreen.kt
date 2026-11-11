@@ -157,6 +157,7 @@ private fun ViewerLoadedScreen(
     LaunchedEffect(posts, navigation.currentIndex, videoPositions) { videoPositions.retainAround(posts.map { it.id }, navigation.currentIndex) }
     val viewerTransform = remember(uiState.session?.value, uiState.currentMedia?.key) { mutableStateOf(ViewerTransformState()) }
     val selection = rememberViewerSelection(uiState, posts[navigation.currentIndex], pixivUgoiraClient != null)
+    WarmViewerPageThumbnails(selection.post.id, selection.overviewItems, selection.mediaIndex)
     val levelControls = rememberViewerLevelControls(
         enabled = !inPictureInPicture && selection.media?.let(::isVideoMediaRef) == true && !uiState.overview.visible,
     )
