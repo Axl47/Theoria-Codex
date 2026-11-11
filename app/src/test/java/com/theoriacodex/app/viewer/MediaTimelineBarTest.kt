@@ -150,6 +150,16 @@ class MediaTimelineBarTest {
         compose.runOnIdle { assertTrue(seeks.isEmpty()); assertFalse(dragging) }
     }
 
+    @Test fun `abandoning a hold scrub cancels it without a seek and ignores the rest of the drag`() {
+        showTimeline()
+        val width = track().fetchSemanticsNode().size.width
+        compose.runOnIdle { holdScrub.holding = true; holdScrub.drag(width * 0.25f) }
+        compose.runOnIdle { holdScrub.abandon(); holdScrub.drag(width * 0.5f); holdScrub.end(released = true) }
+        compose.runOnIdle { assertTrue(seeks.isEmpty()); assertFalse(dragging) }
+        compose.runOnIdle { holdScrub.holding = true; holdScrub.drag(width * 0.25f) }
+        compose.onNodeWithText("Frame 35000").assertIsDisplayed()
+    }
+
     private fun showTimeline(instantSeek: Boolean = false) {
         compose.setContent {
             MaterialTheme {
