@@ -1,8 +1,11 @@
 name: Release
 
-# Started by the release skill after the notes are approved. Everything runs side by side, and the
-# tag is created only when all of it passes, so a failed release can be fixed and retried as the
-# same version. Runs from any other branch are rehearsals: they stop short of publishing.
+# Started by the release skill after the notes are approved. Main has normally already proven the
+# commit (pre-PR check, release part, emulator tests), so this only signs, builds, and publishes.
+# Any result that is not recorded yet runs here instead, side by side with the signed build, so a
+# release is never blocked. The tag is created only when all of it passes, so a failed release can
+# be fixed and retried as the same version. Runs from any other branch are rehearsals: they stop
+# short of publishing.
 on:
   workflow_dispatch:
 
@@ -22,6 +25,8 @@ jobs:
       tag: ${{ steps.gate.outputs.tag }}
       notes-file: ${{ steps.gate.outputs.notes-file }}
       verified: ${{ steps.gate.outputs.verified }}
+      release: ${{ steps.recorded.outputs.release }}
+      device: ${{ steps.recorded.outputs.device }}
 
     steps:
       - name: Checkout
@@ -33,18 +38,49 @@ jobs:
         id: gate
         run: python3 scripts/release_gate.py ${{ github.ref != 'refs/heads/main' && '--rehearsal' || '' }}
 
+      # A release-only commit (version and notes) reuses its parent's results, as the gate already
+      # did for the check: a verified commit without its own check result is one of those.
+      - name: Find the release part and device results
+        id: recorded
+        env:
+          VERIFIED: ${{ steps.gate.outputs.verified }}
+        run: |
+          subject="$(git rev-parse HEAD)"
+          if [[ "$VERIFIED" == true ]] && ! python3 scripts/release_gate.py has check "$subject"; then
+            subject="$(git rev-parse HEAD^)"
+          fi
+          {
+            echo "| Result | Recorded |"
+            echo "| --- | --- |"
+            echo "| check | $VERIFIED |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for kind in release device; do
+            if python3 scripts/release_gate.py has "$kind" "$subject"; then found=true; else found=false; fi
+            echo "$kind=$found" >> "$GITHUB_OUTPUT"
+            echo "| $kind | $found |" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+  # Fallbacks: each runs only the pieces whose result is missing, and records them on main.
   verify:
     needs: gate
-    if: ${{ needs.gate.outputs.verified != 'true' }}
+    if: ${{ needs.gate.outputs.verified != 'true' || needs.gate.outputs.release != 'true' }}
     uses: ./.github/workflows/verify.yml
     permissions:
       contents: write
+    with:
+      check: ${{ needs.gate.outputs.verified != 'true' }}
+      release: ${{ needs.gate.outputs.release != 'true' }}
     secrets:
       GRADLE_ENCRYPTION_KEY: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
   device-validation:
     needs: gate
+    if: ${{ needs.gate.outputs.device != 'true' }}
     uses: ./.github/workflows/device-validation.yml
+    permissions:
+      contents: write
+    with:
+      record: true
     secrets:
       GRADLE_ENCRYPTION_KEY: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
@@ -104,7 +140,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # Verify is skipped when this code already passed it; nothing else may be missing.
+  # A skipped fallback means its result was already recorded; nothing else may be missing.
   publish:
     name: Tag and publish prerelease
     needs: [gate, verify, device-validation, build-release]
@@ -112,7 +148,7 @@ jobs:
       ${{ !cancelled() && github.ref == 'refs/heads/main'
       && needs.gate.result == 'success'
       && (needs.verify.result == 'success' || needs.verify.result == 'skipped')
-      && needs.device-validation.result == 'success'
+      && (needs.device-validation.result == 'success' || needs.device-validation.result == 'skipped')
       && needs.build-release.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
