@@ -4,6 +4,7 @@ import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import com.theoriacodex.domain.adapter.CommentsSourceAdapter
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
@@ -19,9 +20,11 @@ import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.coroutines.mapConcurrent
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.domain.model.CommentPage
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostComment
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
@@ -55,7 +58,8 @@ class NhentaiSourceAdapter(
     private val httpClient: SourceHttpClient,
     private val gson: Gson = Gson(),
     private val minRequestIntervalMs: Long = 350L,
-) : SourceAdapter, TagCountLookupSourceAdapter, FacetedSearchSourceAdapter, RelatedPostsSourceAdapter, CreatorPostsSourceAdapter {
+) : SourceAdapter, TagCountLookupSourceAdapter, FacetedSearchSourceAdapter, RelatedPostsSourceAdapter, CreatorPostsSourceAdapter,
+    CommentsSourceAdapter {
     override val sourceKey: SourceKey = SourceKey.NHENTAI
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
@@ -322,6 +326,23 @@ class NhentaiSourceAdapter(
             .distinctBy(Post::id)
             .take(limit.coerceAtMost(NHENTAI_MAX_RELATED_POSTS))
             .toList()
+    }
+
+    /**
+     * Comments exist only on the direct API; the mirrors do not carry them, so a blocked request
+     * fails instead of falling back. Replies do not exist on nhentai, so [parent] is ignored.
+     */
+    override suspend fun comments(post: Post, pageToken: String?, parent: PostComment?): CommentPage {
+        val galleryId = post.id.sourcePostId.trim().takeIf { post.id.source == sourceKey && it.isDigitsOnly() }
+            ?: return CommentPage(emptyList(), total = 0, nextPageToken = null)
+        val pageIndex = pageToken?.toIntOrNull()?.coerceAtLeast(1) ?: 1
+        val root = requireNotNull(
+            requestJsonObject(
+                url = "$NHENTAI_GALLERY_URL_PREFIX/$galleryId/comments",
+                query = mapOf("page" to pageIndex.toString(), "per_page" to NHENTAI_COMMENTS_PER_PAGE.toString()),
+            ),
+        )
+        return parseNhentaiCommentPage(root, pageIndex)
     }
 
     private suspend fun requestJsonObjectOrMirrorSearch(
