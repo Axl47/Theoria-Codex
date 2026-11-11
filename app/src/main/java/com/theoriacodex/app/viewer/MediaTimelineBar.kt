@@ -28,12 +28,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -95,6 +97,7 @@ fun MediaTimelineBar(
     val shownSecond by remember(safeDuration) { derivedStateOf { displayPosition() / 1000L } }
 
     DisposableEffect(Unit) { onDispose(scrub::abandon) }
+    FollowHoldScrub(scrub, safeDuration, instantSeek, latestPosition)
 
     val fraction = { (displayPosition().toDouble() / safeDuration.toDouble()).coerceIn(0.0, 1.0).toFloat() }
     val showingPreview = scrub.active && !instantSeek
@@ -121,6 +124,56 @@ fun MediaTimelineBar(
                 ViewerScrubPreview(scrub.positionMs, scrub.positionMs - scrub.startMs, fraction()) { preview(scrub.positionMs) }
             }
         }
+    }
+}
+
+/** Drives [scrub] from a drag that began as a held press elsewhere on the media; see [ViewerHoldScrub]. */
+@Composable
+private fun FollowHoldScrub(scrub: TimelineScrubState, durationMs: Long, instantSeek: Boolean, positionMs: () -> Long) {
+    val holdScrub = LocalViewerHoldScrub.current ?: return
+    val duration by rememberUpdatedState(durationMs)
+    val instant by rememberUpdatedState(instantSeek)
+    val position by rememberUpdatedState(positionMs)
+    LaunchedEffect(holdScrub, scrub) {
+        val follower = HoldScrubFollower(scrub, { duration }, { instant }, { position() })
+        // The shared state keeps its last Ended; one that predates this timeline belongs to an earlier gesture.
+        val staleEnd = holdScrub.phase as? ViewerHoldScrubPhase.Ended
+        snapshotFlow { holdScrub.phase }.collect { phase ->
+            when (phase) {
+                is ViewerHoldScrubPhase.Dragging -> follower.follow(phase.offsetPx)
+                is ViewerHoldScrubPhase.Ended -> if (phase !== staleEnd) follower.finish(phase)
+                ViewerHoldScrubPhase.Idle -> Unit
+            }
+        }
+    }
+}
+
+/** Moves [scrub] by a held drag's distance from the handle's position when the drag took hold. */
+private class HoldScrubFollower(
+    private val scrub: TimelineScrubState,
+    private val duration: () -> Long,
+    private val instant: () -> Boolean,
+    private val position: () -> Long,
+) {
+    /** The handle's x when this drag took hold; null until then, and again once it ends. */
+    private var originX: Float? = null
+
+    fun follow(offsetPx: Float) {
+        // A timeline that just appeared has not measured its track yet; the next move begins it.
+        if (originX == null && scrub.widthPx > 1f) {
+            val start = position().coerceIn(0L, duration())
+            scrub.begin(start)
+            originX = start.toFloat() / duration() * scrub.widthPx
+        }
+        originX?.let { scrub.moveTo(it + offsetPx, duration(), instant()) }
+    }
+
+    /** Snapshot state conflates updates, so a quick release can arrive without a Dragging state before it. */
+    fun finish(ended: ViewerHoldScrubPhase.Ended) {
+        follow(ended.offsetPx)
+        if (originX == null) return
+        originX = null
+        scrub.end(ended.released)
     }
 }
 

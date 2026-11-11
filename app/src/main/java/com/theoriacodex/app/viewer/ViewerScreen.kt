@@ -158,9 +158,9 @@ private fun ViewerLoadedScreen(
     val viewerTransform = remember(uiState.session?.value, uiState.currentMedia?.key) { mutableStateOf(ViewerTransformState()) }
     val selection = rememberViewerSelection(uiState, posts[navigation.currentIndex], pixivUgoiraClient != null)
     WarmViewerPageThumbnails(selection.post.id, selection.overviewItems, selection.mediaIndex)
-    val levelControls = rememberViewerLevelControls(
-        enabled = !inPictureInPicture && selection.media?.let(::isVideoMediaRef) == true && !uiState.overview.visible,
-    )
+    // Brightness holds for every media and the overview (PiP hands it back); the remembered volume returns for video only.
+    val levelControls = rememberViewerLevelControls(!inPictureInPicture, restoreVolume = selection.media?.let(::isVideoMediaRef) == true && !uiState.overview.visible)
+    val holdScrub = remember { ViewerHoldScrub() }
     val touchExplorationEnabled = rememberViewerTouchExploration()
     val chromeVisible = viewerChromeVisible(uiState, touchExplorationEnabled, inPictureInPicture, returning, opening, dismissDrag)
     val chromeStage = rememberViewerChromeStage(chromeVisible)
@@ -179,6 +179,7 @@ private fun ViewerLoadedScreen(
     CompositionLocalProvider(
         LocalViewerPostStripInset provides if (chromeVisible && !frame.mediaOverviewVisible) VIEWER_POST_STRIP_HEIGHT else 0.dp,
         LocalViewerAccent provides viewerAccent,
+        LocalViewerHoldScrub provides holdScrub,
     ) {
         ViewerBackdrop(returnProgress, dismissDrag) {
             if (frame.mediaOverviewVisible && selection.overviewAvailable) {

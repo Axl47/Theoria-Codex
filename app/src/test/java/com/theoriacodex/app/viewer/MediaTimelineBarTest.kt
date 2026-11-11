@@ -20,6 +20,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -36,6 +37,7 @@ class MediaTimelineBarTest {
     private val seeks = mutableListOf<Long>()
     private var cancelled = 0
     private var dragging = false
+    private val holdScrub = ViewerHoldScrub()
 
     @Test fun `drag previews changing targets and seeks only once on release`() {
         showTimeline()
@@ -116,10 +118,52 @@ class MediaTimelineBarTest {
         compose.runOnIdle { assertEquals(75_000L, seeks.last()); assertEquals(0, cancelled) }
     }
 
+    @Test fun `a hold scrub moves the handle by the finger's distance and seeks on release`() {
+        showTimeline()
+        val width = track().fetchSemanticsNode().size.width
+        compose.runOnIdle { holdScrub.drag(width * 0.25f) }
+        compose.onNodeWithText("Frame 35000").assertIsDisplayed()
+        compose.runOnIdle {
+            assertTrue(dragging)
+            assertTrue(seeks.isEmpty())
+            holdScrub.end(released = true)
+        }
+        compose.onNodeWithTag("viewer-scrub-preview").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(listOf(35_000L), seeks) }
+    }
+
+    @Test fun `a hold scrub released before the timeline saw it dragging still seeks to the final offset`() {
+        showTimeline()
+        val width = track().fetchSemanticsNode().size.width
+        compose.runOnIdle {
+            holdScrub.drag(width * 0.1f)
+            holdScrub.drag(width * 0.25f)
+            holdScrub.end(released = true)
+        }
+        compose.runOnIdle { assertEquals(listOf(35_000L), seeks) }
+    }
+
+    @Test fun `a hold scrub that ended before the timeline appeared is not replayed`() {
+        holdScrub.drag(10f)
+        holdScrub.end(released = true)
+        showTimeline()
+        compose.runOnIdle { assertTrue(seeks.isEmpty()); assertFalse(dragging) }
+    }
+
+    @Test fun `abandoning a hold scrub cancels it without a seek and ignores the rest of the drag`() {
+        showTimeline()
+        val width = track().fetchSemanticsNode().size.width
+        compose.runOnIdle { holdScrub.holding = true; holdScrub.drag(width * 0.25f) }
+        compose.runOnIdle { holdScrub.abandon(); holdScrub.drag(width * 0.5f); holdScrub.end(released = true) }
+        compose.runOnIdle { assertTrue(seeks.isEmpty()); assertFalse(dragging) }
+        compose.runOnIdle { holdScrub.holding = true; holdScrub.drag(width * 0.25f) }
+        compose.onNodeWithText("Frame 35000").assertIsDisplayed()
+    }
+
     private fun showTimeline(instantSeek: Boolean = false) {
         compose.setContent {
             MaterialTheme {
-                CompositionLocalProvider(LocalViewerInstantSeek provides instantSeek) {
+                CompositionLocalProvider(LocalViewerInstantSeek provides instantSeek, LocalViewerHoldScrub provides holdScrub) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     if (visible.value) ViewerPlaybackFooter(Modifier.width(360.dp).testTag("footer")) {
                         MediaTimelineBar(

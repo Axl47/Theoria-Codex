@@ -6,6 +6,7 @@ import android.media.AudioManager
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -17,6 +18,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
@@ -27,6 +29,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -52,6 +55,8 @@ class ViewerLevelGesturesTest {
     private var seekInteractions = 0
     private var dismissDrags = 0
     private var infoSwipes = 0
+    private var scrubStarts = 0
+    private val holdScrub = ViewerHoldScrub()
 
     @Before fun setup() {
         activity = activityController.setup().get()
@@ -140,13 +145,47 @@ class ViewerLevelGesturesTest {
         compose.runOnIdle { assertEquals(0.5f, activity.window.attributes.screenBrightness, 0f) }
     }
 
-    @Test fun `still images leave brightness alone`() {
+    @Test fun `still images adjust brightness and keep the trailing column for closing`() {
         showPage(video = false)
         swipeSide(0.2f, up = true)
+        compose.runOnIdle { assertEquals(1f, activity.window.attributes.screenBrightness, 0.001f) }
+        val volume = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+        swipeSide(0.8f, up = false)
         compose.runOnIdle {
-            assertEquals(0.5f, activity.window.attributes.screenBrightness, 0f)
-            assertNull(levels.feedback)
+            assert(dismissDrags > 0)
+            assertEquals(volume, audio.getStreamVolume(AudioManager.STREAM_MUSIC))
         }
+    }
+
+    @Test fun `a horizontal drag during hold to speed up scrubs instead of navigating`() {
+        showPage()
+        compose.onNodeWithContentDescription("Media actions").performTouchInput {
+            down(center)
+            advanceEventTime(1_000L)
+            moveBy(Offset(-width * 0.2f, 0f))
+            moveBy(Offset(-width * 0.2f, 0f))
+            up()
+        }
+        compose.runOnIdle {
+            assertEquals(1, scrubStarts)
+            assertTrue((holdScrub.phase as ViewerHoldScrubPhase.Ended).released)
+            assertEquals(emptyList<ViewerHorizontalSwipeDirection>(), navigations)
+        }
+        compose.onNodeWithContentDescription("Media actions").performTouchInput { swipeLeft() }
+        compose.runOnIdle {
+            assertEquals(1, scrubStarts)
+            assertEquals(listOf(ViewerHorizontalSwipeDirection.Next), navigations)
+        }
+    }
+
+    @Test fun `landscape keeps the outer columns narrow so the centre is wider`() {
+        val portrait = IntSize(400, 800)
+        val landscape = IntSize(800, 400)
+        assertEquals(ViewerGestureColumn.Leading, viewerGestureColumn(120f, portrait))
+        assertEquals(ViewerGestureColumn.Center, viewerGestureColumn(240f, landscape))
+        assertEquals(ViewerGestureColumn.Leading, viewerGestureColumn(160f, landscape))
+        assertEquals(ViewerGestureColumn.Center, viewerGestureColumn(560f, landscape))
+        assertEquals(ViewerGestureColumn.Trailing, viewerGestureColumn(640f, landscape))
     }
 
     @Test fun `level rail stays on its gesture's side during a held drag then expires after release`() {
@@ -202,7 +241,9 @@ class ViewerLevelGesturesTest {
                 Box(Modifier.size(360.dp, 500.dp).viewerGestures(
                     ViewerGestureConfig(
                         enabled = !transform.value.isZoomed && !layout.value.pictureInPicture && !layout.value.touchExploration,
-                        levels = levels.takeIf { video },
+                        levels = levels,
+                        volumeAdjustable = video,
+                        holdScrub = holdScrub,
                     ),
                     object : ViewerGestureHandler {
                         override fun onPress() = Unit
@@ -215,15 +256,18 @@ class ViewerLevelGesturesTest {
                         override fun onInfoSwipe() { infoSwipes++ }
                         override fun onGestureEnd() = Unit
                         override fun onLevelLimit() = Unit
+                        override fun onScrubStart() { scrubStarts++ }
                     },
                 )) {
-                    ViewerMediaPage(
-                        post, media, 0, controls.value, events, transform, { transform.value = it },
-                        layout.value, ViewerVideoOptions(VideoQuality.AUTO, null, "Unavailable", false),
-                        positions, null, imageSession, null, {}, { interactions++ }, { chromeToggles++ }, null,
-                        levelControls = levels,
-                        onPassiveInteraction = { seekInteractions++ },
-                    )
+                    CompositionLocalProvider(LocalViewerHoldScrub provides holdScrub) {
+                        ViewerMediaPage(
+                            post, media, 0, controls.value, events, transform, { transform.value = it },
+                            layout.value, ViewerVideoOptions(VideoQuality.AUTO, null, "Unavailable", false),
+                            positions, null, imageSession, null, {}, { interactions++ }, { chromeToggles++ }, null,
+                            levelControls = levels,
+                            onPassiveInteraction = { seekInteractions++ },
+                        )
+                    }
                 }
             }
         }
