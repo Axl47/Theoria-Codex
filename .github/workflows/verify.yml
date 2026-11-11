@@ -78,6 +78,13 @@ jobs:
     if: needs.plan.outputs.parts != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # setup-gradle keys its cache by workflow name plus matrix, and the workflow name is `Main`,
+    # `Release` or `Verify` depending on the caller. Without this, a PR never matches main's entry for
+    # its own part and restores the newest `part` entry instead, usually the release part's, so
+    # almost every task reruns. Keying by the part alone lets each part reuse main's cache for it.
+    # The variable is undocumented; if setup-gradle drops it, caching falls back to that old behavior.
+    env:
+      GRADLE_BUILD_ACTION_CACHE_KEY_JOB_INSTANCE: ${{ matrix.part }}
 
     strategy:
       fail-fast: false
