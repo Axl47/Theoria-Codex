@@ -119,9 +119,8 @@ configuration_cache_check() {
 }
 
 run_tests() {
-  # theoria.coverage turns on Kover instrumentation; unknown properties are ignored.
+  # Naming the Kover tasks is what turns on test instrumentation (see build.gradle.kts).
   phase 'Gradle: tests and coverage' ./gradlew "${task_timings[@]}" \
-    -Ptheoria.coverage=true \
     :core-domain:test \
     :core-data:test \
     :core-sources:test \
