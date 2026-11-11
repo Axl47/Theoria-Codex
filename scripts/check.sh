@@ -29,33 +29,9 @@ if [[ "$record" == true && -n "$part" ]]; then
   exit 2
 fi
 
-# Everything except the agent tool directory, which is local and never part of the build.
-worktree_changes() { git status --porcelain -- . ':!.claude'; }
-
-commit="$(git rev-parse HEAD)"
-if [[ "$record" == true && -n "$(worktree_changes)" ]]; then
-  echo 'Commit or discard changes first: --record must describe exactly the committed code.' >&2
-  exit 2
-fi
-
-# Install the tracked pre-push hook unless this clone already chose its own hooks.
-[[ -n "$(git config --get core.hooksPath || true)" ]] || git config core.hooksPath scripts/hooks
-
-# Robolectric's Android SDK 36 sandbox refuses JVMs older than 21.
-java_bin="${JAVA_HOME:+$JAVA_HOME/bin/}java"
-java_major="$("$java_bin" -version 2>&1 | sed -nE '1s/.*"([0-9]+).*/\1/p')"
-if (( ${java_major:-0} < 21 )); then
-  homebrew_jdk="$(brew --prefix openjdk 2>/dev/null || true)/libexec/openjdk.jdk/Contents/Home"
-  [[ -x "$homebrew_jdk/bin/java" ]] || { echo 'Set JAVA_HOME to JDK 21 or newer.' >&2; exit 2; }
-  export JAVA_HOME="$homebrew_jdk"
-fi
-
-source scripts/policy_checks.sh
-# Changed-code budgets compare against where this work left main, or the last commit when on main.
-base="$(diff_base)"
-
 # Phase timings for CI dashboards: build/reports/timings/ci-timings.json combines phases.json
-# (written here, even when a phase fails) with gradle-tasks.json (written per task by the init script).
+# (written on every exit past argument parsing, even when a phase fails or none started) with
+# gradle-tasks.json (written per task by the init script).
 timings_dir=build/reports/timings
 rm -rf "$timings_dir"
 mkdir -p "$timings_dir"
@@ -94,6 +70,31 @@ write_timings() {
 
 temp="$(mktemp -d)"
 trap 'write_timings; rm -rf "$temp"' EXIT
+
+# Everything except the agent tool directory, which is local and never part of the build.
+worktree_changes() { git status --porcelain -- . ':!.claude'; }
+
+commit="$(git rev-parse HEAD)"
+if [[ "$record" == true && -n "$(worktree_changes)" ]]; then
+  echo 'Commit or discard changes first: --record must describe exactly the committed code.' >&2
+  exit 2
+fi
+
+# Install the tracked pre-push hook unless this clone already chose its own hooks.
+[[ -n "$(git config --get core.hooksPath || true)" ]] || git config core.hooksPath scripts/hooks
+
+# Robolectric's Android SDK 36 sandbox refuses JVMs older than 21.
+java_bin="${JAVA_HOME:+$JAVA_HOME/bin/}java"
+java_major="$("$java_bin" -version 2>&1 | sed -nE '1s/.*"([0-9]+).*/\1/p')"
+if (( ${java_major:-0} < 21 )); then
+  homebrew_jdk="$(brew --prefix openjdk 2>/dev/null || true)/libexec/openjdk.jdk/Contents/Home"
+  [[ -x "$homebrew_jdk/bin/java" ]] || { echo 'Set JAVA_HOME to JDK 21 or newer.' >&2; exit 2; }
+  export JAVA_HOME="$homebrew_jdk"
+fi
+
+source scripts/policy_checks.sh
+# Changed-code budgets compare against where this work left main, or the last commit when on main.
+base="$(diff_base)"
 
 install_node_modules() {
   [[ node_modules/.package-lock.json -nt package-lock.json ]] || npm ci
