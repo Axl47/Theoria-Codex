@@ -1,5 +1,6 @@
 package com.theoriacodex.app.viewer
 
+import com.theoriacodex.app.comments.keepingCommentHintOf
 import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.data.repository.ViewerLaunchContext
@@ -118,7 +119,7 @@ internal suspend fun prepareViewerPostsForLaunch(
     val startIndex = context.startIndex.coerceIn(0, posts.lastIndex)
     val selectedPost = posts[startIndex]
     if (!requiresPrelaunchViewerPostResolution(selectedPost)) return posts
-    val resolved = resolvePost(selectedPost) ?: return posts
+    val resolved = resolvePost(selectedPost)?.keepingCommentHintOf(selectedPost) ?: return posts
     return posts.toMutableList().apply { this[startIndex] = resolved }
 }
 
