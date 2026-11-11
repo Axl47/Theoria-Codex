@@ -68,6 +68,7 @@ Keep `AGENTS.md` limited to durable product intent, safety boundaries, and accep
 - Automated device lanes must use isolated packages. Production changes require explicit authorization; destructive actions require authorization for the exact action after explaining possible data loss. Production installs use the signed release/update path.
 - Developer profile copying must remain read-only against production and excluded from public builds.
 - Never alter unrelated phone packages, governors, or persistent device settings to make benchmarks pass. Never configure `SideEffectRunListener`.
+- Exception: for unattended benchmark or test runs, keep the screen awake (screen timeout or `svc power stayon`) and restore the original value when the run ends.
 - Provider feeds are poorly moderated and can show sexualized depictions of minors. When testing on a device, use logs and accessibility text instead of screenshots or recordings wherever feeds, search results, or the Viewer show provider media. Do not save, describe, or look at such content; if it appears, leave that screen and tell the user.
 
 ## Acceptance and Releases
@@ -77,3 +78,5 @@ Keep `AGENTS.md` limited to durable product intent, safety boundaries, and accep
 - Results are recorded per code, not per commit: the pre-PR check (`scripts/check.sh --record`, or Verify on the PR), the R8 release part, and the emulator tests on Android 16 and 17. PRs run only the pre-PR check, skip it when it is already recorded, and only read caches.
 - Every push to `main` runs all three in the Main workflow, even when the pre-PR check is recorded, and is the only run that saves caches. Release only promotes: it requires all three results for the commit, runs any missing one itself rather than failing, and creates the tag only after everything passes.
 - Emulator tests do not run on PRs. For a risky change, such as a database migration, navigation, or playback, also run `gh workflow run device-validation.yml --ref <branch>`; branch runs never record a result.
+
+Landing: PR, then green checks, then merge; update local `main` and delete the branch and worktree.
