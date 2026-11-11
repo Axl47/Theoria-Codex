@@ -2,9 +2,10 @@
 # The one definition of "verified", shared by this Mac and GitHub. Cheap policy checks run first so they
 # fail in seconds (the Python unittests only once, in the static part), then the chosen part:
 #   tests    unit tests, coverage, and changed-code coverage for every module
-#   static   Detekt with type resolution, Android lint, duplicate code, configuration cache
+#   static   Detekt with type resolution, duplicate code, configuration cache
+#   lint     Android lint
 #   release  R8 builds: release, releaseAcceptance, and benchmark builds when the change can affect them
-# Without --part it runs tests then static: the pre-PR check. Release builds and emulator tests run on
+# Without --part it runs tests, static, then lint: the pre-PR check. GitHub runs those three in parallel. Release builds and emulator tests run on
 # GitHub after merge to main.
 #
 # --record (pre-PR check only) publishes the pass as refs/verified/<key>, where the key names the
@@ -13,12 +14,12 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-usage() { echo 'Usage: scripts/check.sh [--part tests|static|release] [--record]' >&2; exit 2; }
+usage() { echo 'Usage: scripts/check.sh [--part tests|static|lint|release] [--record]' >&2; exit 2; }
 part=''
 record=false
 while (( $# )); do
   case "$1" in
-    --part) [[ "${2:-}" =~ ^(tests|static|release)$ ]] || usage; part="$2"; shift ;;
+    --part) [[ "${2:-}" =~ ^(tests|static|lint|release)$ ]] || usage; part="$2"; shift ;;
     --record) record=true ;;
     *) usage ;;
   esac
@@ -158,11 +159,21 @@ run_static() {
     :core-stubs:detektMain \
     --warning-mode=all \
     --console=plain
+}
+
+run_lint() {
+  # Lint runs offline, so compile its inputs online first: that downloads their dependencies and
+  # finishes all source generation before lint reads Room's generated Java.
+  phase 'Gradle: lint inputs' ./gradlew "${task_timings[@]}" \
+    :app:compileDebugKotlin \
+    :core-data-android:compileDebugKotlin \
+    --warning-mode=all \
+    --console=plain
 
   # Offline lint cannot download its own tool on a fresh machine. A dry run fetches it.
   phase 'Gradle: lint dry run' ./gradlew "${task_timings[@]}" :app:lint :core-data-android:lintDebug --dry-run --console=plain
 
-  # Finish all source generation before lint reads Room's generated Java.
+  # A fresh process: a daemon reused after other analysis can crash lint's Kotlin resolver.
   phase 'Gradle: lint' ./gradlew "${task_timings[@]}" :app:lint :core-data-android:lintDebug --offline --no-daemon --warning-mode=all --console=plain
 }
 
@@ -186,12 +197,13 @@ run_release() {
 }
 
 phase 'Hotspot check' line_budgets "$base"
-[[ "$part" == tests || "$part" == release ]] || phase 'Python unittests' python_tests
+[[ "$part" == tests || "$part" == lint || "$part" == release ]] || phase 'Python unittests' python_tests
 
 case "$part" in
-  '') run_tests; run_static ;;
+  '') run_tests; run_static; run_lint ;;
   tests) run_tests ;;
   static) run_static ;;
+  lint) run_lint ;;
   release) run_release ;;
 esac
 
