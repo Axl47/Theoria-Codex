@@ -57,7 +57,7 @@ class SearchScreenMediaBehaviorTest {
             url = primary,
             localPath = null,
             mime = "image/webp",
-            progressiveUrls = listOf(primary, alternate),
+            fallbackUrls = listOf(primary, alternate),
         )
 
         val plan = previewMediaDeliveryPlan(samplePost(SourceKey.HITOMI).copy(preview = ref))

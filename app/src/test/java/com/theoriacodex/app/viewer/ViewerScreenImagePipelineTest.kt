@@ -68,7 +68,7 @@ class ViewerScreenImagePipelineTest {
             url = primary,
             localPath = null,
             mime = "image/webp",
-            progressiveUrls = listOf(primary, alternate),
+            fallbackUrls = listOf(primary, alternate),
         )
         val post = samplePost(
             sourceKey = SourceKey.HITOMI,
@@ -194,7 +194,7 @@ class ViewerScreenImagePipelineTest {
             url = "https://i.nhentai.net/galleries/3821534/1.webp",
             localPath = null,
             mime = "image/webp",
-            progressiveUrls = listOf(
+            fallbackUrls = listOf(
                 "https://i.nhentai.net/galleries/3821534/1.webp",
                 "https://i.nhentai.net/galleries/3821534/1.jpg",
                 "https://i.nhentai.net/galleries/3821534/1.png",
@@ -234,7 +234,7 @@ class ViewerScreenImagePipelineTest {
             url = "https://example.com/2.webp",
             localPath = null,
             mime = "image/webp",
-            progressiveUrls = listOf(
+            fallbackUrls = listOf(
                 "https://example.com/2.webp",
                 "https://example.com/2.avif",
             ),

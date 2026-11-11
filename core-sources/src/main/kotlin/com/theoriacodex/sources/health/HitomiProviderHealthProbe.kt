@@ -344,6 +344,7 @@ class HitomiProviderHealthProbe(
         return buildList {
             url?.let(::add)
             addAll(progressiveUrls)
+            addAll(fallbackUrls)
         }.firstOrNull { location ->
             location.substringBefore('?').endsWith(".webp", ignoreCase = true)
         }

@@ -111,6 +111,25 @@ class CodexShareModelsTest {
     }
 
     @Test
+    fun `gallery share files written before fallback urls keep their copies as fallbacks`() {
+        fun restored(source: String) = codexSharePostSnapshot(
+            parseCodexShareFile(
+                """
+                {"version": 2, "posts": [{"source": "$source", "sourcePostId": "1", "snapshot": {
+                  "preview": {"url": "https://example.com/thumb.webp"},
+                  "media": [{"url": "https://example.com/1.webp", "progressiveUrls": ["https://example.com/1.jpg"]}]
+                }}]}
+                """.trimIndent(),
+            )!!.posts!!.single(),
+        )!!.media.single()
+
+        val gallery = restored("nhentai")
+        assertEquals(emptyList<String>(), gallery.progressiveUrls)
+        assertEquals(listOf("https://example.com/1.jpg"), gallery.fallbackUrls)
+        assertEquals(listOf("https://example.com/1.jpg"), restored("gelbooru").progressiveUrls)
+    }
+
+    @Test
     fun `malformed optional snapshot values are dropped without losing the v1 id`() {
         val parsed = parseCodexShareFile(
             malformedSnapshotJson(),
@@ -441,6 +460,7 @@ class CodexShareModelsTest {
                 localPath = "/tmp/page-1.jpg",
                 mime = "image/jpeg",
                 progressiveUrls = listOf("https://example.com/page-1-small.jpg"),
+                fallbackUrls = listOf("https://mirror.example.com/page-1.jpg"),
                 isAnimated = false,
             ),
             ImageRef(

@@ -245,6 +245,7 @@ private fun staticOverviewImageLocation(ref: ImageRef): String? {
         ref.localPath?.takeIf(String::isNotBlank)?.let(::add)
         addAll(ref.progressiveUrls.filter(String::isNotBlank))
         ref.url?.takeIf(String::isNotBlank)?.let(::add)
+        addAll(ref.fallbackUrls.filter(String::isNotBlank))
     }.distinct()
     if (!ref.isAnimated) return locations.firstOrNull()
     return locations.firstOrNull { location -> isOverviewWebPImageLocation(ref, location) }
@@ -256,6 +257,7 @@ private fun overviewWebPImageLocation(ref: ImageRef): String? {
         ref.localPath?.takeIf(String::isNotBlank)?.let(::add)
         addAll(ref.progressiveUrls.filter(String::isNotBlank))
         ref.url?.takeIf(String::isNotBlank)?.let(::add)
+        addAll(ref.fallbackUrls.filter(String::isNotBlank))
     }.distinct()
     return locations.firstOrNull { location -> isOverviewWebPImageLocation(ref, location) }
 }

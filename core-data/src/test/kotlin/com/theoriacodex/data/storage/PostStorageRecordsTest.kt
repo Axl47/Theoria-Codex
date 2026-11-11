@@ -30,6 +30,56 @@ class PostStorageRecordsTest {
     }
 
     @Test
+    fun `nhentai and hitomi records saved before fallback urls keep their copies as fallbacks`() {
+        fun legacyRecord(source: String) = gson.fromJson(
+            """
+            {
+              "source": "$source",
+              "sourcePostId": "1",
+              "previewUrl": "https://example.com/thumb.webp",
+              "previewProgressiveUrls": ["https://example.com/thumb2.webp"],
+              "fullUrl": "https://example.com/1.webp",
+              "fullProgressiveUrls": ["https://example.com/1.webp", "https://example.com/1.jpg"],
+              "media": [{
+                "url": "https://example.com/1.webp",
+                "progressiveUrls": ["https://example.com/1.webp", "https://example.com/1.jpg"],
+                "isAnimated": false
+              }],
+              "schemaVersion": 1
+            }
+            """.trimIndent(),
+            PostStorageRecord::class.java,
+        )
+        val copies = listOf("https://example.com/1.webp", "https://example.com/1.jpg")
+
+        listOf("NHENTAI", "HITOMI").forEach { source ->
+            val post = requireNotNull(PostStorageCodec.decode(legacyRecord(source)))
+
+            assertEquals(emptyList<String>(), post.full?.progressiveUrls)
+            assertEquals(copies, post.full?.fallbackUrls)
+            assertEquals(copies, post.media.single().fallbackUrls)
+            assertEquals(emptyList<String>(), post.media.single().progressiveUrls)
+            assertEquals(listOf("https://example.com/thumb2.webp"), post.preview.fallbackUrls)
+        }
+
+        val booru = requireNotNull(PostStorageCodec.decode(legacyRecord("GELBOORU")))
+        assertEquals(copies, booru.full?.progressiveUrls)
+        assertEquals(emptyList<String>(), booru.full?.fallbackUrls)
+    }
+
+    @Test
+    fun `an explicit fallback field is never reinterpreted`() {
+        val post = samplePost().copy(
+            id = PostId(SourceKey.NHENTAI, "1"),
+            media = listOf(ImageRef("https://example.com/1.webp", null, "image/webp", progressiveUrls = listOf("https://example.com/small.webp"))),
+        )
+
+        val decoded = PostStorageCodec.decode(gson.fromJson(gson.toJson(PostStorageCodec.encode(post)), PostStorageRecord::class.java))
+
+        assertEquals(post.media, decoded?.media)
+    }
+
+    @Test
     fun `merging a ref without a thumbnail keeps the stored one`() {
         val stored = samplePost()
         val sparse = stored.copy(media = stored.media.map { it.copy(thumbnailUrl = null) })
@@ -110,6 +160,7 @@ class PostStorageRecordsTest {
             localPath = null,
             mime = "image/webp",
             progressiveUrls = listOf("https://example.com/sample.webp"),
+            fallbackUrls = listOf("https://mirror.example.com/full.webp"),
             isAnimated = true,
             thumbnailUrl = "https://example.com/full-thumb.webp",
         )

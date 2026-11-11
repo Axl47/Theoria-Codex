@@ -468,7 +468,8 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         val term = mapOf("value" to "a", "facet" to "b", "sourceNamespace" to "c", "count" to "d", "translation" to "e")
         fun list(value: JsonElement, each: (JsonObject) -> JsonObject) =
             JsonArray().also { out -> value.asJsonArray.forEach { out.add(each(it.asJsonObject)) } }
-        fun renamedImage(ref: JsonObject) = ref.renamed(image) { key, value ->
+        // Shipped releases predate fallbackUrls, so their manifests never had it.
+        fun renamedImage(ref: JsonObject) = ref.apply { remove("fallbackUrls") }.renamed(image) { key, value ->
             if (key == "videoVariants") list(value) { it.renamed(variant) } else value
         }
         return post.renamed(

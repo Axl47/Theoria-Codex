@@ -33,6 +33,8 @@ data class PostStorageRecord(
     val previewMime: String? = null,
     @field:SerializedName("previewProgressiveUrls")
     val previewProgressiveUrls: List<String>? = null,
+    @field:SerializedName("previewFallbackUrls")
+    val previewFallbackUrls: List<String>? = null,
     @field:SerializedName("previewIsAnimated")
     val previewIsAnimated: Boolean? = null,
     @field:SerializedName("fullUrl")
@@ -43,6 +45,8 @@ data class PostStorageRecord(
     val fullMime: String? = null,
     @field:SerializedName("fullProgressiveUrls")
     val fullProgressiveUrls: List<String>? = null,
+    @field:SerializedName("fullFallbackUrls")
+    val fullFallbackUrls: List<String>? = null,
     @field:SerializedName("fullVideoVariants")
     val fullVideoVariants: List<VideoVariantRecord>? = null,
     @field:SerializedName("fullIsAnimated")
@@ -132,6 +136,8 @@ data class ImageRefStorageRecord(
     val mime: String? = null,
     @field:SerializedName("progressiveUrls")
     val progressiveUrls: List<String>? = null,
+    @field:SerializedName("fallbackUrls")
+    val fallbackUrls: List<String>? = null,
     @field:SerializedName("videoVariants")
     val videoVariants: List<VideoVariantRecord>? = null,
     @field:SerializedName("isAnimated")
@@ -150,11 +156,13 @@ object PostStorageCodec {
             previewLocalPath = post.preview.localPath,
             previewMime = post.preview.mime,
             previewProgressiveUrls = post.preview.progressiveUrls,
+            previewFallbackUrls = post.preview.fallbackUrls,
             previewIsAnimated = post.preview.isAnimated,
             fullUrl = post.full?.url,
             fullLocalPath = post.full?.localPath,
             fullMime = post.full?.mime,
             fullProgressiveUrls = post.full?.progressiveUrls,
+            fullFallbackUrls = post.full?.fallbackUrls,
             fullIsAnimated = post.full?.isAnimated,
             fullVideoVariants = post.full?.videoVariants?.encodeVideoVariants(),
             pageUrl = post.pageUrl,
@@ -190,12 +198,14 @@ object PostStorageCodec {
                 mime = record.previewMime,
                 progressiveUrls = record.previewProgressiveUrls.orEmpty(),
                 isAnimated = record.previewIsAnimated ?: false,
-            ),
+                fallbackUrls = record.previewFallbackUrls.orEmpty(),
+            ).legacyCopiesIf(record.previewFallbackUrls == null, source),
             full = if (
                 record.fullUrl == null &&
                 record.fullLocalPath == null &&
                 record.fullMime == null &&
                 record.fullProgressiveUrls.isNullOrEmpty() &&
+                record.fullFallbackUrls.isNullOrEmpty() &&
                 record.fullIsAnimated != true
             ) {
                 null
@@ -207,7 +217,8 @@ object PostStorageCodec {
                     progressiveUrls = record.fullProgressiveUrls.orEmpty(),
                     isAnimated = record.fullIsAnimated ?: false,
                     videoVariants = record.fullVideoVariants.decodeVideoVariants(),
-                )
+                    fallbackUrls = record.fullFallbackUrls.orEmpty(),
+                ).legacyCopiesIf(record.fullFallbackUrls == null, source)
             },
             pageUrl = record.pageUrl,
             width = record.width,
@@ -216,7 +227,7 @@ object PostStorageCodec {
             rawTags = record.rawTags.orEmpty(),
             authorName = record.authorName,
             createdAtEpochMs = record.createdAtEpochMs,
-            media = record.media.orEmpty().mapNotNull { stored -> stored?.toDomain() },
+            media = record.media.orEmpty().mapNotNull { stored -> stored?.toDomain(source) },
             title = record.title,
             creatorProfile = creator,
             durationMs = record.durationMs,
@@ -236,6 +247,7 @@ object PostStorageCodec {
             localPath = ref.localPath,
             mime = ref.mime,
             progressiveUrls = ref.progressiveUrls,
+            fallbackUrls = ref.fallbackUrls,
             isAnimated = ref.isAnimated,
             videoVariants = ref.videoVariants.encodeVideoVariants(),
             thumbnailUrl = ref.thumbnailUrl,
@@ -263,7 +275,7 @@ object PostStorageCodec {
     }
 }
 
-private fun ImageRefStorageRecord.toDomain(): ImageRef {
+private fun ImageRefStorageRecord.toDomain(source: SourceKey): ImageRef {
     return ImageRef(
         url = url,
         localPath = localPath,
@@ -272,8 +284,12 @@ private fun ImageRefStorageRecord.toDomain(): ImageRef {
         isAnimated = isAnimated ?: false,
         videoVariants = videoVariants.decodeVideoVariants(),
         thumbnailUrl = thumbnailUrl,
-    )
+        fallbackUrls = fallbackUrls.orEmpty(),
+    ).legacyCopiesIf(fallbackUrls == null, source)
 }
+
+private fun ImageRef.legacyCopiesIf(fieldAbsent: Boolean, source: SourceKey): ImageRef =
+    if (fieldAbsent) withLegacyEquivalentCopies(source) else this
 
 private fun CreatorProfileStorageRecord.toDomainOrNull(): CreatorProfile? {
     val sourceKey = SourceKey.parse(source) ?: return null

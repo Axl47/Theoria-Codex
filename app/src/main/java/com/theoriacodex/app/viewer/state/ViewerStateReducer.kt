@@ -613,6 +613,7 @@ private fun ImageRef.bestViewerLocation(): String? {
     return localPath?.takeIf(String::isNotBlank)
         ?: progressiveUrls.firstOrNull(String::isNotBlank)
         ?: url?.takeIf(String::isNotBlank)
+        ?: fallbackUrls.firstOrNull(String::isNotBlank)
 }
 
 private fun ImageRef.isWebP(): Boolean {
@@ -621,6 +622,7 @@ private fun ImageRef.isWebP(): Boolean {
         localPath?.let(::add)
         addAll(progressiveUrls)
         url?.let(::add)
+        addAll(fallbackUrls)
     }.any { location ->
         location.substringBefore('?').substringBefore('#').endsWith(".webp", ignoreCase = true)
     }

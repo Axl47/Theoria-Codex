@@ -501,7 +501,7 @@ class NhentaiSourceAdapter(
                 url = primaryUrl,
                 localPath = null,
                 mime = mimeFromFileExt(firstPageExt),
-                progressiveUrls = imageUrlCandidates(galleryBase, page, firstPageExt),
+                fallbackUrls = imageUrlCandidates(galleryBase, page, firstPageExt),
                 thumbnailUrl = "$NHENTAI_THUMBS_BASE/galleries/$mediaId/${page}t.$firstPageExt",
             )
         }

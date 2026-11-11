@@ -74,7 +74,8 @@ internal fun hasUsableViewerMedia(post: Post): Boolean {
     }.any { media ->
         !media.localPath.isNullOrBlank() ||
             !media.url.isNullOrBlank() ||
-            media.progressiveUrls.any { location -> location.isNotBlank() }
+            media.progressiveUrls.any { location -> location.isNotBlank() } ||
+            media.fallbackUrls.any { location -> location.isNotBlank() }
     }
 }
 
