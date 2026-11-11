@@ -1,3 +1,5 @@
+import com.android.build.api.dsl.ApplicationExtension
+import com.android.build.api.dsl.LibraryExtension
 import dev.detekt.gradle.Detekt
 import dev.detekt.gradle.extensions.DetektExtension
 import kotlinx.kover.gradle.plugin.dsl.KoverProjectExtension
@@ -27,6 +29,10 @@ dependencies {
 }
 
 val qualityCoverageVariant = "quality"
+
+// Kover instruments test JVMs only when the requested tasks include a Kover report or verification,
+// so ordinary local test runs skip the agent. Abbreviated task names (e.g. `kXR`) are not detected.
+val coverageRequested = gradle.startParameter.taskNames.any { "kover" in it.lowercase() }
 
 // The aggregate quality report merges each module's "quality" variant (declared below), so
 // release, benchmark, and baseline-profile variants are never compiled just for coverage.
@@ -64,8 +70,19 @@ subprojects {
                 createVariant(qualityCoverageVariant) {
                     add("jvm", "debug", optional = true)
                 }
+                instrumentation {
+                    disabledForAll.set(!coverageRequested)
+                }
             }
         }
+    }
+
+    // Lint analyses main sources only; test code is covered by Detekt and the tests themselves.
+    pluginManager.withPlugin("com.android.application") {
+        extensions.configure<ApplicationExtension> { lint { ignoreTestSources = true } }
+    }
+    pluginManager.withPlugin("com.android.library") {
+        extensions.configure<LibraryExtension> { lint { ignoreTestSources = true } }
     }
 
     tasks.withType<Test>().configureEach {
@@ -132,4 +149,16 @@ gradle.projectsEvaluated {
             classpath.from(javaCompilation.flatMap { it.destinationDirectory })
         }
     }
+}
+
+// Detekt's CLI for scripts/detekt_changed.sh, which runs it directly on changed files without
+// Gradle's per-run cost. Writes the CLI classpath once; the script reruns it when versions change.
+val detektCli by configurations.creating
+dependencies { detektCli("dev.detekt:detekt-cli:${libs.versions.detekt.get()}") }
+tasks.register("writeDetektCliClasspath") {
+    val classpath: FileCollection = detektCli
+    val output = layout.buildDirectory.file("detekt-cli/classpath.txt")
+    inputs.files(classpath)
+    outputs.file(output)
+    doLast { output.get().asFile.writeText(classpath.asPath) }
 }
