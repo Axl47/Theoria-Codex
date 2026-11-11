@@ -3,13 +3,11 @@ package com.theoriacodex.sources.http
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
-import java.net.UnknownHostException
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import java.net.URLEncoder
 import java.net.URL
 import java.util.TreeMap
 import java.util.concurrent.TimeUnit
-import kotlinx.coroutines.delay
 import okhttp3.Dispatcher
 import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -24,9 +22,9 @@ internal const val CONNECT_TIMEOUT_MS = 3_000
 class DefaultSourceHttpClient(
     private val connectTimeoutMs: Int = CONNECT_TIMEOUT_MS,
     private val readTimeoutMs: Int = 20_000,
-    private val maxRetries: Int = 2,
-    private val retryBaseDelayMs: Long = 300L,
-    private val shouldRetryStatus: (url: String, statusCode: Int) -> Boolean = ::defaultShouldRetryStatus,
+    maxRetries: Int = SourceRetryPolicy.DEFAULT_MAX_RETRIES,
+    retryBaseDelayMs: Long = SourceRetryPolicy.DEFAULT_RETRY_BASE_DELAY_MS,
+    shouldRetryStatus: (url: String, statusCode: Int) -> Boolean = ::defaultShouldRetryStatus,
     /** When set, known-down hosts fail at once and outage answers throw [HostUnavailableException]. */
     private val outages: HostOutageTracker? = null,
     /** The User-Agent a site's browser clearance is bound to, replacing the request's own; null keeps it. */
@@ -34,6 +32,8 @@ class DefaultSourceHttpClient(
     /** The app passes its shared client, so these calls reuse the process's connections and carry its cookies. */
     private val okHttpClient: OkHttpClient = defaultSourceOkHttpClient,
 ) : SourceHttpClient {
+    private val retryPolicy = SourceRetryPolicy(maxRetries, retryBaseDelayMs, shouldRetryStatus)
+
     override suspend fun get(
         url: String,
         query: Map<String, String>,
@@ -118,52 +118,6 @@ class DefaultSourceHttpClient(
         return response.toTextResponse()
     }
 
-    private suspend fun executeBytesWithRetry(
-        requestUrl: String,
-        block: suspend () -> SourceByteResponse,
-    ): SourceByteResponse {
-        outages?.ensureAvailable(requestUrl)
-        var attempt = 0
-        var lastError: Throwable? = null
-        while (attempt <= maxRetries) {
-            try {
-                val response = block()
-                // A maintenance page's Retry-After (Danbooru sends 30 s) is not worth waiting out per request.
-                val retry = shouldRetryStatus(requestUrl, response.statusCode) && !response.headers.retryAfterTooLong()
-                if (!retry || attempt == maxRetries) {
-                    outages?.recordResponse(requestUrl, response.statusCode, response.headers)
-                        ?.let { kind -> throw HostUnavailableException(HostOutageTracker.hostKey(requestUrl).orEmpty(), kind) }
-                    outages?.recordAnswer(requestUrl, response.statusCode)
-                    return response
-                }
-                attempt += 1
-                delay(
-                    resolveRetryDelayMs(
-                        response = SourceHttpResponse(
-                            statusCode = response.statusCode,
-                            body = "",
-                            headers = response.headers,
-                        ),
-                        attempt = attempt,
-                        retryBaseDelayMs = retryBaseDelayMs,
-                    ),
-                )
-            } catch (error: HostUnavailableException) {
-                throw error
-            } catch (error: UnknownHostException) {
-                outages?.recordFailure(requestUrl, error)
-                throw error
-            } catch (error: IOException) {
-                lastError = error
-                outages?.recordFailure(requestUrl, error)
-                if (attempt == maxRetries) throw error
-                attempt += 1
-                delay(retryBaseDelayMs * attempt)
-            }
-        }
-        throw IllegalStateException("Unexpected HTTP retry state", lastError)
-    }
-
     /** Records only the outcome after retries, so a request that recovers leaves nothing in the log. */
     private suspend fun executeReportingFailure(
         requestUrl: String,
@@ -171,7 +125,7 @@ class DefaultSourceHttpClient(
     ): SourceByteResponse {
         val host = HostOutageTracker.hostKey(requestUrl) ?: "unknown host"
         return try {
-            executeBytesWithRetry(requestUrl, block).also { response ->
+            executeWithRetry(requestUrl, retryPolicy, outages, block = block).also { response ->
                 if (response.statusCode >= 400) Diagnostics.report("http", "$host: HTTP ${response.statusCode}")
             }
         } catch (error: IOException) {
