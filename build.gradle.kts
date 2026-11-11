@@ -1,3 +1,5 @@
+import com.android.build.api.dsl.ApplicationExtension
+import com.android.build.api.dsl.LibraryExtension
 import dev.detekt.gradle.Detekt
 import dev.detekt.gradle.extensions.DetektExtension
 import kotlinx.kover.gradle.plugin.dsl.KoverProjectExtension
@@ -66,6 +68,14 @@ subprojects {
                 }
             }
         }
+    }
+
+    // Lint analyses main sources only; test code is covered by Detekt and the tests themselves.
+    pluginManager.withPlugin("com.android.application") {
+        extensions.configure<ApplicationExtension> { lint { ignoreTestSources = true } }
+    }
+    pluginManager.withPlugin("com.android.library") {
+        extensions.configure<LibraryExtension> { lint { ignoreTestSources = true } }
     }
 
     tasks.withType<Test>().configureEach {
