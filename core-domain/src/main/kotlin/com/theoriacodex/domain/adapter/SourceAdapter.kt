@@ -1,8 +1,10 @@
 package com.theoriacodex.domain.adapter
 
+import com.theoriacodex.domain.model.CommentPage
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostComment
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SearchFacet
@@ -43,6 +45,15 @@ const val MAX_RELATED_POST_CANDIDATES = 30
 /** Optional source-owned discovery for a bounded set of posts related to one canonical post. */
 interface RelatedPostsSourceAdapter {
     suspend fun relatedPosts(seed: PostId, limit: Int): List<Post>
+}
+
+/**
+ * Optional read-only comments for one post. A null [pageToken] asks for the first page; a non-null
+ * [parent] (one with [PostComment.hasReplies]) asks for that comment's replies instead. Families
+ * implement this once, so built-in and custom sites of the same family share it.
+ */
+interface CommentsSourceAdapter {
+    suspend fun comments(post: Post, pageToken: String?, parent: PostComment? = null): CommentPage
 }
 
 /**
