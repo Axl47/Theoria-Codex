@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# The one definition of "verified", shared by this Mac and GitHub. Cheap policy checks always run first
-# so they fail in seconds, then the chosen part:
+# The one definition of "verified", shared by this Mac and GitHub. Cheap policy checks run first so they
+# fail in seconds (the Python unittests only once, in the static part), then the chosen part:
 #   tests    unit tests, coverage, and changed-code coverage for every module
 #   static   Detekt with type resolution, Android lint, duplicate code, configuration cache
 #   release  R8 builds: release, releaseAcceptance, and benchmark builds when the change can affect them
@@ -186,7 +186,7 @@ run_release() {
 }
 
 phase 'Hotspot check' line_budgets "$base"
-phase 'Python unittests' python_tests
+[[ "$part" == tests || "$part" == release ]] || phase 'Python unittests' python_tests
 
 case "$part" in
   '') run_tests; run_static ;;
