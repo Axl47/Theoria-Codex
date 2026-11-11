@@ -38,6 +38,9 @@ if [[ "$record" == true && -n "$(worktree_changes)" ]]; then
   exit 2
 fi
 
+# Install the tracked pre-push hook unless this clone already chose its own hooks.
+[[ -n "$(git config --get core.hooksPath || true)" ]] || git config core.hooksPath scripts/hooks
+
 # Robolectric's Android SDK 36 sandbox refuses JVMs older than 21.
 java_bin="${JAVA_HOME:+$JAVA_HOME/bin/}java"
 java_major="$("$java_bin" -version 2>&1 | sed -nE '1s/.*"([0-9]+).*/\1/p')"
