@@ -70,8 +70,10 @@ jobs:
           echo "check=$RUN_CHECK" >> "$GITHUB_OUTPUT"
           echo "parts=[$(IFS=,; echo "${parts[*]}")]" >> "$GITHUB_OUTPUT"
 
+  # A static name: GitHub shows each run as `Check part (tests)` and so on, and a skipped job as
+  # `Check part`. A name built from the matrix would show unevaluated when the job is skipped.
   part:
-    name: ${{ matrix.part }}
+    name: Check part
     needs: plan
     if: needs.plan.outputs.parts != '[]'
     runs-on: ubuntu-latest
