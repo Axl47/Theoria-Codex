@@ -3,6 +3,7 @@ package com.theoriacodex.app.ui.routes
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.app.fixtures.JourneyAppContainer
+import com.theoriacodex.app.search.testSearchCoordinator
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
@@ -16,7 +17,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlin.coroutines.ContinuationInterceptor
@@ -155,6 +158,53 @@ class ViewerProviderWorkTest {
             job.cancel()
             cancelled.await()
             job.join()
+        } finally {
+            graph.shutdown()
+        }
+    }
+
+    @Test
+    fun `feed and Viewer resolving one post at once send a single request while recovery stays fresh`() = runTest {
+        val post = testPost(SourceKey.GELBOORU, "shared")
+        val graph = JourneyAppContainer(
+            ApplicationProvider.getApplicationContext(), temporary.newFolder(),
+            mapOf(SourceKey.GELBOORU to listOf(post)), this,
+        )
+        try {
+            graph.awaitReady()
+            val release = CompletableDeferred<Unit>()
+            var requests = 0
+            val delegate = requireNotNull(graph.sources.registry.adapterFor(SourceKey.GELBOORU))
+            val adapter = object : SourceAdapter by delegate {
+                override suspend fun resolvePost(id: PostId): Post {
+                    if (++requests == 1) release.await()
+                    return post
+                }
+            }
+            val registry = object : SourceAdapterRegistry by graph.sources.registry {
+                override fun adapterFor(sourceKey: SourceKey) = adapter.takeIf { sourceKey == SourceKey.GELBOORU }
+            }
+            val sources = graph.sources.copy(registry = registry)
+            val feed = testSearchCoordinator(registry, postResolutions = sources.postResolutions)
+            val workflow = ViewerRouteWorkflow(
+                graph.data, this, sources, { null }, { null }, { null },
+                providerDispatcher = StandardTestDispatcher(testScheduler),
+            )
+
+            val fromFeed = async { feed.resolvePostForSearch(post.id, "query") }
+            val fromViewer = async { workflow.resolvePost(post.id, ViewerStreamSource.RELATED) }
+            runCurrent()
+            assertEquals(1, requests)
+            // A media recovery needs fresh URLs, so it never joins the request already in flight.
+            val recovered = async { workflow.recoverMedia(post, post.preview, ViewerStreamSource.RELATED) }
+            runCurrent()
+            assertEquals(2, requests)
+
+            release.complete(Unit)
+            assertEquals(post, fromFeed.await())
+            assertEquals(post, fromViewer.await())
+            assertEquals(post, recovered.await())
+            assertEquals(2, requests)
         } finally {
             graph.shutdown()
         }

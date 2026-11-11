@@ -82,13 +82,13 @@ class PostMediaTest {
     @Test
     fun `nhentai extension mirrors are failure fallbacks and higher pages never use the cover`() {
         val first = ref("1.webp", "image/webp").copy(
-            progressiveUrls = listOf(
+            fallbackUrls = listOf(
                 "https://example.test/1.webp",
                 "https://example.test/1.jpg",
             ),
         )
         val second = ref("2.webp", "image/webp").copy(
-            progressiveUrls = listOf(
+            fallbackUrls = listOf(
                 "https://example.test/2.webp",
                 "https://example.test/2.jpg",
             ),
@@ -138,11 +138,58 @@ class PostMediaTest {
             plan.candidates.map { it.activation },
         )
 
-        val withoutSample = previewMediaDeliveryPlan(post(SourceKey.GELBOORU, ref("full.jpg", "image/jpeg")))
+        // Without a lighter rendition the original is the step up only when the post says it is small.
+        val withoutSample = post(SourceKey.GELBOORU, ref("full.jpg", "image/jpeg"))
+        assertEquals(
+            listOf(MediaDeliveryActivation.PRIMARY, MediaDeliveryActivation.FAILURE_FALLBACK),
+            previewMediaDeliveryPlan(withoutSample).candidates.map { it.activation },
+        )
         assertEquals(
             listOf(MediaDeliveryActivation.PRIMARY, MediaDeliveryActivation.QUALITY_UPGRADE),
-            withoutSample.candidates.map { it.activation },
+            previewMediaDeliveryPlan(withoutSample.copy(width = 800, height = 1_100)).candidates.map { it.activation },
         )
+        assertEquals(
+            listOf(MediaDeliveryActivation.PRIMARY, MediaDeliveryActivation.FAILURE_FALLBACK),
+            previewMediaDeliveryPlan(withoutSample.copy(width = 800, height = 4_000)).candidates.map { it.activation },
+        )
+    }
+
+    @Test
+    fun `any source with a lighter rendition steps up to the original in the Viewer and on cards`() {
+        val customSite = requireNotNull(SourceKey.parse("custom_booru_example"))
+        listOf(SourceKey.DANBOORU, SourceKey.RULE34PAHEAL, customSite).forEach { source ->
+            val full = ref("full.jpg", "image/jpeg").copy(progressiveUrls = listOf("https://example.test/sample.jpg"))
+            val post = post(source, full)
+
+            val viewer = viewerMediaDeliveryPlan(post, full)
+            assertEquals(
+                listOf("https://example.test/sample.jpg", "https://example.test/full.jpg"),
+                viewer.candidates.take(2).map { it.location },
+            )
+            assertEquals(MediaDeliveryActivation.QUALITY_UPGRADE, viewer.candidates[1].activation)
+            assertEquals(
+                MediaDeliveryActivation.QUALITY_UPGRADE,
+                previewMediaDeliveryPlan(post).candidates.first { it.location.endsWith("sample.jpg") }.activation,
+            )
+        }
+    }
+
+    @Test
+    fun `equivalent copies never upgrade the Viewer and a page without renditions has no step`() {
+        val page = ref("1.webp", "image/webp").copy(fallbackUrls = listOf("https://mirror.test/1.webp"))
+        val gallery = post(SourceKey.HITOMI, page)
+
+        val plan = viewerMediaDeliveryPlan(gallery, page)
+
+        assertEquals(
+            listOf("https://example.test/1.webp", "https://mirror.test/1.webp"),
+            plan.candidates.take(2).map { it.location },
+        )
+        assertEquals(
+            listOf(MediaDeliveryActivation.PRIMARY, MediaDeliveryActivation.FAILURE_FALLBACK),
+            plan.candidates.take(2).map { it.activation },
+        )
+        assertEquals(emptyList<Int>(), plan.upgradeIndicesAfter(0))
     }
 
     @Test
@@ -186,7 +233,7 @@ class PostMediaTest {
     fun `animated mirrors are alternatives for a single upgrade`() {
         val animated = ref("a.webp", "image/webp").copy(
             isAnimated = true,
-            progressiveUrls = listOf("https://example.test/a.webp", "https://mirror.test/a.webp"),
+            fallbackUrls = listOf("https://example.test/a.webp", "https://mirror.test/a.webp"),
         )
 
         val plan = previewMediaDeliveryPlan(post(SourceKey.HITOMI, animated))

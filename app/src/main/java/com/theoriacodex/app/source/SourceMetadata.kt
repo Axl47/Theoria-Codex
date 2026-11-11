@@ -54,6 +54,8 @@ data class SourcePresentation(
     val userAgent: String = BROWSER_USER_AGENT,
     /** Tags for the built-in "Animated" saved group; empty when the source has no animated tags. */
     val animatedSearchTags: List<String> = emptyList(),
+    /** Feed cards never step up from the preview to a lighter rendition; the Viewer still does. */
+    val cardsStayOnPreview: Boolean = false,
 ) {
     fun isUserExposed(rule34XxxConfigured: Boolean): Boolean {
         return when (exposure) {
@@ -146,6 +148,8 @@ object SourcePresentationCatalog {
             logo = SourceLogoAsset.Text,
             mark = "R34",
             animatedSearchTags = GELBOORU_ANIMATED_SEARCH_TAGS,
+            // A sample on every card would download far more than the previews the feed was tuned around.
+            cardsStayOnPreview = true,
         ),
         SourcePresentation(
             source = SourceKey.RULE34PAHEAL,

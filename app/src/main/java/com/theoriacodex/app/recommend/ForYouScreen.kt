@@ -107,6 +107,7 @@ fun ForYouScreen(
     onDurationPostVisibilityChanged: (Post, Boolean) -> Unit = { _, _ -> },
     onDurationEnvironmentChanged: (Boolean, Boolean) -> Unit = { _, _ -> },
     onAuthoritativeDurationKnown: (Post, Long) -> Unit = { _, _ -> },
+    resolvePostById: (suspend (PostId) -> Post?)? = null,
     onToggleLike: (Post) -> Unit,
     onAction: (ForYouAction) -> Unit,
     creatorBrowsingSources: Set<SourceKey> = emptySet(),
@@ -146,7 +147,7 @@ fun ForYouScreen(
     val pageDemand = rememberForYouPageDemand(state, feed, gridState, onAction)
     val cards = rememberFeedCardEnvironment(
         pixivUgoiraClient, likedPostIds, feed.durationFilter.knownDurationMsByPostId, durationStateForPost,
-        onToggleLike, onDurationPostVisibilityChanged, onAuthoritativeDurationKnown,
+        onToggleLike, onDurationPostVisibilityChanged, onAuthoritativeDurationKnown, resolvePostById,
     )
 
     AnimatedContent(

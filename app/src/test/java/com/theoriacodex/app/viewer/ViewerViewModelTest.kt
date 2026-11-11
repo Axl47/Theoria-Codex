@@ -126,6 +126,24 @@ class ViewerViewModelTest {
     }
 
     @Test
+    fun `lookahead resolves the previous sparse post after the next and plans its prefetch`() = runTest {
+        val started = mutableListOf<PostId>()
+        val posts = listOf(post("prev", SourceKey.HITOMI, emptyList()), post("current"), post("next", SourceKey.HITOMI, emptyList()))
+        val owner = ViewerViewModel(SavedStateHandle(), postResolver = ViewerPostResolver { _, id ->
+            started += id
+            post(id.sourcePostId, id.source, listOf(video("${id.sourcePostId}.mp4")))
+        }, scopeOverride = this)
+        owner.replaceSession(session("previous", posts, startIndex = 1))
+        advanceUntilIdle()
+
+        assertEquals(listOf(posts[2].id, posts[0].id), started)
+        val state = owner.state.value
+        val previousKey = requireNotNull(state.pages[0].media.firstOrNull()).key
+        assertTrue(previousKey in viewerPrefetchAction(state.pages, state.currentMedia?.key, null).mediaKeys)
+        owner.clearSession()
+    }
+
+    @Test
     fun `jump cancels obsolete resolution without showing a timeout error`() = runTest {
         val cancelled = mutableListOf<PostId>()
         val posts = (0..3).map { post("$it", SourceKey.HITOMI, emptyList()) }
@@ -415,6 +433,24 @@ class ViewerViewModelTest {
     }
 
     @Test
+    fun `resolution returning a different post fails instead of staying requested`() = runTest {
+        val owner = ViewerViewModel(
+            savedStateHandle = SavedStateHandle(),
+            postResolver = ViewerPostResolver { _, _ -> post("newest", source = SourceKey.GELBOORU) },
+            scopeOverride = this,
+        )
+        owner.replaceSession(session("mismatch", listOf(post("asked", SourceKey.GELBOORU, listOf(video("asked.mp4"))))))
+
+        owner.onAction(ViewerAction.RequestCurrentPageResolution)
+        advanceUntilIdle()
+
+        val resolution = requireNotNull(owner.state.value.currentPage?.resolution)
+        assertEquals(ViewerResolutionStatus.FAILED, resolution.status)
+        assertFalse(resolution.recoverable)
+        assertEquals("asked", owner.state.value.currentPage?.post?.id?.sourcePostId)
+    }
+
+    @Test
     fun `provider resolution failure remains recoverable and distinct from deletion`() = runTest {
         val owner = ViewerViewModel(
             savedStateHandle = SavedStateHandle(),
@@ -626,18 +662,12 @@ class ViewerViewModelTest {
         assertTrue(owner.state.value.prefetch.inFlight.isEmpty())
     }
 
-    private fun session(id: String, posts: List<Post>): ViewerSession {
-        return ViewerSession(
-            posts = posts,
-            context = ViewerLaunchContext(
-                queryHash = "query:$id",
-                startIndex = 0,
-                streamSource = ViewerStreamSource.SEARCH,
-                scrollOffsetHint = 0,
-            ),
-            sessionId = id,
-        )
-    }
+    private fun session(id: String, posts: List<Post>, startIndex: Int = 0) = ViewerSession(
+        posts = posts,
+        context = ViewerLaunchContext(queryHash = "query:$id", startIndex = startIndex,
+            streamSource = ViewerStreamSource.SEARCH, scrollOffsetHint = 0),
+        sessionId = id,
+    )
 
     private fun post(
         id: String,
@@ -662,15 +692,7 @@ class ViewerViewModelTest {
         )
     }
 
-    private fun image(path: String) = ImageRef(
-        url = "https://example.test/$path",
-        localPath = null,
-        mime = "image/jpeg",
-    )
+    private fun image(path: String) = ImageRef(url = "https://example.test/$path", localPath = null, mime = "image/jpeg")
 
-    private fun video(path: String) = ImageRef(
-        url = "https://example.test/$path",
-        localPath = null,
-        mime = "video/mp4",
-    )
+    private fun video(path: String) = ImageRef(url = "https://example.test/$path", localPath = null, mime = "video/mp4")
 }

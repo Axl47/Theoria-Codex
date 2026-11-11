@@ -268,22 +268,25 @@ internal class ViewerViewModel(
         }
     }
 
-    /** Current-page work wins; only the immediately following post may resolve speculatively. */
+    /** Current-page work wins; only the immediately adjacent posts (next first, then previous) resolve speculatively. */
     private fun reconcileResolutionLookahead() {
         if (postResolver == null) return
         val current = state.value
         val session = current.session ?: return
         val navigation = viewerPostNavigation(current)
-        val next = navigation.pages.getOrNull(navigation.currentIndex + 1)
-        val desired = setOfNotNull(current.currentPage?.post?.id, next?.post?.id)
+        val neighbours = listOfNotNull(
+            navigation.pages.getOrNull(navigation.currentIndex + 1),
+            navigation.pages.getOrNull(navigation.currentIndex - 1),
+        )
+        val desired = setOfNotNull(current.currentPage?.post?.id) + neighbours.map { it.post.id }
         val obsolete = sessionJobs.keys.filterIsInstance<ViewerWorkKey.Resolution>().filter { it.postId !in desired }
         obsolete.forEach { key ->
             sessionJobs.remove(key)?.cancel()
             onAction(ViewerAction.ResolutionCancelled(session, key.postId))
         }
-        if (next?.resolution?.status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.IDLE) {
-            onAction(ViewerAction.RequestPageResolution(next.post.id))
-        }
+        neighbours
+            .filter { it.resolution.status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.IDLE }
+            .forEach { onAction(ViewerAction.RequestPageResolution(it.post.id)) }
     }
 
     private fun launchResolution(effect: ViewerEffect.ResolvePost, resolver: ViewerPostResolver) {
@@ -300,6 +303,16 @@ internal class ViewerViewModel(
                             session = effect.session,
                             postId = effect.postId,
                             message = "Post was deleted",
+                            recoverable = false,
+                        )
+                    )
+                } else if (resolved.id != effect.postId) {
+                    // A provider that ignores the requested id would otherwise leave the page requesting forever.
+                    onAction(
+                        ViewerAction.ResolutionFailed(
+                            session = effect.session,
+                            postId = effect.postId,
+                            message = "Provider returned a different post",
                             recoverable = false,
                         )
                     )

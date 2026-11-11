@@ -53,8 +53,8 @@ internal fun ViewerLoadingPreview(post: Post, media: ImageRef, modifier: Modifie
 }
 
 internal fun viewerLoadingPreviewLocation(post: Post, media: ImageRef): String? {
-    // A gallery's cover must never be presented as a different media page.
-    if (post.media.indexOf(media) > 0) return media.progressiveUrls.firstOrNull()
+    // A gallery's cover must never be presented as a different media page; its own small thumbnail may.
+    if (post.media.indexOf(media) > 0) return media.thumbnailUrl ?: media.progressiveUrls.firstOrNull()
     if (isAnimatedImageMediaRef(post.preview) || isVideoMediaRef(post.preview)) return null
     return post.preview.localPath ?: post.preview.url ?: post.preview.progressiveUrls.firstOrNull()
 }

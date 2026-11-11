@@ -25,11 +25,14 @@ data class ImageRef(
     val url: String?,
     val localPath: String?,
     val mime: String?,
+    /** Lighter renditions of [url], lightest first; shown before [url] and then replaced by it. */
     val progressiveUrls: List<String> = emptyList(),
     val isAnimated: Boolean = false,
     val videoVariants: List<VideoVariant> = emptyList(),
     /** Small stand-in for choosing a page; never shown as the page itself. */
     val thumbnailUrl: String? = null,
+    /** Equivalent copies of [url] (mirrors, other formats, other shards); tried only when it fails, never shown as a lighter step. */
+    val fallbackUrls: List<String> = emptyList(),
 )
 
 data class PostTaxonomyTerm(

@@ -29,6 +29,7 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.common.BoundedLruCache
 import com.theoriacodex.sources.common.asIntOrNull
 import com.theoriacodex.sources.common.asStringOrNull
 import com.theoriacodex.sources.common.canonicalPostPage
@@ -81,7 +82,7 @@ class NhentaiSourceAdapter(
 
     private val throttleMutex = Mutex()
     private var lastRequestAtEpochMs: Long = 0L
-    private val tagInfoByKey = mutableMapOf<String, MutableList<NhentaiTagInfo>>()
+    private val tagInfoByKey = BoundedLruCache<String, List<NhentaiTagInfo>>(TAG_CACHE_MAX_KEYS)
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> {
         val directGalleryId = query.directNhentaiGalleryIdCandidate()
@@ -500,7 +501,7 @@ class NhentaiSourceAdapter(
                 url = primaryUrl,
                 localPath = null,
                 mime = mimeFromFileExt(firstPageExt),
-                progressiveUrls = imageUrlCandidates(galleryBase, page, firstPageExt),
+                fallbackUrls = imageUrlCandidates(galleryBase, page, firstPageExt),
                 thumbnailUrl = "$NHENTAI_THUMBS_BASE/galleries/$mediaId/${page}t.$firstPageExt",
             )
         }
@@ -643,12 +644,13 @@ class NhentaiSourceAdapter(
             .map(::tagCacheKey)
             .distinct()
             .forEach { key ->
-                val bucket = tagInfoByKey.getOrPut(key) { mutableListOf() }
-                val index = bucket.indexOfFirst { cached -> cached.id == info.id }
-                if (index >= 0) {
-                    bucket[index] = info
-                } else {
-                    bucket += info
+                tagInfoByKey.update(key) { bucket ->
+                    val cached = bucket.orEmpty()
+                    if (cached.any { it.id == info.id }) {
+                        cached.map { if (it.id == info.id) info else it }
+                    } else {
+                        cached + info
+                    }
                 }
             }
     }
@@ -659,6 +661,9 @@ class NhentaiSourceAdapter(
         )
     }
 }
+
+/** Each cached tag fills two keys (name and slug), so this keeps about a thousand tags. */
+private const val TAG_CACHE_MAX_KEYS = 2_000
 
 private data class NhentaiTagInfo(
     val id: Int,

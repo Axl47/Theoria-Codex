@@ -28,8 +28,6 @@ data class GelbooruSite(
     /** Appended to newest-first searches; null relies on the site's default id order. */
     val newestSortTag: String? = null,
     val scoreSortTag: String = "sort:score:desc",
-    /** The post's `sample_url` is a lighter viewer rendition to load before the original. */
-    val progressiveSample: Boolean = false,
     /** Uploader (`owner`) becomes a followable creator whose posts are searched with `user:<owner>`. */
     val creatorPosts: Boolean = false,
     /** The HTML post page's "More Like This:" block supplies related posts. */
@@ -43,7 +41,6 @@ data class GelbooruSite(
             siteUrl = "https://gelbooru.com",
             orGroup = GelbooruOrGroup(prefix = "{", separator = " ~ ", suffix = "}"),
             newestSortTag = "sort:id:desc",
-            progressiveSample = true,
             creatorPosts = true,
             relatedPosts = true,
         )
@@ -59,7 +56,6 @@ data class GelbooruSite(
             credentials = ApiKeyUse.REQUIRED,
             postLookup = GelbooruPostLookup.ID_TAG,
             scoreSortTag = "sort:score",
-            progressiveSample = true,
         )
     }
 }

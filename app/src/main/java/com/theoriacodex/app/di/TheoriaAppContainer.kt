@@ -89,6 +89,7 @@ import com.theoriacodex.sources.custom.CustomSiteHttpClient
 import com.theoriacodex.sources.http.HostOutageTracker
 import com.theoriacodex.sources.http.SiteHealthCheck
 import com.theoriacodex.app.media.isMediaNetworkMetered
+import com.theoriacodex.app.source.PostResolutionFlights
 import com.theoriacodex.sources.custom.SiteFamilyRegistry
 import com.theoriacodex.sources.custom.SiteProber
 import com.theoriacodex.sources.http.DefaultSourceHttpClient
@@ -142,6 +143,8 @@ data class SourceDependencies(
     val healthCheck: SiteHealthCheck = SiteHealthCheck(outages),
     /** Opens connections to recently used hosts, on networks where the traffic costs nothing. */
     val warmConnections: suspend () -> Unit = {},
+    /** One in-flight detail request per post, shared by the feed and the Viewer. */
+    val postResolutions: PostResolutionFlights = PostResolutionFlights(),
 )
 
 data class UpdateDependencies(
@@ -391,6 +394,8 @@ internal class DefaultTheoriaAppContainer(
         savedSearches = savedSearches,
     )
 
+    private val postResolutions = PostResolutionFlights()
+
     override val sources = SourceDependencies(
         httpClient = sourceHttpClient,
         accounts = accountStore,
@@ -404,6 +409,7 @@ internal class DefaultTheoriaAppContainer(
         outages = hostOutages,
         healthCheck = siteHealthCheck,
         warmConnections = { if (!appContext.isMediaNetworkMetered()) httpClients.warmRecentHosts() },
+        postResolutions = postResolutions,
     )
 
     override val updates = UpdateDependencies(
@@ -422,6 +428,7 @@ internal class DefaultTheoriaAppContainer(
             statisticsRepository = statisticsRepository,
             tagSuggestionStore = tagSuggestionStore,
             firstPageStore = SearchFirstPageStore(File(appContext.cacheDir, SearchFirstPageStore.FILE_NAME)),
+            postResolutions = postResolutions,
         ),
         forYou = ForYouCoordinator(
             registry = sourceRegistry,
@@ -431,10 +438,12 @@ internal class DefaultTheoriaAppContainer(
             recentsRepository = recentsRepository,
             statisticsRepository = statisticsRepository,
             tagSuggestionStore = tagSuggestionStore,
+            postResolutions = postResolutions,
         ),
         relatedPosts = RelatedPostsLoader(sourceRegistry),
         creatorProfile = CreatorProfileCoordinator(registry = sourceRegistry,
-            follows = com.theoriacodex.data.repository.CreatorFollowsRepository(settingsRepository)),
+            follows = com.theoriacodex.data.repository.CreatorFollowsRepository(settingsRepository),
+            postResolutions = postResolutions),
         mediaDurationCoordinator = mediaDurationCoordinator,
         appUsageTracker = appUsageTracker,
         offlineMedia = offlineMedia,

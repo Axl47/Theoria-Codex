@@ -7,6 +7,7 @@ import com.google.gson.annotations.SerializedName
 import com.theoriacodex.data.repository.checkDocumentDepth
 import com.theoriacodex.data.repository.portableMediaUrl
 import com.theoriacodex.data.repository.portablePostSnapshot
+import com.theoriacodex.data.storage.withLegacyEquivalentCopies
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -78,6 +79,8 @@ internal data class CodexShareImageRef(
     val mime: String? = null,
     @field:SerializedName("progressiveUrls")
     val progressiveUrls: List<String?>? = null,
+    @field:SerializedName("fallbackUrls")
+    val fallbackUrls: List<String?>? = null,
     @field:SerializedName("isAnimated")
     val isAnimated: Boolean? = null,
 )
@@ -157,7 +160,7 @@ internal fun codexSharePostId(post: CodexSharePost): PostId? {
 internal fun codexSharePostSnapshot(post: CodexSharePost): Post? {
     val postId = codexSharePostId(post) ?: return null
     val snapshot = post.snapshot ?: return null
-    val preview = snapshot.preview?.toImageRef() ?: return null
+    val preview = snapshot.preview?.toImageRef(postId.source) ?: return null
     val canonicalTags = snapshot.canonicalTags.normalizedStrings()
     val taxonomy = snapshot.taxonomy
         ?.mapNotNull { term -> term?.toPostTaxonomyTerm() }
@@ -181,8 +184,8 @@ internal fun codexSharePostSnapshot(post: CodexSharePost): Post? {
     return portablePostSnapshot(Post(
         id = postId,
         preview = preview,
-        full = snapshot.full?.toImageRef(),
-        media = snapshot.media.orEmpty().mapNotNull { media -> media?.toImageRef() },
+        full = snapshot.full?.toImageRef(postId.source),
+        media = snapshot.media.orEmpty().mapNotNull { media -> media?.toImageRef(postId.source) },
         pageUrl = snapshot.pageUrl.normalizedOptionalString(),
         width = snapshot.width?.takeIf { it > 0 },
         height = snapshot.height?.takeIf { it > 0 },
@@ -263,11 +266,12 @@ private fun ImageRef.toCodexShareImageRef(): CodexShareImageRef {
         localPath = null,
         mime = mime,
         progressiveUrls = progressiveUrls,
+        fallbackUrls = fallbackUrls,
         isAnimated = isAnimated,
     )
 }
 
-private fun CodexShareImageRef.toImageRef(): ImageRef? {
+private fun CodexShareImageRef.toImageRef(source: SourceKey): ImageRef? {
     val normalizedUrl = portableMediaUrl(url.normalizedOptionalString())
     if (normalizedUrl == null) return null
     return ImageRef(
@@ -275,8 +279,9 @@ private fun CodexShareImageRef.toImageRef(): ImageRef? {
         localPath = null,
         mime = mime.normalizedOptionalString(),
         progressiveUrls = progressiveUrls.normalizedStrings().mapNotNull(::portableMediaUrl),
+        fallbackUrls = fallbackUrls.normalizedStrings().mapNotNull(::portableMediaUrl),
         isAnimated = isAnimated ?: false,
-    )
+    ).let { ref -> if (fallbackUrls == null) ref.withLegacyEquivalentCopies(source) else ref }
 }
 
 private fun PostTaxonomyTerm.toCodexShareTaxonomyTerm(): CodexShareTaxonomyTerm {
@@ -385,6 +390,7 @@ private fun JsonObject.toCodexShareImageRef(): CodexShareImageRef {
         localPath = null,
         mime = stringOrNull("mime"),
         progressiveUrls = stringListOrNull("progressiveUrls"),
+        fallbackUrls = stringListOrNull("fallbackUrls"),
         isAnimated = booleanOrNull("isAnimated"),
     )
 }

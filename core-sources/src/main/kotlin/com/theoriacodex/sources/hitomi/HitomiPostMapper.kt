@@ -72,7 +72,6 @@ internal class HitomiPostMapper(
                 url = hitomiVideoUrl(filename),
                 localPath = null,
                 mime = "video/mp4",
-                progressiveUrls = emptyList(),
             )
         }
         if (sparse) return listOfNotNull(video).takeIf { metadata.hasPlayableVideo }.orEmpty()
@@ -95,13 +94,13 @@ internal class HitomiPostMapper(
         return hitomiThumbnailUrls(file.hash, primaryShard, rendition)
     }
 
-    /** Leads with [thumbnails] and keeps every full-size location behind them as a fallback. */
+    /** Leads with [thumbnails] and keeps every full-size location behind them as a fallback copy. */
     private fun ImageRef.thumbnailFirst(thumbnails: List<String>): ImageRef {
         val thumbnail = thumbnails.firstOrNull() ?: return this
         return copy(
             url = thumbnail,
             mime = "image/webp",
-            progressiveUrls = (thumbnails.drop(1) + listOfNotNull(url) + progressiveUrls).distinct(),
+            fallbackUrls = (thumbnails.drop(1) + listOfNotNull(url) + fallbackUrls).distinct(),
         )
     }
 
@@ -157,7 +156,7 @@ internal class HitomiPostMapper(
             url = first?.url,
             localPath = null,
             mime = first?.mime ?: mimeFromFileExt(file.name.substringAfterLast('.', "")),
-            progressiveUrls = orderedCandidates.map(HitomiMediaCandidate::url).distinct(),
+            fallbackUrls = orderedCandidates.map(HitomiMediaCandidate::url).distinct(),
             isAnimated = animated,
         )
     }
@@ -165,7 +164,7 @@ internal class HitomiPostMapper(
     private fun ImageRef.hitomiRecoveryIdentityOrNull(): HitomiMediaRecoveryIdentity? {
         val locations = buildList {
             url?.takeIf(String::isNotBlank)?.let(::add)
-            addAll(progressiveUrls.filter(String::isNotBlank))
+            addAll(fallbackUrls.filter(String::isNotBlank))
         }.distinct()
         // Thumbnail locations carry no gg.js version, so the first full-size location identifies the media.
         val parsedLocations = locations.mapNotNull { location ->
@@ -248,11 +247,11 @@ internal class HitomiPostMapper(
             val refCandidates = refreshedCandidates.preferFormat(refIdentity.failedFormat)
             if (refCandidates.isEmpty()) return ref
             replaced = true
-            val thumbnails = (listOfNotNull(ref.url) + ref.progressiveUrls).filter { HITOMI_THUMBNAIL_URL.containsMatchIn(it) }
+            val thumbnails = (listOfNotNull(ref.url) + ref.fallbackUrls).filter { HITOMI_THUMBNAIL_URL.containsMatchIn(it) }
             return ref.copy(
                 url = refCandidates.first().url,
                 mime = refCandidates.first().mime,
-                progressiveUrls = refCandidates.map(HitomiMediaCandidate::url).distinct(),
+                fallbackUrls = refCandidates.map(HitomiMediaCandidate::url).distinct(),
             ).thumbnailFirst(thumbnails)
         }
 

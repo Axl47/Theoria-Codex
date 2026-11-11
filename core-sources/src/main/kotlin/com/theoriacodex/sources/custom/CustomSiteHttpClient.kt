@@ -11,9 +11,11 @@ import com.theoriacodex.sources.http.SourceByteRange
 import com.theoriacodex.sources.http.SourceByteResponse
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
+import com.theoriacodex.sources.http.SourceRetryPolicy
 import com.theoriacodex.sources.http.buildUrl
 import com.theoriacodex.sources.http.defaultSourceOkHttpClient
 import com.theoriacodex.sources.http.executeHttpRequest
+import com.theoriacodex.sources.http.executeWithRetry
 import com.theoriacodex.sources.http.toTextResponse
 import com.theoriacodex.sources.http.withByteRange
 import java.io.IOException
@@ -25,7 +27,8 @@ import okhttp3.OkHttpClient
  * Transport for user-added sites, used by the prober and by custom-site adapters (plan C7). Requests
  * go out with redirects off; a redirect is followed (at most [maxRedirects] hops) only when it stays
  * on HTTPS and on the same site, so query-string API keys never reach another host or travel in
- * cleartext. A refused redirect is never requested. No retries; GET only.
+ * cleartext. A refused redirect is never requested. GET only. When [retry] is set (adapters), each
+ * hop retries transient failures the way built-in sources do; probes leave it null and see raw answers.
  */
 class CustomSiteHttpClient internal constructor(
     private val connectTimeoutMs: Int,
@@ -33,15 +36,26 @@ class CustomSiteHttpClient internal constructor(
     private val maxRedirects: Int,
     /** Set for adapters, never for probes (which must see raw answers); see [HostOutageTracker]. */
     private val outages: HostOutageTracker? = null,
+    private val retry: SourceRetryPolicy? = null,
     private val transport: suspend (HttpRequestSpec) -> SourceByteResponse,
 ) : SourceHttpClient {
-    /** Probes use the defaults; adapters may pass a longer [readTimeoutMs] and an [outages] tracker. */
+    /**
+     * Probes use the defaults; adapters may pass a longer [readTimeoutMs] and an [outages] tracker, and
+     * passing the tracker is what makes requests retry transient failures (a probe passes none).
+     */
     constructor(
         connectTimeoutMs: Int = CONNECT_TIMEOUT_MS,
         readTimeoutMs: Int = DEFAULT_READ_TIMEOUT_MS,
         outages: HostOutageTracker? = null,
         okHttpClient: OkHttpClient = defaultSourceOkHttpClient,
-    ) : this(connectTimeoutMs, readTimeoutMs, MAX_REDIRECTS, outages, { spec -> executeHttpRequest(spec, okHttpClient) })
+    ) : this(
+        connectTimeoutMs,
+        readTimeoutMs,
+        MAX_REDIRECTS,
+        outages,
+        retry = outages?.let { SourceRetryPolicy() },
+        transport = { spec -> executeHttpRequest(spec, okHttpClient) },
+    )
 
     override suspend fun get(url: String, query: Map<String, String>, headers: Map<String, String>): SourceHttpResponse =
         getBytes(url, query, headers, range = null, maxBodyBytes = DEFAULT_MAX_SOURCE_TEXT_BODY_BYTES).toTextResponse()
@@ -83,24 +97,22 @@ class CustomSiteHttpClient internal constructor(
         throw UnsupportedOperationException("Custom sites are read-only")
 
     /**
-     * Sends one hop and records outages: down statuses, a browser challenge served in place of the
-     * API (the same markup the prober reports as blocked), or an unresolvable domain. A real answer
-     * marks the site as working this session, and a refusal of its keys takes that back.
+     * Sends one hop, retrying under [retry] when set, and records outages: down statuses, a browser
+     * challenge served in place of the API (the same markup the prober reports as blocked), or an
+     * unresolvable domain. A real answer marks the site as working this session, and a refusal of its
+     * keys takes that back.
      */
     private suspend fun sendTracked(url: String, send: suspend () -> SourceByteResponse): SourceByteResponse {
-        val tracker = outages ?: return send()
-        val response = try {
-            send()
-        } catch (error: IOException) {
-            tracker.recordFailure(url, error)
-            throw error
-        }
-        val kind = tracker.recordResponse(url, response.statusCode, response.headers)
-            ?: HostOutageKind.CHALLENGE.takeIf { response.toTextResponse().isVerificationChallenge() }
-                ?.also { tracker.record(url, it) }
-        if (kind != null) throw HostUnavailableException(HostOutageTracker.hostKey(url).orEmpty(), kind)
-        tracker.recordAnswer(url, response.statusCode)
-        return response
+        if (retry == null && outages == null) return send()
+        return executeWithRetry(
+            requestUrl = url,
+            policy = retry ?: SourceRetryPolicy(maxRetries = 0),
+            outages = outages,
+            extraOutage = { response ->
+                HostOutageKind.CHALLENGE.takeIf { response.toTextResponse().isVerificationChallenge() }
+            },
+            block = send,
+        )
     }
 
     private companion object {

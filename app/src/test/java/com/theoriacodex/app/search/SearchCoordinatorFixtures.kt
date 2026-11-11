@@ -25,6 +25,7 @@ internal fun testSearchCoordinator(
     computationDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.Default,
     seenTagScope: kotlinx.coroutines.CoroutineScope =
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + computationDispatcher),
+    postResolutions: com.theoriacodex.app.source.PostResolutionFlights = com.theoriacodex.app.source.PostResolutionFlights(),
 ): SearchCoordinator {
     return SearchCoordinator(
         registry = registry,
@@ -38,5 +39,6 @@ internal fun testSearchCoordinator(
         clock = clock,
         computationDispatcher = computationDispatcher,
         seenTagScope = seenTagScope,
+        postResolutions = postResolutions,
     )
 }

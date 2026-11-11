@@ -96,6 +96,14 @@ class PixivUgoiraClient internal constructor(
         result.isFailure || result.getOrThrow().isComplete
     }
 
+    /**
+     * Downloads and validates a post's archive into the bounded disk store ahead of playback, so playback only
+     * decodes. It joins an archive download already in flight (and playback joins this one); returns whether the
+     * archive is ready.
+     */
+    suspend fun warmArchive(postId: String): Boolean =
+        runCatchingPreservingCancellation { archiveFor(postId) }.isSuccess
+
     /** Share partial frames and completion; the final departing consumer cancels its work. */
     fun observeLoad(
         postId: String,

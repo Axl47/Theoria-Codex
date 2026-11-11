@@ -132,8 +132,9 @@ internal class NhentaiResolutionSourceAdapterTest : NhentaiSourceAdapterTestFixt
                 "https://i.nhentai.net/galleries/3821534/1.png",
                 "https://i.nhentai.net/galleries/3821534/1.gif",
             ),
-            post?.media?.get(0)?.progressiveUrls,
+            post?.media?.get(0)?.fallbackUrls,
         )
+        assertTrue(post?.media.orEmpty().all { it.progressiveUrls.isEmpty() })
         assertEquals("https://i.nhentai.net/galleries/3821534/3.webp", post?.media?.get(2)?.url)
         assertEquals("https://t.nhentai.net/galleries/3821534/1t.webp", post?.media?.get(0)?.thumbnailUrl)
         assertEquals(listOf("big breasts", "yomoda yomo", "english"), post?.canonicalTags)

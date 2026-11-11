@@ -24,21 +24,34 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
 /** The Viewer route's prefetcher: how far from the current media a prefetch may stay decoded is decided here. */
-internal fun viewerMediaPrefetcher(context: Context, videoQuality: () -> VideoQuality) =
-    ViewerMediaPrefetcher { _, media, distance ->
-        prefetchViewerMedia(context, media, videoQuality(), keepDecodedInMemory = distance <= VIEWER_MEMORY_PREFETCH_DISTANCE)
-    }
+internal fun viewerMediaPrefetcher(
+    context: Context,
+    ugoiraClient: PixivUgoiraClient? = null,
+    videoQuality: () -> VideoQuality,
+) = ViewerMediaPrefetcher { _, media, distance ->
+    prefetchViewerMedia(
+        context, media, videoQuality(),
+        keepDecodedInMemory = distance <= VIEWER_MEMORY_PREFETCH_DISTANCE,
+        ugoiraClient = ugoiraClient,
+    )
+}
 
 /**
  * Android transport/cache seam injected into the route owner; no platform handle enters state.
  * [keepDecodedInMemory] keeps a prefetched image in Coil's memory cache; otherwise only its disk copy is warmed.
+ * A Pixiv ugoira warms its archive through [ugoiraClient]; on a metered network only its still image is warmed.
  */
 internal suspend fun prefetchViewerMedia(
     context: Context,
     media: ViewerMediaState,
     videoQuality: VideoQuality,
     keepDecodedInMemory: Boolean = true,
+    ugoiraClient: PixivUgoiraClient? = null,
 ): ViewerPrefetchResult {
+    if (media.kind == ViewerMediaKind.UGOIRA && ugoiraClient != null && !context.isMediaNetworkMetered()) {
+        val ready = ugoiraClient.warmArchive(media.key.postId.sourcePostId)
+        return ViewerPrefetchResult(if (ready) ViewerPrefetchOutcome.WARMED else ViewerPrefetchOutcome.FAILED)
+    }
     if (media.kind == ViewerMediaKind.VIDEO) {
         val metered = context.isMediaNetworkMetered()
         return prefetchViewerVideoMedia(
@@ -56,6 +69,14 @@ internal suspend fun prefetchViewerMedia(
     if (media.kind == ViewerMediaKind.GIF && location.startsWith("http", ignoreCase = true)) {
         val bytes = warmRemoteViewerGif(context, media.key.postId.source, location)
         return ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED, bytes)
+    }
+    if (media.kind == ViewerMediaKind.IMAGE) {
+        // The page's small thumbnail lands first: it is what the page shows while its original downloads.
+        viewerPrefetchThumbnailLocation(media.ref, location)?.let { thumbnail ->
+            context.imageLoader.execute(
+                MediaRequestFactory.imageRequest(context, thumbnail, media.key.postId.source, crossfade = false).diskWarmOnly(),
+            )
+        }
     }
     val request = MediaRequestFactory.imageRequest(
         context = context,

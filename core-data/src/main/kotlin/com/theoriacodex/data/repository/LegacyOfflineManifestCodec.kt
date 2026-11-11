@@ -2,6 +2,7 @@ package com.theoriacodex.data.repository
 
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import com.theoriacodex.data.storage.withLegacyEquivalentCopies
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -29,9 +30,9 @@ internal fun decodeLegacyOfflinePost(element: JsonElement): Post? {
     val creatorProfile = root.field("creatorProfile", "m")?.asJsonObject?.toCreatorProfile()
     return Post(
         id = PostId(source, sourcePostId),
-        preview = preview.toImageRef(),
-        full = root.field("full", "c")?.asJsonObject?.toImageRef(),
-        media = root.objects("media", "d").map { it.toImageRef() },
+        preview = preview.toImageRef(source),
+        full = root.field("full", "c")?.asJsonObject?.toImageRef(source),
+        media = root.objects("media", "d").map { it.toImageRef(source) },
         pageUrl = root.field("pageUrl", "e")?.asString,
         width = root.field("width", "f")?.asInt,
         height = root.field("height", "g")?.asInt,
@@ -57,14 +58,14 @@ internal fun decodeLegacyOfflinePost(element: JsonElement): Post? {
     )
 }
 
-private fun JsonObject.toImageRef() = ImageRef(
+private fun JsonObject.toImageRef(source: SourceKey) = ImageRef(
     url = field("url", "a")?.asString,
     localPath = field("localPath", "b")?.asString,
     mime = field("mime", "c")?.asString,
     progressiveUrls = strings("progressiveUrls", "d"),
     isAnimated = field("isAnimated", "e")?.asBoolean ?: false,
     videoVariants = objects("videoVariants", "f").mapNotNull { it.toVideoVariant() },
-)
+).withLegacyEquivalentCopies(source)
 
 private fun JsonObject.toVideoVariant(): VideoVariant? {
     val url = field("url", "a")?.asString ?: return null

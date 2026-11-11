@@ -1,5 +1,6 @@
 package com.theoriacodex.app.viewer
 
+import com.theoriacodex.domain.model.PIXIV_UGOIRA_MIME
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.app.viewer.state.ViewerResolutionState
@@ -77,6 +78,17 @@ class ViewerPrefetchPlannerTest {
     }
 
     @Test
+    fun `ugoira archives are warmed only next to the current media`() {
+        val pages = pages(mediaCounts = listOf(1, 1, 1, 1, 1, 1, 1), ugoiraPosts = setOf(0, 2, 4, 6))
+        val flattened = pages.flatMap { page -> page.media.map { media -> media.key } }
+
+        assertEquals(
+            listOf(flattened[4], flattened[5], flattened[2], flattened[1]),
+            planAdjacentViewerPrefetch(pages, current = flattened[3]),
+        )
+    }
+
+    @Test
     fun `only images next to the current media are marked for decoding`() {
         val pages = pages(mediaCounts = listOf(4, 1, 1), videoPosts = setOf(1))
         val flattened = pages.flatMap { page -> page.media.map { media -> media.key } }
@@ -87,14 +99,23 @@ class ViewerPrefetchPlannerTest {
         assertEquals(setOf(flattened[2]), action.decodeKeys)
     }
 
-    private fun pages(mediaCounts: List<Int>, videoPosts: Set<Int> = emptySet()): List<ViewerPageState> {
+    private fun pages(
+        mediaCounts: List<Int>,
+        videoPosts: Set<Int> = emptySet(),
+        ugoiraPosts: Set<Int> = emptySet(),
+    ): List<ViewerPageState> {
         return mediaCounts.mapIndexed { postIndex, mediaCount ->
             val video = postIndex in videoPosts
+            val ugoira = postIndex in ugoiraPosts
             val media = (0 until mediaCount).map { mediaIndex ->
                 ImageRef(
                     url = "https://media.example/$postIndex-$mediaIndex." + if (video) "mp4" else "jpg",
                     localPath = null,
-                    mime = if (video) "video/mp4" else "image/jpeg",
+                    mime = when {
+                        video -> "video/mp4"
+                        ugoira -> PIXIV_UGOIRA_MIME
+                        else -> "image/jpeg"
+                    },
                 )
             }
             Post(

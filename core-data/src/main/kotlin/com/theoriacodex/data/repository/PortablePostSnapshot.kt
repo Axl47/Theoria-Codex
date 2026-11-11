@@ -29,6 +29,7 @@ private fun portableBackupImage(image: ImageRef): ImageRef = image.copy(
     localPath = null,
     thumbnailUrl = portableMediaUrl(image.thumbnailUrl),
     progressiveUrls = image.progressiveUrls.mapNotNull(::portableMediaUrl),
+    fallbackUrls = image.fallbackUrls.mapNotNull(::portableMediaUrl),
     videoVariants = image.videoVariants.mapNotNull { variant ->
         portableMediaUrl(variant.url)?.let { variant.copy(url = it) }
     },

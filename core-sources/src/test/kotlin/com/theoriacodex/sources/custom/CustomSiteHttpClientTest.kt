@@ -7,6 +7,7 @@ import com.theoriacodex.sources.http.SourceByteResponse
 import com.theoriacodex.sources.http.HostUnavailableException
 import com.theoriacodex.sources.http.HostOutageTracker
 import com.theoriacodex.sources.http.HostOutageKind
+import com.theoriacodex.sources.http.SourceRetryPolicy
 import com.theoriacodex.sources.http.executeHttpRequest
 import java.io.IOException
 import java.net.InetSocketAddress
@@ -153,5 +154,53 @@ class CustomSiteHttpClientTest {
         status = 401
         http.get("https://booru.example/index.php")
         assertTrue(tracker.working.value.isEmpty())
+    }
+
+    private fun retryingClient(tracker: HostOutageTracker? = null, retry: SourceRetryPolicy? = SourceRetryPolicy(), answer: (Int) -> SourceByteResponse) =
+        CustomSiteHttpClient(1_000, 1_000, 3, tracker, retry) { spec ->
+            requested += spec.url
+            answer(requested.size)
+        }
+
+    @Test
+    fun `a transient 503 is retried and the next answer wins`() = runTest {
+        val tracker = HostOutageTracker()
+        val http = retryingClient(tracker) { attempt ->
+            if (attempt == 1) SourceByteResponse(503, ByteArray(0)) else SourceByteResponse(200, "ok".toByteArray())
+        }
+
+        val response = http.get("https://booru.example/index.php")
+
+        assertEquals("ok", response.body)
+        assertEquals(2, requested.size)
+        assertTrue("the recovered request leaves no outage", tracker.outages.value.isEmpty())
+    }
+
+    @Test
+    fun `transport errors are retried and an exhausted retry surfaces the last one`() = runTest {
+        val http = retryingClient { throw IOException("reset") }
+
+        val failure = runCatching { http.get("https://booru.example/index.php") }.exceptionOrNull()
+
+        assertEquals("reset", (failure as IOException).message)
+        assertEquals(3, requested.size)
+    }
+
+    @Test
+    fun `a 503 that outlasts the retries marks the site down`() = runTest {
+        val http = retryingClient(HostOutageTracker()) { SourceByteResponse(503, ByteArray(0)) }
+
+        val failure = runCatching { http.get("https://booru.example/index.php") }.exceptionOrNull()
+
+        assertEquals(HostOutageKind.MAINTENANCE, (failure as HostUnavailableException).kind)
+        assertEquals(3, requested.size)
+    }
+
+    @Test
+    fun `a probe without a retry policy sees the first answer raw`() = runTest {
+        val http = retryingClient(retry = null) { SourceByteResponse(503, ByteArray(0)) }
+
+        assertEquals(503, http.get("https://booru.example/index.php").statusCode)
+        assertEquals(1, requested.size)
     }
 }

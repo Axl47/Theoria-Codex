@@ -24,6 +24,28 @@ class ViewerScreenImagePipelineTest {
     }
 
     @Test
+    fun `a gallery page shows its own thumbnail while it loads`() {
+        val cover = ImageRef("https://example.test/cover.jpg", null, "image/jpeg")
+        val first = ImageRef("https://example.test/first.jpg", null, "image/jpeg")
+        val second = ImageRef("https://example.test/second.jpg", null, "image/jpeg", thumbnailUrl = "https://example.test/second-t.jpg")
+        val post = samplePost(SourceKey.NHENTAI, cover, first, listOf(first, second))
+
+        assertEquals(second.thumbnailUrl, viewerLoadingPreviewLocation(post, second))
+        // The first page still shows the cover.
+        assertEquals(cover.url, viewerLoadingPreviewLocation(post, first))
+    }
+
+    @Test
+    fun `prefetch warms a remote page thumbnail only when it differs from the page`() {
+        val page = ImageRef("https://example.test/2.webp", null, "image/webp", thumbnailUrl = "https://example.test/2t.webp")
+
+        assertEquals("https://example.test/2t.webp", viewerPrefetchThumbnailLocation(page, page.url!!))
+        assertEquals(null, viewerPrefetchThumbnailLocation(page, "https://example.test/2t.webp"))
+        assertEquals(null, viewerPrefetchThumbnailLocation(page.copy(thumbnailUrl = null), page.url!!))
+        assertEquals(null, viewerPrefetchThumbnailLocation(page.copy(thumbnailUrl = "/saved/2t.webp"), page.url!!))
+    }
+
+    @Test
     fun `pixiv viewer candidates prefer progressive urls before canonical url`() {
         val media = ImageRef(
             url = "https://i.pximg.net/original.jpg",
@@ -68,7 +90,7 @@ class ViewerScreenImagePipelineTest {
             url = primary,
             localPath = null,
             mime = "image/webp",
-            progressiveUrls = listOf(primary, alternate),
+            fallbackUrls = listOf(primary, alternate),
         )
         val post = samplePost(
             sourceKey = SourceKey.HITOMI,
@@ -194,7 +216,7 @@ class ViewerScreenImagePipelineTest {
             url = "https://i.nhentai.net/galleries/3821534/1.webp",
             localPath = null,
             mime = "image/webp",
-            progressiveUrls = listOf(
+            fallbackUrls = listOf(
                 "https://i.nhentai.net/galleries/3821534/1.webp",
                 "https://i.nhentai.net/galleries/3821534/1.jpg",
                 "https://i.nhentai.net/galleries/3821534/1.png",
@@ -234,7 +256,7 @@ class ViewerScreenImagePipelineTest {
             url = "https://example.com/2.webp",
             localPath = null,
             mime = "image/webp",
-            progressiveUrls = listOf(
+            fallbackUrls = listOf(
                 "https://example.com/2.webp",
                 "https://example.com/2.avif",
             ),

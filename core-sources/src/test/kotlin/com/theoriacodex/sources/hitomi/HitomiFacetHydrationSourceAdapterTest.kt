@@ -124,7 +124,7 @@ internal class HitomiFacetHydrationSourceAdapterTest : HitomiSourceAdapterTestFi
             url = staleWebp.url,
             localPath = null,
             mime = staleWebp.mime,
-            progressiveUrls = staleCandidates.map(HitomiMediaCandidate::url),
+            fallbackUrls = staleCandidates.map(HitomiMediaCandidate::url),
         )
         val staleAvif = staleCandidates.first { candidate ->
             candidate.format == HitomiMediaFormat.AVIF && !candidate.isAlternateShard
@@ -147,17 +147,17 @@ internal class HitomiFacetHydrationSourceAdapterTest : HitomiSourceAdapterTestFi
         val adapter = HitomiSourceAdapter(httpClient = http, mediaUrlResolver = resolver)
 
         val recovered = requireNotNull(adapter.recoverPostMedia(post, staleRef))
-        val refreshedWebpUrls = recovered.preview.progressiveUrls.take(2)
+        val refreshedWebpUrls = recovered.preview.fallbackUrls.take(2)
         val secondRecovery = requireNotNull(adapter.recoverPostMedia(recovered, staleRef))
 
         assertTrue(refreshedWebpUrls[0].startsWith("https://w1.gold-usergeneratedcontent.net/1783689999/"))
         assertTrue(refreshedWebpUrls[1].startsWith("https://w2.gold-usergeneratedcontent.net/1783689999/"))
         assertTrue(recovered.full?.url.orEmpty().startsWith("https://a1.gold-usergeneratedcontent.net/1783689999/"))
         assertTrue(
-            recovered.full?.progressiveUrls?.getOrNull(1).orEmpty()
+            recovered.full?.fallbackUrls?.getOrNull(1).orEmpty()
                 .startsWith("https://a2.gold-usergeneratedcontent.net/1783689999/"),
         )
-        assertEquals(refreshedWebpUrls, secondRecovery.preview.progressiveUrls.take(2))
+        assertEquals(refreshedWebpUrls, secondRecovery.preview.fallbackUrls.take(2))
         assertEquals(
             2,
             http.textRequests.count { request ->
@@ -178,14 +178,15 @@ internal class HitomiFacetHydrationSourceAdapterTest : HitomiSourceAdapterTestFi
         val post = requireNotNull(adapter.resolvePost(PostId(SourceKey.HITOMI, "4042375")))
 
         assertTrue(post.preview.url.orEmpty().contains("tn.gold-usergeneratedcontent.net/webpbigtn/"))
-        assertTrue(post.preview.progressiveUrls.any { it.contains("/1783681201/") })
+        assertTrue(post.preview.fallbackUrls.any { it.contains("/1783681201/") })
+        assertEquals(emptyList<String>(), post.preview.progressiveUrls)
         assertTrue(post.media.all { it.thumbnailUrl.orEmpty().contains("tn.gold-usergeneratedcontent.net/webpsmalltn/") })
 
         http.textRoutes[HitomiMediaUrlResolver.GG_CONFIGURATION_URL] = config.replace("1783681201/", "1783689999/")
         val recovered = requireNotNull(adapter.recoverPostMedia(post, post.preview))
 
         assertEquals(post.preview.url, recovered.preview.url)
-        assertTrue(recovered.preview.progressiveUrls.any { it.contains("/1783689999/") })
+        assertTrue(recovered.preview.fallbackUrls.any { it.contains("/1783689999/") })
     }
 
     @Test
@@ -313,10 +314,11 @@ internal class HitomiFacetHydrationSourceAdapterTest : HitomiSourceAdapterTestFi
         assertEquals("image/webp", resolved.full?.mime)
         assertTrue(resolved.media.all { it.isAnimated })
         assertTrue(resolved.media.all { it.url?.contains("/webp/") == true })
+        assertTrue(resolved.media.all { it.progressiveUrls.isEmpty() })
         assertTrue(resolved.media.all { media ->
-            media.progressiveUrls.firstOrNull()?.contains("/webp/") == true &&
-                media.progressiveUrls.any { it.contains("/avif/") } &&
-                media.progressiveUrls.any { it.contains("/original/") }
+            media.fallbackUrls.firstOrNull()?.contains("/webp/") == true &&
+                media.fallbackUrls.any { it.contains("/avif/") } &&
+                media.fallbackUrls.any { it.contains("/original/") }
         })
         assertEquals(46, mediaCalls.get())
 

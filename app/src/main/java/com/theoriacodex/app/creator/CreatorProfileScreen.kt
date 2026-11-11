@@ -98,6 +98,7 @@ fun CreatorProfileScreen(
     onDurationPostVisibilityChanged: (Post, Boolean) -> Unit = { _, _ -> },
     onDurationEnvironmentChanged: (Boolean, Boolean) -> Unit = { _, _ -> },
     onAuthoritativeDurationKnown: (Post, Long) -> Unit = { _, _ -> },
+    resolvePostById: (suspend (PostId) -> Post?)? = null,
     onToggleLike: (Post) -> Unit,
     onAction: (CreatorAction) -> Unit,
     onRequestSaveToCodex: (Post) -> Unit,
@@ -125,7 +126,7 @@ fun CreatorProfileScreen(
     }
     val cards = rememberFeedCardEnvironment(
         pixivUgoiraClient, likedPostIds, feed.durationFilter.knownDurationMsByPostId, durationStateForPost,
-        onToggleLike, onDurationPostVisibilityChanged, onAuthoritativeDurationKnown,
+        onToggleLike, onDurationPostVisibilityChanged, onAuthoritativeDurationKnown, resolvePostById,
     )
     val filterScroll = rememberFeedScrollSignal()
     val clearFilters: () -> () -> Unit = { clearCreatorFilters(fabRestoreState, onFabRestoreStateChange) }

@@ -28,6 +28,8 @@ Close any T3 `agent-device` session before `am instrument`: its accessibility he
 
 *Maintainability:* Long term maintainability is a core priority. If you add new functionality, first check if there is shared logic that can be extracted to a separate module. Duplicate logic across multiple files is a code smell and should be avoided. Don't be afraid to change existing code. Don't take shortcuts by just adding local logic to solve a problem.
 
+*Cross-source parity:* Performance, preloading, network and smoothness optimizations live in shared code (media delivery, Viewer prefetch, HTTP client, player pool) and apply by default to every source that can supply what they need, Custom Sites included. Decide from what a post's media offers, not from lists of source names; a source that must opt out says why where it opts out. When an optimization needs work in one source (a smaller rendition, an early video URL), check every other source in the same change and either wire it up or record why it cannot benefit.
+
 ## ExecPlans
 
 For complex features or significant refactors, use an ExecPlan from design through implementation.

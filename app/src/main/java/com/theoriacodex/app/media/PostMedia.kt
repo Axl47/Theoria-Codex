@@ -1,5 +1,6 @@
 package com.theoriacodex.app.media
 
+import com.theoriacodex.app.source.presentation
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -118,6 +119,8 @@ fun postMediaItems(post: Post): List<ImageRef> {
  *
  * Feed cards render at most half the screen wide, so quality upgrades stop at the largest downscaled
  * rendition (Gelbooru sample, Pixiv large); originals stay failure fallbacks and are left to the Viewer.
+ * An original with no lighter rendition is the step up only when the post says it is small
+ * ([FEED_SMALL_ORIGINAL_MAX_EDGE_PX]), which is when boorus skip generating a sample.
  */
 fun previewMediaDeliveryPlan(post: Post): MediaDeliveryPlan {
     val animatedFull = post.full?.takeIf(::isAnimatedImageMediaRef)
@@ -133,15 +136,24 @@ fun previewMediaDeliveryPlan(post: Post): MediaDeliveryPlan {
     return mediaDeliveryPlan(
         post = post,
         refs = refs,
-        qualityUpgradeRefs = if (post.id.source.upgradesImageQuality()) {
-            refs.filterTo(linkedSetOf()) { ref -> ref != post.preview || ref == preferred }
-        } else {
+        qualityUpgradeRefs = if (post.id.source.presentation().cardsStayOnPreview) {
             emptySet()
+        } else {
+            refs.filterTo(linkedSetOf()) { ref -> ref != post.preview || ref == preferred }
         },
         preferredUrlFirst = preferred,
         animationUpgradeRef = animationUpgrade,
         nonUpgradeLocations = feedOriginalLocations(post),
+        upgradesToSmallOriginal = post.hasSmallOriginal(),
     )
+}
+
+/** Long-edge size up to which a card may load an original that has no lighter rendition. */
+internal const val FEED_SMALL_ORIGINAL_MAX_EDGE_PX = 1_280
+
+private fun Post.hasSmallOriginal(): Boolean {
+    val longEdge = maxOf(width ?: return false, height ?: return false)
+    return longEdge in 1..FEED_SMALL_ORIGINAL_MAX_EDGE_PX
 }
 
 /** Originals that have a smaller rendition; a feed card never downloads them just to downsample. */
@@ -160,12 +172,7 @@ fun viewerMediaDeliveryPlan(post: Post, media: ImageRef): MediaDeliveryPlan {
     return mediaDeliveryPlan(
         post = post,
         refs = listOf(media) + samePageFallbacks,
-        // rule34.xxx's cards stay on their preview, but its Viewer shows the sample first and then the original.
-        qualityUpgradeRefs = if (post.id.source.upgradesImageQuality() || post.id.source == SourceKey.RULE34XXX) {
-            setOf(media)
-        } else {
-            emptySet()
-        },
+        qualityUpgradeRefs = setOf(media),
         preferredUrlFirst = null,
     )
 }
@@ -177,6 +184,7 @@ private fun mediaDeliveryPlan(
     preferredUrlFirst: ImageRef?,
     animationUpgradeRef: ImageRef? = null,
     nonUpgradeLocations: Set<String> = emptySet(),
+    upgradesToSmallOriginal: Boolean = false,
 ): MediaDeliveryPlan {
     val seen = linkedSetOf<String>()
     val candidates = buildList {
@@ -185,7 +193,7 @@ private fun mediaDeliveryPlan(
             val normalizedRef = normalizedMediaRef(post, ref)
             val isAnimationUpgrade = ref == animationUpgradeRef
             val locations = imageLocations(normalizedRef, isAnimationUpgrade, urlFirst = ref == preferredUrlFirst)
-            locations.forEach locationsLoop@ { rawLocation ->
+            locations.forEach locationsLoop@ { (rawLocation, isFallbackCopy) ->
                 val location = normalizeMediaUrl(post.id.source, rawLocation)
                     ?.takeIf(String::isNotBlank)
                     ?: return@locationsLoop
@@ -196,6 +204,8 @@ private fun mediaDeliveryPlan(
                     isFirstCandidate = isEmpty(),
                     isAnimationUpgrade = isAnimationUpgrade,
                     isQualityUpgrade = ref in qualityUpgradeRefs &&
+                        !isFallbackCopy &&
+                        (normalizedRef.hasLighterRenditions() || upgradesToSmallOriginal) &&
                         normalizedRef.localPath.isNullOrBlank() &&
                         location !in nonUpgradeLocations,
                 )
@@ -224,28 +234,32 @@ private fun mediaDeliveryActivation(
     else -> MediaDeliveryActivation.FAILURE_FALLBACK
 }
 
-private fun imageLocations(ref: ImageRef, isAnimationUpgrade: Boolean, urlFirst: Boolean): List<String> =
+/** One place to load an image from; [isFallbackCopy] marks an equivalent copy that is only tried after a failure. */
+private data class ImageLocation(val location: String, val isFallbackCopy: Boolean = false)
+
+private fun imageLocations(ref: ImageRef, isAnimationUpgrade: Boolean, urlFirst: Boolean): List<ImageLocation> =
     if (isAnimationUpgrade) animatedImageLocations(ref) else orderedImageLocations(ref, urlFirst)
 
-private fun orderedImageLocations(ref: ImageRef, urlFirst: Boolean): List<String> = buildList {
-    ref.localPath?.takeIf(String::isNotBlank)?.let(::add)
-    if (urlFirst) {
-        ref.url?.takeIf(String::isNotBlank)?.let(::add)
-        addAll(ref.progressiveUrls.filter(String::isNotBlank))
-    } else {
-        addAll(ref.progressiveUrls.filter(String::isNotBlank))
-        ref.url?.takeIf(String::isNotBlank)?.let(::add)
-    }
+/** Lighter renditions, then the URL, then equivalent copies; [urlFirst] puts the URL ahead of the renditions. */
+private fun orderedImageLocations(ref: ImageRef, urlFirst: Boolean): List<ImageLocation> = buildList {
+    ref.localPath?.takeIf(String::isNotBlank)?.let { add(ImageLocation(it)) }
+    val renditions = ref.progressiveUrls.filter(String::isNotBlank).map(::ImageLocation)
+    val url = ref.url?.takeIf(String::isNotBlank)?.let { listOf(ImageLocation(it)) }.orEmpty()
+    addAll(if (urlFirst) url + renditions else renditions + url)
+    ref.fallbackUrls.filter(String::isNotBlank).mapTo(this) { ImageLocation(it, isFallbackCopy = true) }
 }
 
-/** The animated URL and its mirrors; a static sample must never replace a playing animation. */
-private fun animatedImageLocations(ref: ImageRef): List<String> = buildList {
-    ref.url?.takeIf(String::isNotBlank)?.let(::add)
-    ref.progressiveUrls
+/** The animated URL and its animated mirrors; a static sample must never replace a playing animation. */
+private fun animatedImageLocations(ref: ImageRef): List<ImageLocation> = buildList {
+    ref.url?.takeIf(String::isNotBlank)?.let { add(ImageLocation(it)) }
+    (ref.progressiveUrls + ref.fallbackUrls)
         .filter(String::isNotBlank)
         .filterNot { location -> location.fileExtension() in STATIC_IMAGE_EXTENSIONS }
-        .let(::addAll)
+        .mapTo(this, ::ImageLocation)
 }
+
+/** Only a ref with lighter renditions has a step up; a lone URL or equivalent copies are just the file. */
+private fun ImageRef.hasLighterRenditions(): Boolean = progressiveUrls.any(String::isNotBlank)
 
 private fun String.fileExtension(): String =
     substringBefore('?').substringBefore('#').trim().lowercase().substringAfterLast('.', "")
@@ -265,6 +279,7 @@ private fun normalizedMediaRef(post: Post, ref: ImageRef): ImageRef {
     return ref.copy(
         url = normalizeMediaUrl(post.id.source, ref.url),
         progressiveUrls = ref.progressiveUrls.mapNotNull { normalizeMediaUrl(post.id.source, it) },
+        fallbackUrls = ref.fallbackUrls.mapNotNull { normalizeMediaUrl(post.id.source, it) },
     )
 }
 
@@ -298,12 +313,3 @@ private fun ImageRef.bestLocation(): String? =
 
 private val IMAGE_EXTENSIONS = setOf("gif", "png", "webp", "jpg", "jpeg", "bmp", "heic", "heif", "avif")
 private val STATIC_IMAGE_EXTENSIONS = setOf("png", "jpg", "jpeg", "bmp")
-/** Custom sources are booru families, which serve a sample before the original like the built-in boorus. */
-private fun SourceKey.upgradesImageQuality(): Boolean = this in QUALITY_UPGRADE_IMAGE_SOURCES || isCustom
-
-private val QUALITY_UPGRADE_IMAGE_SOURCES = setOf(
-    SourceKey.PIXIV,
-    SourceKey.GELBOORU,
-    SourceKey.DANBOORU,
-    SourceKey.AIBOORU,
-)

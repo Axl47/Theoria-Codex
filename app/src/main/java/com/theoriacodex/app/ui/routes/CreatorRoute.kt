@@ -167,6 +167,7 @@ private fun CreatorRouteContent(
         onDurationPostVisibilityChanged = duration.owner::onPostVisibilityChanged,
         onDurationEnvironmentChanged = duration.owner::onEnvironmentChanged,
         onAuthoritativeDurationKnown = duration.owner::publishPlayerDuration,
+        resolvePostById = owner::resolvePost,
         onToggleLike = callbacks.onToggleLike,
         onAction = owner::onAction,
         onRequestSaveToCodex = callbacks.onRequestSaveToCodex,
