@@ -38,7 +38,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.MainActivity
-import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerUiState
@@ -158,9 +157,9 @@ private fun ViewerLoadedScreen(
     val viewerTransform = remember(uiState.session?.value, uiState.currentMedia?.key) { mutableStateOf(ViewerTransformState()) }
     val selection = rememberViewerSelection(uiState, posts[navigation.currentIndex], pixivUgoiraClient != null)
     WarmViewerPageThumbnails(selection.post.id, selection.overviewItems, selection.mediaIndex)
-    val levelControls = rememberViewerLevelControls(
-        enabled = !inPictureInPicture && selection.media?.let(::isVideoMediaRef) == true && !uiState.overview.visible,
-    )
+    // Brightness holds across every kind of media and the overview; only PiP hands it back to the system.
+    val levelControls = rememberViewerLevelControls(enabled = !inPictureInPicture)
+    val holdScrub = remember { ViewerHoldScrub() }
     val touchExplorationEnabled = rememberViewerTouchExploration()
     val chromeVisible = viewerChromeVisible(uiState, touchExplorationEnabled, inPictureInPicture, returning, opening, dismissDrag)
     val chromeStage = rememberViewerChromeStage(chromeVisible)
@@ -179,6 +178,7 @@ private fun ViewerLoadedScreen(
     CompositionLocalProvider(
         LocalViewerPostStripInset provides if (chromeVisible && !frame.mediaOverviewVisible) VIEWER_POST_STRIP_HEIGHT else 0.dp,
         LocalViewerAccent provides viewerAccent,
+        LocalViewerHoldScrub provides holdScrub,
     ) {
         ViewerBackdrop(returnProgress, dismissDrag) {
             if (frame.mediaOverviewVisible && selection.overviewAvailable) {
