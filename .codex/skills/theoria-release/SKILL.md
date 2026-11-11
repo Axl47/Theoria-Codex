@@ -62,7 +62,7 @@ Change nothing yet.
 4. Run `python3 scripts/release_gate.py`. Fix any problem it reports.
 5. Commit only those release files as `chore(release): prepare vX.Y.Z` and push the commit straight to `main`. A release commit needs no PR.
 6. Run `gh workflow run release.yml --ref main`, find the new run, and confirm its `headSha` is that commit.
-7. Monitor the run to completion. It reuses the recorded check when the code is unchanged, otherwise runs the full check, alongside emulator acceptance on Android 16 and 17 and the signed build. It creates the tag and publishes only if all of it passes.
+7. Monitor the run to completion. Every push to `main` is already proven by the Main workflow: the pre-PR check, the R8 release builds, and emulator tests on Android 16 and 17, each recorded when it passes. Release accepts those results (a release-only commit reuses its parent's) and just signs, builds, and publishes, in about 6 minutes. Any result still missing, for example because Main is still running, runs inside the Release itself, so expect about 15 minutes then. It creates the tag and publishes only if all of it passes.
 8. Confirm the prerelease exists, is not a draft, uses the expected tag and notes, and contains `theoria-codex-main.apk`.
 
 ## When The Run Fails
@@ -70,4 +70,4 @@ Change nothing yet.
 No tag exists until the run succeeds, so a failure never uses up the version.
 
 - **Emulator or runner trouble** (emulator offline or failing to boot, a failed SDK download): run `gh run rerun <run-id> --failed` once. Jobs that passed are kept.
-- **A real failure** (a failing test, or a release acceptance error): fix it through a PR, then dispatch Release again on the new `main` with the same version and notes.
+- **A real failure** (a failing test, or a release acceptance error): fix it through a PR, then dispatch Release again on the new `main` with the same version and notes. The fix's Main run proves it; dispatching before that finishes is fine, the missing pieces just run inside the Release.
