@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.MainActivity
+import com.theoriacodex.app.comments.ViewerComments
 import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.viewer.state.ViewerAction
@@ -78,6 +79,7 @@ internal fun ViewerScreen(
     onIncludeRelatedPosts: () -> Unit = {},
     onDismissRelatedPosts: () -> Unit = {},
     onRetryRelatedPosts: () -> Unit = {},
+    comments: ViewerComments = ViewerComments.None,
 ) {
     val returnProgress = rememberViewerReturnProgress()
     val returning = LocalViewerReturnTransition.current?.request != null
@@ -102,7 +104,7 @@ internal fun ViewerScreen(
         fetchTagVideoCounts, canLoadMoreFromSource, loadingMoreFromSource, invertMultiImageScrollDirection, likedPostIds,
         onRequestMediaRecovery, onVisiblePostChanged, onVisibleMediaChanged, onAuthoritativeDurationKnown, onOpenInBrowser,
         onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, onGoToSearch, onOpenCreatorFallback,
-        playbackDiagnosticsEnabled, onIncludeRelatedPosts, onDismissRelatedPosts, onRetryRelatedPosts,
+        playbackDiagnosticsEnabled, onIncludeRelatedPosts, onDismissRelatedPosts, onRetryRelatedPosts, comments,
     )
 }
 
@@ -145,6 +147,7 @@ private fun ViewerLoadedScreen(
     onIncludeRelatedPosts: () -> Unit,
     onDismissRelatedPosts: () -> Unit,
     onRetryRelatedPosts: () -> Unit,
+    comments: ViewerComments,
 ) {
     val readReturnProgress = remember(returnProgress) { { returnProgress.value } }
     val inPictureInPicture = activity?.viewerPictureInPictureActive == true
@@ -191,7 +194,7 @@ private fun ViewerLoadedScreen(
             }
             ViewerChromeOverlays(
                 frame, postPagerState, screen, controls, swipe, activity, quality, qualityHeight, pendingPostId, likedPostIds,
-                invertMultiImageScrollDirection, onAction, loadMoreFromStrip, onIncludeRelatedPosts, onDismissRelatedPosts, onRetryRelatedPosts,
+                invertMultiImageScrollDirection, onAction, loadMoreFromStrip, onIncludeRelatedPosts, onDismissRelatedPosts, onRetryRelatedPosts, comments,
             )
         }
     }
@@ -200,6 +203,7 @@ private fun ViewerLoadedScreen(
             selection, controls, creatorBrowsingSources, saveToCodexQuery, tagVideoCountProvider, fetchTagVideoCounts,
             onAction, onOpenInBrowser, onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, onGoToSearch, onOpenCreatorFallback,
             liked = selection.post.id in likedPostIds,
+            comments = comments,
         )
     }
 }

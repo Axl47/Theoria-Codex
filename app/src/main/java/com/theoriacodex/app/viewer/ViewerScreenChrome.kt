@@ -50,6 +50,11 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.MainActivity
 import com.theoriacodex.app.codex.PreloadCodexSaveRelevance
+import com.theoriacodex.app.comments.CommentCount
+import com.theoriacodex.app.comments.ViewerComments
+import com.theoriacodex.app.comments.commentsSection
+import com.theoriacodex.app.tags.PostTagSheetExtras
+import androidx.compose.runtime.DisposableEffect
 import com.theoriacodex.app.creator.CreatorProfileAction
 import com.theoriacodex.app.creator.creatorProfileActions
 import com.theoriacodex.app.source.displayName
@@ -85,6 +90,7 @@ internal fun BoxScope.ViewerChromeOverlays(
     onIncludeRelatedPosts: () -> Unit,
     onDismissRelatedPosts: () -> Unit,
     onRetryRelatedPosts: () -> Unit,
+    comments: ViewerComments,
 ) {
     val selection = frame.selection
     val navigation = frame.navigation
@@ -125,7 +131,7 @@ internal fun BoxScope.ViewerChromeOverlays(
         }
     }
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_TOP_BAR, Modifier.align(Alignment.TopCenter).then(fadesWhileScrubbing)) {
-        ViewerTopBar(frame, controls, activity, quality, qualityHeight, selection.post.id in likedPostIds, onAction)
+        ViewerTopBar(frame, controls, activity, quality, qualityHeight, selection.post.id in likedPostIds, comments.countOf(selection.post), onAction)
     }
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_STRIPS && !frame.mediaOverviewVisible, Modifier.align(Alignment.TopEnd).padding(top = 72.dp).then(fadesWhileScrubbing)) {
         ViewerRelatedStrip(
@@ -154,6 +160,7 @@ private fun ViewerTopBar(
     quality: MutableState<com.theoriacodex.domain.model.VideoQuality>,
     qualityHeight: MutableState<Int?>,
     liked: Boolean,
+    commentCount: CommentCount?,
     onAction: (ViewerAction) -> Unit,
 ) {
     val uiState = frame.uiState
@@ -208,12 +215,17 @@ private fun ViewerTopBar(
                 controls.markInteraction()
             }
         },
-        onInfo = {
-            controls.setActionsMenuExpanded(false)
-            controls.setInfoSheetVisible(true)
-            controls.markInteraction()
-        },
+        onInfo = { controls.showInfoSheet(atComments = false) },
+        commentCount = commentCount,
+        onComments = { controls.showInfoSheet(atComments = true) },
     )
+}
+
+/** Opens the info sheet from the top bar, at its top or scrolled to the comments. */
+private fun ViewerControls.showInfoSheet(atComments: Boolean) {
+    setActionsMenuExpanded(false)
+    if (atComments) openInfoSheetAtComments() else setInfoSheetVisible(true)
+    markInteraction()
 }
 
 @Composable
@@ -232,10 +244,18 @@ internal fun ViewerInfoSheet(
     onGoToSearch: () -> Unit,
     onOpenCreatorFallback: ((Post) -> Unit)?,
     liked: Boolean = false,
+    comments: ViewerComments = ViewerComments.None,
 ) {
     val post = selection.post
     val searchActions = LocalPostTagSearchActions.current
     PreloadCodexSaveRelevance(post, saveToCodexQuery)
+    // Both settle as the sheet opens: whatever opened it, and whether the post has comments then. Neither moves later.
+    val openedAtComments = remember(post.id) { controls.infoSheetTarget == InfoSheetTarget.Comments }
+    val tagsStartCollapsed = remember(post.id) { comments.countOf(post) != null }
+    DisposableEffect(Unit) { onDispose { controls.resetInfoSheetTarget() } }
+    val commentsState = comments.stateOf(post)
+    val commentCount = comments.countOf(post)
+    val nowEpochMs = remember { System.currentTimeMillis() }
     AdaptiveViewerInfo(onDismiss = { controls.setInfoSheetVisible(false) }) {
         PostTagActionSection(
             header = {
@@ -261,6 +281,11 @@ internal fun ViewerInfoSheet(
                 onGoToSearch()
                 controls.setInfoSheetVisible(false)
             },
+            sheetExtras = PostTagSheetExtras(
+                tagsInitiallyCollapsed = tagsStartCollapsed,
+                scrollToAfterTags = openedAtComments,
+                afterTags = { commentsState?.let { commentsSection(post, it, commentCount, comments.actions, nowEpochMs) } },
+            ),
         )
     }
 }

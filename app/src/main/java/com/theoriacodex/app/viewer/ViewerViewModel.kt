@@ -7,6 +7,10 @@ import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.theoriacodex.app.comments.CommentsLoading
+import com.theoriacodex.app.comments.PostCommentsController
+import com.theoriacodex.app.comments.keepingCommentHintOf
+import com.theoriacodex.app.comments.UnsupportedCommentsLoader
 import com.theoriacodex.app.ui.state.AppRouteSavedStateKeys
 import com.theoriacodex.app.ui.state.RouteStateOwner
 import com.theoriacodex.app.viewer.state.ViewerAction
@@ -65,6 +69,7 @@ internal class ViewerViewModel(
     private val mediaPrefetcher: ViewerMediaPrefetcher? = null,
     scopeOverride: CoroutineScope? = null,
     private val playbackModeProvider: (() -> com.theoriacodex.app.viewer.state.ViewerPlaybackMode)? = null,
+    commentsLoader: CommentsLoading = UnsupportedCommentsLoader,
 ) : ViewModel(), RouteStateOwner<ViewerUiState, ViewerAction, ViewerEffect> {
     private val lock = Any()
     private val workScope = scopeOverride ?: viewModelScope
@@ -83,6 +88,9 @@ internal class ViewerViewModel(
     override val effects: Flow<ViewerEffect> = effectChannel.receiveAsFlow()
     private val mutableSession = MutableStateFlow<ViewerSession?>(null)
     val session: StateFlow<ViewerSession?> = mutableSession.asStateFlow()
+
+    /** Each shown post's comments; the current post's first page loads once its media is up (see [awaitFirstMediaShown]). */
+    val comments = PostCommentsController(commentsLoader, workScope, beforeFirstFetch = ::awaitFirstMediaShown)
 
     /** Compact identity awaiting a process-restoration payload, or null for a live/empty session. */
     val pendingRestoration: ViewerSessionIdentity?
@@ -129,7 +137,10 @@ internal class ViewerViewModel(
         }
         reduction.effects.forEach(::handleEffect)
         if (action is ViewerAction.SelectPage || action is ViewerAction.ReplaceSession ||
-            action is ViewerAction.PlaybackCompleted) reconcileResolutionLookahead()
+            action is ViewerAction.PlaybackCompleted) {
+            reconcileResolutionLookahead()
+            state.value.currentPage?.post?.let(comments::show)
+        }
     }
 
     /** A replacement cancels the old session's work; a new session also waits again for its first media. */
@@ -137,6 +148,7 @@ internal class ViewerViewModel(
         if (action.session != mutableState.value.session) {
             recordedVisiblePosts.clear()
             firstMediaShown.value = false
+            comments.reset()
         }
         cancelSessionJobs()
     }
@@ -168,10 +180,11 @@ internal class ViewerViewModel(
         if (currentMediaIndex > 0) onAction(ViewerAction.SelectMedia(currentMediaIndex))
     }
 
-    fun applyResolvedPost(post: Post) {
+    fun applyResolvedPost(resolved: Post) {
         val current = mutableSession.value ?: return
-        val index = current.posts.indexOfFirst { candidate -> candidate.id == post.id }
+        val index = current.posts.indexOfFirst { candidate -> candidate.id == resolved.id }
         if (index < 0) return
+        val post = resolved.keepingCommentHintOf(current.posts[index])
         sessionJobs.keys.filterIsInstance<ViewerWorkKey.Prefetch>().filter { it.mediaKey.postId == post.id }
             .forEach { key -> sessionJobs.remove(key)?.cancel() }
         mutableSession.value = current.copy(
@@ -221,6 +234,7 @@ internal class ViewerViewModel(
             cancelSessionJobs()
             recordedVisiblePosts.clear()
             firstMediaShown.value = false
+            comments.reset()
             mutableSession.value = null
             mutableState.value = if (retainPresentation) ViewerUiState(
                 pages = mutableState.value.pages,
@@ -486,6 +500,7 @@ internal class ViewerViewModel(
             postResolver: ViewerPostResolver? = null,
             mediaPrefetcher: ViewerMediaPrefetcher? = null,
             playbackModeProvider: (() -> com.theoriacodex.app.viewer.state.ViewerPlaybackMode)? = null,
+            commentsLoader: CommentsLoading = UnsupportedCommentsLoader,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 ViewerViewModel(
@@ -493,6 +508,7 @@ internal class ViewerViewModel(
                     postResolver = postResolver,
                     mediaPrefetcher = mediaPrefetcher,
                     playbackModeProvider = playbackModeProvider,
+                    commentsLoader = commentsLoader,
                 )
             }
         }
