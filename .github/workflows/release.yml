@@ -129,7 +129,7 @@ jobs:
           name: signed-release-apk
 
       - name: Create the tag and publish
-        uses: softprops/action-gh-release@v3.0.3
+        uses: softprops/action-gh-release@v3.0.4
         with:
           tag_name: ${{ needs.gate.outputs.tag }}
           target_commitish: ${{ github.sha }}
