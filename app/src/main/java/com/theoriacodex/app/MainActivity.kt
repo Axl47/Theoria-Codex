@@ -12,6 +12,7 @@ import androidx.core.net.toUri
 import com.theoriacodex.app.ui.TheoriaApp
 import com.theoriacodex.app.viewer.ViewerAutoPictureInPicture
 
+// Measurement only: shifts line numbers like a small code change would.
 class MainActivity : ComponentActivity() {
     var viewerPictureInPictureActive by mutableStateOf(false)
         private set
