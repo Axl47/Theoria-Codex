@@ -131,6 +131,17 @@ class MediaTimelineBarTest {
         compose.runOnIdle { assertEquals(listOf(35_000L), seeks) }
     }
 
+    @Test fun `a hold scrub released before the timeline saw it dragging still seeks to the final offset`() {
+        showTimeline()
+        val width = track().fetchSemanticsNode().size.width
+        compose.runOnIdle {
+            holdScrub.drag(width * 0.1f)
+            holdScrub.drag(width * 0.25f)
+            holdScrub.end(released = true)
+        }
+        compose.runOnIdle { assertEquals(listOf(35_000L), seeks) }
+    }
+
     private fun showTimeline(instantSeek: Boolean = false) {
         compose.setContent {
             MaterialTheme {

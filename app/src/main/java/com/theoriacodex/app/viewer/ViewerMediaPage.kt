@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableIntStateOf
@@ -102,6 +103,8 @@ internal fun ViewerMediaPage(
     val animated = viewerMediaIsAnimated(post, media, pixivUgoiraClient != null)
     val interactions = remember(key) { ViewerMediaInteractions() }
     val holdScrub = LocalViewerHoldScrub.current?.takeIf { controls.isActive }
+    // A page that goes inactive or leaves mid-hold (NEXT mode advancing) never sees the release.
+    DisposableEffect(holdScrub) { onDispose { holdScrub?.holding = false } }
     // The transform changes every pinch event, so it is read only while drawing, never in composition.
     val transformModifier = remember(transform) {
         Modifier.graphicsLayer {

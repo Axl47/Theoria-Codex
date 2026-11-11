@@ -21,7 +21,8 @@ internal class ViewerHoldScrub {
     fun drag(offsetPx: Float) { phase = ViewerHoldScrubPhase.Dragging(offsetPx) }
 
     fun end(released: Boolean) {
-        if (phase is ViewerHoldScrubPhase.Dragging) phase = ViewerHoldScrubPhase.Ended(released)
+        val dragging = phase as? ViewerHoldScrubPhase.Dragging ?: return
+        phase = ViewerHoldScrubPhase.Ended(released, dragging.offsetPx)
     }
 }
 
@@ -29,8 +30,11 @@ internal sealed interface ViewerHoldScrubPhase {
     data object Idle : ViewerHoldScrubPhase
     /** The finger is [offsetPx] from where the drag began; the handle moves the same distance. */
     data class Dragging(val offsetPx: Float) : ViewerHoldScrubPhase
-    /** A released drag seeks; a cancelled one leaves playback where it was. */
-    data class Ended(val released: Boolean) : ViewerHoldScrubPhase
+    /**
+     * A released drag seeks to [offsetPx], the finger's last distance, so a drag that ended before the
+     * timeline saw any [Dragging] state still lands; a cancelled one leaves playback where it was.
+     */
+    data class Ended(val released: Boolean, val offsetPx: Float) : ViewerHoldScrubPhase
 }
 
 /** The active page's hold scrub; null on other pages and outside the Viewer. */
