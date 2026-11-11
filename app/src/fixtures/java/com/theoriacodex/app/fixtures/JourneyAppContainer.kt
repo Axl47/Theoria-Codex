@@ -28,6 +28,7 @@ import com.theoriacodex.app.media.OfflineAwareCacheRepository
 import com.theoriacodex.app.media.OfflineMediaCoordinator
 import com.theoriacodex.app.media.validateOfflineMediaFile
 import com.theoriacodex.app.recommend.ForYouCoordinator
+import com.theoriacodex.app.comments.CommentsLoader
 import com.theoriacodex.app.related.RelatedPostsLoader
 import com.theoriacodex.app.search.FileBackedTagSuggestionStore
 import com.theoriacodex.app.search.SearchCoordinator
@@ -142,6 +143,7 @@ class JourneyAppContainer(
         forYou = ForYouCoordinator(registry, settings, content, data.recentsRepository,
             statisticsRepository = statistics, tagSuggestionStore = tags),
         relatedPosts = RelatedPostsLoader(registry),
+        comments = CommentsLoader(registry),
         creatorProfile = CreatorProfileCoordinator(registry),
         mediaDurationCoordinator = MediaDurationCoordinator(
             acquirer = MediaDurationAcquisitionEngine(registry, BoundedMediaDurationProbe(httpClient)),
