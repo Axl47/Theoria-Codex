@@ -28,7 +28,7 @@ concurrency:
 
 jobs:
   connected-tests:
-    name: Connected tests (API ${{ matrix.api-level }})
+    name: Connected tests (API ${{ matrix.api-level }}, part ${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -38,6 +38,9 @@ jobs:
         # Latest and previous stable Android releases; keep aligned with androidMinSdk.
         # Android 17 packages use the literal 37.0 coordinate in the SDK catalog.
         api-level: ["36", "37.0"]
+        # Each API level's tests are split across two runners, which roughly halves the slowest job.
+        # The total of 2 is repeated in the job name and DEVICE_TEST_SHARD below.
+        shard: [1, 2]
 
     steps:
       - name: Checkout
@@ -75,11 +78,15 @@ jobs:
 
       - name: Run connected device tests
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          DEVICE_TEST_SHARD: ${{ matrix.shard }}/2
         with:
           api-level: ${{ matrix.api-level }}
           target: google_apis
           arch: x86_64
           profile: pixel_6
+          # Hosted runners have 4 vCPUs; the action's default gives the emulator only 2.
+          cores: 4
           # Android 17's default data partition leaves too little room for the app/test APKs.
           disk-size: 6G
           ram-size: 4096M
@@ -97,7 +104,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: connected-tests-api-${{ matrix.api-level }}
+          name: connected-tests-api-${{ matrix.api-level }}-part-${{ matrix.shard }}
           path: |
             build/reports/ci-emulator/
             build/reports/device-preflight/
@@ -167,6 +174,8 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_6
+          # Hosted runners have 4 vCPUs; the action's default gives the emulator only 2.
+          cores: 4
           disk-size: 6G
           ram-size: 4096M
           disable-animations: true
