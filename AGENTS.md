@@ -74,5 +74,6 @@ Keep `AGENTS.md` limited to durable product intent, safety boundaries, and accep
 
 - Builds, mocks, and host tests do not establish live provider authentication, hardware playback, PiP, or TalkBack behavior. Performance acceptance requires physical-device measurements, simultaneous-autoplay coverage, and retained complete iteration evidence. Calibration requires three complete runs of the same APK under matching conditions.
 - Use `.codex/skills/theoria-release/SKILL.md` for releases. Approving the version and release notes authorizes the agent to commit the release files straight to `main`, run the Release workflow, and publish.
-- There are two gates: the pre-PR check, and the Release workflow. Release runs emulator acceptance, and creates the tag only after everything passes.
-- Emulator tests do not run on PRs. For a risky change, such as a database migration, navigation, or playback, also run `gh workflow run device-validation.yml --ref <branch>`.
+- Results are recorded per code, not per commit: the pre-PR check (`scripts/check.sh --record`, or Verify on the PR), the R8 release part, and the emulator tests on Android 16 and 17. PRs run only the pre-PR check, skip it when it is already recorded, and only read caches.
+- Every push to `main` runs all three in the Main workflow, even when the pre-PR check is recorded, and is the only run that saves caches. Release only promotes: it requires all three results for the commit, runs any missing one itself rather than failing, and creates the tag only after everything passes.
+- Emulator tests do not run on PRs. For a risky change, such as a database migration, navigation, or playback, also run `gh workflow run device-validation.yml --ref <branch>`; branch runs never record a result.
