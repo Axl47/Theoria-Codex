@@ -135,31 +135,45 @@ private fun FollowHoldScrub(scrub: TimelineScrubState, durationMs: Long, instant
     val instant by rememberUpdatedState(instantSeek)
     val position by rememberUpdatedState(positionMs)
     LaunchedEffect(holdScrub, scrub) {
-        // The handle's x when this drag took hold; null until then, and again once it ends.
-        var originX: Float? = null
-        // Snapshot state conflates updates, so a quick release can arrive without a Dragging state before it.
-        fun follow(offsetPx: Float) {
-            // A timeline that just appeared has not measured its track yet; the next move begins it.
-            if (originX == null && scrub.widthPx > 1f) {
-                val start = position().coerceIn(0L, duration)
-                scrub.begin(start)
-                originX = start.toFloat() / duration * scrub.widthPx
-            }
-            originX?.let { scrub.moveTo(it + offsetPx, duration, instant) }
-        }
+        val follower = HoldScrubFollower(scrub, { duration }, { instant }, { position() })
+        // The shared state keeps its last Ended; one that predates this timeline belongs to an earlier gesture.
+        val staleEnd = holdScrub.phase as? ViewerHoldScrubPhase.Ended
         snapshotFlow { holdScrub.phase }.collect { phase ->
             when (phase) {
-                is ViewerHoldScrubPhase.Dragging -> follow(phase.offsetPx)
-                is ViewerHoldScrubPhase.Ended -> {
-                    follow(phase.offsetPx)
-                    if (originX != null) {
-                        originX = null
-                        scrub.end(phase.released)
-                    }
-                }
+                is ViewerHoldScrubPhase.Dragging -> follower.follow(phase.offsetPx)
+                is ViewerHoldScrubPhase.Ended -> if (phase !== staleEnd) follower.finish(phase)
                 ViewerHoldScrubPhase.Idle -> Unit
             }
         }
+    }
+}
+
+/** Moves [scrub] by a held drag's distance from the handle's position when the drag took hold. */
+private class HoldScrubFollower(
+    private val scrub: TimelineScrubState,
+    private val duration: () -> Long,
+    private val instant: () -> Boolean,
+    private val position: () -> Long,
+) {
+    /** The handle's x when this drag took hold; null until then, and again once it ends. */
+    private var originX: Float? = null
+
+    fun follow(offsetPx: Float) {
+        // A timeline that just appeared has not measured its track yet; the next move begins it.
+        if (originX == null && scrub.widthPx > 1f) {
+            val start = position().coerceIn(0L, duration())
+            scrub.begin(start)
+            originX = start.toFloat() / duration() * scrub.widthPx
+        }
+        originX?.let { scrub.moveTo(it + offsetPx, duration(), instant()) }
+    }
+
+    /** Snapshot state conflates updates, so a quick release can arrive without a Dragging state before it. */
+    fun finish(ended: ViewerHoldScrubPhase.Ended) {
+        follow(ended.offsetPx)
+        if (originX == null) return
+        originX = null
+        scrub.end(ended.released)
     }
 }
 

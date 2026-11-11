@@ -20,6 +20,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -140,6 +141,13 @@ class MediaTimelineBarTest {
             holdScrub.end(released = true)
         }
         compose.runOnIdle { assertEquals(listOf(35_000L), seeks) }
+    }
+
+    @Test fun `a hold scrub that ended before the timeline appeared is not replayed`() {
+        holdScrub.drag(10f)
+        holdScrub.end(released = true)
+        showTimeline()
+        compose.runOnIdle { assertTrue(seeks.isEmpty()); assertFalse(dragging) }
     }
 
     private fun showTimeline(instantSeek: Boolean = false) {
