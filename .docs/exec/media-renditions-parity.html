@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Media renditions parity</title>
+<style>
+:root{color-scheme:light dark;--bg:#f7f7f4;--surface:#fff;--text:#202124;--muted:#5f6368;--border:#d7d7d0;--accent:#0f766e;--risk:#9a3412}
+@media (prefers-color-scheme:dark){:root{--bg:#151716;--surface:#202321;--text:#f0f2ef;--muted:#b8beb7;--border:#3a403c;--accent:#5eead4;--risk:#fdba74}}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 system-ui,sans-serif}
+header,main{max-width:960px;margin:0 auto;padding:16px}
+nav{position:sticky;top:0;background:var(--surface);border-bottom:1px solid var(--border);padding:8px 16px;font-size:13px}
+nav a{margin-right:12px;color:var(--accent)}
+section{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin:12px 0}
+table{border-collapse:collapse;width:100%;font-size:14px}td,th{border:1px solid var(--border);padding:4px 8px;text-align:left;vertical-align:top}
+code{font-size:13px}.risk{color:var(--risk)}
+</style>
+</head>
+<body>
+<header><h1>Media renditions parity</h1><p>Status: <b>in progress</b> · Owner: Claude (orchestrator), Sonnet subagent (implementation) · Started 2026-11-11. Covers audit findings A3 and A4 from the cross-source performance parity audit.</p></header>
+<nav><a href="#purpose">Purpose</a><a href="#status">Status</a><a href="#context">Context</a><a href="#phases">Phases</a><a href="#work">Work plan</a><a href="#validation">Validation</a><a href="#log">Living log</a><a href="#recovery">Recovery</a></nav>
+<main>
+<section id="purpose"><h2>Purpose / Big Picture</h2>
+<p>"Show a lighter image first, then the original" is today switched on per source by a hand-kept list in <code>app/src/main/java/com/theoriacodex/app/media/PostMedia.kt</code> (<code>QUALITY_UPGRADE_IMAGE_SOURCES</code>, plus a separate rule34.xxx special case). The list exists because <code>ImageRef.progressiveUrls</code> means two different things: on Pixiv and the boorus it holds <em>lighter renditions</em> (samples); on nhentai and Hitomi it holds <em>equivalent copies</em> of the same full-size file (mirrors, other formats, other CDN shards). Shared code cannot tell them apart, so every new source starts without the optimization and parity drifts.</p>
+<p>After this plan: an <code>ImageRef</code> says which URLs are lighter renditions and which are equivalent copies. The Viewer upgrades from a lighter rendition to the original for <b>any</b> source whose media offers one; feed cards upgrade up to the largest lighter rendition for any source unless that source explicitly opts out with a stated reason. Gallery pages (nhentai, Hitomi) show their small page thumbnail while the original loads, and Viewer neighbor prefetch warms those thumbnails first.</p></section>
+
+<section id="status"><h2>Current Status</h2><p>In progress. Next action: Phase 1 (domain field and persistence).</p></section>
+
+<section id="context"><h2>Context And Orientation</h2>
+<table>
+<tr><th>Term</th><th>Meaning</th></tr>
+<tr><td>ImageRef</td><td><code>core-domain/src/main/kotlin/com/theoriacodex/domain/model/Post.kt</code>. One media location: <code>url</code>, <code>localPath</code>, <code>mime</code>, <code>progressiveUrls</code>, <code>thumbnailUrl</code> (small stand-in for choosing a page), <code>videoVariants</code>.</td></tr>
+<tr><td>Lighter rendition</td><td>A smaller version of the same picture (booru <code>sample_url</code>, Danbooru <code>large_file_url</code>, Pixiv medium/large). Safe to show first and then replace with the original.</td></tr>
+<tr><td>Equivalent copy</td><td>The same full-size file at another address or format (nhentai mirror hosts and extensions, Hitomi webp/avif/original and alternate shards). Only worth trying when the primary fails.</td></tr>
+<tr><td>Media delivery plan</td><td><code>mediaDeliveryPlan</code> in <code>PostMedia.kt</code>: ordered candidates with an activation (<code>PRIMARY</code>, <code>QUALITY_UPGRADE</code>, <code>ANIMATION_UPGRADE</code>, <code>FAILURE_FALLBACK</code>). Built by <code>previewMediaDeliveryPlan</code> (feed cards) and <code>viewerMediaDeliveryPlan</code> (Viewer).</td></tr>
+</table>
+<p>Producers that put equivalent copies in <code>progressiveUrls</code> today: <code>core-sources/.../nhentai/NhentaiSourceAdapter.kt</code> (page refs, <code>imageUrlCandidates</code>), <code>core-sources/.../hitomi/HitomiPostMapper.kt</code> (<code>imageRef</code>, <code>thumbnailFirst</code>, the media mapping near line 250), and <code>core-sources/.../health/HitomiProviderHealthProbe.kt</code>. Producers of lighter renditions: Pixiv, Danbooru, Gelbooru adapters.</p>
+<p><code>ImageRef</code> is persisted. Codecs that read or write <code>progressiveUrls</code>: <code>core-data/.../storage/PostStorageRecords.kt</code>, <code>core-data-android/.../room/LocalPostPayloadCodec.kt</code>, <code>core-data/.../repository/PortablePostSnapshot.kt</code>, <code>ProfileBackupJson.kt</code>, <code>LegacyOfflineManifestCodec.kt</code>, <code>PostMergePolicy.kt</code>, and <code>app/.../codex/CodexShareModels.kt</code>. Saved nhentai and Hitomi posts therefore hold equivalent copies in <code>progressiveUrls</code>; they must keep working.</p>
+<p>Consumers in the app: <code>PostMedia.kt</code>, <code>ViewerLoadingPreview.kt</code> (gallery pages after the first read <code>progressiveUrls.firstOrNull()</code> from cache only), <code>ViewerMediaOverview.kt</code>, <code>ViewerSessionCoordinator.kt</code> (<code>hasUsableViewerMedia</code>), <code>ViewerStateReducer.kt</code>, <code>ViewerPlatformPrefetcher.kt</code>.</p></section>
+
+<section id="phases"><h2>Phases</h2>
+<table>
+<tr><th>#</th><th>Goal</th><th>Acceptance</th></tr>
+<tr><td>1</td><td>Add <code>ImageRef.fallbackUrls</code> and persist it everywhere <code>progressiveUrls</code> is persisted, with a legacy decode for saved nhentai/Hitomi posts.</td><td>Round-trip tests keep <code>fallbackUrls</code>; a legacy nhentai/Hitomi record without the field decodes with its old <code>progressiveUrls</code> moved to <code>fallbackUrls</code>.</td></tr>
+<tr><td>2</td><td>nhentai and Hitomi produce equivalent copies in <code>fallbackUrls</code>; <code>progressiveUrls</code> holds only lighter renditions everywhere.</td><td>Adapter tests assert the new split; no producer puts a full-size equivalent in <code>progressiveUrls</code>.</td></tr>
+<tr><td>3</td><td>Delivery plans decide from data. Remove <code>QUALITY_UPGRADE_IMAGE_SOURCES</code>, <code>upgradesImageQuality()</code> and the rule34.xxx Viewer special case. Fallback copies are <code>FAILURE_FALLBACK</code> candidates after the URL. Feed card opt-out becomes an explicit presentation flag.</td><td><code>PostMediaTest</code>: Viewer upgrades sample to original for any source with a lighter rendition; nhentai/Hitomi never "upgrade" to a mirror; rule34.xxx cards still stay on their preview.</td></tr>
+<tr><td>4 (A3)</td><td>Gallery pages show their page thumbnail while the original loads; neighbor prefetch warms neighbor page thumbnails before originals.</td><td>Unit tests on <code>viewerLoadingPreviewLocation</code> and on the prefetch planner/prefetcher ordering.</td></tr>
+</table></section>
+
+<section id="work"><h2>Work Plan</h2>
+<ol>
+<li><b>Domain.</b> In <code>Post.kt</code> add <code>val fallbackUrls: List&lt;String&gt; = emptyList()</code> to <code>ImageRef</code> with a KDoc: equivalent copies of <code>url</code>, tried only when it fails, never shown as a lighter step. Tighten the <code>progressiveUrls</code> KDoc: lighter renditions of <code>url</code>, lightest first, shown before it.</li>
+<li><b>Persistence.</b> Add an optional <code>fallbackUrls</code> field next to every persisted <code>progressiveUrls</code> (Gson records use <code>@field:SerializedName</code> and nullable defaults, so old JSON decodes to null). Write one helper in <code>core-data</code> that, on decode, when the stored field is absent (null) and the post's source is <code>SourceKey.NHENTAI</code> or <code>SourceKey.HITOMI</code>, moves <code>progressiveUrls</code> into <code>fallbackUrls</code>. This source check lives only in the legacy decoder and its comment says so. <code>PostMergePolicy</code> merges <code>fallbackUrls</code> the way it merges <code>progressiveUrls</code>. Portable/backup/share codecs carry the field and apply the same legacy rule when reading.</li>
+<li><b>Producers.</b> nhentai page refs: <code>fallbackUrls = imageUrlCandidates(...)</code>, <code>progressiveUrls</code> empty. Hitomi: full-size format/shard candidates go to <code>fallbackUrls</code>; <code>thumbnailFirst</code> keeps the thumbnail as <code>url</code> for card previews and moves the other thumbnails and the full-size locations to <code>fallbackUrls</code>. Update the Hitomi health probe to read both lists.</li>
+<li><b>Delivery plans.</b> In <code>PostMedia.kt</code>, <code>orderedImageLocations</code> becomes lighter renditions, then <code>url</code>, then <code>fallbackUrls</code> (with <code>urlFirst</code> keeping its current meaning for the first two groups). Candidates from <code>fallbackUrls</code> are always <code>FAILURE_FALLBACK</code>. A location is a quality upgrade when it is <code>url</code> or a lighter rendition after the first candidate and the ref has lighter renditions; no source list. Keep the existing "cards stop below the original" rule (<code>feedOriginalLocations</code>). Add <code>cardsStayOnPreview: Boolean = false</code> to <code>SourcePresentation</code> in <code>app/.../source/SourceMetadata.kt</code>, set it only for rule34.xxx with the reason from commit 76a5f8fa (every card would otherwise download a sample), and have <code>previewMediaDeliveryPlan</code> read it. Animated-image locations (<code>animatedImageLocations</code>) also take animated <code>fallbackUrls</code>. Update <code>hasUsableViewerMedia</code> and any other consumer that treats <code>progressiveUrls</code> as "somewhere to load from" to include <code>fallbackUrls</code>.</li>
+<li><b>A3.</b> <code>viewerLoadingPreviewLocation</code>: for a gallery page after the first, prefer <code>media.thumbnailUrl</code>, then <code>progressiveUrls.firstOrNull()</code> (still cache-only). In <code>ViewerPlatformPrefetcher.prefetchViewerMedia</code>, for <code>IMAGE</code> media with a distinct remote <code>thumbnailUrl</code>, warm the thumbnail disk-only (existing <code>diskWarmOnly()</code>) before the original request.</li>
+<li>Keep comments in sync; delete comments that describe the removed allow-list.</li>
+</ol>
+<p class="risk">Out of scope: video renditions, Gelbooru URL normalization, Hitomi's WebP overview special case. Do not touch <code>GelbooruSourceAdapter.kt</code> (A2 already landed there) or the files owned by the parallel tasks: <code>SearchResultCard.kt</code>, search feed files, <code>ViewerViewModel.kt</code>, <code>ViewerRouteWorkflow.kt</code>, <code>SearchCoordinator.kt</code>, <code>CustomSiteHttpClient.kt</code>, <code>DefaultSourceHttpClient.kt</code>, the ugoira and video branches of <code>ViewerPlatformPrefetcher.kt</code>, and nhentai's tag cache.</p></section>
+
+<section id="validation"><h2>Validation And Acceptance</h2>
+<p>From the repo root with <code>JAVA_HOME</code> set to JDK 21+ (on the Mac: <code>/opt/homebrew/Cellar/openjdk/26.0.2.1/libexec/openjdk.jdk/Contents/Home</code>), and <code>local.properties</code> copied from the main checkout if running in a fresh worktree:</p>
+<pre><code>./gradlew :core-domain:test :core-sources:test :core-data:test :core-data-android:testDebugUnitTest --offline
+./gradlew :app:testDebugUnitTest --tests 'com.theoriacodex.app.media.*' --tests 'com.theoriacodex.app.viewer.*' --offline
+./gradlew :app:compileDebugKotlin :app:detektDebug --offline</code></pre>
+<p>Acceptance on device (user check after landing): on a booru or Custom Site, the Viewer shows the sample immediately and sharpens to the original; on nhentai/Hitomi, swiping to a page that is still downloading shows its small thumbnail instead of a blank frame; saved nhentai galleries from before the update still open.</p></section>
+
+<section id="log"><h2>Living Log</h2>
+<p><b>Progress</b></p>
+<ul><li>2026-11-11 Plan written; A2 (custom Gelbooru samples) landed separately on the branch.</li></ul>
+<p><b>Decisions</b></p>
+<ul>
+<li>2026-11-11, Claude: separate lighter renditions from equivalent copies with a new persisted field rather than a per-source capability flag, so the decision follows each post's data. The only remaining source checks are the legacy decoder and the explicit rule34.xxx card opt-out.</li>
+<li>2026-11-11, Claude: keep rule34.xxx cards on their preview (deliberate choice from 2026-11-09), but express it as a presentation opt-out instead of omission from an allow-list, so new sources get the upgrade by default.</li>
+</ul>
+<p><b>Surprises</b></p><ul><li>None yet.</li></ul>
+<p><b>Outcomes</b></p><ul><li>Pending.</li></ul></section>
+
+<section id="recovery"><h2>Idempotence And Recovery</h2><p>All edits are code and tests; no destructive operations, no device installs. Old saved data is only read through the legacy decode, never rewritten in place, so reverting the commits restores the previous behavior. Gradle commands are safe to rerun.</p></section>
+</main>
+</body>
+</html>
