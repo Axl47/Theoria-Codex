@@ -30,6 +30,10 @@ dependencies {
 
 val qualityCoverageVariant = "quality"
 
+// Kover instruments test JVMs only when the requested tasks include a Kover report or verification,
+// so ordinary local test runs skip the agent. Abbreviated task names (e.g. `kXR`) are not detected.
+val coverageRequested = gradle.startParameter.taskNames.any { "kover" in it.lowercase() }
+
 // The aggregate quality report merges each module's "quality" variant (declared below), so
 // release, benchmark, and baseline-profile variants are never compiled just for coverage.
 kover {
@@ -65,6 +69,9 @@ subprojects {
             currentProject {
                 createVariant(qualityCoverageVariant) {
                     add("jvm", "debug", optional = true)
+                }
+                instrumentation {
+                    disabledForAll.set(!coverageRequested)
                 }
             }
         }
