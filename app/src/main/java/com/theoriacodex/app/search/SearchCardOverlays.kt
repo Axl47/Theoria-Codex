@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material3.Icon
@@ -33,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -41,6 +43,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.comments.CommentCount
+import com.theoriacodex.app.comments.commentCount
 import com.theoriacodex.app.source.SourceLogo
 import com.theoriacodex.app.ui.motion.LikedHeartColor
 import com.theoriacodex.app.ui.motion.likePop
@@ -65,19 +69,14 @@ internal fun BoxScope.SearchCardBadges(
     durationLabel: String?,
 ) {
     val mediaCount = postMediaCount(post)
-    if (onToggleLike != null || mediaCount > 1) {
+    val comments = commentCount(post.commentHint, state = null)
+    if (onToggleLike != null || mediaCount > 1 || comments != null) {
         Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(TOP_SCRIM_HEIGHT).background(TopScrim))
     }
     if (durationLabel != null || showPreviewContext) {
         Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(BOTTOM_SCRIM_HEIGHT).background(BottomScrim))
     }
-    if (mediaCount > 1) {
-        OverlayMark(
-            text = imageCountBadgeLabel(mediaCount, viewedMediaNumber),
-            icon = { Icon(Icons.Outlined.PhotoLibrary, if (viewedMediaNumber == null) "Image count" else "Watched media progress", it) },
-            modifier = Modifier.align(Alignment.TopEnd).then(OverlayMarkPlacement),
-        )
-    }
+    SearchCardCountMarks(comments, mediaCount, viewedMediaNumber, Modifier.align(Alignment.TopEnd).then(OverlayMarkPlacement))
     if (onToggleLike != null) SearchCardLikeButton(liked, onToggleLike, Modifier.align(Alignment.TopStart))
     if (durationLabel != null) {
         OverlayMark(
@@ -94,6 +93,28 @@ internal fun BoxScope.SearchCardBadges(
     }
     if (mediaCount > 1 && viewedMediaNumber != null) {
         GalleryProgressLine(viewedMediaNumber.coerceIn(1, mediaCount).toFloat() / mediaCount, Modifier.align(Alignment.BottomCenter))
+    }
+}
+
+/** Comment count, then media count, along the top end; each appears only when the post has something to count. */
+@Composable
+private fun SearchCardCountMarks(comments: CommentCount?, mediaCount: Int, viewedMediaNumber: Int?, modifier: Modifier) {
+    if (comments == null && mediaCount <= 1) return
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (comments != null) {
+            OverlayMark(
+                text = comments.label,
+                icon = { Icon(Icons.Outlined.ChatBubbleOutline, null, it) },
+                modifier = Modifier.clearAndSetSemantics { contentDescription = comments.description(unknown = "Has comments") },
+            )
+        }
+        if (mediaCount > 1) {
+            OverlayMark(
+                text = imageCountBadgeLabel(mediaCount, viewedMediaNumber),
+                icon = { Icon(Icons.Outlined.PhotoLibrary, if (viewedMediaNumber == null) "Image count" else "Watched media progress", it) },
+                modifier = Modifier,
+            )
+        }
     }
 }
 
@@ -171,10 +192,10 @@ private fun SearchCardPreviewContext(
 
 /** A white icon and label that rely on the edge scrim, not a container, for contrast. */
 @Composable
-private fun OverlayMark(text: String, icon: @Composable (Modifier) -> Unit, modifier: Modifier) {
+private fun OverlayMark(text: String?, icon: @Composable (Modifier) -> Unit, modifier: Modifier) {
     Row(modifier.height(OVERLAY_ROW_HEIGHT), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
         icon(Modifier.size(13.dp))
-        Text(text, style = overlayTextStyle(), maxLines = 1)
+        if (text != null) Text(text, style = overlayTextStyle(), maxLines = 1)
     }
 }
 
