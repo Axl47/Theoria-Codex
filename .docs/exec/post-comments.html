@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Post comments</title>
+<style>
+body{font:15px/1.55 system-ui,sans-serif;max-width:960px;margin:2rem auto;padding:0 1rem;color:#1d1d22}
+h1{margin-bottom:.2rem}h2{margin-top:2rem;border-bottom:1px solid #ddd;padding-bottom:.2rem}
+table{border-collapse:collapse;width:100%;font-size:14px}td,th{border:1px solid #ddd;padding:.35rem .5rem;vertical-align:top;text-align:left}
+code{background:#f2f2f5;padding:0 .25rem;border-radius:3px}.st{font-weight:600}
+</style></head><body>
+<h1>Post comments</h1>
+<p>Status: <span class="st">in progress</span> · branch <code>feat/post-comments</code></p>
+
+<h2>Goal</h2>
+<p>Show read-only provider comments for a post in the Viewer's info sheet, and show how many comments a post has
+on search cards (where the listing says) and in the Viewer (every supported source), so people don't open each post to check.</p>
+
+<h2>Terms</h2>
+<ul>
+<li><b>Family</b>: an API dialect shared by several sites. Theoria has two booru families, <code>DANBOORU</code> and
+<code>GELBOORU_02</code> (<code>core-domain/.../source/CustomSites.kt</code>). Built-in Gelbooru, rule34.xxx, Danbooru and Aibooru use the same adapter classes as custom sites of those families, so a family implementation reaches all of them.</li>
+<li><b>Comment hint</b> (<code>CommentHint</code>): what a search listing already says about comments. Exact count, "none", or "some".</li>
+</ul>
+
+<h2>Live endpoint evidence (2026-11-11)</h2>
+<p>Checked from the Mac and from an on-device probe inside the Debug app, reporting only status codes, field names and counts.</p>
+<table>
+<tr><th>Source</th><th>Listing hint</th><th>Comments</th></tr>
+<tr><td>nhentai</td><td>none (<code>GalleryListItem</code> has no count)</td><td><code>GET /api/v2/galleries/{id}/comments?page=&amp;per_page=50</code> → <code>{result[], num_pages, per_page, total}</code>; comment <code>{id, gallery_id, poster{id, username, slug, avatar_url (relative), …}, post_date (epoch s), body}</code>. No login.</td></tr>
+<tr><td>Pixiv</td><td>none in search/ranking items; <code>/v1/illust/detail</code> has <code>total_comments</code>, <code>comment_access_control</code></td><td><code>GET app-api /v3/illust/comments?illust_id=</code> → <code>{comments[], next_url, comment_access_control}</code>, 30 per page; comment <code>{id, comment, date (ISO), user{id, name, account, profile_image_urls{medium}}, has_replies, stamp{stamp_id, stamp_url}|null}</code>. Replies: <code>/v2/illust/comment/replies?comment_id=</code> → <code>{comments[], next_url}</code>.</td></tr>
+<tr><td>Gelbooru (gelbooru.com)</td><td>JSON <code>has_comments</code> ("true"/"false")</td><td>DAPI <code>s=comment</code> answers HTTP 200 text/html <code>Disabled due to abuse.</code> Fallback: post page <code>index.php?page=post&amp;s=view&amp;id=</code>, no login, comments in <code>div.commentAvatar</code> / <code>div.commentBody</code> blocks, with a <code>div.paginator</code>.</td></tr>
+<tr><td>Gelbooru 0.2 sites (Safebooru, rule34.xxx, custom)</td><td>JSON <code>comment_count</code> (exact); XML <code>has_comments</code></td><td>DAPI <code>s=comment&amp;q=index&amp;post_id=</code> → XML only (<code>json=1</code> ignored), <code>&lt;comment created_at post_id body creator id creator_id/&gt;</code>; filters by post correctly on Safebooru. rule34.xxx needs keys (untested: no keys in Debug app); its HTML page is Cloudflare-blocked.</td></tr>
+<tr><td>Danbooru family</td><td><code>last_commented_at</code> non-null → some</td><td><code>GET /comments.json?group_by=comment&amp;search[post_id]=&amp;limit=</code> → <code>[{id, body (DText), score, created_at, is_deleted, creator{name}}]</code> with <code>only=…,creator</code>.</td></tr>
+</table>
+
+<h2>Design</h2>
+<ul>
+<li>Domain (done, <code>2f77fcdf</code>): <code>CommentsSourceAdapter.comments(post, pageToken, parent)</code>, <code>CommentPage</code>, <code>PostComment</code>, <code>Post.commentHint</code> in <code>core-domain</code>. The hint is never persisted.</li>
+<li>Sources (<code>core-sources</code>): each family/adapter implements the interface and fills <code>commentHint</code> from listings. Gelbooru family tries DAPI XML first and falls back to the post page when the answer is not comment XML.</li>
+<li>App: a session-cached <code>CommentsLoader</code> (like <code>RelatedPostsLoader</code>) fetches the current Viewer post's first page unless its hint says none. The Viewer top bar shows a comment button with the count when there are comments; it opens the info sheet. Search cards show a comment mark from the hint. The info sheet (option A) collapses tags to a one-row peek when comments exist, starts expanded when none, and is always collapsible; comments follow the tags with author avatar, name, relative date, text, stamps, and expandable replies.</li>
+<li>Avatars are shown (user decision, 2026-11-11); remove them if they cause moderation problems.</li>
+</ul>
+
+<h2>Progress</h2>
+<table>
+<tr><th>Step</th><th>State</th></tr>
+<tr><td>Domain contract</td><td>done</td></tr>
+<tr><td>Source adapters + listing hints + tests</td><td>in progress</td></tr>
+<tr><td>App loader, Viewer button, info sheet, card mark + tests</td><td>in progress</td></tr>
+<tr><td>On-device proof (Debug app; logs and accessibility text only)</td><td>pending</td></tr>
+</table>
+
+<h2>Validation</h2>
+<ul>
+<li><code>scripts/check.sh --record</code> passes.</li>
+<li>Parser unit tests from field-shape fixtures (no real comment text).</li>
+<li>On device: open posts from each source in the Viewer and read the comment button's accessibility label and the sheet's comment count via accessibility text; no screenshots of provider media.</li>
+</ul>
+
+<h2>Decisions and surprises</h2>
+<ul>
+<li>Gelbooru's comment API is disabled by the site; the post page is the source of truth there.</li>
+<li>Viewer Info lives in an overflow menu, so the Viewer indicator is its own top-bar button rather than a badge on Info.</li>
+</ul>
+</body></html>
