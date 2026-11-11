@@ -209,7 +209,8 @@ ANDROID_SERIAL=YOUR_DEVICE_SERIAL DEVICE_TEST_CLASS=com.theoriacodex.app.journey
   scripts/verify_debug_device.sh app
 ```
 
-Use `data` to run only the Room device owner. The wrapper retains its task graph and build log under
+Use `data` to run only the Room device owner. `DEVICE_TEST_SHARD=k/n` runs the k-th of n disjoint
+slices of the selected owners; CI uses it to split each API level across two emulators. The wrapper retains its task graph and build log under
 `build/reports/device-preflight/` and delegates all packaged checks to `scripts/verify_device_apk.py`.
 
 For limited benchmark storage, set `BENCHMARK_SCENARIO` to a method from

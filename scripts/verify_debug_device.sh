@@ -13,6 +13,16 @@ if [[ "$owner" == all && -n "${DEVICE_TEST_CLASS:-}" ]]; then
   echo 'A class filter requires selecting its app or data owner.' >&2
   exit 2
 fi
+# DEVICE_TEST_SHARD=k/n runs the k-th of n disjoint slices of every selected owner, so separate
+# devices can split one run. AndroidJUnitRunner assigns each test to a slice by its name's hash.
+shard="${DEVICE_TEST_SHARD:-}"
+if [[ -n "$shard" ]]; then
+  if [[ ! "$shard" =~ ^([1-9][0-9]*)/([1-9][0-9]*)$ ]] || (( BASH_REMATCH[1] > BASH_REMATCH[2] )); then
+    echo 'DEVICE_TEST_SHARD must be k/n with 1 <= k <= n.' >&2
+    exit 2
+  fi
+  readonly shard_index=$((BASH_REMATCH[1] - 1)) shard_count="${BASH_REMATCH[2]}"
+fi
 serial="$(selected_device)"
 readonly serial
 export ANDROID_SERIAL="$serial"
@@ -23,6 +33,10 @@ assemblies=()
 test_options=()
 if [[ -n "${DEVICE_TEST_CLASS:-}" ]]; then
   test_options+=("-Pandroid.testInstrumentationRunnerArguments.class=$DEVICE_TEST_CLASS")
+fi
+if [[ -n "$shard" ]]; then
+  test_options+=("-Pandroid.testInstrumentationRunnerArguments.numShards=$shard_count"
+                 "-Pandroid.testInstrumentationRunnerArguments.shardIndex=$shard_index")
 fi
 if [[ "$owner" == app || "$owner" == all ]]; then
   connected+=(":app:connectedDebugAndroidTest")

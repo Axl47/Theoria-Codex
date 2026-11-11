@@ -16,6 +16,8 @@ class DeviceValidationWorkflowTest(unittest.TestCase):
         self.assertIn("script: bash scripts/verify_ci_emulator.sh debug", self.workflow)
         wrapper = (REPOSITORY_ROOT / "scripts/verify_ci_emulator.sh").read_text(encoding="utf-8")
         self.assertIn("scripts/verify_debug_device.sh all", wrapper)
+        self.assertIn("shard: [1, 2]", self.workflow)
+        self.assertIn("DEVICE_TEST_SHARD: ${{ matrix.shard }}/2", self.workflow)
         lane = (REPOSITORY_ROOT / "scripts/verify_debug_device.sh").read_text(encoding="utf-8")
         self.assertIn(":app:connectedDebugAndroidTest", lane)
         self.assertIn(":core-data-android:connectedDebugAndroidTest", lane)
