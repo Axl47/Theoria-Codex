@@ -174,6 +174,7 @@ private fun ForYouRouteContent(
         onDurationPostVisibilityChanged = duration.owner::onPostVisibilityChanged,
         onDurationEnvironmentChanged = duration.owner::onEnvironmentChanged,
         onAuthoritativeDurationKnown = duration.owner::publishPlayerDuration,
+        resolvePostById = owner::resolvePost,
         onToggleLike = callbacks.onToggleLike,
         onAction = owner::onAction,
         creatorBrowsingSources = config.creatorBrowsingSources,

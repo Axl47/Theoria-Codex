@@ -6,8 +6,8 @@ import com.theoriacodex.app.media.previewMediaDeliveryPlan
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -26,22 +26,13 @@ class SearchScreenMediaBehaviorTest {
     }
 
     @Test
-    fun `iwara and hitomi cards remain poster only in search`() {
-        assertFalse(allowsInlineAutoplayInSearch(samplePost(SourceKey.IWARA)))
-        assertFalse(allowsInlineAutoplayInSearch(samplePost(SourceKey.HITOMI)))
-    }
-
-    @Test
-    fun `rule34 video family cards allow inline autoplay in search`() {
-        assertTrue(allowsInlineAutoplayInSearch(samplePost(SourceKey.RULE34VIDEO)))
-        assertTrue(allowsInlineAutoplayInSearch(samplePost(SourceKey.RULE34GEN)))
-    }
-
-    @Test
-    fun `other image and gallery sources keep inline autoplay enabled in search`() {
-        assertTrue(allowsInlineAutoplayInSearch(samplePost(SourceKey.PIXIV)))
-        assertTrue(allowsInlineAutoplayInSearch(samplePost(SourceKey.GELBOORU)))
-        assertTrue(allowsInlineAutoplayInSearch(samplePost(SourceKey.NHENTAI)))
+    fun `only providers whose list results lack the video url resolve details for it`() {
+        listOf(SourceKey.IWARA, SourceKey.RULE34VIDEO, SourceKey.RULE34GEN).forEach { source ->
+            assertTrue(source.videoUrlComesFromPostDetails())
+        }
+        listOf(SourceKey.HITOMI, SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.NHENTAI).forEach { source ->
+            assertFalse(source.videoUrlComesFromPostDetails())
+        }
     }
 
     @Test

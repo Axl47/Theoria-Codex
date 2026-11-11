@@ -33,6 +33,8 @@ internal data class FeedCardEnvironment(
     val onToggleLike: ((Post) -> Unit)?,
     val onViewportChanged: (Post, Boolean) -> Unit,
     val onAuthoritativeDurationKnown: (Post, Long) -> Unit,
+    /** Loads a post's details for tiles whose list result lacks its video; null where the feed cannot. */
+    val resolvePostById: (suspend (PostId) -> Post?)? = null,
 )
 
 /** Keeps one environment while its callbacks are unchanged, so visible tiles can skip recomposition. */
@@ -45,13 +47,19 @@ internal fun rememberFeedCardEnvironment(
     onToggleLike: ((Post) -> Unit)?,
     onViewportChanged: (Post, Boolean) -> Unit,
     onAuthoritativeDurationKnown: (Post, Long) -> Unit,
+    resolvePostById: (suspend (PostId) -> Post?)? = null,
 ): FeedCardEnvironment {
     val liked = rememberUpdatedState(likedPostIds)
     val durations = rememberUpdatedState(acquiredDurations)
-    return remember(pixivUgoiraClient, durationStateForPost, onToggleLike, onViewportChanged, onAuthoritativeDurationKnown) {
+    // A fresh resolver instance each recomposition must not rebuild the environment, so tiles call through the latest one.
+    val latestResolve = rememberUpdatedState(resolvePostById)
+    val resolver: (suspend (PostId) -> Post?)? = if (resolvePostById == null) null else {
+        remember<suspend (PostId) -> Post?> { { postId -> latestResolve.value?.invoke(postId) } }
+    }
+    return remember(pixivUgoiraClient, durationStateForPost, onToggleLike, onViewportChanged, onAuthoritativeDurationKnown, resolver) {
         FeedCardEnvironment(
             pixivUgoiraClient, liked, durations, durationStateForPost,
-            onToggleLike, onViewportChanged, onAuthoritativeDurationKnown,
+            onToggleLike, onViewportChanged, onAuthoritativeDurationKnown, resolver,
         )
     }
 }
@@ -85,7 +93,7 @@ internal fun FeedPostCard(
         mediaAspectRatio = mediaAspectRatio,
         liked = liked,
         onToggleLike = environment.onToggleLike?.let { toggle -> { toggle(post) } },
-        resolvePostById = resolvePostById,
+        resolvePostById = resolvePostById ?: environment.resolvePostById,
         recoverPostMedia = recoverPostMedia,
         onClick = onClick,
         onLongPress = onLongPress,

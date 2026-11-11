@@ -210,7 +210,7 @@ private class SearchCardResolution(private val postId: PostId) {
 
     fun requestPreview(scope: CoroutineScope, resolver: (suspend (PostId) -> Post?)?, force: Boolean = false) {
         if (attempted || resolver == null) return
-        if (!force && postId.source != SourceKey.RULE34VIDEO && postId.source != SourceKey.RULE34GEN) return
+        if (!force && !postId.source.videoUrlComesFromPostDetails()) return
         attempted = true
         scope.launch {
             resolvedPost = runCatchingPreservingCancellation { resolver(postId) }.getOrNull() ?: return@launch
@@ -321,7 +321,7 @@ private fun SearchCardContent(
     val videoRef = remember(
         effectivePost.id.source, effectivePost.id.sourcePostId, previewPost.media, previewPost.full, previewPost.preview,
     ) {
-        if (allowsInlineAutoplayInSearch(previewPost)) resolveCardVideoRef(previewPost) else null
+        resolveCardVideoRef(previewPost)
     }
     val imageDeliveryPlan = remember(previewPost) { previewMediaDeliveryPlan(previewPost) }
     val progress = remember(effectivePost.id, imageDeliveryPlan) { SearchCardImageProgress() }
@@ -338,8 +338,11 @@ private fun SearchCardContent(
     val scope = rememberCoroutineScope()
     // A new resolver instance must not restart the request; only gaining one at all should.
     val currentResolvePostById by rememberUpdatedState(resolvePostById)
-    LaunchedEffect(effectivePost.id, videoRef?.url, videoRef?.localPath, resolvePostById != null) {
-        if (videoRef == null && resolution.resolvedPost == null) resolution.requestPreview(scope, currentResolvePostById)
+    // Only a card on screen asks its provider for details, so scrolling past cards never spends rate limit.
+    LaunchedEffect(effectivePost.id, videoRef?.url, videoRef?.localPath, resolvePostById != null, playbackActive) {
+        if (playbackActive && videoRef == null && resolution.resolvedPost == null) {
+            resolution.requestPreview(scope, currentResolvePostById)
+        }
     }
     val titleBelowMedia = showTitle && supportingContent.showTitleFooter
     Box(
@@ -625,9 +628,13 @@ private fun resolveCardVideoRef(post: Post): ImageRef? {
     return postPlaybackMediaCandidate(post)?.ref
 }
 
-internal fun allowsInlineAutoplayInSearch(post: Post): Boolean {
-    return post.id.source != SourceKey.IWARA && post.id.source != SourceKey.HITOMI
-}
+/**
+ * Whether this provider's list results carry only a poster, so a card learns its video URL only from
+ * the post's detail request. The one place that names them; every other source's cards play what their
+ * list results already hold.
+ */
+internal fun SourceKey.videoUrlComesFromPostDetails(): Boolean =
+    this == SourceKey.RULE34VIDEO || this == SourceKey.RULE34GEN || this == SourceKey.IWARA
 
 internal fun previewAspectRatio(post: Post): Float {
     val width = post.width ?: return 1f
