@@ -126,6 +126,26 @@ class ViewerViewModelTest {
     }
 
     @Test
+    fun `lookahead resolves the previous sparse post after the next and plans its prefetch`() = runTest {
+        val started = mutableListOf<PostId>()
+        val posts = listOf(post("prev", SourceKey.HITOMI, emptyList()), post("current"),
+            post("next", SourceKey.HITOMI, emptyList()))
+        val owner = ViewerViewModel(SavedStateHandle(), postResolver = ViewerPostResolver { _, id ->
+            started += id
+            post(id.sourcePostId, id.source, listOf(video("${id.sourcePostId}.mp4")))
+        }, scopeOverride = this)
+        val opened = session("previous", posts)
+        owner.replaceSession(opened.copy(context = opened.context.copy(startIndex = 1)))
+        advanceUntilIdle()
+
+        assertEquals(listOf(posts[2].id, posts[0].id), started)
+        val state = owner.state.value
+        val previousKey = requireNotNull(state.pages[0].media.firstOrNull()).key
+        assertTrue(previousKey in viewerPrefetchAction(state.pages, state.currentMedia?.key, null).mediaKeys)
+        owner.clearSession()
+    }
+
+    @Test
     fun `jump cancels obsolete resolution without showing a timeout error`() = runTest {
         val cancelled = mutableListOf<PostId>()
         val posts = (0..3).map { post("$it", SourceKey.HITOMI, emptyList()) }
