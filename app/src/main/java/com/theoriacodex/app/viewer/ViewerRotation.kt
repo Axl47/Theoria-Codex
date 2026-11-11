@@ -90,6 +90,19 @@ internal fun rememberViewerRotation(selection: ViewerSelection, rotation: Viewer
 
 internal class ViewerRotationOffer(val target: ViewerOrientation, val rotate: () -> Unit)
 
+/** The Viewer's rotation behavior and its button, placed above whichever bar the current media shows. */
+@Composable
+internal fun BoxScope.ViewerRotationControl(
+    selection: ViewerSelection,
+    rotation: ViewerRotationState?,
+    inPictureInPicture: Boolean,
+    visible: Boolean,
+) {
+    val offer = rememberViewerRotation(selection, rotation, inPictureInPicture) ?: return
+    val bottomBar = if (selection.isAnimated || selection.overviewItems.size > 1) VIEWER_TIMELINE_HEIGHT else 0.dp
+    ViewerRotateButton(offer, visible, bottomInset = LocalViewerPostStripInset.current + bottomBar)
+}
+
 /** Lower left, above the timeline, where the left thumb rests. */
 @Composable
 internal fun BoxScope.ViewerRotateButton(offer: ViewerRotationOffer, visible: Boolean, bottomInset: androidx.compose.ui.unit.Dp) {
