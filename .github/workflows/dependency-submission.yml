@@ -34,7 +34,7 @@ jobs:
             21
 
       - name: Generate and submit dependency graph
-        uses: gradle/actions/dependency-submission@v6.4.0
+        uses: gradle/actions/dependency-submission@v6.4.1
         with:
           cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
           # Main's own run is the only cache writer; this graph build just restores.
