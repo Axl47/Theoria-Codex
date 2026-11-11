@@ -32,7 +32,8 @@ internal sealed interface ViewerHoldScrubPhase {
     data class Dragging(val offsetPx: Float) : ViewerHoldScrubPhase
     /**
      * A released drag seeks to [offsetPx], the finger's last distance, so a drag that ended before the
-     * timeline saw any [Dragging] state still lands; a cancelled one leaves playback where it was.
+     * timeline saw any [Dragging] state still lands; a cancelled one leaves playback where it was. Each
+     * gesture's end is a new instance, so observers tell it from an earlier one by identity.
      */
     data class Ended(val released: Boolean, val offsetPx: Float) : ViewerHoldScrubPhase
 }
