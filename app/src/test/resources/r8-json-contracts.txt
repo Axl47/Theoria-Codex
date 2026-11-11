@@ -1,10 +1,10 @@
 # Fully qualified class name | durable JSON field names. Keep this synchronized with
 # app/proguard-rules.pro. Transient in-process fields are intentionally absent.
 com.theoriacodex.data.storage.LegacyImportProof|sourceFileName,sourceSchemaVersion,destinationSchemaVersion,sourceSha256,sourceByteCount,importedCounts
-com.theoriacodex.data.storage.PostStorageRecord|source,sourcePostId,previewUrl,previewLocalPath,previewMime,previewProgressiveUrls,previewIsAnimated,fullUrl,fullLocalPath,fullMime,fullProgressiveUrls,fullIsAnimated,fullVideoVariants,pageUrl,width,height,canonicalTags,rawTags,authorName,createdAtEpochMs,media,title,creatorProfile,durationMs,mediaCount,taxonomy,creatorProfiles,schemaVersion
+com.theoriacodex.data.storage.PostStorageRecord|source,sourcePostId,previewUrl,previewLocalPath,previewMime,previewProgressiveUrls,previewFallbackUrls,previewIsAnimated,fullUrl,fullLocalPath,fullMime,fullProgressiveUrls,fullFallbackUrls,fullIsAnimated,fullVideoVariants,pageUrl,width,height,canonicalTags,rawTags,authorName,createdAtEpochMs,media,title,creatorProfile,durationMs,mediaCount,taxonomy,creatorProfiles,schemaVersion
 com.theoriacodex.data.storage.PostTaxonomyTermStorageRecord|value,facet,sourceNamespace,count,translation
 com.theoriacodex.data.storage.CreatorProfileStorageRecord|source,displayName,profileId,profileUrl,uploadsQuery
-com.theoriacodex.data.storage.ImageRefStorageRecord|url,localPath,mime,progressiveUrls,isAnimated,videoVariants,thumbnailUrl
+com.theoriacodex.data.storage.ImageRefStorageRecord|url,localPath,mime,progressiveUrls,fallbackUrls,isAnimated,videoVariants,thumbnailUrl
 com.theoriacodex.data.repository.SettingsDataStoreFile|schemaVersion,settings,legacyImports
 com.theoriacodex.data.repository.UiRestoreDataStoreFile|schemaVersion,state,legacyImports
 com.theoriacodex.data.repository.StatisticsDataStoreFile|schemaVersion,statistics
@@ -48,7 +48,7 @@ com.theoriacodex.app.statistics.StatsShareOverall|timeInAppMs,browsingMs,watchin
 com.theoriacodex.app.codex.CodexShareFile|version,title,posts
 com.theoriacodex.app.codex.CodexSharePost|source,sourcePostId,snapshot
 com.theoriacodex.app.codex.CodexSharePostSnapshot|preview,full,media,pageUrl,width,height,canonicalTags,rawTags,taxonomy,authorName,createdAtEpochMs,title,creatorProfile,creatorProfiles,durationMs,mediaCount
-com.theoriacodex.app.codex.CodexShareImageRef|url,mime,progressiveUrls,isAnimated
+com.theoriacodex.app.codex.CodexShareImageRef|url,mime,progressiveUrls,fallbackUrls,isAnimated
 com.theoriacodex.app.codex.CodexShareTaxonomyTerm|value,facet,sourceNamespace,translation
 com.theoriacodex.app.codex.CodexShareCreatorProfile|source,displayName,profileId,profileUrl,uploadsQuery
 com.theoriacodex.sources.hitomi.HitomiPageToken|version,queryHash,primaryKey,primaryOffset,randomSeed,randomSnapshotFingerprint,randomPermutationVersion,globalIndexVersion
