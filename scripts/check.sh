@@ -1,24 +1,38 @@
 #!/usr/bin/env bash
-# The one definition of "verified", shared by this Mac and GitHub. Cheap policy checks run first so
-# they fail in seconds. Emulator tests are not part of it: they run in the Release workflow.
+# The one definition of "verified", shared by this Mac and GitHub. Cheap policy checks always run first
+# so they fail in seconds, then the chosen part:
+#   tests    unit tests, coverage, and changed-code coverage for every module
+#   static   Detekt with type resolution, Android lint, duplicate code, configuration cache
+#   release  R8 builds: release, releaseAcceptance, and benchmark builds when the change can affect them
+# Without --part it runs tests then static: the pre-PR check. Release builds and emulator tests run on
+# GitHub after merge to main.
 #
-# --record publishes the pass under refs/verified/<tree>, named after the exact code that was tested,
-# so GitHub's Verify and Release can reuse it. It needs a clean checkout. Run it before opening a PR.
+# --record (pre-PR check only) publishes the pass as refs/verified/<key>, where the key names the
+# inputs that can affect the result (scripts/release_gate.py input-key), so GitHub's Verify and
+# Release can reuse it. It needs a clean checkout. Run it before opening a PR.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
+usage() { echo 'Usage: scripts/check.sh [--part tests|static|release] [--record]' >&2; exit 2; }
+part=''
 record=false
-case "${1:-}" in
-  "") ;;
-  --record) record=true ;;
-  *) echo 'Usage: scripts/check.sh [--record]' >&2; exit 2 ;;
-esac
+while (( $# )); do
+  case "$1" in
+    --part) [[ "${2:-}" =~ ^(tests|static|release)$ ]] || usage; part="$2"; shift ;;
+    --record) record=true ;;
+    *) usage ;;
+  esac
+  shift
+done
+if [[ "$record" == true && -n "$part" ]]; then
+  echo '--record records the full pre-PR check, so it cannot be combined with --part.' >&2
+  exit 2
+fi
 
 # Everything except the agent tool directory, which is local and never part of the build.
 worktree_changes() { git status --porcelain -- . ':!.claude'; }
 
 commit="$(git rev-parse HEAD)"
-tree="$(git rev-parse 'HEAD^{tree}')"
 if [[ "$record" == true && -n "$(worktree_changes)" ]]; then
   echo 'Commit or discard changes first: --record must describe exactly the committed code.' >&2
   exit 2
@@ -33,11 +47,9 @@ if (( ${java_major:-0} < 21 )); then
   export JAVA_HOME="$homebrew_jdk"
 fi
 
+source scripts/policy_checks.sh
 # Changed-code budgets compare against where this work left main, or the last commit when on main.
-base="$(git merge-base origin/main HEAD)"
-if [[ "$base" == "$commit" ]]; then
-  base="$(git rev-parse HEAD^)"
-fi
+base="$(diff_base)"
 
 # Phase timings for CI dashboards: build/reports/timings/ci-timings.json combines phases.json
 # (written here, even when a phase fails) with gradle-tasks.json (written per task by the init script).
@@ -60,7 +72,7 @@ record_phase() {
   current_phase=''
 }
 
-# Usage: phase <name> <command...>. A failing command exits the script and is recorded by on_exit.
+# Usage: phase <name> <command...>. A failing command exits the script and is recorded by write_timings.
 phase() {
   current_phase="$1"
   phase_started="$(now_us)"
@@ -84,11 +96,6 @@ install_node_modules() {
   [[ node_modules/.package-lock.json -nt package-lock.json ]] || npm ci
 }
 
-python_tests() {
-  python3 -m unittest discover -s scripts/tests -p 'test_*.py'
-  python3 -m unittest discover -s deploy/libretranslate -p 'test_*.py'
-}
-
 # Strict configuration cache must store and then reuse an isolated entry.
 configuration_cache_check() {
   local project_cache="$temp/config-cache"
@@ -107,56 +114,88 @@ configuration_cache_check() {
   fi
 }
 
-phase 'npm ci' install_node_modules
-phase 'Hotspot check' python3 scripts/check_hotspots.py --base "$base"
-phase 'Duplicate audit' npm run audit:duplicates
+run_tests() {
+  # theoria.coverage turns on Kover instrumentation; unknown properties are ignored.
+  phase 'Gradle: tests and coverage' ./gradlew "${task_timings[@]}" \
+    -Ptheoria.coverage=true \
+    :core-domain:test \
+    :core-data:test \
+    :core-sources:test \
+    :core-stubs:test \
+    :app-logic:test \
+    :core-data-android:testDebugUnitTest \
+    :core-data-android:compileDebugAndroidTestKotlin \
+    :app:testDebugUnitTest \
+    :app:compileDebugAndroidTestKotlin \
+    :app:assembleDebug \
+    :koverXmlReportQuality \
+    :koverVerifyQuality \
+    --warning-mode=all \
+    --console=plain
+
+  phase 'Changed-code coverage' python3 scripts/check_changed_coverage.py \
+    --xml build/reports/kover/quality.xml \
+    --base "$base" \
+    --boundaries config/quality/coverage-boundaries.json \
+    --minimum 60
+}
+
+run_static() {
+  phase 'npm ci' install_node_modules
+  phase 'Duplicate audit' npm run audit:duplicates
+  phase 'Gradle: configuration-cache check' configuration_cache_check
+
+  phase 'Gradle: Detekt' ./gradlew "${task_timings[@]}" \
+    :app:detektDebug \
+    :app-logic:detektMain \
+    :core-data-android:detektDebug \
+    :core-domain:detektMain \
+    :core-data:detektMain \
+    :core-sources:detektMain \
+    :core-stubs:detektMain \
+    --warning-mode=all \
+    --console=plain
+
+  # Offline lint cannot download its own tool on a fresh machine. A dry run fetches it.
+  phase 'Gradle: lint dry run' ./gradlew "${task_timings[@]}" :app:lint :core-data-android:lintDebug --dry-run --console=plain
+
+  # Finish all source generation before lint reads Room's generated Java.
+  phase 'Gradle: lint' ./gradlew "${task_timings[@]}" :app:lint :core-data-android:lintDebug --offline --no-daemon --warning-mode=all --console=plain
+}
+
+# Benchmark builds only matter when the change touches them or the build itself. On main there is no
+# change to compare, so they always run.
+benchmark_relevant() {
+  [[ "$(git merge-base origin/main HEAD)" != "$commit" ]] || return 0
+  grep -Eq \
+    '^(macrobenchmark/|baseline-profile/|app/src/(benchmarkRelease|fixtures|release/generated/baselineProfiles)/|gradle/|gradle\.properties$|gradlew|(.*/)?[^/]*\.gradle\.kts$|scripts/verify_(benchmark_fixture|macrobenchmark_runner)_apk\.py$)' \
+    <<< "$(git diff --name-only "$base" --)"
+}
+
+run_release() {
+  local tasks=(:app:assembleRelease :app:assembleReleaseAcceptance)
+  if benchmark_relevant; then
+    tasks+=(:app:verifyBenchmarkFixtureArtifact :macrobenchmark:verifyMacrobenchmarkRunnerArtifact)
+  else
+    echo 'Skipping benchmark builds: nothing they depend on changed since main.'
+  fi
+  phase 'Gradle: release builds' ./gradlew "${task_timings[@]}" "${tasks[@]}" --warning-mode=all --console=plain
+}
+
+phase 'Hotspot check' line_budgets "$base"
 phase 'Python unittests' python_tests
-phase 'Gradle: configuration-cache check' configuration_cache_check
 
-# One invocation, so tests, assemblies, Detekt, and coverage share a single compile.
-phase 'Gradle: tests, assemblies, Detekt, coverage' ./gradlew "${task_timings[@]}" \
-  :core-domain:test \
-  :core-data:test \
-  :core-sources:test \
-  :core-stubs:test \
-  :app-logic:test \
-  :core-data-android:testDebugUnitTest \
-  :core-data-android:compileDebugAndroidTestKotlin \
-  :app:testDebugUnitTest \
-  :app:compileDebugAndroidTestKotlin \
-  :app:assembleDebug \
-  :app:assembleRelease \
-  :app:verifyBenchmarkFixtureArtifact \
-  :macrobenchmark:verifyMacrobenchmarkRunnerArtifact \
-  :app:detektDebug \
-  :app-logic:detektMain \
-  :core-data-android:detektDebug \
-  :core-domain:detektMain \
-  :core-data:detektMain \
-  :core-sources:detektMain \
-  :core-stubs:detektMain \
-  :koverXmlReportQuality \
-  :koverVerifyQuality \
-  --warning-mode=all \
-  --console=plain
-
-# Offline lint cannot download its own tool on a fresh machine. A dry run fetches it.
-phase 'Gradle: lint dry run' ./gradlew "${task_timings[@]}" :app:lint :core-data-android:lintDebug --dry-run --console=plain
-
-# Finish all source generation before lint reads Room's generated Java.
-phase 'Gradle: lint' ./gradlew "${task_timings[@]}" :app:lint :core-data-android:lintDebug --offline --no-daemon --warning-mode=all --console=plain
-
-phase 'Changed-code coverage' python3 scripts/check_changed_coverage.py \
-  --xml build/reports/kover/quality.xml \
-  --base "$base" \
-  --boundaries config/quality/coverage-boundaries.json \
-  --minimum 60
+case "$part" in
+  '') run_tests; run_static ;;
+  tests) run_tests ;;
+  static) run_static ;;
+  release) run_release ;;
+esac
 
 if [[ "$record" == true ]]; then
   if [[ "$(git rev-parse HEAD)" != "$commit" || -n "$(worktree_changes)" ]]; then
     echo 'The checkout changed during the run, so this result cannot be recorded.' >&2
     exit 1
   fi
-  git push --quiet origin "+$commit:refs/verified/$tree"
-  echo "Recorded verified code $tree."
+  python3 scripts/release_gate.py record check "$commit"
 fi
