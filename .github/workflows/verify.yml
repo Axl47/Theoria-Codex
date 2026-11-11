@@ -80,6 +80,26 @@ jobs:
         continue-on-error: true
         run: git push --quiet origin "+HEAD:refs/verified/$(git rev-parse 'HEAD^{tree}')"
 
+      # Machine-readable phase and Gradle task durations, tracked over time by an external dashboard.
+      - name: Upload timings
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: ci-timings
+          path: build/reports/timings/ci-timings.json
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Summarize timings
+        if: always() && hashFiles('build/reports/timings/ci-timings.json') != ''
+        run: |
+          jq -r '
+            "| Phase | Seconds |", "| --- | ---: |",
+            (.phases[] | "| \(.name)\(if .ok then "" else " (failed)" end) | \(.seconds) |"),
+            "", "| Slowest task | Seconds | Outcome |", "| --- | ---: | --- |",
+            (.tasks | sort_by(-.seconds) | .[:10][] | "| `\(.path)` | \(.seconds) | \(.outcome) |")
+          ' build/reports/timings/ci-timings.json >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload reports
         if: always()
         uses: actions/upload-artifact@v7.0.2
