@@ -3,6 +3,7 @@ package com.theoriacodex.app.search
 import com.theoriacodex.app.media.recoverRemoteMedia
 import com.theoriacodex.app.feed.settleFeedContinuations
 import com.theoriacodex.app.search.state.SearchSourceScope
+import com.theoriacodex.app.source.PostResolutionFlights
 import com.theoriacodex.app.search.state.modeKey
 import com.theoriacodex.app.search.state.queryMode
 import com.theoriacodex.app.source.inPresentationOrder
@@ -78,6 +79,8 @@ class SearchCoordinator(
     private val computationDispatcher: CoroutineDispatcher = Dispatchers.Default,
     /** Runs seen-tag bookkeeping after results return; tests pass their scheduler-backed scope. */
     seenTagScope: CoroutineScope = CoroutineScope(SupervisorJob() + computationDispatcher),
+    /** Shared with the Viewer, so a post both ask for at once is fetched once. */
+    private val postResolutions: PostResolutionFlights = PostResolutionFlights(),
 ) : SearchExecutionService {
     private val seenTags = SeenTagRecorder(statisticsRepository, tagSuggestionStore, computationDispatcher, seenTagScope)
     @Volatile private var runtimeSettings = AppSettings()
@@ -619,7 +622,7 @@ class SearchCoordinator(
         if (shouldDeferResolve(postId, executionKey)) return null
         val adapter = registry.adapterFor(postId.source) ?: return null
         return try {
-            val resolved = adapter.resolvePost(postId) ?: return null
+            val resolved = postResolutions.resolve(postId) { adapter.resolvePost(postId) } ?: return null
             rememberResolvedPost(resolved, executionKey)
             resolved
         } catch (error: SourceAdapterException) {

@@ -29,7 +29,7 @@ internal fun SavedSearchesCodexBoundary(
     val available = sources.availableSources.collectAsStateWithLifecycle().value
     val execution = remember(data, sources.registry) {
         SearchCoordinator(sources.registry, data.queryRepository, data.settingsRepository, data.uiRestoreRepository,
-            data.recentsRepository, data.statisticsRepository)
+            data.recentsRepository, data.statisticsRepository, postResolutions = sources.postResolutions)
     }
     val owner = viewModel<SavedSearchesCodexViewModel>(
         viewModelStoreOwner = com.theoriacodex.app.codex.LocalSavedCodexSessionOwner.current

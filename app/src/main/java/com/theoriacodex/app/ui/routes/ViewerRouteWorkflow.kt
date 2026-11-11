@@ -96,7 +96,9 @@ internal class ViewerRouteWorkflow(
         val adapter = checkNotNull(sources.registry.adapterFor(postId.source)) {
             "${postId.source.displayName()} is unavailable"
         }
-        val resolved = withContext(providerDispatcher) { adapter.resolvePost(postId) } ?: return null
+        val resolved = withContext(providerDispatcher) {
+            sources.postResolutions.resolve(postId) { adapter.resolvePost(postId) }
+        } ?: return null
         persistResolvedPost(resolved, streamSource)
         return resolved
     }
@@ -253,7 +255,11 @@ internal class ViewerRouteWorkflow(
     suspend fun resolvePostWithoutSaving(postId: PostId): Post? = withTimeoutOrNull(15_000L) {
         offlineMedia?.find(postId)
             ?: runCatchingPreservingCancellation {
-                withContext(providerDispatcher) { sources.registry.adapterFor(postId.source)?.resolvePost(postId) }
+                withContext(providerDispatcher) {
+                    sources.registry.adapterFor(postId.source)?.let { adapter ->
+                        sources.postResolutions.resolve(postId) { adapter.resolvePost(postId) }
+                    }
+                }
             }.getOrNull()
     }
 
