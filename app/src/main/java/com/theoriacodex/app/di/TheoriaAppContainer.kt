@@ -21,6 +21,8 @@ import com.theoriacodex.app.media.OfflineMediaCoordinator
 import com.theoriacodex.app.codex.LikesCodexSyncService
 import com.theoriacodex.app.codex.transfer.CodexTransferService
 import com.theoriacodex.app.recommend.ForYouCoordinator
+import com.theoriacodex.app.comments.CommentsLoader
+import com.theoriacodex.app.comments.CommentsLoading
 import com.theoriacodex.app.related.RelatedPostsLoader
 import com.theoriacodex.app.search.FileBackedTagSuggestionStore
 import com.theoriacodex.app.search.SearchCoordinator
@@ -157,6 +159,7 @@ data class FeatureDependencies(
     val search: SearchCoordinator,
     val forYou: ForYouCoordinator,
     val relatedPosts: RelatedPostsLoader,
+    val comments: CommentsLoading,
     val creatorProfile: CreatorProfileCoordinator,
     val mediaDurationCoordinator: MediaDurationCoordinator,
     val appUsageTracker: AppUsageTracker,
@@ -441,6 +444,7 @@ internal class DefaultTheoriaAppContainer(
             postResolutions = postResolutions,
         ),
         relatedPosts = RelatedPostsLoader(sourceRegistry),
+        comments = CommentsLoader(sourceRegistry),
         creatorProfile = CreatorProfileCoordinator(registry = sourceRegistry,
             follows = com.theoriacodex.data.repository.CreatorFollowsRepository(settingsRepository),
             postResolutions = postResolutions),
