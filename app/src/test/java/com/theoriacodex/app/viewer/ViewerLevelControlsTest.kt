@@ -135,6 +135,8 @@ class ViewerLevelControlsTest {
         val next = ViewerLevelControls(activity, activity.window, session)
         next.setEnabled(true)
         assertEquals(0f, activity.window.attributes.screenBrightness, 0f)
+        assertEquals(9, audio.getStreamVolume(AudioManager.STREAM_MUSIC))
+        next.restoreVolume()
         assertEquals(4, audio.getStreamVolume(AudioManager.STREAM_MUSIC))
     }
 }

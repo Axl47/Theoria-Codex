@@ -15,10 +15,27 @@ import androidx.compose.runtime.setValue
 internal class ViewerHoldScrub {
     /** Read once, when a gesture locks its direction, so it is not snapshot state. */
     var holding = false
+        set(value) {
+            field = value
+            if (value) abandoned = false
+        }
     var phase by mutableStateOf<ViewerHoldScrubPhase>(ViewerHoldScrubPhase.Idle)
         private set
+    private var abandoned = false
 
-    fun drag(offsetPx: Float) { phase = ViewerHoldScrubPhase.Dragging(offsetPx) }
+    fun drag(offsetPx: Float) {
+        if (!abandoned) phase = ViewerHoldScrubPhase.Dragging(offsetPx)
+    }
+
+    /**
+     * The media that owned this hold went away mid-gesture. Cancels any scrub in progress and ignores
+     * the rest of the drag, which now belongs to no timeline; the next hold starts clean.
+     */
+    fun abandon() {
+        holding = false
+        end(released = false)
+        abandoned = true
+    }
 
     fun end(released: Boolean) {
         val dragging = phase as? ViewerHoldScrubPhase.Dragging ?: return

@@ -104,7 +104,7 @@ internal fun ViewerMediaPage(
     val interactions = remember(key) { ViewerMediaInteractions() }
     val holdScrub = LocalViewerHoldScrub.current?.takeIf { controls.isActive }
     // A page that goes inactive or leaves mid-hold (NEXT mode advancing) never sees the release.
-    DisposableEffect(holdScrub) { onDispose { holdScrub?.holding = false } }
+    DisposableEffect(holdScrub) { onDispose { holdScrub?.abandon() } }
     // The transform changes every pinch event, so it is read only while drawing, never in composition.
     val transformModifier = remember(transform) {
         Modifier.graphicsLayer {

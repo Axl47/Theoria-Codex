@@ -6,6 +6,7 @@ import android.provider.Settings
 import android.view.Window
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,13 +63,18 @@ internal class ViewerLevelControls(
         if (value) {
             previousBrightness = window?.attributes?.screenBrightness ?: -1f
             session.brightness?.let(::writeBrightness)
-            session.volume?.let { remembered ->
-                runCatching { if (currentVolume() != remembered) audio?.setStreamVolume(AudioManager.STREAM_MUSIC, remembered, 0) }
-            }
         } else {
             writeBrightness(previousBrightness)
             end()
             feedback = null
+        }
+    }
+
+    /** Puts the media volume back where the Viewer last left it; only video playback should touch it. */
+    fun restoreVolume() {
+        if (!enabled) return
+        session.volume?.let { remembered ->
+            runCatching { if (currentVolume() != remembered) audio?.setStreamVolume(AudioManager.STREAM_MUSIC, remembered, 0) }
         }
     }
 
@@ -156,7 +162,7 @@ internal class ViewerLevelControls(
 }
 
 @Composable
-internal fun rememberViewerLevelControls(enabled: Boolean): ViewerLevelControls {
+internal fun rememberViewerLevelControls(enabled: Boolean, restoreVolume: Boolean): ViewerLevelControls {
     val context = LocalContext.current
     val window = context.findActivity()?.window
     val controls = remember(context, window) { ViewerLevelControls(context, window, ViewerSessionLevels.App) }
@@ -164,6 +170,7 @@ internal fun rememberViewerLevelControls(enabled: Boolean): ViewerLevelControls 
         controls.setEnabled(enabled)
         onDispose { controls.setEnabled(false) }
     }
+    LaunchedEffect(controls, enabled, restoreVolume) { if (restoreVolume) controls.restoreVolume() }
     return controls
 }
 
