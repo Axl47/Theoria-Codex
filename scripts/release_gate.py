@@ -1,14 +1,22 @@
 #!/usr/bin/env python3
-"""Decide whether the checked-out commit can be released, and whether its code is already verified.
+"""Release metadata and recorded check results, keyed by the code that can affect them.
 
-The Release workflow runs this first, and the release skill runs it before pushing. It prints the
-release identifiers, or writes them to GITHUB_OUTPUT. A missing verification is not an error: the
-workflow then runs the full check itself.
+Without a subcommand, it decides whether the checked-out commit can be released and whether its code
+already passed scripts/check.sh. The Release workflow runs this first, and the release skill runs it
+before pushing. It prints the release identifiers, or writes them to GITHUB_OUTPUT. A missing result
+is not an error: the workflow then runs the check itself.
+
+Subcommands share the result refs with check.sh and the workflows:
+  input-key [<commit>]          print the key naming every result for that commit's inputs
+  record <kind> [<commit>]      push refs/<kind ref>/<key> to origin
+  has <kind> [<commit>]         exit 0 when that result exists on origin, 1 otherwise
+where kind is check (scripts/check.sh), release (check.sh --part release) or device (emulator tests).
 """
 from __future__ import annotations
 
 import argparse
 import dataclasses
+import hashlib
 import os
 import pathlib
 import re
@@ -20,6 +28,11 @@ APP_BUILD = "app/build.gradle.kts"
 VERSION_CODE_BASE = 1_500_000_000
 VERSION_LINE = re.compile(r"^[+-]\s*version(Name|Code)\s*=")
 RELEASE_PATH_PREFIXES = ("release-notes/", "app/src/release/generated/baselineProfiles/")
+RESULT_REFS = {
+    "check": "refs/verified",
+    "release": "refs/verified-release",
+    "device": "refs/verified-device",
+}
 
 
 class ReleaseError(Exception):
@@ -88,18 +101,59 @@ def git(*arguments: str) -> str:
     return subprocess.run(["git", *arguments], check=True, capture_output=True, text=True).stdout.strip()
 
 
-def is_recorded(commit: str) -> bool:
-    tree = git("rev-parse", f"{commit}^{{tree}}")
-    return bool(git("ls-remote", "origin", f"refs/verified/{tree}"))
+def affects_checks(path: str) -> bool:
+    """False only for files no build or check reads: prose outside source trees, release notes, and
+    workflows other than Verify. No check reads Markdown (jscpd scans only Kotlin)."""
+    if path.startswith(".github/"):
+        return path == ".github/workflows/verify.yml"
+    if path.startswith("release-notes/"):
+        return False
+    return not path.endswith(".md") or "/src/" in f"/{path}"
 
 
-def is_verified() -> bool:
-    """The commit passed the check itself, or it only adds release files to a commit that did."""
-    if is_recorded("HEAD"):
+def input_key(listing: str) -> str:
+    """Hash the NUL-separated `git ls-tree -r -z` entries that can affect the build or the checks."""
+    entries = sorted(
+        entry for entry in listing.split("\0") if entry and affects_checks(entry.split("\t", 1)[1])
+    )
+    return hashlib.sha256("\0".join(entries).encode()).hexdigest()
+
+
+def commit_key(commit: str) -> str:
+    return input_key(git("ls-tree", "-r", "-z", "--full-tree", commit))
+
+
+def result_ref(kind: str, commit: str) -> str:
+    return f"{RESULT_REFS[kind]}/{commit_key(commit)}"
+
+
+def is_recorded(kind: str, commit: str) -> bool:
+    return bool(git("ls-remote", "origin", result_ref(kind, commit)))
+
+
+def is_verified(kind: str, commit: str = "HEAD") -> bool:
+    """The commit's inputs passed, or it only adds release files to a commit whose inputs did."""
+    if is_recorded(kind, commit):
         return True
-    changed = git("diff", "--name-only", "HEAD^", "HEAD").splitlines()
-    build_diff = git("diff", "--unified=0", "HEAD^", "HEAD", "--", APP_BUILD)
-    return is_release_only(changed, build_diff) and is_recorded("HEAD^")
+    try:
+        changed = git("diff", "--name-only", f"{commit}^", commit).splitlines()
+        build_diff = git("diff", "--unified=0", f"{commit}^", commit, "--", APP_BUILD)
+    except subprocess.CalledProcessError:  # A root commit, or a shallow clone without the parent.
+        return False
+    return is_release_only(changed, build_diff) and is_recorded(kind, f"{commit}^")
+
+
+def run_result_command(arguments: argparse.Namespace) -> int:
+    if arguments.command == "input-key":
+        print(commit_key(arguments.commit))
+        return 0
+    if arguments.command == "record":
+        ref = result_ref(arguments.kind, arguments.commit)
+        commit = git("rev-parse", "--verify", f"{arguments.commit}^{{commit}}")
+        git("push", "--quiet", "origin", f"+{commit}:{ref}")
+        print(f"Recorded {ref}.")
+        return 0
+    return 0 if is_verified(arguments.kind, arguments.commit) else 1
 
 
 def main() -> int:
@@ -109,7 +163,16 @@ def main() -> int:
         action="store_true",
         help="Allow a version that is already published, for runs that cannot publish.",
     )
+    commands = parser.add_subparsers(dest="command")
+    key_command = commands.add_parser("input-key", help="Print the result key for a commit.")
+    key_command.add_argument("commit", nargs="?", default="HEAD")
+    for name, help_text in [("record", "Push a result ref."), ("has", "Exit 0 when a result exists.")]:
+        command = commands.add_parser(name, help=help_text)
+        command.add_argument("kind", choices=sorted(RESULT_REFS))
+        command.add_argument("commit", nargs="?", default="HEAD")
     arguments = parser.parse_args()
+    if arguments.command is not None:
+        return run_result_command(arguments)
     try:
         release = parse_release(pathlib.Path(APP_BUILD).read_text(encoding="utf-8"))
         notes = pathlib.Path(release.notes_file)
@@ -126,7 +189,7 @@ def main() -> int:
         "version": release.name,
         "tag": release.tag,
         "notes-file": release.notes_file,
-        "verified": str(is_verified()).lower(),
+        "verified": str(is_verified("check")).lower(),
     }
     text = "".join(f"{key}={value}\n" for key, value in outputs.items())
     if output_path := os.environ.get("GITHUB_OUTPUT"):

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import os
 import pathlib
+import subprocess
 import sys
+import tempfile
 import unittest
 
 
@@ -73,6 +76,81 @@ class ReleaseOnlyCommitTest(unittest.TestCase):
     def test_a_source_change_needs_a_new_check(self) -> None:
         paths = ["CHANGELOG.md", "app/src/main/java/Feature.kt"]
         self.assertFalse(gate.is_release_only(paths, ""))
+
+
+def listing(*paths: str, blob: str = "a" * 40) -> str:
+    return "".join(f"100644 blob {blob}\t{path}\0" for path in paths)
+
+
+class InputKeyTest(unittest.TestCase):
+    code = ("app/src/main/java/Feature.kt", "gradle.properties", ".github/workflows/verify.yml")
+
+    def test_prose_notes_and_other_workflows_keep_the_key(self) -> None:
+        extra = ("README.md", ".docs/notes.md", "release-notes/v1.0.0.md", ".github/workflows/release.yml")
+        self.assertEqual(gate.input_key(listing(*self.code)), gate.input_key(listing(*self.code, *extra)))
+
+    def test_build_inputs_change_the_key(self) -> None:
+        base = gate.input_key(listing(*self.code))
+        for path in [
+            "core-sources/src/test/resources/site/README.md",
+            "scripts/check.sh",
+            "deploy/libretranslate/server.py",
+            ".jscpd.json",
+        ]:
+            with self.subTest(path=path):
+                self.assertNotEqual(base, gate.input_key(listing(*self.code, path)))
+
+    def test_content_changes_the_key(self) -> None:
+        self.assertNotEqual(gate.input_key(listing(*self.code)), gate.input_key(listing(*self.code, blob="b" * 40)))
+
+
+class ResultRefTest(unittest.TestCase):
+    """record and has against a throwaway origin, including the release-only exception."""
+
+    def setUp(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.repo = pathlib.Path(temp.name, "repo")
+        origin = pathlib.Path(temp.name, "origin.git")
+        subprocess.run(["git", "init", "-q", "--bare", origin], check=True)
+        subprocess.run(["git", "init", "-q", self.repo], check=True)
+        self.git("remote", "add", "origin", str(origin))
+        self.commit({gate.APP_BUILD: 'versionCode = 1\nversionName = "1.0.0"\n'})
+
+    def git(self, *arguments: str) -> None:
+        env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
+               "GIT_COMMITTER_EMAIL": "t@t"}
+        subprocess.run(["git", *arguments], cwd=self.repo, env=env, check=True, capture_output=True)
+
+    def commit(self, files: dict[str, str]) -> None:
+        for path, text in files.items():
+            (self.repo / path).parent.mkdir(parents=True, exist_ok=True)
+            (self.repo / path).write_text(text)
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "change")
+
+    def gate(self, *arguments: str) -> int:
+        return subprocess.run(
+            [sys.executable, SCRIPTS_DIR / "release_gate.py", *arguments], cwd=self.repo, capture_output=True
+        ).returncode
+
+    def test_each_kind_is_recorded_separately(self) -> None:
+        self.assertEqual(1, self.gate("has", "check"))
+        self.assertEqual(0, self.gate("record", "check"))
+        self.assertEqual(0, self.gate("has", "check"))
+        self.assertEqual(1, self.gate("has", "release"))
+
+    def test_a_docs_commit_reuses_the_result_and_a_source_commit_does_not(self) -> None:
+        self.gate("record", "check")
+        self.commit({"README.md": "docs"})
+        self.assertEqual(0, self.gate("has", "check"))
+        self.commit({"app/src/main/Feature.kt": "code"})
+        self.assertEqual(1, self.gate("has", "check"))
+
+    def test_a_version_bump_reuses_the_parent_result(self) -> None:
+        self.gate("record", "release")
+        self.commit({gate.APP_BUILD: 'versionCode = 2\nversionName = "1.0.1"\n', "release-notes/v1.0.1.md": "n"})
+        self.assertEqual(0, self.gate("has", "release"))
 
 
 if __name__ == "__main__":
