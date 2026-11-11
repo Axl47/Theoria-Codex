@@ -150,3 +150,15 @@ gradle.projectsEvaluated {
         }
     }
 }
+
+// Detekt's CLI for scripts/detekt_changed.sh, which runs it directly on changed files without
+// Gradle's per-run cost. Writes the CLI classpath once; the script reruns it when versions change.
+val detektCli by configurations.creating
+dependencies { detektCli("dev.detekt:detekt-cli:${libs.versions.detekt.get()}") }
+tasks.register("writeDetektCliClasspath") {
+    val classpath: FileCollection = detektCli
+    val output = layout.buildDirectory.file("detekt-cli/classpath.txt")
+    inputs.files(classpath)
+    outputs.file(output)
+    doLast { output.get().asFile.writeText(classpath.asPath) }
+}
