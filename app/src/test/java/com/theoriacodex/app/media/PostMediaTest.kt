@@ -138,11 +138,19 @@ class PostMediaTest {
             plan.candidates.map { it.activation },
         )
 
-        // Without a lighter rendition there is nothing to step through; the original stays a fallback.
-        val withoutSample = previewMediaDeliveryPlan(post(SourceKey.GELBOORU, ref("full.jpg", "image/jpeg")))
+        // Without a lighter rendition the original is the step up only when the post says it is small.
+        val withoutSample = post(SourceKey.GELBOORU, ref("full.jpg", "image/jpeg"))
         assertEquals(
             listOf(MediaDeliveryActivation.PRIMARY, MediaDeliveryActivation.FAILURE_FALLBACK),
-            withoutSample.candidates.map { it.activation },
+            previewMediaDeliveryPlan(withoutSample).candidates.map { it.activation },
+        )
+        assertEquals(
+            listOf(MediaDeliveryActivation.PRIMARY, MediaDeliveryActivation.QUALITY_UPGRADE),
+            previewMediaDeliveryPlan(withoutSample.copy(width = 800, height = 1_100)).candidates.map { it.activation },
+        )
+        assertEquals(
+            listOf(MediaDeliveryActivation.PRIMARY, MediaDeliveryActivation.FAILURE_FALLBACK),
+            previewMediaDeliveryPlan(withoutSample.copy(width = 800, height = 4_000)).candidates.map { it.activation },
         )
     }
 

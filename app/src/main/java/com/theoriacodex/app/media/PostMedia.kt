@@ -119,6 +119,8 @@ fun postMediaItems(post: Post): List<ImageRef> {
  *
  * Feed cards render at most half the screen wide, so quality upgrades stop at the largest downscaled
  * rendition (Gelbooru sample, Pixiv large); originals stay failure fallbacks and are left to the Viewer.
+ * An original with no lighter rendition is the step up only when the post says it is small
+ * ([FEED_SMALL_ORIGINAL_MAX_EDGE_PX]), which is when boorus skip generating a sample.
  */
 fun previewMediaDeliveryPlan(post: Post): MediaDeliveryPlan {
     val animatedFull = post.full?.takeIf(::isAnimatedImageMediaRef)
@@ -142,7 +144,16 @@ fun previewMediaDeliveryPlan(post: Post): MediaDeliveryPlan {
         preferredUrlFirst = preferred,
         animationUpgradeRef = animationUpgrade,
         nonUpgradeLocations = feedOriginalLocations(post),
+        upgradesToSmallOriginal = post.hasSmallOriginal(),
     )
+}
+
+/** Long-edge size up to which a card may load an original that has no lighter rendition. */
+internal const val FEED_SMALL_ORIGINAL_MAX_EDGE_PX = 1_280
+
+private fun Post.hasSmallOriginal(): Boolean {
+    val longEdge = maxOf(width ?: return false, height ?: return false)
+    return longEdge in 1..FEED_SMALL_ORIGINAL_MAX_EDGE_PX
 }
 
 /** Originals that have a smaller rendition; a feed card never downloads them just to downsample. */
@@ -173,6 +184,7 @@ private fun mediaDeliveryPlan(
     preferredUrlFirst: ImageRef?,
     animationUpgradeRef: ImageRef? = null,
     nonUpgradeLocations: Set<String> = emptySet(),
+    upgradesToSmallOriginal: Boolean = false,
 ): MediaDeliveryPlan {
     val seen = linkedSetOf<String>()
     val candidates = buildList {
@@ -193,7 +205,7 @@ private fun mediaDeliveryPlan(
                     isAnimationUpgrade = isAnimationUpgrade,
                     isQualityUpgrade = ref in qualityUpgradeRefs &&
                         !isFallbackCopy &&
-                        normalizedRef.hasLighterRenditions() &&
+                        (normalizedRef.hasLighterRenditions() || upgradesToSmallOriginal) &&
                         normalizedRef.localPath.isNullOrBlank() &&
                         location !in nonUpgradeLocations,
                 )
