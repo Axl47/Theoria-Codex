@@ -43,14 +43,15 @@ class DeviceValidationWorkflowTest(unittest.TestCase):
         self.assertLess(acceptance.index('mkdir -p "$android_user_home"'),
                         acceptance.index("run: ./gradlew :app:assembleReleaseAcceptance"))
 
-    def test_release_reuses_verified_code_but_always_runs_device_acceptance(self) -> None:
+    def test_release_runs_only_the_results_that_are_missing(self) -> None:
         release = RELEASE_WORKFLOW.read_text(encoding="utf-8")
         verify = release.split("  verify:", 1)[1].split("\n  device-validation:", 1)[0]
         device = release.split("  device-validation:", 1)[1].split("\n  build-release:", 1)[0]
-        self.assertIn("if: ${{ needs.gate.outputs.verified != 'true' }}", verify)
         self.assertIn("uses: ./.github/workflows/verify.yml", verify)
+        self.assertIn("check: ${{ needs.gate.outputs.verified != 'true' }}", verify)
+        self.assertIn("release: ${{ needs.gate.outputs.release != 'true' }}", verify)
         self.assertIn("uses: ./.github/workflows/device-validation.yml", device)
-        self.assertNotIn("if:", device)
+        self.assertIn("if: ${{ needs.gate.outputs.device != 'true' }}", device)
 
     def test_device_lane_never_blocks_ordinary_changes(self) -> None:
         trigger = self.workflow.split("on:", 1)[1].split("permissions:", 1)[0]
