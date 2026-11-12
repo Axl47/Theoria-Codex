@@ -112,7 +112,6 @@ internal fun SearchComposer(
     onUndo: () -> Unit,
     onManageSavedTags: () -> Unit,
     onOpenSourceAccounts: () -> Unit,
-    onDigitsCommitted: () -> Unit,
     onDismiss: () -> Unit,
     savedSearches: ComposerSavedSearches = ComposerSavedSearches(),
     savedTags: ComposerSavedTags = ComposerSavedTags(emptyList()),
@@ -124,7 +123,7 @@ internal fun SearchComposer(
         Surface(Modifier.fillMaxSize().testTag("Search composer")) {
             SearchComposerContent(
                 state, onAction, sourcePicker, onApply, onReset, onUndo,
-                onManageSavedTags, onOpenSourceAccounts, onDigitsCommitted, onDismiss,
+                onManageSavedTags, onOpenSourceAccounts, onDismiss,
                 savedSearches, savedTags,
             )
         }
@@ -141,7 +140,6 @@ private fun SearchComposerContent(
     onUndo: () -> Unit,
     onManageSavedTags: () -> Unit,
     onOpenSourceAccounts: () -> Unit,
-    onDigitsCommitted: () -> Unit,
     onDismiss: () -> Unit,
     savedSearches: ComposerSavedSearches,
     savedTags: ComposerSavedTags,
@@ -178,7 +176,7 @@ private fun SearchComposerContent(
     ComposerRemovalUndoEffect(removalUndo, terms, snackbars, onAction) { removalUndo = null }
 
     fun commitTyped() = commitComposerInput(
-        target, input, state.suggestions.canCommitInput, focus::clear, onAction, onDigitsCommitted,
+        target, input, state.suggestions.canCommitInput, focus::clear, onAction,
     )
     fun addAlternativeTo(term: SearchTerm) {
         excludeNext = false
@@ -246,7 +244,6 @@ private fun commitComposerInput(
     canCommit: Boolean,
     clearFocus: () -> Unit,
     onAction: (SearchAction) -> Unit,
-    onDigitsCommitted: () -> Unit,
 ) {
     val action = composerTypedAction(target, input)
     if (action == null) {
@@ -254,7 +251,6 @@ private fun commitComposerInput(
     } else if (canCommit) {
         onAction(action)
         if (action is SearchAction.AddIncludeAlternative) onAction(SearchAction.ClearAutocomplete)
-        if (input.trim().all(Char::isDigit)) onDigitsCommitted()
     }
 }
 

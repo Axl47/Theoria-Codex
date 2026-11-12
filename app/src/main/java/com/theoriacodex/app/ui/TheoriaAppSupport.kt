@@ -84,11 +84,19 @@ internal suspend fun DataDependencies.currentActiveRecommendationProfile(): Reco
 
 private val CODEX_IMPORT_MIME_TYPES = setOf("application/json", "text/json")
 
+/**
+ * Opens [url] in the default browser. Web URLs go through the browser-app selector so our own
+ * link-handling filters (Open links in Settings) can't capture them and reopen this app.
+ */
 internal fun openInBrowser(context: Context, url: String) {
     runCatching {
-        val intent = Intent(Intent.ACTION_VIEW, url.toUri()).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val uri = url.toUri()
+        val isWeb = uri.scheme.equals("http", ignoreCase = true) || uri.scheme.equals("https", ignoreCase = true)
+        val intent = if (isWeb) {
+            Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_BROWSER).apply { data = uri }
+        } else {
+            Intent(Intent.ACTION_VIEW, uri)
         }
-        context.startActivity(intent)
+        context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 }

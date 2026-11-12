@@ -100,6 +100,18 @@ class ViewerTransformStateTest {
     }
 
     @Test
+    fun `a quick flick the tracker missed still reads at its average speed`() {
+        val travel = androidx.compose.ui.geometry.Offset(-140f, 10f)
+        val missed = androidx.compose.ui.unit.Velocity.Zero
+        // Delivered as little more than down and up: 140 px in 60 ms is a flick.
+        assertEquals(-140f / 0.06f, viewerReleaseVelocity(missed, travel, durationMs = 60).x, 1f)
+        // A faster tracked reading is kept.
+        assertEquals(-5000f, viewerReleaseVelocity(androidx.compose.ui.unit.Velocity(-5000f, 0f), travel, 60).x, 0.01f)
+        // A drag longer than the window keeps the tracker's answer, so holding still before release still cancels.
+        assertEquals(0f, viewerReleaseVelocity(missed, travel, durationMs = 900).x, 0.01f)
+    }
+
+    @Test
     fun `edge stretch resists more the further it is pulled and keeps its direction`() {
         val near = viewerEdgeStretch(50f, 1000f)
         val far = viewerEdgeStretch(500f, 1000f)

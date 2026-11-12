@@ -164,6 +164,11 @@ internal class ViewerViewModel(
         mutableSession.value = session
         onAction(session.toReplaceViewerSessionAction { post -> postResolver?.requiresResolution(post) == true })
         if (isNewLaunch && session.initialMediaIndex > 0) onAction(ViewerAction.SelectMedia(session.initialMediaIndex))
+        if (isNewLaunch) {
+            val target = session.focusComment
+            val post = session.posts.getOrNull(session.context.startIndex)
+            if (target != null && post != null) comments.focus(post, target)
+        }
     }
 
     /** Keeps transient launch metadata and immutable render pages under the same route owner. */

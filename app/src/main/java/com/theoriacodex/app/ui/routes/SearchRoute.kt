@@ -6,10 +6,13 @@ import com.theoriacodex.data.repository.SavedSearchEntry
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
@@ -301,6 +304,8 @@ internal fun SearchRoute(
         posts = durationPosts,
         resolveInBackground = config.resolveUnknownAnimatedDurations,
     )
+    // Held here so a typed gallery ID can close the composer before the Viewer opens over it.
+    val composerOpen = rememberSaveable { mutableStateOf(false) }
     val ownerHandle = remember(owner) { SearchRouteOwnerHandle(owner) }
     val currentOnOwnerAvailable by rememberUpdatedState(onOwnerAvailable)
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -324,7 +329,10 @@ internal fun SearchRoute(
 
     CollectRouteEffects(owner.effects) { effect ->
         when (effect) {
-            is SearchEffect.OpenViewer -> callbacks.onOpenViewer(effect)
+            is SearchEffect.OpenViewer -> {
+                if (effect.fromTypedId) composerOpen.value = false
+                callbacks.onOpenViewer(effect)
+            }
             is SearchEffect.ShowMessage -> callbacks.onShowMessage(effect.message)
         }
     }
@@ -336,6 +344,7 @@ internal fun SearchRoute(
         duration = duration,
         pixivUgoiraClient = pixivUgoiraClient,
         config = config,
+        composerOpen = composerOpen,
         fabRestoreState = fabRestoreState,
         onFabRestoreStateChange = onFabRestoreStateChange,
         callbacks = callbacks,
@@ -350,6 +359,7 @@ private fun SearchRouteContent(
     duration: MediaDurationRouteBinding,
     pixivUgoiraClient: PixivUgoiraClient?,
     config: SearchRouteConfig,
+    composerOpen: MutableState<Boolean>,
     fabRestoreState: FeedFabRestoreState,
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
     callbacks: SearchRouteCallbacks,
@@ -363,6 +373,7 @@ private fun SearchRouteContent(
     val trending = state.suggestions.trending
     SearchScreen(
         state = state,
+        composerOpen = composerOpen,
         oldSearchBar = config.settings.oldSearchBar,
         savedSearches = config.savedSearches,
         onOpenSavedSearch = callbacks.onOpenSavedSearch,

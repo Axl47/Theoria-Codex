@@ -13,6 +13,9 @@ interface CommentsLoading {
 
     /** One page of [post]'s comments, or of the replies to [parent]. Throws when the source fails. */
     suspend fun load(post: Post, pageToken: String?, parent: PostComment? = null): CommentPage
+
+    /** The fragment [source]'s own post page uses to jump to the top-level comment [commentId], or null when it has none. */
+    fun nativeCommentAnchor(source: SourceKey, commentId: String): String? = null
 }
 
 /**

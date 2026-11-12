@@ -13,6 +13,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
@@ -186,7 +187,9 @@ private suspend fun AwaitPointerEventScope.readViewerGesture(
     config: ViewerGestureConfig,
     handler: () -> ViewerGestureHandler,
 ): ViewerGestureEnd {
-    val tracker = VelocityTracker().apply { addPosition(down.uptimeMillis, down.position) }
+    // Frames batch touch samples; the tracker needs the historical ones too, or a flick that arrives
+    // during a busy frame reads as slow and falls back to distance.
+    val tracker = VelocityTracker().apply { addPointerInputChange(down) }
     val gesture = ViewerGestureTracker(
         column = viewerGestureColumn(down.position.x, size),
         config = config,
@@ -199,10 +202,13 @@ private suspend fun AwaitPointerEventScope.readViewerGesture(
         while (true) {
             val change = awaitPointerEvent(PointerEventPass.Initial).changes.singleOrNull()
                 ?.takeIf { it.id == down.id } ?: return ViewerGestureEnd.None
-            tracker.addPosition(change.uptimeMillis, change.position)
+            tracker.addPointerInputChange(change)
             gesture.follow(change)
             if (!change.pressed) {
-                return gesture.end(tracker.calculateVelocity(), VIEWER_INFO_SWIPE_DISTANCE.toPx(), VIEWER_FLING_VELOCITY.toPx())
+                val velocity = viewerReleaseVelocity(
+                    tracker.calculateVelocity(), gesture.travel, change.uptimeMillis - down.uptimeMillis,
+                )
+                return gesture.end(velocity, VIEWER_INFO_SWIPE_DISTANCE.toPx(), VIEWER_FLING_VELOCITY.toPx())
             }
         }
     } finally {
@@ -225,6 +231,8 @@ private class ViewerGestureTracker(
     private var x = 0f
     private var y = 0f
     private var atLimit = false
+    /** How far the finger has moved since it landed. */
+    val travel: Offset get() = Offset(x, y)
 
     fun follow(change: PointerInputChange) {
         val delta = change.position - change.previousPosition
@@ -282,6 +290,21 @@ private class ViewerGestureTracker(
 }
 
 private val VIEWER_INFO_SWIPE_DISTANCE = 64.dp
+
+/** A gesture this short is a flick, even when the tracker saw too few of its samples to say so. */
+internal const val VIEWER_FLICK_WINDOW_MS = 150L
+
+/**
+ * The release velocity for a gesture that moved [travel] in [durationMs]. When the main thread is
+ * busy, Android can deliver a quick flick as little more than its down and up, and the tracker then
+ * reads it as slow; within [VIEWER_FLICK_WINDOW_MS] the gesture's average speed is a floor.
+ */
+internal fun viewerReleaseVelocity(tracked: Velocity, travel: Offset, durationMs: Long): Velocity {
+    if (durationMs !in 1..VIEWER_FLICK_WINDOW_MS) return tracked
+    val perSecond = 1000f / durationMs
+    fun faster(tracked: Float, average: Float) = if (abs(average) > abs(tracked)) average else tracked
+    return Velocity(faster(tracked.x, travel.x * perSecond), faster(tracked.y, travel.y * perSecond))
+}
 
 private fun ViewerLevelControls.isAtLimit(): Boolean =
     feedback?.takeIf { it.available }?.fraction?.let { it <= 0f || it >= 1f } == true

@@ -2,6 +2,7 @@ package com.theoriacodex.app.source
 
 import com.theoriacodex.app.customsites.CustomSiteAvailability
 import com.theoriacodex.app.customsites.CustomSiteSummary
+import com.theoriacodex.domain.model.CommentTarget
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.ProtocolFamily
 import com.theoriacodex.domain.source.SiteHeaders
@@ -20,6 +21,17 @@ class CustomSiteDeepLinksTest {
             parseCustomSitePostDeepLink("https://www.safebooru.org/index.php?page=post&s=view&id=42", sites),
         )
         assertEquals("7", parseCustomSitePostDeepLink("https://booru.example/sub/posts/7", sites)?.postId)
+    }
+
+    @Test fun `reads the comment a link's fragment names`() {
+        assertEquals(
+            CommentTarget("5"),
+            parseCustomSitePostDeepLink("https://safebooru.org/index.php?page=post&s=view&id=42#c5", sites)?.comment,
+        )
+        assertEquals(
+            CommentTarget("8", parentId = "2"),
+            parseCustomSitePostDeepLink("https://booru.example/sub/posts/7#theoria-comment=2/8", sites)?.comment,
+        )
     }
 
     @Test fun `ignores other pages, other install paths and other hosts`() {

@@ -37,6 +37,7 @@ class DataStoreRepositoriesTest {
                 current.copy(oldSearchBar = true, codexLibrarySort = CodexLibrarySort.MOST_ITEMS, viewer = current.viewer.copy(
                     playbackMode = com.theoriacodex.domain.model.ViewerPlaybackMode.ONCE,
                     instantSeek = true,
+                    commentOrder = com.theoriacodex.domain.model.CommentOrder.NEWEST,
                 ))
             }
         } finally {
@@ -47,6 +48,7 @@ class DataStoreRepositoriesTest {
             val restored = DataStoreSettingsRepository(directory, secondScope).observeSettings().first()
             assertEquals(com.theoriacodex.domain.model.ViewerPlaybackMode.ONCE, restored.viewer.playbackMode)
             assertTrue(restored.viewer.instantSeek)
+            assertEquals(com.theoriacodex.domain.model.CommentOrder.NEWEST, restored.viewer.commentOrder)
             assertTrue(restored.oldSearchBar)
             assertEquals(CodexLibrarySort.MOST_ITEMS, restored.codexLibrarySort)
         } finally {

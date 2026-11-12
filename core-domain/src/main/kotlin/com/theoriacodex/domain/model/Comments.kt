@@ -14,6 +14,15 @@ data class CommentHint(val count: Int?) {
     }
 }
 
+/** Which end of a post's comments is listed first; the Viewer keeps the user's choice. */
+enum class CommentOrder {
+    OLDEST,
+    NEWEST,
+    ;
+
+    fun toggled(): CommentOrder = if (this == OLDEST) NEWEST else OLDEST
+}
+
 /** One read-only comment, already reduced to plain text by its source. */
 data class PostComment(
     val id: String,
@@ -26,6 +35,8 @@ data class PostComment(
     val stampUrl: String? = null,
     /** True when [CommentPage]s of replies can be requested with this comment as the parent. */
     val hasReplies: Boolean = false,
+    /** The commenter's account on the source, when the source names one Theoria can open. */
+    val author: CreatorProfile? = null,
 )
 
 /**

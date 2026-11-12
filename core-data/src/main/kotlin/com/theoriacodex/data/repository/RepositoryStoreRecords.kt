@@ -42,6 +42,7 @@ internal data class LegacySettingsStoreRecord(
     @field:SerializedName("codexLibrarySort") val codexLibrarySort: String? = null,
     @field:SerializedName("instantSeek") val instantSeek: Boolean = false,
     @field:SerializedName("viewerAutoRotateVideos") val viewerAutoRotateVideos: Boolean? = null,
+    @field:SerializedName("viewerCommentOrder") val viewerCommentOrder: String? = null,
     @field:SerializedName("viewerAutomaticTextTranslationEnabled")
     val viewerAutomaticTextTranslationEnabled: Boolean = false,
     @field:SerializedName("viewerEnabledOcrLanguages")
@@ -145,6 +146,8 @@ internal data class LegacySettingsStoreRecord(
             invertMultiImageScrollDirection = invertMultiImageScrollDirection,
             instantSeek = instantSeek,
             autoRotateVideos = viewerAutoRotateVideos ?: true,
+            commentOrder = com.theoriacodex.domain.model.CommentOrder.entries.firstOrNull { it.name == viewerCommentOrder }
+                ?: com.theoriacodex.domain.model.CommentOrder.OLDEST,
             automaticTextTranslationEnabled = viewerAutomaticTextTranslationEnabled,
             enabledOcrLanguages = viewerEnabledOcrLanguages.mapNotNullTo(linkedSetOf()) { name ->
                 runCatching { ViewerOcrLanguage.valueOf(name) }.getOrNull()
@@ -186,6 +189,7 @@ internal data class LegacySettingsStoreRecord(
                 invertMultiImageScrollDirection = settings.viewer.invertMultiImageScrollDirection,
                 instantSeek = settings.viewer.instantSeek,
                 viewerAutoRotateVideos = settings.viewer.autoRotateVideos,
+                viewerCommentOrder = settings.viewer.commentOrder.name,
                 viewerAutomaticTextTranslationEnabled = settings.viewer.automaticTextTranslationEnabled,
                 viewerEnabledOcrLanguages = settings.viewer.enabledOcrLanguages
                     .sortedBy(ViewerOcrLanguage::ordinal)

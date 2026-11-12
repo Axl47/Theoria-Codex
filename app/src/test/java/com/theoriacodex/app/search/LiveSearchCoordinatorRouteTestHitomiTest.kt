@@ -11,6 +11,7 @@ import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.viewer.ViewerMediaOverviewKind
 import com.theoriacodex.app.viewer.viewerMediaOverviewItems
 import com.theoriacodex.domain.adapter.FacetedSearchScope
+import com.theoriacodex.domain.model.AccountFeed
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
@@ -228,7 +229,7 @@ internal class LiveSearchCoordinatorRouteTestHitomiTest : LiveSearchCoordinatorR
         ) { "Hitomi gallery $ANIMATED_GALLERY_ID did not expose Najar as a creator" }
         assertEquals("artist:najar", najar.uploadsQuery)
         val creator = CreatorProfileCoordinator(registry)
-        val creatorPage = creator.load(najar, pageToken = null)
+        val creatorPage = creator.load(najar, AccountFeed.UPLOADS, pageToken = null)
         assertTrue("Hitomi Najar creator uploads were empty", creatorPage.items.isNotEmpty())
         assertTrue(
             "Hitomi Najar creator uploads returned another source",

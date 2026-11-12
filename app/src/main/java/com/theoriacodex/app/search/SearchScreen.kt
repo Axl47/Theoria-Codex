@@ -111,12 +111,12 @@ fun SearchScreen(
     fabRestoreState: FeedFabRestoreState = FeedFabRestoreState(),
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit = {},
     oldSearchBar: Boolean = false,
+    composerOpen: MutableState<Boolean> = rememberSaveable { mutableStateOf(false) },
     savedSearches: List<SavedSearchEntry> = emptyList(),
     onOpenSavedSearch: (SavedSearchEntry) -> Unit = {},
     onSaveSearch: (String, RecentSearchEntry) -> Unit = { _, _ -> },
     onManageSavedSearches: () -> Unit = {},
 ) {
-    val composerOpen = rememberSaveable { mutableStateOf(false) }
     val chrome = remember(composerOpen) { SearchChromeState(composerOpen) }
     val actionPost = remember { SearchActionPostState() }
     val inputFocus = rememberSearchInputFocus()
@@ -306,7 +306,6 @@ private fun SearchComposerDialog(
         },
         onManageSavedTags = { chrome.showFavoriteTagSheet = true },
         onOpenSourceAccounts = onOpenSourceAccounts,
-        onDigitsCommitted = { resetScroll() },
         onDismiss = { chrome.closeComposer(onAction) },
         savedSearches = savedSearches,
         savedTags = ComposerSavedTags(

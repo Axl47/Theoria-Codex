@@ -51,10 +51,14 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.MainActivity
 import com.theoriacodex.app.codex.PreloadCodexSaveRelevance
 import com.theoriacodex.app.comments.CommentCount
+import com.theoriacodex.app.comments.CommentsView
 import com.theoriacodex.app.comments.ViewerComments
 import com.theoriacodex.app.comments.commentsSection
 import com.theoriacodex.app.tags.PostTagSheetExtras
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import com.theoriacodex.app.comments.AuthorDestination
+import kotlinx.coroutines.delay
 import com.theoriacodex.app.creator.CreatorProfileAction
 import com.theoriacodex.app.creator.creatorProfileActions
 import com.theoriacodex.app.source.displayName
@@ -94,6 +98,7 @@ internal fun BoxScope.ViewerChromeOverlays(
 ) {
     val selection = frame.selection
     val navigation = frame.navigation
+    OpenInfoSheetForFocusedComment(comments, selection.post, frame.uiState.controls.metadataVisible, controls)
     // While scrubbing everything but the timeline steps back. Only its alpha changes, so the strip keeps its scroll position.
     val scrubFade by animateFloatAsState(if (screen.timelineInteractionActive) 0f else 1f, tween(TheoriaMotion.SHORT_MS), label = "Viewer scrub fade")
     val fadesWhileScrubbing = Modifier.graphicsLayer { alpha = scrubFade }
@@ -222,6 +227,68 @@ private fun ViewerTopBar(
     )
 }
 
+/** How long a comment stays tinted after a link led to it, before the tint fades. */
+private const val COMMENT_HIGHLIGHT_MS = 1400L
+
+/**
+ * The comment a link led to, while it is to be scrolled to and tinted. It is taken from the post's comments
+ * state, which clears it so that it acts once, and held for [COMMENT_HIGHLIGHT_MS]. Null at other times.
+ */
+@Composable
+private fun rememberHighlightedComment(post: Post, comments: ViewerComments): String? {
+    var highlighted by remember(post.id) { mutableStateOf<String?>(null) }
+    val focusKey = comments.stateOf(post)?.focusKey
+    LaunchedEffect(focusKey) {
+        if (focusKey != null) {
+            highlighted = focusKey
+            comments.actions.focusShown(post)
+        }
+    }
+    LaunchedEffect(highlighted) {
+        if (highlighted != null) {
+            delay(COMMENT_HIGHLIGHT_MS)
+            highlighted = null
+        }
+    }
+    return highlighted
+}
+
+/** The comments section as the info sheet shows it; an author's creator page replaces the Viewer, a profile on the site opens beside it. */
+private fun commentsView(
+    comments: ViewerComments,
+    collapsed: Boolean,
+    onToggleCollapsed: () -> Unit,
+    highlightKey: String?,
+    creatorBrowsingSources: Set<SourceKey>,
+    controls: ViewerControls,
+    onAction: (ViewerAction) -> Unit,
+) = CommentsView(
+    collapsed, onToggleCollapsed, comments.order, comments.onOrderSelected,
+    highlightKey = highlightKey,
+    creatorBrowsingSources = creatorBrowsingSources,
+    onOpenAuthor = { destination ->
+        when (destination) {
+            // Playback pauses and the sheet closes, as for the post's own creator.
+            is AuthorDestination.CreatorPage -> {
+                controls.setPlaybackEnabled(false)
+                onAction(ViewerAction.OpenCreator(destination.profile))
+                controls.setInfoSheetVisible(false)
+            }
+            is AuthorDestination.Browser -> comments.onOpenUrl(destination.url)
+        }
+    },
+    onOpenUrl = comments.onOpenUrl,
+)
+
+/** When a comment link's target is found, shows the comments; the info sheet scrolls to it and clears the focus. */
+@Composable
+internal fun OpenInfoSheetForFocusedComment(comments: ViewerComments, post: Post, infoSheetVisible: Boolean, controls: ViewerControls) {
+    val focusKey = comments.stateOf(post)?.focusKey
+    LaunchedEffect(focusKey) {
+        if (focusKey != null && !infoSheetVisible) controls.openInfoSheetAtComments()
+    }
+}
+
 /** Opens the info sheet from the top bar, at its top or scrolled to the comments. */
 private fun ViewerControls.showInfoSheet(atComments: Boolean) {
     setActionsMenuExpanded(false)
@@ -257,6 +324,8 @@ internal fun ViewerInfoSheet(
     val commentsState = comments.stateOf(post)
     val commentCount = comments.countOf(post)
     val nowEpochMs = remember { System.currentTimeMillis() }
+    var commentsCollapsed by remember(post.id) { mutableStateOf(false) }
+    val highlightedComment = rememberHighlightedComment(post, comments)
     AdaptiveViewerInfo(onDismiss = { controls.setInfoSheetVisible(false) }) {
         PostTagActionSection(
             header = {
@@ -285,7 +354,16 @@ internal fun ViewerInfoSheet(
             sheetExtras = PostTagSheetExtras(
                 tagsInitiallyCollapsed = tagsStartCollapsed,
                 scrollToAfterTags = openedAtComments,
-                afterTags = { commentsState?.let { commentsSection(post, it, commentCount, comments.actions, nowEpochMs) } },
+                scrollToKey = highlightedComment,
+                afterTags = {
+                    commentsState?.let { state ->
+                        val view = commentsView(
+                            comments, commentsCollapsed, { commentsCollapsed = !commentsCollapsed }, highlightedComment,
+                            creatorBrowsingSources, controls, onAction,
+                        )
+                        commentsSection(post, state, commentCount, comments.actions, nowEpochMs, view)
+                    }
+                },
             ),
         )
     }

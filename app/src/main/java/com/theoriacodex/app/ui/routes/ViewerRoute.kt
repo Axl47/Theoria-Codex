@@ -92,6 +92,7 @@ internal data class ViewerRouteRenderConfig(
     val invertMultiImageScrollDirection: Boolean = false,
     val instantSeek: Boolean = false,
     val autoRotateVideos: Boolean = false,
+    val commentOrder: com.theoriacodex.domain.model.CommentOrder = com.theoriacodex.domain.model.CommentOrder.OLDEST,
     val likedPostIds: Set<PostId> = emptySet(),
     val creatorBrowsingSources: Set<SourceKey>,
 )
@@ -182,9 +183,11 @@ internal data class ViewerRouteEffectCallbacks(
 internal data class ViewerRouteScreenCallbacks(
     val onOwnerChanged: (ViewerRouteOwnerHandle?) -> Unit = {},
     val onPlaybackModeSelected: (com.theoriacodex.domain.model.ViewerPlaybackMode) -> Unit = {},
+    val onCommentOrderSelected: (com.theoriacodex.domain.model.CommentOrder) -> Unit = {},
     val onVisiblePostChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
     val onVisibleMediaChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
     val onOpenInBrowser: (Post) -> Unit,
+    val onOpenUrl: (String) -> Unit = {},
     val onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
     val onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
     val onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
@@ -358,7 +361,7 @@ private fun ViewerRouteRenderer(
     routeScope: CoroutineScope,
 ) {
     ViewerScreen(
-        comments = rememberViewerComments(viewerOwner),
+        comments = rememberViewerComments(viewerOwner, renderConfig.commentOrder, screenCallbacks.onCommentOrderSelected, screenCallbacks.onOpenUrl),
         uiState = viewerState.copy(related = com.theoriacodex.app.viewer.state.ViewerRelatedUiState(
             related.state, related.posts, activeSession?.relatedNavigation, activeSession?.relatedPostIds.orEmpty(),
         )),
@@ -421,9 +424,18 @@ private fun ViewerViewModel.dispatch(action: ViewerAction, screenCallbacks: View
 
 /** The owner's comments as the screen reads them, recomposing as pages arrive. */
 @Composable
-private fun rememberViewerComments(viewerOwner: ViewerViewModel): ViewerComments {
+private fun rememberViewerComments(
+    viewerOwner: ViewerViewModel,
+    order: com.theoriacodex.domain.model.CommentOrder,
+    onOrderSelected: (com.theoriacodex.domain.model.CommentOrder) -> Unit,
+    onOpenUrl: (String) -> Unit,
+): ViewerComments {
     val states by viewerOwner.comments.state.collectAsStateWithLifecycle()
-    return remember(states, viewerOwner) { ViewerComments(states, viewerOwner.comments) }
+    val latestOnOrderSelected by rememberUpdatedState(onOrderSelected)
+    val latestOnOpenUrl by rememberUpdatedState(onOpenUrl)
+    return remember(states, viewerOwner, order) {
+        ViewerComments(states, viewerOwner.comments, order, { latestOnOrderSelected(it) }) { latestOnOpenUrl(it) }
+    }
 }
 
 /** Claims the pending session once per owner, or rebuilds one from its compact saved identity. */

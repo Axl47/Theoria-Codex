@@ -3,7 +3,9 @@ package com.theoriacodex.sources.danbooru
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.theoriacodex.domain.model.CommentHint
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.PostComment
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.common.booleanValue
 import com.theoriacodex.sources.common.longValue
 import com.theoriacodex.sources.common.optionalJsonObject
@@ -16,17 +18,32 @@ internal const val DANBOORU_COMMENTS_PAGE_SIZE = 100
 /** Fields requested for comments; everything else Danbooru sends is unused. */
 internal const val DANBOORU_COMMENT_FIELDS = "id,body,created_at,is_deleted,creator"
 
-/** Maps one `/comments.json` record; deleted comments and records without an id are dropped. */
-internal fun parseDanbooruComment(element: JsonElement): PostComment? {
+/**
+ * Maps one `/comments.json` record; deleted comments and records without an id are dropped. The
+ * commenter's account is the record's `creator` (`id` and `name`) on the site at [baseUrl].
+ */
+internal fun parseDanbooruComment(element: JsonElement, source: SourceKey, baseUrl: String): PostComment? {
     val raw = element.takeIf { it.isJsonObject }?.asJsonObject ?: return null
     if (raw.booleanValue("is_deleted") == true) return null
     val id = raw.longValue("id")?.toString() ?: return null
+    val creator = raw.optionalJsonObject("creator")
+    val name = creator?.stringValue("name")?.trim().orEmpty()
+    val userId = creator?.longValue("id")?.toString()
     return PostComment(
         id = id,
-        authorName = raw.optionalJsonObject("creator")?.stringValue("name")?.trim().orEmpty(),
+        authorName = name,
         authorAvatarUrl = null,
         body = danbooruDTextToPlain(raw.stringValue("body").orEmpty()),
         createdAtEpochMs = parseOffsetDateTimeMs(raw.stringValue("created_at")),
+        author = userId?.let {
+            CreatorProfile(
+                source = source,
+                displayName = name.ifBlank { it },
+                profileId = it,
+                profileUrl = "$baseUrl/users/$it",
+                uploadsQuery = name.ifBlank { null }?.let { user -> "user:$user" },
+            )
+        },
     )
 }
 

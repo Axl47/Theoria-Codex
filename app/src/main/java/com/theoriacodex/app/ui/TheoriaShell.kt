@@ -433,16 +433,24 @@ internal class TheoriaShell(
         transfers.showDownloads = true
     }
 
+    /**
+     * Opens [creator] above the current screen, so Back returns to it. A Viewer stays open underneath, except one
+     * browsing a creator page's feed: that feed lives in the single creator owner the new page takes over, so it closes.
+     */
     suspend fun openCreatorProfile(creator: CreatorProfile) {
         pendingCreatorProfile = creator
-        if (navigation.currentRoute == AppRoute.Viewer) {
+        val viewerSession = activeViewerOwner?.session?.value
+        val viewerUsesCreatorFeed = viewerSession != null && ViewerStreamSource.CREATOR_PROFILE in
+            listOf(viewerSession.context.streamSource, viewerSession.relatedBinding?.source)
+        if (navigation.currentRoute == AppRoute.Viewer && viewerUsesCreatorFeed) {
             activeViewerOwner?.clearSession()
             viewerSessions.clear()
             features.search.setViewerLaunchContext(null)
             navController.popBackStack(AppRoute.Viewer, inclusive = true)
         }
         navController.navigate(AppRoute.CreatorProfile) {
-            launchSingleTop = true
+            // A creator opened from a creator page replaces it; its entry remembers the creator it started with.
+            if (navigation.currentRoute == AppRoute.CreatorProfile) popUpTo(AppRoute.CreatorProfile) { inclusive = true }
         }
     }
 
@@ -693,6 +701,7 @@ internal class TheoriaShell(
                 context = context,
                 liveSearchBinding = false,
                 initialMediaIndex = deepLink.initialMediaIndex,
+                focusComment = deepLink.comment,
             ),
         )
         data.uiRestoreRepository.setViewerLaunchContext(context)

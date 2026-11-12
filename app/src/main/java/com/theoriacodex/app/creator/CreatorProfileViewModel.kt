@@ -19,6 +19,7 @@ import com.theoriacodex.app.related.RelatedPostsDiagnostics
 import com.theoriacodex.app.related.UnsupportedRelatedPostsLoader
 import com.theoriacodex.app.media.replacingPostSnapshot
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.domain.model.AccountFeed
 import com.theoriacodex.app.ui.state.RouteStateOwner
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
@@ -56,6 +57,7 @@ internal class CreatorProfileViewModel(
 
     private val ownerScope = coroutineScope ?: viewModelScope
     private var requestJob: Job? = null
+    private var detailsJob: Job? = null
 
     private val mutableState = MutableStateFlow(CreatorUiState())
     override val state: StateFlow<CreatorUiState> = mutableState.asStateFlow()
@@ -90,6 +92,26 @@ internal class CreatorProfileViewModel(
     }
 
     override fun onAction(action: CreatorAction) {
+        if (action is CreatorAction.OpenCreator) openCreator(action) else reduceAction(action)
+    }
+
+    /** Asks the source whether [action]'s creator is an account, then loads the header details beside the first feed. */
+    private fun openCreator(action: CreatorAction.OpenCreator) {
+        val opened = if (action.feeds.isEmpty()) action.copy(feeds = engine.accountFeeds(action.creator)) else action
+        detailsJob?.cancel(CancellationException("Creator replaced"))
+        reduceAction(opened)
+        if (opened.feeds.isNotEmpty()) launchDetails(opened.creator)
+    }
+
+    /** A failed or empty details request leaves the header bare; the page never waits on it. */
+    private fun launchDetails(creator: CreatorProfile) {
+        detailsJob = ownerScope.launch {
+            val details = runCatchingPreservingCancellation { engine.accountDetails(creator) }.getOrNull() ?: return@launch
+            onAction(CreatorAction.DetailsLoaded(creator, details))
+        }
+    }
+
+    private fun reduceAction(action: CreatorAction) {
         when (action) {
             is CreatorAction.RelatedLikeCommitted -> {
                 relatedPosts.onLikeCommitted(action.post, action.outcome)
@@ -117,11 +139,14 @@ internal class CreatorProfileViewModel(
             }
             else -> Unit
         }
-        val transition = mutableState.value.reduce(action)
-        if (action == CreatorAction.SourceUnavailable ||
+        val previous = mutableState.value
+        val transition = previous.reduce(action)
+        val feedChanged = transition.state.selectedFeed != previous.selectedFeed
+        if (feedChanged) requestJob?.cancel(CancellationException("Creator feed changed"))
+        if (action == CreatorAction.SourceUnavailable || feedChanged ||
             (transition.effect as? CreatorEffect.LoadPage)?.request?.kind == CreatorRequestKind.REFRESH
         ) {
-            relatedPosts.clear("creator refresh or capability changed")
+            relatedPosts.clear("creator refresh, feed or capability changed")
         }
         mutableState.value = transition.state.copy(relatedPosts = mutableState.value.relatedPosts)
         transition.state.creator?.let(::persistCreator)
@@ -159,31 +184,35 @@ internal class CreatorProfileViewModel(
         requestJob?.cancel(CancellationException("Creator request replaced"))
         requestJob = ownerScope.launch {
             try {
-                val page = engine.load(effect.creator, effect.pageToken)
+                val page = engine.load(effect.creator, effect.feed, effect.pageToken)
                 ensureActive()
                 if (mutableState.value.activeRequest != effect.request) return@launch
                 onAction(CreatorAction.PageLoaded(effect.request, page))
-                if (effect.request.kind == CreatorRequestKind.REFRESH) {
-                    // Accepted bookkeeping outlives the completed request, but not the route owner.
-                    val posts = mutableState.value.results
-                    ownerScope.launch {
-                        runCatchingPreservingCancellation { engine.recordAcceptedVisit(effect.creator, posts) }
-                    }
-                }
+                recordAcceptedVisit(effect)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                onAction(CreatorAction.RequestFailed(
-                    effect.request,
-                    error.message ?: "Could not load creator uploads",
-                    if (engine.supports(effect.creator)) CreatorFailureReason.REQUEST_FAILED
-                    else CreatorFailureReason.UNSUPPORTED_SOURCE,
-                ))
+                onAction(requestFailure(effect, error))
             } finally {
                 if (!isActive) onAction(CreatorAction.RequestCancelled(effect.request))
             }
         }
     }
+
+    /** Only a fresh uploads list is a visit; accepted bookkeeping outlives the completed request, but not the route owner. */
+    private fun recordAcceptedVisit(effect: CreatorEffect.LoadPage) {
+        if (effect.request.kind != CreatorRequestKind.REFRESH || effect.feed != AccountFeed.UPLOADS) return
+        val posts = mutableState.value.results
+        ownerScope.launch {
+            runCatchingPreservingCancellation { engine.recordAcceptedVisit(effect.creator, posts) }
+        }
+    }
+
+    private fun requestFailure(effect: CreatorEffect.LoadPage, error: Throwable) = CreatorAction.RequestFailed(
+        effect.request,
+        error.message ?: if (effect.feed == AccountFeed.FAVORITES) "Could not load favorites" else "Could not load creator uploads",
+        if (engine.supports(effect.creator)) CreatorFailureReason.REQUEST_FAILED else CreatorFailureReason.UNSUPPORTED_SOURCE,
+    )
 
     private fun persistCreator(creator: CreatorProfile) {
         savedStateHandle[KEY_SOURCE] = creator.source.id

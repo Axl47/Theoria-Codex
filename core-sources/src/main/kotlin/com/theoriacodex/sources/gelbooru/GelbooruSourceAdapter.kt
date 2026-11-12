@@ -2,6 +2,7 @@ package com.theoriacodex.sources.gelbooru
 
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.theoriacodex.domain.adapter.AccountProfileSourceAdapter
 import com.theoriacodex.domain.adapter.CommentsSourceAdapter
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.Page
@@ -13,6 +14,8 @@ import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.model.AccountDetails
+import com.theoriacodex.domain.model.AccountFeed
 import com.theoriacodex.domain.model.CommentPage
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
@@ -74,8 +77,12 @@ fun GelbooruSourceAdapter(
     }
 }
 
-/** What every Gelbooru-family site supports; creator and related posts depend on the profile. */
-interface GelbooruFamilySourceAdapter : SourceAdapter, TagCountLookupSourceAdapter, CommentsSourceAdapter
+/**
+ * What every Gelbooru-family site supports; creator and related posts depend on the profile. Every
+ * creator is a site account (post uploaders and commenters alike), so account pages are universal.
+ */
+interface GelbooruFamilySourceAdapter :
+    SourceAdapter, TagCountLookupSourceAdapter, CommentsSourceAdapter, AccountProfileSourceAdapter
 
 /** Speaks the DAPI for one [GelbooruSite]; every search pages by `pid` in fixed 40-post pages. */
 private class GelbooruFamilyAdapter(
@@ -106,6 +113,32 @@ private class GelbooruFamilyAdapter(
         if (creator.source != sourceKey || uploadsQuery.isNullOrBlank()) return canonicalPostPage(emptyList(), null)
         return searchPosts(uploadsQuery, pageToken)
     }
+
+    override fun accountFeeds(creator: CreatorProfile): List<AccountFeed> {
+        if (creator.source != sourceKey) return emptyList()
+        return listOfNotNull(
+            AccountFeed.UPLOADS.takeIf { !creator.uploadsQuery.isNullOrBlank() },
+            AccountFeed.FAVORITES.takeIf { site.favoritesList && creator.profileId != null },
+        )
+    }
+
+    /** Statistics, avatar and bio from the profile page; null on sites without public profiles. */
+    override suspend fun accountDetails(creator: CreatorProfile): AccountDetails? {
+        val profileId = creator.profileId
+        if (creator.source != sourceKey || !site.publicProfiles || profileId == null) return null
+        val html = request(
+            url = "${site.siteUrl}/index.php",
+            query = mapOf("page" to "account", "s" to "profile", "id" to profileId),
+            scanBody = false,
+        )
+        return parseGelbooruAccountProfile(html, site.siteUrl)
+    }
+
+    override suspend fun accountPosts(creator: CreatorProfile, feed: AccountFeed, pageToken: String?): Page<Post> =
+        when (feed) {
+            AccountFeed.UPLOADS -> searchCreatorPosts(creator, pageToken)
+            AccountFeed.FAVORITES -> favoritePosts(creator, pageToken)
+        }
 
     override suspend fun trendingTags(limit: Int): List<TagSuggestion> {
         val items = requestTagList(
@@ -143,6 +176,8 @@ private class GelbooruFamilyAdapter(
         return countsByName
     }
 
+    override fun nativeCommentAnchor(commentId: String): String? = "c$commentId".takeIf { site.commentAnchors }
+
     /** Set once the DAPI answers comment requests with something other than comment XML; never reset. */
     @Volatile
     private var commentsApiDisabled = false
@@ -159,7 +194,7 @@ private class GelbooruFamilyAdapter(
         if (pageToken == null && !commentsApiDisabled) {
             val query = apiQuery("s" to "comment", "q" to "index", "post_id" to postId, json = false)
             val body = requestBody(site.apiUrl, query)
-            parseGelbooruCommentsXml(body)?.let { comments ->
+            parseGelbooruCommentsXml(body, site)?.let { comments ->
                 return CommentPage(comments, total = comments.size, nextPageToken = null)
             }
             // Comment text can mention keys, so the key-failure scan runs only on answers that are not comments.
@@ -177,7 +212,7 @@ private class GelbooruFamilyAdapter(
             },
             scanBody = false,
         )
-        val page = parseGelbooruCommentsHtml(html, site.siteUrl, currentPid = pid)
+        val page = parseGelbooruCommentsHtml(html, site, currentPid = pid)
         return CommentPage(
             comments = page.comments,
             total = if (pid == 0 && page.nextPid == null) page.comments.size else null,
@@ -232,10 +267,14 @@ private class GelbooruFamilyAdapter(
         )
         if (relatedIds.isEmpty()) return emptyList()
 
-        val resolved = hydrateRelatedPosts(relatedIds)
-        val posts = resolved.mapNotNull(Result<Post?>::getOrNull).distinctBy(Post::id)
-        if (posts.isNotEmpty() || resolved.none(Result<Post?>::isFailure)) return posts
-        throw resolved.firstNotNullOf { result -> result.exceptionOrNull() }
+        return resolvePosts(relatedIds, RELATED_HYDRATION_CONCURRENCY).postsOrThrow()
+    }
+
+    /** A page of the account's public favorites: the DAPI answers `fav:<id>` in the same order as the site's favorites list. */
+    private suspend fun favoritePosts(creator: CreatorProfile, pageToken: String?): Page<Post> {
+        val profileId = creator.profileId
+        if (creator.source != sourceKey || !site.favoritesList || profileId == null) return canonicalPostPage(emptyList(), null)
+        return searchPosts("fav:$profileId", pageToken)
     }
 
     private suspend fun searchPosts(tags: String, pageToken: String?): Page<Post> {
@@ -253,8 +292,9 @@ private class GelbooruFamilyAdapter(
         return canonicalPostPage(items = rawPosts.mapNotNull(::parsePost), nextPageToken = next)
     }
 
-    private suspend fun hydrateRelatedPosts(ids: List<String>): List<Result<Post?>> = supervisorScope {
-        val semaphore = Semaphore(RELATED_HYDRATION_CONCURRENCY)
+    /** Resolves [ids] through the DAPI, at most [concurrency] at a time, keeping their order; each failure stays its own result. */
+    private suspend fun resolvePosts(ids: List<String>, concurrency: Int): List<Result<Post?>> = supervisorScope {
+        val semaphore = Semaphore(concurrency)
         ids.map { id ->
             async {
                 semaphore.withPermit {
@@ -268,6 +308,13 @@ private class GelbooruFamilyAdapter(
                 }
             }
         }.awaitAll()
+    }
+
+    /** The resolved posts; partial failures drop their posts, but a batch where nothing resolved and something failed rethrows. */
+    private fun List<Result<Post?>>.postsOrThrow(): List<Post> {
+        val posts = mapNotNull(Result<Post?>::getOrNull).distinctBy(Post::id)
+        if (posts.isNotEmpty() || none(Result<Post?>::isFailure)) return posts
+        throw firstNotNullOf { result -> result.exceptionOrNull() }
     }
 
     /** DAPI call with the site's credentials; a site that requires them fails before the request. */
@@ -377,18 +424,8 @@ private class GelbooruFamilyAdapter(
     }
 
     /** The uploader is named by `owner`, or by `creator_id` alone on posts without one. */
-    private fun parseCreator(raw: JsonObject): CreatorProfile? {
-        val owner = raw.stringValue("owner")?.trim().orEmpty()
-        val creatorId = raw.stringValue("creator_id")?.trim()?.ifBlank { null }
-        val displayName = owner.ifBlank { creatorId } ?: return null
-        return CreatorProfile(
-            source = sourceKey,
-            displayName = displayName,
-            profileId = creatorId,
-            profileUrl = creatorId?.let { "${site.siteUrl}/index.php?page=account&s=profile&id=$it" },
-            uploadsQuery = owner.ifBlank { null }?.let { "user:$it" },
-        )
-    }
+    private fun parseCreator(raw: JsonObject): CreatorProfile? =
+        site.creatorProfile(raw.stringValue("owner"), raw.stringValue("creator_id"))
 
     private fun compileTags(query: Query): String {
         val orGroup = site.orGroup

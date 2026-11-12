@@ -1,5 +1,6 @@
 package com.theoriacodex.sources.gelbooru
 
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.credentials.ApiKeyUse
 import com.theoriacodex.sources.rule34.RULE34_BROWSER_HEADERS
@@ -33,7 +34,29 @@ data class GelbooruSite(
     /** The HTML post page's "More Like This:" block supplies related posts. */
     val relatedPosts: Boolean = false,
     val tagList: GelbooruTagList = GelbooruTagList.JSON,
+    /** The post page wraps each comment in `div#c<id>`, so `#c<id>` jumps to it (0.2 forks; gelbooru.com does not). */
+    val commentAnchors: Boolean = true,
+    /** `index.php?page=account&s=profile&id=` is a public profile page with statistics (0.2 forks send guests to login). */
+    val publicProfiles: Boolean = false,
+    /** Searches answer `fav:<account id>` with that account's public favorites (verified on gelbooru.com with a key, 2026-11-11). */
+    val favoritesList: Boolean = false,
 ) {
+    /**
+     * A site account as a creator: [owner] is the user name (searched as `user:<owner>`), [creatorId] the
+     * account id that opens the profile page. Null when neither is known. Shared by post uploaders and commenters.
+     */
+    fun creatorProfile(owner: String?, creatorId: String?): CreatorProfile? {
+        val name = owner?.trim().orEmpty()
+        val id = creatorId?.trim()?.ifBlank { null }
+        return CreatorProfile(
+            source = source,
+            displayName = name.ifBlank { id } ?: return null,
+            profileId = id,
+            profileUrl = id?.let { "$siteUrl/index.php?page=account&s=profile&id=$it" },
+            uploadsQuery = name.ifBlank { null }?.let { "user:$it" },
+        )
+    }
+
     companion object {
         val GELBOORU = GelbooruSite(
             source = SourceKey.GELBOORU,
@@ -43,6 +66,9 @@ data class GelbooruSite(
             newestSortTag = "sort:id:desc",
             creatorPosts = true,
             relatedPosts = true,
+            commentAnchors = false,
+            publicProfiles = true,
+            favoritesList = true,
         )
 
         /** The API host differs from the site, every API call needs a key, and tags come from `autocomplete.php`. */

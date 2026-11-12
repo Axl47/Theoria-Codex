@@ -331,8 +331,14 @@ internal class SearchViewModel(
         suggestionRefresh.refreshAutocomplete(input)
     }
 
+    /** Runs the draft. A typed number not yet added as a tag is added first, so a lone nhentai ID opens its gallery. */
     private fun applyDraft() {
-        val directGalleryId = commitPendingDirectInput()
+        val pending = mutableState.value.suggestions.input.trim()
+        if (pending.isNotEmpty() && pending.all(Char::isDigit) && SearchDraftReducer.canCommitInput(mutableState.value, pending)) {
+            val draftBefore = mutableState.value.query.draft
+            commitTagInput(pending)
+            if (mutableState.value.query.draft == draftBefore) return // opened as a gallery
+        }
         val current = mutableState.value
         launchRootSearch(
             kind = if (current.content.hasExecutedSearch) {
@@ -343,9 +349,6 @@ internal class SearchViewModel(
             query = current.query.draft,
             sourceScope = current.query.draftSourceScope,
             persistAcceptedResult = true,
-            onSuccess = {
-                directGalleryId?.let { galleryId -> openDirectNhentaiGallery(galleryId) }
-            },
         )
     }
 
@@ -507,6 +510,10 @@ internal class SearchViewModel(
         persistDraftQuery()
     }
 
+    /**
+     * Adds a typed tag to the draft. A bare number that would be the draft's only tag is an nhentai
+     * gallery ID: it opens the Viewer instead, and the draft stays as it was.
+     */
     private fun commitTagInput(input: String) {
         val reduction = SearchDraftReducer.commitInput(mutableState.value, input)
         if (!reduction.accepted) {
@@ -514,43 +521,16 @@ internal class SearchViewModel(
             updateSuggestionInput(input)
             return
         }
+        val directGalleryId = SearchDraftReducer.directNhentaiGalleryIdCandidate(reduction.state.query.draft)
+            ?.takeIf { input.trim().all(Char::isDigit) }
+        if (directGalleryId != null) {
+            clearSuggestionState()
+            viewModelScope.launch { openDirectNhentaiGallery(directGalleryId) }
+            return
+        }
         mutableState.value = reduction.state
         clearSuggestionState()
         persistDraftQuery()
-        val directGalleryId = SearchDraftReducer.directNhentaiGalleryIdCandidate(
-            mutableState.value.query.draft,
-        )
-        if (input.trim().all(Char::isDigit) && directGalleryId != null) {
-            val current = mutableState.value
-            launchRootSearch(
-                kind = if (current.content.hasExecutedSearch) {
-                    SearchRequestKind.REPLACE
-                } else {
-                    SearchRequestKind.INITIAL
-                },
-                query = current.query.draft,
-                sourceScope = current.query.draftSourceScope,
-                persistAcceptedResult = true,
-                onSuccess = { openDirectNhentaiGallery(directGalleryId) },
-            )
-        }
-    }
-
-    private fun commitPendingDirectInput(): String? {
-        val input = mutableState.value.suggestions.input.trim()
-        if (input.isEmpty() || !input.all(Char::isDigit) ||
-            !SearchDraftReducer.canCommitInput(mutableState.value, input)
-        ) {
-            return null
-        }
-        val reduction = SearchDraftReducer.commitInput(mutableState.value, input)
-        if (reduction.accepted) {
-            mutableState.value = reduction.state
-            clearSuggestionState()
-            persistDraftQuery()
-            return SearchDraftReducer.directNhentaiGalleryIdCandidate(mutableState.value.query.draft)
-        }
-        return null
     }
 
     private suspend fun openDirectNhentaiGallery(galleryId: String) {

@@ -284,11 +284,16 @@ sealed interface SearchAction {
 
 /** One-shot work hosted outside Search rendering. */
 sealed interface SearchEffect {
+    /**
+     * [fromTypedId] marks a Viewer opened from a typed gallery ID rather than from the results on
+     * screen: Search's composer closes behind it, and the post is not part of the applied search.
+     */
     data class OpenViewer(
         val posts: List<Post>,
         val context: ViewerLaunchContext,
         val visibilityFilters: SearchVisibilityFilters = SearchVisibilityFilters(),
         val liveSearchBinding: Boolean = true,
+        val fromTypedId: Boolean = false,
     ) : SearchEffect
 
     data class ShowMessage(

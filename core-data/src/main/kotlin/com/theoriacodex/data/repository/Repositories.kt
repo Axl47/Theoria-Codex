@@ -443,6 +443,7 @@ data class ViewerSettings(
     val instantSeek: Boolean = false,
     /** Rotate to fit a video the Viewer opens on, when the video is clearly wide or tall. */
     val autoRotateVideos: Boolean = true,
+    val commentOrder: com.theoriacodex.domain.model.CommentOrder = com.theoriacodex.domain.model.CommentOrder.OLDEST,
     val automaticTextTranslationEnabled: Boolean = false,
     val enabledOcrLanguages: Set<ViewerOcrLanguage> = emptySet(),
 )

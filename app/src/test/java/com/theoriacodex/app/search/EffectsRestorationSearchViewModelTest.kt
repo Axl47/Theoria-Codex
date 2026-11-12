@@ -123,6 +123,38 @@ internal class EffectsRestorationSearchViewModelTest : SearchViewModelTestFixtur
             assertEquals("123", effect.posts.single().id.sourcePostId)
             assertEquals("nhentai-search-id:123", effect.context.queryHash)
             assertFalse(effect.liveSearchBinding)
+            assertTrue(effect.fromTypedId)
+            // The ID is a shortcut: it never joins the draft, and no search runs for it.
+            assertTrue(viewModel.state.value.query.draft.includeTags.isEmpty())
+            assertFalse(viewModel.state.value.content.hasExecutedSearch)
+        }
+
+    @Test
+    fun `a typed id not yet added as a tag opens on search`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val viewModel = viewModel(ViewModelSearchAdapter(SourceKey.NHENTAI))
+            restore(viewModel)
+            viewModel.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.NHENTAI)))
+            viewModel.onAction(SearchAction.AutocompleteChanged("123"))
+            viewModel.onAction(SearchAction.ApplyDraft)
+            advanceUntilIdle()
+
+            val effect = viewModel.effects.first() as SearchEffect.OpenViewer
+            assertEquals("123", effect.posts.single().id.sourcePostId)
+            assertFalse(viewModel.state.value.content.hasExecutedSearch)
+        }
+
+    @Test
+    fun `a number beside other tags stays an ordinary tag`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val viewModel = viewModel(ViewModelSearchAdapter(SourceKey.NHENTAI))
+            restore(viewModel)
+            viewModel.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.NHENTAI)))
+            viewModel.onAction(SearchAction.CommitTagInput("glasses"))
+            viewModel.onAction(SearchAction.CommitTagInput("123"))
+            advanceUntilIdle()
+
+            assertEquals(listOf("glasses", "123"), viewModel.state.value.query.draft.includeTags)
         }
 
     @Test

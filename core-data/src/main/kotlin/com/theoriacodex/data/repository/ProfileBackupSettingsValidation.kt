@@ -19,6 +19,7 @@ internal fun validateBackupSettings(root: JsonObject, profileIds: Set<String>) {
     if (root.has("viewerPlaybackMode")) {
         com.theoriacodex.domain.model.ViewerPlaybackMode.valueOf(root.backupString("viewerPlaybackMode"))
     }
+    if (root.has("viewerCommentOrder")) com.theoriacodex.domain.model.CommentOrder.valueOf(root.backupString("viewerCommentOrder"))
     if (root.has("codexLibrarySort")) CodexLibrarySort.valueOf(root.backupString("codexLibrarySort"))
     VideoQuality.valueOf(root.backupString("videoQuality"))
     VideoQuality.valueOf(root.backupString("downloadQuality"))

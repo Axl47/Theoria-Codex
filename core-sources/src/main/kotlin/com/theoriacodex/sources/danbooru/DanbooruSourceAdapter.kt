@@ -3,6 +3,7 @@ package com.theoriacodex.sources.danbooru
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import com.theoriacodex.domain.adapter.AccountProfileSourceAdapter
 import com.theoriacodex.domain.adapter.CommentsSourceAdapter
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.Page
@@ -13,6 +14,8 @@ import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.model.AccountDetails
+import com.theoriacodex.domain.model.AccountFeed
 import com.theoriacodex.domain.model.CommentPage
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
@@ -81,7 +84,8 @@ class DanbooruSourceAdapter(
     /** [UserApiKeyCredentials.userId] is the Danbooru login name. */
     private val credentials: UserApiKeyCredentialLookup = { null },
     private val gson: Gson = Gson(),
-) : SourceAdapter, TagCountLookupSourceAdapter, CreatorPostsSourceAdapter, CommentsSourceAdapter {
+) : SourceAdapter, TagCountLookupSourceAdapter, CreatorPostsSourceAdapter, CommentsSourceAdapter,
+    AccountProfileSourceAdapter {
     override val sourceKey: SourceKey = site.source
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
@@ -97,12 +101,33 @@ class DanbooruSourceAdapter(
     )
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> =
-        searchTags(compileTags(query), query.sort, pageToken)
+        searchTags(compileTags(query), idCursor = query.sort == SortMode.NEWEST, pageToken)
 
     override suspend fun searchCreatorPosts(creator: CreatorProfile, pageToken: String?): Page<Post> {
         val artistTag = creator.uploadsQuery?.trim()
         if (creator.source != sourceKey || artistTag.isNullOrBlank()) return canonicalPostPage(emptyList(), null)
-        return searchTags(artistTag, SortMode.NEWEST, pageToken)
+        return searchTags(artistTag, idCursor = true, pageToken)
+    }
+
+    override fun accountFeeds(creator: CreatorProfile): List<AccountFeed> =
+        if (creator.source == sourceKey) danbooruAccountFeeds(creator) else emptyList()
+
+    /** `/users/<id>.json` for the join date and upload count, and the `ordfav:` post count for favorites. */
+    override suspend fun accountDetails(creator: CreatorProfile): AccountDetails? {
+        val name = danbooruAccountName(creator)?.takeIf { creator.source == sourceKey } ?: return null
+        val user = creator.profileId?.let { id -> parseJsonObject(request("/users/$id.json"), gson, site.label) }
+        val favorites = request("/counts/posts.json", mapOf("tags" to danbooruFavoritesTags(name)))
+        return parseDanbooruAccountDetails(user, parseDanbooruPostCount(parseJsonObject(favorites, gson, site.label)))
+    }
+
+    /** Favorites page by number: `ordfav:` lists by favorite order, so an id cursor (`b<id>`) would skip posts. */
+    override suspend fun accountPosts(creator: CreatorProfile, feed: AccountFeed, pageToken: String?): Page<Post> {
+        val name = danbooruAccountName(creator)?.takeIf { creator.source == sourceKey }
+            ?: return canonicalPostPage(emptyList(), null)
+        return when (feed) {
+            AccountFeed.UPLOADS -> searchCreatorPosts(creator, pageToken)
+            AccountFeed.FAVORITES -> searchTags(danbooruFavoritesTags(name), idCursor = false, pageToken)
+        }
     }
 
     override suspend fun trendingTags(limit: Int): List<TagSuggestion> {
@@ -163,7 +188,7 @@ class DanbooruSourceAdapter(
         val records = parseJsonArray(response, gson, site.label)
         // Fullness counts every raw record, so a dropped deleted comment never ends paging early.
         val hasMore = records.size() >= DANBOORU_COMMENTS_PAGE_SIZE
-        val comments = records.mapNotNull(::parseDanbooruComment)
+        val comments = records.mapNotNull { parseDanbooruComment(it, sourceKey, site.baseUrl) }
         return CommentPage(
             comments = comments,
             total = comments.size.takeIf { pageIndex == 1 && !hasMore },
@@ -171,7 +196,10 @@ class DanbooruSourceAdapter(
         )
     }
 
-    private suspend fun searchTags(tags: String, sort: SortMode, pageToken: String?): Page<Post> {
+    override fun nativeCommentAnchor(commentId: String): String = "comment_$commentId"
+
+    /** [idCursor] pages by the last post id (`b<id>`); otherwise [pageToken] is a page number. */
+    private suspend fun searchTags(tags: String, idCursor: Boolean, pageToken: String?): Page<Post> {
         val response = request(
             path = "/posts.json",
             query = mapOf(
@@ -185,7 +213,7 @@ class DanbooruSourceAdapter(
         // Fullness counts every raw record, so a malformed entry never ends paging early.
         val nextPageToken = when {
             rawRecords.size() < PAGE_SIZE -> null
-            sort == SortMode.NEWEST -> records.mapNotNull { it.longValue("id") }.minOrNull()?.let { "b$it" }
+            idCursor -> records.mapNotNull { it.longValue("id") }.minOrNull()?.let { "b$it" }
             else -> ((pageToken?.toIntOrNull() ?: 1) + 1).toString()
         }
         return canonicalPostPage(items = records.mapNotNull(::parsePost), nextPageToken = nextPageToken)

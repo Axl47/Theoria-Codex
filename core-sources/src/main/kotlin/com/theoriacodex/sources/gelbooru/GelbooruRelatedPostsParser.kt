@@ -17,14 +17,15 @@ internal fun parseGelbooruRelatedPostIds(
     val container = heading.parent() ?: return emptyList()
     return container.select("a[href]")
         .asSequence()
-        .mapNotNull { link -> relatedPostId(link.attr("href")) }
+        .mapNotNull { link -> viewedPostId(link.attr("href")) }
         .filterNot { id -> id == seedId }
         .distinct()
         .take(limit.coerceAtMost(MAX_RELATED_POSTS))
         .toList()
 }
 
-private fun relatedPostId(href: String): String? {
+/** The post id of a `page=post&s=view&id=` link; null for any other link. */
+internal fun viewedPostId(href: String): String? {
     if (!PAGE_POST_PATTERN.containsMatchIn(href) || !VIEW_POST_PATTERN.containsMatchIn(href)) return null
     return POST_ID_PATTERN.find(href)?.groupValues?.getOrNull(1)
 }
