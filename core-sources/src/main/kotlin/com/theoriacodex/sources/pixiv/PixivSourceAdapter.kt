@@ -359,15 +359,7 @@ class PixivSourceAdapter(
             authorName = userName,
             createdAtEpochMs = createdAt,
             title = title,
-            creatorProfile = userName?.let { displayName ->
-                CreatorProfile(
-                    source = SourceKey.PIXIV,
-                    displayName = displayName,
-                    profileId = userId,
-                    profileUrl = userId?.let { "https://www.pixiv.net/en/users/$it" },
-                    uploadsQuery = userId,
-                )
-            },
+            creatorProfile = userName?.let { pixivUserProfile(userId, it) },
             durationMs = null,
         )
     }

@@ -40,18 +40,22 @@ private fun parsePixivComment(raw: JsonObject): PostComment? {
         createdAtEpochMs = parseOffsetDateTimeMs(raw.stringValue("date")),
         stampUrl = raw.optionalJsonObject("stamp")?.stringValue("stamp_url")?.takeIf(String::isNotBlank),
         hasReplies = raw.booleanValue("has_replies") == true,
-        author = userId?.let {
-            CreatorProfile(
-                source = SourceKey.PIXIV,
-                displayName = userName.ifBlank { it },
-                profileId = it,
-                profileUrl = "https://www.pixiv.net/en/users/$it",
-                uploadsQuery = it,
-            )
-        },
+        author = userId?.let { pixivUserProfile(it, userName) },
     )
 }
 
 /** `total_comments` of a `/v1/illust/detail` response, or null when the response has none. */
 internal fun parsePixivCommentTotal(detail: JsonObject): Int? =
     detail.optionalJsonObject("illust")?.longValue("total_comments")?.toInt()
+
+/** A Pixiv user as a creator; their works are searched by [userId]. Shared by post creators and commenters. */
+internal fun pixivUserProfile(userId: String?, name: String?): CreatorProfile? {
+    val displayName = name?.takeIf(String::isNotBlank) ?: userId ?: return null
+    return CreatorProfile(
+        source = SourceKey.PIXIV,
+        displayName = displayName,
+        profileId = userId,
+        profileUrl = userId?.let { "https://www.pixiv.net/en/users/$it" },
+        uploadsQuery = userId,
+    )
+}
