@@ -60,14 +60,8 @@ internal fun rememberViewerRotation(selection: ViewerSelection, rotation: Viewer
         ViewerOrientation.PORTRAIT
     }
     val key = ViewerMediaKey(selection.post.id, selection.mediaIndex)
-    val isVideo = selection.media?.let(::isVideoMediaRef) == true || (selection.mediaIndex == 0 && selection.post.awaitsVideoStream())
-    val measured = rotation.measured?.takeIf { it.key == key }
-    // A post's dimensions describe its first media item.
-    val fill = when {
-        measured != null -> measured.fill
-        selection.mediaIndex == 0 -> viewerFillOrientation(selection.post.width, selection.post.height)
-        else -> null
-    }
+    val isVideo = selection.isVideoForRotation()
+    val fill = selection.fillOrientation(rotation.measured?.takeIf { it.key == key })
     var openingKey by remember { mutableStateOf<ViewerMediaKey?>(key) }
     LaunchedEffect(key, fill, isVideo, autoRotate, inPictureInPicture) {
         val opening = openingKey ?: return@LaunchedEffect
@@ -88,6 +82,17 @@ internal fun rememberViewerRotation(selection: ViewerSelection, rotation: Viewer
     }
     val offered = !inPictureInPicture && viewerOffersRotation(fill, screen, isVideo, holdingRotation = rotation.held != null)
     return if (offered && fill != null) ViewerRotationOffer(fill) { rotation.held = fill } else null
+}
+
+/** Videos qualify for rotation, including ones whose stream has not resolved yet. */
+private fun ViewerSelection.isVideoForRotation(): Boolean =
+    media?.let(::isVideoMediaRef) == true || (mediaIndex == 0 && post.awaitsVideoStream())
+
+/** What the current media fills: its decoded frames when known, else the post's dimensions, which describe its first item. */
+private fun ViewerSelection.fillOrientation(measured: MeasuredVideoShape?): ViewerOrientation? = when {
+    measured != null -> measured.fill
+    mediaIndex == 0 -> viewerFillOrientation(post.width, post.height)
+    else -> null
 }
 
 /**
