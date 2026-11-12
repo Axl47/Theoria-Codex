@@ -12,6 +12,7 @@ import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.app.creator.state.CreatorEffect
 import com.theoriacodex.app.creator.state.CreatorFailureReason
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.domain.model.AccountFeed
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -319,7 +320,7 @@ private class FakeCreatorRouteEngine : CreatorRouteEngine {
 
     override fun supports(creator: CreatorProfile): Boolean = capabilityAvailable
 
-    override suspend fun load(creator: CreatorProfile, pageToken: String?): Page<Post> {
+    override suspend fun load(creator: CreatorProfile, feed: AccountFeed, pageToken: String?): Page<Post> {
         if (pageToken != null) {
             pageTokens += pageToken
             pageError?.let { error(it) }
