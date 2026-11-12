@@ -78,7 +78,6 @@ internal class ViewerSwipeController(
 
     /** A finger landed: catch a running settle so the gesture continues from the current position. */
     fun press() {
-        android.util.Log.d("SwipeRepro", "press settle=${settle != null} dragging=$dragging sel=${context.selection} pending=${pendingOrigin?.postId}")
         val caught = settle
         limitReported = false
         recoilJob?.cancel()
@@ -135,13 +134,11 @@ internal class ViewerSwipeController(
             displacement, rawDisplacement * sign, velocity, pager.viewerPageExtent(), current.flingVelocity, pager.viewerCommitFraction(),
         )
         val target = direction?.let { current.target(origin, it) }
-        android.util.Log.d("SwipeRepro", "release raw=$rawDisplacement disp=$displacement vel=$velocity extent=${pager.viewerPageExtent()} frac=${pager.viewerCommitFraction()} fling=${current.flingVelocity} origin=$origin dir=$direction target=$target baseline=$baseline")
         settleTo(target ?: origin, -velocity, commits = target != null)
     }
 
     /** The gesture ended without a swipe decision, so a caught or dragged page returns to rest. */
     fun cancel() {
-        android.util.Log.d("SwipeRepro", "cancel dragging=$dragging")
         if (dragging) settleTo(origin(), 0f, commits = false)
     }
 

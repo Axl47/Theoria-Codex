@@ -14,6 +14,7 @@
 
 ### Fixed
 
+- Quick swipes in the Viewer no longer bounce back on the first try after landing on a new post.
 - Open in browser now opens your browser instead of reopening the post in the app.
 - Hitomi video cards now autoplay in search results.
 - Iwara video cards now autoplay once their details load, in search, For You and creator pages.
