@@ -99,6 +99,14 @@ class CommentsLoaderTest {
     }
 
     @Test
+    fun `the site's comment anchor comes from the source's adapter`() {
+        val loader = CommentsLoader(FakeRegistry(FakeCommentsAdapter()))
+
+        assertEquals("c7", loader.nativeCommentAnchor(SourceKey.PIXIV, "7"))
+        assertEquals(null, loader.nativeCommentAnchor(SourceKey.GELBOORU, "7"))
+    }
+
+    @Test
     fun `fetching the first page needs support and a listing that does not say none`() {
         val loader = CommentsLoader(FakeRegistry(FakeCommentsAdapter()))
 
@@ -112,6 +120,7 @@ class CommentsLoaderTest {
 
 private class FakeCommentsAdapter(private val gate: CompletableDeferred<Unit>? = null) : SourceAdapter, CommentsSourceAdapter {
     override val sourceKey = SourceKey.PIXIV
+    override fun nativeCommentAnchor(commentId: String) = "c$commentId"
     override val capabilities = SourceCapabilities(
         supportsSortNewest = true, supportsSortPopular = false, supportsSortTop = false, supportsSortRandom = false,
         supportsExcludeTagsServerSide = false, supportsDateRangeServerSide = false, supportsMinScoreServerSide = false,

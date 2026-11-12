@@ -8,11 +8,11 @@ import com.theoriacodex.domain.model.PostComment
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 
-internal fun commentsTestPost(id: String = "1", hint: CommentHint? = null) = Post(
+internal fun commentsTestPost(id: String = "1", hint: CommentHint? = null, pageUrl: String? = null) = Post(
     id = PostId(SourceKey.PIXIV, id),
     preview = ImageRef("https://example.com/$id.jpg", null, "image/jpeg"),
     full = null,
-    pageUrl = null,
+    pageUrl = pageUrl,
     width = null,
     height = null,
     canonicalTags = emptyList(),
@@ -32,11 +32,15 @@ internal fun commentPage(vararg ids: String, total: Int? = null, next: String? =
 internal class FakeCommentsLoader(
     private val pages: Map<String, CommentPage> = emptyMap(),
     var supported: Boolean = true,
+    /** Top-level comment ids that have a site anchor, by comment id. */
+    private val anchors: Map<String, String> = emptyMap(),
 ) : CommentsLoading {
     val requests = mutableListOf<String>()
     var failNext = false
 
     override fun supports(source: SourceKey) = supported
+
+    override fun nativeCommentAnchor(source: SourceKey, commentId: String) = anchors[commentId]
 
     override suspend fun load(post: Post, pageToken: String?, parent: PostComment?): CommentPage {
         val key = "${parent?.id.orEmpty()}/${pageToken.orEmpty()}"
