@@ -70,7 +70,7 @@ internal val VIEWER_FLING_VELOCITY = 400.dp
 private const val EDGE_STRETCH_FRACTION = 0.18f
 
 /** Landscape pages are about twice as wide, so a slow drag commits after a shorter share of one. */
-internal const val VIEWER_LANDSCAPE_COMMIT_FRACTION = 0.10f
+internal const val VIEWER_LANDSCAPE_COMMIT_FRACTION = 0.06f
 
 /** How far a slow drag must travel, as a fraction of a page, to change page in this pager's shape. */
 internal fun PagerState.viewerCommitFraction(): Float {

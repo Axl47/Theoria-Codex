@@ -92,7 +92,7 @@ class ViewerTransformStateTest {
         assertEquals(null, decide(-150f, -100f))
         assertEquals(ViewerHorizontalSwipeDirection.Previous, decide(170f, 0f))
         // Landscape commits sooner.
-        assertEquals(ViewerHorizontalSwipeDirection.Next, viewerSwipeDecision(-110f, -110f, 0f, 1000f, 400f, VIEWER_LANDSCAPE_COMMIT_FRACTION))
+        assertEquals(ViewerHorizontalSwipeDirection.Next, viewerSwipeDecision(-70f, -70f, 0f, 1000f, 400f, VIEWER_LANDSCAPE_COMMIT_FRACTION))
         // Flicking back against a long drag cancels it.
         assertEquals(null, decide(-700f, 2000f))
         // Pages still settling from a caught swipe do not make a new flick look like flicking back.
