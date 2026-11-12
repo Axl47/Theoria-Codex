@@ -439,6 +439,7 @@ private fun viewerScreenCallbacks(shell: TheoriaShell) = ViewerRouteScreenCallba
     onOpenInBrowser = { post ->
         post.pageUrl?.takeIf { it.isNotBlank() }?.let { url -> openInBrowser(shell.appContext, url) }
     },
+    onOpenUrl = { url -> openInBrowser(shell.appContext, url) },
     onRemoveIncludeTerm = shell.routes.removeSearchIncludeTerm,
     onRemoveExcludeTerm = shell.routes.removeSearchExcludeTerm,
     onFavoriteTagLongPress = shell.addFavoriteTag,

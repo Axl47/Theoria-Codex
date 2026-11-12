@@ -3,7 +3,11 @@ package com.theoriacodex.app.tags
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.mapNotNull
 import androidx.compose.ui.draw.drawWithContent
 import com.theoriacodex.app.ui.components.FoldHeader
 import androidx.compose.ui.geometry.Offset
@@ -78,10 +82,12 @@ import com.theoriacodex.domain.model.SourceKey
  *
  * [tagsInitiallyCollapsed] only sets the state when the sheet opens; later changes to it never move the
  * user's own choice. With [scrollToAfterTags], a sheet that opens collapsed starts scrolled to [afterTags].
+ * [scrollToKey] names an item of [afterTags] to scroll to as soon as the list has it.
  */
 class PostTagSheetExtras(
     val tagsInitiallyCollapsed: Boolean,
     val scrollToAfterTags: Boolean = false,
+    val scrollToKey: Any? = null,
     val afterTags: LazyListScope.() -> Unit = {},
 )
 
@@ -125,8 +131,6 @@ fun PostTagActionSection(
     val draftGroups = draft?.effectiveIncludeTermGroups.orEmpty()
     val targetGroup = draftGroups.indexOfFirst { group -> targetTerm in group.terms }.takeIf { it >= 0 }
     val searchActions = LocalPostTagSearchActions.current
-    val savedTags = LocalPostTagSavedTags.current
-    val saved by savedTags.saved.collectAsStateWithLifecycle(initialValue = emptySet())
     val editor = PostTagEditor(
         post, draft, selection, targetGroup,
         onAddInclude = onAddIncludeTerm,
@@ -142,29 +146,55 @@ fun PostTagActionSection(
         val listState = rememberLazyListState(
             initialFirstVisibleItemIndex = if (sheetExtras?.scrollToAfterTags == true && collapsed) AFTER_FOLDED_TAGS_INDEX else 0,
         )
-        val chip: @Composable (SearchTerm, Boolean) -> Unit = { term, compact ->
-            val isSaved = term.isGeneralPostTag() && (post.id.source to term.value) in saved
-            PostTagChip(term, translations[term.value], countOf(term), editor, isSaved, onFavoriteTagLongPress, savedTags.remove, compact)
-        }
+        val chip = rememberTagChip(editor, translations, countOf, onFavoriteTagLongPress)
+        val keyIndex = remember { LazyListKeyIndex() }
+        sheetExtras?.scrollToKey?.let { key -> ScrollToKeyEffect(key, listState, keyIndex) }
         LazyColumn(
             state = listState,
             modifier = Modifier.weight(1f, fill = false).fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         ) {
-            item(key = "header") { header() }
+            val items = keyIndex.tracking(this)
+            items.item(key = "header") { header() }
             if (loading) {
-                item(key = "loading") { Text("Loading tags...", style = MaterialTheme.typography.bodySmall) }
+                items.item(key = "loading") { Text("Loading tags...", style = MaterialTheme.typography.bodySmall) }
             } else {
                 val fold = TagFold(foldsTags, tagsCollapsed) { tagsCollapsed = !tagsCollapsed }
-                postTagSections(termGroups, terms, expandedGroups, { label -> expandedGroups = expandedGroups + label }, fold, sheetExtras, chip)
+                items.postTagSections(termGroups, terms, expandedGroups, { label -> expandedGroups = expandedGroups + label }, fold, sheetExtras, chip)
             }
-            item(key = "footer") { footer() }
+            items.item(key = "footer") { footer() }
         }
         PostTagQueryTray(
             draft, targetGroup, onSearch,
             onTargetGroup = { index -> targetTerm = index?.let { draftGroups[it].terms.first() } },
             confirmation = pendingSwitch?.let { pending -> pending.confirmation(post.id.source, editor) { pendingSwitch = null } },
         )
+    }
+}
+
+/** Draws a tag as a chip that edits the Search draft through [editor]; compact chips (the folded peek) drop their count. */
+@Composable
+private fun rememberTagChip(
+    editor: PostTagEditor,
+    translations: Map<String, String>,
+    countOf: (SearchTerm) -> Int?,
+    onFavoriteTagLongPress: ((SourceKey, String) -> Unit)?,
+): @Composable (SearchTerm, Boolean) -> Unit {
+    val savedTags = LocalPostTagSavedTags.current
+    val saved by savedTags.saved.collectAsStateWithLifecycle(initialValue = emptySet())
+    return { term, compact ->
+        val isSaved = term.isGeneralPostTag() && (editor.post.id.source to term.value) in saved
+        PostTagChip(term, translations[term.value], countOf(term), editor, isSaved, onFavoriteTagLongPress, savedTags.remove, compact)
+    }
+}
+
+/** Scrolls [listState] to the item with [key] once the list has it, and only that once per [key]. */
+@Composable
+private fun ScrollToKeyEffect(key: Any, listState: LazyListState, keyIndex: LazyListKeyIndex) {
+    LaunchedEffect(key) {
+        // The item count changes as the list is laid out and as pages arrive, which is when the key may first exist.
+        val index = snapshotFlow { listState.layoutInfo.totalItemsCount }.mapNotNull { keyIndex.indexOf(key) }.first()
+        listState.scrollToItem(index)
     }
 }
 

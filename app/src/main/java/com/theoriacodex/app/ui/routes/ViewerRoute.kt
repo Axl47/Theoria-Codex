@@ -187,6 +187,7 @@ internal data class ViewerRouteScreenCallbacks(
     val onVisiblePostChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
     val onVisibleMediaChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
     val onOpenInBrowser: (Post) -> Unit,
+    val onOpenUrl: (String) -> Unit = {},
     val onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
     val onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
     val onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
@@ -360,7 +361,7 @@ private fun ViewerRouteRenderer(
     routeScope: CoroutineScope,
 ) {
     ViewerScreen(
-        comments = rememberViewerComments(viewerOwner, renderConfig.commentOrder, screenCallbacks.onCommentOrderSelected),
+        comments = rememberViewerComments(viewerOwner, renderConfig.commentOrder, screenCallbacks.onCommentOrderSelected, screenCallbacks.onOpenUrl),
         uiState = viewerState.copy(related = com.theoriacodex.app.viewer.state.ViewerRelatedUiState(
             related.state, related.posts, activeSession?.relatedNavigation, activeSession?.relatedPostIds.orEmpty(),
         )),
@@ -427,11 +428,13 @@ private fun rememberViewerComments(
     viewerOwner: ViewerViewModel,
     order: com.theoriacodex.domain.model.CommentOrder,
     onOrderSelected: (com.theoriacodex.domain.model.CommentOrder) -> Unit,
+    onOpenUrl: (String) -> Unit,
 ): ViewerComments {
     val states by viewerOwner.comments.state.collectAsStateWithLifecycle()
     val latestOnOrderSelected by rememberUpdatedState(onOrderSelected)
+    val latestOnOpenUrl by rememberUpdatedState(onOpenUrl)
     return remember(states, viewerOwner, order) {
-        ViewerComments(states, viewerOwner.comments, order) { latestOnOrderSelected(it) }
+        ViewerComments(states, viewerOwner.comments, order, { latestOnOrderSelected(it) }) { latestOnOpenUrl(it) }
     }
 }
 

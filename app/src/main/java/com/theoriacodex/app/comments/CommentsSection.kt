@@ -1,6 +1,8 @@
 package com.theoriacodex.app.comments
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,20 +12,35 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -33,6 +50,8 @@ import coil.compose.AsyncImage
 import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.app.ui.components.FoldHeader
 import com.theoriacodex.domain.model.CommentOrder
+import com.theoriacodex.domain.model.CommentTarget
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostComment
 import com.theoriacodex.domain.model.SourceKey
@@ -40,14 +59,27 @@ import com.theoriacodex.domain.model.SourceKey
 private val AVATAR_SIZE = 24.dp
 private val STAMP_SIZE = 48.dp
 private val REPLY_INDENT = 24.dp
+private val HIGHLIGHT_OUTSET = 4.dp
+private const val HIGHLIGHT_FADE_MS = 600
+private const val HIGHLIGHT_ALPHA = 0.18f
 
-/** How the comments section is shown: folded or not, and its sort order, which the header's button cycles. */
+/**
+ * How the comments section is shown: folded or not, its sort order, which the header's button cycles, and
+ * what a comment's actions lead to. [highlightKey] names the item ([commentItemKey], [replyItemKey]) tinted
+ * to show where a link led; clearing it fades the tint out.
+ */
 internal class CommentsView(
     val collapsed: Boolean,
     val onToggleCollapsed: () -> Unit,
     val order: CommentOrder,
     val onOrderSelected: (CommentOrder) -> Unit,
-)
+    val highlightKey: String? = null,
+    private val creatorBrowsingSources: Set<SourceKey> = emptySet(),
+    val onOpenAuthor: (AuthorDestination) -> Unit = {},
+    val onOpenUrl: (String) -> Unit = {},
+) {
+    fun authorDestination(author: CreatorProfile?) = commentAuthorDestination(author, creatorBrowsingSources)
+}
 
 /**
  * A post's comments as items of the info sheet's list: a header with the count that folds the rest away,
@@ -65,7 +97,7 @@ internal fun LazyListScope.commentsSection(
     if (!state.hasSection) return
     item(key = "comments-header", contentType = "comments-header") { CommentsHeader(count, view) }
     if (view.collapsed) return
-    state.top.comments.inOrder(view.order).forEach { comment -> commentWithReplies(post, state, comment, actions, nowEpochMs) }
+    state.top.comments.inOrder(view.order).forEach { comment -> commentWithReplies(post, state, comment, actions, nowEpochMs, view) }
     listFooter("comments-footer", state.top, "More comments", 0.dp) { actions.loadMore(post) }
 }
 
@@ -87,21 +119,21 @@ private fun LazyListScope.commentWithReplies(
     comment: PostComment,
     actions: PostCommentsActions,
     nowEpochMs: Long,
+    view: CommentsView,
 ) {
-    val source = post.id.source
     val replies = state.replies[comment.id]
     val expanded = comment.id in state.expandedReplies
-    item(key = "comment:${comment.id}", contentType = "comment") {
+    item(key = commentItemKey(comment.id), contentType = "comment") {
         CommentRow(
-            source, comment, nowEpochMs,
+            post, comment, parentId = null, nowEpochMs, actions, view,
             repliesLabel = if (comment.hasReplies) repliesLabel(replies?.total, expanded) else null,
             onToggleReplies = { actions.toggleReplies(post, comment) },
         )
     }
     if (!expanded || replies == null) return
     replies.comments.forEach { reply ->
-        item(key = "reply:${comment.id}:${reply.id}", contentType = "reply") {
-            CommentRow(source, reply, nowEpochMs, Modifier.padding(start = REPLY_INDENT))
+        item(key = replyItemKey(comment.id, reply.id), contentType = "reply") {
+            CommentRow(post, reply, parentId = comment.id, nowEpochMs, actions, view, Modifier.padding(start = REPLY_INDENT))
         }
     }
     listFooter("replies-footer:${comment.id}", replies, "More", REPLY_INDENT) { actions.loadMoreReplies(post, comment) }
@@ -127,19 +159,48 @@ private fun LazyListScope.listFooter(key: String, list: CommentList, moreLabel: 
     }
 }
 
-/** One comment: avatar beside the author, age and text, then its stamp and the button that opens its replies. */
+/**
+ * One comment: avatar beside the author, age and text, then its stamp and the button that opens its replies.
+ * Holding it opens its actions; tapping the avatar or name opens the author's profile. [parentId] is set for a reply.
+ */
 @Composable
 private fun CommentRow(
-    source: SourceKey,
+    post: Post,
     comment: PostComment,
+    parentId: String?,
     nowEpochMs: Long,
+    actions: PostCommentsActions,
+    view: CommentsView,
     modifier: Modifier = Modifier,
     repliesLabel: String? = null,
     onToggleReplies: () -> Unit = {},
 ) {
-    Row(modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    val source = post.id.source
+    var showingActions by remember { mutableStateOf(false) }
+    val haptics = LocalHapticFeedback.current
+    val showActions = {
+        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        showingActions = true
+    }
+    val author = view.authorDestination(comment.author)
+    // Holding the avatar or name opens the actions too, since a tap there already belongs to the profile.
+    val authorTap = author?.let {
+        Modifier.combinedClickable(
+            role = Role.Button,
+            onClickLabel = "Open ${comment.authorName}'s profile",
+            onClick = { view.onOpenAuthor(it) },
+            onLongClick = showActions,
+        )
+    } ?: Modifier
+    val highlighted = view.highlightKey == if (parentId == null) commentItemKey(comment.id) else replyItemKey(parentId, comment.id)
+    Row(
+        modifier.fillMaxWidth().padding(top = 12.dp)
+            .linkHighlight(highlighted)
+            .longPressable("Actions for comment by ${comment.authorName}", showActions),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         comment.authorAvatarUrl?.let { url ->
-            CommentImage(source, url, AVATAR_SIZE, CircleShape, Modifier.background(MaterialTheme.colorScheme.surfaceVariant, CircleShape))
+            CommentImage(source, url, AVATAR_SIZE, CircleShape, Modifier.background(MaterialTheme.colorScheme.surfaceVariant, CircleShape).then(authorTap))
         }
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -149,7 +210,7 @@ private fun CommentRow(
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
+                    modifier = Modifier.weight(1f, fill = false).then(authorTap),
                 )
                 commentAgeLabel(nowEpochMs, comment.createdAtEpochMs)?.let { age ->
                     Text(age, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -162,11 +223,43 @@ private fun CommentRow(
             if (repliesLabel != null) TextButton(onClick = onToggleReplies) { Text(repliesLabel) }
         }
     }
+    if (showingActions) {
+        CommentActionSheet(
+            source, comment, actions.linkTo(post, CommentTarget(comment.id, parentId)), author, view,
+            onDismiss = { showingActions = false },
+        )
+    }
+}
+
+/** Tints the element behind it while [active] and fades the tint out when it ends, to show where a link led. */
+@Composable
+private fun Modifier.linkHighlight(active: Boolean): Modifier {
+    val tint = MaterialTheme.colorScheme.primary
+    val amount by animateFloatAsState(if (active) 1f else 0f, tween(HIGHLIGHT_FADE_MS), label = "Comment highlight")
+    return drawBehind {
+        if (amount > 0f) {
+            val outset = HIGHLIGHT_OUTSET.toPx()
+            drawRoundRect(
+                tint.copy(alpha = HIGHLIGHT_ALPHA * amount),
+                topLeft = Offset(-outset, -outset),
+                size = Size(size.width + 2 * outset, size.height + 2 * outset),
+                cornerRadius = CornerRadius(2 * outset),
+            )
+        }
+    }
+}
+
+/** Runs [onLongPress] on a hold, and offers it to screen readers as a long-click named [label]. Taps are left alone. */
+@Composable
+private fun Modifier.longPressable(label: String, onLongPress: () -> Unit): Modifier {
+    val latest by rememberUpdatedState(onLongPress)
+    return semantics { onLongClick(label) { latest(); true } }
+        .pointerInput(Unit) { detectTapGestures(onLongPress = { latest() }) }
 }
 
 /** An avatar or stamp, requested with the source's media headers (Pixiv's image host refuses requests without its Referer). */
 @Composable
-private fun CommentImage(
+internal fun CommentImage(
     source: SourceKey,
     url: String,
     size: Dp,

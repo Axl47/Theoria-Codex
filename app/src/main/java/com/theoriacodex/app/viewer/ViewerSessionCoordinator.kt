@@ -5,6 +5,7 @@ import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.domain.model.CommentTarget
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 import java.util.UUID
@@ -26,6 +27,8 @@ internal data class ViewerSession(
     val relatedBinding: ViewerRelatedBinding? = null,
     val relatedNavigation: com.theoriacodex.app.viewer.state.ViewerRelatedNavigation? = null,
     val relatedPostIds: Set<com.theoriacodex.domain.model.PostId> = emptySet(),
+    // A comment link's target on the first post; the Viewer opens its comments on it once, when the session launches.
+    val focusComment: CommentTarget? = null,
 )
 
 private val LAZY_MEDIA_RESOLUTION_SOURCES = setOf(
