@@ -1,5 +1,16 @@
 package com.theoriacodex.app.comments
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.isSpecified
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.platform.LocalViewConfiguration
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -57,6 +68,8 @@ private val REPLY_INDENT = 24.dp
 private val HIGHLIGHT_OUTSET = 4.dp
 private const val HIGHLIGHT_FADE_MS = 600
 private const val HIGHLIGHT_ALPHA = 0.18f
+private const val HIGHLIGHT_SHRINK_MS = 250
+private const val HOLD_FILL_DELAY_MS = 80L
 
 /**
  * How the comments section is shown: folded or not, its sort order, which the header's button cycles, and
@@ -190,8 +203,7 @@ private fun CommentRow(
     val highlighted = view.highlightKey == if (parentId == null) commentItemKey(comment.id) else replyItemKey(parentId, comment.id)
     Row(
         modifier.fillMaxWidth().padding(top = 12.dp)
-            .linkHighlight(highlighted)
-            .longPressable("Actions for comment by ${comment.authorName}", showActions),
+            .commentRowHighlight(highlighted, showingActions, "Actions for comment by ${comment.authorName}", showActions),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         comment.authorAvatarUrl?.let { url ->
@@ -226,29 +238,59 @@ private fun CommentRow(
     }
 }
 
-/** Tints the element behind it while [active] and fades the tint out when it ends, to show where a link led. */
+/**
+ * The row's tint and hold gesture. [linked] tints the row and fades out when it ends, to show where a link led.
+ * Holding fills the row from the finger, covering it as the hold completes and runs [onLongPress]; the fill stays
+ * while [selected] (its actions are open) and shrinks back on an early release or when they close.
+ * Screen readers get the hold as a long-click named [label]. Taps are left alone.
+ */
 @Composable
-private fun Modifier.linkHighlight(active: Boolean): Modifier {
+private fun Modifier.commentRowHighlight(linked: Boolean, selected: Boolean, label: String, onLongPress: () -> Unit): Modifier {
     val tint = MaterialTheme.colorScheme.primary
-    val amount by animateFloatAsState(if (active) 1f else 0f, tween(HIGHLIGHT_FADE_MS), label = "Comment highlight")
-    return drawBehind {
-        if (amount > 0f) {
-            val outset = HIGHLIGHT_OUTSET.toPx()
-            drawRoundRect(
-                tint.copy(alpha = HIGHLIGHT_ALPHA * amount),
-                topLeft = Offset(-outset, -outset),
-                size = Size(size.width + 2 * outset, size.height + 2 * outset),
-                cornerRadius = CornerRadius(2 * outset),
+    val latest by rememberUpdatedState(onLongPress)
+    val link by animateFloatAsState(if (linked) 1f else 0f, tween(HIGHLIGHT_FADE_MS), label = "Comment link highlight")
+    val fill = remember { Animatable(0f) }
+    var origin by remember { mutableStateOf(Offset.Unspecified) }
+    val scope = rememberCoroutineScope()
+    val holdMs = LocalViewConfiguration.current.longPressTimeoutMillis.toInt()
+    LaunchedEffect(selected) {
+        if (selected) fill.snapTo(1f) else if (fill.value > 0f) fill.animateTo(0f, tween(HIGHLIGHT_SHRINK_MS))
+    }
+    return semantics { onLongClick(label) { latest(); true } }
+        .pointerInput(Unit) {
+            var held = false
+            detectTapGestures(
+                onPress = { at ->
+                    origin = at
+                    held = false
+                    // A short delay keeps a scroll's touch-down from flashing the fill.
+                    val grow = scope.launch {
+                        delay(HOLD_FILL_DELAY_MS)
+                        fill.animateTo(1f, tween((holdMs - HOLD_FILL_DELAY_MS.toInt()).coerceAtLeast(1), easing = LinearEasing))
+                    }
+                    tryAwaitRelease()
+                    grow.cancel()
+                    if (!held) scope.launch { fill.animateTo(0f, tween(HIGHLIGHT_SHRINK_MS)) }
+                },
+                onLongPress = {
+                    held = true
+                    scope.launch { fill.snapTo(1f) }
+                    latest()
+                },
             )
         }
-    }
-}
-
-/** Runs [onLongPress] on a hold, and offers it to screen readers as a long-click named [label]. Taps are left alone. */
-@Composable
-private fun Modifier.longPressable(label: String, onLongPress: () -> Unit): Modifier {
-    val latest by rememberUpdatedState(onLongPress)
-    return semantics { onLongClick(label) { latest(); true } }
-        .pointerInput(Unit) { detectTapGestures(onLongPress = { latest() }) }
+        .drawBehind {
+            val outset = HIGHLIGHT_OUTSET.toPx()
+            val bounds = RoundRect(-outset, -outset, size.width + outset, size.height + outset, CornerRadius(2 * outset))
+            if (link > 0f) drawPath(Path().apply { addRoundRect(bounds) }, tint.copy(alpha = HIGHLIGHT_ALPHA * link))
+            val progress = fill.value
+            if (progress > 0f) {
+                val from = if (origin.isSpecified) origin else center
+                val reach = Offset(maxOf(from.x - bounds.left, bounds.right - from.x), maxOf(from.y - bounds.top, bounds.bottom - from.y)).getDistance()
+                clipPath(Path().apply { addRoundRect(bounds) }) {
+                    drawCircle(tint.copy(alpha = HIGHLIGHT_ALPHA), radius = reach * progress, center = from)
+                }
+            }
+        }
 }
 
