@@ -18,6 +18,10 @@ Treat these as one release unit:
 
 Never use a low sequential Android code: the updater compares against the high SemVer-derived range. Never move, delete, or reuse a published release tag.
 
+## Who Does What
+
+Keep the version choice, the release notes, and any failure fix on the main model. Hand the reading to Haiku subagents: in step 2, when there are too many changes since the tag to read yourself, give each subagent a slice of the commits and have it return the user-visible changes it found, with SHAs; when a run fails, have one read the failed job logs and report each failing task or test with its first error line.
+
 ## Versioning Policy
 
 Starting with 1.0.0, choose the version based on the most significant user-facing change in the release:
