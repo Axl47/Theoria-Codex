@@ -84,7 +84,11 @@ internal fun rememberViewerRotation(selection: ViewerSelection, rotation: Viewer
     if (inPictureInPicture) return null
     val fits = viewerOffersRotation(fill, screen, isVideo, holdingRotation = rotation.held != null)
     val target = screen.opposite
-    return ViewerRotationOffer(fits) { rotation.held = target }
+    return ViewerRotationOffer(fits) {
+        // The user's choice wins over an automatic rotation still waiting on the video's size.
+        openingKey = null
+        rotation.held = target
+    }
 }
 
 /** Videos qualify for rotation, including ones whose stream has not resolved yet. */
