@@ -1,5 +1,8 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.app.comments.CommentsLoading
+import com.theoriacodex.app.comments.UnsupportedCommentsLoader
+import com.theoriacodex.app.comments.ViewerComments
 import com.theoriacodex.app.related.accumulatedPosts
 import com.theoriacodex.app.viewer.LocalViewerReturnTransition
 
@@ -46,6 +49,7 @@ import com.theoriacodex.app.viewer.ViewerRestorationRequest
 import com.theoriacodex.app.viewer.ViewerReturnTransition
 import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.mergeViewerPosts
+import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.withRelatedPosts
 import com.theoriacodex.app.related.requestOrNull
 import com.theoriacodex.app.viewer.state.ViewerEffect
@@ -70,6 +74,7 @@ internal data class ViewerRouteDependencies(
     val postResolver: ViewerPostResolver,
     val mediaPrefetcher: ViewerMediaPrefetcher,
     val mediaDurationCoordinator: MediaDurationCoordinator,
+    val commentsLoader: CommentsLoading = UnsupportedCommentsLoader,
     val restoreSession: suspend (ViewerRestorationRequest) -> ViewerSession?,
     val canonicalizePost: (Post) -> Post = { it },
     val onCodexUsageTargetChanged: (CodexUsageTarget?) -> Unit = {},
@@ -246,6 +251,7 @@ internal fun ViewerRoute(
             mediaPrefetcher = ViewerMediaPrefetcher { session, media, distance ->
                 latestDependencies.value.mediaPrefetcher.prefetch(session, media, distance)
             },
+            commentsLoader = dependencies.commentsLoader,
         )
     }
     val viewerOwner = viewModel<ViewerViewModel>(factory = ownerFactory)
@@ -348,17 +354,13 @@ private fun ViewerRouteRenderer(
     routeScope: CoroutineScope,
 ) {
     ViewerScreen(
+        comments = rememberViewerComments(viewerOwner),
         uiState = viewerState.copy(related = com.theoriacodex.app.viewer.state.ViewerRelatedUiState(
             related.state, related.posts, activeSession?.relatedNavigation, activeSession?.relatedPostIds.orEmpty(),
         )),
         saveToCodexQuery = activeSession?.saveQuery,
         creatorBrowsingSources = renderConfig.creatorBrowsingSources,
-        onAction = { action ->
-            viewerOwner.onAction(action)
-            if (action is com.theoriacodex.app.viewer.state.ViewerAction.SetPlaybackMode) {
-                screenCallbacks.onPlaybackModeSelected(action.mode)
-            }
-        },
+        onAction = { action -> viewerOwner.dispatch(action, screenCallbacks) },
         pixivUgoiraClient = renderConfig.pixivUgoiraClient,
         tagVideoCountProvider = renderConfig.tagVideoCountProvider,
         fetchTagVideoCounts = renderConfig.fetchTagVideoCounts,
@@ -405,6 +407,19 @@ private fun ViewerRouteRenderer(
         },
         onOpenCreatorFallback = screenCallbacks.onOpenCreatorFallback,
     )
+}
+
+/** Applies a Viewer action, telling the route when the user picked a playback mode. */
+private fun ViewerViewModel.dispatch(action: ViewerAction, screenCallbacks: ViewerRouteScreenCallbacks) {
+    onAction(action)
+    if (action is ViewerAction.SetPlaybackMode) screenCallbacks.onPlaybackModeSelected(action.mode)
+}
+
+/** The owner's comments as the screen reads them, recomposing as pages arrive. */
+@Composable
+private fun rememberViewerComments(viewerOwner: ViewerViewModel): ViewerComments {
+    val states by viewerOwner.comments.state.collectAsStateWithLifecycle()
+    return remember(states, viewerOwner) { ViewerComments(states, viewerOwner.comments) }
 }
 
 /** Claims the pending session once per owner, or rebuilds one from its compact saved identity. */

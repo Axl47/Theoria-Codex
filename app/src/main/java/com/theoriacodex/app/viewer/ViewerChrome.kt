@@ -36,7 +36,17 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import com.theoriacodex.app.comments.CommentCount
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -99,12 +109,15 @@ internal fun ViewerChrome(
     qualityHeight: Int? = null,
     videoVariants: List<com.theoriacodex.domain.model.VideoVariant> = emptyList(),
     onQualitySelected: (com.theoriacodex.domain.model.VideoQuality, Int?) -> Unit = { _, _ -> },
+    commentCount: CommentCount? = null,
+    onComments: () -> Unit = {},
 ) {
     ViewerTopBar(source, indexLabel, onBack, modifier) {
         ViewerLikeAction(
             liked = liked,
             onToggleLike = onToggleLike,
         )
+        if (commentCount != null) ViewerCommentsAction(commentCount, onComments)
         ViewerOverviewAction(
             mediaOverviewAvailable = mediaOverviewAvailable,
             mediaOverviewVisible = mediaOverviewVisible,
@@ -186,6 +199,25 @@ private fun ViewerLikeAction(
             tint = if (liked) LikedHeartColor else Color.White,
             modifier = Modifier.likePop(feedback),
         )
+    }
+}
+
+/** Shows that the post has comments, with their count when known, and opens them in the info sheet. */
+@Composable
+private fun ViewerCommentsAction(count: CommentCount, onClick: () -> Unit) {
+    val label = count.label
+    Row(
+        modifier = Modifier
+            .minimumInteractiveComponentSize()
+            .clip(CircleShape)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 8.dp)
+            .clearAndSetSemantics { contentDescription = count.description(unknown = "Comments") },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null, tint = Color.White)
+        if (label != null) Text(label, style = MaterialTheme.typography.labelLarge, color = Color.White, maxLines = 1)
     }
 }
 

@@ -3,6 +3,7 @@ package com.theoriacodex.sources.danbooru
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import com.theoriacodex.domain.adapter.CommentsSourceAdapter
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
@@ -12,9 +13,11 @@ import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.model.CommentPage
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostComment
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SortMode
@@ -33,6 +36,7 @@ import com.theoriacodex.sources.common.optionalJsonArray
 import com.theoriacodex.sources.common.optionalJsonObject
 import com.theoriacodex.sources.common.parseJsonArray
 import com.theoriacodex.sources.common.parseJsonObject
+import com.theoriacodex.sources.common.parseOffsetDateTimeMs
 import com.theoriacodex.sources.common.sourceNetworkFailure
 import com.theoriacodex.sources.common.sourceQuickQuery
 import com.theoriacodex.sources.common.stringValue
@@ -42,7 +46,6 @@ import com.theoriacodex.sources.credentials.UserApiKeyCredentials
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.THEORIA_SOURCE_USER_AGENT
 import java.io.IOException
-import java.time.OffsetDateTime
 
 /** One site running Danbooru's software; every site shares the same API and post shape. */
 data class DanbooruSite(
@@ -78,7 +81,7 @@ class DanbooruSourceAdapter(
     /** [UserApiKeyCredentials.userId] is the Danbooru login name. */
     private val credentials: UserApiKeyCredentialLookup = { null },
     private val gson: Gson = Gson(),
-) : SourceAdapter, TagCountLookupSourceAdapter, CreatorPostsSourceAdapter {
+) : SourceAdapter, TagCountLookupSourceAdapter, CreatorPostsSourceAdapter, CommentsSourceAdapter {
     override val sourceKey: SourceKey = site.source
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
@@ -136,6 +139,36 @@ class DanbooruSourceAdapter(
             throw SourceAdapterException(SourceFailureReason.AUTH_REQUIRED, "${site.label} doesn't show this post to this account")
         }
         return parsePost(record)
+    }
+
+    /**
+     * Live comments newest first, 100 to a page, without deleted ones. A full page means another
+     * may follow, so the total is known only when everything fit on the first page. Danbooru comments
+     * are flat, so [parent] is ignored.
+     */
+    override suspend fun comments(post: Post, pageToken: String?, parent: PostComment?): CommentPage {
+        if (post.id.source != sourceKey) return CommentPage(emptyList(), total = 0, nextPageToken = null)
+        val pageIndex = pageToken?.toIntOrNull()?.coerceAtLeast(1) ?: 1
+        val response = request(
+            path = "/comments.json",
+            query = mapOf(
+                "group_by" to "comment",
+                "search[post_id]" to post.id.sourcePostId,
+                "search[is_deleted]" to "false",
+                "limit" to DANBOORU_COMMENTS_PAGE_SIZE.toString(),
+                "page" to pageIndex.toString(),
+                "only" to DANBOORU_COMMENT_FIELDS,
+            ),
+        )
+        val records = parseJsonArray(response, gson, site.label)
+        // Fullness counts every raw record, so a dropped deleted comment never ends paging early.
+        val hasMore = records.size() >= DANBOORU_COMMENTS_PAGE_SIZE
+        val comments = records.mapNotNull(::parseDanbooruComment)
+        return CommentPage(
+            comments = comments,
+            total = comments.size.takeIf { pageIndex == 1 && !hasMore },
+            nextPageToken = (pageIndex + 1).toString().takeIf { hasMore },
+        )
     }
 
     private suspend fun searchTags(tags: String, sort: SortMode, pageToken: String?): Page<Post> {
@@ -213,8 +246,9 @@ class DanbooruSourceAdapter(
             canonicalTags = tags,
             rawTags = tags,
             authorName = artistTag?.displayTag(),
-            createdAtEpochMs = raw.stringValue("created_at")?.let(::parseTimestampMs),
+            createdAtEpochMs = parseOffsetDateTimeMs(raw.stringValue("created_at")),
             durationMs = mediaAsset?.durationFieldMs("duration", multiplier = 1_000L),
+            commentHint = raw.danbooruCommentHint(),
             creatorProfile = artistTag?.let { tag ->
                 CreatorProfile(
                     source = sourceKey,
@@ -269,8 +303,5 @@ private fun JsonObject.variantUrl(type: String): String? =
         ?.stringValue("url")
 
 private fun String.displayTag(): String = replace('_', ' ')
-
-private fun parseTimestampMs(value: String): Long? =
-    runCatching { OffsetDateTime.parse(value).toInstant().toEpochMilli() }.getOrNull()
 
 private val WHITESPACE_REGEX = Regex("\\s+")

@@ -2,6 +2,7 @@ package com.theoriacodex.sources.gelbooru
 
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.theoriacodex.domain.adapter.CommentsSourceAdapter
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
@@ -12,9 +13,11 @@ import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.model.CommentPage
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostComment
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SortMode
@@ -72,7 +75,7 @@ fun GelbooruSourceAdapter(
 }
 
 /** What every Gelbooru-family site supports; creator and related posts depend on the profile. */
-interface GelbooruFamilySourceAdapter : SourceAdapter, TagCountLookupSourceAdapter
+interface GelbooruFamilySourceAdapter : SourceAdapter, TagCountLookupSourceAdapter, CommentsSourceAdapter
 
 /** Speaks the DAPI for one [GelbooruSite]; every search pages by `pid` in fixed 40-post pages. */
 private class GelbooruFamilyAdapter(
@@ -138,6 +141,48 @@ private class GelbooruFamilyAdapter(
             }
         }
         return countsByName
+    }
+
+    /** Set once the DAPI answers comment requests with something other than comment XML; never reset. */
+    @Volatile
+    private var commentsApiDisabled = false
+
+    /**
+     * Comments come from the DAPI when it answers comment XML, which has no paging. Sites that disable
+     * it (gelbooru.com) are read from the post page instead, which pages by `pid` offsets; those tokens
+     * are never DAPI tokens, so any page token goes straight to the post page. [parent] is ignored:
+     * these sites have no replies.
+     */
+    override suspend fun comments(post: Post, pageToken: String?, parent: PostComment?): CommentPage {
+        if (post.id.source != sourceKey) return CommentPage(emptyList(), total = 0, nextPageToken = null)
+        val postId = post.id.sourcePostId
+        if (pageToken == null && !commentsApiDisabled) {
+            val query = apiQuery("s" to "comment", "q" to "index", "post_id" to postId, json = false)
+            val body = requestBody(site.apiUrl, query)
+            parseGelbooruCommentsXml(body)?.let { comments ->
+                return CommentPage(comments, total = comments.size, nextPageToken = null)
+            }
+            // Comment text can mention keys, so the key-failure scan runs only on answers that are not comments.
+            throwIfAuthFailure(body)
+            commentsApiDisabled = true
+        }
+        val pid = pageToken?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+        val html = request(
+            url = "${site.siteUrl}/index.php",
+            query = buildMap {
+                put("page", "post")
+                put("s", "view")
+                put("id", postId)
+                if (pid > 0) put("pid", pid.toString())
+            },
+            scanBody = false,
+        )
+        val page = parseGelbooruCommentsHtml(html, site.siteUrl, currentPid = pid)
+        return CommentPage(
+            comments = page.comments,
+            total = if (pid == 0 && page.nextPid == null) page.comments.size else null,
+            nextPageToken = page.nextPid?.toString(),
+        )
     }
 
     /** Set once a [GelbooruTagList.DETECT] site answers the tag list in XML; never reset. */
@@ -226,7 +271,11 @@ private class GelbooruFamilyAdapter(
     }
 
     /** DAPI call with the site's credentials; a site that requires them fails before the request. */
-    private suspend fun requestApi(vararg entries: Pair<String, String>): String {
+    private suspend fun requestApi(vararg entries: Pair<String, String>): String =
+        request(site.apiUrl, apiQuery(*entries))
+
+    /** DAPI query with the site's credentials. Comments are XML only, so they ask for no `json=1`. */
+    private suspend fun apiQuery(vararg entries: Pair<String, String>, json: Boolean = true): Map<String, String> {
         val saved = credentials()
         if (saved == null && site.credentials == ApiKeyUse.REQUIRED) {
             throw SourceAdapterException(
@@ -234,19 +283,25 @@ private class GelbooruFamilyAdapter(
                 message = "${site.label} credentials required",
             )
         }
-        val query = buildMap {
+        return buildMap {
             put("page", "dapi")
-            put("json", "1")
+            if (json) put("json", "1")
             putAll(entries)
             saved?.let {
                 put("user_id", it.userId)
                 put("api_key", it.apiKey)
             }
         }
-        return request(site.apiUrl, query)
     }
 
-    private suspend fun request(url: String, query: Map<String, String>): String {
+    /** [scanBody] is off for pages that show user comments, whose text could mimic a key failure. */
+    private suspend fun request(url: String, query: Map<String, String>, scanBody: Boolean = true): String {
+        val body = requestBody(url, query)
+        if (scanBody) throwIfAuthFailure(body)
+        return body
+    }
+
+    private suspend fun requestBody(url: String, query: Map<String, String>): String {
         val response = try {
             httpClient.get(url = url, query = query, headers = site.headers)
         } catch (error: IOException) {
@@ -262,14 +317,17 @@ private class GelbooruFamilyAdapter(
                 message = "${site.label} request failed (${response.statusCode})",
             )
         }
-        // Sites report a missing or bad key in a successful response body.
-        if (looksLikeGelbooruAuthFailure(response.body)) {
+        return response.body
+    }
+
+    /** Sites report a missing or bad key in a successful response body. */
+    private fun throwIfAuthFailure(body: String) {
+        if (looksLikeGelbooruAuthFailure(body)) {
             throw SourceAdapterException(
                 reason = SourceFailureReason.AUTH_REQUIRED,
                 message = "${site.label} credentials are missing or invalid",
             )
         }
-        return response.body
     }
 
     /** Some sites answer an empty result with an empty body instead of `[]`. */
@@ -314,6 +372,7 @@ private class GelbooruFamilyAdapter(
             createdAtEpochMs = (raw.longValue("created_at") ?: raw.longValue("change"))?.times(1000L),
             durationMs = parseDurationMs(raw),
             creatorProfile = creator?.takeIf { site.creatorPosts },
+            commentHint = raw.gelbooruCommentHint(),
         )
     }
 

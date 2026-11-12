@@ -307,6 +307,7 @@ private fun ViewerDestination(shell: TheoriaShell) {
                 postResolver = shell.viewerRouteWorkflow,
                 mediaPrefetcher = viewerMediaPrefetcher(shell.appContext, shell.sources.pixivUgoiraClient) { state.browsing.settings.viewer.videoQuality },
                 mediaDurationCoordinator = shell.features.mediaDurationCoordinator,
+                commentsLoader = shell.features.comments,
                 restoreSession = shell.viewerRouteWorkflow::restoreSession,
             ),
             renderConfig = ViewerRouteRenderConfig(

@@ -72,4 +72,6 @@ data class Post(
         PostTaxonomyTerm(value = value)
     },
     val creatorProfiles: List<CreatorProfile> = listOfNotNull(creatorProfile),
+    /** Live listing data only; never persisted, so saved or restored posts carry none. */
+    val commentHint: CommentHint? = null,
 )

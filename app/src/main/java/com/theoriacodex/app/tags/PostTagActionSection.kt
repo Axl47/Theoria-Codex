@@ -1,6 +1,19 @@
 package com.theoriacodex.app.tags
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -60,6 +73,20 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 
 /**
+ * What the Viewer's info sheet adds around a post's tag list. With it, a "Tags" header row folds the grouped
+ * list away to a one-row peek, and [afterTags] places more items in the same list, between the tags and the
+ * hint. Without it the list is exactly the tags, always shown.
+ *
+ * [tagsInitiallyCollapsed] only sets the state when the sheet opens; later changes to it never move the
+ * user's own choice. With [scrollToAfterTags], a sheet that opens collapsed starts scrolled to [afterTags].
+ */
+class PostTagSheetExtras(
+    val tagsInitiallyCollapsed: Boolean,
+    val scrollToAfterTags: Boolean = false,
+    val afterTags: LazyListScope.() -> Unit = {},
+)
+
+/**
  * A post's tags beside the search they feed. Tapping a tag edits the live Search draft, and the tray
  * below shows the result. [onSearch] runs the draft; it is null where this screen cannot reach Search.
  */
@@ -78,6 +105,7 @@ fun PostTagActionSection(
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
     draftQuery: Query? = null,
     onSearch: (() -> Unit)? = null,
+    sheetExtras: PostTagSheetExtras? = null,
 ) {
     val termGroups = remember(post.taxonomy, post.canonicalTags, post.rawTags) {
         postActionTermGroups(post)
@@ -91,6 +119,10 @@ fun PostTagActionSection(
     var targetTerm by remember(post.id) { mutableStateOf<SearchTerm?>(null) }
     var pendingSwitch by remember(post.id) { mutableStateOf<PendingSourceSwitch?>(null) }
     var expandedGroups by remember(post.id) { mutableStateOf(emptySet<String>()) }
+    val terms = remember(termGroups) { termGroups.flatMap(PostActionTermGroup::terms) }
+    var tagsCollapsed by remember(post.id) { mutableStateOf(sheetExtras?.tagsInitiallyCollapsed == true) }
+    val foldsTags = sheetExtras != null && !loading && terms.isNotEmpty()
+    val collapsed = foldsTags && tagsCollapsed
     val draftGroups = draft?.effectiveIncludeTermGroups.orEmpty()
     val targetGroup = draftGroups.indexOfFirst { group -> targetTerm in group.terms }.takeIf { it >= 0 }
     val searchActions = LocalPostTagSearchActions.current
@@ -107,7 +139,16 @@ fun PostTagActionSection(
     )
 
     Column(Modifier.fillMaxWidth()) {
+        // The sheet's comments sit right after the folded tags, so a sheet opened for them starts there.
+        val listState = rememberLazyListState(
+            initialFirstVisibleItemIndex = if (sheetExtras?.scrollToAfterTags == true && collapsed) AFTER_FOLDED_TAGS_INDEX else 0,
+        )
+        val chip: @Composable (SearchTerm) -> Unit = { term ->
+            val isSaved = term.isGeneralPostTag() && (post.id.source to term.value) in saved
+            PostTagChip(term, translations[term.value], countOf(term), editor, isSaved, onFavoriteTagLongPress, savedTags.remove)
+        }
         LazyColumn(
+            state = listState,
             modifier = Modifier.weight(1f, fill = false).fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         ) {
@@ -115,27 +156,15 @@ fun PostTagActionSection(
             if (loading) {
                 item(key = "loading") { Text("Loading tags...", style = MaterialTheme.typography.bodySmall) }
             } else {
-                postTagList(
-                    groups = termGroups,
-                    expandedGroups = expandedGroups,
-                    onExpandGroup = { label -> expandedGroups = expandedGroups + label },
-                ) { term ->
-                    val isSaved = term.isGeneralPostTag() && (post.id.source to term.value) in saved
-                    PostTagChip(term, translations[term.value], countOf(term), editor, isSaved, onFavoriteTagLongPress, savedTags.remove)
-                }
+                val fold = TagFold(foldsTags, tagsCollapsed) { tagsCollapsed = !tagsCollapsed }
+                postTagSections(termGroups, terms, expandedGroups, { label -> expandedGroups = expandedGroups + label }, fold, sheetExtras, chip)
             }
             item(key = "footer") { footer() }
         }
-        QueryTray(
-            title = "Your search",
-            emptyText = "Tap a tag to start a search.",
-            query = draft,
-            targetGroup = targetGroup,
+        PostTagQueryTray(
+            draft, targetGroup, onSearch,
             onTargetGroup = { index -> targetTerm = index?.let { draftGroups[it].terms.first() } },
-            onSearch = onSearch,
-            confirmation = pendingSwitch?.let { pending ->
-                pending.confirmation(post.id.source, editor) { pendingSwitch = null }
-            },
+            confirmation = pendingSwitch?.let { pending -> pending.confirmation(post.id.source, editor) { pendingSwitch = null } },
         )
     }
 }
@@ -385,7 +414,10 @@ private fun LazyListScope.postTagList(
             }
         }
     }
-    // After the tags, so the sheet opens on them rather than on instructions.
+}
+
+/** After the tags and anything the sheet adds to them, so the sheet opens on content rather than on instructions. */
+private fun LazyListScope.postTagHint() {
     item(key = "hint") {
         Text(
             text = "Tap a tag to add it, again to exclude it, and once more to clear it. Hold a tag to save it or unsave it.",
@@ -395,6 +427,97 @@ private fun LazyListScope.postTagList(
         )
     }
 }
+
+/** The "Your search" tray under the tag list. */
+@Composable
+private fun PostTagQueryTray(
+    draft: Query?,
+    targetGroup: Int?,
+    onSearch: (() -> Unit)?,
+    onTargetGroup: (Int?) -> Unit,
+    confirmation: TrayConfirmation?,
+) = QueryTray(
+    title = "Your search",
+    emptyText = "Tap a tag to start a search.",
+    query = draft,
+    targetGroup = targetGroup,
+    onTargetGroup = onTargetGroup,
+    onSearch = onSearch,
+    confirmation = confirmation,
+)
+
+/** Whether the tag list can be folded away, and whether it is. */
+private class TagFold(val enabled: Boolean, val collapsed: Boolean, val onToggle: () -> Unit)
+
+/** Everything between the actions and the footer: the tags (or their folded peek), what the sheet adds, then the hint. */
+private fun LazyListScope.postTagSections(
+    groups: List<PostActionTermGroup>,
+    terms: List<SearchTerm>,
+    expandedGroups: Set<String>,
+    onExpandGroup: (String) -> Unit,
+    fold: TagFold,
+    sheetExtras: PostTagSheetExtras?,
+    chip: @Composable (SearchTerm) -> Unit,
+) {
+    if (fold.enabled) item(key = "tags-header") { TagsFoldHeader(terms.size, fold.collapsed, fold.onToggle) }
+    if (fold.enabled && fold.collapsed) {
+        item(key = "tags-peek") { TagPeekRow(terms.take(PEEK_TAG_COUNT), chip) }
+    } else {
+        postTagList(groups, expandedGroups, onExpandGroup, chip)
+    }
+    sheetExtras?.afterTags?.invoke(this)
+    if (groups.isNotEmpty()) postTagHint()
+}
+
+/** The tag list's toggle: how many tags there are, and whether they are shown. */
+@Composable
+private fun TagsFoldHeader(count: Int, collapsed: Boolean, onToggle: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .sizeIn(minHeight = 48.dp)
+            .clickable(role = Role.Button, onClickLabel = if (collapsed) "Show tags" else "Hide tags", onClick = onToggle)
+            .semantics(mergeDescendants = true) { stateDescription = if (collapsed) "Collapsed" else "Expanded" },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Tags", style = MaterialTheme.typography.titleSmall)
+        Text(
+            text = count.toString(),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 8.dp),
+        )
+        Spacer(Modifier.weight(1f))
+        Icon(if (collapsed) Icons.Default.ExpandMore else Icons.Default.ExpandLess, contentDescription = null)
+    }
+}
+
+/** The first tags on one line that fades out at the edge instead of wrapping; chips stay tappable. */
+@Composable
+private fun TagPeekRow(terms: List<SearchTerm>, chip: @Composable (SearchTerm) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .fadeOutAtEnd()
+            .horizontalScroll(rememberScrollState(), enabled = false),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        terms.forEach { term -> chip(term) }
+    }
+}
+
+/** Fades the last stretch of a clipped row to transparent. */
+private fun Modifier.fadeOutAtEnd(): Modifier = graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
+    .drawWithContent {
+        drawContent()
+        val fade = size.width.coerceAtMost(PEEK_FADE_WIDTH.toPx())
+        drawRect(
+            brush = Brush.horizontalGradient(listOf(Color.Black, Color.Transparent), startX = size.width - fade, endX = size.width),
+            topLeft = Offset(size.width - fade, 0f),
+            size = Size(fade, size.height),
+            blendMode = BlendMode.DstIn,
+        )
+    }
 
 @Composable
 private fun FavoriteTagActionCell(
@@ -619,5 +742,9 @@ internal val postTagFacetOrder = listOf(
     SearchFacet.LANGUAGE,
 )
 private const val GENERAL_TAG_NAMESPACE = "tag"
+/** The sheet's header, the tags' header and the tag peek come before whatever follows the folded tags. */
+private const val AFTER_FOLDED_TAGS_INDEX = 3
+private const val PEEK_TAG_COUNT = 10
+private val PEEK_FADE_WIDTH = 40.dp
 private const val COLLAPSE_TAGS_OVER = 16
 private const val COLLAPSED_TAG_COUNT = 12

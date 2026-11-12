@@ -2,6 +2,7 @@ package com.theoriacodex.sources.pixiv
 
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.theoriacodex.domain.adapter.CommentsSourceAdapter
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.DurationMetadataSourceAdapter
 import com.theoriacodex.domain.adapter.DurationMetadataSourceResult
@@ -14,9 +15,12 @@ import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.domain.model.CommentPage
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostComment
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.Query
@@ -44,6 +48,8 @@ import java.io.IOException
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -60,7 +66,8 @@ class PixivSourceAdapter(
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val minRequestIntervalMs: Long = 350L,
     private val ugoiraMetadataCache: PixivUgoiraMetadataCache = PixivUgoiraMetadataCache(),
-) : SourceAdapter, CreatorPostsSourceAdapter, RelatedPostsSourceAdapter, DurationMetadataSourceAdapter {
+) : SourceAdapter, CreatorPostsSourceAdapter, RelatedPostsSourceAdapter, DurationMetadataSourceAdapter,
+    CommentsSourceAdapter {
     override val sourceKey: SourceKey = SourceKey.PIXIV
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
@@ -217,6 +224,46 @@ class PixivSourceAdapter(
             items = posts,
             nextPageToken = parseNextOffset(root.stringValue("next_url")),
         )
+    }
+
+    /**
+     * A page token is the previous response's absolute `next_url` and is requested as given, for
+     * top-level comments and replies alike. Without a token, [parent] selects its replies, and
+     * otherwise the first page also reads the illustration's comment total; a failed total lookup
+     * leaves it null instead of failing the page.
+     */
+    override suspend fun comments(post: Post, pageToken: String?, parent: PostComment?): CommentPage {
+        if (post.id.source != SourceKey.PIXIV) return CommentPage(emptyList(), total = 0, nextPageToken = null)
+        pageToken?.let { nextUrl ->
+            if (!nextUrl.startsWith("$PIXIV_API_BASE/")) {
+                // The bearer token only ever goes to Pixiv's own API.
+                throw SourceAdapterException(SourceFailureReason.PARSE, "Pixiv returned an unexpected comments link")
+            }
+            return parsePixivCommentPage(parseJsonObject(authorizedGet(nextUrl, emptyMap()), gson, "Pixiv"), total = null)
+        }
+        if (parent != null) {
+            val replies = authorizedGet(
+                url = "$PIXIV_API_BASE/v2/illust/comment/replies",
+                query = mapOf("comment_id" to parent.id),
+            )
+            return parsePixivCommentPage(parseJsonObject(replies, gson, "Pixiv"), total = null)
+        }
+        return coroutineScope {
+            val total = async {
+                runCatchingPreservingCancellation {
+                    val detail = authorizedGet(
+                        url = "$PIXIV_API_BASE/v1/illust/detail",
+                        query = mapOf("illust_id" to post.id.sourcePostId),
+                    )
+                    parsePixivCommentTotal(parseJsonObject(detail, gson, "Pixiv"))
+                }.getOrNull()
+            }
+            val first = authorizedGet(
+                url = "$PIXIV_API_BASE/v3/illust/comments",
+                query = mapOf("illust_id" to post.id.sourcePostId),
+            )
+            parsePixivCommentPage(parseJsonObject(first, gson, "Pixiv"), total = total.await())
+        }
     }
 
     private suspend fun authorizedGet(

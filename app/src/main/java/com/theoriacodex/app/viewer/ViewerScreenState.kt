@@ -21,6 +21,9 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
+/** Where the info sheet opens: at its top, or scrolled to the comments. */
+internal enum class InfoSheetTarget { Top, Comments }
+
 /** State the screen's parts share for as long as the Viewer stays composed. */
 @Stable
 internal class ViewerScreenState {
@@ -31,6 +34,9 @@ internal class ViewerScreenState {
     var timelineInteractionActive by mutableStateOf(false)
     var relatedStripExpanded by mutableStateOf(false)
     var pendingDismiss by mutableStateOf(false)
+
+    /** Read when the info sheet opens; the sheet resets it on close, so any other way of opening it starts at the top. */
+    var infoSheetTarget by mutableStateOf(InfoSheetTarget.Top)
 }
 
 /**
@@ -48,6 +54,19 @@ internal class ViewerControls(
 ) {
     fun setInfoSheetVisible(visible: Boolean) {
         onAction(if (visible) ViewerAction.ShowMetadata else ViewerAction.HideMetadata)
+    }
+
+    /** Opens the info sheet scrolled to the post's comments. */
+    fun openInfoSheetAtComments() {
+        screen.infoSheetTarget = InfoSheetTarget.Comments
+        setInfoSheetVisible(true)
+    }
+
+    /** What the open info sheet was asked to show; consumed once as the sheet opens. */
+    val infoSheetTarget: InfoSheetTarget get() = screen.infoSheetTarget
+
+    fun resetInfoSheetTarget() {
+        screen.infoSheetTarget = InfoSheetTarget.Top
     }
 
     fun setPlaybackEnabled(enabled: Boolean) {
