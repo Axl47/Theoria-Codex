@@ -1,5 +1,6 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.domain.model.CommentHint
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -41,6 +42,16 @@ class SearchFirstPageStoreTest {
 
         assertEquals(listOf("1", "2"), store.load("key-a").map { it.id.sourcePostId })
         assertTrue(store.load("key-b").isEmpty())
+    }
+
+    @Test
+    fun `comment hints survive a restore, including a listing that gave none`() = runTest {
+        val store = SearchFirstPageStore(file(), StandardTestDispatcher(testScheduler))
+        val hints = listOf(CommentHint(3), CommentHint.Some, CommentHint.None, null)
+
+        store.save("key", hints.mapIndexed { index, hint -> post("$index").copy(commentHint = hint) })
+
+        assertEquals(hints, store.load("key").map { it.commentHint })
     }
 
     @Test
