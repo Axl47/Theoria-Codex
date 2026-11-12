@@ -14,6 +14,7 @@
 
 ### Fixed
 
+- Open in browser now opens your browser instead of reopening the post in the app.
 - Hitomi video cards now autoplay in search results.
 - Iwara video cards now autoplay once their details load, in search, For You and creator pages.
 - A post whose site answers with a different post now shows an error, instead of loading forever.
