@@ -143,6 +143,8 @@ private class GelbooruFamilyAdapter(
         return countsByName
     }
 
+    override fun nativeCommentAnchor(commentId: String): String? = "c$commentId".takeIf { site.commentAnchors }
+
     /** Set once the DAPI answers comment requests with something other than comment XML; never reset. */
     @Volatile
     private var commentsApiDisabled = false
@@ -159,7 +161,7 @@ private class GelbooruFamilyAdapter(
         if (pageToken == null && !commentsApiDisabled) {
             val query = apiQuery("s" to "comment", "q" to "index", "post_id" to postId, json = false)
             val body = requestBody(site.apiUrl, query)
-            parseGelbooruCommentsXml(body)?.let { comments ->
+            parseGelbooruCommentsXml(body, site)?.let { comments ->
                 return CommentPage(comments, total = comments.size, nextPageToken = null)
             }
             // Comment text can mention keys, so the key-failure scan runs only on answers that are not comments.
@@ -177,7 +179,7 @@ private class GelbooruFamilyAdapter(
             },
             scanBody = false,
         )
-        val page = parseGelbooruCommentsHtml(html, site.siteUrl, currentPid = pid)
+        val page = parseGelbooruCommentsHtml(html, site, currentPid = pid)
         return CommentPage(
             comments = page.comments,
             total = if (pid == 0 && page.nextPid == null) page.comments.size else null,
@@ -377,18 +379,8 @@ private class GelbooruFamilyAdapter(
     }
 
     /** The uploader is named by `owner`, or by `creator_id` alone on posts without one. */
-    private fun parseCreator(raw: JsonObject): CreatorProfile? {
-        val owner = raw.stringValue("owner")?.trim().orEmpty()
-        val creatorId = raw.stringValue("creator_id")?.trim()?.ifBlank { null }
-        val displayName = owner.ifBlank { creatorId } ?: return null
-        return CreatorProfile(
-            source = sourceKey,
-            displayName = displayName,
-            profileId = creatorId,
-            profileUrl = creatorId?.let { "${site.siteUrl}/index.php?page=account&s=profile&id=$it" },
-            uploadsQuery = owner.ifBlank { null }?.let { "user:$it" },
-        )
-    }
+    private fun parseCreator(raw: JsonObject): CreatorProfile? =
+        site.creatorProfile(raw.stringValue("owner"), raw.stringValue("creator_id"))
 
     private fun compileTags(query: Query): String {
         val orGroup = site.orGroup

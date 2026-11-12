@@ -2,6 +2,7 @@ package com.theoriacodex.sources.pixiv
 
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.PostComment
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.credentials.PixivAuthTokens
@@ -54,6 +55,12 @@ class PixivCommentsTest {
         val (first, stamped) = page.comments
         assertEquals("alice", first.authorName)
         assertEquals("https://i.pximg.net/u/7.png", first.authorAvatarUrl)
+        assertEquals(
+            CreatorProfile(SourceKey.PIXIV, "alice", "7", "https://www.pixiv.net/en/users/7", uploadsQuery = "7"),
+            first.author,
+        )
+        assertEquals("8", stamped.author?.profileId)
+        assertNull(adapter(client).nativeCommentAnchor("1"))
         assertEquals(1_767_290_645_000L, first.createdAtEpochMs)
         assertTrue(first.hasReplies)
         assertNull(first.stampUrl)

@@ -163,13 +163,15 @@ class DanbooruSourceAdapter(
         val records = parseJsonArray(response, gson, site.label)
         // Fullness counts every raw record, so a dropped deleted comment never ends paging early.
         val hasMore = records.size() >= DANBOORU_COMMENTS_PAGE_SIZE
-        val comments = records.mapNotNull(::parseDanbooruComment)
+        val comments = records.mapNotNull { parseDanbooruComment(it, sourceKey, site.baseUrl) }
         return CommentPage(
             comments = comments,
             total = comments.size.takeIf { pageIndex == 1 && !hasMore },
             nextPageToken = (pageIndex + 1).toString().takeIf { hasMore },
         )
     }
+
+    override fun nativeCommentAnchor(commentId: String): String = "comment_$commentId"
 
     private suspend fun searchTags(tags: String, sort: SortMode, pageToken: String?): Page<Post> {
         val response = request(

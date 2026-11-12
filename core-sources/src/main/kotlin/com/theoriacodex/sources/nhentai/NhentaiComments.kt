@@ -2,7 +2,9 @@ package com.theoriacodex.sources.nhentai
 
 import com.google.gson.JsonObject
 import com.theoriacodex.domain.model.CommentPage
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.PostComment
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.common.asIntOrNull
 import com.theoriacodex.sources.common.elementsOrEmpty
 import com.theoriacodex.sources.common.intValue
@@ -33,14 +35,27 @@ internal fun parseNhentaiCommentPage(root: JsonObject, pageIndex: Int): CommentP
 private fun parseNhentaiComment(raw: JsonObject): PostComment? {
     val id = raw.longValue("id")?.toString() ?: return null
     val poster = raw.optionalJsonObject("poster")
+    val username = poster?.stringValue("username")?.trim().orEmpty()
+    val userId = poster?.longValue("id")?.toString()
     return PostComment(
         id = id,
-        authorName = poster?.stringValue("username")?.trim().orEmpty(),
+        authorName = username,
         // Avatar paths are relative to the image host, which serves them at its root.
         authorAvatarUrl = poster?.stringValue("avatar_url")?.trim()?.takeIf(String::isNotBlank)
             ?.let { "$NHENTAI_IMAGES_BASE/${it.trimStart('/')}" },
         body = raw.stringValue("body").orEmpty().trim(),
         createdAtEpochMs = raw.longValue("post_date")?.times(MS_PER_SECOND),
+        // The profile page is a site account, not a searchable tag, so there is no uploads query.
+        author = userId?.let {
+            val slug = poster?.stringValue("slug")?.trim()?.takeIf(String::isNotBlank)
+            CreatorProfile(
+                source = SourceKey.NHENTAI,
+                displayName = username.ifBlank { it },
+                profileId = it,
+                profileUrl = "https://nhentai.net/users/$it${slug?.let { s -> "/$s" }.orEmpty()}",
+                uploadsQuery = null,
+            )
+        },
     )
 }
 

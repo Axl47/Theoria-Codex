@@ -2,6 +2,7 @@ package com.theoriacodex.sources.nhentai
 
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.testing.ScriptedHttpClient
 import com.theoriacodex.sources.testing.commentTestPost
@@ -35,6 +36,13 @@ class NhentaiCommentsTest {
         assertEquals("alice", page.comments[0].authorName)
         assertEquals("https://i.nhentai.net/avatars/1.png?_=abc", page.comments[0].authorAvatarUrl)
         assertNull(page.comments[1].authorAvatarUrl)
+        assertEquals(
+            CreatorProfile(SourceKey.NHENTAI, "alice", "1", "https://nhentai.net/users/1/alice", uploadsQuery = null),
+            page.comments[0].author,
+        )
+        // Without a slug the profile link is the id alone.
+        assertEquals("https://nhentai.net/users/2", page.comments[1].author?.profileUrl)
+        assertNull(adapter.nativeCommentAnchor("9"))
         assertEquals(1_700_000_000_000L, page.comments[0].createdAtEpochMs)
         assertEquals("text one", page.comments[0].body)
         assertEquals(120, page.total)

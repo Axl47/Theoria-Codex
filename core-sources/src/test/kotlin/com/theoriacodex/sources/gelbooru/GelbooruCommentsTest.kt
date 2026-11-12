@@ -5,6 +5,7 @@ import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.CommentsSourceAdapter
 import com.theoriacodex.domain.model.CommentHint
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
@@ -25,6 +26,8 @@ class GelbooruCommentsTest {
     private val api = "https://gelbooru.com/index.php"
     private val dapiQuery = mapOf("page" to "dapi", "s" to "comment", "q" to "index", "post_id" to "77")
     private val viewQuery = mapOf("page" to "post", "s" to "view", "id" to "77")
+
+    private val safebooru = GelbooruSite(SourceKey.GELBOORU, "Safebooru", "https://safebooru.org")
 
     private fun gelbooru() = GelbooruSourceAdapter(GelbooruSite.GELBOORU, http)
 
@@ -63,6 +66,13 @@ class GelbooruCommentsTest {
         assertEquals(listOf("5", "6"), page.comments.map { it.id })
         assertEquals("a & b \"c\"", page.comments[0].body)
         assertEquals("alice", page.comments[0].authorName)
+        assertEquals(
+            CreatorProfile(
+                SourceKey.GELBOORU, "alice", "9",
+                "https://gelbooru.com/index.php?page=account&s=profile&id=9", "user:alice",
+            ),
+            page.comments[0].author,
+        )
         assertNull(page.comments[0].authorAvatarUrl)
         assertEquals(1_767_323_040_000L, page.comments[0].createdAtEpochMs)
         assertEquals(1_767_323_106_000L, page.comments[1].createdAtEpochMs)
@@ -92,6 +102,8 @@ class GelbooruCommentsTest {
         val (alice, bob) = first.comments
         assertEquals(listOf("100", "101"), first.comments.map { it.id })
         assertEquals("alice", alice.authorName)
+        assertEquals("9", alice.author?.profileId)
+        assertEquals("user:bob", bob.author?.uploadsQuery)
         assertEquals("first & line\nsecond line", alice.body)
         assertEquals("https://gelbooru.com/user_avatars/avatar_1.jpg", alice.authorAvatarUrl)
         assertEquals("https://cdn.example/a.png", bob.authorAvatarUrl)
@@ -130,15 +142,39 @@ class GelbooruCommentsTest {
             </div>
         """.trimIndent()
 
-        val page = parseGelbooruCommentsHtml(html, "https://safebooru.org", currentPid = 0)
+        val page = parseGelbooruCommentsHtml(html, safebooru, currentPid = 0)
 
         val comment = page.comments.single()
         assertEquals("57661", comment.id)
         assertEquals("alice", comment.authorName)
+        assertEquals("1", comment.author?.profileId)
         assertEquals("one\ntwo & three", comment.body)
         assertEquals(1_767_323_045_000L, comment.createdAtEpochMs)
         assertNull(comment.authorAvatarUrl)
         assertNull(page.nextPid)
+    }
+
+    @Test
+    fun `an author link that names the user without an id still yields a searchable account`() {
+        val html = """<div id="c5"><div class="col1"><a href="index.php?page=account&amp;s=profile&amp;uname=misasami">misasami</a>
+            <b>posted on 2026-01-02 03:04:05</b></div><div class="col2">x</div></div>"""
+
+        val author = parseGelbooruCommentsHtml(html, safebooru, currentPid = 0).comments.single().author
+
+        assertEquals(CreatorProfile(SourceKey.GELBOORU, "misasami", null, null, "user:misasami"), author)
+    }
+
+    @Test
+    fun `a comment record with neither name nor id has no author`() {
+        val xml = """<comments type="array"><comment id="3" body="x" creator="" creator_id=""/></comments>"""
+
+        assertNull(parseGelbooruCommentsXml(xml, safebooru)?.single()?.author)
+    }
+
+    @Test
+    fun `native comment anchors follow the site's markup`() {
+        assertNull(gelbooru().nativeCommentAnchor("100"))
+        assertEquals("c100", GelbooruSourceAdapter(safebooru, http).nativeCommentAnchor("100"))
     }
 
     @Test
