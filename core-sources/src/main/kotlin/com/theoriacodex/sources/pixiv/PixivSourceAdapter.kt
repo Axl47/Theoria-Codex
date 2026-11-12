@@ -2,6 +2,7 @@ package com.theoriacodex.sources.pixiv
 
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.theoriacodex.domain.adapter.AccountProfileSourceAdapter
 import com.theoriacodex.domain.adapter.CommentsSourceAdapter
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.DurationMetadataSourceAdapter
@@ -16,6 +17,8 @@ import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.domain.model.AccountDetails
+import com.theoriacodex.domain.model.AccountFeed
 import com.theoriacodex.domain.model.CommentPage
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
@@ -67,7 +70,7 @@ class PixivSourceAdapter(
     private val minRequestIntervalMs: Long = 350L,
     private val ugoiraMetadataCache: PixivUgoiraMetadataCache = PixivUgoiraMetadataCache(),
 ) : SourceAdapter, CreatorPostsSourceAdapter, RelatedPostsSourceAdapter, DurationMetadataSourceAdapter,
-    CommentsSourceAdapter {
+    CommentsSourceAdapter, AccountProfileSourceAdapter {
     override val sourceKey: SourceKey = SourceKey.PIXIV
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
@@ -226,6 +229,59 @@ class PixivSourceAdapter(
         )
     }
 
+    override fun accountFeeds(creator: CreatorProfile): List<AccountFeed> =
+        if (accountUserId(creator) == null) emptyList() else listOf(AccountFeed.UPLOADS, AccountFeed.FAVORITES)
+
+    /** `/v1/user/detail`; its shape is the documented one and has not been checked against a live account. */
+    override suspend fun accountDetails(creator: CreatorProfile): AccountDetails? {
+        val userId = accountUserId(creator) ?: return null
+        val response = authorizedGet(
+            url = "$PIXIV_API_BASE/v1/user/detail",
+            query = mapOf("user_id" to userId, "filter" to "for_android"),
+        )
+        return parsePixivAccountDetails(parseJsonObject(response, gson, "Pixiv"))
+    }
+
+    override suspend fun accountPosts(creator: CreatorProfile, feed: AccountFeed, pageToken: String?): Page<Post> {
+        val userId = accountUserId(creator) ?: return canonicalPostPage(items = emptyList(), nextPageToken = null)
+        return when (feed) {
+            AccountFeed.UPLOADS -> searchCreatorPosts(creator, pageToken)
+            AccountFeed.FAVORITES -> publicBookmarks(userId, pageToken)
+        }
+    }
+
+    /** Only creators with a Pixiv user id are accounts; artist names alone are not. */
+    private fun accountUserId(creator: CreatorProfile): String? =
+        creator.profileId?.trim()?.takeIf { creator.source == SourceKey.PIXIV && it.isNotBlank() }
+
+    /**
+     * Public bookmarks newest first. Pixiv pages them by `max_bookmark_id`, so a page token is the
+     * previous response's absolute `next_url`, requested as given.
+     */
+    private suspend fun publicBookmarks(userId: String, pageToken: String?): Page<Post> {
+        val response = if (pageToken == null) {
+            authorizedGet(
+                url = "$PIXIV_API_BASE/v1/user/bookmarks/illust",
+                query = mapOf("user_id" to userId, "restrict" to "public", "filter" to "for_android"),
+            )
+        } else {
+            authorizedGet(trustedPixivLink(pageToken), emptyMap())
+        }
+        val root = parseJsonObject(response, gson, "Pixiv")
+        val posts = root.optionalJsonArray("illusts").elementsOrEmpty().mapNotNull { element ->
+            element.takeIf { it.isJsonObject }?.asJsonObject?.let(::parseIllust)
+        }
+        return canonicalPostPage(items = posts, nextPageToken = root.stringValue("next_url")?.trim()?.takeIf(String::isNotBlank))
+    }
+
+    /** The bearer token only ever goes to Pixiv's own API, so a stored `next_url` must point there. */
+    private fun trustedPixivLink(url: String): String {
+        if (!url.startsWith("$PIXIV_API_BASE/")) {
+            throw SourceAdapterException(SourceFailureReason.PARSE, "Pixiv returned an unexpected next-page link")
+        }
+        return url
+    }
+
     /**
      * A page token is the previous response's absolute `next_url` and is requested as given, for
      * top-level comments and replies alike. Without a token, [parent] selects its replies, and
@@ -235,11 +291,10 @@ class PixivSourceAdapter(
     override suspend fun comments(post: Post, pageToken: String?, parent: PostComment?): CommentPage {
         if (post.id.source != SourceKey.PIXIV) return CommentPage(emptyList(), total = 0, nextPageToken = null)
         pageToken?.let { nextUrl ->
-            if (!nextUrl.startsWith("$PIXIV_API_BASE/")) {
-                // The bearer token only ever goes to Pixiv's own API.
-                throw SourceAdapterException(SourceFailureReason.PARSE, "Pixiv returned an unexpected comments link")
-            }
-            return parsePixivCommentPage(parseJsonObject(authorizedGet(nextUrl, emptyMap()), gson, "Pixiv"), total = null)
+            return parsePixivCommentPage(
+                parseJsonObject(authorizedGet(trustedPixivLink(nextUrl), emptyMap()), gson, "Pixiv"),
+                total = null,
+            )
         }
         if (parent != null) {
             val replies = authorizedGet(
