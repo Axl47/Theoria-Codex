@@ -38,6 +38,22 @@ class ViewerRotationTest {
         compose.runOnIdle { assertEquals(ViewerOrientation.LANDSCAPE, rotation.held) }
     }
 
+    @Test fun `a video still waiting for its stream rotates as soon as it opens`() {
+        selection.value = selection("a", WIDE, IMAGE, full = null, durationMs = 45_000L)
+        show(autoRotate = true)
+        compose.runOnIdle { assertEquals(ViewerOrientation.LANDSCAPE, rotation.held) }
+    }
+
+    @Test fun `with the controls hidden, a post offering rotation shows the button briefly`() {
+        selection.value = selection("a", WIDE, VIDEO)
+        compose.mainClock.autoAdvance = false
+        show(autoRotate = false, chromeVisible = false)
+        compose.mainClock.advanceTimeBy(500)
+        compose.onNodeWithContentDescription("Rotate to fit").assertExists()
+        compose.mainClock.advanceTimeBy(VIEWER_ROTATE_HINT_MS + 500)
+        compose.onNodeWithContentDescription("Rotate to fit").assertDoesNotExist()
+    }
+
     @Test fun `leaving the opening post cancels the automatic rotation, and the button rotates instead`() {
         show(autoRotate = true)
         selection.value = selection("b", WIDE, VIDEO)
@@ -64,23 +80,23 @@ class ViewerRotationTest {
         compose.onNodeWithContentDescription("Rotate to fit").assertDoesNotExist()
     }
 
-    private fun show(autoRotate: Boolean) {
+    private fun show(autoRotate: Boolean, chromeVisible: Boolean = true) {
         compose.setContent {
             if (shown.value) {
                 CompositionLocalProvider(LocalViewerAutoRotateVideos provides autoRotate) {
                     Box(Modifier.fillMaxSize()) {
-                        ViewerRotationControl(selection.value, rotation, inPictureInPicture = false, visible = true)
+                        ViewerRotationControl(selection.value, rotation, inPictureInPicture = false, chromeVisible, suppressed = false)
                     }
                 }
             }
         }
     }
 
-    private fun selection(id: String, size: Pair<Int, Int>, media: ImageRef): ViewerSelection {
+    private fun selection(id: String, size: Pair<Int, Int>, media: ImageRef, full: ImageRef? = media, durationMs: Long? = null): ViewerSelection {
         val post = Post(
-            id = PostId(SourceKey.IWARA, id), preview = media, full = media, pageUrl = null,
+            id = PostId(SourceKey.IWARA, id), preview = media, full = full, pageUrl = null,
             width = size.first, height = size.second, canonicalTags = emptyList(), rawTags = emptyList(),
-            authorName = null, createdAtEpochMs = null,
+            authorName = null, createdAtEpochMs = null, durationMs = durationMs,
         )
         return ViewerSelection(post, listOf(media), mediaIndex = 0, canPlayUgoira = false, overviewItems = emptyList())
     }

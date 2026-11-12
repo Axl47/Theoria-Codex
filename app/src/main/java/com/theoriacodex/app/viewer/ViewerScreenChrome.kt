@@ -130,7 +130,7 @@ internal fun BoxScope.ViewerChromeOverlays(
                 })
         }
     }
-    ViewerRotationControl(selection, activity?.viewerRotation, frame.inPictureInPicture, frame.chromeVisible && !frame.mediaOverviewVisible && !screen.timelineInteractionActive)
+    ViewerRotationControl(selection, activity?.viewerRotation, frame.inPictureInPicture, frame.chromeVisible, suppressed = frame.mediaOverviewVisible || screen.timelineInteractionActive)
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_TOP_BAR, Modifier.align(Alignment.TopCenter).then(fadesWhileScrubbing)) {
         ViewerTopBar(frame, controls, activity, quality, qualityHeight, selection.post.id in likedPostIds, comments.countOf(selection.post), onAction)
     }

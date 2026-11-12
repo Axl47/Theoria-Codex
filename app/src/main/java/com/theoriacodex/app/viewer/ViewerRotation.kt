@@ -28,6 +28,8 @@ import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
+import com.theoriacodex.domain.model.Post
+import kotlinx.coroutines.delay
 
 internal val LocalViewerAutoRotateVideos = staticCompositionLocalOf { false }
 
@@ -58,7 +60,7 @@ internal fun rememberViewerRotation(selection: ViewerSelection, rotation: Viewer
         ViewerOrientation.PORTRAIT
     }
     val key = ViewerMediaKey(selection.post.id, selection.mediaIndex)
-    val isVideo = selection.media?.let(::isVideoMediaRef) == true
+    val isVideo = selection.media?.let(::isVideoMediaRef) == true || (selection.mediaIndex == 0 && selection.post.awaitsVideoStream())
     val measured = rotation.measured?.takeIf { it.key == key }
     // A post's dimensions describe its first media item.
     val fill = when {
@@ -75,7 +77,7 @@ internal fun rememberViewerRotation(selection: ViewerSelection, rotation: Viewer
                 if (fill != screen) rotation.held = fill
                 openingKey = null
             }
-            // Otherwise wait: some sources resolve the video, or its size, only after the post opens.
+            // Otherwise wait: a post without dimensions learns its size once the video decodes.
         }
     }
     DisposableEffect(rotation) {
@@ -88,20 +90,42 @@ internal fun rememberViewerRotation(selection: ViewerSelection, rotation: Viewer
     return if (offered && fill != null) ViewerRotationOffer(fill) { rotation.held = fill } else null
 }
 
+/**
+ * A video whose stream resolves only after it opens: its listing gave just a preview and a running time.
+ * Lets the Viewer rotate at once instead of waiting for the stream. GIFs and ugoira carry their media up front.
+ */
+private fun Post.awaitsVideoStream(): Boolean = full == null && media.isEmpty() && (durationMs ?: 0L) > 0L
+
 internal class ViewerRotationOffer(val target: ViewerOrientation, val rotate: () -> Unit)
 
-/** The Viewer's rotation behavior and its button, placed above whichever bar the current media shows. */
+/**
+ * The Viewer's rotation behavior and its button, placed above whichever bar the current media shows. The button
+ * follows the controls, and also shows for [VIEWER_ROTATE_HINT_MS] whenever a post starts offering a rotation,
+ * since swiping to a post leaves the controls hidden. [suppressed] hides it while another surface owns the bottom.
+ */
 @Composable
 internal fun BoxScope.ViewerRotationControl(
     selection: ViewerSelection,
     rotation: ViewerRotationState?,
     inPictureInPicture: Boolean,
-    visible: Boolean,
+    chromeVisible: Boolean,
+    suppressed: Boolean,
 ) {
-    val offer = rememberViewerRotation(selection, rotation, inPictureInPicture) ?: return
+    val offer = rememberViewerRotation(selection, rotation, inPictureInPicture)
+    var hinting by remember { mutableStateOf(false) }
+    LaunchedEffect(selection.post.id, selection.mediaIndex, offer?.target) {
+        hinting = offer != null
+        if (hinting) {
+            delay(VIEWER_ROTATE_HINT_MS)
+            hinting = false
+        }
+    }
+    offer ?: return
     val bottomBar = if (selection.isAnimated || selection.overviewItems.size > 1) VIEWER_TIMELINE_HEIGHT else 0.dp
-    ViewerRotateButton(offer, visible, bottomInset = LocalViewerPostStripInset.current + bottomBar)
+    ViewerRotateButton(offer, (chromeVisible || hinting) && !suppressed, bottomInset = LocalViewerPostStripInset.current + bottomBar)
 }
+
+internal const val VIEWER_ROTATE_HINT_MS = 3_000L
 
 /** Lower left, above the timeline, where the left thumb rests. */
 @Composable
