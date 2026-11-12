@@ -7,6 +7,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.platform.LocalViewConfiguration
 import kotlinx.coroutines.delay
@@ -279,18 +281,18 @@ private fun Modifier.commentRowHighlight(linked: Boolean, selected: Boolean, lab
                 },
             )
         }
-        .drawBehind {
-            val outset = HIGHLIGHT_OUTSET.toPx()
-            val bounds = RoundRect(-outset, -outset, size.width + outset, size.height + outset, CornerRadius(2 * outset))
-            if (link > 0f) drawPath(Path().apply { addRoundRect(bounds) }, tint.copy(alpha = HIGHLIGHT_ALPHA * link))
-            val progress = fill.value
-            if (progress > 0f) {
-                val from = if (origin.isSpecified) origin else center
-                val reach = Offset(maxOf(from.x - bounds.left, bounds.right - from.x), maxOf(from.y - bounds.top, bounds.bottom - from.y)).getDistance()
-                clipPath(Path().apply { addRoundRect(bounds) }) {
-                    drawCircle(tint.copy(alpha = HIGHLIGHT_ALPHA), radius = reach * progress, center = from)
-                }
-            }
-        }
+        .drawBehind { drawRowHighlight(tint, link, fill.value, origin) }
+}
+
+/** Draws the link tint at [link] strength and the hold fill as a circle from [origin] grown to [fill] of the row. */
+private fun DrawScope.drawRowHighlight(tint: Color, link: Float, fill: Float, origin: Offset) {
+    val outset = HIGHLIGHT_OUTSET.toPx()
+    val bounds = RoundRect(-outset, -outset, size.width + outset, size.height + outset, CornerRadius(2 * outset))
+    val shape = Path().apply { addRoundRect(bounds) }
+    if (link > 0f) drawPath(shape, tint.copy(alpha = HIGHLIGHT_ALPHA * link))
+    if (fill <= 0f) return
+    val from = if (origin.isSpecified) origin else center
+    val reach = Offset(maxOf(from.x - bounds.left, bounds.right - from.x), maxOf(from.y - bounds.top, bounds.bottom - from.y)).getDistance()
+    clipPath(shape) { drawCircle(tint.copy(alpha = HIGHLIGHT_ALPHA), radius = reach * fill, center = from) }
 }
 
