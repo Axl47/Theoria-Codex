@@ -1,7 +1,12 @@
 package com.theoriacodex.app.viewer
 
-/** A screen orientation the Viewer can hold to fit its media. */
-enum class ViewerOrientation { PORTRAIT, LANDSCAPE }
+/** A screen orientation the Viewer can hold. */
+enum class ViewerOrientation {
+    PORTRAIT, LANDSCAPE;
+
+    /** The orientation the rotate button turns to from this one. */
+    val opposite: ViewerOrientation get() = if (this == PORTRAIT) LANDSCAPE else PORTRAIT
+}
 
 /** Media must be at least this much wider than tall (or taller than wide) before rotating gains real space. */
 const val VIEWER_ROTATION_MIN_ASPECT = 1.25f
@@ -18,8 +23,9 @@ fun viewerFillOrientation(width: Int?, height: Int?): ViewerOrientation? {
 }
 
 /**
- * Whether the Viewer offers to rotate to [fill]. Videos always qualify; other media only once the Viewer
- * holds a rotation, so a rotation chosen for a video can always be undone from the posts after it.
+ * Whether rotating to [fill] fits the current media, which labels the rotate button and briefly shows it.
+ * Videos always qualify; other media only once the Viewer holds a rotation, so a rotation chosen for a
+ * video can always be undone from the posts after it.
  */
 fun viewerOffersRotation(
     fill: ViewerOrientation?,
