@@ -63,37 +63,48 @@ internal fun LazyListScope.commentsSection(
     view: CommentsView,
 ) {
     if (!state.hasSection) return
-    val source = post.id.source
-    item(key = "comments-header", contentType = "comments-header") {
-        FoldHeader("Comments", "comments", count?.label, view.collapsed, view.onToggleCollapsed, Modifier.padding(top = 8.dp)) {
-            if (!view.collapsed) {
-                TextButton(onClick = { view.onOrderSelected(view.order.toggled()) }) {
-                    Text(if (view.order == CommentOrder.OLDEST) "Oldest" else "Newest")
-                }
-            }
-        }
-    }
+    item(key = "comments-header", contentType = "comments-header") { CommentsHeader(count, view) }
     if (view.collapsed) return
-    state.top.comments.inOrder(view.order).forEach { comment ->
-        val replies = state.replies[comment.id]
-        val expanded = comment.id in state.expandedReplies
-        item(key = "comment:${comment.id}", contentType = "comment") {
-            CommentRow(
-                source, comment, nowEpochMs,
-                repliesLabel = if (comment.hasReplies) repliesLabel(replies?.total, expanded) else null,
-                onToggleReplies = { actions.toggleReplies(post, comment) },
-            )
-        }
-        if (expanded && replies != null) {
-            replies.comments.forEach { reply ->
-                item(key = "reply:${comment.id}:${reply.id}", contentType = "reply") {
-                    CommentRow(source, reply, nowEpochMs, Modifier.padding(start = REPLY_INDENT))
-                }
+    state.top.comments.inOrder(view.order).forEach { comment -> commentWithReplies(post, state, comment, actions, nowEpochMs) }
+    listFooter("comments-footer", state.top, "More comments", 0.dp) { actions.loadMore(post) }
+}
+
+@Composable
+private fun CommentsHeader(count: CommentCount?, view: CommentsView) {
+    FoldHeader("Comments", "comments", count?.label, view.collapsed, view.onToggleCollapsed, Modifier.padding(top = 8.dp)) {
+        if (!view.collapsed) {
+            TextButton(onClick = { view.onOrderSelected(view.order.toggled()) }) {
+                Text(if (view.order == CommentOrder.OLDEST) "Oldest" else "Newest")
             }
-            listFooter("replies-footer:${comment.id}", replies, "More", REPLY_INDENT) { actions.loadMoreReplies(post, comment) }
         }
     }
-    listFooter("comments-footer", state.top, "More comments", 0.dp) { actions.loadMore(post) }
+}
+
+/** One top-level comment, then its replies and their footer while they are opened. */
+private fun LazyListScope.commentWithReplies(
+    post: Post,
+    state: PostCommentsState,
+    comment: PostComment,
+    actions: PostCommentsActions,
+    nowEpochMs: Long,
+) {
+    val source = post.id.source
+    val replies = state.replies[comment.id]
+    val expanded = comment.id in state.expandedReplies
+    item(key = "comment:${comment.id}", contentType = "comment") {
+        CommentRow(
+            source, comment, nowEpochMs,
+            repliesLabel = if (comment.hasReplies) repliesLabel(replies?.total, expanded) else null,
+            onToggleReplies = { actions.toggleReplies(post, comment) },
+        )
+    }
+    if (!expanded || replies == null) return
+    replies.comments.forEach { reply ->
+        item(key = "reply:${comment.id}:${reply.id}", contentType = "reply") {
+            CommentRow(source, reply, nowEpochMs, Modifier.padding(start = REPLY_INDENT))
+        }
+    }
+    listFooter("replies-footer:${comment.id}", replies, "More", REPLY_INDENT) { actions.loadMoreReplies(post, comment) }
 }
 
 /** What follows a list: progress while a page loads, a retry after a failed one, or the button for the next page. */

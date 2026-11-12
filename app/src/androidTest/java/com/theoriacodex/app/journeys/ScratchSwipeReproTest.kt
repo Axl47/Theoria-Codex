@@ -31,8 +31,11 @@ class ScratchSwipeReproTest : AppJourneyFixture() {
         activate(compose.onNodeWithTag("Recent search:journey:swipe"))
         val card = compose.onNodeWithTag(searchCardTestTag(posts.getValue(SourceKey.PIXIV)[0].id))
         compose.waitUntil(10_000) { card.isDisplayed() }
-        activate(card)
         android.util.Log.d("SwipeRepro", "VIEWER_OPEN")
-        Thread.sleep(240_000)
+        val end = System.currentTimeMillis() + 240_000
+        while (System.currentTimeMillis() < end) {
+            compose.mainClock.advanceTimeBy(16)
+            Thread.sleep(16)
+        }
     }
 }
