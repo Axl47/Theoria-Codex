@@ -33,14 +33,14 @@ class DanbooruCommentsTest {
             |see "the page":https://example.com/a?b=1 and "local":/wiki_pages/help, [[keep]] *this*""".trimMargin()
 
         assertEquals(
-            "Hello bold it u s boo note\nsee the page and local, [[keep]] *this*",
+            "quoted reply\nHello bold it u s boo note\nsee the page and local, [[keep]] *this*",
             danbooruDTextToPlain(dtext),
         )
     }
 
     @Test
-    fun `nested quotes are dropped whole`() {
-        assertEquals("after", danbooruDTextToPlain("[quote]a [quote]b[/quote] c[/quote]after"))
+    fun `a quote-only comment keeps its text`() {
+        assertEquals("a b c", danbooruDTextToPlain("[quote]a [quote]b[/quote] c[/quote]"))
     }
 
     @Test

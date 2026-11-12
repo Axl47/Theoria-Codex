@@ -31,23 +31,14 @@ internal fun parseDanbooruComment(element: JsonElement): PostComment? {
 }
 
 /**
- * Reduces DText to readable plain text: quoted blocks are dropped (they repeat another comment),
- * simple formatting tags are removed and `"label":url` links become their label. Everything else
- * is kept as written.
+ * Reduces DText to readable plain text: simple formatting tags (quotes included, keeping their
+ * text) are removed and `"label":url` links become their label. Everything else is kept as written.
  */
-internal fun danbooruDTextToPlain(dtext: String): String {
-    var text = dtext
-    // Quotes nest, so peel the innermost block until none is left.
-    while (true) {
-        val stripped = QUOTE_BLOCK_REGEX.replace(text, "")
-        if (stripped == text) break
-        text = stripped
-    }
-    return text
+internal fun danbooruDTextToPlain(dtext: String): String =
+    dtext
         .replace(LINK_REGEX, "$1")
         .replace(FORMATTING_TAG_REGEX, "")
         .trim()
-}
 
 /** Listing hint: a non-null `last_commented_at` means comments exist; an explicit null means none. */
 internal fun JsonObject.danbooruCommentHint(): CommentHint? = when {
@@ -56,6 +47,5 @@ internal fun JsonObject.danbooruCommentHint(): CommentHint? = when {
     else -> CommentHint.Some
 }
 
-private val QUOTE_BLOCK_REGEX = Regex("\\[quote](?:(?!\\[quote]).)*?\\[/quote]", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
 private val LINK_REGEX = Regex("\"([^\"\\n]+)\":(?:\\[[^\\]\\s]+]|(?:https?://|/)\\S*[^\\s,.;:!?)])")
 private val FORMATTING_TAG_REGEX = Regex("\\[/?(?:b|i|u|s|spoilers?|tn|quote|code|nodtext)]", RegexOption.IGNORE_CASE)
