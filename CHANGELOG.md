@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-11-12
+
 ### Changed
 
 - The Viewer's rotate button is always available with the controls, so you can turn the screen by hand on any post.
