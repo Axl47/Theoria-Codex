@@ -433,16 +433,12 @@ internal class TheoriaShell(
         transfers.showDownloads = true
     }
 
+    /** Opens [creator] above the current screen, so Back returns to it (a Viewer stays open underneath). */
     suspend fun openCreatorProfile(creator: CreatorProfile) {
         pendingCreatorProfile = creator
-        if (navigation.currentRoute == AppRoute.Viewer) {
-            activeViewerOwner?.clearSession()
-            viewerSessions.clear()
-            features.search.setViewerLaunchContext(null)
-            navController.popBackStack(AppRoute.Viewer, inclusive = true)
-        }
         navController.navigate(AppRoute.CreatorProfile) {
-            launchSingleTop = true
+            // A creator opened from a creator page replaces it; its entry remembers the creator it started with.
+            if (navigation.currentRoute == AppRoute.CreatorProfile) popUpTo(AppRoute.CreatorProfile) { inclusive = true }
         }
     }
 

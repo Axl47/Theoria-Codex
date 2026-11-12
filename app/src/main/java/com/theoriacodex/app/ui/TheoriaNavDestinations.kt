@@ -13,6 +13,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -39,6 +41,7 @@ import com.theoriacodex.app.ui.components.creatorFeedFabContext
 import com.theoriacodex.app.ui.routes.BrowsingDestinationStateBoundary
 import com.theoriacodex.app.ui.routes.CodexDetailDestinationState
 import com.theoriacodex.app.ui.routes.CodexDetailDestinationStateBoundary
+import com.theoriacodex.app.ui.routes.CreatorProfileStateSaver
 import com.theoriacodex.app.ui.routes.CreatorRoute
 import com.theoriacodex.app.ui.routes.CreatorRouteCallbacks
 import com.theoriacodex.app.ui.routes.CreatorRouteConfig
@@ -228,8 +231,10 @@ private fun CodexDetailContent(
 @Composable
 private fun CreatorDestination(shell: TheoriaShell) {
     val routes = shell.routes
+    // Each creator entry keeps the creator it opened with, so Back through Creator → Viewer → Creator returns to the right page.
+    val entryCreator by rememberSaveable(stateSaver = CreatorProfileStateSaver) { mutableStateOf(shell.pendingCreatorProfile) }
     BrowsingDestinationStateBoundary(shell.data, shell.sources) { state ->
-        val creator = shell.pendingCreatorProfile ?: return@BrowsingDestinationStateBoundary
+        val creator = entryCreator ?: return@BrowsingDestinationStateBoundary
         val creatorIdentity = creator.profileId ?: creator.uploadsQuery ?: creator.displayName
         val fabContext = creatorFeedFabContext(creator.source.id, creatorIdentity)
         val fabRestoreState = shell.feedFabRestoreRegistry.state(fabContext) ?: return@BrowsingDestinationStateBoundary
