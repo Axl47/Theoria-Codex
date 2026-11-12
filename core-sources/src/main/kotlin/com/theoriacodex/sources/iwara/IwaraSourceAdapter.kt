@@ -3,6 +3,7 @@ package com.theoriacodex.sources.iwara
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import com.theoriacodex.domain.adapter.AccountProfileSourceAdapter
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
@@ -11,6 +12,8 @@ import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.model.AccountDetails
+import com.theoriacodex.domain.model.AccountFeed
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -43,7 +46,7 @@ import java.time.Instant
 class IwaraSourceAdapter(
     private val httpClient: SourceHttpClient,
     private val gson: Gson = Gson(),
-) : SourceAdapter, CreatorPostsSourceAdapter {
+) : SourceAdapter, CreatorPostsSourceAdapter, AccountProfileSourceAdapter {
     override val sourceKey: SourceKey = SourceKey.IWARA
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
@@ -207,6 +210,25 @@ class IwaraSourceAdapter(
         )
         return parsePagedPosts(response)
     }
+
+    override fun accountFeeds(creator: CreatorProfile): List<AccountFeed> =
+        if (creator.source == SourceKey.IWARA && !creator.profileId.isNullOrBlank()) listOf(AccountFeed.UPLOADS) else emptyList()
+
+    /** The profile (avatar, bio, join date) and the follower total; null when the user is unknown. */
+    override suspend fun accountDetails(creator: CreatorProfile): AccountDetails? {
+        val userId = creator.profileId?.trim()?.takeIf { it.isNotBlank() && creator.source == SourceKey.IWARA } ?: return null
+        val username = iwaraUsername(creator) ?: return null
+        val profile = request(url = "$IWARA_API_BASE/profile/$username", query = emptyMap())
+        if (profile.statusCode == 404) return null
+        val followers = requestJsonObject(url = "$IWARA_API_BASE/user/$userId/followers", query = mapOf("limit" to "1"))
+        return parseIwaraAccountDetails(parseJsonObject(profile.body, gson, "Iwara"), followers.intValue("count"))
+    }
+
+    override suspend fun accountPosts(creator: CreatorProfile, feed: AccountFeed, pageToken: String?): Page<Post> =
+        when (feed) {
+            AccountFeed.UPLOADS -> searchCreatorPosts(creator, pageToken)
+            AccountFeed.FAVORITES -> canonicalPostPage(emptyList(), null)
+        }
 
     private fun compileQueryText(query: Query): String {
         return query.includeTags
@@ -405,7 +427,7 @@ class IwaraSourceAdapter(
         val embedUrl = raw.stringValue("embedUrl")?.trim().takeUnless { it.isNullOrBlank() }
         if (file == null && embedUrl != null) return null
         val preview = ImageRef(
-            url = customThumbnail?.let(::buildAssetUrl)
+            url = customThumbnail?.let(::iwaraAssetUrl)
                 ?: file?.stringValue("id")?.let { fileId ->
                     buildVideoThumbnailUrl(
                         fileId = fileId,
@@ -475,18 +497,6 @@ class IwaraSourceAdapter(
         )
     }
 
-    private fun buildAssetUrl(asset: JsonObject): String? {
-        val assetId = asset.stringValue("id")?.trim().takeUnless { it.isNullOrBlank() } ?: return null
-        val fileExt = asset.stringValue("name")
-            ?.substringAfterLast('.', "")
-            ?.trim()
-            ?.lowercase()
-            ?.ifBlank { "jpg" }
-            ?: "jpg"
-        // Used for cards: the original of a custom thumbnail is 1-7 MB, this rendition well under 100 KB.
-        return "https://i.iwara.tv/image/thumbnail/$assetId/$assetId.$fileExt"
-    }
-
     private fun buildVideoThumbnailUrl(
         fileId: String,
         thumbnailIndex: Int?,
@@ -528,6 +538,19 @@ class IwaraSourceAdapter(
         return runCatching { Instant.parse(value).toEpochMilli() }.getOrNull()
     }
 
+}
+
+/** Small rendition URL of an Iwara file object (a custom thumbnail or an avatar); null without an id. */
+internal fun iwaraAssetUrl(asset: JsonObject): String? {
+    val assetId = asset.stringValue("id")?.trim().takeUnless { it.isNullOrBlank() } ?: return null
+    val fileExt = asset.stringValue("name")
+        ?.substringAfterLast('.', "")
+        ?.trim()
+        ?.lowercase()
+        ?.ifBlank { "jpg" }
+        ?: "jpg"
+    // Used for cards: the original of a custom thumbnail is 1-7 MB, this rendition well under 100 KB.
+    return "https://i.iwara.tv/image/thumbnail/$assetId/$assetId.$fileExt"
 }
 
 private data class ResolvedVariant(
