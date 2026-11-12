@@ -69,10 +69,18 @@ internal val VIEWER_FLING_VELOCITY = 400.dp
 
 private const val EDGE_STRETCH_FRACTION = 0.18f
 
+/** Landscape pages are about twice as wide, so a slow drag commits after a shorter share of one. */
+internal const val VIEWER_LANDSCAPE_COMMIT_FRACTION = 0.10f
+
+/** How far a slow drag must travel, as a fraction of a page, to change page in this pager's shape. */
+internal fun PagerState.viewerCommitFraction(): Float {
+    val viewport = layoutInfo.viewportSize
+    return if (viewport.width > viewport.height) VIEWER_LANDSCAPE_COMMIT_FRACTION else TheoriaMotion.PAGE_COMMIT_FRACTION
+}
+
 /**
  * Decides a released swipe. A fling goes where it is moving, and one moving back against this
- * gesture's own [movement] cancels it; a slow release commits only past
- * [TheoriaMotion.PAGE_COMMIT_FRACTION] of a page. [displacement] also counts any offset left from a
+ * gesture's own [movement] cancels it; a slow release commits only past [commitFraction] of a page. [displacement] also counts any offset left from a
  * settle this gesture caught, so it says how far the pages are, not which way the finger went.
  */
 internal fun viewerSwipeDecision(
@@ -81,10 +89,11 @@ internal fun viewerSwipeDecision(
     velocity: Float,
     pageExtent: Float,
     flingVelocity: Float,
+    commitFraction: Float = TheoriaMotion.PAGE_COMMIT_FRACTION,
 ): ViewerHorizontalSwipeDirection? {
     val deciding = when {
         abs(velocity) >= flingVelocity -> if (movement * velocity < 0f) return null else velocity
-        abs(displacement) >= pageExtent * TheoriaMotion.PAGE_COMMIT_FRACTION -> displacement
+        abs(displacement) >= pageExtent * commitFraction -> displacement
         else -> return null
     }
     return if (deciding < 0f) ViewerHorizontalSwipeDirection.Next else ViewerHorizontalSwipeDirection.Previous
