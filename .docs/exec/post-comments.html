@@ -7,7 +7,7 @@ table{border-collapse:collapse;width:100%;font-size:14px}td,th{border:1px solid 
 code{background:#f2f2f5;padding:0 .25rem;border-radius:3px}.st{font-weight:600}
 </style></head><body>
 <h1>Post comments</h1>
-<p>Status: <span class="st">in progress</span> · branch <code>feat/post-comments</code></p>
+<p>Status: <span class="st">implemented, in review</span> · branch <code>feat/post-comments</code></p>
 
 <h2>Goal</h2>
 <p>Show read-only provider comments for a post in the Viewer's info sheet, and show how many comments a post has
@@ -43,9 +43,9 @@ on search cards (where the listing says) and in the Viewer (every supported sour
 <table>
 <tr><th>Step</th><th>State</th></tr>
 <tr><td>Domain contract</td><td>done</td></tr>
-<tr><td>Source adapters + listing hints + tests</td><td>in progress</td></tr>
-<tr><td>App loader, Viewer button, info sheet, card mark + tests</td><td>in progress</td></tr>
-<tr><td>On-device proof (Debug app; logs and accessibility text only)</td><td>pending</td></tr>
+<tr><td>Source adapters + listing hints + tests</td><td>done</td></tr>
+<tr><td>App loader, Viewer button, info sheet, card mark + tests</td><td>done</td></tr>
+<tr><td>On-device proof (Debug app; logs and accessibility text only)</td><td>done (rule34.xxx untested: no API keys)</td></tr>
 </table>
 
 <h2>Validation</h2>
@@ -55,9 +55,19 @@ on search cards (where the listing says) and in the Viewer (every supported sour
 <li>On device: open posts from each source in the Viewer and read the comment button's accessibility label and the sheet's comment count via accessibility text; no screenshots of provider media.</li>
 </ul>
 
+<h2>Evidence</h2>
+<ul>
+<li>Phone, instrumentation inside the Debug app (counts and field presence only): Gelbooru 42 comments plus page 2, avatars present; nhentai total 116 with paging; Pixiv total 76, 30 per page plus page 2, stamps and replies; Safebooru listing hints 2/3/6/37 equal the loaded counts; Danbooru, AIBooru and a custom Danbooru site load.</li>
+<li>Emulator, acceptance APK, accessibility text: an nhentai gallery with 0 comments shows no button, tags expanded and no section; a gallery with 40 comments shows a "40 comments" button that opens the sheet at "Comments 40"; the info swipe opens on the collapsed Tags peek, and the toggle expands and collapses it.</li>
+<li>Emulator search cards: Danbooru <code>cat order:comment</code> shows 9 cards with 9 "Has comments" marks; newest <code>cat</code> shows none, matching the API (0 of 30 posts commented).</li>
+</ul>
+
 <h2>Decisions and surprises</h2>
 <ul>
 <li>Gelbooru's comment API is disabled by the site; the post page is the source of truth there.</li>
 <li>Viewer Info lives in an overflow menu, so the Viewer indicator is its own top-bar button rather than a badge on Info.</li>
+<li>Pixiv's total counts replies too, so the button can read higher than the visible top-level list.</li>
+<li>Booru timestamps without a zone are read as UTC.</li>
+<li>Avatars are shown (approved); remove them if they bring moderation problems.</li>
 </ul>
 </body></html>
