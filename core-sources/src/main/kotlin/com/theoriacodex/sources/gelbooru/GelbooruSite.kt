@@ -36,6 +36,10 @@ data class GelbooruSite(
     val tagList: GelbooruTagList = GelbooruTagList.JSON,
     /** The post page wraps each comment in `div#c<id>`, so `#c<id>` jumps to it (0.2 forks; gelbooru.com does not). */
     val commentAnchors: Boolean = true,
+    /** `index.php?page=account&s=profile&id=` is a public profile page with statistics (0.2 forks send guests to login). */
+    val publicProfiles: Boolean = false,
+    /** The HTML post list answers `fav:<id>` to guests, so an account's public favorites can be paged. */
+    val favoritesList: Boolean = false,
 ) {
     /**
      * A site account as a creator: [owner] is the user name (searched as `user:<owner>`), [creatorId] the
@@ -63,6 +67,8 @@ data class GelbooruSite(
             creatorPosts = true,
             relatedPosts = true,
             commentAnchors = false,
+            publicProfiles = true,
+            favoritesList = true,
         )
 
         /** The API host differs from the site, every API call needs a key, and tags come from `autocomplete.php`. */

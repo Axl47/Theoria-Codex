@@ -8,6 +8,7 @@ import com.theoriacodex.sources.common.htmlFragmentToText
 import com.theoriacodex.sources.common.intValue
 import com.theoriacodex.sources.common.parseBooruDateTimeMs
 import org.jsoup.Jsoup
+import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import org.jsoup.nodes.Node
 import org.jsoup.nodes.TextNode
@@ -55,12 +56,15 @@ internal fun parseGelbooruCommentsHtml(html: String, site: GelbooruSite, current
     } else {
         document.select("div[id~=^c\\d+$]").mapNotNull { parseColumnComment(it, site) }
     }
-    val nextPid = document.select("#paginator a[href], .paginator a[href]")
+    return GelbooruHtmlComments(comments, nextPaginatorPid(document, currentPid))
+}
+
+/** The smallest `pid` offset the page's paginator offers beyond [currentPid]; null on the last page. */
+internal fun nextPaginatorPid(document: Document, currentPid: Int): Int? =
+    document.select("#paginator a[href], .paginator a[href]")
         .mapNotNull { link -> PID_REGEX.find(link.attr("href"))?.groupValues?.get(1)?.toIntOrNull() }
         .filter { it > currentPid }
         .minOrNull()
-    return GelbooruHtmlComments(comments, nextPid)
-}
 
 private fun parseCommentBody(body: Element, site: GelbooruSite): PostComment? {
     val authorLink = body.selectFirst("a")
@@ -120,7 +124,7 @@ private fun profileId(link: Element): String? = PROFILE_ID_REGEX.find(link.attr(
 private fun Node.isBr(): Boolean = this is Element && tagName() == "br"
 
 /** The avatar is an `img`, or a CSS `background: url(...)` on `div.profileAvatar`. */
-private fun avatarUrl(avatar: Element, siteUrl: String): String? {
+internal fun avatarUrl(avatar: Element, siteUrl: String): String? {
     val raw = avatar.selectFirst("img[src]")?.attr("src")
         ?: avatar.select("[style]").firstNotNullOfOrNull { STYLE_URL_REGEX.find(it.attr("style"))?.groupValues?.get(1) }
         ?: return null
