@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -222,19 +223,7 @@ internal fun QueryTray(
         HorizontalDivider()
         Column(Modifier.padding(start = 4.dp, end = 16.dp, top = 4.dp, bottom = if (collapsed) 4.dp else 12.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .sizeIn(minHeight = 48.dp)
-                        .clickable(role = Role.Button, onClickLabel = if (collapsed) "Show search" else "Hide search") { collapsed = !collapsed }
-                        .semantics(mergeDescendants = true) { stateDescription = if (collapsed) "Collapsed" else "Expanded" },
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        if (collapsed) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = null,
-                        modifier = Modifier.padding(horizontal = 8.dp),
-                    )
+                TrayFoldToggle(collapsed, onToggle = { collapsed = !collapsed }, Modifier.weight(1f)) {
                     when {
                         !collapsed -> Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         isEmpty -> TrayEmptyText(emptyText, maxLines = 1)
@@ -245,12 +234,41 @@ internal fun QueryTray(
             }
             confirmation?.let { TrayConfirmationRow(it) }
             if (!collapsed) {
-                Column(Modifier.padding(start = 12.dp)) {
-                    if (isEmpty) TrayEmptyText(emptyText) else TrayExpression(groups, excludes, targetGroup, onTargetGroup)
-                }
+                Column(Modifier.padding(start = 12.dp)) { TrayBody(emptyText, groups, excludes, targetGroup, onTargetGroup) }
             }
         }
     }
+}
+
+/** The tray's header: a chevron and [content], one toggle that folds or unfolds the query. */
+@Composable
+private fun TrayFoldToggle(collapsed: Boolean, onToggle: () -> Unit, modifier: Modifier, content: @Composable RowScope.() -> Unit) {
+    Row(
+        modifier = modifier
+            .sizeIn(minHeight = 48.dp)
+            .clickable(role = Role.Button, onClickLabel = if (collapsed) "Show search" else "Hide search", onClick = onToggle)
+            .semantics(mergeDescendants = true) { stateDescription = if (collapsed) "Collapsed" else "Expanded" },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            if (collapsed) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+            contentDescription = null,
+            modifier = Modifier.padding(horizontal = 8.dp),
+        )
+        content()
+    }
+}
+
+/** The unfolded query, or [emptyText] while it has no terms. */
+@Composable
+private fun TrayBody(
+    emptyText: String,
+    groups: List<SearchTermGroup>,
+    excludes: List<SearchTerm>,
+    targetGroup: Int?,
+    onTargetGroup: (Int?) -> Unit,
+) {
+    if (groups.isEmpty() && excludes.isEmpty()) TrayEmptyText(emptyText) else TrayExpression(groups, excludes, targetGroup, onTargetGroup)
 }
 
 @Composable
