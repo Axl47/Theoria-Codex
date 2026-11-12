@@ -319,6 +319,7 @@ private fun ViewerDestination(shell: TheoriaShell) {
                 invertMultiImageScrollDirection = state.browsing.settings.viewer.invertMultiImageScrollDirection,
                 instantSeek = state.browsing.settings.viewer.instantSeek,
                 autoRotateVideos = state.browsing.settings.viewer.autoRotateVideos,
+                commentOrder = state.browsing.settings.viewer.commentOrder,
                 likedPostIds = state.browsing.likedPostIds,
                 creatorBrowsingSources = state.browsing.creatorBrowsingSources,
             ),
@@ -427,6 +428,7 @@ private fun viewerScreenCallbacks(shell: TheoriaShell) = ViewerRouteScreenCallba
     onDismissRelatedPosts = shell.viewerRouteWorkflow::dismissRelatedPosts,
     onRetryRelatedPosts = shell.viewerRouteWorkflow::retryRelatedPosts,
     onPlaybackModeSelected = { shell.owners.settings.onAction(SettingsAction.SetViewerPlaybackMode(it)) },
+    onCommentOrderSelected = { shell.owners.settings.onAction(SettingsAction.SetCommentOrder(it)) },
     onOwnerChanged = { owner -> shell.activeViewerOwner = owner },
     onVisiblePostChanged = { post, viewedMediaNumber, session ->
         shell.viewerRouteWorkflow.recordVisiblePost(post, viewedMediaNumber, session)

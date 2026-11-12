@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.app.ui.components.FoldHeader
+import com.theoriacodex.domain.model.CommentOrder
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostComment
 import com.theoriacodex.domain.model.SourceKey
@@ -40,9 +41,17 @@ private val AVATAR_SIZE = 24.dp
 private val STAMP_SIZE = 48.dp
 private val REPLY_INDENT = 24.dp
 
+/** How the comments section is shown: folded or not, and its sort order, which the header's button cycles. */
+internal class CommentsView(
+    val collapsed: Boolean,
+    val onToggleCollapsed: () -> Unit,
+    val order: CommentOrder,
+    val onOrderSelected: (CommentOrder) -> Unit,
+)
+
 /**
  * A post's comments as items of the info sheet's list: a header with the count that folds the rest away,
- * each comment, newest first, with its replies opened beneath it, and under each list a progress row, a
+ * each comment in the chosen order, with its replies opened beneath it, and under each list a progress row, a
  * retry, or "More". Adds nothing when the post's state says there is no section ([PostCommentsState.hasSection]).
  */
 internal fun LazyListScope.commentsSection(
@@ -51,17 +60,21 @@ internal fun LazyListScope.commentsSection(
     count: CommentCount?,
     actions: PostCommentsActions,
     nowEpochMs: Long,
-    collapsed: Boolean,
-    onToggleCollapsed: () -> Unit,
+    view: CommentsView,
 ) {
     if (!state.hasSection) return
     val source = post.id.source
     item(key = "comments-header", contentType = "comments-header") {
-        FoldHeader("Comments", "comments", count?.label, collapsed, onToggleCollapsed, Modifier.padding(top = 8.dp))
+        FoldHeader("Comments", "comments", count?.label, view.collapsed, view.onToggleCollapsed, Modifier.padding(top = 8.dp)) {
+            if (!view.collapsed) {
+                TextButton(onClick = { view.onOrderSelected(view.order.toggled()) }) {
+                    Text(if (view.order == CommentOrder.OLDEST) "Oldest" else "Newest")
+                }
+            }
+        }
     }
-    if (collapsed) return
-    // Dates the source left out sort last, in the order it gave them.
-    state.top.comments.sortedByDescending { it.createdAtEpochMs ?: Long.MIN_VALUE }.forEach { comment ->
+    if (view.collapsed) return
+    state.top.comments.inOrder(view.order).forEach { comment ->
         val replies = state.replies[comment.id]
         val expanded = comment.id in state.expandedReplies
         item(key = "comment:${comment.id}", contentType = "comment") {

@@ -1,6 +1,7 @@
 package com.theoriacodex.app.comments
 
 import androidx.compose.runtime.Immutable
+import com.theoriacodex.domain.model.CommentOrder
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
@@ -9,6 +10,9 @@ import com.theoriacodex.domain.model.PostId
 internal class ViewerComments(
     private val states: Map<PostId, PostCommentsState>,
     val actions: PostCommentsActions,
+    /** How the top-level comments are listed, and the way the user changes it for every post. */
+    val order: CommentOrder = CommentOrder.OLDEST,
+    val onOrderSelected: (CommentOrder) -> Unit = {},
 ) {
     fun stateOf(post: Post): PostCommentsState? = states[post.id]
 

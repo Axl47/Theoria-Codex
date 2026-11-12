@@ -14,6 +14,15 @@ data class CommentHint(val count: Int?) {
     }
 }
 
+/** Which end of a post's comments is listed first; the Viewer keeps the user's choice. */
+enum class CommentOrder {
+    OLDEST,
+    NEWEST,
+    ;
+
+    fun toggled(): CommentOrder = if (this == OLDEST) NEWEST else OLDEST
+}
+
 /** One read-only comment, already reduced to plain text by its source. */
 data class PostComment(
     val id: String,

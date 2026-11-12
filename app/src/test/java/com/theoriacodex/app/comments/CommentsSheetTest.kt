@@ -21,6 +21,7 @@ import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.tags.PostTagSheetExtras
 import com.theoriacodex.app.tags.tagList
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.domain.model.CommentOrder
 import com.theoriacodex.domain.model.CommentPage
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostComment
@@ -79,7 +80,7 @@ class CommentsSheetTest {
                     sheetExtras = PostTagSheetExtras(
                         tagsInitiallyCollapsed = collapsed,
                         scrollToAfterTags = scrollToComments,
-                        afterTags = { state?.let { commentsSection(post, it, commentCount(null, it), actions, nowEpochMs = 0L, collapsed = false, onToggleCollapsed = {}) } },
+                        afterTags = { state?.let { commentsSection(post, it, commentCount(null, it), actions, nowEpochMs = 0L, view = CommentsView(false, {}, CommentOrder.OLDEST, {})) } },
                     ),
                 )
             }
@@ -115,7 +116,7 @@ class CommentsSheetTest {
                         draftQuery = com.theoriacodex.app.search.state.emptySearchQuery(),
                         sheetExtras = PostTagSheetExtras(
                             tagsInitiallyCollapsed = collapsed,
-                            afterTags = { state?.let { commentsSection(post, it, commentCount(null, it), actions, nowEpochMs = 0L, collapsed = false, onToggleCollapsed = {}) } },
+                            afterTags = { state?.let { commentsSection(post, it, commentCount(null, it), actions, nowEpochMs = 0L, view = CommentsView(false, {}, CommentOrder.OLDEST, {})) } },
                         ),
                     )
                 }
@@ -132,13 +133,14 @@ class CommentsSheetTest {
     }
 
     @Test
-    fun `comments list newest first and fold under their header`() {
+    fun `comments fold under their header and the sort button cycles their order`() {
         val dated = PostCommentsState(
             top = CommentList().withPage(
                 CommentPage(listOf(PostComment("old", "a-old", null, "t-old", 1L), PostComment("new", "a-new", null, "t-new", 2L)), null, null),
             ),
         )
         var collapsed by mutableStateOf(false)
+        var order by mutableStateOf(CommentOrder.OLDEST)
         compose.setContent {
             MaterialTheme {
                 Box(Modifier.size(360.dp, 480.dp)) {
@@ -148,19 +150,25 @@ class CommentsSheetTest {
                         draftQuery = com.theoriacodex.app.search.state.emptySearchQuery(),
                         sheetExtras = PostTagSheetExtras(
                             tagsInitiallyCollapsed = true,
-                            afterTags = { commentsSection(post, dated, commentCount(null, dated), actions, 0L, collapsed) { collapsed = !collapsed } },
+                            afterTags = {
+                                val view = CommentsView(collapsed, { collapsed = !collapsed }, order) { order = it }
+                                commentsSection(post, dated, commentCount(null, dated), actions, 0L, view)
+                            },
                         ),
                     )
                 }
             }
         }
         val top = { text: String -> compose.onNodeWithText(text).fetchSemanticsNode().positionInRoot.y }
+        assertTrue(top("t-old") < top("t-new"))
+
+        compose.onNodeWithText("Oldest").performClick()
+        assertEquals(CommentOrder.NEWEST, order)
         assertTrue(top("t-new") < top("t-old"))
 
         compose.onNode(hasText("Comments") and hasClickAction()).performClick()
         compose.onNodeWithText("t-new").assertDoesNotExist()
-        compose.onNode(hasText("Comments") and hasClickAction()).performClick()
-        compose.onNodeWithText("t-new").assertIsDisplayed()
+        compose.onNodeWithText("Newest").assertDoesNotExist()
     }
 
     @Test

@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.MainActivity
 import com.theoriacodex.app.codex.PreloadCodexSaveRelevance
 import com.theoriacodex.app.comments.CommentCount
+import com.theoriacodex.app.comments.CommentsView
 import com.theoriacodex.app.comments.ViewerComments
 import com.theoriacodex.app.comments.commentsSection
 import com.theoriacodex.app.tags.PostTagSheetExtras
@@ -286,7 +287,12 @@ internal fun ViewerInfoSheet(
             sheetExtras = PostTagSheetExtras(
                 tagsInitiallyCollapsed = tagsStartCollapsed,
                 scrollToAfterTags = openedAtComments,
-                afterTags = { commentsState?.let { commentsSection(post, it, commentCount, comments.actions, nowEpochMs, commentsCollapsed) { commentsCollapsed = !commentsCollapsed } } },
+                afterTags = {
+                    commentsState?.let { state ->
+                        val view = CommentsView(commentsCollapsed, { commentsCollapsed = !commentsCollapsed }, comments.order, comments.onOrderSelected)
+                        commentsSection(post, state, commentCount, comments.actions, nowEpochMs, view)
+                    }
+                },
             ),
         )
     }

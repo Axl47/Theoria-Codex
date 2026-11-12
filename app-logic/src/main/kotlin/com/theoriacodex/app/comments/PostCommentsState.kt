@@ -1,6 +1,7 @@
 package com.theoriacodex.app.comments
 
 import com.theoriacodex.domain.model.CommentHint
+import com.theoriacodex.domain.model.CommentOrder
 import com.theoriacodex.domain.model.CommentPage
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostComment
@@ -50,6 +51,13 @@ data class PostCommentsState(
 
     fun withReplies(parentId: String, transform: (CommentList) -> CommentList) =
         copy(replies = replies + (parentId to transform(replies[parentId] ?: CommentList())))
+}
+
+/** The comments by date in [order]; ones without a date follow in the order the source gave them. */
+fun List<PostComment>.inOrder(order: CommentOrder): List<PostComment> {
+    val (dated, undated) = partition { it.createdAtEpochMs != null }
+    val byDate = if (order == CommentOrder.NEWEST) dated.sortedByDescending { it.createdAtEpochMs } else dated.sortedBy { it.createdAtEpochMs }
+    return byDate + undated
 }
 
 /** How many comments a post has, as precisely as is known. */
