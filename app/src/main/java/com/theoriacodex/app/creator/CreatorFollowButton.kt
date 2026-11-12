@@ -12,7 +12,7 @@ internal fun CreatorFollowButton(followed: Boolean, onClick: () -> Unit, enabled
     IconButton(onClick = onClick, enabled = enabled) {
         Icon(
             imageVector = if (followed) Icons.Default.HowToReg else Icons.Default.PersonAdd,
-            contentDescription = if (followed) "Unfollow artist" else "Follow artist",
+            contentDescription = if (followed) "Unfollow" else "Follow",
         )
     }
 }

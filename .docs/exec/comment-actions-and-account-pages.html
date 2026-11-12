@@ -9,7 +9,7 @@ code{background:#f2f2f5;padding:0 .25rem;border-radius:3px}.st{font-weight:600}
 @media (prefers-color-scheme:dark){body{color:#e8e8ec;background:#151716}code{background:#2a2c30}td,th,h2{border-color:#3a403c}}
 </style></head><body>
 <h1>Comment actions and account pages</h1>
-<p>Status: <span class="st">implemented, validating</span> · branch <code>feat/comment-actions-profiles</code> · follows <a href="post-comments.html">Post comments</a></p>
+<p>Status: <span class="st">implemented, verified on emulator</span> · branch <code>feat/comment-actions-profiles</code> · follows <a href="post-comments.html">Post comments</a></p>
 
 <h2>Goal</h2>
 <p>Comments in the Viewer's info sheet become actionable, and the people behind them reachable.</p>
@@ -66,11 +66,11 @@ nhentai commenters keep opening in the browser (no public account data).</li>
 <tr><td>Domain contract + <code>CommentLinksTest</code></td><td>done</td></tr>
 <tr><td>Part 1 sources: authors, native anchors, comment deep links, Danbooru/AIBooru post links</td><td>done (gelbooru.com has no native anchor; rule34.xxx anchor unverified)</td></tr>
 <tr><td>Part 1 app: hold sheet, avatar/name tap, Viewer comment focus</td><td>done</td></tr>
-<tr><td>Part 1 on-device proof</td><td>pending</td></tr>
+<tr><td>Part 1 on-device proof</td><td>done (Danbooru, 2026-11-11)</td></tr>
 <tr><td>Part 2 endpoint verification per source</td><td>done (Pixiv app-api pending device)</td></tr>
 <tr><td>Part 2 sources: Gelbooru (profile HTML, DAPI <code>fav:&lt;id&gt;</code>), Danbooru family, Pixiv (documented shapes), Iwara</td><td>done</td></tr>
 <tr><td>Part 2 account page: header, per-feed tabs and state</td><td>done</td></tr>
-<tr><td>Full check and on-device proof</td><td>pending</td></tr>
+<tr><td>Full check and on-device proof</td><td>done; Pixiv, Gelbooru, Iwara account pages not exercised on device</td></tr>
 </table>
 
 <h2>Validation</h2>
@@ -79,6 +79,11 @@ nhentai commenters keep opening in the browser (no public account data).</li>
 <li>Unit tests: link round-trips, per-source author parsing from field-shape fixtures (no real comment text), fragment parsing in deep links, controller focus paging.</li>
 <li>On device (<code>com.theoriacodex.acceptance</code> on the <code>theoria-search-test</code> AVD), logs and accessibility text only: hold a comment, copy its link,
 open it with <code>am start -a android.intent.action.VIEW -d '&lt;link&gt;'</code>, read that the sheet is open on the comment.</li>
+<li>2026-11-11, <code>com.theoriacodex.acceptance</code> on <code>theoria-search-test</code>, accessibility text only: <code>https://danbooru.donmai.us/posts/7412460#comment_2436699</code>
+opened the Viewer with the info sheet on comments, first visible item the target (author and neighbours matched the API's comment order). Holding it showed the author button, first line,
+Copy text, Copy link, Open in browser. The author opened the account page: "Danbooru · 69k uploads · 1.5k favorites", "Joined Mar 2016", Uploads and Favorites tabs,
+each loading its own grid. A post Danbooru hides from anonymous visitors gives "Danbooru doesn't show this post to this account" (existing path).
+The emulator needed <code>pm set-app-links-user-selection</code> for the acceptance package; the in-app "Open links in Theoria" switch alone does not grant unverified hosts.</li>
 </ul>
 
 <h2>Decisions</h2>

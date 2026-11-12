@@ -62,7 +62,7 @@ class AccountCreatorScreenTest {
         compose.onNodeWithText("Gelbooru · 312 uploads · 1.4k favorites").assertIsDisplayed()
         compose.onNodeWithText("Hello there").assertIsDisplayed()
         compose.onNodeWithText("Uploads").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Follow artist").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Follow").assertIsDisplayed()
         compose.onNodeWithText("Favorites").performClick()
 
         compose.runOnIdle { assertEquals(listOf<CreatorAction>(CreatorAction.SelectFeed(AccountFeed.FAVORITES)), actions) }
@@ -83,6 +83,6 @@ class AccountCreatorScreenTest {
 
         compose.onNodeWithText("Gelbooru").assertIsDisplayed()
         compose.onNodeWithText("Uploads").assertDoesNotExist()
-        compose.onNodeWithContentDescription("Follow artist").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Follow").assertIsDisplayed()
     }
 }
