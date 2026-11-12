@@ -75,6 +75,7 @@ import com.theoriacodex.app.ui.components.rememberRelatedFeedPresentation
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.FeedFabRestoreState
+import com.theoriacodex.domain.model.AccountFeed
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -114,7 +115,8 @@ fun CreatorProfileScreen(
 ) {
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var showFilterSheet by remember { mutableStateOf(false) }
-    val gridState = rememberRetainedFeedGridState("creator")
+    // Each feed keeps its own scroll position and duration reveal order.
+    val gridState = rememberRetainedFeedGridState(state.selectedFeed.retainKey)
     val feed = rememberCreatorFeed(state, pendingLikePostIds, likedPostIds, savedPostIds, fabRestoreState, durationStates, resolveUnknownAnimatedDurations)
     LaunchedEffect(feed.durationFilter.active) { onDurationFilterChanged(feed.durationFilter.active) }
     DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
@@ -137,7 +139,7 @@ fun CreatorProfileScreen(
             FeedFilterFab(
                 modifier = Modifier.padding(bottom = 8.dp),
                 labels = creatorFilterLabels(fabRestoreState, feed),
-                contentDescription = "Filter creator uploads",
+                contentDescription = "Filter creator ${state.selectedFeed.noun}",
                 onClick = { showFilterSheet = true },
                 onClear = clearFilters,
                 scrollSignal = filterScroll,
@@ -148,7 +150,10 @@ fun CreatorProfileScreen(
             modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            CreatorAppBar(creator, followed, !state.isRefreshing, onToggleFollow, onOpenUrl, onBack = { onAction(CreatorAction.Back) })
+            val account = state.feeds.isNotEmpty()
+            val followEnabled = !state.uploadsRefreshing
+            CreatorAppBar(creator, account, followed, followEnabled, onToggleFollow, onOpenUrl, onBack = { onAction(CreatorAction.Back) })
+            if (account) AccountSection(state, creator, followed, followEnabled, onToggleFollow, onAction)
             CreatorFeedBody(state, feed, cards, gridState, pageDemand, onAction, onLongPress = { selectedActionPost = it })
         }
     }
@@ -231,7 +236,7 @@ private fun rememberCreatorFeed(
         )
     }
     val durationFilter = rememberSearchDurationFilterPresentation(
-        state.results, animatedDurationRange, durationStates, resolveUnknownAnimatedDurations, retainKey = "creator",
+        state.results, animatedDurationRange, durationStates, resolveUnknownAnimatedDurations, retainKey = state.selectedFeed.retainKey,
     )
     val presentedResults = durationFilter.presentedPosts ?: state.results
     val retainedLikedPostIds = retainPostsUntilViewerCloses(remember(state.relatedPosts, pendingLikePostIds) {
@@ -305,9 +310,25 @@ private fun clearCreatorFilters(
     return { onFabRestoreStateChange(previous) }
 }
 
+/** An account's facts and its feed tabs, below the app bar. */
+@Composable
+private fun AccountSection(
+    state: CreatorUiState,
+    creator: CreatorProfile,
+    followed: Boolean,
+    followEnabled: Boolean,
+    onToggleFollow: () -> Unit,
+    onAction: (CreatorAction) -> Unit,
+) {
+    AccountHeader(creator, state.details, followed, followEnabled, onToggleFollow)
+    AccountFeedTabs(state.tabs, state.selectedFeed) { onAction(CreatorAction.SelectFeed(it)) }
+}
+
+/** Account pages move Follow and the source name into the header below the bar. */
 @Composable
 private fun CreatorAppBar(
     creator: CreatorProfile,
+    account: Boolean,
     followed: Boolean,
     followEnabled: Boolean,
     onToggleFollow: () -> Unit,
@@ -316,10 +337,10 @@ private fun CreatorAppBar(
 ) {
     SecondaryScreenAppBar(
         title = creator.displayName,
-        subtitle = creator.source.displayName(),
+        subtitle = creator.source.displayName().takeUnless { account },
         onBack = onBack,
     ) {
-        CreatorFollowButton(followed = followed, onClick = onToggleFollow, enabled = followEnabled)
+        if (!account) CreatorFollowButton(followed = followed, onClick = onToggleFollow, enabled = followEnabled)
         creator.profileUrl?.takeIf { it.isNotBlank() }?.let { profileUrl ->
             IconButton(onClick = { onOpenUrl(profileUrl) }) {
                 Icon(
@@ -445,11 +466,17 @@ private fun CreatorGrid(
 
 private fun creatorEmptyMessage(state: CreatorUiState, feed: CreatorFeed): String = when {
     feed.durationFilter.readiness.isResolving -> "Resolving durations…"
-    state.results.isEmpty() -> "No uploads found for this creator."
+    state.results.isEmpty() -> "No ${state.selectedFeed.noun} found for this creator."
     !feed.visibilityFilters.animatedDurationRange.isFullRange ->
         "No animated media found in the selected duration range."
-    else -> "No uploads match the current filters."
+    else -> "No ${state.selectedFeed.noun} match the current filters."
 }
+
+/** Keeps the uploads feed's keys as they were before accounts had other feeds. */
+private val AccountFeed.retainKey: String
+    get() = if (this == AccountFeed.UPLOADS) "creator" else "creator-${name.lowercase()}"
+
+private val AccountFeed.noun: String get() = name.lowercase()
 
 @Composable
 private fun CreatorFilterSheet(

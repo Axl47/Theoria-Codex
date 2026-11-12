@@ -154,7 +154,7 @@ private fun CreatorRouteContent(
 ) {
     CreatorProfileScreen(
         followed = config.followed,
-        onToggleFollow = { state.creator?.let { callbacks.onToggleFollow(it, state.results) } },
+        onToggleFollow = { state.creator?.let { callbacks.onToggleFollow(it, state.uploads) } },
         state = state,
         likedPostIds = config.likedPostIds,
         pendingLikePostIds = config.pendingLikePostIds,
