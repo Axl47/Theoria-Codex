@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Comment actions and account pages</title>
+<style>
+:root{color-scheme:light dark}
+body{font:15px/1.55 system-ui,sans-serif;max-width:960px;margin:2rem auto;padding:0 1rem;color:#1d1d22;background:#fff}
+h1{margin-bottom:.2rem}h2{margin-top:2rem;border-bottom:1px solid #ddd;padding-bottom:.2rem}
+table{border-collapse:collapse;width:100%;font-size:14px}td,th{border:1px solid #ddd;padding:.35rem .5rem;vertical-align:top;text-align:left}
+code{background:#f2f2f5;padding:0 .25rem;border-radius:3px}.st{font-weight:600}
+@media (prefers-color-scheme:dark){body{color:#e8e8ec;background:#151716}code{background:#2a2c30}td,th,h2{border-color:#3a403c}}
+</style></head><body>
+<h1>Comment actions and account pages</h1>
+<p>Status: <span class="st">Part 1 in progress</span> · branch <code>feat/comment-actions-profiles</code> · follows <a href="post-comments.html">Post comments</a></p>
+
+<h2>Goal</h2>
+<p>Comments in the Viewer's info sheet become actionable, and the people behind them reachable.</p>
+<ol>
+<li><b>Part 1, comment actions and links.</b> Holding a comment opens a bottom sheet (the post action sheet's style): header with the
+author's avatar, name (a link to their profile when one can be opened) and the comment's first line; rows Copy text, Copy link,
+Open in browser. Tapping the avatar or name opens the profile. A copied comment link opened on the device opens the Viewer on that post
+with the info sheet scrolled to the comment, tinted for a moment.</li>
+<li><b>Part 2, account pages.</b> A creator that is a site <i>account</i> (a person, not an artist tag) gets an upgraded creator page:
+avatar, counts (uploads, favorites, whatever the source exposes), and Uploads / Favorites tabs shown only when the source can list them.
+Creators that are artist tags or searches (Danbooru artists, nhentai, Hitomi) keep today's search-like page unchanged. Commenters on sources
+whose creator route is a tag (Danbooru, nhentai) open the new account page.</li>
+</ol>
+
+<h2>Terms</h2>
+<ul>
+<li><b>Comment link</b>: the post's page URL plus a fragment naming the comment (<code>core-domain/.../model/CommentLinks.kt</code>).
+A top-level comment uses the site's own anchor when it has one (<code>CommentsSourceAdapter.nativeCommentAnchor</code>, e.g. Gelbooru <code>#c123</code>),
+so the link also jumps there in a browser. Replies and sites without anchors (Pixiv, nhentai) use <code>#theoria-comment=&lt;id&gt;</code> or
+<code>#theoria-comment=&lt;parentId&gt;/&lt;id&gt;</code>; browsers ignore it and Theoria reads it back (<code>parseCommentTarget</code>).</li>
+<li><b>Comment author</b>: <code>PostComment.author</code>, a <code>CreatorProfile</code> for the commenter's account, filled by each source.</li>
+<li><b>Account creator</b>: decided by the source in code from the profile's shape (not persisted), so saved posts and follows need no migration.</li>
+</ul>
+
+<h2>Design</h2>
+<ul>
+<li>Domain (done): <code>PostComment.author</code>, <code>CommentTarget</code>, <code>commentLink</code>, <code>parseCommentTarget</code>,
+<code>CommentsSourceAdapter.nativeCommentAnchor</code>, <code>ExternalPostDeepLink.comment</code>.</li>
+<li>Sources: each comments adapter fills <code>author</code> and, where the site has one, the native anchor. Danbooru and AIBooru post links become openable.</li>
+<li>App: <code>ViewerSession</code> carries the comment to focus; the comments controller pages until it finds it (bounded), opening a reply's parent;
+the sheet scrolls to the item and tints it. When it is not found the post opens normally.</li>
+<li>Open profile: the existing creator page when the author is browseable there, otherwise the profile URL in the browser (Part 1); Part 2 replaces the browser fallback with the account page.</li>
+<li>Part 2 contract (planned): an optional source interface returning account details (avatar, counts, bio) and listing an account's feeds
+(<code>UPLOADS</code>, <code>FAVORITES</code>), with the feed set decided synchronously from the profile so the page knows its layout before any request.</li>
+</ul>
+
+<h2>Progress</h2>
+<table>
+<tr><th>Step</th><th>State</th></tr>
+<tr><td>Domain contract + <code>CommentLinksTest</code></td><td>done</td></tr>
+<tr><td>Part 1 sources: authors, native anchors, comment deep links, Danbooru/AIBooru post links</td><td>in progress</td></tr>
+<tr><td>Part 1 app: hold sheet, avatar/name tap, Viewer comment focus</td><td>in progress</td></tr>
+<tr><td>Part 1 on-device proof</td><td>pending</td></tr>
+<tr><td>Part 2 endpoint verification per source</td><td>pending</td></tr>
+<tr><td>Part 2 account page</td><td>pending</td></tr>
+</table>
+
+<h2>Validation</h2>
+<ul>
+<li><code>scripts/check.sh --record</code> passes (JDK 21+, <code>local.properties</code> copied into fresh worktrees).</li>
+<li>Unit tests: link round-trips, per-source author parsing from field-shape fixtures (no real comment text), fragment parsing in deep links, controller focus paging.</li>
+<li>On device (<code>com.theoriacodex.acceptance</code> on the <code>theoria-search-test</code> AVD), logs and accessibility text only: hold a comment, copy its link,
+open it with <code>am start -a android.intent.action.VIEW -d '&lt;link&gt;'</code>, read that the sheet is open on the comment.</li>
+</ul>
+
+<h2>Decisions</h2>
+<ul>
+<li>2026-11-11: bottom sheet (option B) over an anchored menu; the name in its header opens the profile (user pick).</li>
+<li>2026-11-11: tag- or search-based creator pages stay as they are; only account creators get the new page (user).</li>
+<li>2026-11-11: sources without comment ids in URLs get Theoria's own fragment instead of a new path, so links still open the post anywhere.</li>
+</ul>
+
+<h2>Recovery</h2>
+<p>All steps are code edits on the branch; rerun any failed Gradle task. No data, schema or persisted-format changes.</p>
+</body></html>

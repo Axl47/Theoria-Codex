@@ -6,6 +6,7 @@ import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.encoding.decodePercentEncodedUtf8Strict
 import com.theoriacodex.domain.model.HITOMI_ARTIST_IDENTITY_MAX_CODE_POINTS
+import com.theoriacodex.domain.model.CommentTarget
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.canonicalHitomiArtistIdentity
 import com.theoriacodex.domain.source.ProtocolFamily
@@ -20,6 +21,8 @@ data class ExternalPostDeepLink(
     val sourceLabel: String,
     val postId: String,
     val initialMediaIndex: Int = 0,
+    /** The comment the link points at, read from its fragment; the Viewer opens on it. */
+    val comment: CommentTarget? = null,
 )
 
 data class ExternalCreatorDeepLink(
