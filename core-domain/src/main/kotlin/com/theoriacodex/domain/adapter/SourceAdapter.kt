@@ -54,6 +54,13 @@ interface RelatedPostsSourceAdapter {
  */
 interface CommentsSourceAdapter {
     suspend fun comments(post: Post, pageToken: String?, parent: PostComment? = null): CommentPage
+
+    /**
+     * The fragment (without `#`) the site's own post page uses to jump to a top-level comment, such as
+     * Gelbooru's `c123`. Null when the site has none; links then carry Theoria's own fragment
+     * ([commentLink]).
+     */
+    fun nativeCommentAnchor(commentId: String): String? = null
 }
 
 /**

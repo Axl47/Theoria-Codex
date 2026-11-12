@@ -35,6 +35,8 @@ data class PostComment(
     val stampUrl: String? = null,
     /** True when [CommentPage]s of replies can be requested with this comment as the parent. */
     val hasReplies: Boolean = false,
+    /** The commenter's account on the source, when the source names one Theoria can open. */
+    val author: CreatorProfile? = null,
 )
 
 /**
