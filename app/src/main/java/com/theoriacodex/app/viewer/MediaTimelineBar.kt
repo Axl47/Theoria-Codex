@@ -28,6 +28,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.State
@@ -52,6 +53,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import com.theoriacodex.app.ui.motion.TheoriaMotion
@@ -253,7 +255,17 @@ internal fun Modifier.timelineScrubGestures(
     }
 }
 
-/** Portrait gives the track its own full-width line; landscape keeps one line so the frame stays tall. */
+/** Portrait gives a timeline's track its own full-width line; landscape keeps one line so the frame stays tall. */
+@Composable
+@ReadOnlyComposable
+internal fun viewerTimelineOnOneLine(): Boolean = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+/** How tall an animated page's timeline stands above the strip, for controls that sit just over it. */
+@Composable
+@ReadOnlyComposable
+internal fun viewerTimelineFooterHeight(): Dp = if (viewerTimelineOnOneLine()) VIEWER_TIMELINE_ROW_HEIGHT else VIEWER_TIMELINE_HEIGHT
+
+/** Lays a timeline out on one line or two; see [viewerTimelineOnOneLine]. */
 @Composable
 private fun ViewerTimelineLayout(
     positionMs: Long,
@@ -264,7 +276,7 @@ private fun ViewerTimelineLayout(
     leading: @Composable () -> Unit,
     track: @Composable (Modifier) -> Unit,
 ) {
-    if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+    if (viewerTimelineOnOneLine()) {
         Row(modifier.fillMaxWidth().height(VIEWER_TIMELINE_ROW_HEIGHT), verticalAlignment = Alignment.CenterVertically) {
             leading()
             Text(formatTimelineTime(positionMs), Modifier.padding(start = 4.dp, end = 12.dp), style = ViewerVeil.Time, maxLines = 1)

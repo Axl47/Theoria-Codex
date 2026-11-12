@@ -130,7 +130,11 @@ internal fun BoxScope.ViewerRotationControl(
         }
     }
     offer ?: return
-    val bottomBar = if (selection.isAnimated || selection.overviewItems.size > 1) VIEWER_TIMELINE_HEIGHT else 0.dp
+    val bottomBar = when {
+        selection.isAnimated -> viewerTimelineFooterHeight()
+        selection.overviewItems.size > 1 -> VIEWER_TIMELINE_TRACK_HEIGHT
+        else -> 0.dp
+    }
     ViewerRotateButton(offer, (chromeVisible || hinting) && !suppressed, bottomInset = LocalViewerPostStripInset.current + bottomBar)
 }
 

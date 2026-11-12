@@ -137,29 +137,41 @@ private fun ViewerWebPProgress(state: ViewerWebPState, controls: ViewerRendererC
     }
 }
 
+/** Playback buttons, the frame counter and a track, laid out like the other timelines; see [viewerTimelineOnOneLine]. */
 @Composable
 private fun ViewerWebPFooter(state: ViewerWebPState, controls: ViewerRendererControls, events: ViewerRendererEvents) {
+    val buttons: @Composable () -> Unit = {
+        TimelinePlaybackButton(isPaused = !controls.isPlaying, onToggle = events.onTogglePlayback)
+        IconButton(modifier = Modifier.size(VIEWER_TIMELINE_ROW_HEIGHT), onClick = {
+            events.onRestartPlayback()
+            state.drawable?.reset()
+            if (controls.isActive) state.drawable?.start()
+            state.frameIndex = 0
+        }) { Icon(Icons.Default.Replay, contentDescription = "Restart animation") }
+        Text(
+            text = if (state.frameCount > 0) "${state.frameIndex.coerceIn(0, state.frameCount - 1) + 1}/${state.frameCount}" else "—",
+            modifier = Modifier.padding(start = 4.dp),
+            style = ViewerVeil.Time,
+        )
+    }
+    val track: @Composable (Modifier) -> Unit = { modifier ->
+        ViewerTimelineTrack(
+            fraction = { if (state.frameCount <= 1) 0f else state.frameIndex.coerceIn(0, state.frameCount - 1).toFloat() / (state.frameCount - 1) },
+            modifier = modifier.height(VIEWER_TIMELINE_TRACK_HEIGHT),
+            showHandle = false,
+        )
+    }
     ViewerPlaybackFooter {
-        Column(Modifier.fillMaxWidth()) {
+        if (viewerTimelineOnOneLine()) {
             Row(Modifier.fillMaxWidth().height(VIEWER_TIMELINE_ROW_HEIGHT), verticalAlignment = Alignment.CenterVertically) {
-                TimelinePlaybackButton(isPaused = !controls.isPlaying, onToggle = events.onTogglePlayback)
-                IconButton(modifier = Modifier.size(VIEWER_TIMELINE_ROW_HEIGHT), onClick = {
-                    events.onRestartPlayback()
-                    state.drawable?.reset()
-                    if (controls.isActive) state.drawable?.start()
-                    state.frameIndex = 0
-                }) { Icon(Icons.Default.Replay, contentDescription = "Restart animation") }
-                Text(
-                    text = if (state.frameCount > 0) "${state.frameIndex.coerceIn(0, state.frameCount - 1) + 1}/${state.frameCount}" else "—",
-                    modifier = Modifier.padding(start = 4.dp),
-                    style = ViewerVeil.Time,
-                )
+                buttons()
+                track(Modifier.weight(1f).padding(start = 12.dp, end = 8.dp))
             }
-            ViewerTimelineTrack(
-                fraction = { if (state.frameCount <= 1) 0f else state.frameIndex.coerceIn(0, state.frameCount - 1).toFloat() / (state.frameCount - 1) },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp).height(VIEWER_TIMELINE_TRACK_HEIGHT),
-                showHandle = false,
-            )
+        } else {
+            Column(Modifier.fillMaxWidth()) {
+                Row(Modifier.fillMaxWidth().height(VIEWER_TIMELINE_ROW_HEIGHT), verticalAlignment = Alignment.CenterVertically) { buttons() }
+                track(Modifier.fillMaxWidth().padding(horizontal = 8.dp))
+            }
         }
     }
 }
