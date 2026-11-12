@@ -20,6 +20,7 @@ import com.theoriacodex.app.ui.components.ActionMenuHeader
 import com.theoriacodex.app.ui.components.ActionMenuRow
 import com.theoriacodex.app.ui.components.ActionMenuSheet
 import com.theoriacodex.app.ui.components.HeaderLink
+import com.theoriacodex.app.ui.components.SourceImage
 import com.theoriacodex.domain.model.PostComment
 import com.theoriacodex.domain.model.SourceKey
 
@@ -53,7 +54,7 @@ internal fun CommentActionSheet(
             image = { modifier ->
                 val avatar = comment.authorAvatarUrl
                 if (avatar != null) {
-                    CommentImage(source, avatar, 48.dp, RoundedCornerShape(12.dp), modifier)
+                    SourceImage(source, avatar, 48.dp, RoundedCornerShape(12.dp), modifier)
                 } else {
                     Box(modifier, contentAlignment = Alignment.Center) {
                         Icon(Icons.Default.Person, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -15,20 +15,15 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
-import com.theoriacodex.app.media.MediaRequestFactory
+import com.theoriacodex.app.ui.components.SourceImage
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.tags.compactTagCount
 import com.theoriacodex.domain.model.AccountDetails
@@ -131,8 +126,6 @@ private fun AccountBio(bio: String) {
 /** The account's picture, requested with the source's media headers; a circle with the name's initial when there is none. */
 @Composable
 private fun AccountAvatar(creator: CreatorProfile, url: String?) {
-    val context = LocalContext.current
-    val sizePx = with(LocalDensity.current) { AVATAR_SIZE.roundToPx() }
     Box(
         modifier = Modifier.size(AVATAR_SIZE).background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
         contentAlignment = Alignment.Center,
@@ -144,17 +137,7 @@ private fun AccountAvatar(creator: CreatorProfile, url: String?) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
-            val request = remember(context, creator.source, url, sizePx) {
-                MediaRequestFactory.imageRequest(
-                    context, url, creator.source, crossfade = true, targetWidthPx = sizePx, targetHeightPx = sizePx,
-                )
-            }
-            AsyncImage(
-                model = request,
-                contentDescription = null,
-                modifier = Modifier.size(AVATAR_SIZE).clip(CircleShape),
-                contentScale = ContentScale.Crop,
-            )
+            SourceImage(creator.source, url, AVATAR_SIZE, CircleShape)
         }
     }
 }

@@ -9,7 +9,7 @@ code{background:#f2f2f5;padding:0 .25rem;border-radius:3px}.st{font-weight:600}
 @media (prefers-color-scheme:dark){body{color:#e8e8ec;background:#151716}code{background:#2a2c30}td,th,h2{border-color:#3a403c}}
 </style></head><body>
 <h1>Comment actions and account pages</h1>
-<p>Status: <span class="st">Part 1 in progress</span> · branch <code>feat/comment-actions-profiles</code> · follows <a href="post-comments.html">Post comments</a></p>
+<p>Status: <span class="st">implemented, validating</span> · branch <code>feat/comment-actions-profiles</code> · follows <a href="post-comments.html">Post comments</a></p>
 
 <h2>Goal</h2>
 <p>Comments in the Viewer's info sheet become actionable, and the people behind them reachable.</p>
@@ -65,10 +65,12 @@ nhentai commenters keep opening in the browser (no public account data).</li>
 <tr><th>Step</th><th>State</th></tr>
 <tr><td>Domain contract + <code>CommentLinksTest</code></td><td>done</td></tr>
 <tr><td>Part 1 sources: authors, native anchors, comment deep links, Danbooru/AIBooru post links</td><td>done (gelbooru.com has no native anchor; rule34.xxx anchor unverified)</td></tr>
-<tr><td>Part 1 app: hold sheet, avatar/name tap, Viewer comment focus</td><td>in progress</td></tr>
+<tr><td>Part 1 app: hold sheet, avatar/name tap, Viewer comment focus</td><td>done</td></tr>
 <tr><td>Part 1 on-device proof</td><td>pending</td></tr>
 <tr><td>Part 2 endpoint verification per source</td><td>done (Pixiv app-api pending device)</td></tr>
-<tr><td>Part 2 account page</td><td>pending</td></tr>
+<tr><td>Part 2 sources: Gelbooru (profile HTML, <code>fav:</code> list resolved per id), Danbooru family, Pixiv (documented shapes), Iwara</td><td>done</td></tr>
+<tr><td>Part 2 account page: header, per-feed tabs and state</td><td>done</td></tr>
+<tr><td>Full check and on-device proof</td><td>pending</td></tr>
 </table>
 
 <h2>Validation</h2>
@@ -84,6 +86,14 @@ open it with <code>am start -a android.intent.action.VIEW -d '&lt;link&gt;'</cod
 <li>2026-11-11: bottom sheet (option B) over an anchored menu; the name in its header opens the profile (user pick).</li>
 <li>2026-11-11: tag- or search-based creator pages stay as they are; only account creators get the new page (user).</li>
 <li>2026-11-11: sources without comment ids in URLs get Theoria's own fragment instead of a new path, so links still open the post anywhere.</li>
+</ul>
+
+<h2>Open risks</h2>
+<ul>
+<li>Gelbooru favorites list only thumbnails, so each page resolves up to 42 ids through the DAPI (4 at a time, needs the user's key). An <code>id:</code> OR group would make it one request; untested.</li>
+<li>Pixiv account details and bookmarks follow documented app-api shapes; unverified until checked with a signed-in device.</li>
+<li>Iwara avatars use the thumbnail rendition path; unverified for avatars.</li>
+<li>The account page's selected tab is not kept across process death (reopens on Uploads).</li>
 </ul>
 
 <h2>Recovery</h2>

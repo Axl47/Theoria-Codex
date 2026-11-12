@@ -20,23 +20,19 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -46,9 +42,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
-import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.app.ui.components.FoldHeader
+import com.theoriacodex.app.ui.components.SourceImage
 import com.theoriacodex.domain.model.CommentOrder
 import com.theoriacodex.domain.model.CommentTarget
 import com.theoriacodex.domain.model.CreatorProfile
@@ -200,7 +195,7 @@ private fun CommentRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         comment.authorAvatarUrl?.let { url ->
-            CommentImage(source, url, AVATAR_SIZE, CircleShape, Modifier.background(MaterialTheme.colorScheme.surfaceVariant, CircleShape).then(authorTap))
+            SourceImage(source, url, AVATAR_SIZE, CircleShape, Modifier.background(MaterialTheme.colorScheme.surfaceVariant, CircleShape).then(authorTap))
         }
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -218,7 +213,7 @@ private fun CommentRow(
             }
             if (comment.body.isNotBlank()) Text(comment.body, style = MaterialTheme.typography.bodyMedium)
             comment.stampUrl?.let { url ->
-                CommentImage(source, url, STAMP_SIZE, RoundedCornerShape(4.dp), Modifier.padding(top = 4.dp), ContentScale.Fit)
+                SourceImage(source, url, STAMP_SIZE, RoundedCornerShape(4.dp), Modifier.padding(top = 4.dp), ContentScale.Fit)
             }
             if (repliesLabel != null) TextButton(onClick = onToggleReplies) { Text(repliesLabel) }
         }
@@ -257,27 +252,3 @@ private fun Modifier.longPressable(label: String, onLongPress: () -> Unit): Modi
         .pointerInput(Unit) { detectTapGestures(onLongPress = { latest() }) }
 }
 
-/** An avatar or stamp, requested with the source's media headers (Pixiv's image host refuses requests without its Referer). */
-@Composable
-internal fun CommentImage(
-    source: SourceKey,
-    url: String,
-    size: Dp,
-    shape: Shape,
-    modifier: Modifier = Modifier,
-    contentScale: ContentScale = ContentScale.Crop,
-) {
-    val context = LocalContext.current
-    val sizePx = with(LocalDensity.current) { size.roundToPx() }
-    val request = remember(context, source, url, sizePx) {
-        MediaRequestFactory.imageRequest(
-            context, url, source, crossfade = true, targetWidthPx = sizePx, targetHeightPx = sizePx,
-        )
-    }
-    AsyncImage(
-        model = request,
-        contentDescription = null,
-        modifier = modifier.size(size).clip(shape),
-        contentScale = contentScale,
-    )
-}
