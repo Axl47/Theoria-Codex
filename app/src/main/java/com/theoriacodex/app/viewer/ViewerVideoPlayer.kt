@@ -179,7 +179,9 @@ private fun ViewerVideoBinding(
         state.player = player
         state.setPlaying(controls.isActive && controls.isPlaying)
         onDispose {
-            onReleasePosition(player.currentPosition.coerceAtLeast(0L))
+            // A finished video resumes from the start: seeking back to its end would finish it again and,
+            // in Queue next mode, skip straight past it.
+            onReleasePosition(if (player.playbackState == Player.STATE_ENDED) 0L else player.currentPosition.coerceAtLeast(0L))
             player.removeListener(listener)
             state.actuallyPlaying = false
             state.setPlaying(false)
