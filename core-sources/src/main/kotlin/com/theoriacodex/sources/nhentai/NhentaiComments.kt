@@ -47,7 +47,7 @@ private fun parseNhentaiComment(raw: JsonObject): PostComment? {
         createdAtEpochMs = raw.longValue("post_date")?.times(MS_PER_SECOND),
         // The profile page is a site account, not a searchable tag, so there is no uploads query.
         author = userId?.let {
-            val slug = poster?.stringValue("slug")?.trim()?.takeIf(String::isNotBlank)
+            val slug = poster.stringValue("slug")?.trim()?.takeIf(String::isNotBlank)
             CreatorProfile(
                 source = SourceKey.NHENTAI,
                 displayName = username.ifBlank { it },
