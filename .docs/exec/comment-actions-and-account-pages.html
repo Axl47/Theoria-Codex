@@ -52,7 +52,7 @@ nhentai commenters keep opening in the browser (no public account data).</li>
 <p>Checked anonymously with curl; status codes, field names, selectors and counts only.</p>
 <table>
 <tr><th>Source</th><th>Header facts</th><th>Uploads</th><th>Favorites</th><th>Evidence</th></tr>
-<tr><td>Gelbooru (gelbooru.com)</td><td>Profile HTML <code>page=account&amp;s=profile&amp;id=</code>: <code>div.profileStatSeparator</code> rows (Joined <code>MM/dd/yy</code>, Posts, Favorites, Comments…), avatar in <code>div.profileAvatar</code> inline style, relative</td><td><code>user:&lt;name&gt;</code></td><td><code>fav:&lt;id&gt;</code> on the HTML post list (42/page, <code>pid</code>); the favorites page needs login</td><td>live</td></tr>
+<tr><td>Gelbooru (gelbooru.com)</td><td>Profile HTML <code>page=account&amp;s=profile&amp;id=</code>: <code>div.profileStatSeparator</code> rows (Joined <code>MM/dd/yy</code>, Posts, Favorites, Comments…), avatar in <code>div.profileAvatar</code> inline style, relative</td><td><code>user:&lt;name&gt;</code></td><td>DAPI <code>fav:&lt;id&gt;</code> with the user's key: same posts and order as the site's favorites list (checked 2026-11-11, 1,787-favorite account). <code>{id:a ~ id:b}</code> OR groups return nothing. The favorites page needs login</td><td>live</td></tr>
 <tr><td>Safebooru / 0.2 forks</td><td>none (profile redirects to login)</td><td><code>user:&lt;name&gt;</code></td><td>favorites page lists ids only; not used</td><td>live</td></tr>
 <tr><td>Danbooru / AIBooru</td><td><code>/users/&lt;id&gt;.json</code>: <code>created_at</code>, <code>post_upload_count</code>, level; no avatar, no favorite count. <code>counts/posts.json?tags=ordfav:&lt;name&gt;</code> is 0 for private favorites</td><td><code>user:&lt;name&gt;</code></td><td><code>ordfav:&lt;name&gt;</code>, numeric <code>page</code></td><td>live</td></tr>
 <tr><td>Pixiv</td><td>app-api <code>/v1/user/detail</code> (OAuth)</td><td><code>/v1/user/illusts</code> (existing)</td><td><code>/v1/user/bookmarks/illust?restrict=public</code></td><td>documented; verify on device</td></tr>
@@ -68,7 +68,7 @@ nhentai commenters keep opening in the browser (no public account data).</li>
 <tr><td>Part 1 app: hold sheet, avatar/name tap, Viewer comment focus</td><td>done</td></tr>
 <tr><td>Part 1 on-device proof</td><td>pending</td></tr>
 <tr><td>Part 2 endpoint verification per source</td><td>done (Pixiv app-api pending device)</td></tr>
-<tr><td>Part 2 sources: Gelbooru (profile HTML, <code>fav:</code> list resolved per id), Danbooru family, Pixiv (documented shapes), Iwara</td><td>done</td></tr>
+<tr><td>Part 2 sources: Gelbooru (profile HTML, DAPI <code>fav:&lt;id&gt;</code>), Danbooru family, Pixiv (documented shapes), Iwara</td><td>done</td></tr>
 <tr><td>Part 2 account page: header, per-feed tabs and state</td><td>done</td></tr>
 <tr><td>Full check and on-device proof</td><td>pending</td></tr>
 </table>
@@ -90,7 +90,6 @@ open it with <code>am start -a android.intent.action.VIEW -d '&lt;link&gt;'</cod
 
 <h2>Open risks</h2>
 <ul>
-<li>Gelbooru favorites list only thumbnails, so each page resolves up to 42 ids through the DAPI (4 at a time, needs the user's key). An <code>id:</code> OR group would make it one request; untested.</li>
 <li>Pixiv account details and bookmarks follow documented app-api shapes; unverified until checked with a signed-in device.</li>
 <li>Iwara avatars use the thumbnail rendition path; unverified for avatars.</li>
 <li>The account page's selected tab is not kept across process death (reopens on Uploads).</li>

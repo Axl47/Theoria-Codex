@@ -270,27 +270,11 @@ private class GelbooruFamilyAdapter(
         return resolvePosts(relatedIds, RELATED_HYDRATION_CONCURRENCY).postsOrThrow()
     }
 
-    /**
-     * A page of the account's public favorites. The site lists them only as HTML thumbnails (42 per
-     * page, `pid` offsets), so each page's ids are resolved through the DAPI, which needs the user's key.
-     */
+    /** A page of the account's public favorites: the DAPI answers `fav:<id>` in the same order as the site's favorites list. */
     private suspend fun favoritePosts(creator: CreatorProfile, pageToken: String?): Page<Post> {
         val profileId = creator.profileId
         if (creator.source != sourceKey || !site.favoritesList || profileId == null) return canonicalPostPage(emptyList(), null)
-        val pid = pageToken?.toIntOrNull()?.coerceAtLeast(0) ?: 0
-        val html = request(
-            url = "${site.siteUrl}/index.php",
-            query = buildMap {
-                put("page", "post")
-                put("s", "list")
-                put("tags", "fav:$profileId")
-                if (pid > 0) put("pid", pid.toString())
-            },
-            scanBody = false,
-        )
-        val list = parseGelbooruPostList(html, site.siteUrl, currentPid = pid)
-        val posts = resolvePosts(list.ids, FAVORITES_HYDRATION_CONCURRENCY).postsOrThrow()
-        return canonicalPostPage(items = posts, nextPageToken = list.nextPid?.toString())
+        return searchPosts("fav:$profileId", pageToken)
     }
 
     private suspend fun searchPosts(tags: String, pageToken: String?): Page<Post> {
@@ -516,7 +500,6 @@ private const val MAX_SEARCH_TAGS = 40
 private const val TAG_COUNT_BATCH_SIZE = 50
 private const val MAX_RELATED_POSTS = 6
 private const val RELATED_HYDRATION_CONCURRENCY = 2
-private const val FAVORITES_HYDRATION_CONCURRENCY = 4
 private const val POST_ENVELOPE = "post"
 private const val TAG_ENVELOPE = "tag"
 private val NO_SAMPLE_FLAGS = setOf("false", "0")

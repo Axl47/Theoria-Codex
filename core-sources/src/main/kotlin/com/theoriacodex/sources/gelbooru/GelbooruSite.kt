@@ -38,7 +38,7 @@ data class GelbooruSite(
     val commentAnchors: Boolean = true,
     /** `index.php?page=account&s=profile&id=` is a public profile page with statistics (0.2 forks send guests to login). */
     val publicProfiles: Boolean = false,
-    /** The HTML post list answers `fav:<id>` to guests, so an account's public favorites can be paged. */
+    /** Searches answer `fav:<account id>` with that account's public favorites (verified on gelbooru.com with a key, 2026-11-11). */
     val favoritesList: Boolean = false,
 ) {
     /**

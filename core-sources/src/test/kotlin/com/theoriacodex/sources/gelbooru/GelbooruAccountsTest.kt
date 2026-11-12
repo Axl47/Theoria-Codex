@@ -1,7 +1,5 @@
 package com.theoriacodex.sources.gelbooru
 
-import com.theoriacodex.domain.adapter.SourceAdapterException
-import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.AccountDetails
 import com.theoriacodex.domain.model.AccountFeed
 import com.theoriacodex.domain.model.CreatorProfile
@@ -32,14 +30,7 @@ class GelbooruAccountsTest {
         <div class="row"><div class="col-xs-12"><span class="profileSectionTitle">About <b>Myself:</b></span><br /><br />line one<br />a &amp; b<br /><br /><b>bold</b></div></div>
     """.trimIndent()
 
-    private fun postListHtml(vararg ids: Int, paginator: String = "") = ids.joinToString("") { id ->
-        """<article class="thumbnail-preview"><a id="p$id" href="https://gelbooru.com/index.php?page=post&amp;s=view&amp;id=$id&tags=fav%3A9"><img src="https://img.example/t.jpg"></a></article>"""
-    } + """<div id="paginator">$paginator</div>"""
-
     private fun postJson(id: Int) = """{"post":[{"id":$id,"file_url":"https://img.example/$id.jpg","tags":"a b"}]}"""
-
-    private fun resolveQuery(id: Int) =
-        mapOf("page" to "dapi", "json" to "1", "s" to "post", "q" to "index", "id" to id.toString(), "limit" to "1")
 
     @Test
     fun `profile statistics, avatar and bio are read from the page`() {
@@ -63,17 +54,6 @@ class GelbooruAccountsTest {
 
         assertEquals(AccountDetails(uploadCount = 0), parseGelbooruAccountProfile(html, "https://gelbooru.com"))
         assertNull(parseGelbooruAccountProfile("<html><body>login</body></html>", "https://gelbooru.com"))
-    }
-
-    @Test
-    fun `a post list gives its ids in order and the next offset from the paginator`() {
-        val html = postListHtml(
-            5, 3, 5,
-            paginator = """<b>1</b> <a href="?page=post&amp;s=list&amp;tags=fav%3A9&amp;pid=42">2</a> <a href="?page=post&amp;s=list&amp;pid=84">3</a>""",
-        )
-
-        assertEquals(GelbooruPostList(listOf("5", "3"), nextPid = 42), parseGelbooruPostList(html, "https://gelbooru.com", 0))
-        assertNull(parseGelbooruPostList(postListHtml(1, paginator = """<a href="?pid=42">2</a>"""), "https://gelbooru.com", 42).nextPid)
     }
 
     @Test
@@ -108,38 +88,11 @@ class GelbooruAccountsTest {
     }
 
     @Test
-    fun `favorites list the account's ids by offset and resolve them in order`() = runTest {
-        val paginator = """<a href="?page=post&amp;s=list&amp;tags=fav%3A9&amp;pid=42">2</a>"""
-        http.enqueueGet(index, mapOf("page" to "post", "s" to "list", "tags" to "fav:9"), body = postListHtml(7, 3, paginator = paginator))
-        http.enqueueGet(index, resolveQuery(7), body = postJson(7))
-        http.enqueueGet(index, resolveQuery(3), body = postJson(3))
+    fun `favorites are the fav search by account id, paged like any search`() = runTest {
+        http.enqueueGet(index, mapOf("page" to "dapi", "json" to "1", "s" to "post", "q" to "index", "pid" to "2", "limit" to "40", "tags" to "fav:9"), body = postJson(7))
 
-        val page = gelbooru().accountPosts(account, AccountFeed.FAVORITES, pageToken = null)
-
-        assertEquals(listOf("7", "3"), page.items.map { it.id.sourcePostId })
-        assertEquals("42", page.nextPageToken)
+        assertEquals(listOf("7"), gelbooru().accountPosts(account, AccountFeed.FAVORITES, pageToken = "2").items.map { it.id.sourcePostId })
         http.assertExhausted()
-    }
-
-    @Test
-    fun `a later favorites page sends its offset and the last page ends paging`() = runTest {
-        http.enqueueGet(index, mapOf("page" to "post", "s" to "list", "tags" to "fav:9", "pid" to "42"), body = postListHtml(4))
-        http.enqueueGet(index, resolveQuery(4), body = postJson(4))
-
-        val page = gelbooru().accountPosts(account, AccountFeed.FAVORITES, pageToken = "42")
-
-        assertEquals(listOf("4"), page.items.map { it.id.sourcePostId })
-        assertNull(page.nextPageToken)
-    }
-
-    @Test
-    fun `favorites whose every post fails to resolve throw instead of looking empty`() = runTest {
-        http.enqueueGet(index, mapOf("page" to "post", "s" to "list", "tags" to "fav:9"), body = postListHtml(7))
-        http.enqueueGet(index, resolveQuery(7), statusCode = 401)
-
-        val failure = runCatching { gelbooru().accountPosts(account, AccountFeed.FAVORITES, pageToken = null) }.exceptionOrNull()
-
-        assertEquals(SourceFailureReason.AUTH_REQUIRED, (failure as SourceAdapterException).reason)
     }
 
     @Test

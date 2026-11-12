@@ -9,21 +9,6 @@ import java.time.format.DateTimeParseException
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
-/** One page of a `fav:<id>` post list: the posts' ids in site order and the `pid` offset of the next page, if any. */
-internal data class GelbooruPostList(val ids: List<String>, val nextPid: Int?)
-
-/**
- * Reads an HTML post list (`index.php?page=post&s=list`). The list carries only thumbnails, so a caller
- * that needs posts resolves the ids through the DAPI. Each `article.thumbnail-preview` links its post's view page.
- */
-internal fun parseGelbooruPostList(html: String, siteUrl: String, currentPid: Int): GelbooruPostList {
-    val document = Jsoup.parse(html, "$siteUrl/")
-    val ids = document.select("article.thumbnail-preview a[href]")
-        .mapNotNull { link -> viewedPostId(link.attr("href")) }
-        .distinct()
-    return GelbooruPostList(ids, nextPaginatorPid(document, currentPid))
-}
-
 /**
  * Reads gelbooru.com's profile page (`index.php?page=account&s=profile&id=`):
  * - statistics are `div.row.profileStatSeparator` rows holding a label column then a value column
