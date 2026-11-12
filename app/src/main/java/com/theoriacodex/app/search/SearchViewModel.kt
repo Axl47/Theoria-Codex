@@ -331,7 +331,14 @@ internal class SearchViewModel(
         suggestionRefresh.refreshAutocomplete(input)
     }
 
+    /** Runs the draft. A typed number not yet added as a tag is added first, so a lone nhentai ID opens its gallery. */
     private fun applyDraft() {
+        val pending = mutableState.value.suggestions.input.trim()
+        if (pending.isNotEmpty() && pending.all(Char::isDigit) && SearchDraftReducer.canCommitInput(mutableState.value, pending)) {
+            val draftBefore = mutableState.value.query.draft
+            commitTagInput(pending)
+            if (mutableState.value.query.draft == draftBefore) return // opened as a gallery
+        }
         val current = mutableState.value
         launchRootSearch(
             kind = if (current.content.hasExecutedSearch) {

@@ -130,6 +130,21 @@ internal class EffectsRestorationSearchViewModelTest : SearchViewModelTestFixtur
         }
 
     @Test
+    fun `a typed id not yet added as a tag opens on search`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val viewModel = viewModel(ViewModelSearchAdapter(SourceKey.NHENTAI))
+            restore(viewModel)
+            viewModel.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.NHENTAI)))
+            viewModel.onAction(SearchAction.AutocompleteChanged("123"))
+            viewModel.onAction(SearchAction.ApplyDraft)
+            advanceUntilIdle()
+
+            val effect = viewModel.effects.first() as SearchEffect.OpenViewer
+            assertEquals("123", effect.posts.single().id.sourcePostId)
+            assertFalse(viewModel.state.value.content.hasExecutedSearch)
+        }
+
+    @Test
     fun `a number beside other tags stays an ordinary tag`() =
         runTest(mainDispatcherRule.dispatcher) {
             val viewModel = viewModel(ViewModelSearchAdapter(SourceKey.NHENTAI))
