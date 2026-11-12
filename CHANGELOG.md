@@ -2,8 +2,22 @@
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-12
+
+### Added
+
+- A comment button in the Viewer opens a post's comments in the info sheet, for Pixiv, nhentai, Danbooru-family and Gelbooru-family sites.
+- Holding a comment opens its actions.
+- Tapping a comment's author opens their account page.
+- Account pages for Gelbooru-family sites, Danbooru, Pixiv and Iwara show the profile details and the account's feeds on tabs.
+- The Viewer rotates to fit a video when it opens. A rotate button flashes on new posts.
+- Brightness control now works for all media, and holding the screen scrubs a video's timeline.
+
 ### Changed
 
+- Navigation is more responsive in landscape.
+- Gelbooru-family accounts load favorites with one search per page, so they load faster.
+- Typing an nhentai ID on Search opens that post right away, before it is added as a tag.
 - Custom booru sites now show a post's smaller sample image first and then the original, like the built-in boorus.
 - Gallery pages show their thumbnail while the full page loads, for every source.
 - The Viewer now prepares the previous post as well as the next one, so swiping back starts sooner.
@@ -14,6 +28,8 @@
 
 ### Fixed
 
+- Swiping back to a finished video now restarts it from the beginning, instead of ending it again and skipping past it.
+- Opening a creator page keeps the Viewer open beneath it, and a creator-feed Viewer closes when you open another creator.
 - Quick swipes in the Viewer no longer bounce back on the first try after landing on a new post.
 - Open in browser now opens your browser instead of reopening the post in the app.
 - Hitomi video cards now autoplay in search results.
