@@ -114,13 +114,15 @@ internal fun HeaderLinkText(link: HeaderLink, style: TextStyle) {
     }
 }
 
-/** Secondary text for an [ActionMenuHeader]. */
+/** Secondary text for an [ActionMenuHeader]; [singleLine] clips long text with an ellipsis. */
 @Composable
-internal fun ActionMenuDetailText(text: String) {
+internal fun ActionMenuDetailText(text: String, singleLine: Boolean = false) {
     Text(
         text,
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = if (singleLine) 1 else Int.MAX_VALUE,
+        overflow = TextOverflow.Ellipsis,
     )
 }
 

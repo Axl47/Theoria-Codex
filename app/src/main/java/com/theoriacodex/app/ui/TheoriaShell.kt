@@ -693,6 +693,7 @@ internal class TheoriaShell(
                 context = context,
                 liveSearchBinding = false,
                 initialMediaIndex = deepLink.initialMediaIndex,
+                focusComment = deepLink.comment,
             ),
         )
         data.uiRestoreRepository.setViewerLaunchContext(context)

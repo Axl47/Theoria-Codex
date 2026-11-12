@@ -14,7 +14,9 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.tags.PostTagActionSection
@@ -23,6 +25,9 @@ import com.theoriacodex.app.tags.tagList
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.domain.model.CommentOrder
 import com.theoriacodex.domain.model.CommentPage
+import com.theoriacodex.domain.model.CommentTarget
+import com.theoriacodex.domain.model.CreatorProfile
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostComment
 import com.theoriacodex.domain.model.PostTaxonomyTerm
@@ -50,7 +55,13 @@ class CommentsSheetTest {
         override fun loadMore(post: Post) { calls += "more" }
         override fun toggleReplies(post: Post, comment: PostComment) { calls += "toggle:${comment.id}" }
         override fun loadMoreReplies(post: Post, comment: PostComment) { calls += "moreReplies:${comment.id}" }
+        override fun linkTo(post: Post, target: CommentTarget) = if (linksAvailable) "https://site/${target.parentId.orEmpty()}/${target.id}" else null
+        override fun focusShown(post: Post) { calls += "shown" }
     }
+    private var linksAvailable = true
+    private val openedUrls = mutableListOf<String>()
+    private val openedAuthors = mutableListOf<AuthorDestination>()
+    private val plainView = CommentsView(false, {}, CommentOrder.OLDEST, {})
 
     private fun loaded(vararg ids: String, next: String? = null, replies: Map<String, CommentList> = emptyMap(), open: Set<String> = emptySet()) =
         PostCommentsState(
@@ -66,6 +77,8 @@ class CommentsSheetTest {
         collapsed: Boolean = state != null,
         scrollToComments: Boolean = false,
         headerHeight: Int = 40,
+        view: CommentsView = plainView,
+        scrollToKey: String? = null,
     ) = compose.setContent {
         MaterialTheme {
             Box(Modifier.size(360.dp, 480.dp)) {
@@ -80,7 +93,8 @@ class CommentsSheetTest {
                     sheetExtras = PostTagSheetExtras(
                         tagsInitiallyCollapsed = collapsed,
                         scrollToAfterTags = scrollToComments,
-                        afterTags = { state?.let { commentsSection(post, it, commentCount(null, it), actions, nowEpochMs = 0L, view = CommentsView(false, {}, CommentOrder.OLDEST, {})) } },
+                        scrollToKey = scrollToKey,
+                        afterTags = { state?.let { commentsSection(post, it, commentCount(null, it), actions, nowEpochMs = 0L, view = view) } },
                     ),
                 )
             }
@@ -151,7 +165,7 @@ class CommentsSheetTest {
                         sheetExtras = PostTagSheetExtras(
                             tagsInitiallyCollapsed = true,
                             afterTags = {
-                                val view = CommentsView(collapsed, { collapsed = !collapsed }, order) { order = it }
+                                val view = CommentsView(collapsed, { collapsed = !collapsed }, order, onOrderSelected = { order = it })
                                 commentsSection(post, dated, commentCount(null, dated), actions, 0L, view)
                             },
                         ),
@@ -218,6 +232,80 @@ class CommentsSheetTest {
         compose.onNodeWithText("Comments didn't load").assertIsDisplayed()
         compose.onNodeWithText("Retry").performClick()
         assertEquals(listOf("more"), calls)
+    }
+
+    private fun commentsView() = CommentsView(
+        false, {}, CommentOrder.OLDEST, {},
+        creatorBrowsingSources = setOf(SourceKey.PIXIV),
+        onOpenAuthor = { openedAuthors += it },
+        onOpenUrl = { openedUrls += it },
+    )
+
+    @Test
+    fun `holding a comment offers its text and link, and a reply's link names its parent`() {
+        val replies = mapOf("a" to CommentList().withPage(CommentPage(listOf(PostComment("r1", "replier", null, "reply-text", null)), 1, null)))
+        show(loaded("a", replies = replies, open = setOf("a")), view = commentsView())
+
+        compose.onNodeWithText("text-a").performTouchInput { longClick() }
+        compose.onNodeWithText("Copy text").assertIsDisplayed()
+        compose.onNodeWithText("Copy link").assertIsDisplayed()
+        compose.onNodeWithText("Open in browser").performClick()
+        assertEquals(listOf("https://site//a"), openedUrls)
+        compose.onNodeWithText("Open in browser").assertDoesNotExist()
+
+        compose.tagList().performScrollToNode(hasText("reply-text"))
+        compose.onNodeWithText("reply-text").performTouchInput { longClick() }
+        compose.onNodeWithText("Open in browser").performClick()
+        assertEquals("https://site/a/r1", openedUrls.last())
+    }
+
+    @Test
+    fun `without a page url the sheet has only the text`() {
+        linksAvailable = false
+        show(loaded("a"), view = commentsView())
+
+        compose.onNodeWithText("text-a").performTouchInput { longClick() }
+        compose.onNodeWithText("Copy text").assertIsDisplayed()
+        compose.onNodeWithText("Copy link").assertDoesNotExist()
+        compose.onNodeWithText("Open in browser").assertDoesNotExist()
+    }
+
+    @Test
+    fun `a stamp-only comment has no text to copy`() {
+        val stamp = PostCommentsState(
+            top = CommentList().withPage(CommentPage(listOf(PostComment("s", "stamper", null, " ", null, stampUrl = "https://s/1.png")), 1, null)),
+        )
+        show(stamp, view = commentsView())
+
+        compose.onNodeWithText("stamper").performTouchInput { longClick() }
+        compose.onNodeWithText("Copy link").assertIsDisplayed()
+        compose.onNodeWithText("Copy text").assertDoesNotExist()
+    }
+
+    @Test
+    fun `tapping an author with a profile opens it, and one without is not a button`() {
+        val author = CreatorProfile(SourceKey.PIXIV, "author-a", profileId = "1", uploadsQuery = "user:1")
+        val state = PostCommentsState(
+            top = CommentList().withPage(
+                CommentPage(
+                    listOf(PostComment("a", "author-a", null, "text-a", null, author = author), PostComment("b", "author-b", null, "text-b", null)),
+                    null, null,
+                ),
+            ),
+        )
+        show(state, view = commentsView())
+
+        compose.onNode(hasText("author-b") and hasClickAction()).assertDoesNotExist()
+        compose.onNode(hasText("author-a") and hasClickAction()).performClick()
+        assertEquals(listOf<AuthorDestination>(AuthorDestination.CreatorPage(author)), openedAuthors)
+    }
+
+    @Test
+    fun `a focused comment far down the list is scrolled to`() {
+        val ids = (1..40).map { "c$it" }.toTypedArray()
+        show(loaded(*ids), scrollToKey = commentItemKey("c40"))
+
+        compose.onNodeWithText("text-c40").assertIsDisplayed()
     }
 
     @Test

@@ -44,6 +44,9 @@ class CommentsLoader(
         }
     }
 
+    override fun nativeCommentAnchor(source: SourceKey, commentId: String): String? =
+        (registry.adapterFor(source) as? CommentsSourceAdapter)?.nativeCommentAnchor(commentId)
+
     private fun cached(key: PageKey): CommentPage? = synchronized(cache) { cache[key] }
 
     private companion object {

@@ -13,6 +13,8 @@ internal class ViewerComments(
     /** How the top-level comments are listed, and the way the user changes it for every post. */
     val order: CommentOrder = CommentOrder.OLDEST,
     val onOrderSelected: (CommentOrder) -> Unit = {},
+    /** Opens a web address in the browser, for a comment's link and for authors the app has no page for. */
+    val onOpenUrl: (String) -> Unit = {},
 ) {
     fun stateOf(post: Post): PostCommentsState? = states[post.id]
 

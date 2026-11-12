@@ -8,6 +8,7 @@ import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.CommentHint
 import com.theoriacodex.domain.model.CommentPage
+import com.theoriacodex.domain.model.CommentTarget
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostComment
 import com.theoriacodex.domain.model.SourceKey
@@ -60,6 +61,23 @@ class ViewerCommentsTest {
         assertEquals(setOf(posts[0].id, posts[3].id), owner.comments.state.value.keys)
         owner.clearSession()
         assertTrue(owner.comments.state.value.isEmpty())
+    }
+
+    @Test
+    fun `a session launched on a comment finds it once, and relaunching the same session does not search again`() = runTest {
+        val loader = RecordingLoader()
+        val owner = ViewerViewModel(SavedStateHandle(), scopeOverride = this, commentsLoader = loader)
+        val post = testPost(sourcePostId = "linked")
+        val focused = session(listOf(post)).copy(focusComment = CommentTarget("c"))
+
+        owner.replaceSession(focused)
+        openFirstMedia(owner)
+        assertEquals("comment:c", owner.comments.state.value.getValue(post.id).focusKey)
+
+        owner.comments.focusShown(post)
+        owner.replaceSession(focused)
+        runCurrent()
+        assertEquals(null, owner.comments.state.value.getValue(post.id).focusKey)
     }
 
     @Test

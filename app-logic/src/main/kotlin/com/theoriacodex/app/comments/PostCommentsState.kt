@@ -45,6 +45,12 @@ data class PostCommentsState(
     /** Reply lists by parent comment id; kept after collapsing so reopening is instant. */
     val replies: Map<String, CommentList> = emptyMap(),
     val expandedReplies: Set<String> = emptySet(),
+    /**
+     * The sheet's list key ([commentItemKey], [replyItemKey]) of the comment a link pointed at, set once the
+     * search for it ([PostCommentsController.focus]) found it. The sheet scrolls to it and then clears it with
+     * [PostCommentsActions.focusShown], so it acts once.
+     */
+    val focusKey: String? = null,
 ) {
     /** A fetched page with nothing in it means there is nothing to show, not a section to draw. */
     val hasSection: Boolean get() = !(top.status == CommentLoadStatus.Loaded && top.comments.isEmpty())
@@ -52,6 +58,12 @@ data class PostCommentsState(
     fun withReplies(parentId: String, transform: (CommentList) -> CommentList) =
         copy(replies = replies + (parentId to transform(replies[parentId] ?: CommentList())))
 }
+
+/** The key of a top-level comment's item in the sheet's list. */
+fun commentItemKey(commentId: String) = "comment:$commentId"
+
+/** The key of the item for a reply to [parentId] in the sheet's list. */
+fun replyItemKey(parentId: String, replyId: String) = "reply:$parentId:$replyId"
 
 /** The comments by date in [order]; ones without a date follow in the order the source gave them. */
 fun List<PostComment>.inOrder(order: CommentOrder): List<PostComment> {
