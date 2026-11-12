@@ -2,6 +2,7 @@ package com.theoriacodex.sources.gelbooru
 
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.theoriacodex.domain.adapter.AccountProfileSourceAdapter
 import com.theoriacodex.domain.adapter.CommentsSourceAdapter
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.Page
@@ -13,6 +14,8 @@ import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.model.AccountDetails
+import com.theoriacodex.domain.model.AccountFeed
 import com.theoriacodex.domain.model.CommentPage
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
@@ -74,8 +77,12 @@ fun GelbooruSourceAdapter(
     }
 }
 
-/** What every Gelbooru-family site supports; creator and related posts depend on the profile. */
-interface GelbooruFamilySourceAdapter : SourceAdapter, TagCountLookupSourceAdapter, CommentsSourceAdapter
+/**
+ * What every Gelbooru-family site supports; creator and related posts depend on the profile. Every
+ * creator is a site account (post uploaders and commenters alike), so account pages are universal.
+ */
+interface GelbooruFamilySourceAdapter :
+    SourceAdapter, TagCountLookupSourceAdapter, CommentsSourceAdapter, AccountProfileSourceAdapter
 
 /** Speaks the DAPI for one [GelbooruSite]; every search pages by `pid` in fixed 40-post pages. */
 private class GelbooruFamilyAdapter(
@@ -106,6 +113,32 @@ private class GelbooruFamilyAdapter(
         if (creator.source != sourceKey || uploadsQuery.isNullOrBlank()) return canonicalPostPage(emptyList(), null)
         return searchPosts(uploadsQuery, pageToken)
     }
+
+    override fun accountFeeds(creator: CreatorProfile): List<AccountFeed> {
+        if (creator.source != sourceKey) return emptyList()
+        return listOfNotNull(
+            AccountFeed.UPLOADS.takeIf { !creator.uploadsQuery.isNullOrBlank() },
+            AccountFeed.FAVORITES.takeIf { site.favoritesList && creator.profileId != null },
+        )
+    }
+
+    /** Statistics, avatar and bio from the profile page; null on sites without public profiles. */
+    override suspend fun accountDetails(creator: CreatorProfile): AccountDetails? {
+        val profileId = creator.profileId
+        if (creator.source != sourceKey || !site.publicProfiles || profileId == null) return null
+        val html = request(
+            url = "${site.siteUrl}/index.php",
+            query = mapOf("page" to "account", "s" to "profile", "id" to profileId),
+            scanBody = false,
+        )
+        return parseGelbooruAccountProfile(html, site.siteUrl)
+    }
+
+    override suspend fun accountPosts(creator: CreatorProfile, feed: AccountFeed, pageToken: String?): Page<Post> =
+        when (feed) {
+            AccountFeed.UPLOADS -> searchCreatorPosts(creator, pageToken)
+            AccountFeed.FAVORITES -> favoritePosts(creator, pageToken)
+        }
 
     override suspend fun trendingTags(limit: Int): List<TagSuggestion> {
         val items = requestTagList(
@@ -234,10 +267,30 @@ private class GelbooruFamilyAdapter(
         )
         if (relatedIds.isEmpty()) return emptyList()
 
-        val resolved = hydrateRelatedPosts(relatedIds)
-        val posts = resolved.mapNotNull(Result<Post?>::getOrNull).distinctBy(Post::id)
-        if (posts.isNotEmpty() || resolved.none(Result<Post?>::isFailure)) return posts
-        throw resolved.firstNotNullOf { result -> result.exceptionOrNull() }
+        return resolvePosts(relatedIds, RELATED_HYDRATION_CONCURRENCY).postsOrThrow()
+    }
+
+    /**
+     * A page of the account's public favorites. The site lists them only as HTML thumbnails (42 per
+     * page, `pid` offsets), so each page's ids are resolved through the DAPI, which needs the user's key.
+     */
+    private suspend fun favoritePosts(creator: CreatorProfile, pageToken: String?): Page<Post> {
+        val profileId = creator.profileId
+        if (creator.source != sourceKey || !site.favoritesList || profileId == null) return canonicalPostPage(emptyList(), null)
+        val pid = pageToken?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+        val html = request(
+            url = "${site.siteUrl}/index.php",
+            query = buildMap {
+                put("page", "post")
+                put("s", "list")
+                put("tags", "fav:$profileId")
+                if (pid > 0) put("pid", pid.toString())
+            },
+            scanBody = false,
+        )
+        val list = parseGelbooruPostList(html, site.siteUrl, currentPid = pid)
+        val posts = resolvePosts(list.ids, FAVORITES_HYDRATION_CONCURRENCY).postsOrThrow()
+        return canonicalPostPage(items = posts, nextPageToken = list.nextPid?.toString())
     }
 
     private suspend fun searchPosts(tags: String, pageToken: String?): Page<Post> {
@@ -255,8 +308,9 @@ private class GelbooruFamilyAdapter(
         return canonicalPostPage(items = rawPosts.mapNotNull(::parsePost), nextPageToken = next)
     }
 
-    private suspend fun hydrateRelatedPosts(ids: List<String>): List<Result<Post?>> = supervisorScope {
-        val semaphore = Semaphore(RELATED_HYDRATION_CONCURRENCY)
+    /** Resolves [ids] through the DAPI, at most [concurrency] at a time, keeping their order; each failure stays its own result. */
+    private suspend fun resolvePosts(ids: List<String>, concurrency: Int): List<Result<Post?>> = supervisorScope {
+        val semaphore = Semaphore(concurrency)
         ids.map { id ->
             async {
                 semaphore.withPermit {
@@ -270,6 +324,13 @@ private class GelbooruFamilyAdapter(
                 }
             }
         }.awaitAll()
+    }
+
+    /** The resolved posts; partial failures drop their posts, but a batch where nothing resolved and something failed rethrows. */
+    private fun List<Result<Post?>>.postsOrThrow(): List<Post> {
+        val posts = mapNotNull(Result<Post?>::getOrNull).distinctBy(Post::id)
+        if (posts.isNotEmpty() || none(Result<Post?>::isFailure)) return posts
+        throw firstNotNullOf { result -> result.exceptionOrNull() }
     }
 
     /** DAPI call with the site's credentials; a site that requires them fails before the request. */
@@ -455,6 +516,7 @@ private const val MAX_SEARCH_TAGS = 40
 private const val TAG_COUNT_BATCH_SIZE = 50
 private const val MAX_RELATED_POSTS = 6
 private const val RELATED_HYDRATION_CONCURRENCY = 2
+private const val FAVORITES_HYDRATION_CONCURRENCY = 4
 private const val POST_ENVELOPE = "post"
 private const val TAG_ENVELOPE = "tag"
 private val NO_SAMPLE_FLAGS = setOf("false", "0")
