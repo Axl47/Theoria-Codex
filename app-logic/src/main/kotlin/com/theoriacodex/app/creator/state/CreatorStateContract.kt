@@ -79,8 +79,12 @@ data class CreatorUiState(
     val uploads: List<Post>
         get() = if (selectedFeed == AccountFeed.UPLOADS) results else parkedFeeds[AccountFeed.UPLOADS]?.results.orEmpty()
 
-    /** Whether the uploads list is still loading its first page; Follow waits for it. */
-    val uploadsRefreshing: Boolean get() = isRefreshing && selectedFeed == AccountFeed.UPLOADS
+    /**
+     * Whether the uploads list has not finished its first page yet; Follow waits for it, since following
+     * records the uploads seen so far. A parked uploads feed whose load was cancelled by a tab switch still counts.
+     */
+    val uploadsRefreshing: Boolean
+        get() = if (selectedFeed == AccountFeed.UPLOADS) isRefreshing else parkedFeeds[AccountFeed.UPLOADS]?.needsLoad ?: true
 }
 
 sealed interface CreatorAction {

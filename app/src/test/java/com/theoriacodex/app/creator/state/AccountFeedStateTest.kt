@@ -49,6 +49,14 @@ class AccountFeedStateTest {
     }
 
     @Test
+    fun `follow waits for the uploads list even after switching tabs mid-load`() {
+        val opened = CreatorUiState().reduce(CreatorAction.OpenCreator(account, bothFeeds)).state
+        assertTrue(opened.uploadsRefreshing)
+        assertTrue(opened.reduce(CreatorAction.SelectFeed(AccountFeed.FAVORITES)).state.uploadsRefreshing)
+        assertFalse(loaded(listOf(testPost(sourcePostId = "u1")), null).reduce(CreatorAction.SelectFeed(AccountFeed.FAVORITES)).state.uploadsRefreshing)
+    }
+
+    @Test
     fun `each feed pages with its own continuation`() {
         val onFavorites = loaded(listOf(testPost(sourcePostId = "u1")), "uploads-2")
             .reduce(CreatorAction.SelectFeed(AccountFeed.FAVORITES))
