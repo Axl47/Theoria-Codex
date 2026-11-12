@@ -42,18 +42,32 @@ so the link also jumps there in a browser. Replies and sites without anchors (Pi
 <li>App: <code>ViewerSession</code> carries the comment to focus; the comments controller pages until it finds it (bounded), opening a reply's parent;
 the sheet scrolls to the item and tints it. When it is not found the post opens normally.</li>
 <li>Open profile: the existing creator page when the author is browseable there, otherwise the profile URL in the browser (Part 1); Part 2 replaces the browser fallback with the account page.</li>
-<li>Part 2 contract (planned): an optional source interface returning account details (avatar, counts, bio) and listing an account's feeds
-(<code>UPLOADS</code>, <code>FAVORITES</code>), with the feed set decided synchronously from the profile so the page knows its layout before any request.</li>
+<li>Part 2 contract (done): <code>AccountProfileSourceAdapter</code> (<code>accountFeeds</code>, synchronous from the profile's shape;
+<code>accountDetails</code>; <code>accountPosts</code>) with <code>AccountFeed</code> and <code>AccountDetails</code> in <code>core-domain/.../model/Accounts.kt</code>.
+Accounts: every Gelbooru-family creator, Pixiv and Iwara users, Danbooru creators whose uploads query is <code>user:</code>. Not accounts (unchanged page): Danbooru artist tags, nhentai, Hitomi.
+nhentai commenters keep opening in the browser (no public account data).</li>
 </ul>
+
+<h2>Account data evidence (2026-11-11)</h2>
+<p>Checked anonymously with curl; status codes, field names, selectors and counts only.</p>
+<table>
+<tr><th>Source</th><th>Header facts</th><th>Uploads</th><th>Favorites</th><th>Evidence</th></tr>
+<tr><td>Gelbooru (gelbooru.com)</td><td>Profile HTML <code>page=account&amp;s=profile&amp;id=</code>: <code>div.profileStatSeparator</code> rows (Joined <code>MM/dd/yy</code>, Posts, Favorites, Comments…), avatar in <code>div.profileAvatar</code> inline style, relative</td><td><code>user:&lt;name&gt;</code></td><td><code>fav:&lt;id&gt;</code> on the HTML post list (42/page, <code>pid</code>); the favorites page needs login</td><td>live</td></tr>
+<tr><td>Safebooru / 0.2 forks</td><td>none (profile redirects to login)</td><td><code>user:&lt;name&gt;</code></td><td>favorites page lists ids only; not used</td><td>live</td></tr>
+<tr><td>Danbooru / AIBooru</td><td><code>/users/&lt;id&gt;.json</code>: <code>created_at</code>, <code>post_upload_count</code>, level; no avatar, no favorite count. <code>counts/posts.json?tags=ordfav:&lt;name&gt;</code> is 0 for private favorites</td><td><code>user:&lt;name&gt;</code></td><td><code>ordfav:&lt;name&gt;</code>, numeric <code>page</code></td><td>live</td></tr>
+<tr><td>Pixiv</td><td>app-api <code>/v1/user/detail</code> (OAuth)</td><td><code>/v1/user/illusts</code> (existing)</td><td><code>/v1/user/bookmarks/illust?restrict=public</code></td><td>documented; verify on device</td></tr>
+<tr><td>Iwara</td><td><code>/profile/&lt;username&gt;</code>: avatar, bio, <code>createdAt</code>; follower count from <code>/user/&lt;id&gt;/followers?limit=1</code></td><td><code>/videos?user=</code> (existing)</td><td>none public</td><td>live via mirror</td></tr>
+<tr><td>nhentai</td><td>only the comment's poster fields</td><td>none</td><td>none</td><td>live (API 404/401)</td></tr>
+</table>
 
 <h2>Progress</h2>
 <table>
 <tr><th>Step</th><th>State</th></tr>
 <tr><td>Domain contract + <code>CommentLinksTest</code></td><td>done</td></tr>
-<tr><td>Part 1 sources: authors, native anchors, comment deep links, Danbooru/AIBooru post links</td><td>in progress</td></tr>
+<tr><td>Part 1 sources: authors, native anchors, comment deep links, Danbooru/AIBooru post links</td><td>done (gelbooru.com has no native anchor; rule34.xxx anchor unverified)</td></tr>
 <tr><td>Part 1 app: hold sheet, avatar/name tap, Viewer comment focus</td><td>in progress</td></tr>
 <tr><td>Part 1 on-device proof</td><td>pending</td></tr>
-<tr><td>Part 2 endpoint verification per source</td><td>pending</td></tr>
+<tr><td>Part 2 endpoint verification per source</td><td>done (Pixiv app-api pending device)</td></tr>
 <tr><td>Part 2 account page</td><td>pending</td></tr>
 </table>
 

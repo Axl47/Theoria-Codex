@@ -1,5 +1,7 @@
 package com.theoriacodex.domain.adapter
 
+import com.theoriacodex.domain.model.AccountDetails
+import com.theoriacodex.domain.model.AccountFeed
 import com.theoriacodex.domain.model.CommentPage
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
@@ -37,6 +39,22 @@ interface CreatorPostsSourceAdapter {
         creator: CreatorProfile,
         pageToken: String?,
     ): Page<Post>
+}
+
+/**
+ * Optional account pages for creators that are site accounts (people), as opposed to artist tags or
+ * searches. A source whose creators can be either decides from the profile's shape alone, so the app
+ * knows the page's layout before any request.
+ */
+interface AccountProfileSourceAdapter {
+    /** The feeds [creator] offers as an account, in tab order; empty when it is not an account. */
+    fun accountFeeds(creator: CreatorProfile): List<AccountFeed>
+
+    /** Header facts for an account; null when the source has nothing beyond what [creator] holds. Failures throw. */
+    suspend fun accountDetails(creator: CreatorProfile): AccountDetails?
+
+    /** One page of [feed]; a null [pageToken] asks for the first. [AccountFeed.UPLOADS] matches [CreatorPostsSourceAdapter]. */
+    suspend fun accountPosts(creator: CreatorProfile, feed: AccountFeed, pageToken: String?): Page<Post>
 }
 
 /** Candidate budget; presentation removes already-visible posts before choosing its smaller shelf. */
