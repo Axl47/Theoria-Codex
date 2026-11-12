@@ -141,7 +141,8 @@ private suspend fun TheoriaShell.openSearchViewer(effect: SearchEffect.OpenViewe
             searchVisibilityFilters = effect.visibilityFilters,
             onToggleLike = likeAction,
             relatedBinding = ViewerRelatedBinding(ViewerStreamSource.SEARCH, current?.appliedQueryHash.orEmpty()),
-            saveQuery = current?.applied,
+            // A typed ID was never searched, so saving it to a Codex has no search to record.
+            saveQuery = current?.applied?.takeUnless { effect.fromTypedId },
         )),
     )
     navController.navigate(AppRoute.Viewer) {

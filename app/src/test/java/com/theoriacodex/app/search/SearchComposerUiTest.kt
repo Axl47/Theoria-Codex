@@ -71,7 +71,7 @@ class SearchComposerUiTest {
             MaterialTheme {
                 SearchComposer(
                     state = state, onAction = { actions += it }, sourcePicker = {}, onApply = {}, onReset = {},
-                    onUndo = {}, onManageSavedTags = onManageSavedTags, onOpenSourceAccounts = {}, onDigitsCommitted = {}, onDismiss = {},
+                    onUndo = {}, onManageSavedTags = onManageSavedTags, onOpenSourceAccounts = {}, onDismiss = {},
                     savedSearches = ComposerSavedSearches(saved, onOpen = onOpenSaved), savedTags = savedTags,
                 )
             }

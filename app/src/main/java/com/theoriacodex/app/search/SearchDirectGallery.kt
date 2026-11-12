@@ -25,5 +25,10 @@ internal suspend fun SearchCoordinator.directNhentaiGalleryEffect(
         scrollOffsetHint = 0,
     )
     setViewerLaunchContext(context)
-    return SearchEffect.OpenViewer(posts = listOf(resolved), context = context, liveSearchBinding = false)
+    return SearchEffect.OpenViewer(
+        posts = listOf(resolved),
+        context = context,
+        liveSearchBinding = false,
+        fromTypedId = true,
+    )
 }
