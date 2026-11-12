@@ -295,6 +295,9 @@ internal class SettingsViewModel(
             is SettingsAction.SetInstantSeek -> launchMutation {
                 dependencies.settingsRepository.updateSettings { it.copy(viewer = it.viewer.copy(instantSeek = action.enabled)) }
             }
+            is SettingsAction.SetAutoRotateVideos -> launchMutation {
+                dependencies.settingsRepository.updateSettings { it.copy(viewer = it.viewer.copy(autoRotateVideos = action.enabled)) }
+            }
             is SettingsAction.SetViewerPlaybackMode -> launchMutation {
                 dependencies.settingsRepository.updateSettings { it.copy(viewer = it.viewer.copy(playbackMode = action.mode)) }
             }

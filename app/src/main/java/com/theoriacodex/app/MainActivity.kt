@@ -11,12 +11,14 @@ import androidx.compose.runtime.setValue
 import androidx.core.net.toUri
 import com.theoriacodex.app.ui.TheoriaApp
 import com.theoriacodex.app.viewer.ViewerAutoPictureInPicture
+import com.theoriacodex.app.viewer.ViewerRotationState
 
 class MainActivity : ComponentActivity() {
     var viewerPictureInPictureActive by mutableStateOf(false)
         private set
     private var enteringViewerPictureInPicture = false
     internal val viewerAutoPictureInPicture = ViewerAutoPictureInPicture(this)
+    internal val viewerRotation = ViewerRotationState()
     val keepViewerPlayingOnPause: Boolean
         get() = enteringViewerPictureInPicture || isInPictureInPictureMode || viewerAutoPictureInPicture.keepPlayingOnPause
 

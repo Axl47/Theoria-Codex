@@ -91,6 +91,7 @@ internal data class ViewerRouteRenderConfig(
     val videoQuality: com.theoriacodex.domain.model.VideoQuality = com.theoriacodex.domain.model.VideoQuality.AUTO,
     val invertMultiImageScrollDirection: Boolean = false,
     val instantSeek: Boolean = false,
+    val autoRotateVideos: Boolean = false,
     val likedPostIds: Set<PostId> = emptySet(),
     val creatorBrowsingSources: Set<SourceKey>,
 )
@@ -328,7 +329,10 @@ private fun ViewerRouteScreen(
         )
     }
     val related = rememberViewerRelatedPosts(activeSession, liveSourceState)
-    androidx.compose.runtime.CompositionLocalProvider(com.theoriacodex.app.viewer.LocalViewerInstantSeek provides renderConfig.instantSeek) {
+    androidx.compose.runtime.CompositionLocalProvider(
+        com.theoriacodex.app.viewer.LocalViewerInstantSeek provides renderConfig.instantSeek,
+        com.theoriacodex.app.viewer.LocalViewerAutoRotateVideos provides renderConfig.autoRotateVideos,
+    ) {
         ViewerRouteRenderer(
             activeSession, viewerState, viewerOwner, durationOwner, renderConfig, related, screenCallbacks,
             canLoadMoreFromSource, matchingSourceState?.loadingMore == true,

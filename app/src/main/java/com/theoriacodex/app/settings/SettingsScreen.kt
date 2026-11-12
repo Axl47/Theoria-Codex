@@ -214,7 +214,7 @@ private fun SettingsHomeGroups(
             onSheet(SettingsSheet.PLAYBACK)
         })
         SettingsRowDivider()
-        SettingsRow("Controls", "Search bar, seeking, swipe direction", Icons.Default.TouchApp, onClick = {
+        SettingsRow("Controls", "Search bar, seeking, swipes, rotation", Icons.Default.TouchApp, onClick = {
             onSheet(SettingsSheet.CONTROLS)
         })
     }

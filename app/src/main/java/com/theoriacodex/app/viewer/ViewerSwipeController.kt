@@ -129,7 +129,10 @@ internal class ViewerSwipeController(
         val sign = current.swipeSign(origin.postIndex)
         val displacement = baseline + rawDisplacement * sign
         val velocity = rawVelocity * sign
-        val direction = viewerSwipeDecision(displacement, rawDisplacement * sign, velocity, current.postPager.viewerPageExtent(), current.flingVelocity)
+        val pager = current.postPager
+        val direction = viewerSwipeDecision(
+            displacement, rawDisplacement * sign, velocity, pager.viewerPageExtent(), current.flingVelocity, pager.viewerCommitFraction(),
+        )
         val target = direction?.let { current.target(origin, it) }
         settleTo(target ?: origin, -velocity, commits = target != null)
     }

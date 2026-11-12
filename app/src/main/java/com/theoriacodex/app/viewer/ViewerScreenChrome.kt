@@ -71,7 +71,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 
-/** Everything drawn over the media: top bar, post strip, and related drawer. */
+/** Everything drawn over the media: top bar, post strip, rotate button, and related drawer. */
 @Composable
 internal fun BoxScope.ViewerChromeOverlays(
     frame: ViewerFrame,
@@ -130,6 +130,7 @@ internal fun BoxScope.ViewerChromeOverlays(
                 })
         }
     }
+    ViewerRotationControl(selection, activity?.viewerRotation, frame.inPictureInPicture, frame.chromeVisible, suppressed = frame.mediaOverviewVisible || screen.timelineInteractionActive)
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_TOP_BAR, Modifier.align(Alignment.TopCenter).then(fadesWhileScrubbing)) {
         ViewerTopBar(frame, controls, activity, quality, qualityHeight, selection.post.id in likedPostIds, comments.countOf(selection.post), onAction)
     }

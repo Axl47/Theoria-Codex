@@ -441,6 +441,8 @@ data class ViewerSettings(
     val videoQuality: com.theoriacodex.domain.model.VideoQuality = com.theoriacodex.domain.model.VideoQuality.AUTO,
     val invertMultiImageScrollDirection: Boolean = false,
     val instantSeek: Boolean = false,
+    /** Rotate to fit a video the Viewer opens on, when the video is clearly wide or tall. */
+    val autoRotateVideos: Boolean = true,
     val automaticTextTranslationEnabled: Boolean = false,
     val enabledOcrLanguages: Set<ViewerOcrLanguage> = emptySet(),
 )
