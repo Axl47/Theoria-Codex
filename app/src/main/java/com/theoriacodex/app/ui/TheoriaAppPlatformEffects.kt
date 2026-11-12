@@ -11,7 +11,7 @@ import com.theoriacodex.app.viewer.ViewerOrientation
 
 /**
  * Owns only Android window policy; route and navigation state remain app-shell-owned. The Viewer follows
- * the phone's rotation unless it holds [viewerHeldOrientation] to fit a video.
+ * the phone's rotation unless it holds [viewerHeldOrientation], set by auto-rotate or the rotate button.
  */
 @Composable
 internal fun TheoriaAppPlatformEffects(

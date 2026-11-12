@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Changed
+
+- The Viewer's rotate button is always available with the controls, so you can turn the screen by hand on any post.
+- The Viewer's post strip fills the width with more thumbnails in landscape instead of seven widely spaced ones.
+- The search tray under a post's tags, and in Codex tag search, folds to one line beside Search. It starts folded in landscape; tap it to edit the search.
+
+### Fixed
+
+- The Viewer's rotate button no longer floats high above a landscape video's timeline or a multi-page post's page bar.
+
 ## [1.6.0] - 2026-11-12
 
 ### Added

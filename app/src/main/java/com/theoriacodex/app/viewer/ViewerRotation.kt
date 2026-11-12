@@ -48,7 +48,8 @@ internal data class MeasuredVideoShape(val key: ViewerMediaKey, val fill: Viewer
 
 /**
  * Rotates once when the Viewer opens on a clearly wide or tall video, then holds that orientation while
- * swiping. Later rotations are the user's, through the rotate button. Clears the hold when the Viewer leaves.
+ * swiping. Later rotations are the user's, through the rotate button, which always turns to the other orientation
+ * (outside picture-in-picture). Clears the hold when the Viewer leaves.
  */
 @Composable
 internal fun rememberViewerRotation(selection: ViewerSelection, rotation: ViewerRotationState?, inPictureInPicture: Boolean): ViewerRotationOffer? {
@@ -80,8 +81,14 @@ internal fun rememberViewerRotation(selection: ViewerSelection, rotation: Viewer
             rotation.measured = null
         }
     }
-    val offered = !inPictureInPicture && viewerOffersRotation(fill, screen, isVideo, holdingRotation = rotation.held != null)
-    return if (offered && fill != null) ViewerRotationOffer(fill) { rotation.held = fill } else null
+    if (inPictureInPicture) return null
+    val fits = viewerOffersRotation(fill, screen, isVideo, holdingRotation = rotation.held != null)
+    val target = screen.opposite
+    return ViewerRotationOffer(fits) {
+        // The user's choice wins over an automatic rotation still waiting on the video's size.
+        openingKey = null
+        rotation.held = target
+    }
 }
 
 /** Videos qualify for rotation, including ones whose stream has not resolved yet. */
@@ -101,11 +108,12 @@ private fun ViewerSelection.fillOrientation(measured: MeasuredVideoShape?): View
  */
 private fun Post.awaitsVideoStream(): Boolean = full == null && media.isEmpty() && (durationMs ?: 0L) > 0L
 
-internal class ViewerRotationOffer(val target: ViewerOrientation, val rotate: () -> Unit)
+/** The rotate button's action; [fits] when the other orientation suits the current media better. */
+internal class ViewerRotationOffer(val fits: Boolean, val rotate: () -> Unit)
 
 /**
  * The Viewer's rotation behavior and its button, placed above whichever bar the current media shows. The button
- * follows the controls, and also shows for [VIEWER_ROTATE_HINT_MS] whenever a post starts offering a rotation,
+ * follows the controls, and also shows for [VIEWER_ROTATE_HINT_MS] whenever rotating starts to fit a post,
  * since swiping to a post leaves the controls hidden. [suppressed] hides it while another surface owns the bottom.
  */
 @Composable
@@ -118,15 +126,19 @@ internal fun BoxScope.ViewerRotationControl(
 ) {
     val offer = rememberViewerRotation(selection, rotation, inPictureInPicture)
     var hinting by remember { mutableStateOf(false) }
-    LaunchedEffect(selection.post.id, selection.mediaIndex, offer?.target) {
-        hinting = offer != null
+    LaunchedEffect(selection.post.id, selection.mediaIndex, offer?.fits) {
+        hinting = offer?.fits == true
         if (hinting) {
             delay(VIEWER_ROTATE_HINT_MS)
             hinting = false
         }
     }
     offer ?: return
-    val bottomBar = if (selection.isAnimated || selection.overviewItems.size > 1) VIEWER_TIMELINE_HEIGHT else 0.dp
+    val bottomBar = when {
+        selection.isAnimated -> viewerTimelineFooterHeight()
+        selection.overviewItems.size > 1 -> VIEWER_TIMELINE_TRACK_HEIGHT
+        else -> 0.dp
+    }
     ViewerRotateButton(offer, (chromeVisible || hinting) && !suppressed, bottomInset = LocalViewerPostStripInset.current + bottomBar)
 }
 
@@ -138,9 +150,9 @@ internal fun BoxScope.ViewerRotateButton(offer: ViewerRotationOffer, visible: Bo
     ViewerChromeVisibility(visible, Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = bottomInset + 8.dp)) {
         IconButton(
             onClick = offer.rotate,
-            modifier = Modifier.background(Color.Black.copy(alpha = 0.45f), CircleShape).testTag("viewer-rotate-to-fit"),
+            modifier = Modifier.background(Color.Black.copy(alpha = 0.45f), CircleShape).testTag("viewer-rotate"),
         ) {
-            Icon(Icons.Default.ScreenRotation, contentDescription = "Rotate to fit", tint = Color.White)
+            Icon(Icons.Default.ScreenRotation, contentDescription = if (offer.fits) "Rotate to fit" else "Rotate", tint = Color.White)
         }
     }
 }

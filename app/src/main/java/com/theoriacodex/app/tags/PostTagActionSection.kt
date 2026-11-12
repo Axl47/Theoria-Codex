@@ -8,15 +8,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.mapNotNull
-import androidx.compose.ui.draw.drawWithContent
 import com.theoriacodex.app.ui.components.FoldHeader
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.graphicsLayer
+import com.theoriacodex.app.ui.components.fadeOutAtEnd
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -514,19 +507,6 @@ private fun TagPeekRow(terms: List<SearchTerm>, chip: @Composable (SearchTerm, B
     }
 }
 
-/** Fades the last stretch of a clipped row to transparent. */
-private fun Modifier.fadeOutAtEnd(): Modifier = graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
-    .drawWithContent {
-        drawContent()
-        val fade = size.width.coerceAtMost(PEEK_FADE_WIDTH.toPx())
-        drawRect(
-            brush = Brush.horizontalGradient(listOf(Color.Black, Color.Transparent), startX = size.width - fade, endX = size.width),
-            topLeft = Offset(size.width - fade, 0f),
-            size = Size(fade, size.height),
-            blendMode = BlendMode.DstIn,
-        )
-    }
-
 @Composable
 private fun FavoriteTagActionCell(
     tag: String,
@@ -753,6 +733,5 @@ private const val GENERAL_TAG_NAMESPACE = "tag"
 /** The sheet's header, the tags' header and the tag peek come before whatever follows the folded tags. */
 private const val AFTER_FOLDED_TAGS_INDEX = 3
 private const val PEEK_TAG_COUNT = 10
-private val PEEK_FADE_WIDTH = 40.dp
 private const val COLLAPSE_TAGS_OVER = 16
 private const val COLLAPSED_TAG_COUNT = 12

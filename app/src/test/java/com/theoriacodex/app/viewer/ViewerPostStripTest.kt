@@ -40,8 +40,8 @@ import org.robolectric.annotation.Config
 class ViewerPostStripTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun `compact strip centers its selected post with equal inner and edge gaps`() = checkSpacing(320.dp)
-    @Test fun `wide strip spreads seven slots evenly across the viewport`() = checkSpacing(720.dp)
+    @Test fun `compact strip centers its selected post with equal inner and edge gaps`() = checkSpacing(320.dp, slots = 7)
+    @Test fun `wide strip fits more slots and spreads them evenly across the viewport`() = checkSpacing(720.dp, slots = 11)
 
     @Test fun `strip scrolls beyond the seven visible slots selects distant posts and requests more`() {
         val posts = (0..39).map { testPost(sourcePostId = "strip-$it") }
@@ -179,16 +179,16 @@ class ViewerPostStripTest {
 
     private fun hasStateDescription(expected: String) = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, expected)
 
-    private fun checkSpacing(width: Dp) {
+    private fun checkSpacing(width: Dp, slots: Int) {
         val image = ImageRef(null, "/missing/strip.jpg", "image/jpeg")
-        val posts = (0..6).map { testPost(sourcePostId = "strip-$it").copy(preview = image) }
+        val posts = (0 until slots).map { testPost(sourcePostId = "strip-$it").copy(preview = image) }
         compose.setContent {
-            MaterialTheme { ViewerPostStrip(posts, 3, {}, Modifier.width(width).testTag("strip")) }
+            MaterialTheme { ViewerPostStrip(posts, slots / 2, {}, Modifier.width(width).testTag("strip")) }
         }
         compose.waitForIdle()
         val viewport = compose.onNodeWithTag("strip").fetchSemanticsNode().boundsInRoot
         val cells = posts.map { compose.onNodeWithContentDescription("Open post ${it.id.sourcePostId}").fetchSemanticsNode().boundsInRoot }
-        assertEquals(viewport.center.x, cells[3].center.x, 1f)
+        assertEquals(viewport.center.x, cells[slots / 2].center.x, 1f)
         val edgeGap = cells.first().left - viewport.left
         cells.zipWithNext().forEach { (left, right) -> assertEquals(edgeGap, right.left - left.right, 1.5f) }
         assertEquals(edgeGap, viewport.right - cells.last().right, 1.5f)

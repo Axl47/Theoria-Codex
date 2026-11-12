@@ -27,6 +27,7 @@ class ViewerRotationTest {
     @get:Rule val compose = createComposeRule()
     private val rotation = ViewerRotationState()
     private val shown = mutableStateOf(true)
+    private val chrome = mutableStateOf(true)
     private val selection = mutableStateOf(selection("a", WIDE, IMAGE))
 
     @Test fun `rotates once when the opening post resolves to a wide video, then holds`() {
@@ -72,20 +73,26 @@ class ViewerRotationTest {
         compose.runOnIdle { assertNull(rotation.held) }
     }
 
-    @Test fun `near-square videos and images without a held rotation offer nothing`() {
+    @Test fun `media that rotating would not fit still offers a plain rotate, without the brief hint`() {
         selection.value = selection("a", SQUARE, VIDEO)
-        show(autoRotate = true)
+        compose.mainClock.autoAdvance = false
+        show(autoRotate = true, chromeVisible = false)
+        compose.mainClock.advanceTimeBy(500)
+        compose.onNodeWithContentDescription("Rotate").assertDoesNotExist()
+        compose.mainClock.autoAdvance = true
+        chrome.value = true
         compose.onNodeWithContentDescription("Rotate to fit").assertDoesNotExist()
-        selection.value = selection("b", WIDE, IMAGE)
-        compose.onNodeWithContentDescription("Rotate to fit").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Rotate").performClick()
+        compose.runOnIdle { assertEquals(ViewerOrientation.LANDSCAPE, rotation.held) }
     }
 
     private fun show(autoRotate: Boolean, chromeVisible: Boolean = true) {
+        chrome.value = chromeVisible
         compose.setContent {
             if (shown.value) {
                 CompositionLocalProvider(LocalViewerAutoRotateVideos provides autoRotate) {
                     Box(Modifier.fillMaxSize()) {
-                        ViewerRotationControl(selection.value, rotation, inPictureInPicture = false, chromeVisible, suppressed = false)
+                        ViewerRotationControl(selection.value, rotation, inPictureInPicture = false, chrome.value, suppressed = false)
                     }
                 }
             }

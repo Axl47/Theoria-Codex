@@ -25,7 +25,7 @@ import java.io.InputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** The tallest timeline footer: gestures on an animated page leave this much to scrubbing, plus the strip below it. */
+/** The tallest timeline footer (portrait's two lines): gestures on an animated page leave this much to scrubbing, plus the strip below it. */
 internal val VIEWER_TIMELINE_HEIGHT = 72.dp
 
 @Composable

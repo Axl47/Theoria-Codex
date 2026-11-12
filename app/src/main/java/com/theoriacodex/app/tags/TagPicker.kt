@@ -1,5 +1,18 @@
 package com.theoriacodex.app.tags
 
+import android.content.res.Configuration
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalConfiguration
+import com.theoriacodex.app.ui.components.fadeOutAtEnd
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -10,6 +23,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -185,6 +199,9 @@ internal class TrayConfirmation(
  * The query being built, pinned under a tag list: every group must match, a group with several tags
  * is a capsule of alternatives, and excluded tags follow. "+ or" makes a group the target of the
  * next tap. [onSearch] is null where the current screen has no way to reach Search.
+ *
+ * Folds to one line beside Search, so a short landscape screen keeps room for the tags. It starts folded
+ * in landscape and keeps the user's choice while it stays composed.
  */
 @Composable
 internal fun QueryTray(
@@ -200,29 +217,88 @@ internal fun QueryTray(
     val groups = query?.effectiveIncludeTermGroups.orEmpty()
     val excludes = query?.excludeTerms.orEmpty()
     val isEmpty = groups.isEmpty() && excludes.isEmpty()
+    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    var collapsed by remember { mutableStateOf(landscape) }
     Column(modifier.fillMaxWidth()) {
         HorizontalDivider()
-        Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)) {
+        Column(Modifier.padding(start = 4.dp, end = 16.dp, top = 4.dp, bottom = if (collapsed) 4.dp else 12.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.weight(1f))
-                onSearch?.let { search -> Button(onClick = search, enabled = !isEmpty) { Text("Search") } }
+                TrayFoldToggle(collapsed, onToggle = { collapsed = !collapsed }, Modifier.weight(1f)) {
+                    when {
+                        !collapsed -> Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        isEmpty -> TrayEmptyText(emptyText, maxLines = 1)
+                        else -> TrayPeek(groups, excludes, Modifier.weight(1f))
+                    }
+                }
+                onSearch?.let { search -> Button(onClick = search, enabled = !isEmpty, modifier = Modifier.padding(start = 8.dp)) { Text("Search") } }
             }
             confirmation?.let { TrayConfirmationRow(it) }
-            if (isEmpty) {
-                Text(
-                    emptyText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                TrayExpression(groups, excludes, targetGroup, onTargetGroup)
+            if (!collapsed) {
+                Column(Modifier.padding(start = 12.dp)) { TrayBody(emptyText, groups, excludes, targetGroup, onTargetGroup) }
             }
         }
+    }
+}
+
+/** The tray's header: a chevron and [content], one toggle that folds or unfolds the query. */
+@Composable
+private fun TrayFoldToggle(collapsed: Boolean, onToggle: () -> Unit, modifier: Modifier, content: @Composable RowScope.() -> Unit) {
+    Row(
+        modifier = modifier
+            .sizeIn(minHeight = 48.dp)
+            .clickable(role = Role.Button, onClickLabel = if (collapsed) "Show search" else "Hide search", onClick = onToggle)
+            .semantics(mergeDescendants = true) { stateDescription = if (collapsed) "Collapsed" else "Expanded" },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            if (collapsed) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+            contentDescription = null,
+            modifier = Modifier.padding(horizontal = 8.dp),
+        )
+        content()
+    }
+}
+
+/** The unfolded query, or [emptyText] while it has no terms. */
+@Composable
+private fun TrayBody(
+    emptyText: String,
+    groups: List<SearchTermGroup>,
+    excludes: List<SearchTerm>,
+    targetGroup: Int?,
+    onTargetGroup: (Int?) -> Unit,
+) {
+    if (groups.isEmpty() && excludes.isEmpty()) TrayEmptyText(emptyText) else TrayExpression(groups, excludes, targetGroup, onTargetGroup)
+}
+
+@Composable
+private fun TrayEmptyText(text: String, maxLines: Int = Int.MAX_VALUE) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+/** The folded query on one line, fading at the edge; it belongs to the fold toggle, so taps expand the tray. */
+@Composable
+private fun TrayPeek(groups: List<SearchTermGroup>, excludes: List<SearchTerm>, modifier: Modifier) {
+    Row(
+        modifier = modifier.fadeOutAtEnd().horizontalScroll(rememberScrollState(), enabled = false),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        groups.forEach { group ->
+            TagGroupCard(active = false, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
+                group.terms.forEachIndexed { index, term ->
+                    if (index > 0) TagGroupOrLabel()
+                    TrayTerm(term)
+                }
+            }
+        }
+        excludes.forEach { term -> TrayTerm(term, excluded = true) }
     }
 }
 

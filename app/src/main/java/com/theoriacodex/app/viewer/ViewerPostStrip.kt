@@ -82,6 +82,8 @@ internal val LocalViewerPostStripInset = staticCompositionLocalOf { 0.dp }
 private val STRIP_TOP_PADDING = 13.dp
 private val STRIP_BOTTOM_PADDING = 5.dp
 private val STRIP_MAX_CELL = 46.dp
+private val STRIP_MIN_GAP = 12.dp
+private const val STRIP_MIN_SLOTS = 7
 
 /** The strip's height, which the player and its gestures keep clear of. */
 internal val VIEWER_POST_STRIP_HEIGHT = STRIP_TOP_PADDING + STRIP_MAX_CELL + STRIP_BOTTOM_PADDING
@@ -104,9 +106,9 @@ internal class ViewerStripPages(
 )
 
 /**
- * Seven centered slots share equal gaps between thumbnails and at both viewport edges. When [openPages]
- * belongs to the selected post, that post unfolds in place, and its pages scroll inside the middle five
- * slots so the neighbouring posts stay in reach at both ends.
+ * An odd number of centered slots, as many as fit (at least seven), share equal gaps between thumbnails and at
+ * both viewport edges. When [openPages] belongs to the selected post, that post unfolds in place, and its pages
+ * scroll inside all but the outermost slots so the neighbouring posts stay in reach at both ends.
  */
 @Composable
 internal fun ViewerPostStrip(
@@ -122,10 +124,11 @@ internal fun ViewerPostStrip(
     RequestMorePostsNearEnd(list, posts.lastIndex, onLoadMore)
     ReportUserScroll(list, onInteraction)
     BoxWithConstraints(modifier.fillMaxWidth()) {
-        val cell = ((maxWidth - 32.dp) / 7).coerceIn(1.dp, STRIP_MAX_CELL)
-        val gap = ((maxWidth - cell * 7) / 8).coerceAtLeast(0.dp)
+        val slots = viewerStripSlotCount(maxWidth)
+        val cell = ((maxWidth - 32.dp) / slots).coerceIn(1.dp, STRIP_MAX_CELL)
+        val gap = ((maxWidth - cell * slots) / (slots + 1)).coerceAtLeast(0.dp)
         val unfolded = openPages?.takeIf { it.items.size > 1 && posts.getOrNull(selectedIndex)?.id == it.postId }
-        val selectedWidth = unfolded?.let { viewerStripUnfoldedWidth(it.items.size, cell, gap) } ?: cell
+        val selectedWidth = unfolded?.let { viewerStripUnfoldedWidth(it.items.size, cell, gap, slots) } ?: cell
         val cellPx = with(LocalDensity.current) { cell.toPx() }
         val selectedWidthPx = with(LocalDensity.current) { selectedWidth.toPx() }
         val motion = remember(list) { ViewerStripMotion(selectedIndex, selectedWidthPx) }
@@ -140,7 +143,7 @@ internal fun ViewerPostStrip(
                 val pages = rememberPagesWhileOpen(unfolded?.takeIf { index == selectedIndex }) { width() > cellPx + 0.5f }
                 Box(Modifier.stripSlot(width, cell, clipPages = pages != null), contentAlignment = Alignment.Center) {
                     if (pages != null) {
-                        val pagesWidth = viewerStripUnfoldedWidth(pages.items.size, cell, gap)
+                        val pagesWidth = viewerStripUnfoldedWidth(pages.items.size, cell, gap, slots)
                         ViewerUnfoldedPages(post.id.source, pages, cell, onInteraction, Modifier.requiredWidth(pagesWidth).height(cell))
                     } else {
                         ViewerPostThumbnail(post, index == selectedIndex, Modifier.size(cell), pageCount = postMediaCount(post)) { onSelect(index) }
@@ -256,10 +259,17 @@ private fun CenterItem(list: LazyListState, index: Int, offset: Int) {
     }
 }
 
-/** An unfolded post's width: enough for its pages, but never past the slots its two neighbours occupy. */
-internal fun viewerStripUnfoldedWidth(pageCount: Int, cell: Dp, gap: Dp): Dp {
+/** The most odd-numbered slots full-size thumbnails fit across [width] with comfortable gaps, never fewer than seven. */
+internal fun viewerStripSlotCount(width: Dp): Int {
+    val fitting = ((width - STRIP_MIN_GAP) / (STRIP_MAX_CELL + STRIP_MIN_GAP)).toInt()
+    val odd = if (fitting % 2 == 0) fitting - 1 else fitting
+    return odd.coerceAtLeast(STRIP_MIN_SLOTS)
+}
+
+/** An unfolded post's width: enough for its pages, but never past the outermost of the strip's [slots]. */
+internal fun viewerStripUnfoldedWidth(pageCount: Int, cell: Dp, gap: Dp, slots: Int): Dp {
     val pages = cell * pageCount + UNFOLDED_PAGE_GAP * (pageCount - 1) + UNFOLDED_PADDING * 2
-    return minOf(pages, cell * 5 + gap * 4)
+    return minOf(pages, cell * (slots - 2) + gap * (slots - 3))
 }
 
 /** One post's pages as a scroller of its own, holding the current page centered. Past either end, a drag carries on into the strip. */
