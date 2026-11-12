@@ -257,6 +257,7 @@ internal fun ViewerInfoSheet(
     val commentsState = comments.stateOf(post)
     val commentCount = comments.countOf(post)
     val nowEpochMs = remember { System.currentTimeMillis() }
+    var commentsCollapsed by remember(post.id) { mutableStateOf(false) }
     AdaptiveViewerInfo(onDismiss = { controls.setInfoSheetVisible(false) }) {
         PostTagActionSection(
             header = {
@@ -285,7 +286,7 @@ internal fun ViewerInfoSheet(
             sheetExtras = PostTagSheetExtras(
                 tagsInitiallyCollapsed = tagsStartCollapsed,
                 scrollToAfterTags = openedAtComments,
-                afterTags = { commentsState?.let { commentsSection(post, it, commentCount, comments.actions, nowEpochMs) } },
+                afterTags = { commentsState?.let { commentsSection(post, it, commentCount, comments.actions, nowEpochMs, commentsCollapsed) { commentsCollapsed = !commentsCollapsed } } },
             ),
         )
     }

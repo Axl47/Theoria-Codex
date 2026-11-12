@@ -13,6 +13,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.dp
@@ -26,6 +27,7 @@ import com.theoriacodex.domain.model.PostComment
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchFacet
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -77,7 +79,7 @@ class CommentsSheetTest {
                     sheetExtras = PostTagSheetExtras(
                         tagsInitiallyCollapsed = collapsed,
                         scrollToAfterTags = scrollToComments,
-                        afterTags = { state?.let { commentsSection(post, it, commentCount(null, it), actions, nowEpochMs = 0L) } },
+                        afterTags = { state?.let { commentsSection(post, it, commentCount(null, it), actions, nowEpochMs = 0L, collapsed = false, onToggleCollapsed = {}) } },
                     ),
                 )
             }
@@ -113,7 +115,7 @@ class CommentsSheetTest {
                         draftQuery = com.theoriacodex.app.search.state.emptySearchQuery(),
                         sheetExtras = PostTagSheetExtras(
                             tagsInitiallyCollapsed = collapsed,
-                            afterTags = { state?.let { commentsSection(post, it, commentCount(null, it), actions, nowEpochMs = 0L) } },
+                            afterTags = { state?.let { commentsSection(post, it, commentCount(null, it), actions, nowEpochMs = 0L, collapsed = false, onToggleCollapsed = {}) } },
                         ),
                     )
                 }
@@ -127,6 +129,38 @@ class CommentsSheetTest {
 
         compose.onNodeWithText("Comments").assertExists()
         compose.onNodeWithText("Artists").assertIsDisplayed()
+    }
+
+    @Test
+    fun `comments list newest first and fold under their header`() {
+        val dated = PostCommentsState(
+            top = CommentList().withPage(
+                CommentPage(listOf(PostComment("old", "a-old", null, "t-old", 1L), PostComment("new", "a-new", null, "t-new", 2L)), null, null),
+            ),
+        )
+        var collapsed by mutableStateOf(false)
+        compose.setContent {
+            MaterialTheme {
+                Box(Modifier.size(360.dp, 480.dp)) {
+                    PostTagActionSection(
+                        post = post,
+                        onAddIncludeTerm = { true }, onAddExcludeTerm = { true }, onRemoveIncludeTerm = {}, onRemoveExcludeTerm = {},
+                        draftQuery = com.theoriacodex.app.search.state.emptySearchQuery(),
+                        sheetExtras = PostTagSheetExtras(
+                            tagsInitiallyCollapsed = true,
+                            afterTags = { commentsSection(post, dated, commentCount(null, dated), actions, 0L, collapsed) { collapsed = !collapsed } },
+                        ),
+                    )
+                }
+            }
+        }
+        val top = { text: String -> compose.onNodeWithText(text).fetchSemanticsNode().positionInRoot.y }
+        assertTrue(top("t-new") < top("t-old"))
+
+        compose.onNode(hasText("Comments") and hasClickAction()).performClick()
+        compose.onNodeWithText("t-new").assertDoesNotExist()
+        compose.onNode(hasText("Comments") and hasClickAction()).performClick()
+        compose.onNodeWithText("t-new").assertIsDisplayed()
     }
 
     @Test

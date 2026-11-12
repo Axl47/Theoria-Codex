@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -78,6 +79,8 @@ internal fun TagPickerChip(
     longPressLabel: String? = null,
     leadingIcon: ImageVector? = null,
     reserveCountSlot: Boolean = true,
+    /** A name-only chip for a row that scrolls or clips: no count, and the name takes its own width up to a cap. */
+    compact: Boolean = false,
     /** Extra state TalkBack reads after the search state, such as "saved". */
     stateSuffix: String? = null,
 ) {
@@ -110,7 +113,7 @@ internal fun TagPickerChip(
         contentColor = tint,
         border = BorderStroke(1.dp, if (neutral) colors.outlineVariant else tint),
     ) {
-        TagChipContent(label, count, state, if (neutral) colors.onSurfaceVariant else tint, leadingIcon, reserveCountSlot)
+        TagChipContent(label, count, state, if (neutral) colors.onSurfaceVariant else tint, leadingIcon, reserveCountSlot && !compact, compact)
     }
 }
 
@@ -129,6 +132,7 @@ private fun TagChipContent(
     countColor: Color,
     leadingIcon: ImageVector?,
     reserveCountSlot: Boolean,
+    compact: Boolean,
 ) {
     Row(
         modifier = Modifier.height(CHIP_HEIGHT).padding(start = 10.dp, end = 8.dp),
@@ -141,7 +145,8 @@ private fun TagChipContent(
         }
         Text(
             label,
-            modifier = Modifier.weight(1f, fill = false),
+            // A weight collapses to zero width inside a row with unbounded width, like the peek.
+            modifier = if (compact) Modifier.widthIn(max = COMPACT_LABEL_MAX_WIDTH) else Modifier.weight(1f, fill = false),
             style = MaterialTheme.typography.labelLarge,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -291,6 +296,7 @@ private fun TrayTerm(term: SearchTerm, excluded: Boolean = false) {
 }
 
 private val CHIP_HEIGHT = 36.dp
+private val COMPACT_LABEL_MAX_WIDTH = 160.dp
 private val TRAY_QUERY_MAX_HEIGHT = 112.dp
 private const val COUNT_SLOT_WIDTH = 26
 private const val DIMMED_ALPHA = 0.38f

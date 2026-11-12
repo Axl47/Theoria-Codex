@@ -4,9 +4,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.ui.draw.drawWithContent
+import com.theoriacodex.app.ui.components.FoldHeader
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
@@ -143,9 +142,9 @@ fun PostTagActionSection(
         val listState = rememberLazyListState(
             initialFirstVisibleItemIndex = if (sheetExtras?.scrollToAfterTags == true && collapsed) AFTER_FOLDED_TAGS_INDEX else 0,
         )
-        val chip: @Composable (SearchTerm) -> Unit = { term ->
+        val chip: @Composable (SearchTerm, Boolean) -> Unit = { term, compact ->
             val isSaved = term.isGeneralPostTag() && (post.id.source to term.value) in saved
-            PostTagChip(term, translations[term.value], countOf(term), editor, isSaved, onFavoriteTagLongPress, savedTags.remove)
+            PostTagChip(term, translations[term.value], countOf(term), editor, isSaved, onFavoriteTagLongPress, savedTags.remove, compact)
         }
         LazyColumn(
             state = listState,
@@ -275,6 +274,7 @@ private fun PostTagChip(
     saved: Boolean,
     onFavoriteLongPress: ((SourceKey, String) -> Unit)?,
     onRemoveSaved: (SourceKey, String) -> Unit,
+    compact: Boolean,
 ) {
     val nativeName = searchTermChipLabel(term, excluded = false)
     val name = translation?.let { "$it ($nativeName)" } ?: nativeName
@@ -290,7 +290,8 @@ private fun PostTagChip(
     }
     TagPickerChip(
         label = postTagChipLabel(term.value, translation),
-        count = count?.let(::compactTagCount),
+        count = count?.takeUnless { compact }?.let(::compactTagCount),
+        compact = compact,
         state = state,
         enabled = editor.canTap(term),
         tapLabel = tagTapLabel(name, state),
@@ -380,7 +381,7 @@ private fun LazyListScope.postTagList(
     groups: List<PostActionTermGroup>,
     expandedGroups: Set<String>,
     onExpandGroup: (String) -> Unit,
-    chip: @Composable (SearchTerm) -> Unit,
+    chip: @Composable (SearchTerm, Boolean) -> Unit,
 ) {
     if (groups.isEmpty()) {
         item(key = "empty") {
@@ -405,7 +406,7 @@ private fun LazyListScope.postTagList(
         val rows = (if (collapsed) group.terms.take(COLLAPSED_TAG_COUNT) else group.terms).tagChipChunks()
         items(rows.size, key = { "row:${group.label}:$it" }, contentType = { "tags" }) { rowIndex ->
             TagChipRow {
-                rows[rowIndex].forEach { term -> chip(term) }
+                rows[rowIndex].forEach { term -> chip(term, false) }
                 if (collapsed && rowIndex == rows.lastIndex) {
                     TextButton(onClick = { onExpandGroup(group.label) }) {
                         Text("+${group.terms.size - COLLAPSED_TAG_COUNT} more")
@@ -416,11 +417,11 @@ private fun LazyListScope.postTagList(
     }
 }
 
-/** After the tags and anything the sheet adds to them, so the sheet opens on content rather than on instructions. */
+/** Closes the open tag list, so it only shows when the tags do. */
 private fun LazyListScope.postTagHint() {
     item(key = "hint") {
         Text(
-            text = "Tap a tag to add it, again to exclude it, and once more to clear it. Hold a tag to save it or unsave it.",
+            text = "Tap to include, exclude, or clear. Hold to save.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 12.dp),
@@ -449,7 +450,7 @@ private fun PostTagQueryTray(
 /** Whether the tag list can be folded away, and whether it is. */
 private class TagFold(val enabled: Boolean, val collapsed: Boolean, val onToggle: () -> Unit)
 
-/** Everything between the actions and the footer: the tags (or their folded peek), what the sheet adds, then the hint. */
+/** Everything between the actions and the footer: the tags (or their folded peek) with their hint, then what the sheet adds. */
 private fun LazyListScope.postTagSections(
     groups: List<PostActionTermGroup>,
     terms: List<SearchTerm>,
@@ -457,44 +458,21 @@ private fun LazyListScope.postTagSections(
     onExpandGroup: (String) -> Unit,
     fold: TagFold,
     sheetExtras: PostTagSheetExtras?,
-    chip: @Composable (SearchTerm) -> Unit,
+    chip: @Composable (SearchTerm, Boolean) -> Unit,
 ) {
-    if (fold.enabled) item(key = "tags-header") { TagsFoldHeader(terms.size, fold.collapsed, fold.onToggle) }
+    if (fold.enabled) item(key = "tags-header") { FoldHeader("Tags", "tags", terms.size.toString(), fold.collapsed, fold.onToggle) }
     if (fold.enabled && fold.collapsed) {
         item(key = "tags-peek") { TagPeekRow(terms.take(PEEK_TAG_COUNT), chip) }
     } else {
         postTagList(groups, expandedGroups, onExpandGroup, chip)
+        if (groups.isNotEmpty()) postTagHint()
     }
     sheetExtras?.afterTags?.invoke(this)
-    if (groups.isNotEmpty()) postTagHint()
-}
-
-/** The tag list's toggle: how many tags there are, and whether they are shown. */
-@Composable
-private fun TagsFoldHeader(count: Int, collapsed: Boolean, onToggle: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .sizeIn(minHeight = 48.dp)
-            .clickable(role = Role.Button, onClickLabel = if (collapsed) "Show tags" else "Hide tags", onClick = onToggle)
-            .semantics(mergeDescendants = true) { stateDescription = if (collapsed) "Collapsed" else "Expanded" },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text("Tags", style = MaterialTheme.typography.titleSmall)
-        Text(
-            text = count.toString(),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 8.dp),
-        )
-        Spacer(Modifier.weight(1f))
-        Icon(if (collapsed) Icons.Default.ExpandMore else Icons.Default.ExpandLess, contentDescription = null)
-    }
 }
 
 /** The first tags on one line that fades out at the edge instead of wrapping; chips stay tappable. */
 @Composable
-private fun TagPeekRow(terms: List<SearchTerm>, chip: @Composable (SearchTerm) -> Unit) {
+private fun TagPeekRow(terms: List<SearchTerm>, chip: @Composable (SearchTerm, Boolean) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -502,7 +480,7 @@ private fun TagPeekRow(terms: List<SearchTerm>, chip: @Composable (SearchTerm) -
             .horizontalScroll(rememberScrollState(), enabled = false),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        terms.forEach { term -> chip(term) }
+        terms.forEach { term -> chip(term, true) }
     }
 }
 

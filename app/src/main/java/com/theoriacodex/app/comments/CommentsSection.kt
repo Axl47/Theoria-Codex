@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.theoriacodex.app.media.MediaRequestFactory
+import com.theoriacodex.app.ui.components.FoldHeader
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostComment
 import com.theoriacodex.domain.model.SourceKey
@@ -40,9 +41,9 @@ private val STAMP_SIZE = 48.dp
 private val REPLY_INDENT = 24.dp
 
 /**
- * A post's comments as items of the info sheet's list: a header with the count, each comment with its
- * replies opened beneath it, and under each list a progress row, a retry, or "More". Adds nothing when the
- * post's state says there is no section ([PostCommentsState.hasSection]).
+ * A post's comments as items of the info sheet's list: a header with the count that folds the rest away,
+ * each comment, newest first, with its replies opened beneath it, and under each list a progress row, a
+ * retry, or "More". Adds nothing when the post's state says there is no section ([PostCommentsState.hasSection]).
  */
 internal fun LazyListScope.commentsSection(
     post: Post,
@@ -50,23 +51,17 @@ internal fun LazyListScope.commentsSection(
     count: CommentCount?,
     actions: PostCommentsActions,
     nowEpochMs: Long,
+    collapsed: Boolean,
+    onToggleCollapsed: () -> Unit,
 ) {
     if (!state.hasSection) return
     val source = post.id.source
     item(key = "comments-header", contentType = "comments-header") {
-        Row(Modifier.padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Comments", style = MaterialTheme.typography.titleSmall)
-            count?.label?.let { label ->
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 8.dp),
-                )
-            }
-        }
+        FoldHeader("Comments", "comments", count?.label, collapsed, onToggleCollapsed, Modifier.padding(top = 8.dp))
     }
-    state.top.comments.forEach { comment ->
+    if (collapsed) return
+    // Dates the source left out sort last, in the order it gave them.
+    state.top.comments.sortedByDescending { it.createdAtEpochMs ?: Long.MIN_VALUE }.forEach { comment ->
         val replies = state.replies[comment.id]
         val expanded = comment.id in state.expandedReplies
         item(key = "comment:${comment.id}", contentType = "comment") {
