@@ -9,6 +9,7 @@ import com.theoriacodex.domain.model.HITOMI_ARTIST_IDENTITY_MAX_CODE_POINTS
 import com.theoriacodex.domain.model.CommentTarget
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.canonicalHitomiArtistIdentity
+import com.theoriacodex.domain.model.parseCommentTarget
 import com.theoriacodex.domain.source.ProtocolFamily
 import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.sources.http.HostUnavailableException
@@ -36,8 +37,15 @@ fun parseExternalPostDeepLink(uri: Uri): ExternalPostDeepLink? {
     return parseExternalPostDeepLink(uri.toString())
 }
 
+/** A post link; a `#comment` fragment on it becomes [ExternalPostDeepLink.comment]. */
 fun parseExternalPostDeepLink(rawUrl: String): ExternalPostDeepLink? {
     val uri = parseExternalUri(rawUrl) ?: return null
+    return parseKnownPostDeepLink(uri)?.withCommentOf(uri)
+}
+
+private fun ExternalPostDeepLink.withCommentOf(uri: ParsedExternalUri) = copy(comment = parseCommentTarget(uri.fragment))
+
+private fun parseKnownPostDeepLink(uri: ParsedExternalUri): ExternalPostDeepLink? {
     postIdDeepLink(SourceKey.PIXIV, parsePixivPostIdFromUri(uri))?.let { return it }
     parseNhentaiPostDeepLink(uri)?.let { return it }
     postIdDeepLink(SourceKey.HITOMI, parseHitomiGalleryIdFromUri(uri))?.let { return it }
@@ -46,6 +54,8 @@ fun parseExternalPostDeepLink(rawUrl: String): ExternalPostDeepLink? {
     postIdDeepLink(SourceKey.RULE34PAHEAL, parseRule34PahealPostIdFromUri(uri))?.let { return it }
     postIdDeepLink(SourceKey.RULE34VIDEO, parseRule34VideoPostIdFromUri(uri))?.let { return it }
     postIdDeepLink(SourceKey.RULE34GEN, parseRule34GenPostIdFromUri(uri))?.let { return it }
+    postIdDeepLink(SourceKey.DANBOORU, parseDanbooruPostId(uri, DANBOORU_HOSTS))?.let { return it }
+    postIdDeepLink(SourceKey.AIBOORU, parseDanbooruPostId(uri, AIBOORU_HOSTS))?.let { return it }
     return postIdDeepLink(SourceKey.GELBOORU, parseGelbooruPostIdFromUri(uri))
 }
 
@@ -145,6 +155,9 @@ private fun parseBooruQueryId(
     if (uri.queryParameters["s"]?.lowercase() != section) return null
     return uri.queryParameters["id"]?.takeIf(String::isDigitsOnly)
 }
+
+private fun parseDanbooruPostId(uri: ParsedExternalUri, hosts: Set<String>): String? =
+    if (uri.isHttpUrlFor(hosts)) DANBOORU_POST_PATH.matchEntire(uri.encodedPath)?.groupValues?.get(1) else null
 
 private fun parseIwaraVideoIdFromUri(uri: ParsedExternalUri): String? {
     val scheme = uri.scheme
@@ -250,6 +263,7 @@ private fun parseExternalUri(rawUrl: String): ParsedExternalUri? {
         host = host,
         encodedPath = path,
         queryParameters = queryParameters,
+        fragment = parsed.fragment,
     )
 }
 
@@ -272,6 +286,8 @@ private data class ParsedExternalUri(
     val host: String,
     val encodedPath: String,
     val queryParameters: Map<String, String>,
+    /** Without the `#`, decoded; null when the link has none. */
+    val fragment: String?,
 )
 
 private fun String.isDigitsOnly(): Boolean {
@@ -283,6 +299,9 @@ private const val MAX_HITOMI_ARTIST_ENCODED_LENGTH = HITOMI_ARTIST_IDENTITY_MAX_
 private val HITOMI_HOSTS = setOf("hitomi.la", "www.hitomi.la")
 private val GELBOORU_HOSTS = setOf("gelbooru.com", "www.gelbooru.com")
 private val RULE34XXX_HOSTS = setOf("rule34.xxx", "www.rule34.xxx")
+private val DANBOORU_HOSTS = setOf("danbooru.donmai.us")
+private val AIBOORU_HOSTS = setOf("aibooru.online")
+private val DANBOORU_POST_PATH = Regex("^/posts/(\\d+)/?$")
 private val HITOMI_READER_PATH = Regex("^/reader/(\\d+)\\.html/?$")
 private val HITOMI_GALLERY_PATH = Regex(
     "^/(?:anime|cg|doujinshi|manga|artistcg|gamecg|imageset)/[^/]+-(\\d+)\\.html/?$",
@@ -302,7 +321,7 @@ fun parseCustomSitePostDeepLink(rawUrl: String, sites: List<CustomSiteSummary>):
         val installPath = base.rawPath.orEmpty().trimEnd('/')
         if (!uri.encodedPath.startsWith(installPath)) return@firstNotNullOfOrNull null
         familyPostId(site.family, uri, uri.encodedPath.removePrefix(installPath))
-            ?.let { ExternalPostDeepLink(source = source, sourceLabel = site.label, postId = it) }
+            ?.let { ExternalPostDeepLink(source = source, sourceLabel = site.label, postId = it, comment = parseCommentTarget(uri.fragment)) }
     }
 }
 
@@ -335,7 +354,7 @@ private fun familyPostId(family: ProtocolFamily?, uri: ParsedExternalUri, pathUn
             uri.queryParameters["s"]?.lowercase() == "view" &&
             it.isDigitsOnly()
     }
-    ProtocolFamily.DANBOORU -> Regex("^/posts/(\\d+)/?$").matchEntire(pathUnderInstall)?.groupValues?.get(1)
+    ProtocolFamily.DANBOORU -> DANBOORU_POST_PATH.matchEntire(pathUnderInstall)?.groupValues?.get(1)
     null -> null
 }
 

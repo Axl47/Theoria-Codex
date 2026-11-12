@@ -4,6 +4,7 @@ import com.theoriacodex.sources.http.HostUnavailableException
 import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.model.CommentTarget
 import com.theoriacodex.domain.model.SourceKey
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -38,6 +39,31 @@ class ExternalPostDeepLinksTest {
         ).forEach { (url, source, postId) ->
             assertDeepLink(url = url, source = source, postId = postId)
         }
+    }
+
+    @Test
+    fun `parses Danbooru and AIBooru post links`() {
+        assertDeepLink("https://danbooru.donmai.us/posts/123", SourceKey.DANBOORU, "123")
+        assertDeepLink("https://danbooru.donmai.us/posts/123/?q=cat", SourceKey.DANBOORU, "123")
+        assertDeepLink("https://aibooru.online/posts/9", SourceKey.AIBOORU, "9")
+        listOf(
+            "https://danbooru.donmai.us/posts?tags=cat",
+            "https://danbooru.donmai.us/posts/abc",
+            "https://aibooru.online/posts/9/edit",
+            "https://danbooru.example.com/posts/9",
+        ).forEach { assertNull(parseExternalPostDeepLink(it)) }
+    }
+
+    @Test
+    fun `reads the comment a link's fragment names`() {
+        fun comment(url: String) = parseExternalPostDeepLink(url)?.comment
+
+        assertEquals(CommentTarget("77"), comment("https://gelbooru.com/index.php?page=post&s=view&id=1#c77"))
+        assertEquals(CommentTarget("5"), comment("https://danbooru.donmai.us/posts/1#comment_5"))
+        assertEquals(CommentTarget("9", parentId = "4"), comment("https://www.pixiv.net/en/artworks/2#theoria-comment=4/9"))
+        assertEquals(CommentTarget("3"), comment("https://nhentai.net/g/123/#theoria-comment=3"))
+        assertNull(comment("https://nhentai.net/g/123/#other"))
+        assertNull(comment("https://nhentai.net/g/123/"))
     }
 
     @Test

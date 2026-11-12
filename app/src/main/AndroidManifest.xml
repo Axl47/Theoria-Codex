@@ -80,6 +80,8 @@
                 <data android:host="rule34.paheal.net" />
                 <data android:host="rule34video.com" />
                 <data android:host="rule34gen.com" />
+                <data android:host="danbooru.donmai.us" />
+                <data android:host="aibooru.online" />
                 <data android:pathPrefix="/" />
             </intent-filter>
 

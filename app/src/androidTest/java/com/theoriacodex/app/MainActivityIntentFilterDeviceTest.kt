@@ -36,6 +36,8 @@ class MainActivityIntentFilterDeviceTest {
             "rule34.paheal.net",
             "rule34video.com",
             "rule34gen.com",
+            "danbooru.donmai.us",
+            "aibooru.online",
         )
 
         listOf("http", "https").forEach { scheme ->
