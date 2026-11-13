@@ -3,7 +3,11 @@ package com.theoriacodex.domain.model
 data class DateRange(
     val fromEpochMs: Long?,
     val toEpochMs: Long?,
-)
+) {
+    /** A post with no known date cannot be shown to be in range, so it is outside every range. */
+    operator fun contains(epochMs: Long?): Boolean =
+        epochMs != null && epochMs >= (fromEpochMs ?: Long.MIN_VALUE) && epochMs <= (toEpochMs ?: Long.MAX_VALUE)
+}
 
 enum class SearchFacet {
     TAG,

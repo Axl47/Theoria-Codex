@@ -77,7 +77,7 @@ fun filterSearchResults(
 ): List<Post> {
     return results.filter { post ->
         (!filters.animatedOnly || matchesAnimatedFilter(post)) &&
-            matchesDateRange(post, filters.dateRange) &&
+            (filters.dateRange == null || post.createdAtEpochMs in filters.dateRange) &&
             matchesAnimatedDurationFilter(
                 post,
                 filters,
@@ -88,13 +88,6 @@ fun filterSearchResults(
             (!filters.hideSaved || post.id !in savedPostIds || post.id in retainedLikedPostIds) &&
             (!filters.hideWatched || post.id !in watchedPostIds || post.id in retainedLikedPostIds)
     }
-}
-
-/** A post with no known date cannot be shown to be in range, so a date filter hides it. */
-private fun matchesDateRange(post: Post, range: DateRange?): Boolean {
-    if (range == null) return true
-    val created = post.createdAtEpochMs ?: return false
-    return created >= (range.fromEpochMs ?: Long.MIN_VALUE) && created <= (range.toEpochMs ?: Long.MAX_VALUE)
 }
 
 /** The built-in "Animated" saved "or" group for Gelbooru-engine sites, which tag animation several ways. */

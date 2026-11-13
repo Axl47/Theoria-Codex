@@ -5,6 +5,7 @@ import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.distinctByFile
 import com.theoriacodex.domain.model.normalizedForMode
@@ -210,7 +211,7 @@ class UnifiedSearchOrchestrator(
             preparedQueries[source] = if (clientSideExclude) {
                 prepared.copy(excludeTerms = sourceBaseQuery.excludeTerms)
             } else prepared
-            val page = searchSource(adapter, prepared, pageToken)
+            val page = searchSource(adapter, prepared, pageToken).inDateRange(sourceBaseQuery.dateRange)
             if (clientSideExclude) {
                 val hydrated = listOf(page).withSearchMetadata(adapter).single()
                 hydrated.copy(items = applyClientSideExcludeFilter(hydrated.items, sourceBaseQuery.excludeTags))
@@ -354,6 +355,13 @@ class UnifiedSearchOrchestrator(
             else -> SourceFailureReason.UNKNOWN
         }
     }
+
+    /**
+     * Drops posts outside the search's dates before sites are merged. Most sites ignore the range, and merging keeps
+     * one copy of each file: an out-of-range copy kept there would hide the in-range copy another site holds.
+     */
+    private fun Page<Post>.inDateRange(range: DateRange?): Page<Post> =
+        if (range == null) this else copy(items = items.filter { post -> post.createdAtEpochMs in range })
 
     private fun applyClientSideExcludeFilter(
         posts: List<Post>,

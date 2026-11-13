@@ -7,6 +7,7 @@ import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -448,6 +449,30 @@ class UnifiedSearchOrchestratorTest {
         )
 
         assertEquals(listOf("d1", "g1", "d2"), result.items.map { it.id.sourcePostId })
+    }
+
+    @Test
+    fun `a date search keeps the copy of a file that is in range`() = runTest {
+        val mirrored = "0123456789abcdef0123456789abcdef"
+        val orchestrator = UnifiedSearchOrchestrator(
+            mapOf(
+                SourceKey.DANBOORU to FakeAdapter(
+                    SourceKey.DANBOORU, supportedCapabilities(),
+                    listOf(post(SourceKey.DANBOORU, "early").copy(contentHash = mirrored, createdAtEpochMs = 10)),
+                ),
+                SourceKey.GELBOORU to FakeAdapter(
+                    SourceKey.GELBOORU, supportedCapabilities(),
+                    listOf(post(SourceKey.GELBOORU, "inRange").copy(contentHash = mirrored, createdAtEpochMs = 60)),
+                ),
+            ),
+        )
+
+        val result = orchestrator.search(
+            sampleQuery().copy(dateRange = DateRange(fromEpochMs = 50, toEpochMs = null)),
+            setOf(SourceKey.DANBOORU, SourceKey.GELBOORU), emptyMap(), emptyMap(),
+        )
+
+        assertEquals(listOf("inRange"), result.items.map { it.id.sourcePostId })
     }
 
     @Test
