@@ -8,6 +8,7 @@ import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.distinctByFile
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 import com.theoriacodex.domain.query.QueryHash
 
@@ -305,8 +306,7 @@ object SearchStateReducer {
         change: SearchStateChange.AppendPage,
     ): SearchReduction {
         if (!state.isCurrent(change.requestId)) return SearchReduction(state)
-        val combined = (state.content.results + change.results)
-            .distinctBy { post -> post.id }
+        val combined = (state.content.results + change.results).distinctByFile()
         val mergedStatuses = (state.content.statuses + change.statuses)
             .associateBy { status -> status.source }
             .values

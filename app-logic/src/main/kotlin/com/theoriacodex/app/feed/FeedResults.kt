@@ -2,15 +2,19 @@ package com.theoriacodex.app.feed
 
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.distinctByFile
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 
-/** Keeps accepted order while admitting new canonical IDs and fresher payloads for existing IDs. */
+/**
+ * Keeps accepted order while admitting new canonical IDs and fresher payloads for existing IDs. A new ID whose file
+ * the feed already shows from another site is left out, so the first copy keeps its place.
+ */
 fun mergeFeedPosts(existing: List<Post>, incoming: List<Post>): List<Post> {
     if (incoming.isEmpty()) return existing
     val byId = LinkedHashMap(existing.associateBy(Post::id))
     incoming.forEach { post -> byId[post.id] = post }
-    return byId.values.toList()
+    return byId.values.distinctByFile()
 }
 
 /** Map membership admits a request; a null value retries the first page after a root failure. */

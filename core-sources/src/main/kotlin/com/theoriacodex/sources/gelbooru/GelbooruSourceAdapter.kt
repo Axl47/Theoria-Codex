@@ -24,6 +24,7 @@ import com.theoriacodex.domain.model.PostComment
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SortMode
+import com.theoriacodex.domain.model.contentHashOrNull
 import com.theoriacodex.domain.tags.decodeHtmlEntities
 import com.theoriacodex.sources.common.ambiguousDurationFieldMs
 import com.theoriacodex.sources.common.asStringOrNull
@@ -420,6 +421,8 @@ private class GelbooruFamilyAdapter(
             durationMs = parseDurationMs(raw),
             creatorProfile = creator?.takeIf { site.creatorPosts },
             commentHint = raw.gelbooruCommentHint(),
+            // gelbooru.com names the file hash `md5`; Gelbooru 0.2 forks name it `hash`.
+            contentHash = contentHashOrNull(raw.stringValue("md5") ?: raw.stringValue("hash")),
         )
     }
 

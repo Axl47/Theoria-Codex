@@ -24,6 +24,7 @@ import com.theoriacodex.domain.model.PostComment
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SortMode
+import com.theoriacodex.domain.model.contentHashOrNull
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.query.SearchTermLimit
 import com.theoriacodex.sources.common.autocompleteTagCounts
@@ -277,6 +278,7 @@ class DanbooruSourceAdapter(
             createdAtEpochMs = parseOffsetDateTimeMs(raw.stringValue("created_at")),
             durationMs = mediaAsset?.durationFieldMs("duration", multiplier = 1_000L),
             commentHint = raw.danbooruCommentHint(),
+            contentHash = contentHashOrNull(raw.stringValue("md5")),
             creatorProfile = artistTag?.let { tag ->
                 CreatorProfile(
                     source = sourceKey,

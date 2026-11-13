@@ -13,6 +13,7 @@ import com.theoriacodex.domain.coroutines.mapConcurrent
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.distinctByFile
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 import kotlinx.coroutines.CancellationException
@@ -27,7 +28,7 @@ internal data class SavedSearchBranch(
     val requestError: String? = null,
 ) : LiveCodexBranch {
     override val id get() = entry.id
-    override val posts get() = parts.flatMap { it.posts }.distinctBy(Post::id)
+    override val posts get() = parts.flatMap { it.posts }.distinctByFile()
     override val canLoadMore get() = requestError == null && parts.any { it.canLoadMore }
     override val error get() = requestError ?: parts.mapNotNull { it.error }.takeIf { it.isNotEmpty() }?.joinToString("; ")
 }
@@ -91,7 +92,7 @@ internal class SavedSearchFeedLoader(
         return if (!part.started) {
             when (val result = coordinator.executeInitial(part.query, part.scope)) {
                 is SearchExecutionResult.Success -> part.copy(
-                    posts = result.posts.distinctBy(Post::id), continuation = result.continuation,
+                    posts = result.posts.distinctByFile(), continuation = result.continuation,
                     started = true, failures = failures(emptyMap(), result.statuses), requestError = null,
                 )
                 is SearchExecutionResult.Failure -> part.copy(
@@ -131,7 +132,7 @@ internal class SavedSearchFeedLoader(
                         failedSources = before.failedSources - retriedSource,
                     )
                 }
-                copy(posts = (posts + result.posts).distinctBy(Post::id), continuation = next,
+                copy(posts = (posts + result.posts).distinctByFile(), continuation = next,
                     failures = failures(failures, result.statuses), requestError = null)
             }
         }

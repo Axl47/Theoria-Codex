@@ -5,7 +5,9 @@ import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.distinctByFile
 import com.theoriacodex.domain.model.normalizedForMode
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
@@ -133,7 +135,9 @@ class UnifiedSearchOrchestrator(
             if (combined.statuses.any { it.state == SourceRunState.SUCCESS }) onPartial(combined)
             val latest = answered.first { answers -> answers.size > included.size }
             val lateItems = latest.drop(included.size).flatMap { (_, result) -> result.getOrNull()?.items.orEmpty() }
-            combined = combineResults(latest, hardExcluded, weights, preparedQueries, items = combined.items + lateItems)
+            combined = combineResults(
+                latest, hardExcluded, weights, preparedQueries, items = (combined.items + lateItems).distinctByFile(),
+            )
             included = latest
         }
         return combined
@@ -207,7 +211,7 @@ class UnifiedSearchOrchestrator(
             preparedQueries[source] = if (clientSideExclude) {
                 prepared.copy(excludeTerms = sourceBaseQuery.excludeTerms)
             } else prepared
-            val page = searchSource(adapter, prepared, pageToken)
+            val page = searchSource(adapter, prepared, pageToken).inDateRange(sourceBaseQuery.dateRange)
             if (clientSideExclude) {
                 val hydrated = listOf(page).withSearchMetadata(adapter).single()
                 hydrated.copy(items = applyClientSideExcludeFilter(hydrated.items, sourceBaseQuery.excludeTags))
@@ -292,7 +296,8 @@ class UnifiedSearchOrchestrator(
             accumulators[selected] = accumulators.getValue(selected) - 1.0
         }
 
-        return merged
+        // Sites that mirror each other list the same files; the copy from the earlier interleaved source stays.
+        return merged.distinctByFile()
     }
 
     private fun mergeBranches(
@@ -350,6 +355,13 @@ class UnifiedSearchOrchestrator(
             else -> SourceFailureReason.UNKNOWN
         }
     }
+
+    /**
+     * Drops posts outside the search's dates before sites are merged. Most sites ignore the range, and merging keeps
+     * one copy of each file: an out-of-range copy kept there would hide the in-range copy another site holds.
+     */
+    private fun Page<Post>.inDateRange(range: DateRange?): Page<Post> =
+        if (range == null) this else copy(items = items.filter { post -> post.createdAtEpochMs in range })
 
     private fun applyClientSideExcludeFilter(
         posts: List<Post>,
