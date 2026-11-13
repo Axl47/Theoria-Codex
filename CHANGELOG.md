@@ -5,6 +5,7 @@
 ### Added
 
 - Booru posts have "Open original post" in the Viewer's More menu, which goes to the page the booru says the file came from, usually the artist's own Pixiv or X post. It opens in the Viewer when that site is one of your sources, and in the browser otherwise.
+- App lock, in Settings under Storage & app. With it on, the app asks for your fingerprint, face or screen lock when you open it and again when you come back after more than a minute away, and Android no longer shows its screen in the recent-apps view.
 
 ### Changed
 
