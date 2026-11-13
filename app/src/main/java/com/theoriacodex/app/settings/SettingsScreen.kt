@@ -226,6 +226,8 @@ private fun SettingsHomeGroups(
             onClick = { open(SettingsPage.STORAGE) },
         )
         SettingsRowDivider()
+        AppLockRow()
+        SettingsRowDivider()
         SettingsRow(
             "What's new",
             if (state.changelogLoading) "Loading release history..." else "Changelog for available pre-releases",

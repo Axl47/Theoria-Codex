@@ -7,6 +7,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.theoriacodex.app.applock.AppLockGate
 import com.theoriacodex.app.appshell.AppShellViewModel
 import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.data.storage.ApplicationDataState
@@ -40,24 +41,26 @@ fun TheoriaApp(
     val containerState by containerOwner.appContainerState.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     LaunchedEffect(containerOwner) { containerOwner.startAppContainer() }
-    when (val current = containerState) {
-        is ApplicationDataState.Ready -> TheoriaAppContent(
-            appContainer = current.value,
-            viewerSessionOwner = viewerSessionOwner,
-            appShellOwner = appShellOwner,
-            incomingUri = incomingUri,
-            onIncomingUriConsumed = onIncomingUriConsumed,
-        )
-        is ApplicationDataState.Failed -> AppContainerStartupSurface(
-            failed = true,
-            onRetry = {
-                scope.launch {
-                    runCatchingPreservingCancellation { containerOwner.retryAppContainer() }
-                }
-            },
-        )
-        ApplicationDataState.Loading,
-        ApplicationDataState.NotStarted,
-        -> AppContainerStartupSurface(failed = false, onRetry = {})
+    AppLockGate {
+        when (val current = containerState) {
+            is ApplicationDataState.Ready -> TheoriaAppContent(
+                appContainer = current.value,
+                viewerSessionOwner = viewerSessionOwner,
+                appShellOwner = appShellOwner,
+                incomingUri = incomingUri,
+                onIncomingUriConsumed = onIncomingUriConsumed,
+            )
+            is ApplicationDataState.Failed -> AppContainerStartupSurface(
+                failed = true,
+                onRetry = {
+                    scope.launch {
+                        runCatchingPreservingCancellation { containerOwner.retryAppContainer() }
+                    }
+                },
+            )
+            ApplicationDataState.Loading,
+            ApplicationDataState.NotStarted,
+            -> AppContainerStartupSurface(failed = false, onRetry = {})
+        }
     }
 }
