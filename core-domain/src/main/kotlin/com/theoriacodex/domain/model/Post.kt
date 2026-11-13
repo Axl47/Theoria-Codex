@@ -108,10 +108,14 @@ private fun Post.fileUrls(): Sequence<String> = sequence {
     }
 }
 
-/** A path segment token of exactly 32 hex digits; longer hex runs (SHA-256 names) and query strings never count. */
+/**
+ * Exactly 32 hex digits in the file name or its folder. Longer hex runs (SHA-1 and SHA-256 names), query strings and
+ * tokens deeper in the path (signed download links such as `/get_file/1/<token>/123/123_720p.mp4/`) never count.
+ */
 private fun md5InUrlPath(url: String): String? {
     val path = url.substringBefore('?').substringBefore('#').substringAfter("://").substringAfter('/', "")
-    return MD5_IN_PATH.find(path)?.value?.lowercase()
+    return path.split('/').filter(String::isNotEmpty).takeLast(2).asReversed()
+        .firstNotNullOfOrNull { segment -> MD5_IN_PATH.find(segment)?.value?.lowercase() }
 }
 
 private val MD5_IN_PATH = Regex("(?<![0-9a-fA-F])[0-9a-fA-F]{32}(?![0-9a-fA-F])")
