@@ -46,6 +46,7 @@ class FileHashTest {
         assertNull(post(full = "https://x.test/images/${MD5.drop(1)}.jpg").fileHash)
         assertNull(post(full = "https://x.test/image.jpg?token=$MD5").fileHash)
         assertNull(post(full = "https://$MD5.x.test/image.jpg").fileHash)
+        assertNull(post(full = "https://rule34video.com/get_file/47/$MD5/3089000/3089604/3089604_720p.mp4/").fileHash)
         assertNull(post().fileHash)
     }
 
