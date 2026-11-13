@@ -204,9 +204,8 @@ private fun ViewerLoadedScreen(
     }
     if (uiState.controls.metadataVisible && !inPictureInPicture) {
         ViewerInfoSheet(
-            selection, controls, creatorBrowsingSources, saveToCodexQuery, tagVideoCountProvider, fetchTagVideoCounts,
-            onAction, onOpenInBrowser, onOpenOriginalPost, onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress,
-            onGoToSearch, onOpenCreatorFallback,
+            selection, controls, creatorBrowsingSources, saveToCodexQuery, tagVideoCountProvider, fetchTagVideoCounts, onAction,
+            onOpenInBrowser, onOpenOriginalPost, onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, onGoToSearch, onOpenCreatorFallback,
             liked = selection.post.id in likedPostIds,
             comments = comments,
         )
