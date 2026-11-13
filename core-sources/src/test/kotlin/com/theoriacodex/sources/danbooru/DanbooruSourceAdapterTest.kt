@@ -59,6 +59,7 @@ class DanbooruSourceAdapterTest {
         val http = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(200, """
                 {"id":7,"created_at":"2026-11-06T19:04:09.830-05:00","file_ext":"mp4","md5":"0123456789ABCDEF0123456789abcdef",
+                 "pixiv_id":98214188,"source":"https://i.pximg.net/img-original/img/2022/05/08/23/40/37/98214188_p0.jpg",
                  "file_url":"$CDN/original/7.mp4","large_file_url":"$CDN/original/7.mp4",
                  "preview_file_url":"$CDN/180x180/7.jpg","tag_string":"1girl blue_hair",
                  "tag_string_artist":"some_artist other_artist",
@@ -80,6 +81,7 @@ class DanbooruSourceAdapterTest {
         assertEquals(12_500L, post.durationMs)
         assertEquals("https://danbooru.donmai.us/posts/7", post.pageUrl)
         assertEquals("0123456789abcdef0123456789abcdef", post.contentHash)
+        assertEquals("https://www.pixiv.net/artworks/98214188", post.originUrl)
     }
 
     @Test

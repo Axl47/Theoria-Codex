@@ -36,6 +36,7 @@ import com.theoriacodex.sources.common.intValue
 import com.theoriacodex.sources.common.isSuccessful
 import com.theoriacodex.sources.common.longValue
 import com.theoriacodex.sources.common.mimeFromUrlOrExt
+import com.theoriacodex.sources.common.originUrlOrNull
 import com.theoriacodex.sources.common.optionalJsonArray
 import com.theoriacodex.sources.common.optionalJsonObject
 import com.theoriacodex.sources.common.parseJsonArray
@@ -279,6 +280,7 @@ class DanbooruSourceAdapter(
             durationMs = mediaAsset?.durationFieldMs("duration", multiplier = 1_000L),
             commentHint = raw.danbooruCommentHint(),
             contentHash = contentHashOrNull(raw.stringValue("md5")),
+            originUrl = originUrlOrNull(raw.stringValue("source"), raw.longValue("pixiv_id")),
             creatorProfile = artistTag?.let { tag ->
                 CreatorProfile(
                     source = sourceKey,

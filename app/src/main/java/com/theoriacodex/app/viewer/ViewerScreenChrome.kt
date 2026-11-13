@@ -329,7 +329,10 @@ internal fun ViewerInfoSheet(
     AdaptiveViewerInfo(onDismiss = { controls.setInfoSheetVisible(false) }) {
         PostTagActionSection(
             header = {
-                ViewerInfoActions(selection, liked, controls, creatorBrowsingSources, onAction, onOpenInBrowser, onGoToSearch, onOpenCreatorFallback)
+                ViewerInfoActions(
+                    selection, liked, controls, creatorBrowsingSources, onAction, onOpenInBrowser, comments.onOpenUrl,
+                    onGoToSearch, onOpenCreatorFallback,
+                )
             },
             post = post,
             tagVideoCountProvider = tagVideoCountProvider,
@@ -381,6 +384,7 @@ private fun ViewerInfoActions(
     creatorBrowsingSources: Set<SourceKey>,
     onAction: (ViewerAction) -> Unit,
     onOpenInBrowser: (Post) -> Unit,
+    onOpenUrl: (String) -> Unit,
     onGoToSearch: () -> Unit,
     onOpenCreatorFallback: ((Post) -> Unit)?,
 ) {
@@ -411,6 +415,7 @@ private fun ViewerInfoActions(
                 otherCreators = creators.drop(1),
                 onOpenCreator = ::openCreator,
                 onGoToSearch = { closeThen { controls.setPlaybackEnabled(false); onGoToSearch() } },
+                onOpenOriginalPost = post.originUrl?.let { url -> { closeThen { onOpenUrl(url) } } },
                 onOpenInBrowser = if (post.pageUrl.isNullOrBlank()) null else ({ closeThen { onOpenInBrowser(post) } }),
             )
         }
@@ -433,6 +438,7 @@ private fun ViewerInfoMoreActions(
     otherCreators: List<CreatorProfileAction>,
     onOpenCreator: (CreatorProfileAction) -> Unit,
     onGoToSearch: () -> Unit,
+    onOpenOriginalPost: (() -> Unit)?,
     onOpenInBrowser: (() -> Unit)?,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -443,6 +449,7 @@ private fun ViewerInfoMoreActions(
                 DropdownMenuItem(text = { Text(creator.label) }, onClick = { onOpenCreator(creator) })
             }
             DropdownMenuItem(text = { Text("Go to Search") }, onClick = onGoToSearch)
+            onOpenOriginalPost?.let { open -> DropdownMenuItem(text = { Text("Open original post") }, onClick = open) }
             onOpenInBrowser?.let { open -> DropdownMenuItem(text = { Text("Open in browser") }, onClick = open) }
         }
     }

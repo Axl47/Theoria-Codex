@@ -637,6 +637,19 @@ internal class TheoriaShell(
         navReady = true
     }
 
+    /**
+     * Opens a link tapped inside the app: a post on a site the app can browse opens in the Viewer, anything else in
+     * the browser. Unlike a shared link it never offers to set up a site.
+     */
+    fun openLink(url: String) {
+        val post = parseExternalPostDeepLink(url) ?: parseCustomSitePostDeepLink(url, container.customSites.sites.value)
+        if (post == null || post.source !in sources.availableSources.value) {
+            openInBrowser(appContext, url)
+        } else {
+            scope.launch { openExternalPost(post) }
+        }
+    }
+
     /** Opens a shared link as a creator profile or a one-post Viewer session, or says why it cannot. */
     suspend fun openExternalContent(uri: Uri) {
         val customSites = container.customSites.sites.value
