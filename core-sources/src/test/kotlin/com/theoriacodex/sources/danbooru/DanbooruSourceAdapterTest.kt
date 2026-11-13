@@ -155,6 +155,21 @@ class DanbooruSourceAdapterTest {
         assertEquals(emptyList<String>(), post.canonicalTags)
     }
 
+    @Test
+    fun `a file hash finds the post through an md5 search`() = runTest {
+        val md5 = "0123456789abcdef0123456789abcdef"
+        val http = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(200, """[{"id":7,"md5":"$md5","file_url":"$CDN/original/01/23/$md5.jpg"}]""")
+        }
+
+        val post = danbooru(http).findByFileHash(md5)
+
+        assertEquals("7", post?.id?.sourcePostId)
+        assertEquals("md5:$md5", http.lastGet?.query?.get("tags"))
+        http.nextGetResponse = SourceHttpResponse(200, "[]")
+        assertNull(danbooru(http).findByFileHash(md5))
+    }
+
     private fun danbooru(http: FakeHttpClient) = DanbooruSourceAdapter(DanbooruSite.DANBOORU, http)
 
     /** A full provider page with ids 40 down to 1, so a next page exists. */

@@ -5,6 +5,7 @@ import com.google.gson.JsonObject
 import com.theoriacodex.domain.adapter.AccountProfileSourceAdapter
 import com.theoriacodex.domain.adapter.CommentsSourceAdapter
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
+import com.theoriacodex.domain.adapter.FileHashLookupSourceAdapter
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.RelatedPostsSourceAdapter
@@ -84,7 +85,7 @@ fun GelbooruSourceAdapter(
  * creator is a site account (post uploaders and commenters alike), so account pages are universal.
  */
 interface GelbooruFamilySourceAdapter :
-    SourceAdapter, TagCountLookupSourceAdapter, CommentsSourceAdapter, AccountProfileSourceAdapter
+    SourceAdapter, TagCountLookupSourceAdapter, CommentsSourceAdapter, AccountProfileSourceAdapter, FileHashLookupSourceAdapter
 
 /** Speaks the DAPI for one [GelbooruSite]; every search pages by `pid` in fixed 40-post pages. */
 private class GelbooruFamilyAdapter(
@@ -278,6 +279,8 @@ private class GelbooruFamilyAdapter(
         if (creator.source != sourceKey || !site.favoritesList || profileId == null) return canonicalPostPage(emptyList(), null)
         return searchPosts("fav:$profileId", pageToken)
     }
+
+    override suspend fun findByFileHash(md5: String): Post? = searchPosts("md5:$md5", pageToken = null).items.firstOrNull()
 
     private suspend fun searchPosts(tags: String, pageToken: String?): Page<Post> {
         val pageIndex = pageToken?.toIntOrNull()?.coerceAtLeast(0) ?: 0

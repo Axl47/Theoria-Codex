@@ -57,6 +57,16 @@ interface AccountProfileSourceAdapter {
     suspend fun accountPosts(creator: CreatorProfile, feed: AccountFeed, pageToken: String?): Page<Post>
 }
 
+/**
+ * Optional lookup of a post by its original file's MD5 ([com.theoriacodex.domain.model.fileHash]), which the Viewer uses
+ * to find one file on the user's other sites. The Danbooru and Gelbooru families, custom sites included, answer it
+ * with an `md5:` search. Sources without such a search term leave it out.
+ */
+interface FileHashLookupSourceAdapter {
+    /** This site's post holding the file with lowercase [md5], or null when it has none. Failures throw. */
+    suspend fun findByFileHash(md5: String): Post?
+}
+
 /** Candidate budget; presentation removes already-visible posts before choosing its smaller shelf. */
 const val MAX_RELATED_POST_CANDIDATES = 30
 
