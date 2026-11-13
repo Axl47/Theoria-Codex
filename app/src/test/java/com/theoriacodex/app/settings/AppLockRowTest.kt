@@ -1,8 +1,8 @@
 package com.theoriacodex.app.settings
 
 import android.app.Application
+import android.app.KeyguardManager
 import android.content.Context
-import android.hardware.biometrics.BiometricManager
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -12,14 +12,14 @@ import com.theoriacodex.app.applock.AppLockViewModel
 import com.theoriacodex.app.applock.appLockViewModel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import org.robolectric.shadow.api.Shadow
-import org.robolectric.shadows.ShadowBiometricManager
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowToast
 
 /** A device with no screen lock is the case where the row must neither lock nor trap its owner. */
@@ -28,12 +28,11 @@ import org.robolectric.shadows.ShadowToast
 class AppLockRowTest {
     @get:Rule val composeRule = createComposeRule()
 
+    private val keyguard =
+        shadowOf(ApplicationProvider.getApplicationContext<Context>().getSystemService(KeyguardManager::class.java))
+
     @Before
-    fun removeScreenLock() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        Shadow.extract<ShadowBiometricManager>(context.getSystemService(BiometricManager::class.java))
-            .setCanAuthenticate(false)
-    }
+    fun removeScreenLock() = keyguard.setIsDeviceSecure(false)
 
     @Test
     fun `without a screen lock the app lock stays off and says why`() {
@@ -55,6 +54,17 @@ class AppLockRowTest {
         composeRule.onNodeWithText("App lock").performClick()
 
         composeRule.runOnIdle { assertFalse(lock.enabled) }
+    }
+
+    @Test
+    fun `with a screen lock set the lock stays on until its owner is confirmed`() {
+        keyguard.setIsDeviceSecure(true)
+        val lock = showRow()
+        composeRule.runOnIdle { lock.update(true) }
+
+        composeRule.onNodeWithText("App lock").performClick()
+
+        composeRule.runOnIdle { assertTrue(lock.enabled) }
     }
 
     private fun showRow(): AppLockViewModel {

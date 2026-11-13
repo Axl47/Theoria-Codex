@@ -1,6 +1,7 @@
 package com.theoriacodex.app.applock
 
 import android.app.Activity
+import android.app.KeyguardManager
 import android.app.Application
 import android.content.Context
 import android.hardware.biometrics.BiometricManager
@@ -167,10 +168,18 @@ internal enum class DeviceOwnerCheck { CONFIRMED, CANCELLED, NO_SCREEN_LOCK }
 private const val OWNER_AUTHENTICATORS =
     BiometricManager.Authenticators.BIOMETRIC_WEAK or BiometricManager.Authenticators.DEVICE_CREDENTIAL
 
-/** Asks whoever holds the device to prove they own it, with a biometric or the screen lock. */
+/**
+ * Asks whoever holds the device to prove they own it, with a biometric or the screen lock. Only a device with no
+ * screen lock at all reports [DeviceOwnerCheck.NO_SCREEN_LOCK]; a prompt that cannot be shown right now counts as
+ * cancelled, so the lock holds and can be tried again.
+ */
 internal fun Activity?.confirmDeviceOwner(onResult: (DeviceOwnerCheck) -> Unit) {
-    val canAsk = this?.getSystemService(BiometricManager::class.java)?.canAuthenticate(OWNER_AUTHENTICATORS)
-    if (this == null || canAsk != BiometricManager.BIOMETRIC_SUCCESS) {
+    val keyguard = this?.getSystemService(KeyguardManager::class.java)
+    if (this == null || keyguard == null) {
+        onResult(DeviceOwnerCheck.CANCELLED)
+        return
+    }
+    if (!keyguard.isDeviceSecure) {
         onResult(DeviceOwnerCheck.NO_SCREEN_LOCK)
         return
     }
