@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- App lock, in Settings under Storage & app. With it on, the app asks for your fingerprint, face or screen lock when you open it and again after more than a minute in the background, and Android no longer shows its screen in the recent-apps view.
+
 ## [1.6.1] - 2026-11-12
 
 ### Changed
