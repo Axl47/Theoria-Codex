@@ -251,6 +251,27 @@ class SearchStateContractTest {
     }
 
     @Test
+    fun `paging leaves out another site's copy of a file already in the results`() {
+        val shown = post("shown").copy(contentHash = "0123456789abcdef0123456789abcdef")
+        val copy = post("copy").let { it.copy(id = it.id.copy(source = SourceKey.DANBOORU), contentHash = shown.contentHash) }
+        val next = post("next")
+        val initial = SearchUiState(
+            content = SearchContentUiState(results = listOf(shown), hasExecutedSearch = true, canLoadMore = true),
+        )
+        val paging = SearchStateReducer.reduce(
+            initial,
+            SearchStateChange.BeginRequest(15L, SearchRequestKind.PAGE, initial.query.applied),
+        ).state
+
+        val completed = SearchStateReducer.reduce(
+            paging,
+            SearchStateChange.AppendPage(15L, listOf(copy, next), emptyList(), canLoadMore = true),
+        ).state
+
+        assertEquals(listOf(shown.id, next.id), completed.content.results.map(Post::id))
+    }
+
+    @Test
     fun `paging merges provider statuses by source without losing exhausted providers`() {
         val query = query("paged")
         val pixiv = SourceRunStatus(SourceKey.PIXIV, SourceRunState.SUCCESS)

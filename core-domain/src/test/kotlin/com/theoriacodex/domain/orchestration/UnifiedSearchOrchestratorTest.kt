@@ -428,6 +428,53 @@ class UnifiedSearchOrchestratorTest {
     }
 
     @Test
+    fun `a file two sources host appears once, from the source interleaved first`() = runTest {
+        val mirrored = "0123456789abcdef0123456789abcdef"
+        val orchestrator = UnifiedSearchOrchestrator(
+            mapOf(
+                SourceKey.DANBOORU to FakeAdapter(
+                    SourceKey.DANBOORU, supportedCapabilities(),
+                    listOf(post(SourceKey.DANBOORU, "d1").copy(contentHash = mirrored), post(SourceKey.DANBOORU, "d2")),
+                ),
+                SourceKey.GELBOORU to FakeAdapter(
+                    SourceKey.GELBOORU, supportedCapabilities(),
+                    listOf(post(SourceKey.GELBOORU, "g1"), post(SourceKey.GELBOORU, "g2").copy(contentHash = mirrored)),
+                ),
+            ),
+        )
+
+        val result = orchestrator.search(
+            sampleQuery(), setOf(SourceKey.DANBOORU, SourceKey.GELBOORU), emptyMap(), emptyMap(),
+        )
+
+        assertEquals(listOf("d1", "g1", "d2"), result.items.map { it.id.sourcePostId })
+    }
+
+    @Test
+    fun `a slow source's copy of a file already shown is left out`() = runTest {
+        val mirrored = "0123456789abcdef0123456789abcdef"
+        val orchestrator = UnifiedSearchOrchestrator(
+            mapOf(
+                SourceKey.DANBOORU to FakeAdapter(
+                    SourceKey.DANBOORU, supportedCapabilities(),
+                    listOf(post(SourceKey.DANBOORU, "fast").copy(contentHash = mirrored)),
+                ),
+                SourceKey.GELBOORU to FakeAdapter(
+                    SourceKey.GELBOORU, supportedCapabilities(),
+                    listOf(post(SourceKey.GELBOORU, "copy").copy(contentHash = mirrored), post(SourceKey.GELBOORU, "new")),
+                    delayMs = 10_000L,
+                ),
+            ),
+        )
+
+        val result = orchestrator.search(
+            sampleQuery(), setOf(SourceKey.DANBOORU, SourceKey.GELBOORU), emptyMap(), emptyMap(), onPartial = {},
+        )
+
+        assertEquals(listOf("fast", "new"), result.items.map { it.id.sourcePostId })
+    }
+
+    @Test
     fun `a slow source never holds back results and only appends below them`() = runTest {
         val orchestrator = UnifiedSearchOrchestrator(
             mapOf(

@@ -55,6 +55,16 @@ class SearchFirstPageStoreTest {
     }
 
     @Test
+    fun `file hashes survive a restore`() = runTest {
+        val store = SearchFirstPageStore(file(), StandardTestDispatcher(testScheduler))
+        val hashes = listOf("0123456789abcdef0123456789abcdef", null)
+
+        store.save("key", hashes.mapIndexed { index, hash -> post("$index").copy(contentHash = hash) })
+
+        assertEquals(hashes, store.load("key").map { it.contentHash })
+    }
+
+    @Test
     fun `an unreadable file only costs the instant paint`() = runTest {
         file().writeText("{not json")
 

@@ -32,6 +32,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.distinctByFile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineStart
@@ -689,7 +690,7 @@ internal class SearchViewModel(
         if (!showingCachedFirstPage || !scrolledCachedFirstPage) return fresh
         val freshById = fresh.associateBy(Post::id)
         val shown = mutableState.value.content.results.map { post -> freshById[post.id] ?: post }
-        return (shown + fresh).distinctBy(Post::id)
+        return (shown + fresh).distinctByFile()
     }
 
     private fun showPartialResults(requestId: Long, result: SearchExecutionResult.Success): Boolean {

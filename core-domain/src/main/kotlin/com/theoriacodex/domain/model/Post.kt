@@ -74,4 +74,25 @@ data class Post(
     val creatorProfiles: List<CreatorProfile> = listOfNotNull(creatorProfile),
     /** Live listing data only; never persisted, so saved or restored posts carry none. */
     val commentHint: CommentHint? = null,
+    /**
+     * MD5 of the original file as its site reports it, lowercase. Sites that host the same file report the same
+     * value, which is how [distinctByFile] recognises one post listed by several sites. Live listing data only.
+     */
+    val contentHash: String? = null,
 )
+
+/** A site-reported file MD5 in the form [Post.contentHash] holds, or null when [raw] is not one. */
+fun contentHashOrNull(raw: String?): String? =
+    raw?.trim()?.lowercase()?.takeIf { hash -> hash.length == MD5_HEX_LENGTH && hash.all { it in '0'..'9' || it in 'a'..'f' } }
+
+/**
+ * Keeps the first post for each ID and the first post for each file, in order. Feeds that mix sites use it so a file
+ * hosted by several of them appears once; posts without a [Post.contentHash] are only compared by ID.
+ */
+fun Iterable<Post>.distinctByFile(): List<Post> {
+    val ids = HashSet<PostId>()
+    val files = HashSet<String>()
+    return filter { post -> ids.add(post.id) && (post.contentHash == null || files.add(post.contentHash)) }
+}
+
+private const val MD5_HEX_LENGTH = 32

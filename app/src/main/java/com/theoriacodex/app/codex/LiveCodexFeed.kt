@@ -9,6 +9,7 @@ import com.theoriacodex.domain.coroutines.mapConcurrent
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.distinctByFile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -137,7 +138,7 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
 
     private fun publish(loading: Boolean) {
         mutableState.value = LiveCodexFeedState(
-            posts = branches.values.flatMap { it.posts }.distinctBy(Post::id),
+            posts = branches.values.flatMap { it.posts }.distinctByFile(),
             loading = loading,
             canLoadMore = branches.values.any { it.canLoadMore },
             errors = branches.values.mapNotNull { branch -> branch.error?.let { branch.id to it } }.toMap(),
