@@ -9,7 +9,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.theoriacodex.app.comments.CommentsLoading
 import com.theoriacodex.app.comments.PostCommentsController
-import com.theoriacodex.app.comments.keepingCommentHintOf
+import com.theoriacodex.domain.model.keepingListingDataOf
 import com.theoriacodex.app.comments.UnsupportedCommentsLoader
 import com.theoriacodex.app.ui.state.AppRouteSavedStateKeys
 import com.theoriacodex.app.ui.state.RouteStateOwner
@@ -189,7 +189,7 @@ internal class ViewerViewModel(
         val current = mutableSession.value ?: return
         val index = current.posts.indexOfFirst { candidate -> candidate.id == resolved.id }
         if (index < 0) return
-        val post = resolved.keepingCommentHintOf(current.posts[index])
+        val post = resolved.keepingListingDataOf(current.posts[index])
         sessionJobs.keys.filterIsInstance<ViewerWorkKey.Prefetch>().filter { it.mediaKey.postId == post.id }
             .forEach { key -> sessionJobs.remove(key)?.cancel() }
         mutableSession.value = current.copy(

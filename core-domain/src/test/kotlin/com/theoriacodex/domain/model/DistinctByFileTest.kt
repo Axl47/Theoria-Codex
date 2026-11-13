@@ -37,6 +37,15 @@ class DistinctByFileTest {
     }
 
     @Test
+    fun `a stored copy that replaces a listed post keeps the listing's file hash`() {
+        val listed = post(SourceKey.DANBOORU, "1", HASH_A)
+        val stored = post(SourceKey.DANBOORU, "1")
+
+        assertEquals(HASH_A, stored.keepingListingDataOf(listed).contentHash)
+        assertEquals(HASH_B, post(SourceKey.DANBOORU, "1", HASH_B).keepingListingDataOf(listed).contentHash)
+    }
+
+    @Test
     fun `only a 32-digit hex value is a file hash`() {
         assertEquals(HASH_A, contentHashOrNull(" ${HASH_A.uppercase()} "))
         assertNull(contentHashOrNull(HASH_A.dropLast(1)))
