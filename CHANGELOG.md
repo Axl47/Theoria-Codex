@@ -8,8 +8,6 @@
 
 ### Changed
 
-- A link in a comment that points to a post on one of your sources now opens that post in the Viewer instead of the browser.
-
 - A file that several sites host now shows once when you search them together, instead of one card per site. This covers Danbooru, AIBooru, Gelbooru, Rule34.xxx and custom booru sites, in Search, For You and live Codices.
 
 ## [1.6.1] - 2026-11-12

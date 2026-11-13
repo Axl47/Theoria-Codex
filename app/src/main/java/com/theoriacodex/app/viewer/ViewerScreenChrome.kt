@@ -306,6 +306,7 @@ internal fun ViewerInfoSheet(
     fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?>,
     onAction: (ViewerAction) -> Unit,
     onOpenInBrowser: (Post) -> Unit,
+    onOpenOriginalPost: (Post) -> Unit,
     onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
     onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)?,
@@ -330,7 +331,7 @@ internal fun ViewerInfoSheet(
         PostTagActionSection(
             header = {
                 ViewerInfoActions(
-                    selection, liked, controls, creatorBrowsingSources, onAction, onOpenInBrowser, comments.onOpenUrl,
+                    selection, liked, controls, creatorBrowsingSources, onAction, onOpenInBrowser, onOpenOriginalPost,
                     onGoToSearch, onOpenCreatorFallback,
                 )
             },
@@ -384,7 +385,7 @@ private fun ViewerInfoActions(
     creatorBrowsingSources: Set<SourceKey>,
     onAction: (ViewerAction) -> Unit,
     onOpenInBrowser: (Post) -> Unit,
-    onOpenUrl: (String) -> Unit,
+    onOpenOriginalPost: (Post) -> Unit,
     onGoToSearch: () -> Unit,
     onOpenCreatorFallback: ((Post) -> Unit)?,
 ) {
@@ -415,7 +416,7 @@ private fun ViewerInfoActions(
                 otherCreators = creators.drop(1),
                 onOpenCreator = ::openCreator,
                 onGoToSearch = { closeThen { controls.setPlaybackEnabled(false); onGoToSearch() } },
-                onOpenOriginalPost = post.originUrl?.let { url -> { closeThen { onOpenUrl(url) } } },
+                onOpenOriginalPost = if (post.originUrl == null) null else ({ closeThen { onOpenOriginalPost(post) } }),
                 onOpenInBrowser = if (post.pageUrl.isNullOrBlank()) null else ({ closeThen { onOpenInBrowser(post) } }),
             )
         }
