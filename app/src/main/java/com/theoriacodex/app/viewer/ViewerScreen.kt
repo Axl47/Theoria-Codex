@@ -70,6 +70,7 @@ internal fun ViewerScreen(
     onVisibleMediaChanged: ((Post, Int) -> Unit)? = null,
     onAuthoritativeDurationKnown: (Post, Long) -> Unit = { _, _ -> },
     onOpenInBrowser: (Post) -> Unit,
+    onOpenOriginalPost: (Post) -> Unit = {},
     onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
     onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
@@ -103,7 +104,7 @@ internal fun ViewerScreen(
         videoPositions, creatorBrowsingSources, onAction, saveToCodexQuery, pixivUgoiraClient, tagVideoCountProvider,
         fetchTagVideoCounts, canLoadMoreFromSource, loadingMoreFromSource, invertMultiImageScrollDirection, likedPostIds,
         onRequestMediaRecovery, onVisiblePostChanged, onVisibleMediaChanged, onAuthoritativeDurationKnown, onOpenInBrowser,
-        onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, onGoToSearch, onOpenCreatorFallback,
+        onOpenOriginalPost, onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, onGoToSearch, onOpenCreatorFallback,
         playbackDiagnosticsEnabled, onIncludeRelatedPosts, onDismissRelatedPosts, onRetryRelatedPosts, comments,
     )
 }
@@ -138,6 +139,7 @@ private fun ViewerLoadedScreen(
     onVisibleMediaChanged: ((Post, Int) -> Unit)?,
     onAuthoritativeDurationKnown: (Post, Long) -> Unit,
     onOpenInBrowser: (Post) -> Unit,
+    onOpenOriginalPost: (Post) -> Unit,
     onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
     onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)?,
@@ -203,7 +205,8 @@ private fun ViewerLoadedScreen(
     if (uiState.controls.metadataVisible && !inPictureInPicture) {
         ViewerInfoSheet(
             selection, controls, creatorBrowsingSources, saveToCodexQuery, tagVideoCountProvider, fetchTagVideoCounts,
-            onAction, onOpenInBrowser, onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, onGoToSearch, onOpenCreatorFallback,
+            onAction, onOpenInBrowser, onOpenOriginalPost, onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress,
+            onGoToSearch, onOpenCreatorFallback,
             liked = selection.post.id in likedPostIds,
             comments = comments,
         )

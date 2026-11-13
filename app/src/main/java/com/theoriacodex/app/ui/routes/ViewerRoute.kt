@@ -187,6 +187,7 @@ internal data class ViewerRouteScreenCallbacks(
     val onVisiblePostChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
     val onVisibleMediaChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
     val onOpenInBrowser: (Post) -> Unit,
+    val onOpenOriginalPost: (Post) -> Unit = {},
     val onOpenUrl: (String) -> Unit = {},
     val onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
     val onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
@@ -404,6 +405,7 @@ private fun ViewerRouteRenderer(
             durationOwner.publishPlayerDuration(latestDependencies.value.canonicalizePost(post), durationMs)
         },
         onOpenInBrowser = screenCallbacks.onOpenInBrowser,
+        onOpenOriginalPost = screenCallbacks.onOpenOriginalPost,
         onRemoveIncludeTerm = screenCallbacks.onRemoveIncludeTerm,
         onRemoveExcludeTerm = screenCallbacks.onRemoveExcludeTerm,
         onFavoriteTagLongPress = screenCallbacks.onFavoriteTagLongPress,

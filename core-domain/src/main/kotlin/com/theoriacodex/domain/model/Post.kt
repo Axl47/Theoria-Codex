@@ -92,12 +92,14 @@ fun contentHashOrNull(raw: String?): String? =
 
 /**
  * A resolved or stored post replaces a listed one, keeping what only the listing said: detail responses seldom repeat
- * the comment hint, and stored posts carry neither it nor the file hash.
+ * the comment hint, and stored posts carry neither it, the file hash nor the origin page.
  */
 fun Post.keepingListingDataOf(listed: Post): Post {
     val hint = commentHint ?: listed.commentHint
     val hash = contentHash ?: listed.contentHash
-    return if (hint == commentHint && hash == contentHash) this else copy(commentHint = hint, contentHash = hash)
+    val origin = originUrl ?: listed.originUrl
+    if (hint == commentHint && hash == contentHash && origin == originUrl) return this
+    return copy(commentHint = hint, contentHash = hash, originUrl = origin)
 }
 
 /**

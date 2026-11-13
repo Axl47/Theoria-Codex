@@ -638,15 +638,26 @@ internal class TheoriaShell(
     }
 
     /**
-     * Opens a link tapped inside the app: a post on a site the app can browse opens in the Viewer, anything else in
-     * the browser. Unlike a shared link it never offers to set up a site.
+     * Opens the page a booru post came from. A post on an active source replaces the open Viewer; anything else, or
+     * a post that cannot be loaded, opens in the browser.
      */
-    fun openLink(url: String) {
-        val post = parseExternalPostDeepLink(url) ?: parseCustomSitePostDeepLink(url, container.customSites.sites.value)
-        if (post == null || post.source !in sources.availableSources.value) {
+    fun openOriginalPost(url: String) {
+        val link = parseExternalPostDeepLink(url) ?: parseCustomSitePostDeepLink(url, container.customSites.sites.value)
+        val adapter = link?.takeIf { it.source in sources.availableSources.value }
+            ?.let { sources.registry.adapterFor(it.source) }
+        if (link == null || adapter == null) {
             openInBrowser(appContext, url)
-        } else {
-            scope.launch { openExternalPost(post) }
+            return
+        }
+        scope.launch {
+            val post = runCatchingPreservingCancellation {
+                adapter.resolvePost(PostId(source = link.source, sourcePostId = link.postId))
+            }.getOrNull()
+            if (post == null) {
+                openInBrowser(appContext, url)
+            } else {
+                openSinglePostViewer("${link.source.id.lowercase()}-deeplink:${link.postId}", link.initialMediaIndex) { post }
+            }
         }
     }
 
