@@ -47,6 +47,8 @@ internal fun AppSettings.mergeRestoredSettings(imported: AppSettings, applyPrefe
     require(follows.size <= MAX_FOLLOWED_CREATORS) { "Restore would exceed the followed-creator limit" }
     val preferences = if (applyPreferences) imported else this
     return copy(
+        oldSearchBar = preferences.oldSearchBar,
+        codexLibrarySort = preferences.codexLibrarySort,
         runtime = preferences.runtime,
         cache = preferences.cache,
         contentFilters = preferences.contentFilters,

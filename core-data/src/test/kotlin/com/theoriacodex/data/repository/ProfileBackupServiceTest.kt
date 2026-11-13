@@ -119,6 +119,7 @@ class ProfileBackupServiceTest {
         assertEquals(1, result.collectionsAdded)
         assertEquals(existing.activeProfileId, settings.activeProfileId)
         assertEquals(existing.cache, settings.cache)
+        assertEquals(existing.codexLibrarySort, settings.codexLibrarySort)
         assertEquals(existing.recommendationProfiles, settings.recommendationProfiles)
         val imported = harness.store.library
         assertEquals("legacy-codex", imported.codices.single().codexId)
@@ -184,8 +185,11 @@ class ProfileBackupServiceTest {
     @Test fun `global preferences are restored only when explicitly requested`() = runTest {
         val harness = harness()
         harness.service.restore(codec.encode(backup()), applyPreferences = true)
-        assertTrue(harness.settings.observeSettings().first().cache.cacheFullImageOnSave)
-        assertEquals("profile-main", harness.settings.observeSettings().first().activeProfileId)
+        val settings = harness.settings.observeSettings().first()
+        assertTrue(settings.cache.cacheFullImageOnSave)
+        assertTrue(settings.oldSearchBar)
+        assertEquals(CodexLibrarySort.NEWEST, settings.codexLibrarySort)
+        assertEquals("profile-main", settings.activeProfileId)
     }
 
     @Test fun `canonical booru post links survive while arbitrary credential queries do not`() {
@@ -320,6 +324,8 @@ private fun backup(): ProfileBackup {
     val codex = Codex("legacy-codex", "Favorites", 2L,
         listOf(CodexAutomaticTag(SourceKey.PIXIV, "cat"), CodexAutomaticTag(SourceKey.PIXIV, "dog")))
     val settings = AppSettings(
+        oldSearchBar = true,
+        codexLibrarySort = CodexLibrarySort.NEWEST,
         cache = CacheSettings(cacheFullImageOnSave = true),
         favoriteTagsByProfile = mapOf("profile-main" to listOf(FavoriteTagEntry(SourceKey.PIXIV, "cat"))),
         forYouBlacklistByProfile = mapOf("profile-main" to listOf(ForYouBlacklistEntry(SourceKey.PIXIV, listOf("hidden")))),
