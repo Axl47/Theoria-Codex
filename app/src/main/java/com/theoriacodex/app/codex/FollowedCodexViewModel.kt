@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.theoriacodex.app.post.FileMirrorIndex
 import com.theoriacodex.app.related.RelatedPostsLoader
 import com.theoriacodex.app.related.RelatedPostsLoading
 import com.theoriacodex.app.related.UnsupportedRelatedPostsLoader
@@ -24,6 +25,7 @@ internal class FollowedCodexViewModel(
     private val registry: SourceAdapterRegistry,
     private val cacheRepository: CacheRepository,
     relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
+    private val fileMirrors: FileMirrorIndex = FileMirrorIndex(),
 ) : ViewModel(), LiveCodexFeedOwner {
     private val feed = LiveCodexFeedController<CreatorBranch>(viewModelScope,
         fetch = { branch, _ -> fetch(branch) },
@@ -58,6 +60,7 @@ internal class FollowedCodexViewModel(
                 ?: error("Creator browsing unavailable")
             val page = withTimeoutOrNull(15_000L) { adapter.searchCreatorPosts(creator, branch.nextPageToken) }
                 ?: error("Source timed out")
+            fileMirrors.learn(page.items)
             branch.copy(
                 posts = (branch.posts + page.items.filter { it.id.source == creator.source }).distinctBy(Post::id),
                 nextPageToken = page.nextPageToken,
@@ -83,8 +86,8 @@ internal class FollowedCodexViewModel(
     }
 
     companion object {
-        fun factory(registry: SourceAdapterRegistry, cacheRepository: CacheRepository) = viewModelFactory {
-            initializer { FollowedCodexViewModel(registry, cacheRepository, RelatedPostsLoader(registry)) }
+        fun factory(registry: SourceAdapterRegistry, cacheRepository: CacheRepository, fileMirrors: FileMirrorIndex) = viewModelFactory {
+            initializer { FollowedCodexViewModel(registry, cacheRepository, RelatedPostsLoader(registry, fileMirrors), fileMirrors) }
         }
     }
 }

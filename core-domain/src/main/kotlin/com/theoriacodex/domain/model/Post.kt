@@ -91,6 +91,32 @@ fun contentHashOrNull(raw: String?): String? =
     raw?.trim()?.lowercase()?.takeIf { hash -> hash.length == MD5_HEX_LENGTH && hash.all { it in '0'..'9' || it in 'a'..'f' } }
 
 /**
+ * The original file's MD5: [Post.contentHash] when the site reported one, else the MD5 that booru file, sample and
+ * thumbnail URLs carry (`/original/ab/cd/<md5>.jpg`, `sample_<md5>.jpg`, `/image/<md5>/name.jpg`). Stored posts keep
+ * their URLs, so this also recognises saved and liked files without storing a hash. Null when no URL carries one.
+ */
+val Post.fileHash: String?
+    get() = contentHash ?: fileUrls().firstNotNullOfOrNull(::md5InUrlPath)
+
+/** Original file first, then lighter renditions, which name the original's MD5 on the same sites. */
+private fun Post.fileUrls(): Sequence<String> = sequence {
+    for (image in listOfNotNull(full) + media + preview) {
+        image.url?.let { yield(it) }
+        yieldAll(image.fallbackUrls)
+        yieldAll(image.progressiveUrls)
+        image.thumbnailUrl?.let { yield(it) }
+    }
+}
+
+/** A path segment token of exactly 32 hex digits; longer hex runs (SHA-256 names) and query strings never count. */
+private fun md5InUrlPath(url: String): String? {
+    val path = url.substringBefore('?').substringBefore('#').substringAfter("://").substringAfter('/', "")
+    return MD5_IN_PATH.find(path)?.value?.lowercase()
+}
+
+private val MD5_IN_PATH = Regex("(?<![0-9a-fA-F])[0-9a-fA-F]{32}(?![0-9a-fA-F])")
+
+/**
  * A resolved or stored post replaces a listed one, keeping what only the listing said: detail responses seldom repeat
  * the comment hint, and stored posts carry neither it, the file hash nor the origin page.
  */

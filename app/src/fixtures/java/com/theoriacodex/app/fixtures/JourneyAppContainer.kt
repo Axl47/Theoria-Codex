@@ -154,7 +154,7 @@ class JourneyAppContainer(
     )
     override val workflows = WorkflowDependencies(
         com.theoriacodex.app.codex.CodexCleaningService(content),
-        LikesCodexSyncService(content, content, offline::withoutOfflineLocations),
+        LikesCodexSyncService(content, content, content, canonicalizePost = offline::withoutOfflineLocations),
         CodexTransferService(content, content, data.cacheRepository, registry, canonicalizePost = offline::withoutOfflineLocations),
         profileDeletion = ProfileDeletionService(settings, content,
             storageDirectory.resolve("pending_profile_deletion.json"), profileWriteGuard),

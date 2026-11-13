@@ -1,9 +1,11 @@
 package com.theoriacodex.app.codex
 
+import com.theoriacodex.app.post.FileMirrorIndex
 import com.theoriacodex.app.related.LikeToggleOutcome
 import com.theoriacodex.data.repository.ClearedLikesSnapshot
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.CodexLikesTransactions
+import com.theoriacodex.data.repository.LikesRepository
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.domain.model.Post
 import java.util.UUID
@@ -13,9 +15,30 @@ import kotlinx.coroutines.flow.first
 class LikesCodexSyncService internal constructor(
     private val transactions: CodexLikesTransactions,
     private val codexRepository: CodexRepository,
+    private val likes: LikesRepository,
+    private val mirrors: FileMirrorIndex = FileMirrorIndex(),
     private val canonicalizePost: (Post) -> Post = { it },
 ) {
+    /**
+     * Likes [post], or, when its file is already liked under any site's ID (see [FileMirrorIndex]), removes every one
+     * of those likes, so a heart filled by another site's copy empties.
+     */
     suspend fun toggle(
+        profile: RecommendationProfile,
+        post: Post,
+        trainingTags: List<String>,
+    ): LikeToggleOutcome {
+        val likedCopies = mirrors.copiesOf(post).intersect(likes.observeLikedPostIds(profile.profileId).first())
+        if (likedCopies.isEmpty()) return toggleOne(profile, post, trainingTags)
+        likedCopies.forEach { id ->
+            // Removal reads only the ID; the stored copy is passed so a concurrent change can never like the wrong post.
+            val copy = if (id == post.id) post else codexRepository.getPost(id) ?: return@forEach
+            toggleOne(profile, copy, trainingTags)
+        }
+        return LikeToggleOutcome.UNLIKED
+    }
+
+    private suspend fun toggleOne(
         profile: RecommendationProfile,
         post: Post,
         trainingTags: List<String>,

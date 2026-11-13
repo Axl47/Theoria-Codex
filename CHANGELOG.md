@@ -10,6 +10,7 @@
 ### Changed
 
 - A file that several sites host now shows once when you search them together, instead of one card per site. This covers Danbooru, AIBooru, Gelbooru, Rule34.xxx and custom booru sites, in Search, For You and live Codices.
+- A post you liked, saved or watched on one booru site is recognised when another site shows the same file: its heart is filled, "Hide liked", "Hide saved" and "Hide watched" hide it, and For You stops suggesting it. Unliking that copy removes the like from every site where you liked the file. Your Library still lists only the posts you saved.
 
 ### Fixed
 

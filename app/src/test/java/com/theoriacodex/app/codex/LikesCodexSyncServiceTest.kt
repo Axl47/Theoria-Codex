@@ -1,5 +1,9 @@
 package com.theoriacodex.app.codex
 
+import com.theoriacodex.app.post.FileMirrorIndex
+import com.theoriacodex.app.post.HASH
+import com.theoriacodex.app.post.OTHER
+import com.theoriacodex.app.post.filePost
 import com.theoriacodex.app.related.LikeToggleOutcome
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.testing.InMemoryCodexLikesTransactions
@@ -20,7 +24,7 @@ class LikesCodexSyncServiceTest {
         val transactions = InMemoryCodexLikesTransactions()
         val likes = transactions.likes
         val codices = transactions.codices
-        val service = LikesCodexSyncService(transactions, codices)
+        val service = LikesCodexSyncService(transactions, codices, transactions.likes)
         val profile = RecommendationProfile("profile-main", "Main")
         val post = testPost(sourcePostId = "liked")
 
@@ -47,7 +51,7 @@ class LikesCodexSyncServiceTest {
         val transactions = InMemoryCodexLikesTransactions()
         val likes = transactions.likes
         val codices = transactions.codices
-        val service = LikesCodexSyncService(transactions, codices)
+        val service = LikesCodexSyncService(transactions, codices, transactions.likes)
         val profile = RecommendationProfile("profile-alt", "Alt")
         service.toggle(profile, testPost(sourcePostId = "one"), listOf("tag"))
         service.toggle(profile, testPost(sourcePostId = "two"), listOf("tag"))
@@ -73,7 +77,7 @@ class LikesCodexSyncServiceTest {
     fun `like routes matching post only into current profile automatic Codices`() = runTest {
         val transactions = InMemoryCodexLikesTransactions()
         val codices = transactions.codices
-        val service = LikesCodexSyncService(transactions, codices)
+        val service = LikesCodexSyncService(transactions, codices, transactions.likes)
         val profile = RecommendationProfile("profile-main", "Main")
         val matching = codices.ensureCodex(
             profileScopedCodexId(profile.profileId, "matching"),
@@ -111,5 +115,25 @@ class LikesCodexSyncServiceTest {
 
         assertEquals(LikeToggleOutcome.UNLIKED, service.toggle(profile, post, post.canonicalTags))
         assertEquals(listOf(post.id), codices.observeCodexItems(matching.codexId).first().map { it.postId })
+    }
+
+    @Test
+    fun `unliking a copy from another site removes every stored like of that file`() = runTest {
+        val transactions = InMemoryCodexLikesTransactions()
+        val mirrors = FileMirrorIndex()
+        val service = LikesCodexSyncService(transactions, transactions.codices, transactions.likes, mirrors)
+        val profile = RecommendationProfile("profile-main", "Main")
+        val danbooru = filePost(SourceKey.DANBOORU, "1", HASH)
+        val gelbooru = filePost(SourceKey.GELBOORU, "9", HASH)
+        val mirror = filePost(SourceKey.RULE34XXX, "5", HASH)
+        val unrelated = filePost(SourceKey.DANBOORU, "2", OTHER)
+        listOf(danbooru, gelbooru, unrelated).forEach { service.toggle(profile, it, emptyList()) }
+        mirrors.learn(listOf(danbooru, gelbooru, unrelated, mirror))
+
+        assertEquals(LikeToggleOutcome.UNLIKED, service.toggle(profile, mirror, emptyList()))
+        assertEquals(setOf(unrelated.id), transactions.likes.observeLikedPostIds(profile.profileId).first())
+
+        assertEquals(LikeToggleOutcome.LIKED, service.toggle(profile, mirror, emptyList()))
+        assertEquals(setOf(unrelated.id, mirror.id), transactions.likes.observeLikedPostIds(profile.profileId).first())
     }
 }

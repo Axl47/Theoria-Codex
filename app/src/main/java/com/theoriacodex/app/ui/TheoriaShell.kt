@@ -713,6 +713,7 @@ internal class TheoriaShell(
             toast("${deepLink.sourceLabel} post was not found")
             return
         }
+        data.fileMirrors.learn(listOf(resolved))
         val context = ViewerLaunchContext(
             queryHash = "${deepLink.source.id.lowercase()}-deeplink:${deepLink.postId}",
             startIndex = 0,
@@ -789,6 +790,7 @@ internal class TheoriaShell(
             snackbarHostState.showSnackbar("This post could not be opened. Try again.")
             return
         }
+        data.fileMirrors.learn(listOf(post))
         if (navigation.currentRoute == AppRoute.Viewer) {
             activeViewerOwner?.clearSession()
             viewerSessions.clear()
