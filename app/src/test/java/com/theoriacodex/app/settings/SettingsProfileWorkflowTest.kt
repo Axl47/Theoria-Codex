@@ -36,7 +36,7 @@ class SettingsProfileWorkflowTest {
         val transactions = InMemoryCodexLikesTransactions()
         val codices = transactions.codices
         val likes = transactions.likes
-        val sync = LikesCodexSyncService(transactions, codices)
+        val sync = LikesCodexSyncService(transactions, codices, transactions.likes)
         val owner = settingsOwner(settingsRepository = settings, codexRepository = codices,
             likesRepository = likes, profileMutations = profileMutations(settings, transactions))
         runCurrent()
@@ -83,7 +83,7 @@ class SettingsProfileWorkflowTest {
         val settings = InMemorySettingsRepository()
         val second = settings.addRecommendationProfile("Sketching")
         val transactions = InMemoryCodexLikesTransactions()
-        val sync = LikesCodexSyncService(transactions, transactions.codices)
+        val sync = LikesCodexSyncService(transactions, transactions.codices, transactions.likes)
         sync.toggle(second, testPost(sourcePostId = "keep"), listOf("landscape"))
         val owner = settingsOwner(settingsRepository = settings,
             profileMutations = profileMutations(settings, transactions))
@@ -99,7 +99,7 @@ class SettingsProfileWorkflowTest {
         val settings = InMemorySettingsRepository()
         val second = settings.addRecommendationProfile("Sketching")
         val transactions = InMemoryCodexLikesTransactions()
-        val sync = LikesCodexSyncService(transactions, transactions.codices)
+        val sync = LikesCodexSyncService(transactions, transactions.codices, transactions.likes)
         sync.toggle(second, testPost(sourcePostId = "keep"), listOf("landscape"))
         val owner = settingsOwner(settingsRepository = settings,
             profileMutations = profileMutations(settings, transactions))
@@ -119,7 +119,7 @@ class SettingsProfileWorkflowTest {
     @Test
     fun `last profile and missing profile deletion are rejected before touching data`() = runTest {
         val transactions = InMemoryCodexLikesTransactions()
-        val sync = LikesCodexSyncService(transactions, transactions.codices)
+        val sync = LikesCodexSyncService(transactions, transactions.codices, transactions.likes)
         val settings = InMemorySettingsRepository().apply {
             updateSettings { it.copy(recommendationProfiles = it.recommendationProfiles.take(1)) }
         }

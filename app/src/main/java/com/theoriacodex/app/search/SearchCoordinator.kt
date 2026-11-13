@@ -3,6 +3,7 @@ package com.theoriacodex.app.search
 import com.theoriacodex.app.media.recoverRemoteMedia
 import com.theoriacodex.app.feed.settleFeedContinuations
 import com.theoriacodex.app.search.state.SearchSourceScope
+import com.theoriacodex.app.post.FileMirrorIndex
 import com.theoriacodex.app.source.PostResolutionFlights
 import com.theoriacodex.app.search.state.modeKey
 import com.theoriacodex.app.search.state.queryMode
@@ -81,8 +82,15 @@ class SearchCoordinator(
     seenTagScope: CoroutineScope = CoroutineScope(SupervisorJob() + computationDispatcher),
     /** Shared with the Viewer, so a post both ask for at once is fetched once. */
     private val postResolutions: PostResolutionFlights = PostResolutionFlights(),
+    private val fileMirrors: FileMirrorIndex = FileMirrorIndex(),
 ) : SearchExecutionService {
     private val seenTags = SeenTagRecorder(statisticsRepository, tagSuggestionStore, computationDispatcher, seenTagScope)
+
+    /** Every page of results passes here, so tags and file copies are learned once per page. */
+    private fun listed(posts: List<Post>) {
+        seenTags.record(posts)
+        fileMirrors.learn(posts)
+    }
     @Volatile private var runtimeSettings = AppSettings()
     private var availableSourcesSnapshot = registry.availableSources()
     private val suggestionCoordinator = SearchSuggestionCoordinator(
@@ -184,7 +192,7 @@ class SearchCoordinator(
     /** The key doesn't cover the enabled sources, so a source turned off or removed since is dropped here. */
     override suspend fun cachedFirstPage(executionKey: String, sourceScope: SearchSourceScope): List<Post> {
         val sources = effectiveEnabledSources(sourceScope)
-        return firstPageStore?.load(executionKey).orEmpty().filter { it.id.source in sources }
+        return firstPageStore?.load(executionKey).orEmpty().filter { it.id.source in sources }.also(fileMirrors::learn)
     }
 
     override suspend fun rememberFirstPage(executionKey: String, posts: List<Post>) {
@@ -275,6 +283,7 @@ class SearchCoordinator(
             },
             onPartial = onPartial?.let { publish ->
                 { partial ->
+                    fileMirrors.learn(partial.items)
                     publish(
                         SearchExecutionResult.Success(
                             executionKey, query, sourceScope, partial.items, mergeStatuses(excluded, partial.statuses),
@@ -293,7 +302,7 @@ class SearchCoordinator(
             return SearchExecutionResult.Failure(executionKey, query, sourceScope, statuses,
                 unifiedFailureMessage(result.items, statuses), next)
         }
-        seenTags.record(result.items)
+        listed(result.items)
         return SearchExecutionResult.Success(executionKey, query, sourceScope, result.items, statuses, next)
     }
 
@@ -331,7 +340,7 @@ class SearchCoordinator(
         }
         val page = registry.unifiedOrchestrator().searchSource(adapter, query, null)
         currentCoroutineContext().ensureActive()
-        seenTags.record(page.items)
+        listed(page.items)
         return SearchExecutionResult.Success(
             executionKey = executionKey,
             query = query,
@@ -381,7 +390,7 @@ class SearchCoordinator(
                     ?: buildSourceAuthErrorMessage(result.statuses) ?: "Source could not be retried",
             )
         }
-        seenTags.record(result.items)
+        listed(result.items)
         val updated = base.copy(
             unifiedPageTokens = base.unifiedPageTokens + result.nextPageTokens,
             unifiedQueryOverrides = base.unifiedQueryOverrides + result.queriesBySource,
@@ -395,7 +404,7 @@ class SearchCoordinator(
         val page = kotlinx.coroutines.withTimeoutOrNull(15_000L) {
             registry.unifiedOrchestrator().searchSource(adapter, base.query, base.sourcePageToken)
         } ?: throw SourceAdapterException(SourceFailureReason.NETWORK, "Source timed out")
-        seenTags.record(page.items)
+        listed(page.items)
         SearchPageResult.Success(base.executionKey, page.items, listOf(SourceRunStatus(source, SourceRunState.SUCCESS)),
             base.copy(sourcePageToken = page.nextPageToken))
     } catch (error: CancellationException) { throw error }
@@ -460,7 +469,7 @@ class SearchCoordinator(
         if (statuses.none { it.state == SourceRunState.SUCCESS }) {
             return SearchPageResult.Failure(continuation.executionKey, statuses, unifiedFailureMessage(result.items, statuses))
         }
-        seenTags.record(result.items)
+        listed(result.items)
         val nextTokens = settleFeedContinuations(continuation.unifiedPageTokens, pageable, result.nextPageTokens, statuses)
             .minus(pageable - registry.availableSources())
         val failed = statuses.filter { it.state == SourceRunState.FAILED }.mapTo(mutableSetOf()) { it.source }
@@ -488,7 +497,7 @@ class SearchCoordinator(
         val adapter = requireNotNull(registry.adapterFor(mode.source)) { "No adapter for ${mode.source}" }
         val page = registry.unifiedOrchestrator().searchSource(adapter, continuation.query, token)
         currentCoroutineContext().ensureActive()
-        seenTags.record(page.items)
+        listed(page.items)
         return SearchPageResult.Success(
             continuation.executionKey,
             page.items,

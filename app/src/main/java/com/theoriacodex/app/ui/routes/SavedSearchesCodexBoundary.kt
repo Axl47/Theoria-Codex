@@ -29,13 +29,14 @@ internal fun SavedSearchesCodexBoundary(
     val available = sources.availableSources.collectAsStateWithLifecycle().value
     val execution = remember(data, sources.registry) {
         SearchCoordinator(sources.registry, data.queryRepository, data.settingsRepository, data.uiRestoreRepository,
-            data.recentsRepository, data.statisticsRepository, postResolutions = sources.postResolutions)
+            data.recentsRepository, data.statisticsRepository, postResolutions = sources.postResolutions,
+            fileMirrors = data.fileMirrors)
     }
     val owner = viewModel<SavedSearchesCodexViewModel>(
         viewModelStoreOwner = com.theoriacodex.app.codex.LocalSavedCodexSessionOwner.current
             ?: checkNotNull(androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner.current),
         factory = SavedSearchesCodexViewModel.factory(
-            execution, data.cacheRepository, com.theoriacodex.app.related.RelatedPostsLoader(sources.registry),
+            execution, data.cacheRepository, com.theoriacodex.app.related.RelatedPostsLoader(sources.registry, data.fileMirrors),
         ),
     )
     val selected = remember(entries, filters.excludedSavedSearches) {

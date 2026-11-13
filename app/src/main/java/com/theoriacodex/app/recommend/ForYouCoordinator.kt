@@ -1,5 +1,6 @@
 package com.theoriacodex.app.recommend
 
+import com.theoriacodex.app.post.FileMirrorIndex
 import com.theoriacodex.app.source.PostResolutionFlights
 import com.theoriacodex.app.search.NoOpTagSuggestionStore
 import com.theoriacodex.app.search.TagSuggestionStore
@@ -45,6 +46,7 @@ class ForYouCoordinator(
     private val computationDispatcher: CoroutineDispatcher = Dispatchers.Default,
     /** Shared with the Viewer, so a card and the Viewer asking for one post at once fetch it once. */
     private val postResolutions: PostResolutionFlights = PostResolutionFlights(),
+    private val fileMirrors: FileMirrorIndex = FileMirrorIndex(),
 ) : ForYouRouteEngine {
     private val sections = ForYouSectionsLoader(registry, tagSuggestionStore, likesRepository, savedSearches, ::runFeedSeed)
 
@@ -90,6 +92,7 @@ class ForYouCoordinator(
             weights = SourceWeightNormalization.normalize(sources, continuation.weights),
             queryOverridesBySource = continuation.queriesBySource.filterKeys { it in sources },
         ).also { page ->
+            fileMirrors.learn(page.items)
             page.items.forEach { post ->
                 runCatchingPreservingCancellation { statisticsRepository.recordPostAvailable(post) }
             }

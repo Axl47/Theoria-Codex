@@ -195,7 +195,7 @@ internal fun browsingMetadataOwner(data: DataDependencies): BrowsingMetadataView
     key = "browsing-metadata",
     factory = remember(data) { viewModelFactory {
         initializer { BrowsingMetadataViewModel(data.settingsRepository, data.likesRepository,
-            data.codexRepository, data.recentsRepository) }
+            data.codexRepository, data.recentsRepository, mirrors = data.fileMirrors) }
     } },
 )
 
@@ -513,7 +513,7 @@ private fun FollowedCodexDestinationStateBoundary(
     val owner = androidx.lifecycle.viewmodel.compose.viewModel<com.theoriacodex.app.codex.FollowedCodexViewModel>(
         viewModelStoreOwner = com.theoriacodex.app.codex.LocalSavedCodexSessionOwner.current
             ?: checkNotNull(androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner.current),
-        factory = com.theoriacodex.app.codex.FollowedCodexViewModel.factory(sources.registry, data.cacheRepository),
+        factory = com.theoriacodex.app.codex.FollowedCodexViewModel.factory(sources.registry, data.cacheRepository, data.fileMirrors),
     )
     val selected = remember(settings.followedCreators, filters.followedSources, filters.followedAuthors) {
         com.theoriacodex.app.codex.selectFollowedCreators(

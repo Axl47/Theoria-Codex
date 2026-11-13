@@ -1,5 +1,6 @@
 package com.theoriacodex.app.creator
 
+import com.theoriacodex.app.post.FileMirrorIndex
 import com.theoriacodex.app.source.PostResolutionFlights
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.data.repository.CreatorFollowsRepository
@@ -33,6 +34,7 @@ class CreatorProfileCoordinator(
     private val follows: CreatorFollowsRepository? = null,
     /** Shared with the Viewer, so a card and the Viewer asking for one post at once fetch it once. */
     private val postResolutions: PostResolutionFlights = PostResolutionFlights(),
+    private val fileMirrors: FileMirrorIndex = FileMirrorIndex(),
 ) : CreatorRouteEngine {
     override fun supports(creator: CreatorProfile): Boolean = accountAdapterFor(creator) != null || adapterFor(creator) != null
 
@@ -53,7 +55,8 @@ class CreatorProfileCoordinator(
         }
         return withTimeoutOrNull(SOURCE_TIMEOUT_MS) {
             account?.accountPosts(creator, feed, pageToken) ?: search?.searchCreatorPosts(creator, pageToken)
-        } ?: error(if (feed == AccountFeed.FAVORITES) "Favorites timed out. Try again." else "Creator uploads timed out. Try again.")
+        }?.also { page -> fileMirrors.learn(page.items) }
+            ?: error(if (feed == AccountFeed.FAVORITES) "Favorites timed out. Try again." else "Creator uploads timed out. Try again.")
     }
 
     override suspend fun recordAcceptedVisit(creator: CreatorProfile, posts: List<Post>) {
