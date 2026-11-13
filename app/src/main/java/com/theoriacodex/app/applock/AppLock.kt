@@ -40,27 +40,30 @@ import com.theoriacodex.app.R
 import com.theoriacodex.app.ui.findActivity
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
 
-/** How long the app may stay in the background before it asks again. */
+/** How long the app may be away from the front before it asks again. */
 internal const val APP_LOCK_GRACE_MS = 60_000L
 
-/** Whether this run of the app has passed the lock, and when a trip to the background ends that. */
+/**
+ * Whether this run of the app has passed the lock, and when time away ends that. Away means not in front: in the
+ * background, or shrunk to picture-in-picture, which keeps playing but must not hand back the whole app later.
+ */
 internal class AppLockSession {
     var unlocked by mutableStateOf(false)
         private set
-    private var stoppedAtMs: Long? = null
+    private var leftAtMs: Long? = null
 
     fun unlock() {
         unlocked = true
     }
 
-    fun onStop(nowMs: Long) {
-        stoppedAtMs = nowMs
+    fun onPause(nowMs: Long) {
+        leftAtMs = nowMs
     }
 
-    fun onStart(nowMs: Long) {
-        val stoppedAt = stoppedAtMs ?: return
-        stoppedAtMs = null
-        if (nowMs - stoppedAt > APP_LOCK_GRACE_MS) unlocked = false
+    fun onResume(nowMs: Long) {
+        val leftAt = leftAtMs ?: return
+        leftAtMs = null
+        if (nowMs - leftAt > APP_LOCK_GRACE_MS) unlocked = false
     }
 }
 
@@ -106,8 +109,8 @@ internal fun AppLockGate(content: @Composable () -> Unit) {
     DisposableEffect(lifecycleOwner, lock) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_STOP -> lock.session.onStop(SystemClock.elapsedRealtime())
-                Lifecycle.Event.ON_START -> lock.session.onStart(SystemClock.elapsedRealtime())
+                Lifecycle.Event.ON_PAUSE -> lock.session.onPause(SystemClock.elapsedRealtime())
+                Lifecycle.Event.ON_RESUME -> lock.session.onResume(SystemClock.elapsedRealtime())
                 else -> Unit
             }
         }
