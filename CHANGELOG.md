@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Restoring a backup with "Also apply global preferences" ticked now brings back the Codex Library's sort order and the old search bar choice, which it used to leave as they were.
+
 ## [1.6.1] - 2026-11-12
 
 ### Changed
