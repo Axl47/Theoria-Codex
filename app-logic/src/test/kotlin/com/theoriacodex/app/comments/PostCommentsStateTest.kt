@@ -1,6 +1,7 @@
 package com.theoriacodex.app.comments
 
 import com.theoriacodex.domain.model.CommentHint
+import com.theoriacodex.domain.model.keepingListingDataOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -80,10 +81,10 @@ class PostCommentsStateTest {
     fun `a resolved post keeps the listing's hint only when it has none of its own`() {
         val listed = commentsTestPost(hint = CommentHint(3))
         val resolved = commentsTestPost()
-        assertEquals(CommentHint(3), resolved.keepingCommentHintOf(listed).commentHint)
-        assertEquals(CommentHint.None, commentsTestPost(hint = CommentHint.None).keepingCommentHintOf(listed).commentHint)
+        assertEquals(CommentHint(3), resolved.keepingListingDataOf(listed).commentHint)
+        assertEquals(CommentHint.None, commentsTestPost(hint = CommentHint.None).keepingListingDataOf(listed).commentHint)
         val unhinted = commentsTestPost()
-        assertSame(unhinted, unhinted.keepingCommentHintOf(commentsTestPost()))
+        assertSame(unhinted, unhinted.keepingListingDataOf(commentsTestPost()))
     }
 
     @Test

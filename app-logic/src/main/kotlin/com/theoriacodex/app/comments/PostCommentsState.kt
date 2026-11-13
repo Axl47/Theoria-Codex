@@ -120,13 +120,6 @@ private fun CommentHint?.countBeforeLoading(): CommentCount? {
     return count?.let(CommentCount::Exact) ?: CommentCount.Some
 }
 
-/**
- * A resolved post replaces a listed one with the listing's [CommentHint] when the resolved one has none,
- * because detail responses seldom repeat what the listing said about comments.
- */
-fun Post.keepingCommentHintOf(listed: Post): Post =
-    if (commentHint == null && listed.commentHint != null) copy(commentHint = listed.commentHint) else this
-
 /** The reply button's text: "Hide replies" while open; otherwise the reply count once known, else "Replies". */
 fun repliesLabel(total: Int?, expanded: Boolean): String = when {
     expanded -> "Hide replies"

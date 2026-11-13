@@ -91,6 +91,16 @@ fun contentHashOrNull(raw: String?): String? =
     raw?.trim()?.lowercase()?.takeIf { hash -> hash.length == MD5_HEX_LENGTH && hash.all { it in '0'..'9' || it in 'a'..'f' } }
 
 /**
+ * A resolved or stored post replaces a listed one, keeping what only the listing said: detail responses seldom repeat
+ * the comment hint, and stored posts carry neither it nor the file hash.
+ */
+fun Post.keepingListingDataOf(listed: Post): Post {
+    val hint = commentHint ?: listed.commentHint
+    val hash = contentHash ?: listed.contentHash
+    return if (hint == commentHint && hash == contentHash) this else copy(commentHint = hint, contentHash = hash)
+}
+
+/**
  * Keeps the first post for each ID and the first post for each file, in order. Feeds that mix sites use it so a file
  * hosted by several of them appears once; posts without a [Post.contentHash] are only compared by ID.
  */

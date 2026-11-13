@@ -1,6 +1,6 @@
 package com.theoriacodex.app.search.state
 
-import com.theoriacodex.app.comments.keepingCommentHintOf
+import com.theoriacodex.domain.model.keepingListingDataOf
 import com.theoriacodex.domain.model.Post
 
 /** Refreshes known posts without changing the applied search, canonical order, or pagination. */
@@ -10,7 +10,7 @@ fun SearchUiState.withResolvedPosts(queryHash: String, posts: List<Post>): Searc
     if (replacements.isEmpty()) return this
     var changed = false
     val updated = content.results.map { post ->
-        replacements[post.id]?.keepingCommentHintOf(post)?.also { replacement ->
+        replacements[post.id]?.keepingListingDataOf(post)?.also { replacement ->
             if (replacement != post) changed = true
         } ?: post
     }
