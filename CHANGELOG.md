@@ -11,6 +11,10 @@
 
 - A file that several sites host now shows once when you search them together, instead of one card per site. This covers Danbooru, AIBooru, Gelbooru, Rule34.xxx and custom booru sites, in Search, For You and live Codices.
 
+### Fixed
+
+- Restoring a backup with "Also apply global preferences" ticked now brings back the Codex Library's sort order and the old search bar choice, which it used to leave as they were.
+
 ## [1.6.1] - 2026-11-12
 
 ### Changed
