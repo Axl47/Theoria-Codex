@@ -115,7 +115,7 @@ class GelbooruSourceAdapterTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(
                 statusCode = 200,
-                body = """{"post":[{"id":"12345678","preview_url":"https://gelbooru.com/p.jpg","file_url":"https://gelbooru.com/f.jpg","md5":"0123456789abcdef0123456789abcdef","tags":"a jojo&#039;s_bizarre_adventure"}]}""",
+                body = """{"post":[{"id":"12345678","preview_url":"https://gelbooru.com/p.jpg","file_url":"https://gelbooru.com/f.jpg","md5":"0123456789abcdef0123456789abcdef","source":"https://x.com/artist/status/1","tags":"a jojo&#039;s_bizarre_adventure"}]}""",
             )
         }
         val adapter = gelbooru(httpClient)
@@ -128,6 +128,7 @@ class GelbooruSourceAdapterTest {
         )
         assertEquals(listOf("a", "jojo's_bizarre_adventure"), page.items.firstOrNull()?.canonicalTags)
         assertEquals("0123456789abcdef0123456789abcdef", page.items.firstOrNull()?.contentHash)
+        assertEquals("https://x.com/artist/status/1", page.items.firstOrNull()?.originUrl)
     }
 
     @Test

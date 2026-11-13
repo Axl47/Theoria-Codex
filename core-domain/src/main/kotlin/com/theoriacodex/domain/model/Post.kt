@@ -79,6 +79,11 @@ data class Post(
      * value, which is how [distinctByFile] recognises one post listed by several sites. Live listing data only.
      */
     val contentHash: String? = null,
+    /**
+     * The page a booru says the file came from, usually the artist's own post on Pixiv or a social site. Live
+     * listing data only.
+     */
+    val originUrl: String? = null,
 )
 
 /** A site-reported file MD5 in the form [Post.contentHash] holds, or null when [raw] is not one. */

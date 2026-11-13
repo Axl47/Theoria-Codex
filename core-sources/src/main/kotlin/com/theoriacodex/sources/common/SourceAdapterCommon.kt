@@ -48,6 +48,21 @@ internal fun sourceQuickQuery(
     )
 }
 
+/**
+ * A booru's `source` field as a page that can be opened, or null when it is empty or free text. Direct Pixiv image
+ * addresses only load with a Pixiv referer, so they and a known [pixivId] become the artwork's own page.
+ */
+internal fun originUrlOrNull(source: String?, pixivId: Long? = null): String? {
+    pixivId?.takeIf { it > 0 }?.let { return PIXIV_ARTWORK_URL + it }
+    val url = source?.trim()?.split(BOORU_WHITESPACE_REGEX)?.firstOrNull()
+        ?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+        ?: return null
+    return PXIMG_ARTWORK_ID_REGEX.find(url)?.let { PIXIV_ARTWORK_URL + it.groupValues[1] } ?: url
+}
+
+private const val PIXIV_ARTWORK_URL = "https://www.pixiv.net/artworks/"
+private val PXIMG_ARTWORK_ID_REGEX = Regex("""^https?://i\d*\.pximg\.net/.*/(\d+)_(?:p\d+|ugoira)""")
+
 internal fun parseJsonArray(body: String, gson: Gson, errorLabel: String): JsonArray {
     return runCatching { gson.fromJson(body, JsonArray::class.java) }.getOrNull()
         ?: throw SourceAdapterException(
