@@ -79,6 +79,11 @@ data class Post(
      * value, which is how [distinctByFile] recognises one post listed by several sites. Live listing data only.
      */
     val contentHash: String? = null,
+    /**
+     * The page a booru says the file came from, usually the artist's own post on Pixiv or a social site. Live
+     * listing data only.
+     */
+    val originUrl: String? = null,
 )
 
 /** A site-reported file MD5 in the form [Post.contentHash] holds, or null when [raw] is not one. */
@@ -87,12 +92,14 @@ fun contentHashOrNull(raw: String?): String? =
 
 /**
  * A resolved or stored post replaces a listed one, keeping what only the listing said: detail responses seldom repeat
- * the comment hint, and stored posts carry neither it nor the file hash.
+ * the comment hint, and stored posts carry neither it, the file hash nor the origin page.
  */
 fun Post.keepingListingDataOf(listed: Post): Post {
     val hint = commentHint ?: listed.commentHint
     val hash = contentHash ?: listed.contentHash
-    return if (hint == commentHint && hash == contentHash) this else copy(commentHint = hint, contentHash = hash)
+    val origin = originUrl ?: listed.originUrl
+    if (hint == commentHint && hash == contentHash && origin == originUrl) return this
+    return copy(commentHint = hint, contentHash = hash, originUrl = origin)
 }
 
 /**

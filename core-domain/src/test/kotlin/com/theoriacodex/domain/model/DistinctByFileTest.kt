@@ -43,6 +43,7 @@ class DistinctByFileTest {
 
         assertEquals(HASH_A, stored.keepingListingDataOf(listed).contentHash)
         assertEquals(HASH_B, post(SourceKey.DANBOORU, "1", HASH_B).keepingListingDataOf(listed).contentHash)
+        assertEquals("https://x.com/a/status/1", stored.keepingListingDataOf(listed.copy(originUrl = "https://x.com/a/status/1")).originUrl)
     }
 
     @Test

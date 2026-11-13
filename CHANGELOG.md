@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Booru posts have "Open original post" in the Viewer's More menu, which goes to the page the booru says the file came from, usually the artist's own Pixiv or X post. It opens in the Viewer when that site is one of your sources, and in the browser otherwise.
+
 ### Changed
 
 - A file that several sites host now shows once when you search them together, instead of one card per site. This covers Danbooru, AIBooru, Gelbooru, Rule34.xxx and custom booru sites, in Search, For You and live Codices.

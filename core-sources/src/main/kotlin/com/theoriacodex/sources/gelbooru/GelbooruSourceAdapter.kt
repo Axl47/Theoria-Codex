@@ -38,6 +38,7 @@ import com.theoriacodex.sources.common.intValue
 import com.theoriacodex.sources.common.isSuccessful
 import com.theoriacodex.sources.common.longValue
 import com.theoriacodex.sources.common.mimeFromUrlOrExt
+import com.theoriacodex.sources.common.originUrlOrNull
 import com.theoriacodex.sources.common.normalizeBooruTag
 import com.theoriacodex.sources.common.objectList
 import com.theoriacodex.sources.common.parseJsonArray
@@ -423,6 +424,7 @@ private class GelbooruFamilyAdapter(
             commentHint = raw.gelbooruCommentHint(),
             // gelbooru.com names the file hash `md5`; Gelbooru 0.2 forks name it `hash`.
             contentHash = contentHashOrNull(raw.stringValue("md5") ?: raw.stringValue("hash")),
+            originUrl = originUrlOrNull(raw.stringValue("source")),
         )
     }
 

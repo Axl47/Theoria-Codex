@@ -637,6 +637,30 @@ internal class TheoriaShell(
         navReady = true
     }
 
+    /**
+     * Opens the page a booru post came from. A post on an active source replaces the open Viewer; anything else, or
+     * a post that cannot be loaded, opens in the browser.
+     */
+    fun openOriginalPost(url: String) {
+        val link = parseExternalPostDeepLink(url) ?: parseCustomSitePostDeepLink(url, container.customSites.sites.value)
+        val adapter = link?.takeIf { it.source in sources.availableSources.value }
+            ?.let { sources.registry.adapterFor(it.source) }
+        if (link == null || adapter == null) {
+            openInBrowser(appContext, url)
+            return
+        }
+        scope.launch {
+            val post = runCatchingPreservingCancellation {
+                adapter.resolvePost(PostId(source = link.source, sourcePostId = link.postId))
+            }.getOrNull()
+            if (post == null) {
+                openInBrowser(appContext, url)
+            } else {
+                openSinglePostViewer("${link.source.id.lowercase()}-deeplink:${link.postId}", link.initialMediaIndex) { post }
+            }
+        }
+    }
+
     /** Opens a shared link as a creator profile or a one-post Viewer session, or says why it cannot. */
     suspend fun openExternalContent(uri: Uri) {
         val customSites = container.customSites.sites.value

@@ -306,6 +306,7 @@ internal fun ViewerInfoSheet(
     fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?>,
     onAction: (ViewerAction) -> Unit,
     onOpenInBrowser: (Post) -> Unit,
+    onOpenOriginalPost: (Post) -> Unit,
     onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
     onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)?,
@@ -329,7 +330,10 @@ internal fun ViewerInfoSheet(
     AdaptiveViewerInfo(onDismiss = { controls.setInfoSheetVisible(false) }) {
         PostTagActionSection(
             header = {
-                ViewerInfoActions(selection, liked, controls, creatorBrowsingSources, onAction, onOpenInBrowser, onGoToSearch, onOpenCreatorFallback)
+                ViewerInfoActions(
+                    selection, liked, controls, creatorBrowsingSources, onAction, onOpenInBrowser, onOpenOriginalPost,
+                    onGoToSearch, onOpenCreatorFallback,
+                )
             },
             post = post,
             tagVideoCountProvider = tagVideoCountProvider,
@@ -381,6 +385,7 @@ private fun ViewerInfoActions(
     creatorBrowsingSources: Set<SourceKey>,
     onAction: (ViewerAction) -> Unit,
     onOpenInBrowser: (Post) -> Unit,
+    onOpenOriginalPost: (Post) -> Unit,
     onGoToSearch: () -> Unit,
     onOpenCreatorFallback: ((Post) -> Unit)?,
 ) {
@@ -411,6 +416,7 @@ private fun ViewerInfoActions(
                 otherCreators = creators.drop(1),
                 onOpenCreator = ::openCreator,
                 onGoToSearch = { closeThen { controls.setPlaybackEnabled(false); onGoToSearch() } },
+                onOpenOriginalPost = if (post.originUrl == null) null else ({ closeThen { onOpenOriginalPost(post) } }),
                 onOpenInBrowser = if (post.pageUrl.isNullOrBlank()) null else ({ closeThen { onOpenInBrowser(post) } }),
             )
         }
@@ -433,6 +439,7 @@ private fun ViewerInfoMoreActions(
     otherCreators: List<CreatorProfileAction>,
     onOpenCreator: (CreatorProfileAction) -> Unit,
     onGoToSearch: () -> Unit,
+    onOpenOriginalPost: (() -> Unit)?,
     onOpenInBrowser: (() -> Unit)?,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -443,6 +450,7 @@ private fun ViewerInfoMoreActions(
                 DropdownMenuItem(text = { Text(creator.label) }, onClick = { onOpenCreator(creator) })
             }
             DropdownMenuItem(text = { Text("Go to Search") }, onClick = onGoToSearch)
+            onOpenOriginalPost?.let { open -> DropdownMenuItem(text = { Text("Open original post") }, onClick = open) }
             onOpenInBrowser?.let { open -> DropdownMenuItem(text = { Text("Open in browser") }, onClick = open) }
         }
     }
