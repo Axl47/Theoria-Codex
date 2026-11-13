@@ -6,6 +6,7 @@ import com.google.gson.JsonObject
 import com.theoriacodex.domain.adapter.AccountProfileSourceAdapter
 import com.theoriacodex.domain.adapter.CommentsSourceAdapter
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
+import com.theoriacodex.domain.adapter.FileHashLookupSourceAdapter
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
@@ -87,7 +88,7 @@ class DanbooruSourceAdapter(
     private val credentials: UserApiKeyCredentialLookup = { null },
     private val gson: Gson = Gson(),
 ) : SourceAdapter, TagCountLookupSourceAdapter, CreatorPostsSourceAdapter, CommentsSourceAdapter,
-    AccountProfileSourceAdapter {
+    AccountProfileSourceAdapter, FileHashLookupSourceAdapter {
     override val sourceKey: SourceKey = site.source
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
@@ -167,6 +168,9 @@ class DanbooruSourceAdapter(
         }
         return parsePost(record)
     }
+
+    override suspend fun findByFileHash(md5: String): Post? =
+        searchTags("md5:$md5", idCursor = false, pageToken = null).items.firstOrNull()
 
     /**
      * Live comments newest first, 100 to a page, without deleted ones. A full page means another

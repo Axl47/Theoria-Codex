@@ -53,6 +53,19 @@ class GelbooruCustomProfileTest {
     }
 
     @Test
+    fun `a custom profile finds a file by its md5`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(statusCode = 200, body = SAFEBOORU_POSTS)
+        }
+        val adapter = GelbooruSourceAdapter(SAFEBOORU_SHAPED_SITE, httpClient)
+
+        assertEquals("7293991", adapter.findByFileHash(MD5)?.id?.sourcePostId)
+        assertEquals("md5:$MD5", httpClient.lastGet?.query?.get("tags"))
+        httpClient.nextGetResponse = SourceHttpResponse(statusCode = 200, body = "[]")
+        assertNull(adapter.findByFileHash(MD5))
+    }
+
+    @Test
     fun `a custom profile loads a generated sample before the original and skips one the fork disowns`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(statusCode = 200, body = SAMPLED_POSTS)
@@ -97,6 +110,8 @@ private val SAFEBOORU_SHAPED_SITE = GelbooruSite(
     orGroup = GelbooruOrGroup(prefix = "( ", separator = " ~ ", suffix = " )"),
     creatorPosts = true,
 )
+
+private const val MD5 = "00000000000000000000000000000000"
 
 private val SAFEBOORU_POSTS = """
     [{"preview_url":"https://safebooru.example/thumbnails/1/thumbnail_a.jpg",

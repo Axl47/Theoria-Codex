@@ -307,6 +307,7 @@ internal fun ViewerInfoSheet(
     onAction: (ViewerAction) -> Unit,
     onOpenInBrowser: (Post) -> Unit,
     onOpenOriginalPost: (Post) -> Unit,
+    findOnOtherSites: (Post) -> (() -> Unit)?,
     onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
     onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)?,
@@ -332,7 +333,7 @@ internal fun ViewerInfoSheet(
             header = {
                 ViewerInfoActions(
                     selection, liked, controls, creatorBrowsingSources, onAction, onOpenInBrowser, onOpenOriginalPost,
-                    onGoToSearch, onOpenCreatorFallback,
+                    findOnOtherSites, onGoToSearch, onOpenCreatorFallback,
                 )
             },
             post = post,
@@ -386,6 +387,7 @@ private fun ViewerInfoActions(
     onAction: (ViewerAction) -> Unit,
     onOpenInBrowser: (Post) -> Unit,
     onOpenOriginalPost: (Post) -> Unit,
+    findOnOtherSites: (Post) -> (() -> Unit)?,
     onGoToSearch: () -> Unit,
     onOpenCreatorFallback: ((Post) -> Unit)?,
 ) {
@@ -417,6 +419,7 @@ private fun ViewerInfoActions(
                 onOpenCreator = ::openCreator,
                 onGoToSearch = { closeThen { controls.setPlaybackEnabled(false); onGoToSearch() } },
                 onOpenOriginalPost = if (post.originUrl == null) null else ({ closeThen { onOpenOriginalPost(post) } }),
+                onFindOnOtherSites = findOnOtherSites(post)?.let { find -> { closeThen(find) } },
                 onOpenInBrowser = if (post.pageUrl.isNullOrBlank()) null else ({ closeThen { onOpenInBrowser(post) } }),
             )
         }
@@ -440,6 +443,7 @@ private fun ViewerInfoMoreActions(
     onOpenCreator: (CreatorProfileAction) -> Unit,
     onGoToSearch: () -> Unit,
     onOpenOriginalPost: (() -> Unit)?,
+    onFindOnOtherSites: (() -> Unit)?,
     onOpenInBrowser: (() -> Unit)?,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -451,6 +455,7 @@ private fun ViewerInfoMoreActions(
             }
             DropdownMenuItem(text = { Text("Go to Search") }, onClick = onGoToSearch)
             onOpenOriginalPost?.let { open -> DropdownMenuItem(text = { Text("Open original post") }, onClick = open) }
+            onFindOnOtherSites?.let { find -> DropdownMenuItem(text = { Text("Find on other sites") }, onClick = find) }
             onOpenInBrowser?.let { open -> DropdownMenuItem(text = { Text("Open in browser") }, onClick = open) }
         }
     }

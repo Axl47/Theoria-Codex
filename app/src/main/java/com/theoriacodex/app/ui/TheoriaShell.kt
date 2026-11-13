@@ -52,6 +52,7 @@ import com.theoriacodex.app.codex.transfer.saveExportToDownloads
 import com.theoriacodex.app.codex.transfer.writeExportDocument
 import com.theoriacodex.app.creator.CreatorFollowsViewModel
 import com.theoriacodex.app.creator.CreatorOpeningWorkflow
+import com.theoriacodex.app.source.FileCopyLookup
 import com.theoriacodex.app.creator.state.CreatorAction
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.media.PostDownloadItem
@@ -376,6 +377,7 @@ internal class TheoriaShell(
     var navReady by mutableStateOf(appShellOwner.state.value.appReady)
     var activeViewerOwner by mutableStateOf<ViewerRouteOwnerHandle?>(null)
     val creatorOpening = CreatorOpeningWorkflow(sources.registry, sources.httpClient)
+    private val fileCopies = FileCopyLookup(sources.registry)
     val recentsClearWorkflow = RecentsClearWorkflow(data.recentsRepository)
     val viewerRouteWorkflow = ViewerRouteWorkflow(
         data = data,
@@ -661,6 +663,15 @@ internal class TheoriaShell(
         }
     }
 
+    /** "Find on other sites" for [post], or null when it has no file hash or no other site can look one up. */
+    fun findOnOtherSites(post: Post): (() -> Unit)? = if (!fileCopies.canFind(post)) null else ({
+        scope.launch {
+            val copies = fileCopies.find(post)
+            if (copies.isEmpty()) toast("Not on your other sites")
+            else openViewerSession("file-copies:${post.id.source.id}:${post.id.sourcePostId}", copies)
+        }
+    })
+
     /** Opens a shared link as a creator profile or a one-post Viewer session, or says why it cannot. */
     suspend fun openExternalContent(uri: Uri) {
         val customSites = container.customSites.sites.value
@@ -790,7 +801,12 @@ internal class TheoriaShell(
             snackbarHostState.showSnackbar("This post could not be opened. Try again.")
             return
         }
-        data.fileMirrors.learn(listOf(post))
+        openViewerSession(queryHash, listOf(post), initialMediaIndex)
+    }
+
+    /** Replaces any open Viewer with a fresh session over [posts], which also teach the file mirror index. */
+    private suspend fun openViewerSession(queryHash: String, posts: List<Post>, initialMediaIndex: Int = 0) {
+        data.fileMirrors.learn(posts)
         if (navigation.currentRoute == AppRoute.Viewer) {
             activeViewerOwner?.clearSession()
             viewerSessions.clear()
@@ -799,7 +815,7 @@ internal class TheoriaShell(
         val context = ViewerLaunchContext(queryHash, 0, ViewerStreamSource.RECENTS, 0)
         viewerSessions.retain(
             ViewerSession(
-                posts = listOf(post),
+                posts = posts,
                 context = context,
                 liveSearchBinding = false,
                 initialMediaIndex = initialMediaIndex,
