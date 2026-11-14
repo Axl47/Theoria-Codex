@@ -342,6 +342,8 @@ private fun ViewerRouteScreen(
         )
         durationOwner.onNearbyPostsChanged(nearbyPostIds)
     }
+    // The Viewer has no scrolling feed, so its duration work waits only on the lifecycle.
+    com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect({ false }, durationOwner::onEnvironmentChanged)
     val related = rememberViewerRelatedPosts(activeSession, liveSourceState)
     androidx.compose.runtime.CompositionLocalProvider(
         com.theoriacodex.app.viewer.LocalViewerInstantSeek provides renderConfig.instantSeek,
