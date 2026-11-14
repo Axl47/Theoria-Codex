@@ -39,14 +39,8 @@ class FileMirrorIndex {
 
     /** [ids] plus every known post that shares a file with one of them; [ids] itself when there are none. */
     fun withCopies(ids: Set<PostId>): Set<PostId> = synchronized(lock) {
-        var expanded: MutableSet<PostId>? = null
-        for (id in ids) {
-            val copies = hashById[id]?.let(idsByHash::get) ?: continue
-            if (copies.size < 2) continue
-            if (expanded == null) expanded = ids.toMutableSet()
-            expanded += copies
-        }
-        expanded ?: ids
+        val copies = ids.flatMapTo(HashSet()) { id -> hashById[id]?.let(idsByHash::get)?.takeIf { it.size > 1 }.orEmpty() }
+        if (copies.isEmpty()) ids else ids + copies
     }
 
     /** Known posts holding the same file as [post], [post] itself included. */
