@@ -100,14 +100,16 @@ private fun SearchEmptyResults(
     outageNotices: List<SourceOutageNotice>,
     onRetry: () -> Unit,
 ) {
-    val sourceFailureMessage = remember(state.content.statuses, outageNotices) {
+    // Sources with a notice of their own are left out of both this message and its action.
+    val unannounced = remember(state.content.statuses, outageNotices) {
         val announced = outageNotices.flatMap(SourceOutageNotice::sources)
-        buildSourceFailureMessage(state.content.statuses.filterNot { it.source in announced })
+        state.content.statuses.filterNot { it.source in announced }
     }
+    val sourceFailureMessage = remember(unannounced) { buildSourceFailureMessage(unannounced) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         FeedContinueLoading(pageDemand)
         sourceAuthErrorMessage?.let { SourceAccountNotice(it, state.content.statuses) }
-        sourceFailureMessage?.let { failureMessage -> SourceFailureBlock(failureMessage, state.content.statuses, onRetry) }
+        sourceFailureMessage?.let { failureMessage -> SourceFailureBlock(failureMessage, unannounced, onRetry) }
         if (feed.durationMetadata.readiness.isResolving) {
             EmptyBlock(hasPendingChanges = false, messageOverride = "Resolving durations…")
         } else if (!state.content.hasExecutedSearch && !feed.animatedFilterActive) {
