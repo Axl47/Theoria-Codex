@@ -38,6 +38,7 @@ import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.media.MediaDurationRouteViewModel
+import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.viewer.PixivUgoiraClient
@@ -66,6 +67,7 @@ import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /** Dependencies whose lifetime is longer than one Viewer destination composition. */
@@ -326,6 +328,11 @@ private fun ViewerRouteScreen(
         matchingSourceState?.canLoadMore == true
     // Remembered so an unchanged session keeps one list, which is how the owner recognizes no new work.
     val durationPosts = remember(viewerState.pages) { viewerState.pages.map { page -> dependencies.canonicalizePost(page.post) } }
+    val nearbyPostIds = remember(viewerState) {
+        val navigation = com.theoriacodex.app.viewer.viewerPostNavigation(viewerState)
+        listOfNotNull(viewerState.currentPage).plus(navigation.neighbours)
+            .mapTo(mutableSetOf()) { page -> dependencies.canonicalizePost(page.post).id }
+    }
     SideEffect {
         if (activeSession == null) return@SideEffect
         durationOwner.synchronize(
@@ -333,6 +340,7 @@ private fun ViewerRouteScreen(
             posts = durationPosts,
             resolveInBackground = false,
         )
+        durationOwner.onNearbyPostsChanged(nearbyPostIds)
     }
     val related = rememberViewerRelatedPosts(activeSession, liveSourceState)
     androidx.compose.runtime.CompositionLocalProvider(
@@ -403,8 +411,16 @@ private fun ViewerRouteRenderer(
         onVisibleMediaChanged = { post, viewedMediaNumber ->
             viewerOwner.recordVisibleMedia(post, viewedMediaNumber, latestScreenCallbacks.value.onVisibleMediaChanged)
         },
-        onAuthoritativeDurationKnown = { post, durationMs ->
-            durationOwner.publishPlayerDuration(latestDependencies.value.canonicalizePost(post), durationMs)
+        durations = remember(durationOwner) {
+            com.theoriacodex.app.viewer.ViewerPostDurations(
+                observe = { post ->
+                    durationOwner.observeState(latestDependencies.value.canonicalizePost(post))
+                        .map { state -> (state as? MediaDurationState.Known)?.durationMs }
+                },
+                onPlayerDuration = { post, durationMs ->
+                    durationOwner.publishPlayerDuration(latestDependencies.value.canonicalizePost(post), durationMs)
+                },
+            )
         },
         onOpenInBrowser = screenCallbacks.onOpenInBrowser,
         onOpenOriginalPost = screenCallbacks.onOpenOriginalPost,

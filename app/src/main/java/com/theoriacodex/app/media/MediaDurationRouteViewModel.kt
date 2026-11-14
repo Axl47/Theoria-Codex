@@ -59,9 +59,12 @@ internal class MediaDurationRouteViewModel(
     private var backgroundEnabled = false
     private var filterActive = false
     private val visiblePostIds = mutableSetOf<PostId>()
+    private var requestedNearbyPostIds: Set<PostId> = emptySet()
+    private var nearbyPostIds: Set<PostId> = emptySet()
     private var backgroundDemandKeys: Set<MediaDurationKey> = emptySet()
     private var filterDemandKeys: Set<MediaDurationKey> = emptySet()
     private var visibleDemandKeys: Set<MediaDurationKey> = emptySet()
+    private var nearbyDemandKeys: Set<MediaDurationKey> = emptySet()
 
     private val mutableStates = MutableStateFlow<Map<MediaDurationKey, MediaDurationState>>(emptyMap())
     val states: StateFlow<Map<MediaDurationKey, MediaDurationState>> = mutableStates.asStateFlow()
@@ -193,6 +196,21 @@ internal class MediaDurationRouteViewModel(
         }
     }
 
+    /**
+     * The posts a swipe can reach right now (the Viewer's current post and its neighbours). Their durations
+     * resolve regardless of background resolution, so a timeline can show its length before the player has it.
+     */
+    fun onNearbyPostsChanged(postIds: Set<PostId>) {
+        if (requestedNearbyPostIds == postIds) return
+        requestedNearbyPostIds = postIds
+        ownerScope.launch {
+            demandLock.withLock {
+                nearbyPostIds = postIds
+                synchronizeDemand()
+            }
+        }
+    }
+
     fun onEnvironmentChanged(lifecycleStarted: Boolean, scrollIdle: Boolean) {
         ownerScope.launch {
             coordinator.updateEnvironment(environmentIdentity, lifecycleStarted, scrollIdle)
@@ -248,6 +266,15 @@ internal class MediaDurationRouteViewModel(
             },
             lane = DemandLane.VISIBLE,
             priority = DurationDemandPriority.VISIBLE,
+            reason = DurationDemandReason.VIEWPORT,
+        )
+        nearbyDemandKeys = reconcileDemandLane(
+            current = nearbyDemandKeys,
+            desired = nearbyPostIds.mapNotNullTo(mutableSetOf()) { postId ->
+                keysByPostId[postId]?.takeIf(candidatesByKey::containsKey)
+            },
+            lane = DemandLane.NEARBY,
+            priority = DurationDemandPriority.NEAR_VIEWPORT,
             reason = DurationDemandReason.VIEWPORT,
         )
     }
@@ -330,6 +357,7 @@ internal class MediaDurationRouteViewModel(
         backgroundDemandKeys = emptySet()
         filterDemandKeys = emptySet()
         visibleDemandKeys = emptySet()
+        nearbyDemandKeys = emptySet()
         postsById = emptyMap()
         keysByPostId = emptyMap()
         candidatesByKey = emptyMap()
@@ -341,6 +369,7 @@ internal class MediaDurationRouteViewModel(
             backgroundDemandKeys.forEach { key -> add(demandIdentity(DemandLane.BACKGROUND, key)) }
             filterDemandKeys.forEach { key -> add(demandIdentity(DemandLane.FILTER, key)) }
             visibleDemandKeys.forEach { key -> add(demandIdentity(DemandLane.VISIBLE, key)) }
+            nearbyDemandKeys.forEach { key -> add(demandIdentity(DemandLane.NEARBY, key)) }
             observedKeys.forEach { key ->
                 DemandLane.entries.forEach { lane -> add(demandIdentity(lane, key)) }
             }
@@ -366,6 +395,7 @@ internal class MediaDurationRouteViewModel(
         BACKGROUND,
         FILTER,
         VISIBLE,
+        NEARBY,
     }
 
     private data class DurationSnapshotRequest(

@@ -110,6 +110,8 @@ private class ViewerVideoState {
     var position by mutableLongStateOf(0L)
     var scrubbing by mutableStateOf(false)
     var actuallyPlaying by mutableStateOf(false)
+    /** The decoded frames' shape once the player knows it. */
+    var aspectRatio by mutableStateOf<Float?>(null)
 
     fun setPlaying(playing: Boolean) {
         runCatching {
@@ -122,6 +124,8 @@ private class ViewerVideoState {
         val active = player ?: return
         runCatching {
             active.duration.takeIf { it > 0L }?.let { duration = it }
+            active.videoSize.let { size -> viewerAspectRatio((size.width * size.pixelWidthHeightRatio).toInt(), size.height) }
+                ?.let { aspectRatio = it }
             if (!scrubbing) position = active.currentPosition.coerceAtLeast(0L)
                 .let { if (duration > 0L) it.coerceAtMost(duration) else it }
         }
@@ -368,20 +372,24 @@ private fun ViewerVideoContent(
         if ((!controls.isActive || !state.hasRenderedFirstFrame) && !state.failed) loadingPreview?.invoke()
         if (state.loading && !state.failed) CircularProgressIndicator()
         if (state.failed) Text("Could not play video", color = MaterialTheme.colorScheme.onBackground)
-        ViewerVideoTimelineOverlay(state, postId.source, controls, events, Modifier.align(Alignment.BottomCenter))
+        ViewerVideoTimelineOverlay(state, postId.source, controls, events, state.aspectRatio ?: aspectRatio, Modifier.align(Alignment.BottomCenter))
     }
 }
 
 @Composable
 private fun ViewerVideoTimelineOverlay(
     state: ViewerVideoState, source: SourceKey, controls: ViewerRendererControls,
-    events: ViewerRendererEvents, modifier: Modifier,
+    events: ViewerRendererEvents, aspectRatio: Float?, modifier: Modifier,
 ) {
-    if (!controls.isActive || state.failed || state.duration <= 0L || state.player == null) return
+    if (!controls.isActive || state.failed) return
+    if (state.duration <= 0L || state.player == null) {
+        ViewerPendingTimeline(controls, events, modifier)
+        return
+    }
     ViewerChromeVisibility(controls.showControls, modifier) {
         ViewerTimelineVeil { ViewerVideoTimeline(state, source, controls, events) }
     }
-    if (controls.showPassiveProgress) ViewerPassiveProgressBar({ state.position }, state.duration, modifier)
+    if (controls.showPassiveProgress) ViewerMediaPassiveProgress({ state.position }, state.duration, aspectRatio)
 }
 
 @Composable

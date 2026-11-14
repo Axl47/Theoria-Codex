@@ -13,6 +13,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -21,8 +22,6 @@ import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.app.media.isAuthoritativeDurationMedia
-import com.theoriacodex.app.media.isPixivUgoiraMedia
 import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.media.postMediaItems
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
@@ -55,7 +54,7 @@ internal fun ViewerPostPagerSurface(
     pixivUgoiraClient: PixivUgoiraClient?,
     onAction: (ViewerAction) -> Unit,
     onVisibleMediaChanged: ((Post, Int) -> Unit)?,
-    onAuthoritativeDurationKnown: (Post, Long) -> Unit,
+    durations: ViewerPostDurations,
     onRequestMediaRecovery: ((Post, ImageRef) -> Unit)?,
     scope: CoroutineScope,
 ) {
@@ -94,7 +93,7 @@ internal fun ViewerPostPagerSurface(
                 ViewerPostPage(
                     postPage, frame, postPagerState, viewerTransform, screen, controls, swipe, dismissDrag, levelControls, readReturnProgress, quality,
                     qualityHeight, playbackDiagnosticsEnabled, videoPositions, invertMultiImageScrollDirection, pixivUgoiraClient,
-                    onAction, onVisibleMediaChanged, onAuthoritativeDurationKnown, onRequestMediaRecovery,
+                    onAction, onVisibleMediaChanged, durations, onRequestMediaRecovery,
                 )
             }
         }
@@ -156,12 +155,13 @@ private fun ViewerPostPage(
     pixivUgoiraClient: PixivUgoiraClient?,
     onAction: (ViewerAction) -> Unit,
     onVisibleMediaChanged: ((Post, Int) -> Unit)?,
-    onAuthoritativeDurationKnown: (Post, Long) -> Unit,
+    durations: ViewerPostDurations,
     onRequestMediaRecovery: ((Post, ImageRef) -> Unit)?,
 ) {
     val post = frame.posts[postPage]
     val pageState = frame.navigation.pages[postPage]
     val postMedia = remember(post) { postMediaItems(post) }
+    val knownDurationMs by remember(post, durations) { durations.observe(post) }.collectAsState(null)
     val initialMediaPage = pageState.selectedMediaIndex.coerceIn(0, postMedia.lastIndex)
     val mediaPagerState = rememberPagerState(initialPage = initialMediaPage, pageCount = { postMedia.size })
     DisposableEffect(post.id, mediaPagerState) {
@@ -190,12 +190,15 @@ private fun ViewerPostPage(
             returnProgress = if (active) readReturnProgress else restingReturnProgress,
             dismissDrag = dismissDrag.takeIf { active },
             mediaIndex = mediaPage,
-            controls = viewerRendererControls(frame, active, swipe.loadTarget == ViewerHorizontalSwipeTarget(postPage, mediaPage), loadGeneration),
+            controls = viewerRendererControls(
+                frame, active, swipe.loadTarget == ViewerHorizontalSwipeTarget(postPage, mediaPage), loadGeneration,
+                expectedDurationMs = knownDurationMs?.takeIf { carriesPostDuration(post, media) },
+            ),
             events = viewerRendererEvents(
                 session = frame.uiState.session, key = key, generation = loadGeneration,
                 onAction = onAction,
                 onTimelineInteractionActiveChanged = { controls.onTimelineInteractionChanged(it) },
-                onDurationKnown = { duration -> reportAuthoritativeDuration(post, media, duration, onAuthoritativeDurationKnown) },
+                onDurationKnown = { duration -> if (carriesPostDuration(post, media)) durations.onPlayerDuration(post, duration) },
             ),
             transform = viewerTransform,
             onTransformChanged = { viewerTransform.value = it },
@@ -215,15 +218,13 @@ private fun ViewerPostPage(
     }
 }
 
-private fun reportAuthoritativeDuration(post: Post, media: ImageRef, duration: Long, report: (Post, Long) -> Unit) {
-    if (isPixivUgoiraMedia(post, media) || isAuthoritativeDurationMedia(post, media)) report(post, duration)
-}
-
 private fun ViewerPageState.terminalResolutionMessage(): String? = resolution
     .takeIf { it.status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.FAILED && !it.recoverable }
     ?.message
 
-private fun viewerRendererControls(frame: ViewerFrame, active: Boolean, preloading: Boolean, loadGeneration: Long): ViewerRendererControls {
+private fun viewerRendererControls(
+    frame: ViewerFrame, active: Boolean, preloading: Boolean, loadGeneration: Long, expectedDurationMs: Long?,
+): ViewerRendererControls {
     val controls = frame.uiState.controls
     return ViewerRendererControls(
         isActive = active,
@@ -236,6 +237,7 @@ private fun viewerRendererControls(frame: ViewerFrame, active: Boolean, preloadi
         restartRequest = controls.playback.restartRequest,
         loadGeneration = loadGeneration,
         systemControlsReady = !frame.opening,
+        expectedDurationMs = expectedDurationMs,
     )
 }
 

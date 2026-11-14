@@ -68,7 +68,7 @@ internal fun ViewerScreen(
     onRequestMediaRecovery: ((Post, ImageRef) -> Unit)? = null,
     onVisiblePostChanged: ((Post, Int) -> Unit)? = null,
     onVisibleMediaChanged: ((Post, Int) -> Unit)? = null,
-    onAuthoritativeDurationKnown: (Post, Long) -> Unit = { _, _ -> },
+    durations: ViewerPostDurations = ViewerPostDurations.None,
     onOpenInBrowser: (Post) -> Unit,
     onOpenOriginalPost: (Post) -> Unit = {},
     findOnOtherSites: (Post) -> (() -> Unit)? = { null },
@@ -104,7 +104,7 @@ internal fun ViewerScreen(
         uiState, navigation, posts, returnProgress, returning, opening, dismissDrag, activity, quality, qualityHeight, pendingPostId,
         videoPositions, creatorBrowsingSources, onAction, saveToCodexQuery, pixivUgoiraClient, tagVideoCountProvider,
         fetchTagVideoCounts, canLoadMoreFromSource, loadingMoreFromSource, invertMultiImageScrollDirection, likedPostIds,
-        onRequestMediaRecovery, onVisiblePostChanged, onVisibleMediaChanged, onAuthoritativeDurationKnown, onOpenInBrowser,
+        onRequestMediaRecovery, onVisiblePostChanged, onVisibleMediaChanged, durations, onOpenInBrowser,
         onOpenOriginalPost, findOnOtherSites, onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, onGoToSearch, onOpenCreatorFallback,
         playbackDiagnosticsEnabled, onIncludeRelatedPosts, onDismissRelatedPosts, onRetryRelatedPosts, comments,
     )
@@ -138,7 +138,7 @@ private fun ViewerLoadedScreen(
     onRequestMediaRecovery: ((Post, ImageRef) -> Unit)?,
     onVisiblePostChanged: ((Post, Int) -> Unit)?,
     onVisibleMediaChanged: ((Post, Int) -> Unit)?,
-    onAuthoritativeDurationKnown: (Post, Long) -> Unit,
+    durations: ViewerPostDurations,
     onOpenInBrowser: (Post) -> Unit,
     onOpenOriginalPost: (Post) -> Unit,
     findOnOtherSites: (Post) -> (() -> Unit)?,
@@ -196,7 +196,7 @@ private fun ViewerLoadedScreen(
                 ViewerPostPagerSurface(
                     frame, postPagerState, viewerTransform, screen, controls, swipe, dismissDrag, levelControls, readReturnProgress, flingVelocity,
                     quality.value, qualityHeight.value, playbackDiagnosticsEnabled, videoPositions, invertMultiImageScrollDirection,
-                    pixivUgoiraClient, onAction, onVisibleMediaChanged, onAuthoritativeDurationKnown, onRequestMediaRecovery, scope,
+                    pixivUgoiraClient, onAction, onVisibleMediaChanged, durations, onRequestMediaRecovery, scope,
                 )
             }
             ViewerChromeOverlays(

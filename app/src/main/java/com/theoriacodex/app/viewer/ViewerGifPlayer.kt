@@ -87,7 +87,10 @@ private fun ViewerGifFallback(
     val location = state.fallbackLocations.getOrNull(state.fallbackIndex)
     Box(modifier, contentAlignment = Alignment.Center) {
         when {
-            state.loading -> CircularProgressIndicator()
+            state.loading -> {
+                CircularProgressIndicator()
+                ViewerPendingTimeline(controls, events, Modifier.align(Alignment.BottomCenter))
+            }
             !state.failed && location != null -> ViewerGifFallbackImage(state, source, location, mediaModifier, controls, events)
             else -> Text("Could not play GIF", color = MaterialTheme.colorScheme.onBackground)
         }
@@ -155,7 +158,9 @@ private fun ViewerGifMovie(
         ViewerChromeVisibility(controls.showControls, Modifier.align(Alignment.BottomCenter)) {
             ViewerTimelineVeil { ViewerGifTimeline(movie, animation, duration, controls, events) { scrubbing = it } }
         }
-        if (controls.showPassiveProgress) ViewerPassiveProgressBar({ animation.positionMs }, duration, Modifier.align(Alignment.BottomCenter))
+        if (controls.showPassiveProgress) {
+            ViewerMediaPassiveProgress({ animation.positionMs }, duration, viewerAspectRatio(movie.width(), movie.height()))
+        }
     }
 }
 

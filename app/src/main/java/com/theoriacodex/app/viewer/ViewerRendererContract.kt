@@ -20,6 +20,8 @@ internal data class ViewerRendererControls(
     val seekJumpDeltaMs: Long = 0L,
     /** False while the Viewer opens: system media controls wait for it to land, since connecting them costs frames. */
     val systemControlsReady: Boolean = true,
+    /** The media's length as known before its player loads; timelines show it at 0:00 meanwhile instead of vanishing. */
+    val expectedDurationMs: Long? = null,
 )
 
 internal data class ViewerRendererEvents(

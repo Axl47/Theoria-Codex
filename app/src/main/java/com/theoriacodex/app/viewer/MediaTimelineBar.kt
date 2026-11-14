@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -73,7 +74,7 @@ internal val VIEWER_TIMELINE_TRACK_HEIGHT = 34.dp
 /**
  * The seekable timeline shared by video, GIF and ugoira. [leading] holds the player's own buttons.
  * [positionMs] is read while drawing, so playback redraws the track each frame but recomposes only
- * when the shown second changes.
+ * when the shown second changes. A track that is not [seekable] only shows progress.
  */
 @Composable
 fun MediaTimelineBar(
@@ -87,6 +88,7 @@ fun MediaTimelineBar(
     onInteractionActiveChanged: (Boolean) -> Unit = {},
     playbackRate: Float = 1f,
     leading: @Composable () -> Unit = {},
+    seekable: Boolean = true,
 ) {
     val instantSeek = LocalViewerInstantSeek.current
     val safeDuration = durationMs.coerceAtLeast(1L)
@@ -110,7 +112,7 @@ fun MediaTimelineBar(
                 .height(VIEWER_TIMELINE_TRACK_HEIGHT)
                 .onSizeChanged { scrub.widthPx = it.width.toFloat().coerceAtLeast(1f) }
                 .testTag("viewer-timeline-track")
-                .timelineScrubGestures(
+                .then(if (!seekable) Modifier else Modifier.timelineScrubGestures(
                     safeDuration, instantSeek,
                     onBegin = { x ->
                         scrub.begin(latestPosition().coerceIn(0L, safeDuration))
@@ -118,7 +120,7 @@ fun MediaTimelineBar(
                     },
                     onMove = { x -> scrub.moveTo(x, safeDuration, instantSeek) },
                     onEnd = scrub::end,
-                ),
+                )),
             contentAlignment = Alignment.Center,
         ) {
             ViewerTimelineTrack(fraction, Modifier.fillMaxWidth().height(VIEWER_TIMELINE_TRACK_HEIGHT), emphasized = scrub.active)
@@ -409,3 +411,66 @@ internal fun ViewerPassiveProgressBar(positionMs: () -> Long, durationMs: Long, 
         drawRect(accent, size = Size(size.width * progress, size.height))
     }
 }
+
+/**
+ * Stands in for a player's timeline while its media loads: the [durationMs] already known, at 0:00 and not yet
+ * seekable, so swiping to a post keeps the timeline on screen. [onTogglePlayback] flips the playback intent the
+ * player picks up once it loads.
+ */
+@Composable
+internal fun ViewerPendingTimeline(
+    durationMs: Long,
+    visible: Boolean,
+    paused: Boolean,
+    playbackRate: Float,
+    onTogglePlayback: () -> Unit,
+    onInteractionActiveChanged: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    ViewerChromeVisibility(visible, modifier) {
+        ViewerTimelineVeil {
+            ViewerPlaybackFooter {
+                MediaTimelineBar(
+                    positionMs = { 0L }, durationMs = durationMs,
+                    onSeekFinished = {}, preview = {},
+                    playbackRate = playbackRate,
+                    leading = {
+                        TimelinePlaybackButton(isPaused = paused, onToggle = {
+                            onTogglePlayback()
+                            onInteractionActiveChanged(true)
+                            onInteractionActiveChanged(false)
+                        })
+                    },
+                    seekable = false,
+                )
+            }
+        }
+    }
+}
+
+/** [ViewerPendingTimeline] for a renderer whose [ViewerRendererControls.expectedDurationMs] is known; nothing otherwise. */
+@Composable
+internal fun ViewerPendingTimeline(controls: ViewerRendererControls, events: ViewerRendererEvents, modifier: Modifier) {
+    val expected = controls.expectedDurationMs?.takeIf { it > 0L && controls.isActive } ?: return
+    ViewerPendingTimeline(
+        expected, controls.showControls, !controls.isPlaying, controls.playbackRate,
+        events.onTogglePlayback, events.onTimelineInteractionActiveChanged, modifier,
+    )
+}
+
+/**
+ * [ViewerPassiveProgressBar] along the bottom edge of the fitted media, as wide as it, in a parent that lays the
+ * media out centred. An unknown [aspectRatio] falls back to the parent's bottom edge.
+ */
+@Composable
+internal fun ViewerMediaPassiveProgress(positionMs: () -> Long, durationMs: Long, aspectRatio: Float?) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(Modifier.viewerFittedMedia(aspectRatio), contentAlignment = Alignment.BottomCenter) {
+            ViewerPassiveProgressBar(positionMs, durationMs)
+        }
+    }
+}
+
+/** Width over height of a [width] by [height] frame, or null while either is unknown. */
+internal fun viewerAspectRatio(width: Int, height: Int): Float? =
+    if (width > 0 && height > 0) width.toFloat() / height.toFloat() else null
