@@ -27,7 +27,7 @@ import org.robolectric.annotation.Config
 class SaveToCodexSheetTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun `already saved indicators follow profile and Likes navigation and membership changes`() {
+    @Test fun `already saved indicators follow profile and membership changes`() {
         val likes = likesCodexIdForProfile("main")
         val containing = mutableStateOf(setOf("a", likes))
         compose.setContent {
@@ -46,14 +46,10 @@ class SaveToCodexSheetTest {
             }
         }
         compose.onNodeWithText("Art").assertIsDisplayed()
-        compose.onAllNodesWithContentDescription("Already in Codex").assertCountEquals(2)
-        compose.onNodeWithText("Saved").performClick()
-        compose.onNodeWithText("Likes").assertIsDisplayed()
         compose.onNodeWithContentDescription("Already in Codex").assertIsDisplayed()
-        compose.runOnIdle { containing.value = setOf("a") }
+        compose.runOnIdle { containing.value = setOf(likes) }
         compose.onNodeWithContentDescription("Already in Codex").assertDoesNotExist()
-        compose.onNodeWithText("All Codices").performClick()
-        compose.onNodeWithContentDescription("Already in Codex").assertIsDisplayed()
+        compose.runOnIdle { containing.value = setOf("a") }
         compose.onNodeWithText("Main", substring = false).performClick()
         compose.onNodeWithText("Other").assertIsDisplayed()
         compose.onNodeWithContentDescription("Already in Codex").assertDoesNotExist()
@@ -110,38 +106,48 @@ class SaveToCodexSheetTest {
         org.junit.Assert.assertTrue(top("Art") < top("Moss") && top("Moss") < top("Zoo"))
     }
 
-    @Test fun `Saved drills down to Likes and preserves excluded targets across profiles`() {
+    @Test fun `Likes is never a save target, in any profile`() {
         val main = "profile-main"
         val other = "alt"
-        val mainLikes = likesCodexIdForProfile(main)
-        val otherLikes = likesCodexIdForProfile(other)
         var selected: String? = null
         compose.setContent {
             MaterialTheme {
                 SaveToCodexSheet(
                     profiles = listOf(RecommendationProfile(main, "Main"), RecommendationProfile(other, "Alt")),
                     initialProfileId = main,
-                    codicesByProfile = mapOf(main to listOf(Codex(mainLikes, "Likes", 0), Codex("a", "Landscapes", 0)),
-                        other to listOf(Codex(otherLikes, "Likes (Alt)", 0))),
-                    codexItemCounts = emptyMap(), codexCoverCandidates = emptyMap(),
-                    excludedCodexIds = setOf(otherLikes), onCreateCodex = { _, _ -> },
+                    codicesByProfile = mapOf(
+                        main to listOf(Codex(likesCodexIdForProfile(main), "Likes", 0), Codex("a", "Landscapes", 0)),
+                        other to listOf(Codex(likesCodexIdForProfile(other), "Likes (Alt)", 0)),
+                    ),
+                    codexItemCounts = emptyMap(), codexCoverCandidates = emptyMap(), onCreateCodex = { _, _ -> },
                     onSelectCodex = { selected = it }, onDismiss = {},
                 )
             }
         }
-        compose.onNodeWithText("Likes").assertDoesNotExist()
-        compose.onNodeWithText("Saved").performClick()
-        compose.runOnIdle { assertEquals(null, selected) }
-        compose.onNodeWithText("Likes").assertIsDisplayed()
-        compose.onNodeWithText("Landscapes").assertDoesNotExist()
-        compose.onNodeWithText("All Codices").performClick()
-        compose.onNodeWithText("Landscapes").assertIsDisplayed()
-        compose.onNodeWithText("Saved").performClick()
-        compose.onNodeWithText("Likes").performClick()
-        compose.runOnIdle { assertEquals(mainLikes, selected) }
-        compose.onNodeWithText("Main", substring = false).performClick()
         compose.onNodeWithText("Saved").assertDoesNotExist()
+        compose.onNodeWithText("Likes").assertDoesNotExist()
+        compose.onNodeWithText("Landscapes").performClick()
+        compose.runOnIdle { assertEquals("a", selected) }
+        compose.onNodeWithText("Main", substring = false).performClick()
         compose.onNodeWithText("Likes (Alt)").assertDoesNotExist()
+        compose.onNodeWithText("No Codices in this profile yet.").assertIsDisplayed()
+    }
+
+    @Config(qualifiers = "w800dp-h400dp-land")
+    @Test fun `landscape puts the controls beside a two-column list`() {
+        compose.setContent {
+            MaterialTheme {
+                SaveToCodexSheet(
+                    profiles = listOf(RecommendationProfile("main", "Main")), initialProfileId = "main",
+                    codicesByProfile = mapOf("main" to listOf(Codex("a", "Art", 0), Codex("b", "Moss", 0))),
+                    codexItemCounts = emptyMap(), codexCoverCandidates = emptyMap(), relevanceScores = emptyMap(),
+                    onCreateCodex = { _, _ -> }, onSelectCodex = {}, onDismiss = {},
+                )
+            }
+        }
+        fun bounds(text: String) = compose.onNodeWithText(text).fetchSemanticsNode().boundsInRoot
+        assertEquals(bounds("Art").top, bounds("Moss").top)
+        org.junit.Assert.assertTrue(bounds("Create Codex").right < bounds("Art").left)
     }
 
     @Test fun `search filters eligible names and keeps profile switching and selection working`() {

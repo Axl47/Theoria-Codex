@@ -126,6 +126,25 @@ class BrowsingMetadataViewModelTest {
         assertEquals(beforeMirror + 1, emissions.size)
     }
 
+    @Test fun `only Codices people make count toward codexPostIds, not Likes`() = runTest {
+        val settings = InMemorySettingsRepository()
+        val transactions = InMemoryCodexLikesTransactions()
+        val owner = BrowsingMetadataViewModel(settings, transactions.likes, transactions.codices, InMemoryRecentsRepository(),
+            backgroundScope, StandardTestDispatcher(testScheduler))
+        backgroundScope.launch { owner.state.collect() }
+        runCurrent()
+        val profile = settings.observeSettings().first().activeRecommendationProfile()
+        val liked = filePost(SourceKey.DANBOORU, "1", HASH)
+        val kept = filePost(SourceKey.DANBOORU, "2", OTHER)
+        LikesCodexSyncService(transactions, transactions.codices, transactions.likes, FileMirrorIndex()).toggle(profile, liked, emptyList())
+        transactions.codices.addItems(transactions.codices.createCodex("Kept").codexId, listOf(kept))
+        runCurrent()
+
+        val metadata = requireNotNull(owner.state.value)
+        assertEquals(setOf(liked.id, kept.id), metadata.savedPostIds)
+        assertEquals(setOf(kept.id), metadata.codexPostIds)
+    }
+
     @Test fun `a Library stored before browsing starts is read once and its copies count as liked`() = runTest {
         val settings = InMemorySettingsRepository()
         val transactions = InMemoryCodexLikesTransactions()

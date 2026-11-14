@@ -17,6 +17,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.State
+import com.theoriacodex.domain.model.PostId
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -58,6 +60,7 @@ import com.theoriacodex.app.appshell.StartupUpdateChoice
 import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.app.codex.CodexCollectionSource
 import com.theoriacodex.app.codex.CodexSaveRelevanceLoader
+import com.theoriacodex.app.codex.LocalCodexPostIds
 import com.theoriacodex.app.codex.LocalCodexSaveRelevanceLoader
 import com.theoriacodex.app.codex.SaveToCodexSheet
 import com.theoriacodex.app.codex.profileScopedCodexId
@@ -66,6 +69,7 @@ import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.tags.PostTagContextProvider
 import com.theoriacodex.app.ui.routes.ActiveProfileCoordinationEffect
+import com.theoriacodex.app.ui.routes.browsingMetadataOwner
 import com.theoriacodex.app.ui.routes.CredentialRecoveryOverlay
 import com.theoriacodex.app.ui.routes.SaveToCodexDestinationStateBoundary
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
@@ -96,6 +100,14 @@ private fun rememberPostTagSavedTags(shell: TheoriaShell): PostTagSavedTags = re
 }
 
 /** Renderable app-shell boundary with dependencies supplied by the application owner. */
+/** The app-wide in-a-Codex set behind [LocalCodexPostIds], read from the shared browsing metadata. */
+@Composable
+private fun rememberCodexPostIds(shell: TheoriaShell): State<Set<PostId>> {
+    val metadata = browsingMetadataOwner(shell.data)
+    return remember(metadata) { metadata.state.map { it?.codexPostIds.orEmpty() }.distinctUntilChanged() }
+        .collectAsStateWithLifecycle(emptySet())
+}
+
 @Composable
 internal fun TheoriaAppContent(
     appContainer: TheoriaAppContainer,
@@ -135,6 +147,7 @@ internal fun TheoriaAppContent(
     val sourceHealth = rememberSourceHealth(shell)
     val savedTags = rememberPostTagSavedTags(shell)
     CompositionLocalProvider(
+        LocalCodexPostIds provides rememberCodexPostIds(shell),
         com.theoriacodex.app.search.LocalPostWatchPresentation provides watchPresentation,
         LocalCodexSaveRelevanceLoader provides saveRelevanceLoader,
         LocalViewerReturnTransition provides viewerReturnTransition,

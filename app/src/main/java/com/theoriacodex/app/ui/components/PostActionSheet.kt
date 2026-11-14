@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.filled.BookmarkAdded
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
@@ -28,7 +29,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.theoriacodex.app.codex.LocalCodexPostIds
 import com.theoriacodex.app.codex.PreloadCodexSaveRelevance
+import com.theoriacodex.app.codex.codexSavedColor
 import com.theoriacodex.app.creator.creatorProfileActions
 import com.theoriacodex.app.media.copyPostTagsToClipboard
 import com.theoriacodex.app.media.copyPostUrlToClipboard
@@ -96,9 +99,7 @@ fun PostActionSheet(
             ActionMenuRow(Icons.Default.AutoAwesome, "More like this") { dismissThen(showRelated) }
         }
 
-        onSaveToCodex?.let { save ->
-            ActionMenuRow(Icons.Default.BookmarkAdd, saveToCodexLabel) { dismissThen(save) }
-        }
+        onSaveToCodex?.let { save -> SaveToCodexRow(post, saveToCodexLabel) { dismissThen(save) } }
         ActionMenuRow(Icons.Default.Download, "Save to device") { dismissThen(onSaveToDevice) }
 
         if (creatorActions.isNotEmpty() || onStartOver != null || onGoToSearch != null) {
@@ -134,6 +135,16 @@ fun PostActionSheet(
                 tint = MaterialTheme.colorScheme.error,
             ) { dismissThen(remove) }
         }
+    }
+}
+
+/** Save to Codex, marked green with a checked bookmark when [post] is already in a Codex. */
+@Composable
+private fun SaveToCodexRow(post: Post, label: String, onClick: () -> Unit) {
+    if (post.id in LocalCodexPostIds.current.value) {
+        ActionMenuRow(Icons.Default.BookmarkAdded, label, tint = codexSavedColor(), onClick = onClick)
+    } else {
+        ActionMenuRow(Icons.Default.BookmarkAdd, label, onClick = onClick)
     }
 }
 
