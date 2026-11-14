@@ -73,6 +73,7 @@ class InstalledJsonCompatibilityDeviceTest {
             "mediaCount",
             "taxonomy",
             "creatorProfiles",
+            "contentHash",
             "schemaVersion",
         )
         assertJsonKeys(

@@ -196,6 +196,7 @@ class PostStorageRecordsTest {
                 PostTaxonomyTerm(value = "Landscape", translation = "landscape"),
             ),
             creatorProfiles = listOf(creator),
+            contentHash = "0123456789abcdef0123456789abcdef",
         )
     }
 }
