@@ -80,15 +80,9 @@ fun PixivUgoiraPlayer(
     val togglePlayback = { if (onTogglePlayback != null) onTogglePlayback() else playbackPaused = !playbackPaused }
     val activePlayback = playback
     if (activePlayback == null) {
-        Box(modifier) {
-            UgoiraLoadingState(errorMessage, Modifier.fillMaxSize(), loadingPreview)
-            val expected = expectedDurationMs?.takeIf { it > 0L && isActive && errorMessage == null }
-            if (expected != null) {
-                ViewerPendingTimeline(
-                    expected, showProgressBar, paused, playbackRate, togglePlayback, onTimelineInteractionActiveChanged,
-                    Modifier.align(Alignment.BottomCenter),
-                )
-            }
+        UgoiraLoadingState(errorMessage, modifier, loadingPreview) {
+            val expected = expectedDurationMs?.takeIf { it > 0L && isActive } ?: return@UgoiraLoadingState
+            ViewerPendingTimeline(expected, showProgressBar, paused, playbackRate, togglePlayback, onTimelineInteractionActiveChanged)
         }
         return
     }
@@ -261,11 +255,13 @@ private fun UgoiraLoadingState(
     errorMessage: String?,
     modifier: Modifier,
     loadingPreview: (@Composable () -> Unit)?,
+    pendingTimeline: @Composable () -> Unit,
 ) {
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         loadingPreview?.invoke()
         if (errorMessage == null) {
             CircularProgressIndicator()
+            Box(Modifier.align(Alignment.BottomCenter)) { pendingTimeline() }
         } else {
             Text(
                 text = errorMessage,

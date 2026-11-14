@@ -355,6 +355,23 @@ private fun ViewerRouteScreen(
     }
 }
 
+/** The Viewer's window onto [durationOwner], keyed by each post's canonical identity. */
+@Composable
+private fun rememberViewerPostDurations(
+    durationOwner: MediaDurationRouteViewModel,
+    latestDependencies: State<ViewerRouteDependencies>,
+) = remember(durationOwner) {
+    com.theoriacodex.app.viewer.ViewerPostDurations(
+        observe = { post ->
+            durationOwner.observeState(latestDependencies.value.canonicalizePost(post))
+                .map { state -> (state as? MediaDurationState.Known)?.durationMs }
+        },
+        onPlayerDuration = { post, durationMs ->
+            durationOwner.publishPlayerDuration(latestDependencies.value.canonicalizePost(post), durationMs)
+        },
+    )
+}
+
 @Composable
 private fun ViewerRouteRenderer(
     activeSession: ViewerSession?,
@@ -411,17 +428,7 @@ private fun ViewerRouteRenderer(
         onVisibleMediaChanged = { post, viewedMediaNumber ->
             viewerOwner.recordVisibleMedia(post, viewedMediaNumber, latestScreenCallbacks.value.onVisibleMediaChanged)
         },
-        durations = remember(durationOwner) {
-            com.theoriacodex.app.viewer.ViewerPostDurations(
-                observe = { post ->
-                    durationOwner.observeState(latestDependencies.value.canonicalizePost(post))
-                        .map { state -> (state as? MediaDurationState.Known)?.durationMs }
-                },
-                onPlayerDuration = { post, durationMs ->
-                    durationOwner.publishPlayerDuration(latestDependencies.value.canonicalizePost(post), durationMs)
-                },
-            )
-        },
+        durations = rememberViewerPostDurations(durationOwner, latestDependencies),
         onOpenInBrowser = screenCallbacks.onOpenInBrowser,
         onOpenOriginalPost = screenCallbacks.onOpenOriginalPost,
         findOnOtherSites = screenCallbacks.findOnOtherSites,

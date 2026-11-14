@@ -13,7 +13,6 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -22,6 +21,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.media.postMediaItems
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
@@ -161,7 +161,7 @@ private fun ViewerPostPage(
     val post = frame.posts[postPage]
     val pageState = frame.navigation.pages[postPage]
     val postMedia = remember(post) { postMediaItems(post) }
-    val knownDurationMs by remember(post, durations) { durations.observe(post) }.collectAsState(null)
+    val knownDurationMs by remember(post, durations) { durations.observe(post) }.collectAsStateWithLifecycle(null)
     val initialMediaPage = pageState.selectedMediaIndex.coerceIn(0, postMedia.lastIndex)
     val mediaPagerState = rememberPagerState(initialPage = initialMediaPage, pageCount = { postMedia.size })
     DisposableEffect(post.id, mediaPagerState) {
