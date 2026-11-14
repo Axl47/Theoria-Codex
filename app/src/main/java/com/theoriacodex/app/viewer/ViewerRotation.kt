@@ -1,14 +1,9 @@
 package com.theoriacodex.app.viewer
 
 import android.content.res.Configuration
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ScreenRotation
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -18,12 +13,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import com.theoriacodex.app.media.isVideoMediaRef
@@ -112,7 +103,7 @@ private fun Post.awaitsVideoStream(): Boolean = full == null && media.isEmpty() 
 internal class ViewerRotationOffer(val fits: Boolean, val rotate: () -> Unit)
 
 /**
- * The Viewer's rotation behavior and its button, placed above whichever bar the current media shows. The button
+ * The Viewer's rotation behavior and its button, in the lower left above whichever bar the current media shows. The button
  * follows the controls, and also shows for [VIEWER_ROTATE_HINT_MS] whenever rotating starts to fit a post,
  * since swiping to a post leaves the controls hidden. [suppressed] hides it while another surface owns the bottom.
  */
@@ -134,28 +125,14 @@ internal fun BoxScope.ViewerRotationControl(
         }
     }
     offer ?: return
-    val bottomBar = when {
-        selection.isAnimated -> viewerTimelineFooterHeight()
-        selection.overviewItems.size > 1 -> VIEWER_TIMELINE_TRACK_HEIGHT
-        else -> 0.dp
-    }
-    ViewerRotateButton(offer, (chromeVisible || hinting) && !suppressed, bottomInset = LocalViewerPostStripInset.current + bottomBar)
+    ViewerFooterButton(
+        selection, chromeVisible, visible = (chromeVisible || hinting) && !suppressed, alignment = Alignment.BottomStart,
+        icon = Icons.Default.ScreenRotation, contentDescription = if (offer.fits) "Rotate to fit" else "Rotate", testTag = "viewer-rotate",
+        onClick = offer.rotate,
+    )
 }
 
 internal const val VIEWER_ROTATE_HINT_MS = 3_000L
-
-/** Lower left, above the timeline, where the left thumb rests. */
-@Composable
-internal fun BoxScope.ViewerRotateButton(offer: ViewerRotationOffer, visible: Boolean, bottomInset: androidx.compose.ui.unit.Dp) {
-    ViewerChromeVisibility(visible, Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = bottomInset + 8.dp)) {
-        IconButton(
-            onClick = offer.rotate,
-            modifier = Modifier.background(Color.Black.copy(alpha = 0.45f), CircleShape).testTag("viewer-rotate"),
-        ) {
-            Icon(Icons.Default.ScreenRotation, contentDescription = if (offer.fits) "Rotate to fit" else "Rotate", tint = Color.White)
-        }
-    }
-}
 
 /** Reports what the active video's frames fill, so posts without dimensions can still rotate. */
 @Composable

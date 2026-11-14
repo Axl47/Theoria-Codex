@@ -16,6 +16,7 @@
 ### Fixed
 
 - Restoring a backup with "Also apply global preferences" ticked now brings back the Codex Library's sort order and the old search bar choice, which it used to leave as they were.
+- The Viewer's rotate button no longer jumps when the controls hide or come back; it glides with the bottom bar and settles in the corner.
 
 ## [1.6.1] - 2026-11-12
 
