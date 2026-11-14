@@ -71,7 +71,18 @@ write_timings() {
 }
 
 temp="$(mktemp -d)"
-trap 'kill $(jobs -p) 2>/dev/null || true; write_timings; rm -rf "$temp"' EXIT
+
+# Stops the lanes still running when the check ends early, and waits for them. A lane is a subshell, so
+# its command is signalled too: stopping the subshell alone would leave that Gradle build running.
+stop_lanes() {
+  local pid children
+  for pid in $(jobs -p); do
+    children="$(pgrep -P "$pid" || true)"
+    kill "$pid" $children 2>/dev/null || true
+  done
+  wait
+}
+trap 'stop_lanes; write_timings; rm -rf "$temp"' EXIT
 
 # Lanes run side by side. Usage: lane <name> <command...> for each, then finish_lanes, which waits for
 # all of them, records each as a phase, prints the output of the ones that failed, and exits if any did.
@@ -217,11 +228,23 @@ lint_build() {
 # hour unused. If lint fails there, that daemon is stopped and a fresh process decides, so a stale
 # analysis session cannot fail the check and real findings still do.
 lint_daemon_jvmargs='-Xmx2048m -XX:G1PeriodicGCInterval=60000 -Dfile.encoding=UTF-8'
+
+# Gradle gives a build to any idle daemon started with the same JVM settings, so the daemons carrying
+# every one of lint's settings are the ones lint could have run in. No other daemon is touched.
+stop_lint_daemons() {
+  ps -axo pid=,command= | awk -v settings="$lint_daemon_jvmargs" '
+    /GradleDaemon/ {
+      count = split(settings, setting, " ")
+      for (i = 1; i <= count; i++) if (!index($0, " " setting[i] " ")) next
+      print $1
+    }' | xargs kill 2>/dev/null || true
+}
+
 lint_in_daemon() {
   ./gradlew "${task_timings[@]}" "${lint_tasks[@]}" --offline --warning-mode=all --console=plain \
     "-Dorg.gradle.jvmargs=$lint_daemon_jvmargs" -Dorg.gradle.daemon.idletimeout=3600000 && return
   echo 'Lint failed in its daemon. Stopping that daemon and retrying in a fresh process.'
-  pkill -f -- "${lint_daemon_jvmargs%% *} .*GradleDaemon" || true
+  stop_lint_daemons
   lint_build
 }
 
