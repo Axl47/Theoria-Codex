@@ -78,7 +78,8 @@ internal fun ViewerAnimatedWebPPlayer(
             ViewerTimelineVeil { ViewerWebPFooter(state, controls, events) }
         }
         if (controls.showPassiveProgress && state.frameCount > 1) {
-            ViewerPassiveProgressBar({ state.frameIndex.toLong() }, state.frameCount - 1L, Modifier.align(Alignment.BottomCenter))
+            val aspectRatio = state.drawable?.let { viewerAspectRatio(it.intrinsicWidth, it.intrinsicHeight) }
+            ViewerMediaPassiveProgress({ state.frameIndex.toLong() }, state.frameCount - 1L, aspectRatio)
         }
     }
 }

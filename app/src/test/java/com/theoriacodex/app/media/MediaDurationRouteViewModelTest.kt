@@ -44,6 +44,27 @@ class MediaDurationRouteViewModelTest {
     }
 
     @Test
+    fun `nearby posts resolve with background resolution off and others stay idle`() = runTest {
+        val requested = mutableListOf<String>()
+        val coordinator = coordinator { post ->
+            requested += post.id.sourcePostId
+            MediaDurationState.Known(7_000L, MediaDurationProvenance.CONTAINER_PROBE)
+        }
+        val owner = MediaDurationRouteViewModel(coordinator, "viewer-test", backgroundScope)
+        val near = animatedTestPost(sourcePostId = "near")
+        val far = animatedTestPost(sourcePostId = "far")
+
+        owner.onNearbyPostsChanged(setOf(near.id))
+        owner.synchronize("session", listOf(near, far), resolveInBackground = false)
+        owner.onEnvironmentChanged(lifecycleStarted = true, scrollIdle = true)
+        runCurrent()
+
+        assertEquals(listOf("near"), requested)
+        assertEquals(7_000L, (owner.observeState(near).first() as MediaDurationState.Known).durationMs)
+        coordinator.close()
+    }
+
+    @Test
     fun `active filter resolves loaded posts without rewriting them`() = runTest {
         val requested = mutableListOf<String>()
         val coordinator = coordinator { post ->

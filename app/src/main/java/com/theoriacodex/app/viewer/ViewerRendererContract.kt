@@ -9,6 +9,7 @@ import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 internal data class ViewerRendererControls(
     val isActive: Boolean,
     val isPlaying: Boolean,
+    /** Whether the timeline shows: on the selected media, and on the media a swipe is heading to. */
     val showControls: Boolean,
     val loopPlayback: Boolean,
     val playbackRate: Float,
@@ -20,6 +21,8 @@ internal data class ViewerRendererControls(
     val seekJumpDeltaMs: Long = 0L,
     /** False while the Viewer opens: system media controls wait for it to land, since connecting them costs frames. */
     val systemControlsReady: Boolean = true,
+    /** The media's length as known before its player loads; timelines show it at 0:00 meanwhile instead of vanishing. */
+    val expectedDurationMs: Long? = null,
 )
 
 internal data class ViewerRendererEvents(

@@ -48,6 +48,7 @@ internal fun ViewerMediaContent(
                 mediaModifier = modifier,
                 isActive = controls.isActive,
                 isPreloading = controls.isPreloading,
+                expectedDurationMs = controls.expectedDurationMs,
                 isPlaying = controls.isPlaying,
                 seekJumpSerial = controls.seekJumpSerial,
                 seekJumpDeltaMs = controls.seekJumpDeltaMs,

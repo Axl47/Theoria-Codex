@@ -48,6 +48,8 @@ fun PixivUgoiraPlayer(
     showPassiveProgress: Boolean = false,
     mediaModifier: Modifier = Modifier,
     isPreloading: Boolean = false,
+    /** The animation's length as known before it loads, shown on a 0:00 timeline meanwhile. */
+    expectedDurationMs: Long? = null,
 ) {
     var playback by remember(postId, client, sizeBucket, loadGeneration) {
         mutableStateOf(client.cached(postId, sizeBucket))
@@ -74,9 +76,14 @@ fun PixivUgoiraPlayer(
         }
     }
 
+    val paused = isPlaying?.not() ?: playbackPaused
+    val togglePlayback = { if (onTogglePlayback != null) onTogglePlayback() else playbackPaused = !playbackPaused }
     val activePlayback = playback
     if (activePlayback == null) {
-        UgoiraLoadingState(errorMessage, modifier, loadingPreview)
+        UgoiraLoadingState(errorMessage, modifier, loadingPreview) {
+            val expected = expectedDurationMs?.takeIf { it > 0L && shouldLoad } ?: return@UgoiraLoadingState
+            ViewerPendingTimeline(expected, showProgressBar, paused, playbackRate, togglePlayback, onTimelineInteractionActiveChanged)
+        }
         return
     }
     UgoiraLoadedPlayer(
@@ -90,7 +97,7 @@ fun PixivUgoiraPlayer(
         modifier = modifier,
         mediaModifier = mediaModifier,
         isActive = isActive,
-        paused = isPlaying?.not() ?: playbackPaused,
+        paused = paused,
         loop = loopPlayback,
         showProgressBar = showProgressBar,
         showPassiveProgress = showPassiveProgress,
@@ -102,7 +109,7 @@ fun PixivUgoiraPlayer(
         onPlaybackCompleted = onPlaybackCompleted,
         onDurationKnown = onDurationKnown,
         onTimelineInteractionActiveChanged = onTimelineInteractionActiveChanged,
-        onTogglePlayback = { if (onTogglePlayback != null) onTogglePlayback() else playbackPaused = !playbackPaused },
+        onTogglePlayback = togglePlayback,
     )
 }
 
@@ -175,7 +182,9 @@ private fun UgoiraLoadedPlayer(
             modifier = Modifier.fillMaxSize().then(mediaModifier),
             contentScale = contentScale,
         )
-        if (!showProgressBar) ViewerPassiveProgressBar({ animation.positionMs }, totalDurationMs, Modifier.align(Alignment.BottomCenter))
+        if (!showProgressBar) {
+            ViewerMediaPassiveProgress({ animation.positionMs }, totalDurationMs, viewerAspectRatio(frame.bitmap.width, frame.bitmap.height))
+        }
         ViewerChromeVisibility(showProgressBar, Modifier.align(Alignment.BottomCenter)) {
             ViewerTimelineVeil {
                 ViewerPlaybackFooter {
@@ -246,11 +255,13 @@ private fun UgoiraLoadingState(
     errorMessage: String?,
     modifier: Modifier,
     loadingPreview: (@Composable () -> Unit)?,
+    pendingTimeline: @Composable () -> Unit,
 ) {
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         loadingPreview?.invoke()
         if (errorMessage == null) {
             CircularProgressIndicator()
+            Box(Modifier.align(Alignment.BottomCenter)) { pendingTimeline() }
         } else {
             Text(
                 text = errorMessage,

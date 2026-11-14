@@ -14,7 +14,11 @@ internal data class ViewerPostNavigation(
     val currentIndex: Int,
     val stripAnchorIndex: Int,
     val branchAnchor: PostId?,
-)
+) {
+    /** The pages one swipe away, next before previous: where speculative work goes after the current page. */
+    val neighbours: List<ViewerPageState>
+        get() = listOfNotNull(pages.getOrNull(currentIndex + 1), pages.getOrNull(currentIndex - 1))
+}
 
 internal fun viewerPostNavigation(state: ViewerUiState, pendingPostId: PostId? = null): ViewerPostNavigation {
     val indicesById = state.pages.mapIndexed { index, page -> page.post.id to index }.toMap()
