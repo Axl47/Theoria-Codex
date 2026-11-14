@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalUriHandler
 import com.theoriacodex.app.settings.sites.ADD_API_KEY_LABEL
+import com.theoriacodex.app.settings.sites.VERIFY_IN_BROWSER_LABEL
 import com.theoriacodex.app.source.LocalSourceHealth
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.referer
@@ -40,6 +41,7 @@ internal fun StatusRow(
     selectedStatus?.let { status ->
         val requiresAccount = onOpenAccounts != null && status.requiresAccount()
         val keyableSite = status.source.takeIf { requiresAccount && it.isCustom }
+        val challenged = listOf(status).challengedSource(health.issues)
         AlertDialog(
             onDismissRequest = { selected = null },
             title = { Text(status.source.displayName()) },
@@ -53,14 +55,22 @@ internal fun StatusRow(
                 }
             },
             confirmButton = {
-                TextButton(enabled = retryEnabled || requiresAccount, onClick = {
+                TextButton(enabled = retryEnabled || requiresAccount || challenged != null, onClick = {
                     selected = null
                     when {
                         keyableSite != null -> health.addKey(keyableSite)
                         requiresAccount -> onOpenAccounts()
+                        challenged != null -> health.verify(challenged)
                         else -> onRetrySource(status.source)
                     }
-                }) { Text(if (keyableSite != null) ADD_API_KEY_LABEL else if (requiresAccount) "Source accounts" else "Retry this source") }
+                }) {
+                    Text(when {
+                        keyableSite != null -> ADD_API_KEY_LABEL
+                        requiresAccount -> "Source accounts"
+                        challenged != null -> VERIFY_IN_BROWSER_LABEL
+                        else -> "Retry this source"
+                    })
+                }
             },
             dismissButton = { TextButton(onClick = { selected = null }) { Text("Close") } },
         )
@@ -106,7 +116,7 @@ internal fun ErrorBlock(
     onRetry: (() -> Unit)? = null,
     title: String = "Could not load results",
     actionLabel: String = "Retry",
-    /** An account problem, which reconnecting won't fix even when it has an action. */
+    /** An account or verification problem, which reconnecting won't fix even when it has an action. */
     accountProblem: Boolean = false,
 ) {
     val online by LocalNetworkOnline.current.collectAsStateWithLifecycle()
@@ -116,6 +126,20 @@ internal fun ErrorBlock(
         title = if (offline) OFFLINE_FEED_TITLE else title,
         actionLabel = actionLabel,
         onRetry = onRetry,
+    )
+}
+
+/** A failed search, whose action verifies the source in the browser when a challenge blocked it, else retries. */
+@Composable
+internal fun SourceFailureBlock(message: String, statuses: List<SourceRunStatus>, onRetry: () -> Unit) {
+    val health = LocalSourceHealth.current
+    val challenged = statuses.challengedSource(health.issues)
+    if (challenged == null) return ErrorBlock(message = message, onRetry = onRetry)
+    ErrorBlock(
+        message = message,
+        onRetry = { health.verify(challenged) },
+        actionLabel = VERIFY_IN_BROWSER_LABEL,
+        accountProblem = true,
     )
 }
 
@@ -143,7 +167,7 @@ internal fun SourceOutageNotices(notices: List<SourceOutageNotice>) {
         FeedErrorTile(
             title = "Results may be incomplete",
             message = notice.message,
-            actionLabel = "Verify in browser",
+            actionLabel = VERIFY_IN_BROWSER_LABEL,
             onRetry = notice.verifiableSource?.let { source -> { health.verify(source) } },
             onDismiss = { health.dismissNotices(notice.sources) },
         )

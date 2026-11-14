@@ -17,6 +17,9 @@
 ### Fixed
 
 - Restoring a backup with "Also apply global preferences" ticked now brings back the Codex Library's sort order and the old search bar choice, which it used to leave as they were.
+- When a search fails because a site wants a browser check, its error and its source chip offer "Verify in browser", which opens that check, instead of a Retry that would fail again.
+- Holding a video or animation at 2x no longer changes brightness or volume when your finger slides up or down; a sideways slide still scrubs.
+- Sliding your finger after a long press on a still image opened Post Info no longer drags the Viewer behind the sheet.
 - The Viewer's rotate button no longer jumps when the controls hide or come back; it glides with the bottom bar and settles in the corner.
 
 ## [1.6.1] - 2026-11-12
