@@ -30,6 +30,9 @@ dependencies {
 
 val qualityCoverageVariant = "quality"
 
+// These two inspect code that writes lint rules, which this app has none of, and cost about a tenth of lint's time.
+val lintAuthorChecks = setOf("UElementAsPsi", "UastImplementation")
+
 // Kover instruments test JVMs only when the requested tasks include a Kover report or verification,
 // so ordinary local test runs skip the agent. Abbreviated task names (e.g. `kXR`) are not detected.
 val coverageRequested = gradle.startParameter.taskNames.any { "kover" in it.lowercase() }
@@ -72,6 +75,12 @@ subprojects {
                 }
                 instrumentation {
                     disabledForAll.set(!coverageRequested)
+                    // Left alone, the agent rewrites every library class the tests load (Compose, Kotlin, Robolectric),
+                    // which made the app's tests a quarter slower. Reports only ever cover com.theoriacodex.
+                    excludedClasses.addAll(
+                        "androidx.*", "kotlin.*", "kotlinx.*", "org.*", "com.google.*", "com.squareup.*", "okhttp3.*", "okio.*",
+                        "coil3.*", "io.*", "net.*", "java.*", "javax.*", "sun.*", "com.sun.*", "libcore.*", "dalvik.*",
+                    )
                 }
             }
         }
@@ -79,10 +88,10 @@ subprojects {
 
     // Lint analyses main sources only; test code is covered by Detekt and the tests themselves.
     pluginManager.withPlugin("com.android.application") {
-        extensions.configure<ApplicationExtension> { lint { ignoreTestSources = true } }
+        extensions.configure<ApplicationExtension> { lint { ignoreTestSources = true; disable += lintAuthorChecks } }
     }
     pluginManager.withPlugin("com.android.library") {
-        extensions.configure<LibraryExtension> { lint { ignoreTestSources = true } }
+        extensions.configure<LibraryExtension> { lint { ignoreTestSources = true; disable += lintAuthorChecks } }
     }
 
     tasks.withType<Test>().configureEach {
@@ -95,7 +104,7 @@ subprojects {
         }
         if (plugins.hasPlugin("com.android.application") || plugins.hasPlugin("com.android.library")) {
             // Robolectric suites are CPU-bound and run serially in one JVM by default.
-            maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceIn(1, 3)
+            maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceIn(1, 2)
             // Robolectric's Android 16+ runtime accesses JDK internals on Java 21.
             jvmArgs(
                 "--add-opens=java.base/java.lang=ALL-UNNAMED",
