@@ -1,7 +1,7 @@
 # Fully qualified class name | durable JSON field names. Keep this synchronized with
 # app/proguard-rules.pro. Transient in-process fields are intentionally absent.
 com.theoriacodex.data.storage.LegacyImportProof|sourceFileName,sourceSchemaVersion,destinationSchemaVersion,sourceSha256,sourceByteCount,importedCounts
-com.theoriacodex.data.storage.PostStorageRecord|source,sourcePostId,previewUrl,previewLocalPath,previewMime,previewProgressiveUrls,previewFallbackUrls,previewIsAnimated,fullUrl,fullLocalPath,fullMime,fullProgressiveUrls,fullFallbackUrls,fullIsAnimated,fullVideoVariants,pageUrl,width,height,canonicalTags,rawTags,authorName,createdAtEpochMs,media,title,creatorProfile,durationMs,mediaCount,taxonomy,creatorProfiles,schemaVersion
+com.theoriacodex.data.storage.PostStorageRecord|source,sourcePostId,previewUrl,previewLocalPath,previewMime,previewProgressiveUrls,previewFallbackUrls,previewIsAnimated,fullUrl,fullLocalPath,fullMime,fullProgressiveUrls,fullFallbackUrls,fullIsAnimated,fullVideoVariants,pageUrl,width,height,canonicalTags,rawTags,authorName,createdAtEpochMs,media,title,creatorProfile,durationMs,mediaCount,taxonomy,creatorProfiles,contentHash,schemaVersion
 com.theoriacodex.data.storage.PostTaxonomyTermStorageRecord|value,facet,sourceNamespace,count,translation
 com.theoriacodex.data.storage.CreatorProfileStorageRecord|source,displayName,profileId,profileUrl,uploadsQuery
 com.theoriacodex.data.storage.ImageRefStorageRecord|url,localPath,mime,progressiveUrls,fallbackUrls,isAnimated,videoVariants,thumbnailUrl

@@ -8,6 +8,7 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.VideoVariant
+import com.theoriacodex.domain.model.contentHashOrNull
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.withRecoveredPixivTranslations
 
@@ -79,6 +80,9 @@ data class PostStorageRecord(
     val taxonomy: List<PostTaxonomyTermStorageRecord?>? = null,
     @field:SerializedName("creatorProfiles")
     val creatorProfiles: List<CreatorProfileStorageRecord?>? = null,
+    // The site's own MD5 of the file. Optional: records written before it existed, and by sites that report none, omit it.
+    @field:SerializedName("contentHash")
+    val contentHash: String? = null,
     @field:SerializedName("schemaVersion")
     // Gson may invoke the generated no-arg constructor. Null must continue to mean the original
     // pre-versioned payload; current writers always set the explicit version in the codec.
@@ -179,6 +183,7 @@ object PostStorageCodec {
             mediaCount = post.mediaCount,
             taxonomy = post.taxonomy.map(::encodeTaxonomyTerm),
             creatorProfiles = post.creatorProfiles.map(::encodeCreatorProfile),
+            contentHash = post.contentHash,
             schemaVersion = CURRENT_POST_STORAGE_SCHEMA_VERSION,
         )
     }
@@ -238,6 +243,7 @@ object PostStorageCodec {
             creatorProfiles = record.creatorProfiles
                 ?.mapNotNull { stored -> stored?.toDomainOrNull() }
                 ?: listOfNotNull(creator),
+            contentHash = contentHashOrNull(record.contentHash),
         ).withRecoveredPixivTranslations()
     }
 
