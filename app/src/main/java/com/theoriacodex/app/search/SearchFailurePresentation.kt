@@ -23,7 +23,7 @@ internal fun SearchFailureSurface(
         if (statuses.siteNeedingKey() != null) {
             SourceAccountNotice(siteKeyFailureMessage(error.message, statuses), statuses)
         } else {
-            ErrorBlock(message = error.message, onRetry = onRetry)
+            SourceFailureBlock(error.message, statuses, onRetry)
         }
     }
 }

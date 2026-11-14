@@ -171,7 +171,8 @@ private sealed interface ViewerGestureEnd {
     data object None : ViewerGestureEnd
 }
 
-private enum class ViewerGestureMode { Pending, Horizontal, Scrub, Level, Dismiss, Info }
+/** [Held]: the finger outlasted a long press, which already acted, so the rest of its drag does nothing. */
+private enum class ViewerGestureMode { Pending, Horizontal, Scrub, Level, Dismiss, Info, Held }
 
 /** The level a vertical drag from [this] column adjusts, if any. */
 private fun ViewerGestureColumn.levelControl(config: ViewerGestureConfig): ViewerLevelControl? = when {
@@ -195,6 +196,8 @@ private suspend fun AwaitPointerEventScope.readViewerGesture(
         config = config,
         handler = handler,
         touchSlop = viewConfiguration.touchSlop,
+        longPressTimeoutMs = viewConfiguration.longPressTimeoutMillis,
+        downUptimeMs = down.uptimeMillis,
         levelRange = (size.height * 0.6f).coerceAtLeast(1f),
         height = size.height.toFloat(),
     )
@@ -223,6 +226,8 @@ private class ViewerGestureTracker(
     private val config: ViewerGestureConfig,
     private val handler: () -> ViewerGestureHandler,
     private val touchSlop: Float,
+    private val longPressTimeoutMs: Long,
+    private val downUptimeMs: Long,
     private val levelRange: Float,
     private val height: Float,
 ) {
@@ -239,7 +244,7 @@ private class ViewerGestureTracker(
         x += delta.x
         y += delta.y
         val locking = mode == ViewerGestureMode.Pending
-        if (locking) mode = lockedMode()
+        if (locking) mode = lockedMode(change.uptimeMillis - downUptimeMs)
         when (mode) {
             ViewerGestureMode.Horizontal -> handler().onHorizontalDrag(x)
             ViewerGestureMode.Scrub -> {
@@ -248,22 +253,29 @@ private class ViewerGestureTracker(
             }
             ViewerGestureMode.Level -> followLevel(if (locking) y else delta.y, begin = locking)
             ViewerGestureMode.Dismiss -> handler().onDismissDrag(x, y, height)
-            ViewerGestureMode.Info -> Unit
+            ViewerGestureMode.Info, ViewerGestureMode.Held -> Unit
             ViewerGestureMode.Pending -> return
         }
         change.consume()
     }
 
-    /** Outer columns adjust their level; everywhere else a pull closes and a push opens info. */
-    private fun lockedMode(): ViewerGestureMode = when {
-        abs(x) > touchSlop && abs(x) > abs(y) * 1.25f ->
-            if (config.holdScrub?.holding == true) ViewerGestureMode.Scrub else ViewerGestureMode.Horizontal
-        abs(y) > touchSlop && abs(y) > abs(x) * 1.25f -> when {
+    /**
+     * Outer columns adjust their level; everywhere else a pull closes and a push opens info. A finger that
+     * locks only after the long-press timeout has already sped playback up or opened info under itself
+     * (an unlocked drag stays unconsumed, so the media's long press fires), and then may only scrub.
+     */
+    private fun lockedMode(pressedForMs: Long): ViewerGestureMode {
+        val horizontal = abs(x) > touchSlop && abs(x) > abs(y) * 1.25f
+        val vertical = abs(y) > touchSlop && abs(y) > abs(x) * 1.25f
+        return when {
+            !horizontal && !vertical -> ViewerGestureMode.Pending
+            config.holdScrub?.holding == true -> if (horizontal) ViewerGestureMode.Scrub else ViewerGestureMode.Held
+            pressedForMs >= longPressTimeoutMs -> ViewerGestureMode.Held
+            horizontal -> ViewerGestureMode.Horizontal
             levelControl != null -> ViewerGestureMode.Level
             y > 0f -> ViewerGestureMode.Dismiss
             else -> ViewerGestureMode.Info
         }
-        else -> ViewerGestureMode.Pending
     }
 
     private fun followLevel(deltaY: Float, begin: Boolean) {
@@ -285,7 +297,7 @@ private class ViewerGestureTracker(
         ViewerGestureMode.Dismiss -> ViewerGestureEnd.Dismiss(velocity.y)
         ViewerGestureMode.Info ->
             if (y <= -infoDistance || velocity.y <= -flingVelocity) ViewerGestureEnd.Info else ViewerGestureEnd.None
-        ViewerGestureMode.Level, ViewerGestureMode.Pending -> ViewerGestureEnd.None
+        ViewerGestureMode.Level, ViewerGestureMode.Held, ViewerGestureMode.Pending -> ViewerGestureEnd.None
     }
 }
 

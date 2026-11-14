@@ -178,6 +178,34 @@ class ViewerLevelGesturesTest {
         }
     }
 
+    @Test fun `a vertical drag during hold to speed up changes no level`() {
+        showPage()
+        holdThenDrag(x = 0.2f, dy = -0.4f)
+        compose.runOnIdle {
+            assertEquals(0.5f, activity.window.attributes.screenBrightness, 0f)
+            assertNull(levels.feedback)
+        }
+    }
+
+    @Test fun `a drag after a long press opened info pulls nothing behind it`() {
+        showPage(video = false)
+        holdThenDrag(x = 0.5f, dy = 0.4f)
+        compose.runOnIdle {
+            assertEquals(0, dismissDrags)
+            assertEquals(0, infoSwipes)
+        }
+    }
+
+    private fun holdThenDrag(x: Float, dy: Float) {
+        compose.onNodeWithContentDescription("Media actions").performTouchInput {
+            down(Offset(width * x, height * 0.5f))
+            advanceEventTime(1_000L)
+            moveBy(Offset(0f, height * dy / 2))
+            moveBy(Offset(0f, height * dy / 2))
+            up()
+        }
+    }
+
     @Test fun `landscape keeps the outer columns narrow so the centre is wider`() {
         val portrait = IntSize(400, 800)
         val landscape = IntSize(800, 400)

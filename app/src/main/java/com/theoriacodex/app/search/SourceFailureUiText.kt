@@ -72,6 +72,10 @@ internal fun buildSourceAuthErrorMessage(statuses: List<SourceRunStatus>): Strin
     return "$names $verb account setup. Connect or refresh the account, or add its API key, in Settings > Sites."
 }
 
+/** The first failed source that a browser check stands in front of, which verifying can fix and retrying cannot. */
+internal fun List<SourceRunStatus>.challengedSource(issues: Map<SourceKey, HostOutageKind>): SourceKey? =
+    firstOrNull { it.state == SourceRunState.FAILED && issues[it.source] == HostOutageKind.CHALLENGE }?.source
+
 /** The first added site that refused this identity, whose API key field can fix it. */
 internal fun List<SourceRunStatus>.siteNeedingKey(): SourceKey? =
     firstOrNull { it.requiresAccount() && it.source.isCustom }?.source

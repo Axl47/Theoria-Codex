@@ -77,7 +77,7 @@ private fun AddStageControls(form: SiteForm.Add, onAction: (CustomSitesAction) -
         is AddStage.Address -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { onAction(CustomSitesAction.Probe) }) { Text("Check site") }
             stage.blockedHost?.let { host ->
-                TextButton(onClick = { onAction(CustomSitesAction.StartVerification(host, afterRefusal = true)) }) { Text("Verify in browser") }
+                TextButton(onClick = { onAction(CustomSitesAction.StartVerification(host, afterRefusal = true)) }) { Text(VERIFY_IN_BROWSER_LABEL) }
             }
         }
         AddStage.Probing -> Progress("Checking site…")
@@ -142,7 +142,7 @@ internal fun EditSitePage(
         }
         SettingsGroup("Browser check") {
             SettingsRow(
-                title = "Verify in browser",
+                title = VERIFY_IN_BROWSER_LABEL,
                 summary = "Open this site to pass its browser check",
                 enabled = editable,
                 onClick = { onAction(CustomSitesAction.StartVerification(site.host, afterRefusal = false)) },
