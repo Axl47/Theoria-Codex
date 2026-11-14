@@ -8,12 +8,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
 import com.theoriacodex.app.viewer.state.VIEWER_SLIDESHOW_IMAGE_MS
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.holdViewerSlideshowImage
@@ -23,13 +28,20 @@ import kotlinx.coroutines.launch
 /**
  * The slideshow's button, lower right opposite the rotate button, offered on still images and kept while a slideshow
  * runs. While a still image is held it times the hold and draws the time left along the bottom edge; videos and
- * animated posts move on when they end. [suppressed] hides the button while another surface owns the bottom.
+ * animated posts move on when they end. The screen stays awake while a slideshow runs. [suppressed] hides the button while another surface owns the bottom.
  */
 @Composable
 internal fun BoxScope.ViewerSlideshowControl(frame: ViewerFrame, suppressed: Boolean, onAction: (ViewerAction) -> Unit) {
     val state = frame.uiState
     val running = state.controls.slideshow
-    val hold = state.slideshowImageHold()
+    // Time spent in the background or with the screen off does not count: the hold starts over on return.
+    val resumed = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value.isAtLeast(Lifecycle.State.RESUMED)
+    val hold = state.slideshowImageHold().takeIf { resumed }
+    val view = LocalView.current
+    DisposableEffect(running) {
+        view.keepScreenOn = running
+        onDispose { view.keepScreenOn = false }
+    }
     val currentState by rememberUpdatedState(state)
     val currentOnAction by rememberUpdatedState(onAction)
     // Drawn only; the hold itself is timed by delay, so disabled system animations cannot shorten it.

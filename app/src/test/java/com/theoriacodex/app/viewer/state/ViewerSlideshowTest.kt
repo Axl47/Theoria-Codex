@@ -66,6 +66,17 @@ class ViewerSlideshowTest {
     }
 
     @Test
+    fun `more posts arriving for the same session keep the slideshow running and a new session starts without one`() {
+        val posts = listOf(post("a", "image/jpeg"), post("b", "image/jpeg"))
+        val state = started(posts[0])
+        fun replaced(identity: ViewerSessionIdentity) =
+            reduceViewerState(state, ViewerAction.ReplaceSession(session = identity, posts = posts, initialPageIndex = 0)).state
+
+        assertTrue(replaced(session).controls.slideshow)
+        assertFalse(replaced(session.copy(value = "other")).controls.slideshow)
+    }
+
+    @Test
     fun `the slideshow stops at the end of the queue`() {
         var state = started(post("a", "image/jpeg")).ready()
         state = reduceViewerState(state, ViewerAction.SlideshowAdvance(session, requireNotNull(state.currentMedia).key)).state

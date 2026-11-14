@@ -177,6 +177,8 @@ private fun ViewerUiState.replaceSession(action: ViewerAction.ReplaceSession): V
                     playbackMode = controls.playbackMode,
                     // A live update of the same session, such as pagination, must not reopen hidden chrome.
                     chromeVisible = if (session == action.session) controls.chromeVisible else replacement.controls.chromeVisible,
+                    // Nor may it end a running slideshow; a new session starts without one.
+                    slideshow = session == action.session && controls.slideshow,
                 ),
                 related = ViewerRelatedUiState(navigation = action.relatedNavigation, extraPostIds = action.relatedPostIds),
             )
