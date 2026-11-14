@@ -216,10 +216,25 @@ private fun SaveToCodexSheetContent(
             },
         )
     }
+    SaveToCodexSheetLayout(landscape, onDismiss, controls, list, actions)
+}
+
+/**
+ * Stacks the controls, list and actions in portrait. Landscape is short, so the controls and actions take a side
+ * column and the list keeps the full height.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SaveToCodexSheetLayout(
+    landscape: Boolean,
+    onDismiss: () -> Unit,
+    controls: @Composable () -> Unit,
+    list: @Composable (Modifier) -> Unit,
+    actions: @Composable () -> Unit,
+) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        // Landscape is short, so the controls take a side column and the list keeps the full height.
         sheetMaxWidth = if (landscape) Dp.Unspecified else BottomSheetDefaults.SheetMaxWidth,
         dragHandle = null,
     ) {

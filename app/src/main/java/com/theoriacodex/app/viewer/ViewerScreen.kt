@@ -211,8 +211,7 @@ private fun ViewerLoadedScreen(
         ViewerInfoSheet(
             selection, controls, creatorBrowsingSources, saveToCodexQuery, tagVideoCountProvider, fetchTagVideoCounts, onAction,
             onOpenInBrowser, onOpenOriginalPost, findOnOtherSites, onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, onGoToSearch, onOpenCreatorFallback,
-            liked = selection.post.id in likedPostIds,
-            inCodex = selection.post.id in codexPostIds,
+            liked = selection.post.id in likedPostIds, inCodex = selection.post.id in codexPostIds,
             comments = comments,
         )
     }
