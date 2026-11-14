@@ -65,7 +65,6 @@ internal fun ViewerScreen(
     videoQuality: com.theoriacodex.domain.model.VideoQuality = com.theoriacodex.domain.model.VideoQuality.AUTO,
     invertMultiImageScrollDirection: Boolean = false,
     likedPostIds: Set<PostId> = emptySet(),
-    codexPostIds: Set<PostId> = emptySet(),
     onRequestMediaRecovery: ((Post, ImageRef) -> Unit)? = null,
     onVisiblePostChanged: ((Post, Int) -> Unit)? = null,
     onVisibleMediaChanged: ((Post, Int) -> Unit)? = null,
@@ -107,7 +106,7 @@ internal fun ViewerScreen(
         fetchTagVideoCounts, canLoadMoreFromSource, loadingMoreFromSource, invertMultiImageScrollDirection, likedPostIds,
         onRequestMediaRecovery, onVisiblePostChanged, onVisibleMediaChanged, durations, onOpenInBrowser,
         onOpenOriginalPost, findOnOtherSites, onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, onGoToSearch, onOpenCreatorFallback,
-        playbackDiagnosticsEnabled, onIncludeRelatedPosts, onDismissRelatedPosts, onRetryRelatedPosts, comments, codexPostIds,
+        playbackDiagnosticsEnabled, onIncludeRelatedPosts, onDismissRelatedPosts, onRetryRelatedPosts, comments,
     )
 }
 
@@ -153,7 +152,6 @@ private fun ViewerLoadedScreen(
     onDismissRelatedPosts: () -> Unit,
     onRetryRelatedPosts: () -> Unit,
     comments: ViewerComments,
-    codexPostIds: Set<PostId>,
 ) {
     val readReturnProgress = remember(returnProgress) { { returnProgress.value } }
     val inPictureInPicture = activity?.viewerPictureInPictureActive == true
@@ -211,7 +209,7 @@ private fun ViewerLoadedScreen(
         ViewerInfoSheet(
             selection, controls, creatorBrowsingSources, saveToCodexQuery, tagVideoCountProvider, fetchTagVideoCounts, onAction,
             onOpenInBrowser, onOpenOriginalPost, findOnOtherSites, onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, onGoToSearch, onOpenCreatorFallback,
-            liked = selection.post.id in likedPostIds, inCodex = selection.post.id in codexPostIds,
+            liked = selection.post.id in likedPostIds,
             comments = comments,
         )
     }

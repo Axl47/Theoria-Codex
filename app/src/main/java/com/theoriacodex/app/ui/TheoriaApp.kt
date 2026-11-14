@@ -58,6 +58,7 @@ import com.theoriacodex.app.appshell.StartupUpdateChoice
 import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.app.codex.CodexCollectionSource
 import com.theoriacodex.app.codex.CodexSaveRelevanceLoader
+import com.theoriacodex.app.codex.LocalCodexPostIds
 import com.theoriacodex.app.codex.LocalCodexSaveRelevanceLoader
 import com.theoriacodex.app.codex.SaveToCodexSheet
 import com.theoriacodex.app.codex.profileScopedCodexId
@@ -66,6 +67,7 @@ import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.tags.PostTagContextProvider
 import com.theoriacodex.app.ui.routes.ActiveProfileCoordinationEffect
+import com.theoriacodex.app.ui.routes.browsingMetadataOwner
 import com.theoriacodex.app.ui.routes.CredentialRecoveryOverlay
 import com.theoriacodex.app.ui.routes.SaveToCodexDestinationStateBoundary
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
@@ -134,7 +136,11 @@ internal fun TheoriaAppContent(
     val relatedPostsSupport = remember(shell) { shell.features.relatedPosts::supports }
     val sourceHealth = rememberSourceHealth(shell)
     val savedTags = rememberPostTagSavedTags(shell)
+    val metadata = browsingMetadataOwner(shell.data)
+    val codexPostIds = remember(metadata) { metadata.state.map { it?.codexPostIds.orEmpty() }.distinctUntilChanged() }
+        .collectAsStateWithLifecycle(emptySet())
     CompositionLocalProvider(
+        LocalCodexPostIds provides codexPostIds,
         com.theoriacodex.app.search.LocalPostWatchPresentation provides watchPresentation,
         LocalCodexSaveRelevanceLoader provides saveRelevanceLoader,
         LocalViewerReturnTransition provides viewerReturnTransition,

@@ -51,6 +51,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.MainActivity
 import com.theoriacodex.app.codex.PreloadCodexSaveRelevance
+import com.theoriacodex.app.codex.LocalCodexPostIds
 import com.theoriacodex.app.codex.codexSavedColor
 import com.theoriacodex.app.comments.CommentCount
 import com.theoriacodex.app.comments.CommentsView
@@ -326,7 +327,6 @@ internal fun ViewerInfoSheet(
     onGoToSearch: () -> Unit,
     onOpenCreatorFallback: ((Post) -> Unit)?,
     liked: Boolean = false,
-    inCodex: Boolean = false,
     comments: ViewerComments = ViewerComments.None,
 ) {
     val post = selection.post
@@ -345,7 +345,7 @@ internal fun ViewerInfoSheet(
         PostTagActionSection(
             header = {
                 ViewerInfoActions(
-                    selection, liked, inCodex, controls, creatorBrowsingSources, onAction, onOpenInBrowser, onOpenOriginalPost,
+                    selection, liked, controls, creatorBrowsingSources, onAction, onOpenInBrowser, onOpenOriginalPost,
                     findOnOtherSites, onGoToSearch, onOpenCreatorFallback,
                 )
             },
@@ -395,7 +395,6 @@ internal fun ViewerInfoSheet(
 private fun ViewerInfoActions(
     selection: ViewerSelection,
     liked: Boolean,
-    inCodex: Boolean,
     controls: ViewerControls,
     creatorBrowsingSources: Set<SourceKey>,
     onAction: (ViewerAction) -> Unit,
@@ -423,7 +422,7 @@ private fun ViewerInfoActions(
         )
         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), Arrangement.SpaceEvenly) {
             ViewerLikeAction(liked) { onAction(ViewerAction.ToggleLike) }
-            ViewerCodexAction(inCodex) { closeThen { onAction(ViewerAction.Save) } }
+            ViewerCodexAction(post.id in LocalCodexPostIds.current.value) { closeThen { onAction(ViewerAction.Save) } }
             ViewerInfoAction(Icons.Default.Download, "Device", "Save to device", selection.canDownload) {
                 closeThen { onAction(ViewerAction.Download) }
             }

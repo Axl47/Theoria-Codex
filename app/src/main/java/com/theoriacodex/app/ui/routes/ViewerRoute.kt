@@ -96,7 +96,6 @@ internal data class ViewerRouteRenderConfig(
     val autoRotateVideos: Boolean = false,
     val commentOrder: com.theoriacodex.domain.model.CommentOrder = com.theoriacodex.domain.model.CommentOrder.OLDEST,
     val likedPostIds: Set<PostId> = emptySet(),
-    val codexPostIds: Set<PostId> = emptySet(),
     val creatorBrowsingSources: Set<SourceKey>,
 )
 
@@ -407,7 +406,6 @@ private fun ViewerRouteRenderer(
         invertMultiImageScrollDirection = renderConfig.invertMultiImageScrollDirection,
         videoQuality = renderConfig.videoQuality,
         likedPostIds = renderConfig.likedPostIds,
-        codexPostIds = renderConfig.codexPostIds,
         onIncludeRelatedPosts = {
             related.state.requestOrNull?.seed?.id?.let { seedId ->
                 viewerOwner.updateSession { current -> current.withRelatedPosts(seedId, related.posts) }
