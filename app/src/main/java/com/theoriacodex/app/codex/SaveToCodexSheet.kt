@@ -10,9 +10,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.Dp
+import android.content.res.Configuration
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -176,41 +184,62 @@ private fun SaveToCodexSheetContent(
     }
     val displayedContainingCodexIds = if (likesId in containingCodexIds) containingCodexIds + SAVED_CODEX_ID
         else containingCodexIds
+    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val controls: @Composable () -> Unit = {
+        SheetHeader(if (insideSaved) "Saved" else title, "Close save menu", onDismiss) {
+            SaveCodexSortToggle(sortByRelevance) { sortByRelevance = it }
+        }
+        if (insideSaved) {
+            SheetActionRow(Icons.AutoMirrored.Filled.ArrowBack, "All Codices") {
+                insideSaved = false
+                searchText = ""
+            }
+        }
+        CodexPickerSearch(searchText) { searchText = it }
+    }
+    val actions: @Composable () -> Unit = {
+        SheetActionRow(Icons.Default.Person, selectedProfile?.name ?: "Profile", onCycleProfile)
+        SheetActionRow(Icons.Default.Add, "Create Codex", onCreateCodex)
+    }
+    val list: @Composable (Modifier) -> Unit = { modifier ->
+        CodexPickerList(
+            codices = matchingCodices,
+            columns = if (landscape) 2 else 1,
+            modifier = modifier,
+            emptyMessage = savePickerEmptyMessage(selectedCodices, hasExcludedCodices),
+            itemCounts = codexItemCounts + (SAVED_CODEX_ID to (codexItemCounts[likesId] ?: 0)),
+            containingCodexIds = displayedContainingCodexIds,
+            coverCandidates = codexCoverCandidates + (SAVED_CODEX_ID to codexCoverCandidates[likesId].orEmpty()),
+            onSelectCodex = { id ->
+                if (id == SAVED_CODEX_ID) { insideSaved = true; searchText = "" }
+                else onSelectCodex(id)
+            },
+        )
+    }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        // Landscape is short, so the controls take a side column and the list keeps the full height.
+        sheetMaxWidth = if (landscape) Dp.Unspecified else BottomSheetDefaults.SheetMaxWidth,
         dragHandle = null,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            SheetHeader(if (insideSaved) "Saved" else title, "Close save menu", onDismiss) {
-                SaveCodexSortToggle(sortByRelevance) { sortByRelevance = it }
-            }
-            if (insideSaved) {
-                SheetActionRow(Icons.AutoMirrored.Filled.ArrowBack, "All Codices") {
-                    insideSaved = false
-                    searchText = ""
+        val spacing = Arrangement.spacedBy(12.dp)
+        val padding = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        if (landscape) {
+            Row(padding.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Column(Modifier.weight(0.36f).fillMaxHeight(), verticalArrangement = spacing) {
+                    controls()
+                    Spacer(Modifier.weight(1f))
+                    actions()
                 }
+                list(Modifier.weight(0.64f).fillMaxHeight())
             }
-            CodexPickerSearch(searchText) { searchText = it }
-            CodexPickerList(
-                codices = matchingCodices,
-                modifier = Modifier.weight(1f, fill = false),
-                emptyMessage = savePickerEmptyMessage(selectedCodices, hasExcludedCodices),
-                itemCounts = codexItemCounts + (SAVED_CODEX_ID to (codexItemCounts[likesId] ?: 0)),
-                containingCodexIds = displayedContainingCodexIds,
-                coverCandidates = codexCoverCandidates + (SAVED_CODEX_ID to codexCoverCandidates[likesId].orEmpty()),
-                onSelectCodex = { id ->
-                    if (id == SAVED_CODEX_ID) { insideSaved = true; searchText = "" }
-                    else onSelectCodex(id)
-                },
-            )
-            SheetActionRow(Icons.Default.Person, selectedProfile?.name ?: "Profile", onCycleProfile)
-            SheetActionRow(Icons.Default.Add, "Create Codex", onCreateCodex)
+        } else {
+            Column(padding.fillMaxWidth(), verticalArrangement = spacing) {
+                controls()
+                list(Modifier.weight(1f, fill = false).heightIn(max = 420.dp))
+                actions()
+            }
         }
     }
 }
@@ -279,6 +308,7 @@ private fun CodexPickerSearch(searchText: String, onChange: (String) -> Unit) {
 @Composable
 private fun CodexPickerList(
     codices: List<Codex>,
+    columns: Int,
     emptyMessage: String,
     itemCounts: Map<String, Int>,
     coverCandidates: Map<String, List<CodexCoverCandidate>>,
@@ -286,7 +316,7 @@ private fun CodexPickerList(
     onSelectCodex: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val listState = rememberLazyListState()
+    val listState = rememberLazyGridState()
     LaunchedEffect(codices) { listState.scrollToItem(0) }
     if (codices.isEmpty()) {
         Surface(
@@ -302,10 +332,12 @@ private fun CodexPickerList(
         }
         return
     }
-    LazyColumn(
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(columns),
         state = listState,
-        modifier = modifier.heightIn(max = 420.dp),
+        modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         items(codices, key = Codex::codexId) { codex ->
             CodexPickerRow(

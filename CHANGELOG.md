@@ -8,11 +8,13 @@
 - Booru posts have "Find on other sites" in the Viewer's More menu. It looks the file up on your other Danbooru, AIBooru, Gelbooru, Rule34.xxx and custom booru sites and opens what it finds in the Viewer, one post per site, or says "Not on your other sites".
 - App lock, in Settings under Storage & app. With it on, the app asks for your fingerprint, face or screen lock when you open it and again when you come back after more than a minute away, and Android no longer shows its screen in the recent-apps view.
 - A slideshow button in the Viewer, on the lower right of still images. It shows each image for five seconds with a thin line for the time left, plays videos and animations through once, and moves through the queue until it ends or you touch the screen.
+- The Viewer's Codex button turns green with a checked bookmark when the post is already in one of your Codices. Likes doesn't count.
 
 ### Changed
 
 - A file that several sites host now shows once when you search them together, instead of one card per site. This covers Danbooru, AIBooru, Gelbooru, Rule34.xxx and custom booru sites, in Search, For You and live Codices.
 - A post you liked, saved or watched on one booru site is recognised when another site shows the same file: its heart is filled, "Hide liked", "Hide saved" and "Hide watched" hide it, and For You stops suggesting it. Unliking that copy removes the like from every site where you liked the file. Your Library still lists only the posts you saved.
+- Save to Codex uses the width in landscape: search, profile and Create Codex move to a left column, and Codices show in two columns beside them, so many more fit on screen.
 
 ### Fixed
 
