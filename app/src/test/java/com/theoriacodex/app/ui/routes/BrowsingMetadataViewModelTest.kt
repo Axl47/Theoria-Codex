@@ -29,7 +29,7 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class BrowsingMetadataViewModelTest {
-    @Test fun `multiple feed consumers share ID queries and Recents shares one payload stream with file mirrors`() = runTest {
+    @Test fun `multiple feed consumers share ID queries and Recents decodes one payload stream`() = runTest {
         val settings = InMemorySettingsRepository()
         val likes = InMemoryLikesRepository()
         val recentStore = InMemoryRecentsRepository()
@@ -64,7 +64,7 @@ class BrowsingMetadataViewModelTest {
         runCurrent()
         assertEquals(1, likedSubscriptions)
         assertEquals(0, fullLikeSubscriptions)
-        // Watched posts' URLs teach the file mirror index; Recents reuses the same decoded stream below.
+        // One read of the watch history teaches the file mirror index; nothing stays subscribed for badges.
         assertEquals(1, watchedPayloadSubscriptions)
 
         backgroundScope.launch { owner.recents.collect() }
@@ -79,7 +79,7 @@ class BrowsingMetadataViewModelTest {
         settings.setCacheFullImageOnSave(true)
         runCurrent()
         assertEquals(1, likedSubscriptions)
-        assertEquals(1, watchedPayloadSubscriptions)
+        assertEquals(2, watchedPayloadSubscriptions)
         assertEquals(1, searchSubscriptions)
         assertEquals(0, fullLikeSubscriptions)
         assertEquals(setOf(post.id), owner.state.value?.watchedPostIds)
@@ -91,7 +91,7 @@ class BrowsingMetadataViewModelTest {
         assertTrue(owner.state.value?.likedPostIds?.isEmpty() == true)
         assertFalse(owner.state.value?.watchedPostIds?.isEmpty() == true)
         assertEquals(2, likedSubscriptions)
-        assertEquals(1, watchedPayloadSubscriptions)
+        assertEquals(2, watchedPayloadSubscriptions)
     }
 
     @Test fun `a copy of a liked file on another site counts as liked and is hidden by Hide liked`() = runTest {
@@ -124,5 +124,25 @@ class BrowsingMetadataViewModelTest {
         mirrors.learn(listOf(filePost(SourceKey.PIXIV, "3", "a".repeat(32))))
         runCurrent()
         assertEquals(beforeMirror + 1, emissions.size)
+    }
+
+    @Test fun `a Library stored before browsing starts is read once and its copies count as liked`() = runTest {
+        val settings = InMemorySettingsRepository()
+        val transactions = InMemoryCodexLikesTransactions()
+        val profile = settings.observeSettings().first().activeRecommendationProfile()
+        val sync = LikesCodexSyncService(transactions, transactions.codices, transactions.likes)
+        // More posts than are read one by one, so this takes the single Library read a real start takes.
+        (1..25).forEach { n -> sync.toggle(profile, filePost(SourceKey.DANBOORU, "$n", "%032x".format(n)), emptyList()) }
+        val mirrors = FileMirrorIndex()
+        val owner = BrowsingMetadataViewModel(settings, transactions.likes, transactions.codices, InMemoryRecentsRepository(),
+            backgroundScope, StandardTestDispatcher(testScheduler), mirrors)
+        backgroundScope.launch { owner.state.collect() }
+        runCurrent()
+
+        val mirror = filePost(SourceKey.GELBOORU, "9", "%032x".format(7))
+        mirrors.learn(listOf(mirror))
+        runCurrent()
+
+        assertTrue(mirror.id in requireNotNull(owner.state.value).likedPostIds)
     }
 }
