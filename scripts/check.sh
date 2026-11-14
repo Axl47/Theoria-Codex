@@ -5,8 +5,9 @@
 #   static   Detekt with type resolution, duplicate code, configuration cache
 #   lint     Android lint
 #   release  R8 builds: release, releaseAcceptance, and benchmark builds when the change can affect them
-# Without --part it runs tests, static, then lint: the pre-PR check. GitHub runs those three in parallel. Release builds and emulator tests run on
-# GitHub after merge to main.
+# Without --part it runs all three, the pre-PR check: one Gradle build of what they share, then lint
+# beside the tests and Detekt (see run_check). GitHub runs the three parts as parallel jobs. Release
+# builds and emulator tests run on GitHub after merge to main.
 #
 # --record (pre-PR check only) publishes the pass as refs/verified/<key>, where the key names the
 # inputs that can affect the result (scripts/release_gate.py input-key), so GitHub's Verify and
@@ -70,7 +71,39 @@ write_timings() {
 }
 
 temp="$(mktemp -d)"
-trap 'write_timings; rm -rf "$temp"' EXIT
+trap 'kill $(jobs -p) 2>/dev/null || true; write_timings; rm -rf "$temp"' EXIT
+
+# Lanes run side by side. Usage: lane <name> <command...> for each, then finish_lanes, which waits for
+# all of them, records each as a phase, prints the output of the ones that failed, and exits if any did.
+lanes=()
+lane() {
+  local log="$temp/lane-${#lanes[@]}.log" started
+  started="$(now_us)"
+  ( trap 'now_us > "$log.end"' EXIT; "${@:2}" > "$log" 2>&1 ) &
+  lanes+=("$!|$started|$log|$1")
+}
+
+finish_lanes() {
+  local entry pid started log name ok us failed=()
+  for entry in "${lanes[@]}"; do
+    IFS='|' read -r pid started log name <<< "$entry"
+    if wait "$pid"; then ok=true; else ok=false; failed+=("$name"); fi
+    us=$(( $(< "$log.end") - started ))
+    phases+=("$(printf '{"name": "%s", "seconds": %d.%03d, "ok": %s}' "$name" $(( us / 1000000 )) $(( us % 1000000 / 1000 )) "$ok")")
+    if [[ "$ok" == true ]]; then
+      echo "$name: passed in $(( us / 1000000 ))s"
+    else
+      echo "----- $name: FAILED after $(( us / 1000000 ))s. Its output:"
+      cat "$log"
+      echo "----- end of $name"
+    fi
+  done
+  lanes=()
+  if (( ${#failed[@]} )); then
+    (IFS=,; echo "Failed: ${failed[*]}" >&2)
+    exit 1
+  fi
+}
 
 # Everything except the agent tool directory, which is local and never part of the build.
 worktree_changes() { git status --porcelain -- . ':!.claude'; }
@@ -119,46 +152,91 @@ configuration_cache_check() {
   fi
 }
 
-run_tests() {
-  # Naming the Kover tasks is what turns on test instrumentation (see build.gradle.kts).
-  phase 'Gradle: tests and coverage' ./gradlew "${task_timings[@]}" \
-    :core-domain:test \
-    :core-data:test \
-    :core-sources:test \
-    :core-stubs:test \
-    :app-logic:test \
-    :core-data-android:testDebugUnitTest \
-    :core-data-android:compileDebugAndroidTestKotlin \
-    :app:testDebugUnitTest \
-    :app:compileDebugAndroidTestKotlin \
-    :app:assembleDebug \
-    :koverXmlReportQuality \
-    :koverVerifyQuality \
-    --warning-mode=all \
-    --console=plain
+test_tasks=(
+  :core-domain:test
+  :core-data:test
+  :core-sources:test
+  :core-stubs:test
+  :app-logic:test
+  :core-data-android:testDebugUnitTest
+  :core-data-android:compileDebugAndroidTestKotlin
+  :app:testDebugUnitTest
+  :app:compileDebugAndroidTestKotlin
+  :app:assembleDebug
+  :koverXmlReportQuality
+  :koverVerifyQuality
+)
+detekt_tasks=(
+  :app:detektDebug
+  :app-logic:detektMain
+  :core-data-android:detektDebug
+  :core-domain:detektMain
+  :core-data:detektMain
+  :core-sources:detektMain
+  :core-stubs:detektMain
+)
+lint_tasks=(:app:lint :core-data-android:lintDebug)
+# Everything lint shares with the tests and Detekt: all compilation and code generation. Once these
+# are built, a lint build and a tests-and-Detekt build have no task left in common, so the two can
+# run at the same time without writing the same output or reading sources mid-generation.
+# `./gradlew <tasks> --dry-run` on each side lists the graphs if this needs rechecking.
+shared_tasks=(
+  :app:assembleDebug
+  :app:compileDebugUnitTestKotlin
+  :app:compileDebugUnitTestJavaWithJavac
+  :app:compileDebugAndroidTestKotlin
+  :core-data-android:compileDebugUnitTestKotlin
+  :core-data-android:compileDebugUnitTestJavaWithJavac
+  :core-data-android:compileDebugAndroidTestKotlin
+  :core-data-android:bundleLibRuntimeToJarDebug
+  :core-domain:testClasses
+  :core-data:testClasses
+  :core-sources:testClasses
+  :core-stubs:testClasses
+  :app-logic:testClasses
+)
 
-  phase 'Changed-code coverage' python3 scripts/check_changed_coverage.py \
+changed_coverage() {
+  python3 scripts/check_changed_coverage.py \
     --xml build/reports/kover/quality.xml \
     --base "$base" \
     --boundaries config/quality/coverage-boundaries.json \
     --minimum 60
 }
 
+# A fresh process: a daemon reused after other analysis can crash lint's Kotlin resolver. Offline
+# keeps lint from looking up dependency versions on the network.
+lint_build() {
+  ./gradlew "${task_timings[@]}" "${lint_tasks[@]}" --offline --no-daemon --warning-mode=all --console=plain
+}
+
+# The pre-PR check keeps a daemon that only ever runs lint: warm, it analyses the app in about 50s
+# where a fresh process takes 80s. Its heap size differs from the main daemon's on purpose: Gradle
+# only keeps a second daemon when its JVM settings differ, and only then does no other analysis
+# share lint's process. The periodic collection hands its heap back while it idles; it exits after an
+# hour unused. If lint fails there, that daemon is stopped and a fresh process decides, so a stale
+# analysis session cannot fail the check and real findings still do.
+lint_daemon_jvmargs='-Xmx2048m -XX:G1PeriodicGCInterval=60000 -Dfile.encoding=UTF-8'
+lint_in_daemon() {
+  ./gradlew "${task_timings[@]}" "${lint_tasks[@]}" --offline --warning-mode=all --console=plain \
+    "-Dorg.gradle.jvmargs=$lint_daemon_jvmargs" -Dorg.gradle.daemon.idletimeout=3600000 && return
+  echo 'Lint failed in its daemon. Stopping that daemon and retrying in a fresh process.'
+  pkill -f -- "${lint_daemon_jvmargs%% *} .*GradleDaemon" || true
+  lint_build
+}
+
+run_tests() {
+  # Naming the Kover tasks is what turns on test instrumentation (see build.gradle.kts).
+  phase 'Gradle: tests and coverage' ./gradlew "${task_timings[@]}" "${test_tasks[@]}" \
+    --warning-mode=all --console=plain
+  phase 'Changed-code coverage' changed_coverage
+}
+
 run_static() {
   phase 'npm ci' install_node_modules
   phase 'Duplicate audit' npm run audit:duplicates
   phase 'Gradle: configuration-cache check' configuration_cache_check
-
-  phase 'Gradle: Detekt' ./gradlew "${task_timings[@]}" \
-    :app:detektDebug \
-    :app-logic:detektMain \
-    :core-data-android:detektDebug \
-    :core-domain:detektMain \
-    :core-data:detektMain \
-    :core-sources:detektMain \
-    :core-stubs:detektMain \
-    --warning-mode=all \
-    --console=plain
+  phase 'Gradle: Detekt' ./gradlew "${task_timings[@]}" "${detekt_tasks[@]}" --warning-mode=all --console=plain
 }
 
 run_lint() {
@@ -171,10 +249,25 @@ run_lint() {
     --console=plain
 
   # Offline lint cannot download its own tool on a fresh machine. A dry run fetches it.
-  phase 'Gradle: lint dry run' ./gradlew "${task_timings[@]}" :app:lint :core-data-android:lintDebug --dry-run --console=plain
+  phase 'Gradle: lint dry run' ./gradlew "${task_timings[@]}" "${lint_tasks[@]}" --dry-run --console=plain
 
-  # A fresh process: a daemon reused after other analysis can crash lint's Kotlin resolver.
-  phase 'Gradle: lint' ./gradlew "${task_timings[@]}" :app:lint :core-data-android:lintDebug --offline --no-daemon --warning-mode=all --console=plain
+  phase 'Gradle: lint' lint_build
+}
+
+# The pre-PR check on one machine. Lint analyses the whole app on one thread for most of a minute, so
+# it runs beside the tests and Detekt instead of after them; their output is shown only if they fail.
+run_check() {
+  lane 'Python unittests' python_tests
+  phase 'Gradle: shared build' ./gradlew "${task_timings[@]}" "${shared_tasks[@]}" --warning-mode=all --console=plain
+  phase 'Gradle: lint dry run' ./gradlew "${task_timings[@]}" "${lint_tasks[@]}" --dry-run --console=plain
+  lane 'Gradle: lint' lint_in_daemon
+  lane 'Gradle: tests, coverage and Detekt' ./gradlew "${task_timings[@]}" "${test_tasks[@]}" "${detekt_tasks[@]}" \
+    --warning-mode=all --console=plain
+  phase 'npm ci' install_node_modules
+  phase 'Duplicate audit' npm run audit:duplicates
+  finish_lanes
+  phase 'Changed-code coverage' changed_coverage
+  phase 'Gradle: configuration-cache check' configuration_cache_check
 }
 
 # Benchmark builds only matter when the change touches them or the build itself. On main there is no
@@ -197,10 +290,10 @@ run_release() {
 }
 
 phase 'Hotspot check' line_budgets "$base"
-[[ "$part" == tests || "$part" == lint || "$part" == release ]] || phase 'Python unittests' python_tests
+[[ "$part" != static ]] || phase 'Python unittests' python_tests
 
 case "$part" in
-  '') run_tests; run_static; run_lint ;;
+  '') run_check ;;
   tests) run_tests ;;
   static) run_static ;;
   lint) run_lint ;;
