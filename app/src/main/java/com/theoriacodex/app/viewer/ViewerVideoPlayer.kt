@@ -381,7 +381,7 @@ private fun ViewerVideoTimelineOverlay(
     state: ViewerVideoState, source: SourceKey, controls: ViewerRendererControls,
     events: ViewerRendererEvents, aspectRatio: Float?, modifier: Modifier,
 ) {
-    if (!controls.isActive || state.failed) return
+    if (!controls.isActive && !controls.isPreloading || state.failed) return
     if (state.duration <= 0L || state.player == null) {
         ViewerPendingTimeline(controls, events, modifier)
         return

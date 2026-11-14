@@ -451,7 +451,7 @@ internal fun ViewerPendingTimeline(
 /** [ViewerPendingTimeline] for a renderer whose [ViewerRendererControls.expectedDurationMs] is known; nothing otherwise. */
 @Composable
 internal fun ViewerPendingTimeline(controls: ViewerRendererControls, events: ViewerRendererEvents, modifier: Modifier) {
-    val expected = controls.expectedDurationMs?.takeIf { it > 0L && controls.isActive } ?: return
+    val expected = controls.expectedDurationMs?.takeIf { it > 0L && (controls.isActive || controls.isPreloading) } ?: return
     ViewerPendingTimeline(
         expected, controls.showControls, !controls.isPlaying, controls.playbackRate,
         events.onTogglePlayback, events.onTimelineInteractionActiveChanged, modifier,

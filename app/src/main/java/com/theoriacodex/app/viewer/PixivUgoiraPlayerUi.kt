@@ -81,7 +81,7 @@ fun PixivUgoiraPlayer(
     val activePlayback = playback
     if (activePlayback == null) {
         UgoiraLoadingState(errorMessage, modifier, loadingPreview) {
-            val expected = expectedDurationMs?.takeIf { it > 0L && isActive } ?: return@UgoiraLoadingState
+            val expected = expectedDurationMs?.takeIf { it > 0L && shouldLoad } ?: return@UgoiraLoadingState
             ViewerPendingTimeline(expected, showProgressBar, paused, playbackRate, togglePlayback, onTimelineInteractionActiveChanged)
         }
         return

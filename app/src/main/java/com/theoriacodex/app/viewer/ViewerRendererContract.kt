@@ -9,6 +9,7 @@ import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 internal data class ViewerRendererControls(
     val isActive: Boolean,
     val isPlaying: Boolean,
+    /** Whether the timeline shows: on the selected media, and on the media a swipe is heading to. */
     val showControls: Boolean,
     val loopPlayback: Boolean,
     val playbackRate: Float,
