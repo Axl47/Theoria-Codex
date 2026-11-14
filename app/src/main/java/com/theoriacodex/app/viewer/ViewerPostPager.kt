@@ -77,7 +77,7 @@ internal fun ViewerPostPagerSurface(
                     holdScrub = LocalViewerHoldScrub.current,
                     reservedBottomPx = reservedBottom,
                 ),
-                viewerGestureHandler(swipe, dismissDrag, screen, controls, haptics, flingVelocity, scope),
+                viewerGestureHandler(swipe, dismissDrag, screen, controls, haptics, flingVelocity, scope, frame.uiState.controls.slideshow),
             )
             .graphicsLayer { translationX = swipe.edgeOffset },
     ) {
@@ -109,8 +109,13 @@ private fun viewerGestureHandler(
     haptics: HapticFeedback,
     flingVelocity: Float,
     scope: CoroutineScope,
+    slideshowRunning: Boolean,
 ) = object : ViewerGestureHandler {
-    override fun onPress() = swipe.press()
+    // Any touch on the media stops a slideshow; a tap then shows the controls as usual.
+    override fun onPress() {
+        if (slideshowRunning) controls.stopSlideshow()
+        swipe.press()
+    }
     override fun onHorizontalDrag(displacement: Float) = swipe.drag(displacement)
     override fun onHorizontalRelease(displacement: Float, velocity: Float) = swipe.release(displacement, velocity)
     override fun onDismissDrag(x: Float, y: Float, height: Float) {
@@ -226,7 +231,7 @@ private fun viewerRendererControls(frame: ViewerFrame, active: Boolean, preloadi
         isPreloading = preloading,
         showControls = frame.chromeStage >= VIEWER_CHROME_STAGE_TIMELINE && active,
         showPassiveProgress = !frame.chromeVisible && active && !frame.inPictureInPicture,
-        loopPlayback = controls.playbackMode == com.theoriacodex.app.viewer.state.ViewerPlaybackMode.LOOP,
+        loopPlayback = controls.playbackMode == com.theoriacodex.app.viewer.state.ViewerPlaybackMode.LOOP && !controls.slideshow,
         playbackRate = closestViewerPlaybackRate(controls.playback.playbackRate).speed,
         restartRequest = controls.playback.restartRequest,
         loadGeneration = loadGeneration,
