@@ -63,7 +63,7 @@ internal fun ColumnScope.SearchResultsBody(
     val issues = LocalSourceHealth.current.issues
     val scope = state.query.appliedSourceScope
     val outageNotices = remember(state.content.statuses, issues, scope) {
-        // A single source already says so in its own error, with a Retry that makes sense there.
+        // A single source already says so in its own error, whose action verifies or retries it.
         if (scope is SearchSourceScope.Single) emptyList() else sourceOutageNotices(state.content.statuses, issues)
     }
     SourceOutageNotices(outageNotices)
@@ -107,7 +107,7 @@ private fun SearchEmptyResults(
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         FeedContinueLoading(pageDemand)
         sourceAuthErrorMessage?.let { SourceAccountNotice(it, state.content.statuses) }
-        sourceFailureMessage?.let { failureMessage -> ErrorBlock(message = failureMessage, onRetry = onRetry) }
+        sourceFailureMessage?.let { failureMessage -> SourceFailureBlock(failureMessage, state.content.statuses, onRetry) }
         if (feed.durationMetadata.readiness.isResolving) {
             EmptyBlock(hasPendingChanges = false, messageOverride = "Resolving durations…")
         } else if (!state.content.hasExecutedSearch && !feed.animatedFilterActive) {

@@ -153,7 +153,7 @@ internal fun RetestFailure(retest: RetestStatus?, host: String, onAction: (Custo
     val offeredKey = keyAction?.takeIf { retest.needsKey || (retest.blocked && !it.hasKey) }
     Row(Modifier.padding(start = 4.dp)) {
         if (retest.blocked) {
-            TextButton(onClick = { onAction(CustomSitesAction.StartVerification(host, afterRefusal = true)) }) { Text("Verify in browser") }
+            TextButton(onClick = { onAction(CustomSitesAction.StartVerification(host, afterRefusal = true)) }) { Text(VERIFY_IN_BROWSER_LABEL) }
         }
         offeredKey?.let { action ->
             TextButton(onClick = { onAction(CustomSitesAction.StartEdit(action.sourceId, expandKeys = true)) }) {

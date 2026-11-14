@@ -11,6 +11,8 @@ import androidx.compose.ui.test.performClick
 import com.theoriacodex.app.source.LocalSourceHealth
 import com.theoriacodex.app.source.SourceHealth
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.orchestration.SourceRunState
+import com.theoriacodex.domain.orchestration.SourceRunStatus
 import com.theoriacodex.sources.http.HostOutageKind
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -50,6 +52,21 @@ class SourceOutageNoticesTest {
         val verified = mutableListOf<SourceKey>()
         show(listOf(challenge), verified::add)
         compose.onNodeWithText("Dismiss").assertExists()
+
+        compose.onNodeWithText("Verify in browser").performClick()
+
+        assertEquals(listOf(SourceKey.IWARA), verified)
+    }
+
+    @Test
+    fun `a single-source failure behind a challenge verifies instead of retrying`() {
+        val verified = mutableListOf<SourceKey>()
+        val statuses = listOf(SourceRunStatus(SourceKey.IWARA, SourceRunState.FAILED))
+        compose.setContent {
+            val health = SourceHealth(issues = mapOf(SourceKey.IWARA to HostOutageKind.CHALLENGE), verify = verified::add)
+            CompositionLocalProvider(LocalSourceHealth provides health) { SourceFailureBlock("Iwara failed", statuses) {} }
+        }
+        compose.onNodeWithText("Retry").assertDoesNotExist()
 
         compose.onNodeWithText("Verify in browser").performClick()
 

@@ -39,7 +39,7 @@ internal fun BuiltInSitePage(site: BuiltInSiteSummary, accounts: BuiltInAccounts
         SettingsHeader(site.label, onBack = { onAction(CustomSitesAction.CloseBuiltIn) }, parents = SITES_PATH)
         SettingsGroup("Browser check") {
             SettingsRow(
-                title = "Verify in browser",
+                title = VERIFY_IN_BROWSER_LABEL,
                 summary = if (site.needsVerification) "This site is asking for a browser check" else "Open this site to pass its browser check",
                 onClick = { onAction(CustomSitesAction.StartVerification(site.host, afterRefusal = site.needsVerification)) },
                 trailing = if (site.working) { { WorkingMark() } } else null,
