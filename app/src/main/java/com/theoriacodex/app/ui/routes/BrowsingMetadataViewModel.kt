@@ -23,10 +23,10 @@ import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 
@@ -42,8 +42,8 @@ internal data class BrowsingMetadata(
 )
 
 /**
- * One activity-owned read model is shared by every destination. Badges and filters read IDs only; the stored posts'
- * URLs reach [FileMirrorIndex] beside the first emission, so mirrors appear once those posts are decoded.
+ * One activity-owned read model is shared by every destination. Badges and filters read IDs only. Stored posts are
+ * read beside that, once each, to teach [FileMirrorIndex] their file hashes, so mirrors appear shortly after the IDs.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 internal class BrowsingMetadataViewModel(
@@ -60,13 +60,26 @@ internal class BrowsingMetadataViewModel(
     private val settings = settingsRepository.observeSettings().flowOn(dispatcher).shareIn(scope, started, replay = 1)
     private val profileLikes = settings.map { it.activeRecommendationProfile().profileId }.distinctUntilChanged()
         .flatMapLatest { profileId -> likes.observeLikedPostIds(profileId).map { ProfileLikes(profileId, it) } }
+        .shareIn(scope, started, replay = 1)
     private val codexIds = codices.observeCodices().map { rows -> rows.mapTo(linkedSetOf()) { it.codexId } }.distinctUntilChanged()
-    private val saved = codexIds.flatMapLatest(codices::observeSavedPostIds)
-    private val watchedPosts = recentsRepository.observeWatchedPosts().shareIn(scope, started, replay = 1)
+    private val saved = codexIds.flatMapLatest(codices::observeSavedPostIds).shareIn(scope, started, replay = 1)
 
-    /** [FileMirrorIndex.links], while teaching the index the stored posts for as long as metadata is observed. */
+    /**
+     * [FileMirrorIndex.links], while teaching the index the stored posts for as long as metadata is observed: the watch
+     * history and the Library once, then only the posts stored since. No decoded Library stays in memory for this.
+     */
     private val mirrorLinks = channelFlow {
-        launch { merge(codexIds.flatMapLatest(codices::observeLibraryPosts), watchedPosts.map { it.map(RecentPostEntry::post) }).collect(mirrors::learn) }
+        launch { mirrors.learn(recentsRepository.observeWatchedPosts().first().map(RecentPostEntry::post)) }
+        launch {
+            val taught = HashSet<PostId>()
+            combine(profileLikes, saved) { liked, savedIds -> liked.ids + savedIds }.collect { stored ->
+                val fresh = stored.filter(taught::add)
+                mirrors.learn(
+                    if (fresh.size > SINGLE_READS) codices.observeLibraryPosts(codexIds.first()).first()
+                    else fresh.mapNotNull { codices.getPost(it) },
+                )
+            }
+        }
         mirrors.links.collect(::send)
     }
 
@@ -79,7 +92,7 @@ internal class BrowsingMetadataViewModel(
     }.filterNotNull().flowOn(dispatcher).stateIn(scope, started, null)
 
     val recents = combine(
-        watchedPosts,
+        recentsRepository.observeWatchedPosts(),
         recentsRepository.observeSearches(),
         state.filterNotNull().map { it.likedPostIds }.distinctUntilChanged(),
     ) { watched, searches, likedIds ->
@@ -94,4 +107,9 @@ internal class BrowsingMetadataViewModel(
     }.flowOn(dispatcher).stateIn(scope, started, null)
 
     private data class ProfileLikes(val profileId: String, val ids: Set<PostId>)
+
+    private companion object {
+        /** Up to this many newly stored posts are read one by one; more (the first load, a restore) in one Library read. */
+        const val SINGLE_READS = 20
+    }
 }
