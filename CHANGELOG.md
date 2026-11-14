@@ -11,6 +11,9 @@
 
 ### Changed
 
+- Swiping to the next or previous post in the Viewer shows its comment count right away, since the neighbouring posts' counts load ahead of time.
+- Swiping to a video or animation with the controls showing keeps its timeline on screen at 0:00 while it loads, instead of hiding it until playback starts.
+- With the controls hidden, the thin progress line under a video or animation runs along the bottom of the media itself, as wide as it, instead of the bottom of the screen.
 - A file that several sites host now shows once when you search them together, instead of one card per site. This covers Danbooru, AIBooru, Gelbooru, Rule34.xxx and custom booru sites, in Search, For You and live Codices.
 - A post you liked, saved or watched on one booru site is recognised when another site shows the same file: its heart is filled, "Hide liked", "Hide saved" and "Hide watched" hide it, and For You stops suggesting it. Unliking that copy removes the like from every site where you liked the file. Your Library still lists only the posts you saved.
 
