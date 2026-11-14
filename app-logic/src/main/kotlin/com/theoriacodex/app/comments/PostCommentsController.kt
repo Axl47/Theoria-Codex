@@ -43,7 +43,8 @@ interface PostCommentsActions {
 
 /**
  * Owns the comments of the posts one Viewer session has shown, so swiping back to a post is instant. The
- * current post's first page loads in the background ([show]); everything else waits for a tap. Pages come
+ * first page of each post the Viewer [show]s (the current one and its neighbours) loads in the background;
+ * everything else waits for a tap. Pages come
  * through [loader], which caches them, so this holds only what the screen draws.
  *
  * [beforeFirstFetch] runs before each background first-page request, letting the Viewer keep the shown

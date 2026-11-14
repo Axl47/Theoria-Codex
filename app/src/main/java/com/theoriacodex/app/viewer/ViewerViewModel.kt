@@ -89,7 +89,10 @@ internal class ViewerViewModel(
     private val mutableSession = MutableStateFlow<ViewerSession?>(null)
     val session: StateFlow<ViewerSession?> = mutableSession.asStateFlow()
 
-    /** Each shown post's comments; the current post's first page loads once its media is up (see [awaitFirstMediaShown]). */
+    /**
+     * Each shown post's comments; the current and adjacent posts' first pages load once the media is up
+     * (see [awaitFirstMediaShown]).
+     */
     val comments = PostCommentsController(commentsLoader, workScope, beforeFirstFetch = ::awaitFirstMediaShown)
 
     /** Compact identity awaiting a process-restoration payload, or null for a live/empty session. */
@@ -139,8 +142,15 @@ internal class ViewerViewModel(
         if (action is ViewerAction.SelectPage || action is ViewerAction.ReplaceSession ||
             action is ViewerAction.PlaybackCompleted || action is ViewerAction.SlideshowAdvance) {
             reconcileResolutionLookahead()
-            state.value.currentPage?.post?.let(comments::show)
+            showComments()
         }
+    }
+
+    /** The current post's first comment page, then its neighbours', so a swipe lands on a known count. */
+    private fun showComments() {
+        val current = state.value
+        current.currentPage?.post?.let(comments::show)
+        viewerPostNavigation(current).neighbours.forEach { page -> comments.show(page.post) }
     }
 
     /** A replacement cancels the old session's work; a new session also waits again for its first media. */
@@ -292,11 +302,7 @@ internal class ViewerViewModel(
         if (postResolver == null) return
         val current = state.value
         val session = current.session ?: return
-        val navigation = viewerPostNavigation(current)
-        val neighbours = listOfNotNull(
-            navigation.pages.getOrNull(navigation.currentIndex + 1),
-            navigation.pages.getOrNull(navigation.currentIndex - 1),
-        )
+        val neighbours = viewerPostNavigation(current).neighbours
         val desired = setOfNotNull(current.currentPage?.post?.id) + neighbours.map { it.post.id }
         val obsolete = sessionJobs.keys.filterIsInstance<ViewerWorkKey.Resolution>().filter { it.postId !in desired }
         obsolete.forEach { key ->
