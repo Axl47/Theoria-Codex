@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
  */
 class FileMirrorIndex {
     private val lock = Any()
-    private val hashById = HashMap<PostId, String?>()
+    private val hashById = HashMap<PostId, String>()
     private val idsByHash = HashMap<String, MutableSet<PostId>>()
     private val mutableLinks = MutableStateFlow(0)
 
@@ -26,9 +26,9 @@ class FileMirrorIndex {
         synchronized(lock) {
             for (post in posts) {
                 if (post.id in hashById) continue
-                val hash = post.fileHash
+                // A stored post can lack the hash its site reports, so it stays open to a later listing that has it.
+                val hash = post.fileHash ?: continue
                 hashById[post.id] = hash
-                if (hash == null) continue
                 val ids = idsByHash.getOrPut(hash) { linkedSetOf() }
                 ids += post.id
                 if (ids.size > 1) linked = true

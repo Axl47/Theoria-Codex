@@ -24,6 +24,20 @@ class FileMirrorIndexTest {
     }
 
     @Test
+    fun `a stored post without a hash is linked once a listing reports its hash`() {
+        val index = FileMirrorIndex()
+        val stored = testPost(SourceKey.GELBOORU, "9")
+        val mirror = filePost(SourceKey.DANBOORU, "1", HASH)
+        index.learn(listOf(stored, mirror))
+        assertEquals(setOf(stored.id), index.withCopies(setOf(stored.id)))
+
+        index.learn(listOf(stored.copy(contentHash = HASH)))
+
+        assertEquals(setOf(stored.id, mirror.id), index.withCopies(setOf(stored.id)))
+        assertEquals(1, index.links.value)
+    }
+
+    @Test
     fun `links change only when two known posts first share a file`() {
         val index = FileMirrorIndex()
         index.learn(listOf(filePost(SourceKey.DANBOORU, "1", HASH), testPost(SourceKey.PIXIV, "2")))
