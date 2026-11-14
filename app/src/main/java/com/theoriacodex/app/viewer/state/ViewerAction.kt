@@ -30,6 +30,9 @@ internal sealed interface ViewerAction {
 
     data class SetPlaybackMode(val mode: ViewerPlaybackMode) : ViewerAction
     data class PlaybackCompleted(val session: ViewerSessionIdentity, val key: ViewerMediaKey, val loadGeneration: Long) : ViewerAction
+    data class SetSlideshow(val running: Boolean) : ViewerAction
+    /** A slideshow's hold on the still image [key] ran out. */
+    data class SlideshowAdvance(val session: ViewerSessionIdentity, val key: ViewerMediaKey) : ViewerAction
     data object Play : ViewerAction
     data object Pause : ViewerAction
     data object TogglePlayback : ViewerAction
