@@ -75,7 +75,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 
-/** Everything drawn over the media: top bar, post strip, rotate button, and related drawer. */
+/** Everything drawn over the media: top bar, post strip, rotate and slideshow buttons, and related drawer. */
 @Composable
 internal fun BoxScope.ViewerChromeOverlays(
     frame: ViewerFrame,
@@ -135,7 +135,7 @@ internal fun BoxScope.ViewerChromeOverlays(
                 })
         }
     }
-    ViewerRotationControl(selection, activity?.viewerRotation, frame.inPictureInPicture, frame.chromeVisible, suppressed = frame.mediaOverviewVisible || screen.timelineInteractionActive)
+    ViewerFooterButtons(frame, screen, activity, onAction)
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_TOP_BAR, Modifier.align(Alignment.TopCenter).then(fadesWhileScrubbing)) {
         ViewerTopBar(frame, controls, activity, quality, qualityHeight, selection.post.id in likedPostIds, comments.countOf(selection.post), onAction)
     }
@@ -156,6 +156,16 @@ internal fun BoxScope.ViewerChromeOverlays(
             onInteraction = { controls.markInteraction() },
         )
     }
+}
+
+/** The rotate button on the left and the slideshow button on the right, hidden while another surface owns the bottom. */
+@Composable
+private fun BoxScope.ViewerFooterButtons(frame: ViewerFrame, screen: ViewerScreenState, activity: MainActivity?, onAction: (ViewerAction) -> Unit) {
+    val bottomOwned = frame.mediaOverviewVisible || screen.timelineInteractionActive
+    // A running slideshow keeps the image clear, including of the rotate hint.
+    val rotationSuppressed = bottomOwned || frame.uiState.controls.slideshow
+    ViewerRotationControl(frame.selection, activity?.viewerRotation, frame.inPictureInPicture, frame.chromeVisible, rotationSuppressed)
+    ViewerSlideshowControl(frame, suppressed = bottomOwned || frame.inPictureInPicture, onAction)
 }
 
 @Composable

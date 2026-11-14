@@ -85,6 +85,10 @@ internal class ViewerControls(
         if (visible != overviewVisible) onAction(ViewerAction.ToggleOverview)
     }
 
+    fun stopSlideshow() {
+        onAction(ViewerAction.SetSlideshow(false))
+    }
+
     fun markInteraction() {
         screen.interactionSerial += 1
         if (!chromeVisible && !opening && !returning) onAction(ViewerAction.ToggleChrome)

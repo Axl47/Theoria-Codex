@@ -7,6 +7,7 @@
 - Booru posts have "Open original post" in the Viewer's More menu, which goes to the page the booru says the file came from, usually the artist's own Pixiv or X post. It opens in the Viewer when that site is one of your sources, and in the browser otherwise.
 - Booru posts have "Find on other sites" in the Viewer's More menu. It looks the file up on your other Danbooru, AIBooru, Gelbooru, Rule34.xxx and custom booru sites and opens what it finds in the Viewer, one post per site, or says "Not on your other sites".
 - App lock, in Settings under Storage & app. With it on, the app asks for your fingerprint, face or screen lock when you open it and again when you come back after more than a minute away, and Android no longer shows its screen in the recent-apps view.
+- A slideshow button in the Viewer, on the lower right of still images. It shows each image for five seconds with a thin line for the time left, plays videos and animations through once, and moves through the queue until it ends or you touch the screen.
 
 ### Changed
 
@@ -16,6 +17,7 @@
 ### Fixed
 
 - Restoring a backup with "Also apply global preferences" ticked now brings back the Codex Library's sort order and the old search bar choice, which it used to leave as they were.
+- The Viewer's rotate button no longer jumps when the controls hide or come back; it glides with the bottom bar and settles in the corner.
 
 ## [1.6.1] - 2026-11-12
 

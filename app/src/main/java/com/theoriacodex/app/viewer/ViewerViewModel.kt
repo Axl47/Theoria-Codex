@@ -137,7 +137,7 @@ internal class ViewerViewModel(
         }
         reduction.effects.forEach(::handleEffect)
         if (action is ViewerAction.SelectPage || action is ViewerAction.ReplaceSession ||
-            action is ViewerAction.PlaybackCompleted) {
+            action is ViewerAction.PlaybackCompleted || action is ViewerAction.SlideshowAdvance) {
             reconcileResolutionLookahead()
             state.value.currentPage?.post?.let(comments::show)
         }

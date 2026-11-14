@@ -101,6 +101,8 @@ internal data class ViewerControlsState(
     val playbackSettingsVisible: Boolean = false,
     val metadataVisible: Boolean = false,
     val playback: ViewerPlaybackControlsState = ViewerPlaybackControlsState(),
+    /** A slideshow is moving through the queue; session-only, never saved. */
+    val slideshow: Boolean = false,
 )
 
 internal data class ViewerOverviewState(

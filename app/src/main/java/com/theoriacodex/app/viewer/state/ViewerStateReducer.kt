@@ -113,6 +113,8 @@ internal fun reduceViewerState(state: ViewerUiState, action: ViewerAction): View
         ViewerAction.HidePlaybackSettings -> state.withControls(state.controls.copy(playbackSettingsVisible = false))
         is ViewerAction.SetPlaybackMode -> state.withControls(state.controls.copy(playbackMode = action.mode))
         is ViewerAction.PlaybackCompleted -> state.completePlayback(action)
+        is ViewerAction.SetSlideshow -> ViewerReduction(state.setSlideshow(action.running))
+        is ViewerAction.SlideshowAdvance -> state.advanceSlideshow(action)
         ViewerAction.Play -> ViewerReduction(state.setPlaying(true))
         ViewerAction.Pause -> ViewerReduction(state.setPlaying(false))
         ViewerAction.TogglePlayback -> ViewerReduction(state.setPlaying(!state.controls.playback.playing))
@@ -175,6 +177,8 @@ private fun ViewerUiState.replaceSession(action: ViewerAction.ReplaceSession): V
                     playbackMode = controls.playbackMode,
                     // A live update of the same session, such as pagination, must not reopen hidden chrome.
                     chromeVisible = if (session == action.session) controls.chromeVisible else replacement.controls.chromeVisible,
+                    // Nor may it end a running slideshow; a new session starts without one.
+                    slideshow = session == action.session && controls.slideshow,
                 ),
                 related = ViewerRelatedUiState(navigation = action.relatedNavigation, extraPostIds = action.relatedPostIds),
             )
@@ -362,17 +366,35 @@ private fun ViewerUiState.toggleChrome(): ViewerUiState {
 private fun ViewerUiState.completePlayback(action: ViewerAction.PlaybackCompleted): ViewerReduction {
     if (session != action.session || currentMedia?.key != action.key ||
         currentMedia?.loadGeneration != action.loadGeneration || !controls.playback.playing ||
-        controls.playbackMode == ViewerPlaybackMode.LOOP) return ViewerReduction(this)
-    if (controls.playbackMode == ViewerPlaybackMode.NEXT) {
-        val page = currentPage ?: return ViewerReduction(this)
-        if (page.selectedMediaIndex < page.media.lastIndex) return selectMedia(page.selectedMediaIndex + 1)
-        val navigation = com.theoriacodex.app.viewer.viewerPostNavigation(this)
-        val nextIndex = navigation.sourceIndices.getOrNull(navigation.currentIndex + 1)
-        if (nextIndex != null) return selectPage(nextIndex).state.selectMedia(0)
-    }
+        (controls.playbackMode == ViewerPlaybackMode.LOOP && !controls.slideshow)) return ViewerReduction(this)
+    if (controls.playbackMode == ViewerPlaybackMode.NEXT || controls.slideshow) advanceInQueue()?.let { return it }
     return ViewerReduction(copy(controls = controls.copy(
         playback = controls.playback.copy(playing = false, completed = true),
+        slideshow = false,
     )))
+}
+
+/** Moves to the post's next page, else the queue's next post; null at the end of the queue. Shared by "Next in queue" and the slideshow. */
+private fun ViewerUiState.advanceInQueue(): ViewerReduction? {
+    val page = currentPage ?: return null
+    if (page.selectedMediaIndex < page.media.lastIndex) return selectMedia(page.selectedMediaIndex + 1)
+    val navigation = com.theoriacodex.app.viewer.viewerPostNavigation(this)
+    val nextIndex = navigation.sourceIndices.getOrNull(navigation.currentIndex + 1) ?: return null
+    return selectPage(nextIndex).state.selectMedia(0)
+}
+
+/** Starting hides the chrome and plays the current video, so it can end and move on; stopping leaves everything else as it is. */
+private fun ViewerUiState.setSlideshow(running: Boolean): ViewerUiState {
+    if (!running) return copy(controls = controls.copy(slideshow = false))
+    val started = setPlaying(true)
+    return started.copy(controls = started.controls.copy(
+        slideshow = true, chromeVisible = false, actionsMenuVisible = false, playbackSettingsVisible = false,
+    ))
+}
+
+private fun ViewerUiState.advanceSlideshow(action: ViewerAction.SlideshowAdvance): ViewerReduction {
+    if (!controls.slideshow || session != action.session || currentMedia?.key != action.key) return ViewerReduction(this)
+    return advanceInQueue() ?: ViewerReduction(setSlideshow(false))
 }
 
 private fun ViewerUiState.setPlaying(playing: Boolean): ViewerUiState {
