@@ -666,7 +666,7 @@ internal class TheoriaShell(
     /** "Find on other sites" for [post], or null when it has no file hash or no other site can look one up. */
     fun findOnOtherSites(post: Post): (() -> Unit)? = if (!fileCopies.canFind(post)) null else ({
         scope.launch {
-            val copies = fileCopies.find(post)
+            val copies = fileCopies.find(post) { toast("Searching other sites…") }
             if (copies.isEmpty()) toast("Not on your other sites")
             else openViewerSession("file-copies:${post.id.source.id}:${post.id.sourcePostId}", copies)
         }
