@@ -75,6 +75,7 @@ internal data class BrowsingDestinationState(
     val favoriteTags: List<FavoriteTagEntry>,
     val savedPostIds: Set<PostId>,
     val watchedPostIds: Set<PostId>,
+    val codexPostIds: Set<PostId>,
 ) {
     val unknownAnimatedDurationPolicy: UnknownAnimatedDurationPolicy
         get() = if (settings.contentFilters.resolveUnknownAnimatedDurations) {
@@ -172,6 +173,7 @@ internal fun BrowsingDestinationStateBoundary(
         },
         savedPostIds = metadata.savedPostIds,
         watchedPostIds = metadata.watchedPostIds,
+        codexPostIds = metadata.codexPostIds,
     ))
 }
 

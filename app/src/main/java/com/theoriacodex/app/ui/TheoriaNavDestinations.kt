@@ -326,6 +326,7 @@ private fun ViewerDestination(shell: TheoriaShell) {
                 autoRotateVideos = state.browsing.settings.viewer.autoRotateVideos,
                 commentOrder = state.browsing.settings.viewer.commentOrder,
                 likedPostIds = state.browsing.likedPostIds,
+                codexPostIds = state.browsing.codexPostIds,
                 creatorBrowsingSources = state.browsing.creatorBrowsingSources,
             ),
             liveSourceState = viewerLiveSourceState(state, shell.pendingLikePostIds[state.browsing.activeProfile.profileId].orEmpty()),

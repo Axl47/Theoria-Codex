@@ -41,6 +41,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -326,6 +327,12 @@ internal fun availableSaveTargetCodices(
     excludedCodexIds: Set<String>,
 ): List<Codex> = codices.filterNot { codex -> codex.codexId in excludedCodexIds }
 
+/** Marks a post that is already in a Codex, readable on both light and dark surfaces. */
+@Composable
+@ReadOnlyComposable
+internal fun codexSavedColor(): Color =
+    if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) Color(0xFF81C784) else Color(0xFF256A2B)
+
 @Composable
 private fun CodexPickerRow(
     codex: Codex,
@@ -336,8 +343,7 @@ private fun CodexPickerRow(
     alreadySaved: Boolean = false,
     description: String = "$itemCount items",
 ) {
-    val savedGreen = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) Color(0xFF81C784)
-        else Color(0xFF256A2B)
+    val savedGreen = codexSavedColor()
     Surface(
         color = if (alreadySaved) savedGreen.copy(alpha = 0.16f).compositeOver(MaterialTheme.colorScheme.surface)
             else MaterialTheme.colorScheme.surface,
