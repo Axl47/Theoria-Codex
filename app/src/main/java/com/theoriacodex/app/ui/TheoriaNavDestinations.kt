@@ -445,6 +445,7 @@ private fun viewerScreenCallbacks(shell: TheoriaShell) = ViewerRouteScreenCallba
         post.pageUrl?.takeIf { it.isNotBlank() }?.let { url -> openInBrowser(shell.appContext, url) }
     },
     onOpenOriginalPost = { post -> post.originUrl?.let(shell::openOriginalPost) },
+    findOnOtherSites = shell::findOnOtherSites,
     onOpenUrl = { url -> openInBrowser(shell.appContext, url) },
     onRemoveIncludeTerm = shell.routes.removeSearchIncludeTerm,
     onRemoveExcludeTerm = shell.routes.removeSearchExcludeTerm,

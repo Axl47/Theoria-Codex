@@ -82,6 +82,7 @@ import com.theoriacodex.data.android.room.RoomProfileBackupStore
 import com.theoriacodex.data.android.room.awaitProfileLibraryStores
 import com.theoriacodex.data.android.room.TheoriaRoomDatabase
 import com.theoriacodex.domain.adapter.QuickQueryKind
+import com.theoriacodex.app.post.FileMirrorIndex
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.PostId
@@ -127,6 +128,8 @@ data class DataDependencies(
     val legacyJsonRecoveries: StateFlow<List<CorruptionRecovery>>,
     val readingPositions: ReadingPositionRepository = InMemoryReadingPositionRepository(),
     val savedSearches: SavedSearchRepository = InMemorySavedSearchRepository(),
+    /** This session's copies of one file across sites; feeds teach it what they list. */
+    val fileMirrors: FileMirrorIndex = FileMirrorIndex(),
 )
 
 data class SourceDependencies(
@@ -432,6 +435,7 @@ internal class DefaultTheoriaAppContainer(
             tagSuggestionStore = tagSuggestionStore,
             firstPageStore = SearchFirstPageStore(File(appContext.cacheDir, SearchFirstPageStore.FILE_NAME)),
             postResolutions = postResolutions,
+            fileMirrors = data.fileMirrors,
         ),
         forYou = ForYouCoordinator(
             registry = sourceRegistry,
@@ -442,12 +446,13 @@ internal class DefaultTheoriaAppContainer(
             statisticsRepository = statisticsRepository,
             tagSuggestionStore = tagSuggestionStore,
             postResolutions = postResolutions,
+            fileMirrors = data.fileMirrors,
         ),
-        relatedPosts = RelatedPostsLoader(sourceRegistry),
+        relatedPosts = RelatedPostsLoader(sourceRegistry, data.fileMirrors),
         comments = CommentsLoader(sourceRegistry),
         creatorProfile = CreatorProfileCoordinator(registry = sourceRegistry,
             follows = com.theoriacodex.data.repository.CreatorFollowsRepository(settingsRepository),
-            postResolutions = postResolutions),
+            postResolutions = postResolutions, fileMirrors = data.fileMirrors),
         mediaDurationCoordinator = mediaDurationCoordinator,
         appUsageTracker = appUsageTracker,
         offlineMedia = offlineMedia,
@@ -458,6 +463,8 @@ internal class DefaultTheoriaAppContainer(
         likesCodexSync = LikesCodexSyncService(
             transactions = codexLikesTransactions,
             codexRepository = codexRepository,
+            likes = likesRepository,
+            mirrors = data.fileMirrors,
             canonicalizePost = offlineMedia::withoutOfflineLocations,
         ),
         codexTransfer = CodexTransferService(

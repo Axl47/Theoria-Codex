@@ -1,5 +1,6 @@
 package com.theoriacodex.app.related
 
+import com.theoriacodex.app.post.FileMirrorIndex
 import com.theoriacodex.domain.adapter.MAX_RELATED_POST_CANDIDATES
 import com.theoriacodex.domain.adapter.RelatedPostsSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
@@ -17,6 +18,7 @@ interface RelatedPostsLoading {
 
 class RelatedPostsLoader(
     private val registry: SourceAdapterRegistry,
+    private val fileMirrors: FileMirrorIndex = FileMirrorIndex(),
 ) : RelatedPostsLoading {
     override fun supports(source: SourceKey): Boolean {
         return registry.adapterFor(source) is RelatedPostsSourceAdapter
@@ -30,6 +32,7 @@ class RelatedPostsLoader(
             .distinctBy(Post::id)
             .take(MAX_RELATED_POST_CANDIDATES)
             .toList()
+            .also(fileMirrors::learn)
     }
 }
 

@@ -31,6 +31,8 @@ import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import org.jsoup.parser.Parser
 
+/** Not a [com.theoriacodex.domain.adapter.FileHashLookupSourceAdapter]: its posts carry a file hash, but Shimmie's
+ * `hash=` search is unverified through this RSS/HTML path, so other sites' "Find on other sites" skips Paheal. */
 class Rule34PahealSourceAdapter(
     private val httpClient: SourceHttpClient,
     private val gson: Gson = Gson(),

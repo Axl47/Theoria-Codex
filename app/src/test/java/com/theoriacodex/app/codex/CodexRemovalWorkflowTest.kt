@@ -162,7 +162,7 @@ class CodexRemovalWorkflowTest {
         val repository = InMemoryCodexRepository()
         val likes = com.theoriacodex.data.repository.InMemoryLikesRepository()
         val transactions = InMemoryCodexLikesTransactions(repository, likes)
-        val service = LikesCodexSyncService(transactions, repository)
+        val service = LikesCodexSyncService(transactions, repository, transactions.likes)
         val profile = com.theoriacodex.data.repository.RecommendationProfile("profile-main", "Main")
         service.ensureProfileCodex(profile)
         val owner = CodexCommandViewModel(repository, service::clearProfile, service::restoreClearedLikes, {},
