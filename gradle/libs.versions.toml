@@ -16,7 +16,7 @@ coroutines = "1.11.0"
 gson = "2.14.0"
 securityCrypto = "1.1.0"
 # Hold the proven storage path while the newly released 1.3 line settles.
-dataStore = "1.2.1"
+dataStore = "1.3.0"
 vectorDrawable = "1.2.0"
 # Coil 3 changes animated drawable/network/cache contracts; migrate with physical autoplay coverage.
 coil = "2.7.0"
