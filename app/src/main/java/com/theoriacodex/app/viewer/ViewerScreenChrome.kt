@@ -21,6 +21,7 @@ import com.theoriacodex.app.ui.motion.LikedHeartColor
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.filled.BookmarkAdded
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Share
@@ -50,6 +51,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.MainActivity
 import com.theoriacodex.app.codex.PreloadCodexSaveRelevance
+import com.theoriacodex.app.codex.codexSavedColor
 import com.theoriacodex.app.comments.CommentCount
 import com.theoriacodex.app.comments.CommentsView
 import com.theoriacodex.app.comments.ViewerComments
@@ -324,6 +326,7 @@ internal fun ViewerInfoSheet(
     onGoToSearch: () -> Unit,
     onOpenCreatorFallback: ((Post) -> Unit)?,
     liked: Boolean = false,
+    inCodex: Boolean = false,
     comments: ViewerComments = ViewerComments.None,
 ) {
     val post = selection.post
@@ -342,7 +345,7 @@ internal fun ViewerInfoSheet(
         PostTagActionSection(
             header = {
                 ViewerInfoActions(
-                    selection, liked, controls, creatorBrowsingSources, onAction, onOpenInBrowser, onOpenOriginalPost,
+                    selection, liked, inCodex, controls, creatorBrowsingSources, onAction, onOpenInBrowser, onOpenOriginalPost,
                     findOnOtherSites, onGoToSearch, onOpenCreatorFallback,
                 )
             },
@@ -392,6 +395,7 @@ internal fun ViewerInfoSheet(
 private fun ViewerInfoActions(
     selection: ViewerSelection,
     liked: Boolean,
+    inCodex: Boolean,
     controls: ViewerControls,
     creatorBrowsingSources: Set<SourceKey>,
     onAction: (ViewerAction) -> Unit,
@@ -419,7 +423,7 @@ private fun ViewerInfoActions(
         )
         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), Arrangement.SpaceEvenly) {
             ViewerLikeAction(liked) { onAction(ViewerAction.ToggleLike) }
-            ViewerInfoAction(Icons.Default.BookmarkAdd, "Codex", "Save to Codex") { closeThen { onAction(ViewerAction.Save) } }
+            ViewerCodexAction(inCodex) { closeThen { onAction(ViewerAction.Save) } }
             ViewerInfoAction(Icons.Default.Download, "Device", "Save to device", selection.canDownload) {
                 closeThen { onAction(ViewerAction.Download) }
             }
@@ -444,6 +448,16 @@ private fun ViewerLikeAction(liked: Boolean, onToggle: () -> Unit) {
         ViewerInfoAction(Icons.Default.Favorite, "Liked", "Unlike post", tint = LikedHeartColor, onClick = onToggle)
     } else {
         ViewerInfoAction(Icons.Outlined.FavoriteBorder, "Like", "Like post", onClick = onToggle)
+    }
+}
+
+/** Marks a post already in a Codex of its own (Likes aside); opening the sheet still adds it to more. */
+@Composable
+private fun ViewerCodexAction(inCodex: Boolean, onClick: () -> Unit) {
+    if (inCodex) {
+        ViewerInfoAction(Icons.Default.BookmarkAdded, "Codex", "In a Codex. Save to Codex", tint = codexSavedColor(), onClick = onClick)
+    } else {
+        ViewerInfoAction(Icons.Default.BookmarkAdd, "Codex", "Save to Codex", onClick = onClick)
     }
 }
 
