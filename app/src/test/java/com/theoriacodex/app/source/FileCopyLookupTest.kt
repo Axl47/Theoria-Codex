@@ -1,6 +1,7 @@
 package com.theoriacodex.app.source
 
 import com.theoriacodex.app.post.HASH
+import com.theoriacodex.app.post.OTHER
 import com.theoriacodex.app.post.filePost
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.domain.adapter.FileHashLookupSourceAdapter
@@ -11,6 +12,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
 import java.io.IOException
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -48,6 +50,18 @@ class FileCopyLookupTest {
         )
 
         assertEquals(listOf(gelbooruCopy), FileCopyLookup(registry, timeoutMs = 1_000).find(seed))
+    }
+
+    @Test
+    fun `an answer holding another file is dropped and a slow search says so once`() = runTest {
+        var notices = 0
+        val registry = registry(
+            SourceKey.GELBOORU to { _ -> delay(5_000); gelbooruCopy },
+            SourceKey.RULE34XXX to { _ -> filePost(SourceKey.RULE34XXX, "5", OTHER) },
+        )
+
+        assertEquals(listOf(gelbooruCopy), FileCopyLookup(registry).find(seed) { notices++ })
+        assertEquals(1, notices)
     }
 
     @Test
