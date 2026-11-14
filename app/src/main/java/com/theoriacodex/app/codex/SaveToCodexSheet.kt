@@ -25,8 +25,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.activity.compose.BackHandler
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -49,7 +47,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,7 +57,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -168,32 +164,20 @@ private fun SaveToCodexSheetContent(
     onDismiss: () -> Unit,
 ) {
     var searchText by rememberSaveable { mutableStateOf("") }
-    var insideSaved by rememberSaveable(selectedProfile?.profileId) { mutableStateOf(false) }
     var sortByRelevance by rememberSaveable { mutableStateOf(true) }
+    // Likes is filled by liking, so it is never a save target here.
     val likesId = selectedProfile?.profileId?.let(::likesCodexIdForProfile)
-    val rootCodices = remember(selectedCodices, likesId, insideSaved, librarySort, codexItemCounts, libraryUsage) {
-        savePickerCodices(
-            sortCodicesForLibrary(selectedCodices, librarySort, codexItemCounts, likesId, libraryUsage),
-            likesId,
-            insideSaved,
-        )
+    val pickableCodices = remember(selectedCodices, likesId) { selectedCodices.filterNot { it.codexId == likesId } }
+    val rootCodices = remember(pickableCodices, librarySort, codexItemCounts, libraryUsage) {
+        sortCodicesForLibrary(pickableCodices, librarySort, codexItemCounts, likesCodexId = null, libraryUsage)
     }
-    BackHandler(enabled = insideSaved) { insideSaved = false; searchText = "" }
-    val matchingCodices = remember(rootCodices, searchText, sortByRelevance, relevanceScores, likesId) {
-        matchingSaveCodices(rootCodices, searchText, sortByRelevance, relevanceScores, likesId)
+    val matchingCodices = remember(rootCodices, searchText, sortByRelevance, relevanceScores) {
+        matchingSaveCodices(rootCodices, searchText, sortByRelevance, relevanceScores)
     }
-    val displayedContainingCodexIds = if (likesId in containingCodexIds) containingCodexIds + SAVED_CODEX_ID
-        else containingCodexIds
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val controls: @Composable () -> Unit = {
-        SheetHeader(if (insideSaved) "Saved" else title, "Close save menu", onDismiss) {
+        SheetHeader(title, "Close save menu", onDismiss) {
             SaveCodexSortToggle(sortByRelevance) { sortByRelevance = it }
-        }
-        if (insideSaved) {
-            SheetActionRow(Icons.AutoMirrored.Filled.ArrowBack, "All Codices") {
-                insideSaved = false
-                searchText = ""
-            }
         }
         CodexPickerSearch(searchText) { searchText = it }
     }
@@ -206,14 +190,11 @@ private fun SaveToCodexSheetContent(
             codices = matchingCodices,
             columns = if (landscape) 2 else 1,
             modifier = modifier,
-            emptyMessage = savePickerEmptyMessage(selectedCodices, hasExcludedCodices),
-            itemCounts = codexItemCounts + (SAVED_CODEX_ID to (codexItemCounts[likesId] ?: 0)),
-            containingCodexIds = displayedContainingCodexIds,
-            coverCandidates = codexCoverCandidates + (SAVED_CODEX_ID to codexCoverCandidates[likesId].orEmpty()),
-            onSelectCodex = { id ->
-                if (id == SAVED_CODEX_ID) { insideSaved = true; searchText = "" }
-                else onSelectCodex(id)
-            },
+            emptyMessage = savePickerEmptyMessage(pickableCodices, hasExcludedCodices),
+            itemCounts = codexItemCounts,
+            containingCodexIds = containingCodexIds,
+            coverCandidates = codexCoverCandidates,
+            onSelectCodex = onSelectCodex,
         )
     }
     SaveToCodexSheetLayout(landscape, onDismiss, controls, list, actions)
@@ -264,16 +245,11 @@ private fun matchingSaveCodices(
     searchText: String,
     sortByRelevance: Boolean,
     relevanceScores: Map<String, Double>,
-    likesId: String?,
 ): List<Codex> {
     val query = searchText.trim()
-    val matches = codices.filter { codex ->
-        codex.name.contains(query, ignoreCase = true) ||
-            (codex.codexId == SAVED_CODEX_ID && "Likes".contains(query, ignoreCase = true))
-    }
-    return if (sortByRelevance) matches.sortedByDescending { codex ->
-        relevanceScores[if (codex.codexId == SAVED_CODEX_ID) likesId else codex.codexId] ?: 0.0
-    } else matches
+    val matches = codices.filter { codex -> codex.name.contains(query, ignoreCase = true) }
+    return if (sortByRelevance) matches.sortedByDescending { codex -> relevanceScores[codex.codexId] ?: 0.0 }
+        else matches
 }
 
 @Composable
@@ -285,14 +261,6 @@ private fun SaveCodexSortToggle(sortByRelevance: Boolean, onChange: (Boolean) ->
                 else "Sort: library order. Switch to tag relevance",
         )
     }
-}
-
-private fun savePickerCodices(codices: List<Codex>, likesId: String?, insideSaved: Boolean): List<Codex> {
-    if (insideSaved) return savedCodexChildren(likesId.orEmpty()).filter { child ->
-        isVirtualCodex(child.codexId) || codices.any { it.codexId == child.codexId }
-    }
-    if (likesId == null || codices.none { it.codexId == likesId }) return codices
-    return savedCodexLibraryEntries(codices, likesId)
 }
 
 private fun savePickerEmptyMessage(codices: List<Codex>, hasExcluded: Boolean): String = when {
@@ -360,10 +328,7 @@ private fun CodexPickerList(
                 itemCount = itemCounts[codex.codexId] ?: 0,
                 coverCandidates = coverCandidates[codex.codexId].orEmpty(),
                 onClick = { onSelectCodex(codex.codexId) },
-                enabled = !isVirtualCodex(codex.codexId),
                 alreadySaved = codex.codexId in containingCodexIds,
-                description = if (isVirtualCodex(codex.codexId)) "Automatic feed"
-                    else "${itemCounts[codex.codexId] ?: 0} items",
             )
         }
     }
@@ -374,21 +339,13 @@ internal fun availableSaveTargetCodices(
     excludedCodexIds: Set<String>,
 ): List<Codex> = codices.filterNot { codex -> codex.codexId in excludedCodexIds }
 
-/** Marks a post that is already in a Codex, readable on both light and dark surfaces. */
-@Composable
-@ReadOnlyComposable
-internal fun codexSavedColor(): Color =
-    if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) Color(0xFF81C784) else Color(0xFF256A2B)
-
 @Composable
 private fun CodexPickerRow(
     codex: Codex,
     itemCount: Int,
     coverCandidates: List<CodexCoverCandidate>,
     onClick: () -> Unit,
-    enabled: Boolean = true,
     alreadySaved: Boolean = false,
-    description: String = "$itemCount items",
 ) {
     val savedGreen = codexSavedColor()
     Surface(
@@ -396,7 +353,7 @@ private fun CodexPickerRow(
             else MaterialTheme.colorScheme.surface,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick),
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
         tonalElevation = 2.dp,
     ) {
@@ -420,7 +377,7 @@ private fun CodexPickerRow(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = description,
+                    text = "$itemCount items",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
