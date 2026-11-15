@@ -8,9 +8,6 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
-/** The per-Codex Stats figures the Library can sort by: time watched and times opened. */
-internal data class CodexLibraryUsage(val watchingMs: Long = 0L, val opens: Long = 0L)
-
 internal val CodexLibrarySort.label: String
     get() = when (this) {
         CodexLibrarySort.MANUAL -> "Manual"
@@ -34,11 +31,11 @@ internal val CodexLibrarySort.usesUsage: Boolean
  * Usage per Codex id, emitting only when a figure changes because other statistics are written often.
  * A statistics failure degrades to no usage, leaving manual order, and never affects the Library.
  */
-internal fun StatisticsRepository.observeCodexLibraryUsage(): Flow<Map<String, CodexLibraryUsage>> =
+internal fun StatisticsRepository.observeCodexLibraryUsage(): Flow<Map<String, CodexUsage>> =
     observeStatistics()
         .map { statistics ->
             (statistics.codexStatistics.keys + statistics.codexEntryCounts.keys).associateWith { codexId ->
-                CodexLibraryUsage(
+                CodexUsage(
                     watchingMs = statistics.codexStatistics[codexId]?.watchingMs ?: 0L,
                     opens = statistics.codexEntryCounts[codexId] ?: 0L,
                 )
@@ -57,11 +54,10 @@ internal fun sortCodicesForLibrary(
     sort: CodexLibrarySort,
     itemCounts: Map<String, Int>,
     likesCodexId: String?,
-    usage: Map<String, CodexLibraryUsage> = emptyMap(),
+    usage: Map<String, CodexUsage> = emptyMap(),
 ): List<Codex> {
     val itemCount = { codex: Codex -> itemCounts[codex.codexId] ?: 0 }
-    val watchingMs = { codex: Codex -> usage[codex.codexId]?.watchingMs ?: 0L }
-    val opens = { codex: Codex -> usage[codex.codexId]?.opens ?: 0L }
+    val usageOf = { codex: Codex -> usage[codex.codexId] ?: CodexUsage() }
     val comparator = when (sort) {
         CodexLibrarySort.MANUAL -> return codices
         CodexLibrarySort.NAME_ASCENDING -> compareBy(String.CASE_INSENSITIVE_ORDER, Codex::name)
@@ -70,8 +66,8 @@ internal fun sortCodicesForLibrary(
         CodexLibrarySort.OLDEST -> compareBy(Codex::createdAtEpochMs)
         CodexLibrarySort.MOST_ITEMS -> compareByDescending(itemCount)
         CodexLibrarySort.FEWEST_ITEMS -> compareBy(itemCount)
-        CodexLibrarySort.MOST_WATCHED -> compareByDescending(watchingMs).thenByDescending(opens)
-        CodexLibrarySort.MOST_OPENED -> compareByDescending(opens).thenByDescending(watchingMs)
+        CodexLibrarySort.MOST_WATCHED -> compareBy(CodexUsage.MostWatched, usageOf)
+        CodexLibrarySort.MOST_OPENED -> compareBy(CodexUsage.MostOpened, usageOf)
     }
     val (likes, others) = codices.partition { it.codexId == likesCodexId }
     return likes + others.sortedWith(comparator)

@@ -26,10 +26,13 @@ import com.theoriacodex.app.codex.sortLiveCodexPosts
 import com.theoriacodex.app.codex.CodexCollectionSource
 import com.theoriacodex.app.codex.CodexCollectionPresentation
 import com.theoriacodex.app.codex.CodexActionOptions
-import com.theoriacodex.app.codex.CodexLibraryUsage
+import com.theoriacodex.app.codex.CodexUsage
 import com.theoriacodex.app.codex.FOLLOWED_CODEX_ID
 import com.theoriacodex.app.codex.observeCodexLibraryUsage
 import com.theoriacodex.app.codex.usesUsage
+import com.theoriacodex.app.codex.storeOrder
+import com.theoriacodex.app.codex.sortCodexPosts
+import com.theoriacodex.app.codex.rememberCodexPostUsage
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import com.theoriacodex.app.codex.CodexCoverCandidate
@@ -101,7 +104,7 @@ internal data class CodexDestinationState(
     val coverCandidates: Map<String, List<CodexCoverCandidate>>,
     val observeActionOptions: (String) -> Flow<CodexActionOptions>,
     val librarySort: com.theoriacodex.data.repository.CodexLibrarySort,
-    val libraryUsage: Map<String, CodexLibraryUsage>?,
+    val libraryUsage: Map<String, CodexUsage>?,
 )
 
 internal data class CodexDetailDestinationState(
@@ -128,7 +131,7 @@ internal data class SaveToCodexDestinationState(
     val coverCandidates: Map<String, List<CodexCoverCandidate>>,
     val relevanceScores: Map<String, Double>,
     val containingCodexIds: Set<String>,
-    val libraryUsage: Map<String, CodexLibraryUsage>,
+    val libraryUsage: Map<String, CodexUsage>,
 )
 
 internal data class ViewerDestinationState(
@@ -278,7 +281,12 @@ internal fun CodexDetailDestinationStateBoundary(
     val content = rememberCodexContentFlows()
     val lookup by rememberRetained(codexLookupKey(codexId), content) { codexLookupFlow(data, codexId) }
     val items by rememberRetained(codexItemsKey(codexId), content) { data.codexRepository.observeCodexItems(codexId) }
-    val sortedPosts by rememberRetained(codexPostsKey(codexId, sortMode), content) { codexPostsFlow(data, codexId, sortMode) }
+    val storeSort = sortMode.storeOrder
+    val storedPosts by rememberRetained(codexPostsKey(codexId, storeSort), content) { codexPostsFlow(data, codexId, storeSort) }
+    val usage = rememberCodexPostUsage(data.statisticsRepository, codexId, sortMode)
+    val sortedPosts = remember(storedPosts, sortMode, usage) {
+        storedPosts?.let { posts -> usage?.let { sortCodexPosts(posts, sortMode, it) } }
+    }
     // Changing the sort keeps showing the previous order until the new one answers.
     val shownPosts = remember(codexId) { ShownPosts() }
     sortedPosts?.let { shownPosts.latest = it }
@@ -324,7 +332,7 @@ private fun CodexContentWarmUp(data: DataDependencies, itemCounts: Map<String, I
     largest.forEach { codexId ->
         key(codexId) {
             LaunchedEffect(content) {
-                val sort = currentSavedSortFor(codexId)
+                val sort = currentSavedSortFor(codexId).storeOrder
                 merge(
                     content.retain(codexLookupKey(codexId)) { codexLookupFlow(data, codexId) },
                     content.retain(codexItemsKey(codexId)) { data.codexRepository.observeCodexItems(codexId) },
@@ -372,7 +380,7 @@ internal fun SaveToCodexDestinationStateBoundary(
         }.collectAsStateWithLifecycle(initialValue = emptyMap())
     }
     // One reading per open: watching behind this sheet writes usage, which must not move rows under a tap.
-    val libraryUsage = produceState(emptyMap<String, CodexLibraryUsage>(), data.statisticsRepository) {
+    val libraryUsage = produceState(emptyMap<String, CodexUsage>(), data.statisticsRepository) {
         value = data.statisticsRepository.observeCodexLibraryUsage().first()
     }
     val activeProfile = settings.activeRecommendationProfile()
@@ -520,11 +528,10 @@ private fun FollowedCodexDestinationStateBoundary(
             settings.followedCreators, filters.followedSources.toSet(), filters.followedAuthors.toSet(),
         )
     }
-    androidx.compose.runtime.LaunchedEffect(selected, available, sort) { owner.synchronize(selected, available, sort) }
+    val usage = rememberCodexPostUsage(data.statisticsRepository, FOLLOWED_CODEX_ID, sort).orEmpty()
+    androidx.compose.runtime.LaunchedEffect(selected, available, sort, usage) { owner.synchronize(selected, available, sort, usage) }
     val feed = owner.state.collectAsStateWithLifecycle().value
-    val posts = remember(feed.posts, sort) {
-        sortLiveCodexPosts(feed.posts, sort)
-    }
+    val posts = remember(feed.posts, sort, usage) { sortLiveCodexPosts(feed.posts, sort, usage) }
     content(CodexDetailDestinationState(
         codex = Codex(com.theoriacodex.app.codex.FOLLOWED_CODEX_ID, "Followed", 0),
         items = emptyList(), posts = posts, activeProfile = settings.activeRecommendationProfile(),
