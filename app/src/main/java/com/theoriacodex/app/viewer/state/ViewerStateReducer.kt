@@ -532,18 +532,23 @@ private fun ViewerUiState.updateResolution(
     return copy(pages = updatedPages)
 }
 
-/** A warmed image is done unless it has come close enough to be decoded and only its download is warm. */
+/**
+ * A warmed image is done unless it has come close enough to be decoded and only its download is warm.
+ * Runs on the main thread for every prefetch action, so it checks only the few requested keys instead of
+ * building sets of every page's media or every finished key, which grow with the session.
+ */
 private fun ViewerUiState.queuePrefetch(
     session: ViewerSessionIdentity,
     requested: List<ViewerMediaKey>,
     decodeKeys: Set<ViewerMediaKey>,
 ): ViewerReduction {
-    val known = pages.flatMap { page -> page.media.map(ViewerMediaState::key) }.toSet()
-    val terminal = prefetch.skipped + prefetch.failed +
-        prefetch.warmed.keys.filterNot { key -> key in decodeKeys && key !in prefetch.decoded }
+    fun isKnown(key: ViewerMediaKey) =
+        pages.any { page -> page.post.id == key.postId && page.media.getOrNull(key.mediaIndex)?.key == key }
+    fun isTerminal(key: ViewerMediaKey) = key in prefetch.skipped || key in prefetch.failed ||
+        (key in prefetch.warmed && !(key in decodeKeys && key !in prefetch.decoded))
     val desired = requested.asSequence()
-        .filter { key -> key in known }
-        .filterNot { key -> key in terminal }
+        .filter(::isKnown)
+        .filterNot(::isTerminal)
         .distinct()
         .toList()
     return ViewerReduction(
