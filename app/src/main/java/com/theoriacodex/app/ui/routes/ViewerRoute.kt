@@ -188,10 +188,6 @@ internal data class ViewerRouteScreenCallbacks(
     val onCommentOrderSelected: (com.theoriacodex.domain.model.CommentOrder) -> Unit = {},
     val onVisiblePostChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
     val onVisibleMediaChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
-    val onOpenInBrowser: (Post) -> Unit,
-    val onOpenOriginalPost: (Post) -> Unit = {},
-    /** The "Find on other sites" action for a post, or null to hide it. */
-    val findOnOtherSites: (Post) -> (() -> Unit)? = { null },
     val onOpenUrl: (String) -> Unit = {},
     val onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
     val onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
@@ -431,9 +427,6 @@ private fun ViewerRouteRenderer(
             viewerOwner.recordVisibleMedia(post, viewedMediaNumber, latestScreenCallbacks.value.onVisibleMediaChanged)
         },
         durations = rememberViewerPostDurations(durationOwner, latestDependencies),
-        onOpenInBrowser = screenCallbacks.onOpenInBrowser,
-        onOpenOriginalPost = screenCallbacks.onOpenOriginalPost,
-        findOnOtherSites = screenCallbacks.findOnOtherSites,
         onRemoveIncludeTerm = screenCallbacks.onRemoveIncludeTerm,
         onRemoveExcludeTerm = screenCallbacks.onRemoveExcludeTerm,
         onFavoriteTagLongPress = screenCallbacks.onFavoriteTagLongPress,

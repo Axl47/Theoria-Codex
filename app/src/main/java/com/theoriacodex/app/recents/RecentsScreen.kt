@@ -175,6 +175,7 @@ internal fun RecentsScreen(
                 selectedActionPost = null
             }.takeIf { maxOf(post.mediaCount ?: 1, post.media.size) > 1 },
             onShowRelated = related?.let { shelf -> { shelf.controller.show(post) } },
+            liked = post.id in likedPostIds, onToggleLike = onToggleLike,
         )
     }
 

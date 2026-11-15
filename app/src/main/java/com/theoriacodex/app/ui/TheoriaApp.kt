@@ -54,6 +54,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.theoriacodex.app.R
+import com.theoriacodex.app.ui.components.LocalPostLinkActions
+import com.theoriacodex.app.ui.components.PostLinkActions
 import com.theoriacodex.app.appshell.AppShellUiState
 import com.theoriacodex.app.appshell.AppShellViewModel
 import com.theoriacodex.app.appshell.StartupUpdateChoice
@@ -146,11 +148,15 @@ internal fun TheoriaAppContent(
     val relatedPostsSupport = remember(shell) { shell.features.relatedPosts::supports }
     val sourceHealth = rememberSourceHealth(shell)
     val savedTags = rememberPostTagSavedTags(shell)
+    val postLinkActions = remember(shell) {
+        PostLinkActions(shell::openOriginalPost, { url -> openInBrowser(shell.appContext, url) }, shell::findOnOtherSites)
+    }
     CompositionLocalProvider(
         LocalCodexPostIds provides rememberCodexPostIds(shell),
         com.theoriacodex.app.search.LocalPostWatchPresentation provides watchPresentation,
         LocalCodexSaveRelevanceLoader provides saveRelevanceLoader,
         LocalViewerReturnTransition provides viewerReturnTransition,
+        LocalPostLinkActions provides postLinkActions,
         LocalNetworkOnline provides shell.sources.networkOnline,
         LocalSourceHealth provides sourceHealth,
         com.theoriacodex.app.related.LocalRelatedPostsSupport provides relatedPostsSupport,

@@ -71,4 +71,51 @@ class PostActionSheetTest {
         compose.onNodeWithText("More like this").performClick()
         compose.runOnIdle { assertEquals(1, shown) }
     }
+
+    @Test fun `offers the Viewer's like and link actions the post supports`() {
+        val opened = mutableListOf<String>()
+        var liked by mutableStateOf(false)
+        var dismissals = 0
+        val links = PostLinkActions(
+            openOriginalPost = { opened += "original $it" },
+            openInBrowser = { opened += "browser $it" },
+            findOnOtherSites = { post -> { opened += "find ${post.id.sourcePostId}" } },
+        )
+        compose.setContent {
+            MaterialTheme {
+                CompositionLocalProvider(LocalPostLinkActions provides links) {
+                    PostActionSheet(
+                        post = testPost(pageUrl = "https://example.com/p").copy(originUrl = "https://origin.test/1"),
+                        onDismiss = { dismissals++ },
+                        onSaveToDevice = {},
+                        liked = liked,
+                        onToggleLike = { liked = !liked },
+                        tagContent = {},
+                    )
+                }
+            }
+        }
+
+        compose.onNodeWithText("Like").performClick()
+        compose.onNodeWithText("Unlike").assertIsDisplayed()
+        compose.onNodeWithText("Open original post").performClick()
+        compose.onNodeWithText("Find on other sites").performClick()
+        compose.onNodeWithText("Open in browser").performClick()
+        compose.runOnIdle {
+            assertEquals(listOf("original https://origin.test/1", "find post-1", "browser https://example.com/p"), opened)
+            assertEquals(4, dismissals)
+        }
+    }
+
+    @Test fun `hides link actions the post cannot use`() {
+        compose.setContent {
+            MaterialTheme {
+                PostActionSheet(post = testPost(pageUrl = null), onDismiss = {}, onSaveToDevice = {}, tagContent = {})
+            }
+        }
+
+        listOf("Like", "Open original post", "Find on other sites", "Open in browser").forEach { label ->
+            compose.onNodeWithText(label).assertDoesNotExist()
+        }
+    }
 }

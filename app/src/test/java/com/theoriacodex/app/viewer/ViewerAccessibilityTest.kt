@@ -52,7 +52,7 @@ class ViewerAccessibilityTest {
                 ViewerScreen(
                     uiState = state.value, creatorBrowsingSources = emptySet(),
                     onAction = { action -> actions += action; state.value = reduceViewerState(state.value, action).state },
-                    onOpenInBrowser = {}, onRemoveIncludeTerm = { _, _ -> },
+                    onRemoveIncludeTerm = { _, _ -> },
                     onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
                 )
             }

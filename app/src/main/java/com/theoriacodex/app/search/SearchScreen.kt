@@ -158,6 +158,7 @@ fun SearchScreen(
         SearchPostSheet(
             post, actionPost, state, creatorBrowsingSources, tagVideoCountProvider, fetchTagVideoCounts, onAction, onSaveToDevice,
             onRequestSaveToCodex, onOpenCreatorProfile, onOpenLegacyCreatorProfile, onPostUrlCopied, onAddFavoriteTag, applyDraft,
+            liked = post.id in likedPostIds, onToggleLike = onToggleLike,
         )
     }
     if (chrome.composerOpen) {
@@ -381,12 +382,16 @@ private fun SearchPostSheet(
     onPostUrlCopied: (Post) -> Unit,
     onAddFavoriteTag: (SourceKey, List<String>, String?) -> Unit,
     applyDraft: () -> Unit,
+    liked: Boolean,
+    onToggleLike: ((Post) -> Unit)?,
 ) {
     PostActionSheet(
         post = post,
         creatorBrowsingSources = creatorBrowsingSources,
         onDismiss = actionPost::dismiss,
         onSaveToDevice = { onSaveToDevice(post) },
+        liked = liked,
+        onToggleLike = onToggleLike?.let { toggle -> { toggle(post) } },
         onSaveToCodex = { onRequestSaveToCodex(post) },
         saveToCodexQuery = state.query.applied,
         onOpenCreatorProfile = onOpenCreatorProfile,

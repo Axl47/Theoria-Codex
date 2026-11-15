@@ -178,6 +178,7 @@ fun ForYouScreen(
             onOpenLegacyCreatorProfile, onGoToSearch, onPostUrlCopied, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm,
             onRemoveExcludeTerm, onFavoriteTagLongPress,
             onShowRelated = { onAction(ForYouAction.ShowRelatedPosts(post)) },
+            liked = post.id in likedPostIds, onToggleLike = onToggleLike,
         )
     }
 

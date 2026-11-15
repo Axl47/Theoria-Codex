@@ -179,7 +179,7 @@ class ViewerRouteRestorationUiTest {
                             onDismiss = onDismiss, onRestorationUnavailable = {},
                         ),
                         screenCallbacks = ViewerRouteScreenCallbacks(
-                            onOwnerChanged = onOwner, onOpenInBrowser = {}, onRemoveIncludeTerm = { _, _ -> },
+                            onOwnerChanged = onOwner, onRemoveIncludeTerm = { _, _ -> },
                             onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = onGoToSearch,
                         ),
                     )

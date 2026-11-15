@@ -42,7 +42,7 @@ class ViewerLinkedPageTest {
                 ViewerScreen(
                     uiState = owner.state.collectAsState().value,
                     creatorBrowsingSources = emptySet(), onAction = owner::onAction,
-                    onOpenInBrowser = {}, onRemoveIncludeTerm = { _, _ -> },
+                    onRemoveIncludeTerm = { _, _ -> },
                     onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
                 )
             }

@@ -167,6 +167,7 @@ fun CreatorProfileScreen(
     selectedActionPost?.let { post ->
         PostActionSheet(
             post, onDismiss = { selectedActionPost = null }, onSaveToDevice = { onSaveToDevice(post) },
+            liked = post.id in likedPostIds, onToggleLike = { onToggleLike(post) },
             onSaveToCodex = { onRequestSaveToCodex(post) }, onPostUrlCopied = onPostUrlCopied,
             onShowRelated = { onAction(CreatorAction.ShowRelatedPosts(post)) },
         ) {

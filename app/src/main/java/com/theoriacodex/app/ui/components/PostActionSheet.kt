@@ -13,6 +13,8 @@ import androidx.compose.material.icons.filled.BookmarkAdded
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Replay
@@ -39,6 +41,7 @@ import com.theoriacodex.app.post.displayTitleOrNull
 import com.theoriacodex.app.related.LocalRelatedPostsSupport
 import com.theoriacodex.app.source.SourceIcon
 import com.theoriacodex.app.source.displayName
+import com.theoriacodex.app.ui.motion.LikedHeartColor
 import com.theoriacodex.app.viewer.buildViewerImageRequest
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
@@ -57,6 +60,8 @@ fun PostActionSheet(
     creatorBrowsingSources: Set<SourceKey> = emptySet(),
     onDismiss: () -> Unit,
     onSaveToDevice: () -> Unit,
+    liked: Boolean = false,
+    onToggleLike: (() -> Unit)? = null,
     onSaveToCodex: (() -> Unit)? = null,
     saveToCodexQuery: Query? = null,
     saveToCodexLabel: String = "Save to Codex",
@@ -81,7 +86,6 @@ fun PostActionSheet(
         return
     }
 
-    val context = LocalContext.current
     fun dismissThen(action: () -> Unit) {
         onDismiss()
         action()
@@ -99,6 +103,7 @@ fun PostActionSheet(
             ActionMenuRow(Icons.Default.AutoAwesome, "More like this") { dismissThen(showRelated) }
         }
 
+        onToggleLike?.let { toggle -> PostLikeRow(liked) { dismissThen(toggle) } }
         onSaveToCodex?.let { save -> SaveToCodexRow(post, saveToCodexLabel) { dismissThen(save) } }
         ActionMenuRow(Icons.Default.Download, "Save to device") { dismissThen(onSaveToDevice) }
 
@@ -118,14 +123,7 @@ fun PostActionSheet(
         }
 
         ActionMenuDivider()
-        ActionMenuRow(Icons.Default.ContentCopy, "Copy tags") {
-            copyPostTagsWithFeedback(context, post)
-            onDismiss()
-        }
-        ActionMenuRow(Icons.Default.Link, "Copy link") {
-            copyPostUrlWithFeedback(context, post, onPostUrlCopied)
-            onDismiss()
-        }
+        PostLinkRows(post, onDismiss, onPostUrlCopied)
 
         onRemoveFromCodex?.let { remove ->
             ActionMenuDivider()
@@ -135,6 +133,35 @@ fun PostActionSheet(
                 tint = MaterialTheme.colorScheme.error,
             ) { dismissThen(remove) }
         }
+    }
+}
+
+@Composable
+private fun PostLikeRow(liked: Boolean, onClick: () -> Unit) {
+    if (liked) {
+        ActionMenuRow(Icons.Default.Favorite, "Unlike", tint = LikedHeartColor, onClick = onClick)
+    } else {
+        ActionMenuRow(Icons.Outlined.FavoriteBorder, "Like", onClick = onClick)
+    }
+}
+
+/** The app-wide [PostLinkActions] for [post], then copying its tags or link. Each closes the menu. */
+@Composable
+private fun PostLinkRows(post: Post, onDismiss: () -> Unit, onPostUrlCopied: (Post) -> Unit) {
+    val context = LocalContext.current
+    LocalPostLinkActions.current.availableFor(post).forEach { action ->
+        ActionMenuRow(action.icon, action.label) {
+            onDismiss()
+            action.run()
+        }
+    }
+    ActionMenuRow(Icons.Default.ContentCopy, "Copy tags") {
+        copyPostTagsWithFeedback(context, post)
+        onDismiss()
+    }
+    ActionMenuRow(Icons.Default.Link, "Copy link") {
+        copyPostUrlWithFeedback(context, post, onPostUrlCopied)
+        onDismiss()
     }
 }
 

@@ -189,6 +189,7 @@ internal fun CodexDetailScreen(
             saveToCodexLabel = "Add to another Codex",
             onRemoveFromCodex = if (customHeader == null) ({ onRemovePosts(listOf(post)) }) else null,
             onShowRelated = related?.let { shelf -> { shelf.controller.show(post) } },
+            liked = post.id in likedPostIds, onToggleLike = onToggleLike,
         )
     }
     CodexDeleteConfirmationDialog(showDeleteConfirm, codexName, isLikesCodex, { showDeleteConfirm = false }) {

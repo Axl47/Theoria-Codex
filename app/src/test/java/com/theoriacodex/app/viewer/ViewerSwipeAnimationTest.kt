@@ -136,7 +136,7 @@ class ViewerSwipeAnimationTest {
                 ViewerScreen(
                     uiState = state.value, creatorBrowsingSources = emptySet(),
                     onAction = { actions += it; state.value = reduceViewerState(state.value, it).state },
-                    onOpenInBrowser = {}, onRemoveIncludeTerm = { _, _ -> }, onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
+                    onRemoveIncludeTerm = { _, _ -> }, onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
                 )
             }
         }
@@ -213,7 +213,7 @@ class ViewerSwipeAnimationTest {
                             state.value = reduceViewerState(state.value,
                                 com.theoriacodex.app.viewer.state.ViewerAction.ReplaceSession(ViewerSessionIdentity("swipe"), posts)).state
                         },
-                        onOpenInBrowser = {}, onRemoveIncludeTerm = { _, _ -> },
+                        onRemoveIncludeTerm = { _, _ -> },
                         onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
                     )
                 }

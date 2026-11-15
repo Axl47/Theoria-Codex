@@ -233,7 +233,6 @@ private fun BenchmarkViewerFixture(mediaUri: String) {
             onAction = { action: ViewerAction ->
                 viewerState = reduceViewerState(viewerState, action).state
             },
-            onOpenInBrowser = {},
             onRemoveIncludeTerm = { _, _ -> },
             onRemoveExcludeTerm = { _, _ -> },
             onGoToSearch = {},
