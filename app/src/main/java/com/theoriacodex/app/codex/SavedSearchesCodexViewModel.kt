@@ -35,8 +35,8 @@ internal class SavedSearchesCodexViewModel(
     private var runtime: com.theoriacodex.data.repository.SourceRuntimeSettings? = null
 
     fun synchronize(selected: List<SavedSearchEntry>, settings: AppSettings, sources: Set<SourceKey>,
-        sort: CodexSortMode = CodexSortMode.NEWEST_SAVED) {
-        feed.updateCoverSort(sort)
+        sort: CodexSortMode = CodexSortMode.NEWEST_SAVED, usage: Map<String, CodexUsage> = emptyMap()) {
+        feed.updateCoverSort(sort, usage)
         loader.updateAvailableSources(sources)
         coordinator.updateEnvironment(settings.copy(runtime = settings.runtime.copy(
             enabledSources = settings.runtime.enabledSources.intersect(sources),

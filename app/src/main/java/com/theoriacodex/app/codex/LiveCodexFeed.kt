@@ -17,12 +17,17 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-internal fun sortLiveCodexPosts(posts: List<Post>, sort: CodexSortMode): List<Post> = posts.sortedWith(liveCodexOrder(sort))
+internal fun sortLiveCodexPosts(posts: List<Post>, sort: CodexSortMode, usage: Map<String, CodexUsage> = emptyMap()): List<Post> =
+    posts.sortedWith(liveCodexOrder(sort, usage))
 
-private fun liveCodexOrder(sort: CodexSortMode): Comparator<Post> = when (sort) {
-    CodexSortMode.NEWEST_SAVED -> compareByDescending { it.createdAtEpochMs }
-    CodexSortMode.OLDEST_SAVED -> compareBy { it.createdAtEpochMs }
-    CodexSortMode.BY_SOURCE -> compareBy { it.id.source }
+/** Live posts were never saved, so their post date stands in for save time. */
+private fun liveCodexOrder(sort: CodexSortMode, usage: Map<String, CodexUsage>): Comparator<Post> {
+    val date: Comparator<Post> = if (sort == CodexSortMode.OLDEST_SAVED) {
+        compareBy { it.createdAtEpochMs }
+    } else {
+        compareByDescending { it.createdAtEpochMs }
+    }
+    return codexPostRefinement(sort, usage)?.then(date) ?: date
 }
 
 internal data class LiveCodexFeedState(
@@ -67,6 +72,7 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
     private var generation = 0L
     private var coverPostId: PostId? = null
     private var coverSort = CodexSortMode.NEWEST_SAVED
+    private var coverUsage = emptyMap<String, CodexUsage>()
     private val mutableRelated = MutableStateFlow<RelatedPostsUiState>(RelatedPostsUiState.Idle)
     val relatedState = mutableRelated.asStateFlow()
     // Live collections never promote shelf posts: their posts come only from their branches.
@@ -74,13 +80,14 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
         scope = scope,
         loader = relatedPostsLoader,
         currentState = { mutableRelated.value },
-        canonicalPosts = { sortLiveCodexPosts(state.value.posts, coverSort) },
+        canonicalPosts = { sortLiveCodexPosts(state.value.posts, coverSort, coverUsage) },
         updateState = { mutableRelated.value = it },
     )
 
-    fun updateCoverSort(sort: CodexSortMode) {
-        if (coverSort == sort) return
+    fun updateCoverSort(sort: CodexSortMode, usage: Map<String, CodexUsage> = emptyMap()) {
+        if (coverSort == sort && coverUsage == usage) return
         coverSort = sort
+        coverUsage = usage
         related.clear("live codex re-sorted")
         scope.launch { cacheFirstPost(generation, root = true) }
     }
@@ -129,7 +136,7 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
 
     private suspend fun cacheFirstPost(admitted: Long, root: Boolean) {
         if (generation != admitted) return
-        val post = state.value.posts.minWithOrNull(liveCodexOrder(coverSort)) ?: return
+        val post = state.value.posts.minWithOrNull(liveCodexOrder(coverSort, coverUsage)) ?: return
         if (post.id == coverPostId || (!root && coverPostId != null)) return
         coverPostId = post.id
         val result = runCatchingPreservingCancellation { cacheCover(post) }

@@ -248,9 +248,9 @@ class RoomCodexLikesRepository(
 
     override fun observeCodexPosts(codexId: String, sort: CodexSortMode): Flow<List<Post>> {
         val rows = when (sort) {
-            CodexSortMode.NEWEST_SAVED -> dao.observeCodexPostsNewest(codexId)
             CodexSortMode.OLDEST_SAVED -> dao.observeCodexPostsOldest(codexId)
             CodexSortMode.BY_SOURCE -> dao.observeCodexPostsBySource(codexId)
+            else -> dao.observeCodexPostsNewest(codexId)
         }
         // Every sort projects the same rows, so sorts share one retained projection per Codex.
         return rows.map { values -> values.map { PostEntity(it.source, it.sourcePostId, it.payloadJson) } }

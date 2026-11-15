@@ -1,5 +1,8 @@
 package com.theoriacodex.app.codex
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.MutableState
+import androidx.compose.foundation.background
 import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.theoriacodex.app.media.animatedDurationRangeLabel
@@ -32,7 +35,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -140,7 +142,7 @@ internal fun CodexDetailScreen(
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
-    var editSelection by remember { mutableStateOf(CodexEditSelection()) }
+    var editSelection by rememberCodexEditSelection(posts)
     val gridState = rememberRetainedFeedGridState("codex-detail")
     val sourceOptions = remember(posts, availableSources) { codexSearchSourceOptions(posts, availableSources).map(CodexSearchSourceOption::source) }
     val supportsLanguage = remember(sourceOptions) { supportsCodexLanguageFilter(sourceOptions.toSet()) }
@@ -148,7 +150,6 @@ internal fun CodexDetailScreen(
     val filters = remember(fabRestoreState) { fabRestoreState.savedCollectionFilters() }
     val feed = rememberCodexDetailFeed(posts, filters, fabRestoreState, durationStates, resolveUnknownAnimatedDurations, related, likedPostIds)
     val applyFilters = { updated: CodexCollectionFilters -> onFabRestoreStateChange(fabRestoreState.withCollectionFilters(updated)) }
-    LaunchedEffect(posts.map(Post::id)) { editSelection = editSelection.retainAvailable(posts.mapTo(mutableSetOf(), Post::id)) }
     CodexFilterReconciliationEffect(filters, sourceOptions, supportsLanguage, supportsFullColor, applyFilters)
     LaunchedEffect(feed.durationFilterActive) { onDurationFilterChanged(feed.durationFilterActive) }
     DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
@@ -195,6 +196,18 @@ internal fun CodexDetailScreen(
         showDeleteConfirm = false
         onDeleteCodex()
     }
+}
+
+/** Edit selection that drops posts that leave the Codex; while selecting, Back ends selection first. */
+@Composable
+private fun rememberCodexEditSelection(posts: List<Post>): MutableState<CodexEditSelection> {
+    val selection = remember { mutableStateOf(CodexEditSelection()) }
+    LaunchedEffect(posts.map(Post::id)) {
+        selection.value = selection.value.retainAvailable(posts.mapTo(mutableSetOf(), Post::id))
+    }
+    // Registered after the destination's own Back handler, so it wins while enabled.
+    BackHandler(enabled = selection.value.active) { selection.value = selection.value.exit() }
+    return selection
 }
 
 @Composable
@@ -641,24 +654,26 @@ private fun CodexSelectablePostCard(
     }
 }
 
+/** Drawing only: a Surface here would swallow taps meant for the card, which toggles selection. */
 @Composable
 private fun androidx.compose.foundation.layout.BoxScope.CodexSelectionMarker(selected: Boolean) {
-    Surface(
+    Box(
         modifier = Modifier
             .align(Alignment.TopStart)
             .padding(8.dp)
-            .size(32.dp),
-        shape = CircleShape,
-        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+            .size(32.dp)
+            .background(
+                if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                CircleShape,
+            ),
+        contentAlignment = Alignment.Center,
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = if (selected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                contentDescription = if (selected) "Selected" else "Not selected",
-                tint = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(22.dp),
-            )
-        }
+        Icon(
+            imageVector = if (selected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+            contentDescription = if (selected) "Selected" else "Not selected",
+            tint = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(22.dp),
+        )
     }
 }
 
@@ -678,7 +693,7 @@ internal fun CodexFilterSheet(
     FeedFilterSheet(onDismiss = onDismiss, onReset = onReset, modifier = Modifier.testTag("codex-filter-scroll")) {
         FilterSection("Sort") {
             CodexSortMode.entries.forEach { mode ->
-                FilterChoiceChip(mode.displayLabel(), sortMode == mode) { onSortChange(mode) }
+                FilterChoiceChip(mode.label, sortMode == mode) { onSortChange(mode) }
             }
         }
         FilterSection("Show") {
@@ -722,7 +737,7 @@ private fun codexFilterLabels(
     sortMode: CodexSortMode,
     customFiltersActive: Boolean,
 ): List<String> = listOfNotNull(
-    sortMode.displayLabel().takeIf { sortMode != CodexSortMode.NEWEST_SAVED },
+    sortMode.label.takeIf { sortMode != CodexSortMode.NEWEST_SAVED },
     "Animated".takeIf { filters.animatedOnly },
     animatedDurationRangeLabel(filters.animatedDurationRange).takeIf { !filters.animatedDurationRange.isFullRange },
     "Full color".takeIf { filters.fullColorOnly },
@@ -755,10 +770,4 @@ private fun CodexLanguageFilter.displayLabel(): String = when (this) {
     CodexLanguageFilter.ENGLISH -> "English"
     CodexLanguageFilter.CHINESE -> "Chinese"
     CodexLanguageFilter.JAPANESE -> "Japanese"
-}
-
-private fun CodexSortMode.displayLabel(): String = when (this) {
-    CodexSortMode.NEWEST_SAVED -> "Newest"
-    CodexSortMode.OLDEST_SAVED -> "Oldest"
-    CodexSortMode.BY_SOURCE -> "By source"
 }
