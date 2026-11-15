@@ -138,7 +138,7 @@ private fun SettingsHome(
     SettingsPageColumn {
         SettingsHeader("Settings")
         ProfileCard(state, onAction, onAdd = { showAddProfile = true }, onMenu = { sheet = SettingsSheet.PROFILE })
-        SettingsGroup(null) {
+        SettingsGroup("Stats") {
             SettingsRow("Your stats", statsSummary(statistics), Icons.Default.BarChart, onClick = {
                 open(SettingsPage.STATS)
             })
