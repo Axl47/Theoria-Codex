@@ -9,6 +9,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -26,7 +27,7 @@ import java.util.concurrent.TimeUnit
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SearchScrollResetTest {
-    @Test fun `closing on the UI thread can drain while a root reset finishes`() = runBlocking {
+    @Test fun `closing on the UI thread drains after a root reset finishes`() = runBlocking {
         val uiExecutor = Executors.newSingleThreadExecutor()
         val uiDispatcher = uiExecutor.asCoroutineDispatcher()
         val uiJob = SupervisorJob()
@@ -54,6 +55,7 @@ class SearchScrollResetTest {
             withTimeout(5_000) { closeStarted.await() }
             releaseReset.complete(Unit)
             closing.get(5, TimeUnit.SECONDS)
+            withTimeout(5_000) { while (writes.size < 2) delay(10) }
             assertEquals(listOf("reset", "prior-query"), writes.toList())
         } finally {
             releaseReset.complete(Unit)

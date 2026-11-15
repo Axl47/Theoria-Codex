@@ -4,14 +4,12 @@ import com.theoriacodex.data.repository.SearchScrollState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -34,8 +32,8 @@ internal fun SearchCoordinator.scrollPersistence(
 
 /**
  * Navigation-owner closeable for debounced scroll writes. Its scheduler is independent from
- * viewModelScope so ViewModel teardown can cancel route work first and still synchronously drain
- * the final pending position through the durable repository.
+ * viewModelScope so ViewModel teardown can cancel route work first and still drain the final
+ * pending position through the durable repository after the owner is gone.
  */
 internal class SearchScrollPersistenceController(
     private val dispatcher: CoroutineDispatcher,
@@ -82,24 +80,25 @@ internal class SearchScrollPersistenceController(
     }
 
     /**
-     * ViewModel.clear() has no suspending completion hook. The caller therefore waits for the one
-     * final DataStore acknowledgement on Dispatchers.IO before the owned scheduler is cancelled.
-     * This can delay teardown by the duration of that storage operation; imposing a timeout would
-     * make the final position lossy again, so storage failure is surfaced instead of abandoned.
+     * Called by ViewModel.clear() on the main thread, so it never waits on storage. The final pending
+     * position is written on this controller's own scheduler, which outlives the owner and cancels
+     * itself once that write is acknowledged; a debounced write already in flight is not repeated.
+     * Only a process death during that one write can lose the position, and the teardown paths that
+     * kill the process skip ViewModel.clear() altogether.
      */
     override fun close() {
-        synchronized(lock) {
+        val pending = synchronized(lock) {
             if (closed) return
             closed = true
             activeJob?.cancel(CancellationException("Search owner closed"))
+            latest?.takeIf { target -> target != committed }
         }
-        try {
-            runBlocking(Dispatchers.IO) {
-                val pending = synchronized(lock) { latest?.takeIf { target -> target != committed } }
+        scope.launch {
+            try {
                 if (pending != null) commit(pending)
+            } finally {
+                scope.cancel(CancellationException("Search scroll scheduler closed"))
             }
-        } finally {
-            scope.cancel(CancellationException("Search scroll scheduler closed"))
         }
     }
 
