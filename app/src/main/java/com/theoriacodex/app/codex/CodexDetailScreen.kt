@@ -1,6 +1,7 @@
 package com.theoriacodex.app.codex
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.MutableState
 import androidx.compose.foundation.background
 import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -141,7 +142,7 @@ internal fun CodexDetailScreen(
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
-    var editSelection by remember { mutableStateOf(CodexEditSelection()) }
+    var editSelection by rememberCodexEditSelection(posts)
     val gridState = rememberRetainedFeedGridState("codex-detail")
     val sourceOptions = remember(posts, availableSources) { codexSearchSourceOptions(posts, availableSources).map(CodexSearchSourceOption::source) }
     val supportsLanguage = remember(sourceOptions) { supportsCodexLanguageFilter(sourceOptions.toSet()) }
@@ -149,13 +150,10 @@ internal fun CodexDetailScreen(
     val filters = remember(fabRestoreState) { fabRestoreState.savedCollectionFilters() }
     val feed = rememberCodexDetailFeed(posts, filters, fabRestoreState, durationStates, resolveUnknownAnimatedDurations, related, likedPostIds)
     val applyFilters = { updated: CodexCollectionFilters -> onFabRestoreStateChange(fabRestoreState.withCollectionFilters(updated)) }
-    LaunchedEffect(posts.map(Post::id)) { editSelection = editSelection.retainAvailable(posts.mapTo(mutableSetOf(), Post::id)) }
     CodexFilterReconciliationEffect(filters, sourceOptions, supportsLanguage, supportsFullColor, applyFilters)
     LaunchedEffect(feed.durationFilterActive) { onDurationFilterChanged(feed.durationFilterActive) }
     DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
     if (codexName == null) return CodexUnavailable(loading, onBack)
-    // Registered after the destination's own Back handler, so Back leaves selection before the Codex.
-    BackHandler(enabled = editSelection.active) { editSelection = editSelection.exit() }
     val filterScroll = rememberFeedScrollSignal()
     val resetFilters = { onFabRestoreStateChange(FeedFabRestoreState(sortMode = CodexSortMode.NEWEST_SAVED.name)) }
     Scaffold(
@@ -198,6 +196,18 @@ internal fun CodexDetailScreen(
         showDeleteConfirm = false
         onDeleteCodex()
     }
+}
+
+/** Edit selection that drops posts that leave the Codex; while selecting, Back ends selection first. */
+@Composable
+private fun rememberCodexEditSelection(posts: List<Post>): MutableState<CodexEditSelection> {
+    val selection = remember { mutableStateOf(CodexEditSelection()) }
+    LaunchedEffect(posts.map(Post::id)) {
+        selection.value = selection.value.retainAvailable(posts.mapTo(mutableSetOf(), Post::id))
+    }
+    // Registered after the destination's own Back handler, so it wins while enabled.
+    BackHandler(enabled = selection.value.active) { selection.value = selection.value.exit() }
+    return selection
 }
 
 @Composable
