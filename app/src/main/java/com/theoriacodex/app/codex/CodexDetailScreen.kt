@@ -678,7 +678,7 @@ internal fun CodexFilterSheet(
     FeedFilterSheet(onDismiss = onDismiss, onReset = onReset, modifier = Modifier.testTag("codex-filter-scroll")) {
         FilterSection("Sort") {
             CodexSortMode.entries.forEach { mode ->
-                FilterChoiceChip(mode.displayLabel(), sortMode == mode) { onSortChange(mode) }
+                FilterChoiceChip(mode.label, sortMode == mode) { onSortChange(mode) }
             }
         }
         FilterSection("Show") {
@@ -722,7 +722,7 @@ private fun codexFilterLabels(
     sortMode: CodexSortMode,
     customFiltersActive: Boolean,
 ): List<String> = listOfNotNull(
-    sortMode.displayLabel().takeIf { sortMode != CodexSortMode.NEWEST_SAVED },
+    sortMode.label.takeIf { sortMode != CodexSortMode.NEWEST_SAVED },
     "Animated".takeIf { filters.animatedOnly },
     animatedDurationRangeLabel(filters.animatedDurationRange).takeIf { !filters.animatedDurationRange.isFullRange },
     "Full color".takeIf { filters.fullColorOnly },
@@ -755,10 +755,4 @@ private fun CodexLanguageFilter.displayLabel(): String = when (this) {
     CodexLanguageFilter.ENGLISH -> "English"
     CodexLanguageFilter.CHINESE -> "Chinese"
     CodexLanguageFilter.JAPANESE -> "Japanese"
-}
-
-private fun CodexSortMode.displayLabel(): String = when (this) {
-    CodexSortMode.NEWEST_SAVED -> "Newest"
-    CodexSortMode.OLDEST_SAVED -> "Oldest"
-    CodexSortMode.BY_SOURCE -> "By source"
 }

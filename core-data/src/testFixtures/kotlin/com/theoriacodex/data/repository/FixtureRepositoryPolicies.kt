@@ -34,13 +34,14 @@ internal object FixtureRepositoryPolicies {
         sort: CodexSortMode,
     ): List<Pair<CodexItem, Post>> {
         return when (sort) {
-            CodexSortMode.NEWEST_SAVED -> pairs.sortedByDescending { it.first.savedAtEpochMs }
             CodexSortMode.OLDEST_SAVED -> pairs.sortedBy { it.first.savedAtEpochMs }
             CodexSortMode.BY_SOURCE -> pairs.sortedWith(
                 compareBy<Pair<CodexItem, Post>> { it.second.id.source.id }
                     .thenByDescending { it.first.savedAtEpochMs }
                     .thenBy { it.second.id.sourcePostId }
             )
+            // Like the Room store, other sorts come back newest saved first for the app to refine.
+            else -> pairs.sortedByDescending { it.first.savedAtEpochMs }
         }
     }
 

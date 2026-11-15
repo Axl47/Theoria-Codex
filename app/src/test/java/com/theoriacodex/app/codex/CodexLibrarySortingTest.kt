@@ -46,10 +46,10 @@ class CodexLibrarySortingTest {
 
     @Test fun `usage sorts pin Likes, break ties on the other figure, then keep manual order`() {
         val usage = mapOf(
-            "a" to CodexLibraryUsage(watchingMs = 100L, opens = 1L),
-            "c" to CodexLibraryUsage(watchingMs = 100L, opens = 7L),
-            "t" to CodexLibraryUsage(watchingMs = 500L, opens = 1L),
-            "likes" to CodexLibraryUsage(watchingMs = 0L, opens = 0L),
+            "a" to CodexUsage(watchingMs = 100L, opens = 1L),
+            "c" to CodexUsage(watchingMs = 100L, opens = 7L),
+            "t" to CodexUsage(watchingMs = 500L, opens = 1L),
+            "likes" to CodexUsage(watchingMs = 0L, opens = 0L),
         )
         fun sortedBy(sort: CodexLibrarySort) =
             sortCodicesForLibrary(manual, sort, counts, "likes", usage).map(Codex::codexId)
@@ -59,7 +59,7 @@ class CodexLibrarySortingTest {
 
     @Test fun `usage combines watch time and opens per Codex and only emits when they change`() = runTest {
         val repository = FakeStatisticsRepository()
-        val emissions = mutableListOf<Map<String, CodexLibraryUsage>>()
+        val emissions = mutableListOf<Map<String, CodexUsage>>()
         val collecting = launch(UnconfinedTestDispatcher(testScheduler)) {
             repository.observeCodexLibraryUsage().toList(emissions)
         }
@@ -72,7 +72,7 @@ class CodexLibrarySortingTest {
         assertEquals(
             listOf(
                 emptyMap(),
-                mapOf("watched" to CodexLibraryUsage(40L, 2L), "opened" to CodexLibraryUsage(0L, 3L)),
+                mapOf("watched" to CodexUsage(40L, 2L), "opened" to CodexUsage(0L, 3L)),
             ),
             emissions,
         )
@@ -80,7 +80,7 @@ class CodexLibrarySortingTest {
 
     @Test fun `a statistics failure leaves no usage instead of failing the Library`() = runTest {
         val failing = FakeStatisticsRepository(flow { throw IOException("unreadable") })
-        assertEquals(emptyMap<String, CodexLibraryUsage>(), failing.observeCodexLibraryUsage().first())
+        assertEquals(emptyMap<String, CodexUsage>(), failing.observeCodexLibraryUsage().first())
     }
 
     private class FakeStatisticsRepository(

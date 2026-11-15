@@ -29,6 +29,7 @@ interface CodexRepository {
     suspend fun deleteCodexForUndo(codexId: String): DeletedCodexSnapshot?
     suspend fun restoreDeletedCodex(snapshot: DeletedCodexSnapshot)
     fun observeCodexItems(codexId: String): Flow<List<CodexItem>>
+    /** Orders by save time, or by source then save time; any other [sort] comes back newest saved first. */
     fun observeCodexPosts(codexId: String, sort: CodexSortMode): Flow<List<Post>>
     /** A unique saved-library snapshot for read models that do not need per-collection memberships. */
     fun observeLibraryPosts(codexIds: Set<String>): Flow<List<Post>> = if (codexIds.isEmpty()) flowOf(emptyList()) else
@@ -71,9 +72,15 @@ data class CodexSummary(
     val coverPosts: List<Post>,
 )
 
+/** How a Codex orders its posts; persisted by name, so renaming an entry resets saved choices. */
 enum class CodexSortMode {
     NEWEST_SAVED,
     OLDEST_SAVED,
+    MOST_WATCHED,
+    MOST_OPENED,
+    MOST_PAGES,
+    FEWEST_PAGES,
+    CREATOR_ASCENDING,
     BY_SOURCE,
 }
 

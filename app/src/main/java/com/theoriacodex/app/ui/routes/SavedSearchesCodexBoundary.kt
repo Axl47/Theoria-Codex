@@ -5,6 +5,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.theoriacodex.app.codex.rememberCodexPostUsage
 import com.theoriacodex.app.codex.sortLiveCodexPosts
 import com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID
 import com.theoriacodex.app.codex.SavedSearchesCodexViewModel
@@ -43,9 +44,12 @@ internal fun SavedSearchesCodexBoundary(
         val excluded = filters.excludedSavedSearches.toSet()
         entries.filterNot { it.id in excluded }
     }
-    LaunchedEffect(selected, settings.runtime, available, sort) { owner.synchronize(selected, settings, available, sort) }
+    val usage = rememberCodexPostUsage(data.statisticsRepository, SAVED_SEARCHES_CODEX_ID, sort).orEmpty()
+    LaunchedEffect(selected, settings.runtime, available, sort, usage) {
+        owner.synchronize(selected, settings, available, sort, usage)
+    }
     val feed = owner.state.collectAsStateWithLifecycle().value
-    val posts = remember(feed.posts, sort) { sortLiveCodexPosts(feed.posts, sort) }
+    val posts = remember(feed.posts, sort, usage) { sortLiveCodexPosts(feed.posts, sort, usage) }
     content(CodexDetailDestinationState(
         codex = Codex(SAVED_SEARCHES_CODEX_ID, "Searches", 0), items = emptyList(), posts = posts,
         activeProfile = settings.activeRecommendationProfile(), availableSources = available,
