@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-15
+
 ### Added
 
 - Booru posts have "Open original post" in the Viewer's More menu, which goes to the page the booru says the file came from, usually the artist's own Pixiv or X post. It opens in the Viewer when that site is one of your sources, and in the browser otherwise.
