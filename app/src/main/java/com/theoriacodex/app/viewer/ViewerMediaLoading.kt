@@ -135,7 +135,11 @@ private data class GifMovieLoadResult(val movie: Movie? = null, val failure: Str
 
 private data class GifBytesLoadResult(val bytes: ByteArray? = null, val failure: String? = null)
 
-/** No crossfade: the preview leaves as the image arrives, so fading in would dip through the background. */
+/**
+ * No crossfade: the preview leaves as the image arrives, so fading in would dip through the background.
+ * Decodes to hardware bitmaps so a full-size page is not uploaded to the GPU by RenderThread as it settles;
+ * callers that read pixels (the artwork accent) opt back into software with `allowHardware(false)`.
+ */
 internal fun buildViewerImageRequest(
     context: Context,
     url: String,
@@ -148,6 +152,7 @@ internal fun buildViewerImageRequest(
     url = url,
     sourceKey = sourceKey,
     crossfade = false,
+    allowHardware = true,
     staticAnimatedWebPFrame = staticAnimatedWebPFrame,
     targetWidthPx = targetWidthPx,
     targetHeightPx = targetHeightPx,
