@@ -80,6 +80,8 @@ enum class CodexSortMode {
     MOST_OPENED,
     MOST_PAGES,
     FEWEST_PAGES,
+    LONGEST,
+    SHORTEST,
     CREATOR_ASCENDING,
     BY_SOURCE,
 }

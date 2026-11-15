@@ -40,6 +40,9 @@ import com.theoriacodex.app.codex.savedCodexChildren
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.di.SourceDependencies
 import com.theoriacodex.app.media.MediaDurationCoordinator
+import com.theoriacodex.app.codex.usesDuration
+import com.theoriacodex.app.media.MediaDurationState
+import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.media.rememberDurationFilterMetadata
@@ -95,9 +98,13 @@ internal fun SavedCodexRoute(
                     val restore = restoreRegistry.state(codexFeedFabContext(child.codexId)) ?: return@item
                     val sort = CodexSortMode.entries.firstOrNull { it.name == restore.sortMode }
                         ?: CodexSortMode.NEWEST_SAVED
-                    CodexDetailDestinationStateBoundary(child.codexId, sort, data, sources, restore) { state ->
-                        SavedCodexSection(state, child.codexId, child.name, counts[index], restore,
-                            durations, sources, { scroll.isScrollInProgress },
+                    // Owned above the boundary so its known lengths reach the length sorts.
+                    val owner = viewModel<MediaDurationRouteViewModel>(key = "saved-duration:${child.codexId}",
+                        factory = MediaDurationRouteViewModel.factory(durations, "saved:${child.codexId}"))
+                    val durationStates by owner.states.collectAsStateWithLifecycle()
+                    CodexDetailDestinationStateBoundary(child.codexId, sort, data, sources, restore, durationStates) { state ->
+                        SavedCodexSection(state, child.codexId, child.name, counts[index], restore, sort,
+                            owner, durationStates, sources, { scroll.isScrollInProgress },
                             { onOpenCodex(child.codexId) },
                             { onOpenCodexActions(child.codexId) },
                             { posts, position -> onOpenViewer(child.codexId, posts, position) }, resolvePost, onToggleLike)
@@ -115,7 +122,9 @@ private fun SavedCodexSection(
     title: String,
     count: Int,
     restore: FeedFabRestoreState,
-    durations: MediaDurationCoordinator,
+    sort: CodexSortMode,
+    owner: MediaDurationRouteViewModel,
+    durationStates: Map<MediaDurationKey, MediaDurationState>,
     sources: SourceDependencies,
     parentScrolling: () -> Boolean,
     onOpen: () -> Unit,
@@ -124,17 +133,14 @@ private fun SavedCodexSection(
     resolvePost: suspend (PostId) -> Post?,
     onToggleLike: (Post) -> Unit,
 ) {
-    val owner = viewModel<MediaDurationRouteViewModel>(key = "saved-duration:$id",
-        factory = MediaDurationRouteViewModel.factory(durations, "saved:$id"))
     SideEffect { owner.synchronize(id, state.posts, state.resolveUnknownAnimatedDurations) }
-    val durationStates by owner.states.collectAsStateWithLifecycle()
     val filters = remember(restore) { restore.savedCollectionFilters() }
     val metadata = rememberDurationFilterMetadata(state.posts, durationStates, !filters.animatedDurationRange.isFullRange)
     val posts = remember(state.posts, filters, metadata.knownDurationMsByPostId) {
         filterCodexCollectionPosts(state.posts, filters, UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS,
             metadata.knownDurationMsByPostId)
     }
-    SideEffect { owner.onFilterChanged(!filters.animatedDurationRange.isFullRange) }
+    SideEffect { owner.onFilterChanged(!filters.animatedDurationRange.isFullRange || sort.usesDuration) }
     val cardWidth = POST_SHELF_CARD_WIDTH
     val rowHeight = cardWidth / POST_SHELF_MEDIA_ASPECT_RATIO
     val row = rememberLazyListState()

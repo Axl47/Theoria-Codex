@@ -2,14 +2,20 @@ package com.theoriacodex.app.codex
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.theoriacodex.app.media.MediaDurationKey
+import com.theoriacodex.app.media.MediaDurationState
+import com.theoriacodex.app.media.isAnimatedPost
+import com.theoriacodex.app.media.knownMediaDurations
 import com.theoriacodex.app.search.postMediaCount
 import com.theoriacodex.app.statistics.statisticsPostKey
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.flow.first
 
 /** Stats figures a Codex, or a post within one, can sort by: time watched and times opened. */
@@ -30,6 +36,8 @@ internal val CodexSortMode.label: String
         CodexSortMode.MOST_OPENED -> "Most opened"
         CodexSortMode.MOST_PAGES -> "Most pages"
         CodexSortMode.FEWEST_PAGES -> "Fewest pages"
+        CodexSortMode.LONGEST -> "Longest"
+        CodexSortMode.SHORTEST -> "Shortest"
         CodexSortMode.CREATOR_ASCENDING -> "Creator (A–Z)"
         CodexSortMode.BY_SOURCE -> "By source"
     }
@@ -37,15 +45,24 @@ internal val CodexSortMode.label: String
 internal val CodexSortMode.usesUsage: Boolean
     get() = this == CodexSortMode.MOST_WATCHED || this == CodexSortMode.MOST_OPENED
 
+/** Length sorts order animated posts by duration, so they ask for every unknown duration to be resolved. */
+internal val CodexSortMode.usesDuration: Boolean
+    get() = this == CodexSortMode.LONGEST || this == CodexSortMode.SHORTEST
+
 /** The order to ask the store for; it orders only by save time or source, and the app refines the rest. */
 internal val CodexSortMode.storeOrder: CodexSortMode
     get() = takeIf { it == CodexSortMode.OLDEST_SAVED || it == CodexSortMode.BY_SOURCE } ?: CodexSortMode.NEWEST_SAVED
 
 /**
  * What [sort] orders by beyond a list's date order, or null when the date order already is the sort.
- * Sorting is stable, so ties keep the date order. [usage] is keyed by [statisticsPostKey].
+ * Sorting is stable, so ties keep the date order. [usage] is keyed by [statisticsPostKey]; [durations]
+ * holds the animation lengths known so far.
  */
-internal fun codexPostRefinement(sort: CodexSortMode, usage: Map<String, CodexUsage>): Comparator<Post>? {
+internal fun codexPostRefinement(
+    sort: CodexSortMode,
+    usage: Map<String, CodexUsage>,
+    durations: Map<PostId, Long> = emptyMap(),
+): Comparator<Post>? {
     val usageOf = { post: Post -> usage[statisticsPostKey(post.id)] ?: CodexUsage() }
     return when (sort) {
         CodexSortMode.NEWEST_SAVED, CodexSortMode.OLDEST_SAVED -> null
@@ -53,6 +70,8 @@ internal fun codexPostRefinement(sort: CodexSortMode, usage: Map<String, CodexUs
         CodexSortMode.MOST_OPENED -> compareBy(CodexUsage.MostOpened, usageOf)
         CodexSortMode.MOST_PAGES -> compareByDescending(::postMediaCount)
         CodexSortMode.FEWEST_PAGES -> compareBy(::postMediaCount)
+        CodexSortMode.LONGEST -> lengthGroups(durations).thenByDescending { durations[it.id] }
+        CodexSortMode.SHORTEST -> lengthGroups(durations).thenBy { durations[it.id] }
         // Posts without a creator go last.
         CodexSortMode.CREATOR_ASCENDING -> compareBy(nullsLast(String.CASE_INSENSITIVE_ORDER)) { post: Post ->
             (post.creatorProfile?.displayName ?: post.authorName)?.takeIf(String::isNotBlank)
@@ -61,9 +80,35 @@ internal fun codexPostRefinement(sort: CodexSortMode, usage: Map<String, CodexUs
     }
 }
 
+/** Known lengths first, then animated posts still unresolved, then posts with no animation. */
+private fun lengthGroups(durations: Map<PostId, Long>): Comparator<Post> = compareBy { post ->
+    when {
+        post.id in durations -> 0
+        isAnimatedPost(post) -> 1
+        else -> 2
+    }
+}
+
 /** Orders a saved Codex's [posts], which the store returned in [CodexSortMode.storeOrder] for [sort]. */
-internal fun sortCodexPosts(posts: List<Post>, sort: CodexSortMode, usage: Map<String, CodexUsage>): List<Post> =
-    codexPostRefinement(sort, usage)?.let(posts::sortedWith) ?: posts
+internal fun sortCodexPosts(
+    posts: List<Post>,
+    sort: CodexSortMode,
+    usage: Map<String, CodexUsage>,
+    durations: Map<PostId, Long> = emptyMap(),
+): List<Post> = codexPostRefinement(sort, usage, durations)?.let(posts::sortedWith) ?: posts
+
+/**
+ * Known animation lengths of [posts] while [sort] is a length sort; empty otherwise. Recomputed as
+ * durations resolve, so posts settle into place while resolution runs.
+ */
+@Composable
+internal fun rememberCodexPostDurations(
+    posts: List<Post>?,
+    sort: CodexSortMode,
+    states: Map<MediaDurationKey, MediaDurationState>,
+): Map<PostId, Long> = remember(posts, sort, states) {
+    if (sort.usesDuration && posts != null) knownMediaDurations(posts, states) else emptyMap()
+}
 
 /** Per-post usage within [codexId]. A statistics failure degrades to no usage, leaving the date order. */
 internal suspend fun StatisticsRepository.codexPostUsage(codexId: String): Map<String, CodexUsage> =

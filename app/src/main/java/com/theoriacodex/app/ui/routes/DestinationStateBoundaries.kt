@@ -33,6 +33,9 @@ import com.theoriacodex.app.codex.usesUsage
 import com.theoriacodex.app.codex.storeOrder
 import com.theoriacodex.app.codex.sortCodexPosts
 import com.theoriacodex.app.codex.rememberCodexPostUsage
+import com.theoriacodex.app.codex.rememberCodexPostDurations
+import com.theoriacodex.app.media.MediaDurationState
+import com.theoriacodex.app.media.MediaDurationKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import com.theoriacodex.app.codex.CodexCoverCandidate
@@ -263,6 +266,7 @@ internal fun CodexDetailDestinationStateBoundary(
     data: DataDependencies,
     sources: SourceDependencies,
     fabRestoreState: com.theoriacodex.data.repository.FeedFabRestoreState,
+    durationStates: Map<MediaDurationKey, MediaDurationState> = emptyMap(),
     content: @Composable (CodexDetailDestinationState) -> Unit,
 ) {
     val metadata = browsingMetadataOwner(data).state.collectAsStateWithLifecycle().value ?: return
@@ -271,11 +275,11 @@ internal fun CodexDetailDestinationStateBoundary(
             metadata.likedPostIds else emptySet()))
     }
     if (codexId == com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID) {
-        SavedSearchesCodexBoundary(data, sources, metadata.settings, fabRestoreState, sortMode, render)
+        SavedSearchesCodexBoundary(data, sources, metadata.settings, fabRestoreState, sortMode, durationStates, render)
         return
     }
     if (codexId == com.theoriacodex.app.codex.FOLLOWED_CODEX_ID) {
-        FollowedCodexDestinationStateBoundary(data, sources, metadata.settings, fabRestoreState, sortMode, render)
+        FollowedCodexDestinationStateBoundary(data, sources, metadata.settings, fabRestoreState, sortMode, durationStates, render)
         return
     }
     val content = rememberCodexContentFlows()
@@ -284,8 +288,9 @@ internal fun CodexDetailDestinationStateBoundary(
     val storeSort = sortMode.storeOrder
     val storedPosts by rememberRetained(codexPostsKey(codexId, storeSort), content) { codexPostsFlow(data, codexId, storeSort) }
     val usage = rememberCodexPostUsage(data.statisticsRepository, codexId, sortMode)
-    val sortedPosts = remember(storedPosts, sortMode, usage) {
-        storedPosts?.let { posts -> usage?.let { sortCodexPosts(posts, sortMode, it) } }
+    val durations = rememberCodexPostDurations(storedPosts, sortMode, durationStates)
+    val sortedPosts = remember(storedPosts, sortMode, usage, durations) {
+        storedPosts?.let { posts -> usage?.let { sortCodexPosts(posts, sortMode, it, durations) } }
     }
     // Changing the sort keeps showing the previous order until the new one answers.
     val shownPosts = remember(codexId) { ShownPosts() }
@@ -515,6 +520,7 @@ private fun FollowedCodexDestinationStateBoundary(
     settings: AppSettings,
     filters: com.theoriacodex.data.repository.FeedFabRestoreState,
     sort: CodexSortMode,
+    durationStates: Map<MediaDurationKey, MediaDurationState>,
     content: @Composable (CodexDetailDestinationState) -> Unit,
 ) {
     val available = sources.availableSources.collectAsStateWithLifecycle().value
@@ -529,9 +535,12 @@ private fun FollowedCodexDestinationStateBoundary(
         )
     }
     val usage = rememberCodexPostUsage(data.statisticsRepository, FOLLOWED_CODEX_ID, sort).orEmpty()
-    androidx.compose.runtime.LaunchedEffect(selected, available, sort, usage) { owner.synchronize(selected, available, sort, usage) }
     val feed = owner.state.collectAsStateWithLifecycle().value
-    val posts = remember(feed.posts, sort, usage) { sortLiveCodexPosts(feed.posts, sort, usage) }
+    val durations = rememberCodexPostDurations(feed.posts, sort, durationStates)
+    androidx.compose.runtime.LaunchedEffect(selected, available, sort, usage, durations) {
+        owner.synchronize(selected, available, sort, usage, durations)
+    }
+    val posts = remember(feed.posts, sort, usage, durations) { sortLiveCodexPosts(feed.posts, sort, usage, durations) }
     content(CodexDetailDestinationState(
         codex = Codex(com.theoriacodex.app.codex.FOLLOWED_CODEX_ID, "Followed", 0),
         items = emptyList(), posts = posts, activeProfile = settings.activeRecommendationProfile(),

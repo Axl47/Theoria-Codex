@@ -77,7 +77,9 @@ fun buildRelatedFeedProjection(
         canonicalIndexById[post.id]?.let { index -> RelatedFeedEntry.PostEntry(post, index) }
     }
     val request = relatedState.requestOrNull ?: return RelatedFeedProjection(postEntries)
-    val insertionIndex = postEntries.nearestAtOrBefore(request.anchorCanonicalIndex) + 1
+    // Follows the seed when the canonical order changes under an open shelf, as a length sort does.
+    val anchor = request.anchorIndexIn(canonicalPosts.map(Post::id))
+    val insertionIndex = postEntries.nearestAtOrBefore(anchor) + 1
     val entries = postEntries.toMutableList<RelatedFeedEntry>().apply {
         add(
             index = insertionIndex.coerceIn(0, size),

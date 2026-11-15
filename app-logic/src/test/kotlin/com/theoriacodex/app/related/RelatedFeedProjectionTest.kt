@@ -50,6 +50,17 @@ class RelatedFeedProjectionTest {
     }
 
     @Test
+    fun `shelf follows its seed when the canonical order changes under it`() {
+        val posts = listOf(post("0"), post("1"), post("2"))
+        val related = RelatedPostsUiState.Idle.begin(posts[2], 2, 1)
+        val reordered = listOf(posts[2], posts[0], posts[1])
+
+        val projection = buildRelatedFeedProjection(reordered, reordered, related)
+
+        assertEquals(listOf("2", "shelf", "0", "1"), projection.labels())
+    }
+
+    @Test
     fun `shelf precedes first visible post when no predecessor exists`() {
         val posts = listOf(post("0"), post("1"), post("2"))
         val related = RelatedPostsUiState.Idle.begin(posts[0], 0, 1)
