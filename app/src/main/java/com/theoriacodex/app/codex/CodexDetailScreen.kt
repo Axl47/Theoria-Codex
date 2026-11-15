@@ -1,5 +1,7 @@
 package com.theoriacodex.app.codex
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.theoriacodex.app.media.animatedDurationRangeLabel
@@ -32,7 +34,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -153,6 +154,8 @@ internal fun CodexDetailScreen(
     LaunchedEffect(feed.durationFilterActive) { onDurationFilterChanged(feed.durationFilterActive) }
     DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
     if (codexName == null) return CodexUnavailable(loading, onBack)
+    // Registered after the destination's own Back handler, so Back leaves selection before the Codex.
+    BackHandler(enabled = editSelection.active) { editSelection = editSelection.exit() }
     val filterScroll = rememberFeedScrollSignal()
     val resetFilters = { onFabRestoreStateChange(FeedFabRestoreState(sortMode = CodexSortMode.NEWEST_SAVED.name)) }
     Scaffold(
@@ -641,24 +644,26 @@ private fun CodexSelectablePostCard(
     }
 }
 
+/** Drawing only: a Surface here would swallow taps meant for the card, which toggles selection. */
 @Composable
 private fun androidx.compose.foundation.layout.BoxScope.CodexSelectionMarker(selected: Boolean) {
-    Surface(
+    Box(
         modifier = Modifier
             .align(Alignment.TopStart)
             .padding(8.dp)
-            .size(32.dp),
-        shape = CircleShape,
-        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+            .size(32.dp)
+            .background(
+                if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                CircleShape,
+            ),
+        contentAlignment = Alignment.Center,
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = if (selected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                contentDescription = if (selected) "Selected" else "Not selected",
-                tint = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(22.dp),
-            )
-        }
+        Icon(
+            imageVector = if (selected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+            contentDescription = if (selected) "Selected" else "Not selected",
+            tint = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(22.dp),
+        )
     }
 }
 
