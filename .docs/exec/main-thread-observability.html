@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Make main-thread work visible</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f7f4; --surface: #ffffff; --text: #202124; --muted: #5f6368; --border: #d7d7d0;
+      --accent: #0f766e; --accent-soft: #dff3ef; --risk: #9a3412; --risk-soft: #ffedd5; --code: #111827;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #151716; --surface: #202321; --text: #f0f2ef; --muted: #b8beb7; --border: #3a403c;
+        --accent: #5eead4; --accent-soft: #123b37; --risk: #fdba74; --risk-soft: #43230f; --code: #0b0f0d;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+    header, main { max-width: 1180px; margin: 0 auto; padding: 24px; }
+    header { padding-top: 36px; }
+    h1, h2, h3 { line-height: 1.15; margin: 0 0 12px; }
+    h1 { font-size: clamp(2rem, 4vw, 3.25rem); }
+    h2 { margin-top: 36px; font-size: 1.55rem; }
+    h3 { margin-top: 24px; font-size: 1.1rem; }
+    p { margin: 0 0 14px; }
+    li { margin-bottom: 6px; }
+    a { color: var(--accent); }
+    nav { position: sticky; top: 0; z-index: 10; border-block: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(10px); }
+    nav ul { display: flex; gap: 6px; max-width: 1180px; margin: 0 auto; padding: 8px 24px; list-style: none; overflow-x: auto; }
+    nav li { margin: 0; }
+    nav a { display: block; padding: 6px 10px; border-radius: 6px; text-decoration: none; white-space: nowrap; }
+    nav a:hover { background: var(--accent-soft); }
+    section { padding: 22px; margin: 18px 0; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+    section > h2:first-child { margin-top: 0; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.95rem; }
+    th, td { padding: 9px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-weight: 650; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }
+    pre { overflow-x: auto; padding: 14px; border-radius: 8px; background: var(--code); color: #f8fafc; }
+    details { margin: 12px 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: color-mix(in srgb, var(--surface) 88%, var(--bg)); }
+    summary { cursor: pointer; font-weight: 700; }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; color: var(--muted); }
+    .pill { padding: 4px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); }
+    .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin: 18px 0 0; }
+    .card { padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+    .card strong { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.82rem; letter-spacing: 0.02em; text-transform: uppercase; }
+    .callout { margin: 14px 0; padding: 12px 14px; border-left: 4px solid var(--accent); background: var(--accent-soft); border-radius: 6px; }
+    .risk { border-left-color: var(--risk); background: var(--risk-soft); }
+    .status-table td:first-child { width: 180px; color: var(--muted); font-weight: 650; }
+    @media print { nav { position: static; } section, .card { break-inside: avoid; } body { background: #fff; color: #000; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ExecPlan: Make main-thread work visible</h1>
+    <p>After this plan, the app reports on its own when the main thread does work that is not drawing the screen. Work that has been declared "background only" is logged the first time it runs on the main thread and fails a benchmark gate. Every build records how many slow frames each screen produced and what the main thread was doing during long stalls, in the existing on-device diagnostics log. Debug builds also log disk access on the main thread. Today none of this is visible without attaching a profiler, which is why the same class of problem has been fixed screen by screen.</p>
+    <div class="meta" aria-label="Plan metadata">
+      <span class="pill">Status: Proposed, in review</span>
+      <span class="pill">Owner: Claude (orchestrator)</span>
+      <span class="pill">Created: 2026-11-15</span>
+      <span class="pill">Updated: 2026-11-15</span>
+      <span class="pill">Plan file: .docs/exec/main-thread-observability.html</span>
+      <span class="pill">Audit item: B4</span>
+    </div>
+    <div class="dashboard">
+      <div class="card"><strong>Next Action</strong>Two review rounds, then Phase 0 (prototype a real source adapter fed by fixture data).</div>
+      <div class="card"><strong>Main Risk</strong>Always-on reporting that floods the diagnostics log or costs frames itself. Reduced by reporting each label once per process, summarising frames per screen visit, and capping stall reports.</div>
+      <div class="card"><strong>Validation</strong>Host tests for the pure logic, <code>scripts/check.sh --record</code>, logcat evidence on the emulator's acceptance build, and one macrobenchmark scenario that counts violations.</div>
+      <div class="card"><strong>Affected Areas</strong><code>core-domain</code> diagnostics, <code>core-sources</code> parse helpers, <code>app</code> diagnostics and navigation shell, fixtures, <code>macrobenchmark</code>.</div>
+    </div>
+  </header>
+
+  <nav aria-label="Plan sections">
+    <ul>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#context">Context</a></li>
+      <li><a href="#design">Design</a></li>
+      <li><a href="#phases">Phases</a></li>
+      <li><a href="#work-plan">Work Plan</a></li>
+      <li><a href="#validation">Validation</a></li>
+      <li><a href="#living-log">Living Log</a></li>
+      <li><a href="#recovery">Recovery</a></li>
+      <li><a href="#appendix">Appendix</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <section id="purpose">
+      <h2>Purpose / Big Picture</h2>
+      <p>An Android app draws on two threads. The <strong>main thread</strong> runs Compose (building and laying out the screen), input handling, and in this app every video player call. <strong>RenderThread</strong> turns what the main thread recorded into pixels. Any other work that lands on the main thread, such as parsing a provider's JSON response, delays the next frame.</p>
+      <p>A threading audit on 2026-11-15 found such work in seven places (findings A1 to A7, fixed separately). The common cause was that nothing detects it: the frame benchmarks use test sources that hand back ready-made posts, so they never parse anything; there is no StrictMode (Android's detector for disk and network access on the main thread); and the diagnostics log records failures, not slowness.</p>
+      <p>When this plan is complete:</p>
+      <ul>
+        <li>A developer who accidentally calls a source or a feed computation from the main thread sees a <code>main-thread</code> line in logcat and in the diagnostics log, with the stack that did it, and the macrobenchmark gate fails.</li>
+        <li>The diagnostics report from any install, including the daily-driver phone, shows per screen how many frames were slow and the stack of any main-thread stall of roughly 150 ms or more.</li>
+        <li>The three larger refactors that follow (B1 source boundary, B2 feed presenter, B3 player thread) can be judged against these signals instead of ad hoc traces.</li>
+      </ul>
+    </section>
+
+    <section id="context">
+      <h2>Context And Orientation</h2>
+      <p>Terms used below:</p>
+      <ul>
+        <li><strong>Source adapter</strong>: one class per provider (Danbooru, Pixiv, and so on) in the <code>core-sources</code> module. It makes HTTP requests and parses the response into the app's <code>Post</code> model.</li>
+        <li><strong>Diagnostics log</strong>: a private, bounded, redacted on-device log (<code>DiagnosticLogStore</code>). Code anywhere calls <code>Diagnostics.report(area, message, error)</code>; the store writes on its own thread and collapses repeated lines. The user can export it from the app.</li>
+        <li><strong>Fixture</strong>: test data built into the benchmark and debug builds (<code>app/src/fixtures</code>), so journeys run without a network or provider media.</li>
+        <li><strong>Macrobenchmark</strong>: the <code>macrobenchmark</code> module drives the benchmark build on a device and records frame timings and named trace sections.</li>
+        <li><strong>Build types</strong>: <code>debug</code> (<code>com.theoriacodex.debug</code>), <code>release</code> and <code>personalRelease</code> (<code>com.theoriacodex</code>, production, never used for tests), <code>releaseAcceptance</code> (<code>com.theoriacodex.acceptance</code>, a release-equivalent build for emulator checks), <code>benchmarkRelease</code> (<code>com.theoriacodex.benchmark</code>, includes fixtures).</li>
+      </ul>
+      <table>
+        <thead><tr><th>File or module</th><th>Role in this plan</th></tr></thead>
+        <tbody>
+          <tr><td><code>core-domain/src/main/kotlin/com/theoriacodex/domain/diagnostics/</code></td><td>Holds <code>Diagnostics</code>, an object with an installable sink. <code>core-domain</code> and <code>core-sources</code> are plain Kotlin/JVM modules with no Android classes, so they cannot ask "am I on the main thread?" themselves. The new contract object follows the same installable pattern.</td></tr>
+          <tr><td><code>core-sources/src/main/kotlin/com/theoriacodex/sources/common/SourceAdapterCommon.kt</code></td><td><code>parseJsonArray</code> (:66), <code>parseJsonObject</code> (:74), <code>parseJsonElement</code> (:82): the shared JSON entry points used by nine adapter files.</td></tr>
+          <tr><td><code>core-sources/.../nhentai/NhentaiSourceAdapter.kt</code> (:615, :627), <code>core-sources/.../hitomi/HitomiProtocol.kt</code> (:142)</td><td>Private parse helpers that do not go through the shared ones.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/TheoriaApplication.kt</code></td><td><code>startDiagnostics()</code> (:85) builds the <code>DiagnosticLogStore</code> and installs it. New monitors are installed here.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/diagnostics/DiagnosticLogStore.kt</code></td><td>The sink. Bounded to 256 KB, at most 512 pending events, stacks cut at 6,000 characters, repeated lines collapsed.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt</code></td><td>Observes the current navigation entry (:135). The place to tell the frame recorder which screen is showing.</td></tr>
+          <tr><td><code>app/src/fixtures/java/com/theoriacodex/app/fixtures/JourneySourceRegistry.kt</code></td><td>The fixture source registry. Its <code>FixtureAdapter.search</code> returns ready-made <code>Post</code> objects, which is why benchmarks never see parsing.</td></tr>
+          <tr><td><code>app/src/benchmarkRelease/java/com/theoriacodex/app/benchmark/BenchmarkFixtureActivity.kt</code>, <code>BenchmarkAppJourney.kt</code></td><td>Scenario entry points for the benchmark build.</td></tr>
+          <tr><td><code>macrobenchmark/src/main/java/com/theoriacodex/macrobenchmark/TheoriaMacrobenchmark.kt</code></td><td>Benchmark scenarios. Already uses <code>FrameTimingMetric</code> and <code>TraceSectionMetric</code> in count and sum modes.</td></tr>
+          <tr><td><code>scripts/benchmark_results.py</code></td><td>Reads benchmark output; the place for a "violations must be zero" check.</td></tr>
+          <tr><td><code>core-sources/src/main/kotlin/com/theoriacodex/sources/http/SourceHttpClient.kt</code></td><td>The interface every adapter uses for HTTP (<code>get</code>, <code>getBytes</code>). A fixture implementation can answer from memory.</td></tr>
+        </tbody>
+      </table>
+      <div class="callout"><strong>Dependency on the audit fixes.</strong> Finding A1 moves Search, Followed Codex and Creator parsing off the main thread. This plan lands after A1. Until then the new check would fire on every search, which is correct but noisy, and is used once on purpose as proof that the check works (see Validation).</div>
+    </section>
+
+    <section id="design">
+      <h2>Design</h2>
+      <h3>1. A contract marker for work that must not run on the main thread</h3>
+      <p>A new object in <code>core-domain</code>, <code>OffMainWork</code>, with one call: <code>OffMainWork.note("source-parse")</code>. Shared code calls it at the start of work that is background-only by contract. With nothing installed it is a single volatile read. The app installs a checker at startup that asks Android whether the current thread is the main thread and, if so:</p>
+      <ul>
+        <li>reports the first occurrence per label per process to <code>Diagnostics</code> (area <code>main-thread</code>) with a stack, and to logcat under the tag <code>TheoriaThreads</code>; later occurrences only increment a counter that is written with the frame summary;</li>
+        <li>emits a trace section named <code>OffMainViolation:&lt;label&gt;</code>, so the macrobenchmark can count it.</li>
+      </ul>
+      <p>The checker is installed in every build type. It never throws: a contract breach should be reported, not crash a user's session. Unit tests can install a throwing checker where a test wants a hard failure.</p>
+      <p>First call sites are the JSON parse helpers listed in Context. Plan B1 later moves the marker to the adapter entry points, and B2 adds one to the feed presenter.</p>
+
+      <h3>2. Slow frames per screen</h3>
+      <p>Android reports timing for every frame an activity's window draws (<code>Window.addOnFrameMetricsAvailableListener</code>, delivered on a background handler). A small recorder counts, per visit to a screen: frames, slow frames (total duration above the frame's deadline), frozen frames (above 700 ms) and the worst duration. When the screen changes or the activity stops, a visit with at least one slow frame is written as one line, for example <code>frames | Search: 5432 frames, 61 slow (1.1%), 0 frozen, worst 212 ms</code>.</p>
+      <p>The platform API is used directly instead of the AndroidX JankStats library: the app's minimum is API 36, where the platform already supplies the deadline, so the library would add a dependency for a few dozen lines. The screen name is the navigation route pattern (such as <code>viewer</code>), never a filled-in route, so no query or post id reaches the log.</p>
+
+      <h3>3. Stacks for long main-thread stalls</h3>
+      <p>Frame counts say how often; they do not say why. A watchdog thread posts a marker to the main thread every 100 ms while an activity is started. If the marker has not run by the next tick, the main thread has been busy for at least that long, so the watchdog samples the main thread's stack once and, when the marker finally runs, reports <code>main-stall | Main thread busy 340 ms on Search</code> with that stack. Reports are capped at 20 per process and skipped while a debugger is attached. Short stalls of one or two frames are below this detector's reach; Perfetto traces remain the tool for those.</p>
+
+      <h3>4. StrictMode in debug builds</h3>
+      <p>Debug builds set a main-thread StrictMode policy that detects disk reads and writes, and report violations whose stack contains an app frame (<code>com.theoriacodex</code>) to <code>Diagnostics</code> (area <code>strictmode</code>) and logcat. Network access on the main thread already throws on Android, and Room already asserts, so disk access is the gap. Framework-only stacks are dropped because they cannot be fixed here.</p>
+
+      <h3>5. A benchmark that parses</h3>
+      <p>One fixture source is served by a real adapter instead of the ready-made one: <code>DanbooruSourceAdapter</code> constructed with a fixture <code>SourceHttpClient</code> that answers the post-search request from memory with Danbooru-shaped JSON generated from the existing fixture posts (same local media, realistic tag counts so the payload size is representative). No real provider data is recorded or stored. A new macrobenchmark scenario pages through that source's search results and records frame timing plus the count of <code>OffMainViolation:%</code> sections. <code>scripts/benchmark_results.py</code> fails the run when that count is above zero.</p>
+      <p>If the generated JSON ever drifts from what the parser accepts, the adapter returns no posts and the scenario's existing "all visible videos are playing" check fails, so the fixture cannot silently stop exercising the parser.</p>
+      <div class="callout risk"><strong>What this does not do.</strong> It does not measure RenderThread work (texture uploads, video surface composition) and it does not find unannotated work shorter than about 150 ms. Those still need a trace.</div>
+    </section>
+
+    <section id="phases">
+      <h2>Phases</h2>
+      <article>
+        <h3>Phase 0: Prototype the parsing fixture</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Show that <code>DanbooruSourceAdapter</code> fed by generated JSON yields posts the feed can display and autoplay from local fixture media.</td></tr>
+          <tr><td>Edits</td><td>Throwaway host test in <code>core-sources</code> or <code>app</code> that builds the JSON for three fixture posts (one image, one video, one GIF), runs <code>search</code>, and compares the resulting media URLs and tags with the fixture posts.</td></tr>
+          <tr><td>Promote if</td><td>All three posts round-trip with their media URLs intact. If Danbooru's parser rejects local URIs, try the next simplest adapter that uses the shared parse helpers and record the choice in the Decision Log.</td></tr>
+        </tbody></table>
+      </article>
+      <article>
+        <h3>Phase 1: Contract marker and checker</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Annotated work that runs on the main thread is reported once per label, with a stack.</td></tr>
+          <tr><td>Commands</td><td><code>./gradlew :core-domain:test :core-sources:test :app:testDebugUnitTest --offline</code></td></tr>
+          <tr><td>Acceptance</td><td>Host test: a checker installed with a fake "is main" probe reports the first call and counts the rest. On the emulator's acceptance build, <code>adb -s emulator-5554 logcat -s TheoriaThreads</code> stays empty during a search; with the A1 dispatcher switch removed in a local, uncommitted build it prints one <code>source-parse</code> line.</td></tr>
+        </tbody></table>
+      </article>
+      <article>
+        <h3>Phase 2: Benchmark scenario and gate</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>The macrobenchmark exercises a real parser and fails when annotated work runs on the main thread.</td></tr>
+          <tr><td>Commands</td><td>Verify both APKs with <code>scripts/verify_benchmark_fixture_apk.py</code> and <code>scripts/verify_macrobenchmark_runner_apk.py</code>, then run the single scenario with <code>am instrument</code> on <code>emulator-5554</code>.</td></tr>
+          <tr><td>Acceptance</td><td>Violation count 0 on the branch; above 0 on the same branch with the A1 switch removed locally. Frame timing is recorded for the scenario.</td></tr>
+        </tbody></table>
+      </article>
+      <article>
+        <h3>Phase 3: Slow frames per screen</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>One summary line per screen visit that had slow frames.</td></tr>
+          <tr><td>Acceptance</td><td>Host tests for counting, formatting and the screen-change flush. On the emulator's acceptance build, scrolling Search and then opening Settings prints a <code>frames | Search: …</code> line in logcat, and the exported diagnostics report contains it.</td></tr>
+        </tbody></table>
+      </article>
+      <article>
+        <h3>Phase 4: Stall stacks</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>A main-thread stall of roughly 150 ms or more is reported with the stack sampled during it.</td></tr>
+          <tr><td>Acceptance</td><td>Host tests with a fake clock and fake main-thread probe cover: no report below the threshold, one report per stall, the cap of 20. On the emulator, a cold start or a heavy scroll yields at least one <code>main-stall</code> line whose stack names app or framework frames; if none appears in five minutes of use, record that and rely on the host tests.</td></tr>
+        </tbody></table>
+      </article>
+      <article>
+        <h3>Phase 5: StrictMode in debug</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Disk access on the main thread from app code is logged in debug builds.</td></tr>
+          <tr><td>Acceptance</td><td>On the emulator's debug build, starting the app prints <code>strictmode</code> lines for known main-thread preference reads (the app-lock check at first composition is one). Each distinct app stack is added to this plan's Surprises list as a new finding; none are fixed here. If the shared emulator's debug data cannot be opened ("Saved data could not be opened safely"), do not clear it; record the phase as verified by code review only and ask the user.</td></tr>
+        </tbody></table>
+      </article>
+    </section>
+
+    <section id="work-plan">
+      <h2>Work Plan</h2>
+      <ol>
+        <li><strong>Contract object.</strong> Add <code>core-domain/src/main/kotlin/com/theoriacodex/domain/diagnostics/OffMainWork.kt</code>: <code>fun interface OffMainChecker { fun check(label: String) }</code> and <code>object OffMainWork { fun install(checker); fun note(label) }</code>, mirroring <code>Diagnostics</code>. Test in <code>core-domain/src/test</code>.</li>
+        <li><strong>Call sites.</strong> Call <code>OffMainWork.note("source-parse")</code> first in <code>parseJsonArray</code>, <code>parseJsonObject</code>, <code>parseJsonElement</code> (<code>SourceAdapterCommon.kt</code>), in Nhentai's two private helpers and in <code>HitomiProtocol.parseJson</code>. HTML-parsing adapters are listed in the Appendix when found and annotated the same way.</li>
+        <li><strong>Pure logic in <code>app-logic</code>.</strong> Add <code>app-logic/src/main/kotlin/com/theoriacodex/app/diagnostics/</code> with three small classes that take their clock and inputs as parameters: <code>OffMainViolationLedger</code> (first-per-label, counts), <code>FrameVisitStats</code> (accumulate, format, reset) and <code>StallDetector</code> (tick logic, cap). Host tests beside them.</li>
+        <li><strong>Android glue.</strong> Add <code>app/src/main/java/com/theoriacodex/app/diagnostics/ThreadDiagnostics.kt</code> with one entry point, <code>installThreadDiagnostics(application)</code>, that: installs the <code>OffMainWork</code> checker (main-looper probe, <code>Diagnostics.report</code>, <code>Log.w</code>, trace section); registers activity lifecycle callbacks that attach and detach the frame-metrics listener on a <code>HandlerThread</code> and start and stop the watchdog; and, when <code>BuildConfig.DEBUG</code>, sets the StrictMode thread policy with a <code>penaltyListener</code>. Call it from <code>TheoriaApplication.startDiagnostics()</code> after the sink is installed.</li>
+        <li><strong>Screen name.</strong> In <code>TheoriaApp.kt</code> next to the existing <code>currentBackStackEntryAsState()</code> read, publish <code>backStackEntry?.destination?.route</code> to the recorder from a side effect. Use the route pattern only.</li>
+        <li><strong>Parsing fixture.</strong> Add <code>app/src/fixtures/java/com/theoriacodex/app/fixtures/ProviderShapedSource.kt</code>: the in-memory <code>SourceHttpClient</code> and the JSON generator. In <code>JourneySourceRegistry</code>, accept an optional set of source keys to serve through the real adapter; default empty so existing scenarios are unchanged.</li>
+        <li><strong>Scenario.</strong> Add a scenario to <code>BenchmarkFixtureActivity</code>/<code>BenchmarkAppJourney</code> that opens Search on the parsed source with enough fixture posts for at least five pages, and a test <code>searchProviderParsePaging</code> in <code>TheoriaMacrobenchmark.kt</code> that scrolls through those pages with <code>fixtureFrameTimingMetric()</code> and <code>TraceSectionMetric("OffMainViolation:%", Mode.Count)</code>.</li>
+        <li><strong>Gate.</strong> In <code>scripts/benchmark_results.py</code>, fail when the violation count metric is above zero; add a case to its tests under <code>scripts/tests</code>.</li>
+      </ol>
+      <p>Deliberately not touched: the existing fixture scenarios (their numbers stay comparable with history), <code>DiagnosticLogStore</code> itself, and any of the violations these tools reveal. Revealed problems are recorded as findings.</p>
+      <p>Commits: one per phase, Conventional Commit messages. Two pull requests: phases 1 and 2 (the gate that protects B1 and B2), then phases 3 to 5.</p>
+    </section>
+
+    <section id="validation">
+      <h2>Validation And Acceptance</h2>
+      <p>All commands run from the repository root. Robolectric tests need Java 21 or newer (<code>JAVA_HOME</code> as described in <code>AGENTS.md</code>).</p>
+      <table>
+        <thead><tr><th>Check</th><th>Command or action</th><th>Expected result</th></tr></thead>
+        <tbody>
+          <tr><td>Host tests</td><td><code>./gradlew :core-domain:test :core-sources:test :app-logic:test :app:testDebugUnitTest --offline</code></td><td>Pass, including the new ledger, frame-stats and stall-detector tests.</td></tr>
+          <tr><td>Pre-PR check</td><td><code>scripts/check.sh --record</code></td><td>Policy checks, coverage, Detekt, lint and duplicate checks pass.</td></tr>
+          <tr><td>Contract proof</td><td>Acceptance APK on <code>emulator-5554</code>, verified first with <code>scripts/verify_device_apk.py</code>. Run a search; watch <code>logcat -s TheoriaThreads</code>. Repeat with the A1 dispatcher switch removed locally (not committed).</td><td>Silent with the switch; one <code>source-parse</code> line with a stack without it.</td></tr>
+          <tr><td>Benchmark gate</td><td><code>searchProviderParsePaging</code> on the emulator, both variants as above.</td><td>Count 0 and gate passes; count above 0 and gate fails.</td></tr>
+          <tr><td>Frames and stalls</td><td>Acceptance APK: scroll Search, open Settings, export the diagnostics report.</td><td><code>frames</code> line for Search present; any <code>main-stall</code> lines carry a stack.</td></tr>
+          <tr><td>Overhead</td><td>Run the existing <code>searchConcurrentAutoplayScroll</code> scenario before and after on the emulator, three runs each.</td><td>No change in frame-time percentiles beyond run-to-run spread. If there is, the watchdog interval and the listener are the first suspects.</td></tr>
+        </tbody>
+      </table>
+      <p>Emulator rules: only the <code>theoria-search-test</code> AVD, only isolated packages, never <code>com.theoriacodex</code>. Use logs and accessibility text, not screenshots, wherever provider media could be shown. Physical-device numbers are taken once at the end of the whole audit, not per phase.</p>
+    </section>
+
+    <section id="living-log">
+      <h2>Living Log</h2>
+      <h3>Progress</h3>
+      <ul>
+        <li>[x] 2026-11-15 - Plan drafted from the threading audit (B4).</li>
+        <li>[ ] Review round 1 (Opus high, GPT-6.1 Sol adversarial) merged.</li>
+        <li>[ ] Review round 2 merged.</li>
+        <li>[ ] Phase 0 prototype.</li>
+        <li>[ ] Phases 1 and 2 merged.</li>
+        <li>[ ] Phases 3 to 5 merged.</li>
+      </ul>
+      <h3>Surprises And Discoveries</h3>
+      <ul>
+        <li>Observation: <code>personalRelease</code> has no application-id suffix, so it is the production package. Evidence: <code>app/build.gradle.kts</code> build types. Consequence: frame and stall reporting had to be safe for the daily-driver install, which is why it is bounded and always on rather than a debug feature.</li>
+      </ul>
+      <h3>Decision Log</h3>
+      <ul>
+        <li>Decision: Reporting is on in every build type except StrictMode. Rationale: the diagnostics log is already designed to stay on permanently, a single code path is simpler than a build-type matrix, and the acceptance build can then prove the same code that ships. Date/Author: 2026-11-15 / Claude.</li>
+        <li>Decision: Use platform frame metrics, not JankStats. Rationale: minimum API 36 already provides the frame deadline. Date/Author: 2026-11-15 / Claude.</li>
+        <li>Decision: The contract check reports and never throws. Rationale: a threading breach must not crash a session. Date/Author: 2026-11-15 / Claude.</li>
+        <li>Decision: Generate provider-shaped JSON from fixture posts instead of recording real responses. Rationale: no provider content in the repository, and deterministic local media. Date/Author: 2026-11-15 / Claude.</li>
+      </ul>
+      <h3>Outcomes And Retrospective</h3>
+      <p>Not started.</p>
+    </section>
+
+    <section id="recovery">
+      <h2>Idempotence And Recovery</h2>
+      <p>Nothing here migrates data or deletes anything. Every phase is additive and can be reverted by reverting its commit. The diagnostics log format is unchanged, so old and new builds read each other's logs. If the benchmark scenario is flaky on the emulator, it can be excluded from the gate without affecting the other phases. The local build with the A1 switch removed exists only to prove the detector; discard it with <code>git checkout -- .</code> and never commit it. Benchmark and trace output under <code>build/reports/</code> is pruned once the evidence is recorded here.</p>
+    </section>
+
+    <section id="appendix">
+      <h2>Appendix: Evidence And Notes</h2>
+      <details>
+        <summary>Why the existing benchmarks cannot see parsing</summary>
+        <pre><code>// app/src/fixtures/java/com/theoriacodex/app/fixtures/JourneySourceRegistry.kt
+override suspend fun search(query: Query, pageToken: String?): Page&lt;Post&gt; {
+    requests += Request(sourceKey, query, pageToken)
+    val eligible = posts.filter { ... }
+    return page(eligible, pageToken)   // ready-made Post objects, no JSON
+}</code></pre>
+      </details>
+      <details>
+        <summary>Audit findings this plan supports</summary>
+        <p>A1 provider pages parsed on the main thread; A2 Viewer GIF decoding during draw; A3 feed filtering and sorting during composition; A4 software bitmaps uploaded by RenderThread; A5 blocking save when Search closes; A6 Viewer reducer rebuilding a media set; A7 Room reads queued behind writes. B1 source boundary, B2 feed presenter and B3 player thread are separate plans in this folder.</p>
+      </details>
+    </section>
+  </main>
+</body>
+</html>
