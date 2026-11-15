@@ -59,7 +59,7 @@ internal data class CodexCommandFeedback(
         is CodexCommand.ClearLikes -> if (succeeded) "Likes cleared" else "Could not clear Likes"
         is CodexCommand.RestoreLikes -> if (succeeded) "Likes restored" else "Could not restore Likes"
         is CodexCommand.Reorder -> if (succeeded) "Codices reordered" else "Could not reorder Codices"
-        is CodexCommand.Remove -> if (succeeded) "${command.items.size} posts removed" else "Could not remove posts"
+        is CodexCommand.Remove -> if (succeeded) "${command.items.size} ${if (command.items.size == 1) "post" else "posts"} removed" else "Could not remove posts"
         is CodexCommand.Restore -> if (succeeded) "Posts restored" else "Could not restore posts"
     }
 }

@@ -21,6 +21,7 @@
 - Save to Codex uses the width in landscape: search, profile and Create Codex move to a left column, and Codices show in two columns beside them, so many more fit on screen.
 - Save to Codex lists the Codices that already hold the post first, in either sort order.
 - The long-press menu on feeds and the Viewer's Info now offer the same actions. Feeds gain Like, Share, "Open original post", "Find on other sites" and "Open in browser"; the Viewer's More menu gains "More like this", "Start over", "Copy tags", "Copy link", and "Remove from Codex" when opened from a Codex.
+- Removing a single post from a Codex now says "1 post removed" instead of "1 posts removed".
 - Share opens Android's share sheet with the post's link, in the Viewer and on feeds, instead of copying the link.
 
 ### Fixed
