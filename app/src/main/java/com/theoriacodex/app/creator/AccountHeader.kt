@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.components.SourceImage
 import com.theoriacodex.app.source.displayName
@@ -36,10 +40,14 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 private val AVATAR_SIZE = 48.dp
+internal val COMPACT_AVATAR_SIZE = 32.dp
 private const val BIO_COLLAPSED_LINES = 3
 
 /** The header's muted lines: [stats] always (it opens with the source), [secondary] only when the source offers its facts. */
-internal data class AccountHeaderText(val stats: String, val secondary: String?)
+internal data class AccountHeaderText(val stats: String, val secondary: String?) {
+    /** Both lines joined, for the single-line landscape bar. */
+    val line: String get() = listOfNotNull(stats, secondary).joinToString(" · ")
+}
 
 /**
  * Builds the header lines from whatever [details] holds. A favorites count of 0 is left out: sites
@@ -70,6 +78,12 @@ internal val AccountFeed.label: String
         AccountFeed.FAVORITES -> "Favorites"
     }
 
+/** Follow tracks the creator's uploads search, so an account without one cannot be followed. */
+internal val CreatorProfile.canFollow: Boolean get() = !uploadsQuery.isNullOrBlank()
+
+/** The account's bio, or null when it has none worth showing. */
+internal val AccountDetails?.shownBio: String? get() = this?.bio?.trim()?.takeIf(String::isNotEmpty)
+
 /** Avatar, facts and Follow for an account, with the bio under them. Facts fill in as [details] arrives. */
 @Composable
 internal fun AccountHeader(
@@ -82,7 +96,7 @@ internal fun AccountHeader(
     val text = remember(creator.source, details) { accountHeaderText(creator.source, details) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            AccountAvatar(creator, details?.avatarUrl)
+            AccountAvatar(creator, details?.avatarUrl, AVATAR_SIZE)
             Column(Modifier.weight(1f)) {
                 Text(
                     text.stats,
@@ -101,18 +115,17 @@ internal fun AccountHeader(
                     )
                 }
             }
-            // Follow tracks the creator's uploads search, so an account without one cannot be followed.
-            if (!creator.uploadsQuery.isNullOrBlank()) {
+            if (creator.canFollow) {
                 CreatorFollowButton(followed = followed, onClick = onToggleFollow, enabled = followEnabled)
             }
         }
-        details?.bio?.trim()?.takeIf(String::isNotEmpty)?.let { bio -> AccountBio(bio) }
+        details.shownBio?.let { bio -> AccountBio(bio) }
     }
 }
 
 /** The bio, clipped to three lines until tapped. */
 @Composable
-private fun AccountBio(bio: String) {
+internal fun AccountBio(bio: String) {
     var expanded by remember(bio) { mutableStateOf(false) }
     Text(
         bio,
@@ -125,19 +138,19 @@ private fun AccountBio(bio: String) {
 
 /** The account's picture, requested with the source's media headers; a circle with the name's initial when there is none. */
 @Composable
-private fun AccountAvatar(creator: CreatorProfile, url: String?) {
+internal fun AccountAvatar(creator: CreatorProfile, url: String?, size: Dp) {
     Box(
-        modifier = Modifier.size(AVATAR_SIZE).background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
+        modifier = Modifier.size(size).background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         if (url == null) {
             Text(
                 creator.displayName.trim().take(1).uppercase(),
-                style = MaterialTheme.typography.titleMedium,
+                style = if (size < AVATAR_SIZE) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
-            SourceImage(creator.source, url, AVATAR_SIZE, CircleShape)
+            SourceImage(creator.source, url, size, CircleShape)
         }
     }
 }
@@ -149,6 +162,24 @@ internal fun AccountFeedTabs(tabs: List<AccountFeed>, selected: AccountFeed, onS
     PrimaryTabRow(selectedTabIndex = tabs.indexOf(selected).coerceAtLeast(0), containerColor = Color.Transparent) {
         tabs.forEach { feed ->
             Tab(selected = feed == selected, onClick = { onSelect(feed) }, text = { Text(feed.label) })
+        }
+    }
+}
+
+/** The landscape bar's compact feed switcher; nothing when there is only one feed. */
+@Composable
+internal fun AccountFeedSegments(tabs: List<AccountFeed>, selected: AccountFeed, onSelect: (AccountFeed) -> Unit) {
+    if (tabs.size < 2) return
+    SingleChoiceSegmentedButtonRow {
+        tabs.forEachIndexed { index, feed ->
+            SegmentedButton(
+                selected = feed == selected,
+                onClick = { onSelect(feed) },
+                shape = SegmentedButtonDefaults.itemShape(index, tabs.size),
+                // No checkmark, so the switcher keeps its width when the selection changes.
+                icon = {},
+                label = { Text(feed.label, maxLines = 1) },
+            )
         }
     }
 }

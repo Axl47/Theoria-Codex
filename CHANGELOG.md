@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Account pages in landscape fit the avatar, name, stats, Uploads/Favorites switch and Follow into one bar, so the grid gets most of the screen. The bio sits behind the info button.
+
 ## [1.7.0] - 2026-11-15
 
 ### Added

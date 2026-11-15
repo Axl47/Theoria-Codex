@@ -5,9 +5,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
@@ -30,6 +32,7 @@ fun SecondaryScreenAppBar(
     subtitle: String? = null,
     containerColor: Color = Color.Transparent,
     onTitleLongPress: (() -> Unit)? = null,
+    leading: (@Composable () -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     Surface(
@@ -45,6 +48,10 @@ fun SecondaryScreenAppBar(
         ) {
             IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            }
+            leading?.let {
+                it()
+                Spacer(Modifier.width(10.dp))
             }
             Column(
                 modifier = Modifier.weight(1f).then(

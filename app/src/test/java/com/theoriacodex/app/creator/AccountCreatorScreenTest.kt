@@ -85,4 +85,19 @@ class AccountCreatorScreenTest {
         compose.onNodeWithText("Uploads").assertDoesNotExist()
         compose.onNodeWithContentDescription("Follow").assertIsDisplayed()
     }
+
+    @Test
+    @Config(qualifiers = "w800dp-h360dp-land")
+    fun `a landscape account folds its facts and feeds into the bar and keeps the bio behind a toggle`() {
+        val actions = mutableListOf<CreatorAction>()
+        show(accountState(AccountDetails(uploadCount = 312, followerCount = 2, bio = "Hello there")), actions)
+
+        compose.onNodeWithText("Gelbooru · 312 uploads · 2 followers").assertIsDisplayed()
+        compose.onNodeWithText("Hello there").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Bio").performClick()
+        compose.onNodeWithText("Hello there").assertIsDisplayed()
+        compose.onNodeWithText("Favorites").performClick()
+
+        compose.runOnIdle { assertEquals(listOf<CreatorAction>(CreatorAction.SelectFeed(AccountFeed.FAVORITES)), actions) }
+    }
 }
