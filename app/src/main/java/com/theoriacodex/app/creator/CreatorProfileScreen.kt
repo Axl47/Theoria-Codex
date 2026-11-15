@@ -156,13 +156,7 @@ fun CreatorProfileScreen(
         ) {
             val account = state.feeds.isNotEmpty()
             val followEnabled = !state.uploadsRefreshing
-            val onBack = { onAction(CreatorAction.Back) }
-            if (account && LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-                CompactAccountBar(state, creator, followed, followEnabled, onToggleFollow, onOpenUrl, onBack, onAction)
-            } else {
-                CreatorAppBar(creator, account, followed, followEnabled, onToggleFollow, onOpenUrl, onBack)
-                if (account) AccountSection(state, creator, followed, followEnabled, onToggleFollow, onAction)
-            }
+            CreatorHeader(state, creator, account, followed, followEnabled, onToggleFollow, onOpenUrl, onAction)
             CreatorFeedBody(state, feed, cards, gridState, pageDemand, onAction, onLongPress = { selectedActionPost = it })
         }
     }
@@ -316,6 +310,27 @@ private fun clearCreatorFilters(
         ),
     )
     return { onFabRestoreStateChange(previous) }
+}
+
+/** The bar and, for accounts, their facts and feed tabs; landscape accounts fold all of it into one bar. */
+@Composable
+private fun CreatorHeader(
+    state: CreatorUiState,
+    creator: CreatorProfile,
+    account: Boolean,
+    followed: Boolean,
+    followEnabled: Boolean,
+    onToggleFollow: () -> Unit,
+    onOpenUrl: (String) -> Unit,
+    onAction: (CreatorAction) -> Unit,
+) {
+    val onBack = { onAction(CreatorAction.Back) }
+    if (account && LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+        CompactAccountBar(state, creator, followed, followEnabled, onToggleFollow, onOpenUrl, onBack, onAction)
+    } else {
+        CreatorAppBar(creator, account, followed, followEnabled, onToggleFollow, onOpenUrl, onBack)
+        if (account) AccountSection(state, creator, followed, followEnabled, onToggleFollow, onAction)
+    }
 }
 
 /** An account's facts and its feed tabs, below the app bar. */
