@@ -5,7 +5,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.theoriacodex.app.codex.rememberCodexPostDurations
 import com.theoriacodex.app.codex.rememberCodexPostUsage
+import com.theoriacodex.app.media.MediaDurationKey
+import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.codex.sortLiveCodexPosts
 import com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID
 import com.theoriacodex.app.codex.SavedSearchesCodexViewModel
@@ -24,6 +27,7 @@ internal fun SavedSearchesCodexBoundary(
     settings: com.theoriacodex.data.repository.AppSettings,
     filters: FeedFabRestoreState,
     sort: CodexSortMode,
+    durationStates: Map<MediaDurationKey, MediaDurationState>,
     content: @Composable (CodexDetailDestinationState) -> Unit,
 ) {
     val entries = rememberRetained("saved-searches") { data.savedSearches.observeSavedSearches() }.value ?: return
@@ -45,11 +49,12 @@ internal fun SavedSearchesCodexBoundary(
         entries.filterNot { it.id in excluded }
     }
     val usage = rememberCodexPostUsage(data.statisticsRepository, SAVED_SEARCHES_CODEX_ID, sort).orEmpty()
-    LaunchedEffect(selected, settings.runtime, available, sort, usage) {
-        owner.synchronize(selected, settings, available, sort, usage)
-    }
     val feed = owner.state.collectAsStateWithLifecycle().value
-    val posts = remember(feed.posts, sort, usage) { sortLiveCodexPosts(feed.posts, sort, usage) }
+    val durations = rememberCodexPostDurations(feed.posts, sort, durationStates)
+    LaunchedEffect(selected, settings.runtime, available, sort, usage, durations) {
+        owner.synchronize(selected, settings, available, sort, usage, durations)
+    }
+    val posts = remember(feed.posts, sort, usage, durations) { sortLiveCodexPosts(feed.posts, sort, usage, durations) }
     content(CodexDetailDestinationState(
         codex = Codex(SAVED_SEARCHES_CODEX_ID, "Searches", 0), items = emptyList(), posts = posts,
         activeProfile = settings.activeRecommendationProfile(), availableSources = available,

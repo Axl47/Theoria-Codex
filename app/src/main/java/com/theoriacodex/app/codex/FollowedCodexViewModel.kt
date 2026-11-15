@@ -1,5 +1,6 @@
 package com.theoriacodex.app.codex
 
+import com.theoriacodex.domain.model.PostId
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
@@ -43,8 +44,9 @@ internal class FollowedCodexViewModel(
         available: Set<SourceKey>,
         sort: CodexSortMode = CodexSortMode.NEWEST_SAVED,
         usage: Map<String, CodexUsage> = emptyMap(),
+        durations: Map<PostId, Long> = emptyMap(),
     ) {
-        feed.updateCoverSort(sort, usage)
+        feed.updateCoverSort(sort, usage, durations)
         // Check/visit metadata must not restart an otherwise identical feed.
         val identity = selected.map { it.membershipId to it.creator }
         if (identity == follows.map { it.membershipId to it.creator } && available == availableSources) return

@@ -144,6 +144,7 @@ private fun CodexDetailDestination(shell: TheoriaShell, codexId: String) {
         fabRestoreState = fabRestoreState,
         data = shell.data,
         sources = shell.sources,
+        durationStates = durationStates,
     ) { state ->
         SideEffect {
             durationOwner.synchronize(

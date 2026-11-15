@@ -1,6 +1,7 @@
 package com.theoriacodex.app.codex
 
 import androidx.activity.compose.BackHandler
+import com.theoriacodex.app.media.isAnimatedPost
 import androidx.compose.runtime.MutableState
 import androidx.compose.foundation.background
 import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
@@ -151,7 +152,8 @@ internal fun CodexDetailScreen(
     val feed = rememberCodexDetailFeed(posts, filters, fabRestoreState, durationStates, resolveUnknownAnimatedDurations, related, likedPostIds)
     val applyFilters = { updated: CodexCollectionFilters -> onFabRestoreStateChange(fabRestoreState.withCollectionFilters(updated)) }
     CodexFilterReconciliationEffect(filters, sourceOptions, supportsLanguage, supportsFullColor, applyFilters)
-    LaunchedEffect(feed.durationFilterActive) { onDurationFilterChanged(feed.durationFilterActive) }
+    val resolveAllDurations = feed.durationFilterActive || sortMode.usesDuration
+    LaunchedEffect(resolveAllDurations) { onDurationFilterChanged(resolveAllDurations) }
     DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
     if (codexName == null) return CodexUnavailable(loading, onBack)
     val filterScroll = rememberFeedScrollSignal()
@@ -178,7 +180,7 @@ internal fun CodexDetailScreen(
             filters, sourceOptions, supportsLanguage, supportsFullColor, sortMode, applyFilters,
             { updatedSort -> onFabRestoreStateChange(fabRestoreState.copy(sortMode = updatedSort.name)) },
             resetFilters, { showFilterSheet = false },
-            customFilters?.let { content -> ({ content { showFilterSheet = false } }) },
+            customFilters?.let { content -> ({ content { showFilterSheet = false } }) }, posts.any(::isAnimatedPost),
         )
     }
     selectedActionPost?.let { post ->
@@ -689,10 +691,12 @@ internal fun CodexFilterSheet(
     onReset: () -> Unit,
     onDismiss: () -> Unit,
     followedFilters: (@Composable () -> Unit)? = null,
+    hasAnimatedPosts: Boolean = true,
 ) {
     FeedFilterSheet(onDismiss = onDismiss, onReset = onReset, modifier = Modifier.testTag("codex-filter-scroll")) {
         FilterSection("Sort") {
-            CodexSortMode.entries.forEach { mode ->
+            // Length sorts mean nothing without animations, unless one is already chosen.
+            CodexSortMode.entries.filter { hasAnimatedPosts || !it.usesDuration || it == sortMode }.forEach { mode ->
                 FilterChoiceChip(mode.label, sortMode == mode) { onSortChange(mode) }
             }
         }

@@ -64,6 +64,18 @@ class CodexPostSortingTest {
         assertEquals(listOf("long", "new", "old"), liveIds(CodexSortMode.MOST_PAGES))
     }
 
+    @Test fun `length sorts put known lengths first, then unresolved animations, then stills`() {
+        val still = testPost(sourcePostId = "still")
+        val unresolved = testPost(source = SourceKey.RULE34VIDEO, sourcePostId = "unresolved")
+        val short = testPost(source = SourceKey.RULE34VIDEO, sourcePostId = "short")
+        val long = testPost(source = SourceKey.RULE34VIDEO, sourcePostId = "long")
+        val durations = mapOf(short.id to 5_000L, long.id to 90_000L)
+        fun lengthIds(sort: CodexSortMode) =
+            sortCodexPosts(listOf(still, unresolved, short, long), sort, emptyMap(), durations).map { it.id.sourcePostId }
+        assertEquals(listOf("long", "short", "unresolved", "still"), lengthIds(CodexSortMode.LONGEST))
+        assertEquals(listOf("short", "long", "unresolved", "still"), lengthIds(CodexSortMode.SHORTEST))
+    }
+
     @Test fun `post usage reads one Codex's watch time and opens`() = runTest {
         val statistics = InMemoryStatisticsRepository(LifetimeStatistics(codexStatistics = mapOf(
             "mine" to CodexStatistics(posts = mapOf(
