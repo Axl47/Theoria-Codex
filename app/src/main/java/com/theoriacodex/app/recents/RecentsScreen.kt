@@ -103,7 +103,6 @@ internal fun RecentsScreen(
     fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
     onRequestSaveToCodex: (Post) -> Unit,
     onSaveToDevice: (Post) -> Unit,
-    onPostUrlCopied: (Post) -> Unit = {},
     onOpenCreatorProfile: (CreatorProfile) -> Unit,
     onOpenLegacyCreatorProfile: (Post) -> Unit,
     onAddIncludeTerm: (Post, SearchTerm) -> Boolean,
@@ -168,13 +167,14 @@ internal fun RecentsScreen(
     selectedActionPost?.let { post ->
         FeedPostActionSheet(
             post, creatorBrowsingSources, { selectedActionPost = null }, onSaveToDevice, onRequestSaveToCodex, onOpenCreatorProfile,
-            onOpenLegacyCreatorProfile, onGoToSearch, onPostUrlCopied, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm,
+            onOpenLegacyCreatorProfile, onGoToSearch, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm,
             onRemoveExcludeTerm, onFavoriteTagLongPress, tagVideoCountProvider, fetchTagVideoCounts,
             onStartOver = {
                 onStartOver(post, selectedActionSection)
                 selectedActionPost = null
             }.takeIf { maxOf(post.mediaCount ?: 1, post.media.size) > 1 },
             onShowRelated = related?.let { shelf -> { shelf.controller.show(post) } },
+            liked = post.id in likedPostIds, onToggleLike = onToggleLike,
         )
     }
 

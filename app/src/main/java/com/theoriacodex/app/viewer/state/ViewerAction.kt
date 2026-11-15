@@ -91,7 +91,6 @@ internal sealed interface ViewerAction {
     data object RetryMedia : ViewerAction
 
     data object Save : ViewerAction
-    data object Share : ViewerAction
     data object Download : ViewerAction
     data object ToggleLike : ViewerAction
     data class OpenCreator(val creator: CreatorProfile) : ViewerAction
@@ -117,12 +116,6 @@ internal sealed interface ViewerEffect {
     data class SavePost(
         override val session: ViewerSessionIdentity,
         val postId: PostId,
-    ) : ViewerEffect
-
-    data class ShareMedia(
-        override val session: ViewerSessionIdentity,
-        val postId: PostId,
-        val mediaKey: ViewerMediaKey,
     ) : ViewerEffect
 
     data class DownloadMedia(

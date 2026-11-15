@@ -104,7 +104,6 @@ fun CreatorProfileScreen(
     onAction: (CreatorAction) -> Unit,
     onRequestSaveToCodex: (Post) -> Unit,
     onSaveToDevice: (Post) -> Unit,
-    onPostUrlCopied: (Post) -> Unit = {},
     onOpenUrl: (String) -> Unit,
     onAddIncludeTerm: (Post, SearchTerm) -> Boolean = { _, _ -> false },
     onAddExcludeTerm: (Post, SearchTerm) -> Boolean = { _, _ -> false },
@@ -167,11 +166,10 @@ fun CreatorProfileScreen(
     selectedActionPost?.let { post ->
         PostActionSheet(
             post, onDismiss = { selectedActionPost = null }, onSaveToDevice = { onSaveToDevice(post) },
-            onSaveToCodex = { onRequestSaveToCodex(post) }, onPostUrlCopied = onPostUrlCopied,
+            liked = post.id in likedPostIds, onToggleLike = { onToggleLike(post) },
+            onSaveToCodex = { onRequestSaveToCodex(post) },
             onShowRelated = { onAction(CreatorAction.ShowRelatedPosts(post)) },
-        ) {
-            PostBoundTagSection(post, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm, onRemoveExcludeTerm)
-        }
+        ) { PostBoundTagSection(post, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm, onRemoveExcludeTerm) }
     }
 }
 

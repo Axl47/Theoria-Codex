@@ -113,7 +113,6 @@ fun ForYouScreen(
     creatorBrowsingSources: Set<SourceKey> = emptySet(),
     onRequestSaveToCodex: (Post) -> Unit,
     onSaveToDevice: (Post) -> Unit,
-    onPostUrlCopied: (Post) -> Unit = {},
     onOpenCreatorProfile: (CreatorProfile) -> Unit,
     onOpenLegacyCreatorProfile: (Post) -> Unit,
     onAddIncludeTerm: (Post, SearchTerm) -> Boolean,
@@ -175,8 +174,8 @@ fun ForYouScreen(
     selectedActionPost?.let { post ->
         FeedPostActionSheet(
             post, creatorBrowsingSources, { selectedActionPost = null }, onSaveToDevice, onRequestSaveToCodex, onOpenCreatorProfile,
-            onOpenLegacyCreatorProfile, onGoToSearch, onPostUrlCopied, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm,
-            onRemoveExcludeTerm, onFavoriteTagLongPress,
+            onOpenLegacyCreatorProfile, onGoToSearch, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm,
+            onRemoveExcludeTerm, onFavoriteTagLongPress, liked = post.id in likedPostIds, onToggleLike = onToggleLike,
             onShowRelated = { onAction(ForYouAction.ShowRelatedPosts(post)) },
         )
     }

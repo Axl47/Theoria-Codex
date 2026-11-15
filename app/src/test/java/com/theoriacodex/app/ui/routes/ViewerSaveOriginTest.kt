@@ -60,14 +60,14 @@ class ViewerSaveOriginTest {
                         renderConfig = ViewerRouteRenderConfig(creatorBrowsingSources = emptySet()),
                         liveSourceState = ViewerRouteLiveSourceState(),
                         effectCallbacks = ViewerRouteEffectCallbacks(
-                            onSavePost = { _, _ -> }, onSharePost = {}, onDownloadMedia = {},
+                            onSavePost = { _, _ -> }, onDownloadMedia = {},
                             onToggleLike = { error("Originating feed action must handle this Like") },
                             onOpenCreatorProfile = {}, onApplyTag = { _, _, _ -> },
                             onRecoverMedia = { _, _, _ -> null }, onLoadMore = {},
                             onDismiss = {}, onRestorationUnavailable = {},
                         ),
                         screenCallbacks = ViewerRouteScreenCallbacks(
-                            onOpenInBrowser = {}, onRemoveIncludeTerm = { _, _ -> },
+                            onRemoveIncludeTerm = { _, _ -> },
                             onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
                         ),
                     )
@@ -118,14 +118,14 @@ class ViewerSaveOriginTest {
                             onSavePost = { _, origin ->
                                 savedContext = origin
                                 savedQuery = owner?.session?.value?.saveQuery
-                            }, onSharePost = {},
+                            },
                             onDownloadMedia = {}, onToggleLike = {}, onOpenCreatorProfile = {},
                             onApplyTag = { _, _, _ -> }, onRecoverMedia = { _, _, _ -> null },
                             onLoadMore = {}, onDismiss = {}, onRestorationUnavailable = {},
                         ),
                         screenCallbacks = ViewerRouteScreenCallbacks(
                             onOwnerChanged = { owner = it },
-                            onOpenInBrowser = {}, onRemoveIncludeTerm = { _, _ -> },
+                            onRemoveIncludeTerm = { _, _ -> },
                             onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
                         ),
                     )

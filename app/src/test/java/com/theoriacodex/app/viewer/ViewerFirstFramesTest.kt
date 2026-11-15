@@ -88,7 +88,7 @@ class ViewerFirstFramesTest {
                     ViewerScreen(
                         uiState = state.value, creatorBrowsingSources = emptySet(),
                         onAction = { state.value = reduceViewerState(state.value, it).state },
-                        onOpenInBrowser = {}, onRemoveIncludeTerm = { _, _ -> }, onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
+                        onRemoveIncludeTerm = { _, _ -> }, onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
                     )
                 }
             }

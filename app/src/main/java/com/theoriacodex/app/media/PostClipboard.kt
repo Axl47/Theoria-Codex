@@ -34,11 +34,6 @@ fun copyPostTagsToClipboard(context: Context, post: Post): Boolean {
     return copyTextToClipboard(context, "tags", formatPostTagsForClipboard(post))
 }
 
-fun copyPostUrlToClipboard(context: Context, post: Post): Boolean {
-    val pageUrl = post.pageUrl?.trim().takeIf { !it.isNullOrBlank() } ?: return false
-    return copyTextToClipboard(context, "post_url", pageUrl)
-}
-
 fun copyTextToClipboard(context: Context, label: String, text: String): Boolean {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return false
     clipboard.setPrimaryClip(ClipData.newPlainText(label, text))

@@ -98,7 +98,7 @@ class ViewerRelatedNavigationTest {
                             .let { it.copy(context = it.context.copy(startIndex = state.value.currentPageIndex)) }
                         state.value = reduceViewerState(state.value, session.value.toReplaceViewerSessionAction()).state
                     },
-                    onOpenInBrowser = {}, onRemoveIncludeTerm = { _, _ -> }, onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
+                    onRemoveIncludeTerm = { _, _ -> }, onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
                 )
             }
         }

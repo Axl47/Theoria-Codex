@@ -442,10 +442,6 @@ class ViewerStateReducerTest {
             reduceViewerState(state, ViewerAction.Save).effects.single(),
         )
         assertEquals(
-            ViewerEffect.ShareMedia(session, postId, mediaKey),
-            reduceViewerState(state, ViewerAction.Share).effects.single(),
-        )
-        assertEquals(
             ViewerEffect.DownloadMedia(session, postId, mediaKey),
             reduceViewerState(state, ViewerAction.Download).effects.single(),
         )

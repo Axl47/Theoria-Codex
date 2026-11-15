@@ -69,14 +69,12 @@ internal fun ViewerScreen(
     onVisiblePostChanged: ((Post, Int) -> Unit)? = null,
     onVisibleMediaChanged: ((Post, Int) -> Unit)? = null,
     durations: ViewerPostDurations = ViewerPostDurations.None,
-    onOpenInBrowser: (Post) -> Unit,
-    onOpenOriginalPost: (Post) -> Unit = {},
-    findOnOtherSites: (Post) -> (() -> Unit)? = { null },
     onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
     onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
     onGoToSearch: () -> Unit,
     onOpenCreatorFallback: ((Post) -> Unit)? = null,
+    contextActions: ViewerContextActions = ViewerContextActions(),
     playbackDiagnosticsEnabled: Boolean = com.theoriacodex.app.BuildConfig.BENCHMARK_FIXTURES_ENABLED,
     onIncludeRelatedPosts: () -> Unit = {},
     onDismissRelatedPosts: () -> Unit = {},
@@ -104,8 +102,8 @@ internal fun ViewerScreen(
         uiState, navigation, posts, returnProgress, returning, opening, dismissDrag, activity, quality, qualityHeight, pendingPostId,
         videoPositions, creatorBrowsingSources, onAction, saveToCodexQuery, pixivUgoiraClient, tagVideoCountProvider,
         fetchTagVideoCounts, canLoadMoreFromSource, loadingMoreFromSource, invertMultiImageScrollDirection, likedPostIds,
-        onRequestMediaRecovery, onVisiblePostChanged, onVisibleMediaChanged, durations, onOpenInBrowser,
-        onOpenOriginalPost, findOnOtherSites, onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, onGoToSearch, onOpenCreatorFallback,
+        onRequestMediaRecovery, onVisiblePostChanged, onVisibleMediaChanged, durations,
+        onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, onGoToSearch, onOpenCreatorFallback, contextActions,
         playbackDiagnosticsEnabled, onIncludeRelatedPosts, onDismissRelatedPosts, onRetryRelatedPosts, comments,
     )
 }
@@ -139,14 +137,12 @@ private fun ViewerLoadedScreen(
     onVisiblePostChanged: ((Post, Int) -> Unit)?,
     onVisibleMediaChanged: ((Post, Int) -> Unit)?,
     durations: ViewerPostDurations,
-    onOpenInBrowser: (Post) -> Unit,
-    onOpenOriginalPost: (Post) -> Unit,
-    findOnOtherSites: (Post) -> (() -> Unit)?,
     onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
     onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)?,
     onGoToSearch: () -> Unit,
     onOpenCreatorFallback: ((Post) -> Unit)?,
+    contextActions: ViewerContextActions,
     playbackDiagnosticsEnabled: Boolean,
     onIncludeRelatedPosts: () -> Unit,
     onDismissRelatedPosts: () -> Unit,
@@ -208,9 +204,9 @@ private fun ViewerLoadedScreen(
     if (uiState.controls.metadataVisible && !inPictureInPicture) {
         ViewerInfoSheet(
             selection, controls, creatorBrowsingSources, saveToCodexQuery, tagVideoCountProvider, fetchTagVideoCounts, onAction,
-            onOpenInBrowser, onOpenOriginalPost, findOnOtherSites, onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, onGoToSearch, onOpenCreatorFallback,
-            liked = selection.post.id in likedPostIds,
-            comments = comments,
+            onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, onGoToSearch, onOpenCreatorFallback,
+            contextActions = contextActions,
+            liked = selection.post.id in likedPostIds, comments = comments,
         )
     }
 }

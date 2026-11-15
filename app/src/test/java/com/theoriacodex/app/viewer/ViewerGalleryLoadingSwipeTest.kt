@@ -54,7 +54,7 @@ class ViewerGalleryLoadingSwipeTest {
                 ViewerScreen(
                     uiState = state.value, creatorBrowsingSources = emptySet(),
                     onAction = { state.value = reduceViewerState(state.value, it).state },
-                    onOpenInBrowser = {}, onRemoveIncludeTerm = { _, _ -> },
+                    onRemoveIncludeTerm = { _, _ -> },
                     onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
                     onVisiblePostChanged = { post, number -> if (post.id == watched.id) recorded += number },
                     onVisibleMediaChanged = { post, number -> if (post.id == watched.id) recorded += number },
@@ -94,7 +94,7 @@ class ViewerGalleryLoadingSwipeTest {
                 ViewerScreen(
                     uiState = state.value, creatorBrowsingSources = emptySet(),
                     onAction = { state.value = reduceViewerState(state.value, it).state },
-                    onOpenInBrowser = {}, onRemoveIncludeTerm = { _, _ -> },
+                    onRemoveIncludeTerm = { _, _ -> },
                     onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
                 )
             }

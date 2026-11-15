@@ -143,7 +143,6 @@ internal fun FeedPostActionSheet(
     onOpenCreatorProfile: (CreatorProfile) -> Unit,
     onOpenLegacyCreatorProfile: (Post) -> Unit,
     onGoToSearch: (() -> Unit)?,
-    onPostUrlCopied: (Post) -> Unit,
     onAddIncludeTerm: (Post, SearchTerm) -> Boolean,
     onAddExcludeTerm: (Post, SearchTerm) -> Boolean,
     onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
@@ -155,10 +154,14 @@ internal fun FeedPostActionSheet(
     onRemoveFromCodex: (() -> Unit)? = null,
     onStartOver: (() -> Unit)? = null,
     onShowRelated: (() -> Unit)? = null,
+    liked: Boolean = false,
+    onToggleLike: ((Post) -> Unit)? = null,
 ) {
     val searchActions = LocalPostTagSearchActions.current
     PostActionSheet(
         post, creatorBrowsingSources, onDismiss, { onSaveToDevice(post) },
+        liked = liked,
+        onToggleLike = onToggleLike?.let { toggle -> { toggle(post) } },
         onSaveToCodex = { onSaveToCodex(post) },
         saveToCodexLabel = saveToCodexLabel,
         onRemoveFromCodex = onRemoveFromCodex,
@@ -166,7 +169,6 @@ internal fun FeedPostActionSheet(
         onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
         onGoToSearch = onGoToSearch,
         onStartOver = onStartOver,
-        onPostUrlCopied = onPostUrlCopied,
         onShowRelated = onShowRelated,
     ) {
         PostBoundTagSection(

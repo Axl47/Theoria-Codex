@@ -11,6 +11,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import com.theoriacodex.app.related.LocalRelatedPostsSupport
 import com.theoriacodex.app.testing.testPost
 import org.junit.Assert.assertEquals
@@ -70,5 +71,61 @@ class PostActionSheetTest {
         supported = true
         compose.onNodeWithText("More like this").performClick()
         compose.runOnIdle { assertEquals(1, shown) }
+    }
+
+    @Test fun `offers the Viewer's like, share and link actions the post supports`() {
+        val opened = mutableListOf<String>()
+        var liked by mutableStateOf(false)
+        var dismissals = 0
+        val actions = PostMenuActions(
+            openOriginalPost = { opened += "original $it" },
+            openInBrowser = { opened += "browser $it" },
+            findOnOtherSites = { post -> { opened += "find ${post.id.sourcePostId}" } },
+            share = { opened += "share $it" },
+            copyTags = { post -> opened += "tags ${post.id.sourcePostId}" },
+            copyLink = { opened += "copy $it" },
+        )
+        compose.setContent {
+            MaterialTheme {
+                CompositionLocalProvider(LocalPostMenuActions provides actions) {
+                    PostActionSheet(
+                        post = testPost(pageUrl = "https://example.com/p").copy(originUrl = "https://origin.test/1"),
+                        onDismiss = { dismissals++ },
+                        onSaveToDevice = {},
+                        liked = liked,
+                        onToggleLike = { liked = !liked },
+                        tagContent = {},
+                    )
+                }
+            }
+        }
+
+        compose.onNodeWithText("Like").performClick()
+        compose.onNodeWithText("Unlike").assertIsDisplayed()
+        val labels = listOf("Share", "Open original post", "Find on other sites", "Open in browser", "Copy tags", "Copy link")
+        labels.forEach { label -> compose.onNodeWithText(label).performScrollTo().performClick() }
+        compose.runOnIdle {
+            assertEquals(
+                listOf(
+                    "share https://example.com/p", "original https://origin.test/1", "find post-1",
+                    "browser https://example.com/p", "tags post-1", "copy https://example.com/p",
+                ),
+                opened,
+            )
+            assertEquals(labels.size + 1, dismissals)
+        }
+    }
+
+    @Test fun `hides actions the post cannot use`() {
+        compose.setContent {
+            MaterialTheme {
+                PostActionSheet(post = testPost(pageUrl = null), onDismiss = {}, onSaveToDevice = {}, tagContent = {})
+            }
+        }
+
+        compose.onNodeWithText("Copy tags").assertExists()
+        listOf("Like", "Share", "Open original post", "Find on other sites", "Open in browser", "Copy link").forEach { label ->
+            compose.onNodeWithText(label).assertDoesNotExist()
+        }
     }
 }

@@ -2,22 +2,21 @@ package com.theoriacodex.app.ui.components
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
-import android.content.Context
-import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.BookmarkAdded
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sell
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
@@ -33,12 +32,11 @@ import com.theoriacodex.app.codex.LocalCodexPostIds
 import com.theoriacodex.app.codex.PreloadCodexSaveRelevance
 import com.theoriacodex.app.codex.codexSavedColor
 import com.theoriacodex.app.creator.creatorProfileActions
-import com.theoriacodex.app.media.copyPostTagsToClipboard
-import com.theoriacodex.app.media.copyPostUrlToClipboard
 import com.theoriacodex.app.post.displayTitleOrNull
 import com.theoriacodex.app.related.LocalRelatedPostsSupport
 import com.theoriacodex.app.source.SourceIcon
 import com.theoriacodex.app.source.displayName
+import com.theoriacodex.app.ui.motion.LikedHeartColor
 import com.theoriacodex.app.viewer.buildViewerImageRequest
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
@@ -57,6 +55,8 @@ fun PostActionSheet(
     creatorBrowsingSources: Set<SourceKey> = emptySet(),
     onDismiss: () -> Unit,
     onSaveToDevice: () -> Unit,
+    liked: Boolean = false,
+    onToggleLike: (() -> Unit)? = null,
     onSaveToCodex: (() -> Unit)? = null,
     saveToCodexQuery: Query? = null,
     saveToCodexLabel: String = "Save to Codex",
@@ -65,7 +65,6 @@ fun PostActionSheet(
     onOpenLegacyCreatorProfile: (() -> Unit)? = null,
     onGoToSearch: (() -> Unit)? = null,
     onStartOver: (() -> Unit)? = null,
-    onPostUrlCopied: (Post) -> Unit = {},
     onShowRelated: (() -> Unit)? = null,
     tagContent: @Composable () -> Unit,
 ) {
@@ -81,7 +80,6 @@ fun PostActionSheet(
         return
     }
 
-    val context = LocalContext.current
     fun dismissThen(action: () -> Unit) {
         onDismiss()
         action()
@@ -99,6 +97,7 @@ fun PostActionSheet(
             ActionMenuRow(Icons.Default.AutoAwesome, "More like this") { dismissThen(showRelated) }
         }
 
+        onToggleLike?.let { toggle -> PostLikeRow(liked) { dismissThen(toggle) } }
         onSaveToCodex?.let { save -> SaveToCodexRow(post, saveToCodexLabel) { dismissThen(save) } }
         ActionMenuRow(Icons.Default.Download, "Save to device") { dismissThen(onSaveToDevice) }
 
@@ -118,14 +117,7 @@ fun PostActionSheet(
         }
 
         ActionMenuDivider()
-        ActionMenuRow(Icons.Default.ContentCopy, "Copy tags") {
-            copyPostTagsWithFeedback(context, post)
-            onDismiss()
-        }
-        ActionMenuRow(Icons.Default.Link, "Copy link") {
-            copyPostUrlWithFeedback(context, post, onPostUrlCopied)
-            onDismiss()
-        }
+        PostMenuRows(post, onDismiss)
 
         onRemoveFromCodex?.let { remove ->
             ActionMenuDivider()
@@ -134,6 +126,28 @@ fun PostActionSheet(
                 label = "Remove from Codex",
                 tint = MaterialTheme.colorScheme.error,
             ) { dismissThen(remove) }
+        }
+    }
+}
+
+@Composable
+private fun PostLikeRow(liked: Boolean, onClick: () -> Unit) {
+    if (liked) {
+        ActionMenuRow(Icons.Default.Favorite, "Unlike", tint = LikedHeartColor, onClick = onClick)
+    } else {
+        ActionMenuRow(Icons.Outlined.FavoriteBorder, "Like", onClick = onClick)
+    }
+}
+
+/** The app-wide [PostMenuActions] for [post], Share first. Each closes the menu. */
+@Composable
+private fun PostMenuRows(post: Post, onDismiss: () -> Unit) {
+    val actions = LocalPostMenuActions.current
+    actions.shareFor(post)?.let { share -> ActionMenuRow(Icons.Default.Share, "Share") { onDismiss(); share() } }
+    actions.availableFor(post).forEach { action ->
+        ActionMenuRow(action.icon, action.label) {
+            onDismiss()
+            action.run()
         }
     }
 }
@@ -206,22 +220,4 @@ internal fun PostThumbnail(post: Post, modifier: Modifier) {
         location?.let { buildViewerImageRequest(context, it, post.id.source, staticAnimatedWebPFrame = true) }
     }
     AsyncImage(request, null, modifier, contentScale = ContentScale.Crop)
-}
-
-private fun copyPostTagsWithFeedback(context: Context, post: Post) {
-    if (!copyPostTagsToClipboard(context, post)) {
-        Toast.makeText(context, "Could not copy tags", Toast.LENGTH_SHORT).show()
-    }
-}
-
-private fun copyPostUrlWithFeedback(
-    context: Context,
-    post: Post,
-    onPostUrlCopied: (Post) -> Unit,
-) {
-    if (copyPostUrlToClipboard(context, post)) {
-        onPostUrlCopied(post)
-    } else {
-        Toast.makeText(context, "No post URL available", Toast.LENGTH_SHORT).show()
-    }
 }
