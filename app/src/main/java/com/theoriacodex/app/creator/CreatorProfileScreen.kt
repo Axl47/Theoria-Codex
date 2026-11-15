@@ -170,9 +170,7 @@ fun CreatorProfileScreen(
             liked = post.id in likedPostIds, onToggleLike = { onToggleLike(post) },
             onSaveToCodex = { onRequestSaveToCodex(post) }, onPostUrlCopied = onPostUrlCopied,
             onShowRelated = { onAction(CreatorAction.ShowRelatedPosts(post)) },
-        ) {
-            PostBoundTagSection(post, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm, onRemoveExcludeTerm)
-        }
+        ) { PostBoundTagSection(post, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm, onRemoveExcludeTerm) }
     }
 }
 

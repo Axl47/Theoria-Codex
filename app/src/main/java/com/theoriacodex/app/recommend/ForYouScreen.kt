@@ -176,9 +176,8 @@ fun ForYouScreen(
         FeedPostActionSheet(
             post, creatorBrowsingSources, { selectedActionPost = null }, onSaveToDevice, onRequestSaveToCodex, onOpenCreatorProfile,
             onOpenLegacyCreatorProfile, onGoToSearch, onPostUrlCopied, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm,
-            onRemoveExcludeTerm, onFavoriteTagLongPress,
+            onRemoveExcludeTerm, onFavoriteTagLongPress, liked = post.id in likedPostIds, onToggleLike = onToggleLike,
             onShowRelated = { onAction(ForYouAction.ShowRelatedPosts(post)) },
-            liked = post.id in likedPostIds, onToggleLike = onToggleLike,
         )
     }
 

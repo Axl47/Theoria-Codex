@@ -148,15 +148,12 @@ internal fun TheoriaAppContent(
     val relatedPostsSupport = remember(shell) { shell.features.relatedPosts::supports }
     val sourceHealth = rememberSourceHealth(shell)
     val savedTags = rememberPostTagSavedTags(shell)
-    val postLinkActions = remember(shell) {
-        PostLinkActions(shell::openOriginalPost, { url -> openInBrowser(shell.appContext, url) }, shell::findOnOtherSites)
-    }
     CompositionLocalProvider(
         LocalCodexPostIds provides rememberCodexPostIds(shell),
         com.theoriacodex.app.search.LocalPostWatchPresentation provides watchPresentation,
         LocalCodexSaveRelevanceLoader provides saveRelevanceLoader,
         LocalViewerReturnTransition provides viewerReturnTransition,
-        LocalPostLinkActions provides postLinkActions,
+        LocalPostLinkActions provides rememberPostLinkActions(shell),
         LocalNetworkOnline provides shell.sources.networkOnline,
         LocalSourceHealth provides sourceHealth,
         com.theoriacodex.app.related.LocalRelatedPostsSupport provides relatedPostsSupport,
@@ -350,6 +347,12 @@ private fun ShellDialogs(shell: TheoriaShell, appShellState: AppShellUiState) {
             onReconnect = { shell.owners.settings.onAction(SettingsAction.ResetCredentialStore) },
         )
     }
+}
+
+/** The shell's ways out of a feed for a post, shared by the Viewer and every feed post menu. */
+@Composable
+private fun rememberPostLinkActions(shell: TheoriaShell): PostLinkActions = remember(shell) {
+    PostLinkActions(shell::openOriginalPost, { url -> openInBrowser(shell.appContext, url) }, shell::findOnOtherSites)
 }
 
 @Composable
