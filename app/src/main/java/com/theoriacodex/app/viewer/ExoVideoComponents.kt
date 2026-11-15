@@ -36,6 +36,7 @@ internal object MediaTraceSections {
     const val VIEWER_PLAYER_RETURN = "TheoriaViewerPlayerReturn"
     const val VIEWER_PLAYER_RELEASE = "TheoriaViewerPlayerRelease"
     const val MEDIA_LOAD = "TheoriaMediaLoad"
+    const val VIEWER_GIF_RENDER = "TheoriaViewerGifRender"
 }
 
 internal object MediaTraceCounters {
