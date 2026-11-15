@@ -36,4 +36,10 @@ class AccountHeaderTextTest {
         assertEquals("1 follower", text(AccountDetails(followerCount = 1)).secondary)
         assertNull(text(AccountDetails(uploadCount = 4)).secondary)
     }
+
+    @Test
+    fun `the landscape line joins both lines`() {
+        assertEquals("Gelbooru · 4 uploads · 1 follower", text(AccountDetails(uploadCount = 4, followerCount = 1)).line)
+        assertEquals("Gelbooru", text(null).line)
+    }
 }
