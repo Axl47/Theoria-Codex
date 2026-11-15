@@ -19,6 +19,8 @@
 - A post you liked, saved or watched on one booru site is recognised when another site shows the same file: its heart is filled, "Hide liked", "Hide saved" and "Hide watched" hide it, and For You stops suggesting it. Unliking that copy removes the like from every site where you liked the file. Your Library still lists only the posts you saved.
 - Save to Codex no longer offers Saved or Likes. Liking a post is how it gets into Likes.
 - Save to Codex uses the width in landscape: search, profile and Create Codex move to a left column, and Codices show in two columns beside them, so many more fit on screen.
+- Save to Codex lists the Codices that already hold the post first, in either sort order.
+- The long-press menu on feeds now has Like, "Open original post", "Find on other sites" and "Open in browser", the same options as the Viewer's Info.
 
 ### Fixed
 
