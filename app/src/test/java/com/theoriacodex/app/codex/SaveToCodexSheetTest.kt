@@ -106,6 +106,29 @@ class SaveToCodexSheetTest {
         org.junit.Assert.assertTrue(top("Art") < top("Moss") && top("Moss") < top("Zoo"))
     }
 
+    @Config(qualifiers = "w411dp-h1000dp")
+    @Test fun `Codices already holding the post come first in either order`() {
+        compose.setContent {
+            MaterialTheme {
+                SaveToCodexSheet(
+                    profiles = listOf(RecommendationProfile("main", "Main")), initialProfileId = "main",
+                    codicesByProfile = mapOf("main" to listOf(
+                        Codex("a", "Art", 0), Codex("m", "Moss", 0), Codex("z", "Zoo", 0),
+                    )),
+                    codexItemCounts = emptyMap(), codexCoverCandidates = emptyMap(),
+                    relevanceScores = mapOf("m" to 0.5),
+                    librarySort = CodexLibrarySort.NAME_ASCENDING,
+                    containingCodexIds = setOf("z"),
+                    onCreateCodex = { _, _ -> }, onSelectCodex = {}, onDismiss = {},
+                )
+            }
+        }
+        fun top(name: String) = compose.onNodeWithText(name).fetchSemanticsNode().boundsInRoot.top
+        org.junit.Assert.assertTrue(top("Zoo") < top("Moss") && top("Moss") < top("Art"))
+        compose.onNodeWithContentDescription("Sort: tag relevance. Switch to library order").performClick()
+        org.junit.Assert.assertTrue(top("Zoo") < top("Art") && top("Art") < top("Moss"))
+    }
+
     @Test fun `Likes is never a save target, in any profile`() {
         val main = "profile-main"
         val other = "alt"
