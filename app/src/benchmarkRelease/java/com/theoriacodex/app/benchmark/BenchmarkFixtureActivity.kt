@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import com.theoriacodex.app.R
 import com.theoriacodex.app.search.SearchResultCard
+import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.mediaDurationKeysByPostId
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
@@ -116,23 +117,16 @@ class BenchmarkFixtureActivity : ComponentActivity() {
     }
 }
 
+/** Runs the duration workload over [posts] when [enabled] and returns its live duration states. */
 @Composable
-private fun BenchmarkSearchFixture(
-    mediaUri: String,
-    durationEnrichmentEnabled: Boolean,
-) {
-    val posts = remember(mediaUri, durationEnrichmentEnabled) {
-        benchmarkPosts(
-            prefix = "benchmark_search",
-            count = SEARCH_POST_COUNT,
-            mediaUri = mediaUri,
-            durationMs = if (durationEnrichmentEnabled) null else BENCHMARK_MEDIA_DURATION_MS,
-        )
-    }
+private fun rememberBenchmarkDurationStates(
+    posts: List<Post>,
+    enabled: Boolean,
+): Map<MediaDurationKey, MediaDurationState> {
     val scope = rememberCoroutineScope()
     val resources = LocalContext.current.resources
-    val workload = remember(mediaUri, durationEnrichmentEnabled) {
-        if (durationEnrichmentEnabled) {
+    val workload = remember(posts, enabled) {
+        if (enabled) {
             BenchmarkDurationWorkload(
                 scope = scope,
                 resources = resources,
@@ -152,7 +146,23 @@ private fun BenchmarkSearchFixture(
             }
         }
     }
-    val durationStates = workload?.states?.collectAsState()?.value.orEmpty()
+    return workload?.states?.collectAsState()?.value.orEmpty()
+}
+
+@Composable
+private fun BenchmarkSearchFixture(
+    mediaUri: String,
+    durationEnrichmentEnabled: Boolean,
+) {
+    val posts = remember(mediaUri, durationEnrichmentEnabled) {
+        benchmarkPosts(
+            prefix = "benchmark_search",
+            count = SEARCH_POST_COUNT,
+            mediaUri = mediaUri,
+            durationMs = if (durationEnrichmentEnabled) null else BENCHMARK_MEDIA_DURATION_MS,
+        )
+    }
+    val durationStates = rememberBenchmarkDurationStates(posts, durationEnrichmentEnabled)
     val durationKeysByPostId = remember(posts) { mediaDurationKeysByPostId(posts) }
     val resolvedCount = posts.count { post ->
         post.durationMs != null ||
