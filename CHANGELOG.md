@@ -20,7 +20,8 @@
 - Save to Codex no longer offers Saved or Likes. Liking a post is how it gets into Likes.
 - Save to Codex uses the width in landscape: search, profile and Create Codex move to a left column, and Codices show in two columns beside them, so many more fit on screen.
 - Save to Codex lists the Codices that already hold the post first, in either sort order.
-- The long-press menu on feeds now has Like, "Open original post", "Find on other sites" and "Open in browser", the same options as the Viewer's Info.
+- The long-press menu on feeds and the Viewer's Info now offer the same actions. Feeds gain Like, Share, "Open original post", "Find on other sites" and "Open in browser"; the Viewer's More menu gains "More like this", "Start over", "Copy tags", "Copy link", and "Remove from Codex" when opened from a Codex.
+- Share opens Android's share sheet with the post's link, in the Viewer and on feeds, instead of copying the link.
 
 ### Fixed
 

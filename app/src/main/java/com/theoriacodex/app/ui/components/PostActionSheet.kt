@@ -2,24 +2,21 @@ package com.theoriacodex.app.ui.components
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
-import android.content.Context
-import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.BookmarkAdded
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sell
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
@@ -35,8 +32,6 @@ import com.theoriacodex.app.codex.LocalCodexPostIds
 import com.theoriacodex.app.codex.PreloadCodexSaveRelevance
 import com.theoriacodex.app.codex.codexSavedColor
 import com.theoriacodex.app.creator.creatorProfileActions
-import com.theoriacodex.app.media.copyPostTagsToClipboard
-import com.theoriacodex.app.media.copyPostUrlToClipboard
 import com.theoriacodex.app.post.displayTitleOrNull
 import com.theoriacodex.app.related.LocalRelatedPostsSupport
 import com.theoriacodex.app.source.SourceIcon
@@ -70,7 +65,6 @@ fun PostActionSheet(
     onOpenLegacyCreatorProfile: (() -> Unit)? = null,
     onGoToSearch: (() -> Unit)? = null,
     onStartOver: (() -> Unit)? = null,
-    onPostUrlCopied: (Post) -> Unit = {},
     onShowRelated: (() -> Unit)? = null,
     tagContent: @Composable () -> Unit,
 ) {
@@ -123,7 +117,7 @@ fun PostActionSheet(
         }
 
         ActionMenuDivider()
-        PostLinkRows(post, onDismiss, onPostUrlCopied)
+        PostMenuRows(post, onDismiss)
 
         onRemoveFromCodex?.let { remove ->
             ActionMenuDivider()
@@ -145,23 +139,16 @@ private fun PostLikeRow(liked: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** The app-wide [PostLinkActions] for [post], then copying its tags or link. Each closes the menu. */
+/** The app-wide [PostMenuActions] for [post], Share first. Each closes the menu. */
 @Composable
-private fun PostLinkRows(post: Post, onDismiss: () -> Unit, onPostUrlCopied: (Post) -> Unit) {
-    val context = LocalContext.current
-    LocalPostLinkActions.current.availableFor(post).forEach { action ->
+private fun PostMenuRows(post: Post, onDismiss: () -> Unit) {
+    val actions = LocalPostMenuActions.current
+    actions.shareFor(post)?.let { share -> ActionMenuRow(Icons.Default.Share, "Share") { onDismiss(); share() } }
+    actions.availableFor(post).forEach { action ->
         ActionMenuRow(action.icon, action.label) {
             onDismiss()
             action.run()
         }
-    }
-    ActionMenuRow(Icons.Default.ContentCopy, "Copy tags") {
-        copyPostTagsWithFeedback(context, post)
-        onDismiss()
-    }
-    ActionMenuRow(Icons.Default.Link, "Copy link") {
-        copyPostUrlWithFeedback(context, post, onPostUrlCopied)
-        onDismiss()
     }
 }
 
@@ -233,22 +220,4 @@ internal fun PostThumbnail(post: Post, modifier: Modifier) {
         location?.let { buildViewerImageRequest(context, it, post.id.source, staticAnimatedWebPFrame = true) }
     }
     AsyncImage(request, null, modifier, contentScale = ContentScale.Crop)
-}
-
-private fun copyPostTagsWithFeedback(context: Context, post: Post) {
-    if (!copyPostTagsToClipboard(context, post)) {
-        Toast.makeText(context, "Could not copy tags", Toast.LENGTH_SHORT).show()
-    }
-}
-
-private fun copyPostUrlWithFeedback(
-    context: Context,
-    post: Post,
-    onPostUrlCopied: (Post) -> Unit,
-) {
-    if (copyPostUrlToClipboard(context, post)) {
-        onPostUrlCopied(post)
-    } else {
-        Toast.makeText(context, "No post URL available", Toast.LENGTH_SHORT).show()
-    }
 }

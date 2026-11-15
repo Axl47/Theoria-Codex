@@ -74,6 +74,7 @@ internal fun ViewerScreen(
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
     onGoToSearch: () -> Unit,
     onOpenCreatorFallback: ((Post) -> Unit)? = null,
+    contextActions: ViewerContextActions = ViewerContextActions(),
     playbackDiagnosticsEnabled: Boolean = com.theoriacodex.app.BuildConfig.BENCHMARK_FIXTURES_ENABLED,
     onIncludeRelatedPosts: () -> Unit = {},
     onDismissRelatedPosts: () -> Unit = {},
@@ -102,7 +103,7 @@ internal fun ViewerScreen(
         videoPositions, creatorBrowsingSources, onAction, saveToCodexQuery, pixivUgoiraClient, tagVideoCountProvider,
         fetchTagVideoCounts, canLoadMoreFromSource, loadingMoreFromSource, invertMultiImageScrollDirection, likedPostIds,
         onRequestMediaRecovery, onVisiblePostChanged, onVisibleMediaChanged, durations,
-        onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, onGoToSearch, onOpenCreatorFallback,
+        onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, onGoToSearch, onOpenCreatorFallback, contextActions,
         playbackDiagnosticsEnabled, onIncludeRelatedPosts, onDismissRelatedPosts, onRetryRelatedPosts, comments,
     )
 }
@@ -141,6 +142,7 @@ private fun ViewerLoadedScreen(
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)?,
     onGoToSearch: () -> Unit,
     onOpenCreatorFallback: ((Post) -> Unit)?,
+    contextActions: ViewerContextActions,
     playbackDiagnosticsEnabled: Boolean,
     onIncludeRelatedPosts: () -> Unit,
     onDismissRelatedPosts: () -> Unit,
@@ -203,8 +205,8 @@ private fun ViewerLoadedScreen(
         ViewerInfoSheet(
             selection, controls, creatorBrowsingSources, saveToCodexQuery, tagVideoCountProvider, fetchTagVideoCounts, onAction,
             onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, onGoToSearch, onOpenCreatorFallback,
-            liked = selection.post.id in likedPostIds,
-            comments = comments,
+            contextActions = contextActions,
+            liked = selection.post.id in likedPostIds, comments = comments,
         )
     }
 }

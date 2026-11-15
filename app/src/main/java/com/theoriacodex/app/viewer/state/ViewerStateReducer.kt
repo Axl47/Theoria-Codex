@@ -136,9 +136,6 @@ internal fun reduceViewerState(state: ViewerUiState, action: ViewerAction): View
         ViewerAction.Save -> state.currentPageEffect { page, _ ->
             ViewerEffect.SavePost(session = session, postId = page.post.id)
         }
-        ViewerAction.Share -> state.currentPageEffect { page, media ->
-            ViewerEffect.ShareMedia(session = session, postId = page.post.id, mediaKey = media.key)
-        }
         ViewerAction.Download -> state.currentPageEffect { page, media ->
             ViewerEffect.DownloadMedia(session = session, postId = page.post.id, mediaKey = media.key)
         }

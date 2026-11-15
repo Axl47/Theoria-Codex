@@ -14,6 +14,7 @@ import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -94,6 +95,11 @@ internal class CodexCommandViewModel(
         val postIds = posts.mapTo(mutableSetOf(), Post::id)
         val selected = items.filter { it.postId in postIds }
         if (selected.isNotEmpty()) submit(CodexCommand.Remove(id, selected, posts.toList()))
+    }
+
+    /** Removes [post] from Codex [id] for a surface that shows the post without the Codex's items, such as the Viewer. */
+    fun removePost(id: String, post: Post) {
+        scope.launch { remove(id, repository.observeCodexItems(id).first(), listOf(post)) }
     }
 
     fun acknowledge(id: Long, performAction: Boolean) {

@@ -61,10 +61,27 @@ class ViewerRouteRestorationUiTest {
             compose.onNodeWithContentDescription("More actions").performClick()
             compose.onNodeWithText("Info").performClick()
             compose.onNodeWithContentDescription("More post actions").performClick()
+            compose.onNodeWithText("Remove from Codex").assertDoesNotExist()
             compose.onNodeWithText("Go to Search").performClick()
             compose.runOnIdle { assertEquals(true, wentToSearch) }
             assertExitingPresentation()
         }
+    }
+
+    @Test fun `Info removes the post from the stored Codex the Viewer was opened from`() {
+        var removed: Pair<String, String>? = null
+        withRoute(
+            launchSession = session.copy(context = session.context.copy(queryHash = "codex:collection", streamSource = ViewerStreamSource.CODEX)),
+            onRemoveFromCodex = { codexId, removedPost -> removed = codexId to removedPost.id.sourcePostId },
+        ) {
+            compose.onNodeWithContentDescription("More actions").performClick()
+            compose.onNodeWithText("Info").performClick()
+            compose.onNodeWithContentDescription("More post actions").performClick()
+            compose.onNodeWithText("Remove from Codex").performClick()
+            compose.runOnIdle { assertEquals("collection" to post.id.sourcePostId, removed) }
+        }
+        fun codexContext(id: String) = ViewerLaunchContext("codex:$id", 0, ViewerStreamSource.CODEX, 0)
+        listOf("system:saved", "system:followed", "system:saved-searches").forEach { id -> assertNull(codexContext(id).removableCodexId()) }
     }
 
     @Test fun `shell-owned Creator exit clears owner without showing restoration UI`() {
@@ -149,6 +166,7 @@ class ViewerRouteRestorationUiTest {
         onDismiss: suspend () -> Unit = {},
         onOwner: (ViewerRouteOwnerHandle?) -> Unit = {},
         onGoToSearch: () -> Unit = {},
+        onRemoveFromCodex: (String, com.theoriacodex.domain.model.Post) -> Unit = { _, _ -> },
         verify: () -> Unit,
     ) {
         val retention = ViewerSessionRetentionViewModel()
@@ -173,7 +191,7 @@ class ViewerRouteRestorationUiTest {
                         renderConfig = ViewerRouteRenderConfig(creatorBrowsingSources = emptySet()),
                         liveSourceState = ViewerRouteLiveSourceState(),
                         effectCallbacks = ViewerRouteEffectCallbacks(
-                            onSavePost = { _, _ -> }, onSharePost = {}, onDownloadMedia = {}, onToggleLike = {},
+                            onSavePost = { _, _ -> }, onDownloadMedia = {}, onToggleLike = {},
                             onOpenCreatorProfile = {}, onApplyTag = { _, _, _ -> },
                             onRecoverMedia = { _, _, _ -> null }, onLoadMore = {},
                             onDismiss = onDismiss, onRestorationUnavailable = {},
@@ -181,6 +199,7 @@ class ViewerRouteRestorationUiTest {
                         screenCallbacks = ViewerRouteScreenCallbacks(
                             onOwnerChanged = onOwner, onRemoveIncludeTerm = { _, _ -> },
                             onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = onGoToSearch,
+                            onRemoveFromCodex = onRemoveFromCodex,
                         ),
                     )
                 }

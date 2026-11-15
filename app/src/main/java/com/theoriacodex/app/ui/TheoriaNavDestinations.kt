@@ -55,7 +55,6 @@ import com.theoriacodex.app.ui.routes.ViewerRouteLiveSourceSnapshot
 import com.theoriacodex.app.ui.routes.ViewerRouteLiveSourceState
 import com.theoriacodex.app.ui.routes.ViewerRouteRenderConfig
 import com.theoriacodex.app.ui.routes.ViewerRouteScreenCallbacks
-import com.theoriacodex.app.ui.routes.shareViewerPostMessage
 import com.theoriacodex.app.ui.routes.virtualCodexUi
 import com.theoriacodex.app.viewer.ViewerRelatedBinding
 import com.theoriacodex.app.viewer.ViewerReturnLifetime
@@ -211,7 +210,6 @@ private fun CodexDetailContent(
             shell.transfers.downloads.submitPosts(listOf(post), originLabel = "Codex · ${state.codex?.name ?: "Collection"}")
             shell.transfers.showDownloads = true
         },
-        onPostUrlCopied = { shell.recordPostUrlCopy() },
         onOpenCreatorProfile = shell::launchOpenCreator,
         onOpenLegacyCreatorProfile = shell::launchOpenCreator,
         onAddIncludeTerm = routes.addSearchIncludeTerm,
@@ -278,7 +276,6 @@ private fun CreatorDestination(shell: TheoriaShell) {
                 onToggleLike = { post -> shell.creatorLikeAction()(post) },
                 onRequestSaveToCodex = { post -> shell.requestSaveToCodex(post) },
                 onSaveToDevice = shell::requestSaveToDevice,
-                onPostUrlCopied = { shell.recordPostUrlCopy() },
                 onOpenUrl = { url -> openInBrowser(shell.appContext, url) },
                 onAddIncludeTerm = routes.addSearchIncludeTerm,
                 onAddExcludeTerm = routes.addSearchExcludeTerm,
@@ -395,9 +392,6 @@ private fun viewerEffectCallbacks(shell: TheoriaShell) = ViewerRouteEffectCallba
                 ?.takeIf { it.context.queryHash == context.queryHash }?.saveQuery,
         )
     },
-    onSharePost = { post ->
-        shareViewerPostMessage(shell.appContext, post) { shell.recordPostUrlCopy() }?.let { message -> shell.toast(message) }
-    },
     onDownloadMedia = { request ->
         if (request == null) {
             shell.snackbarHostState.showSnackbar("Media is still loading.")
@@ -430,8 +424,10 @@ private fun viewerEffectCallbacks(shell: TheoriaShell) = ViewerRouteEffectCallba
 )
 
 private fun viewerScreenCallbacks(shell: TheoriaShell) = ViewerRouteScreenCallbacks(
-    onDismissRelatedPosts = shell.viewerRouteWorkflow::dismissRelatedPosts,
-    onRetryRelatedPosts = shell.viewerRouteWorkflow::retryRelatedPosts,
+    onDismissRelatedPosts = shell.viewerRouteWorkflow.relatedShelves::dismiss,
+    onRetryRelatedPosts = shell.viewerRouteWorkflow.relatedShelves::retry,
+    onShowRelatedPosts = shell.viewerRouteWorkflow.relatedShelves::show,
+    onRemoveFromCodex = shell.owners.codexCommands::removePost,
     onPlaybackModeSelected = { shell.owners.settings.onAction(SettingsAction.SetViewerPlaybackMode(it)) },
     onCommentOrderSelected = { shell.owners.settings.onAction(SettingsAction.SetCommentOrder(it)) },
     onOwnerChanged = { owner -> shell.activeViewerOwner = owner },

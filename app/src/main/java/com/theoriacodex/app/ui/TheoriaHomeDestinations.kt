@@ -106,7 +106,6 @@ private fun SearchDestination(shell: TheoriaShell) {
                     shell.requestSaveToCodex(post, searchQuery = routes.searchOwner?.currentState()?.query?.applied)
                 },
                 onSaveToDevice = shell::requestSaveToDevice,
-                onPostUrlCopied = { shell.recordPostUrlCopy() },
                 onAddFavoriteTag = shell.addFavoriteTags,
                 onRemoveFavoriteTag = shell.removeFavoriteTags,
                 onRenameFavoriteTag = shell.renameFavoriteTags,
@@ -180,7 +179,6 @@ private fun ForYouDestination(shell: TheoriaShell) {
                 onToggleLike = { post -> shell.forYouLikeAction()(post) },
                 onRequestSaveToCodex = { post -> shell.requestSaveToCodex(post, fromForYou = true) },
                 onSaveToDevice = shell::requestSaveToDevice,
-                onPostUrlCopied = { shell.recordPostUrlCopy() },
                 onOpenCreatorProfile = shell::launchOpenCreator,
                 onOpenLegacyCreatorProfile = shell::launchOpenCreator,
                 onAddIncludeTerm = routes.addSearchIncludeTerm,
@@ -306,7 +304,6 @@ private fun RecentsDestination(shell: TheoriaShell) {
             },
             onRequestSaveToCodex = { post -> shell.requestSaveToCodex(post) },
             onSaveToDevice = shell::requestSaveToDevice,
-            onPostUrlCopied = { shell.recordPostUrlCopy() },
             onOpenCreatorProfile = shell::launchOpenCreator,
             onOpenLegacyCreatorProfile = shell::launchOpenCreator,
             onAddIncludeTerm = routes.addSearchIncludeTerm,

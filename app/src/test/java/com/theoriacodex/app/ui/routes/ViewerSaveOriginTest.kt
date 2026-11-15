@@ -60,7 +60,7 @@ class ViewerSaveOriginTest {
                         renderConfig = ViewerRouteRenderConfig(creatorBrowsingSources = emptySet()),
                         liveSourceState = ViewerRouteLiveSourceState(),
                         effectCallbacks = ViewerRouteEffectCallbacks(
-                            onSavePost = { _, _ -> }, onSharePost = {}, onDownloadMedia = {},
+                            onSavePost = { _, _ -> }, onDownloadMedia = {},
                             onToggleLike = { error("Originating feed action must handle this Like") },
                             onOpenCreatorProfile = {}, onApplyTag = { _, _, _ -> },
                             onRecoverMedia = { _, _, _ -> null }, onLoadMore = {},
@@ -118,7 +118,7 @@ class ViewerSaveOriginTest {
                             onSavePost = { _, origin ->
                                 savedContext = origin
                                 savedQuery = owner?.session?.value?.saveQuery
-                            }, onSharePost = {},
+                            },
                             onDownloadMedia = {}, onToggleLike = {}, onOpenCreatorProfile = {},
                             onApplyTag = { _, _, _ -> }, onRecoverMedia = { _, _, _ -> null },
                             onLoadMore = {}, onDismiss = {}, onRestorationUnavailable = {},

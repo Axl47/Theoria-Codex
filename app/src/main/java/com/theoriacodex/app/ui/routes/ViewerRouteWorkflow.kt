@@ -3,14 +3,15 @@ package com.theoriacodex.app.ui.routes
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.statistics.statisticsCodexId
 import com.theoriacodex.app.statistics.statisticsPostKey
-import android.content.Context
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.di.SourceDependencies
-import com.theoriacodex.app.media.copyPostUrlToClipboard
 import com.theoriacodex.app.media.recoverRemoteMedia
+import com.theoriacodex.app.creator.state.CreatorAction
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.statistics.statisticsTagsForPost
+import com.theoriacodex.app.codex.SAVED_CODEX_ID
+import com.theoriacodex.app.codex.isVirtualCodex
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.ViewerPostResolver
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
@@ -119,19 +120,7 @@ internal class ViewerRouteWorkflow(
         return recovered
     }
 
-    fun dismissRelatedPosts(source: ViewerStreamSource) = updateRelatedPosts(source, retry = false)
-
-    fun retryRelatedPosts(source: ViewerStreamSource) = updateRelatedPosts(source, retry = true)
-
-    private fun updateRelatedPosts(source: ViewerStreamSource, retry: Boolean) {
-        when (source) {
-            ViewerStreamSource.SEARCH -> searchOwner()?.dispatch(if (retry) SearchAction.RetryRelatedPosts else SearchAction.DismissRelatedPosts)
-            ViewerStreamSource.FOR_YOU -> forYouOwner()?.dispatch(if (retry) ForYouAction.RetryRelatedPosts else ForYouAction.DismissRelatedPosts)
-            ViewerStreamSource.CREATOR_PROFILE -> creatorOwner()?.dispatch(if (retry)
-                com.theoriacodex.app.creator.state.CreatorAction.RetryRelatedPosts else com.theoriacodex.app.creator.state.CreatorAction.DismissRelatedPosts)
-            else -> Unit
-        }
-    }
+    val relatedShelves = ViewerRelatedShelves(searchOwner, forYouOwner, creatorOwner)
 
     fun loadMore(streamSource: ViewerStreamSource) {
         when (streamSource) {
@@ -326,12 +315,40 @@ internal fun recentPostSectionForViewer(context: ViewerLaunchContext?): RecentPo
     return context?.recentsSection ?: RecentPostSection.fromOrigin(origin)
 }
 
-internal fun shareViewerPostMessage(
-    context: Context,
-    post: Post?,
-    onPostUrlCopied: () -> Unit = {},
-): String? {
-    val copied = post?.let { copyPostUrlToClipboard(context, it) } == true
-    if (copied) onPostUrlCopied()
-    return if (copied) null else "No post URL available"
+/**
+ * The related shelf of the feed a Viewer session came from, which the Viewer shows as its strip. Only the feeds in
+ * [SOURCES] keep one; for any other source each call does nothing.
+ */
+internal class ViewerRelatedShelves(
+    private val searchOwner: () -> SearchRouteOwnerHandle?,
+    private val forYouOwner: () -> ForYouRouteOwnerHandle?,
+    private val creatorOwner: () -> CreatorRouteOwnerHandle?,
+) {
+    /** "More like this" from the Viewer. */
+    fun show(source: ViewerStreamSource, post: Post) =
+        dispatch(source, SearchAction.ShowRelatedPosts(post), ForYouAction.ShowRelatedPosts(post), CreatorAction.ShowRelatedPosts(post))
+
+    fun dismiss(source: ViewerStreamSource) =
+        dispatch(source, SearchAction.DismissRelatedPosts, ForYouAction.DismissRelatedPosts, CreatorAction.DismissRelatedPosts)
+
+    fun retry(source: ViewerStreamSource) =
+        dispatch(source, SearchAction.RetryRelatedPosts, ForYouAction.RetryRelatedPosts, CreatorAction.RetryRelatedPosts)
+
+    private fun dispatch(source: ViewerStreamSource, search: SearchAction, forYou: ForYouAction, creator: CreatorAction) {
+        when (source) {
+            ViewerStreamSource.SEARCH -> searchOwner()?.dispatch(search)
+            ViewerStreamSource.FOR_YOU -> forYouOwner()?.dispatch(forYou)
+            ViewerStreamSource.CREATOR_PROFILE -> creatorOwner()?.dispatch(creator)
+            else -> Unit
+        }
+    }
+
+    companion object {
+        val SOURCES = setOf(ViewerStreamSource.SEARCH, ViewerStreamSource.FOR_YOU, ViewerStreamSource.CREATOR_PROFILE)
+    }
+}
+
+/** The Codex a Viewer session was opened from, when its posts can be removed from it: not a feed, nor a virtual Codex. */
+internal fun ViewerLaunchContext.removableCodexId(): String? = queryHash.removePrefix("codex:").takeIf { id ->
+    streamSource == ViewerStreamSource.CODEX && id != queryHash && id != SAVED_CODEX_ID && !isVirtualCodex(id)
 }

@@ -54,8 +54,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.theoriacodex.app.R
-import com.theoriacodex.app.ui.components.LocalPostLinkActions
-import com.theoriacodex.app.ui.components.PostLinkActions
+import com.theoriacodex.app.ui.components.LocalPostMenuActions
+import com.theoriacodex.app.ui.components.PostMenuActions
+import com.theoriacodex.app.ui.components.sharePostLink
+import com.theoriacodex.app.media.copyPostTagsToClipboard
+import com.theoriacodex.app.media.copyTextToClipboard
 import com.theoriacodex.app.appshell.AppShellUiState
 import com.theoriacodex.app.appshell.AppShellViewModel
 import com.theoriacodex.app.appshell.StartupUpdateChoice
@@ -153,7 +156,7 @@ internal fun TheoriaAppContent(
         com.theoriacodex.app.search.LocalPostWatchPresentation provides watchPresentation,
         LocalCodexSaveRelevanceLoader provides saveRelevanceLoader,
         LocalViewerReturnTransition provides viewerReturnTransition,
-        LocalPostLinkActions provides rememberPostLinkActions(shell),
+        LocalPostMenuActions provides rememberPostMenuActions(shell),
         LocalNetworkOnline provides shell.sources.networkOnline,
         LocalSourceHealth provides sourceHealth,
         com.theoriacodex.app.related.LocalRelatedPostsSupport provides relatedPostsSupport,
@@ -349,10 +352,17 @@ private fun ShellDialogs(shell: TheoriaShell, appShellState: AppShellUiState) {
     }
 }
 
-/** The shell's ways out of a feed for a post, shared by the Viewer and every feed post menu. */
+/** The shell's post actions that work the same everywhere, shared by the Viewer and every feed post menu. */
 @Composable
-private fun rememberPostLinkActions(shell: TheoriaShell): PostLinkActions = remember(shell) {
-    PostLinkActions(shell::openOriginalPost, { url -> openInBrowser(shell.appContext, url) }, shell::findOnOtherSites)
+private fun rememberPostMenuActions(shell: TheoriaShell): PostMenuActions = remember(shell) {
+    PostMenuActions(
+        shell::openOriginalPost, { url -> openInBrowser(shell.appContext, url) }, shell::findOnOtherSites,
+        share = { url -> sharePostLink(shell.appContext, url) },
+        copyTags = { post -> if (!copyPostTagsToClipboard(shell.appContext, post)) shell.toast("Could not copy tags") },
+        copyLink = { url ->
+            if (copyTextToClipboard(shell.appContext, "post_url", url)) shell.recordPostUrlCopy() else shell.toast("Could not copy the link")
+        },
+    )
 }
 
 @Composable

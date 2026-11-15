@@ -12,6 +12,8 @@ import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.app.creator.state.CreatorEffect
 import com.theoriacodex.app.creator.state.CreatorFailureReason
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.app.ui.routes.CreatorRouteOwnerHandle
+import com.theoriacodex.app.ui.routes.ViewerRelatedShelves
 import com.theoriacodex.domain.model.AccountFeed
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
@@ -227,6 +229,26 @@ class CreatorProfileViewModelTest {
         owner.onAction(CreatorAction.RelatedLikeCommitted(sibling, LikeToggleOutcome.UNLIKED))
         assertEquals(RelatedPostsUiState.Idle, owner.state.value.relatedPosts)
         assertEquals(1, engine.visits.size)
+    }
+
+    @Test
+    fun `the Viewer opens and dismisses the creator feed's related shelf, and ignores feeds without one`() = runTest {
+        val seed = testPost(sourcePostId = "seed")
+        val engine = FakeCreatorRouteEngine().apply { openResults = listOf(seed) }
+        val owner = CreatorProfileViewModel(engine, SavedStateHandle(), this, CreatorRelatedLoader { listOf(testPost(sourcePostId = "similar")) })
+        owner.onAction(CreatorAction.OpenCreator(creator(SourceKey.PIXIV, "creator")))
+        advanceUntilIdle()
+        val shelves = ViewerRelatedShelves({ null }, { null }, { CreatorRouteOwnerHandle(owner) })
+
+        listOf(ViewerStreamSource.SEARCH, ViewerStreamSource.FOR_YOU, ViewerStreamSource.CODEX).forEach { shelves.show(it, seed) }
+        advanceUntilIdle()
+        assertEquals(RelatedPostsUiState.Idle, owner.state.value.relatedPosts)
+        shelves.show(ViewerStreamSource.CREATOR_PROFILE, seed)
+        advanceUntilIdle()
+        assertEquals(listOf("similar"), owner.state.value.relatedPosts.loadedPosts.map { it.id.sourcePostId })
+        shelves.retry(ViewerStreamSource.CREATOR_PROFILE)
+        shelves.dismiss(ViewerStreamSource.CREATOR_PROFILE)
+        assertEquals(RelatedPostsUiState.Idle, owner.state.value.relatedPosts)
     }
 
     @Test

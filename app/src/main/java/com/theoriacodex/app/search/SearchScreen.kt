@@ -103,7 +103,6 @@ fun SearchScreen(
     onOpenLegacyCreatorProfile: (Post) -> Unit,
     onRequestSaveToCodex: (Post) -> Unit,
     onSaveToDevice: (Post) -> Unit,
-    onPostUrlCopied: (Post) -> Unit = {},
     onOpenSourceAccounts: () -> Unit = {},
     onAddFavoriteTag: (SourceKey, List<String>, String?) -> Unit = { _, _, _ -> },
     onRemoveFavoriteTag: (SourceKey, List<String>) -> Unit = { _, _ -> },
@@ -157,7 +156,7 @@ fun SearchScreen(
     actionPost.post?.let { post ->
         SearchPostSheet(
             post, actionPost, state, creatorBrowsingSources, tagVideoCountProvider, fetchTagVideoCounts, onAction, onSaveToDevice,
-            onRequestSaveToCodex, onOpenCreatorProfile, onOpenLegacyCreatorProfile, onPostUrlCopied, onAddFavoriteTag, applyDraft,
+            onRequestSaveToCodex, onOpenCreatorProfile, onOpenLegacyCreatorProfile, onAddFavoriteTag, applyDraft,
             liked = post.id in likedPostIds, onToggleLike = onToggleLike,
         )
     }
@@ -379,7 +378,6 @@ private fun SearchPostSheet(
     onRequestSaveToCodex: (Post) -> Unit,
     onOpenCreatorProfile: (CreatorProfile) -> Unit,
     onOpenLegacyCreatorProfile: (Post) -> Unit,
-    onPostUrlCopied: (Post) -> Unit,
     onAddFavoriteTag: (SourceKey, List<String>, String?) -> Unit,
     applyDraft: () -> Unit,
     liked: Boolean,
@@ -396,7 +394,6 @@ private fun SearchPostSheet(
         saveToCodexQuery = state.query.applied,
         onOpenCreatorProfile = onOpenCreatorProfile,
         onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
-        onPostUrlCopied = onPostUrlCopied,
         onShowRelated = { onAction(SearchAction.ShowRelatedPosts(post)) },
         tagContent = {
             PostTagActionSection(

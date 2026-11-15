@@ -79,6 +79,22 @@ class CodexRemovalWorkflowTest {
         assertEquals(2, restores)
     }
 
+    @Test fun `removing one post looks up its Codex membership and can be undone`() = runTest {
+        val stored = InMemoryCodexRepository()
+        val codex = stored.createCodex("Saved")
+        val removed = testPost(sourcePostId = "removed")
+        val kept = testPost(sourcePostId = "kept")
+        val original = listOf(removed, kept).mapIndexed { index, post -> CodexItem(codex.codexId, post.id, 100L + index) }
+        stored.restoreItems(original, listOf(removed, kept))
+        val owner = CodexCommandViewModel(stored, { null }, {}, {}, CodexCleaningService(InMemoryCodexLikesTransactions(stored)), this)
+        owner.removePost(codex.codexId, removed)
+        runCurrent()
+        assertEquals(listOf(original.last()), stored.observeCodexItems(codex.codexId).first())
+        owner.acknowledge(owner.feedback.value.single().id, true)
+        runCurrent()
+        assertEquals(original, stored.observeCodexItems(codex.codexId).first().sortedBy { it.savedAtEpochMs })
+    }
+
     @Test
     fun `suspended rename and its completion survive a cancelled UI collector`() = runTest {
         val stored = InMemoryCodexRepository()

@@ -112,7 +112,6 @@ internal fun CodexDetailScreen(
     onAddPostsToAnotherCodex: (List<Post>) -> Unit,
     onRemovePosts: (List<Post>) -> Unit,
     onSavePostToDevice: (Post) -> Unit,
-    onPostUrlCopied: (Post) -> Unit = {},
     onOpenCreatorProfile: (CreatorProfile) -> Unit,
     onOpenLegacyCreatorProfile: (Post) -> Unit,
     tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
@@ -184,7 +183,7 @@ internal fun CodexDetailScreen(
     selectedActionPost?.let { post ->
         FeedPostActionSheet(
             post, creatorBrowsingSources, { selectedActionPost = null }, onSavePostToDevice, { onAddPostsToAnotherCodex(listOf(it)) },
-            onOpenCreatorProfile, onOpenLegacyCreatorProfile, onGoToSearch, onPostUrlCopied, onAddIncludeTerm, onAddExcludeTerm,
+            onOpenCreatorProfile, onOpenLegacyCreatorProfile, onGoToSearch, onAddIncludeTerm, onAddExcludeTerm,
             onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, tagVideoCountProvider, fetchTagVideoCounts,
             saveToCodexLabel = "Add to another Codex",
             onRemoveFromCodex = if (customHeader == null) ({ onRemovePosts(listOf(post)) }) else null,

@@ -24,6 +24,12 @@ import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.BookmarkAdded
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Replay
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.runtime.Immutable
+import com.theoriacodex.app.related.LocalRelatedPostsSupport
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -68,9 +74,10 @@ import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.tags.LocalPostTagSearchActions
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.ui.components.HeaderLink
-import com.theoriacodex.app.ui.components.LocalPostLinkActions
+import com.theoriacodex.app.ui.components.LocalPostMenuActions
 import com.theoriacodex.app.ui.components.PostActionHeader
-import com.theoriacodex.app.ui.components.PostLinkAction
+import com.theoriacodex.app.ui.components.PostMenuAction
+import com.theoriacodex.app.ui.components.shareFor
 import com.theoriacodex.app.ui.components.availableFor
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.viewer.state.ViewerAction
@@ -326,6 +333,7 @@ internal fun ViewerInfoSheet(
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)?,
     onGoToSearch: () -> Unit,
     onOpenCreatorFallback: ((Post) -> Unit)?,
+    contextActions: ViewerContextActions = ViewerContextActions(),
     liked: Boolean = false,
     comments: ViewerComments = ViewerComments.None,
 ) {
@@ -345,7 +353,7 @@ internal fun ViewerInfoSheet(
         PostTagActionSection(
             header = {
                 ViewerInfoActions(
-                    selection, liked, controls, creatorBrowsingSources, onAction, onGoToSearch, onOpenCreatorFallback,
+                    selection, liked, controls, creatorBrowsingSources, onAction, onGoToSearch, onOpenCreatorFallback, contextActions,
                 )
             },
             post = post,
@@ -386,9 +394,17 @@ internal fun ViewerInfoSheet(
     }
 }
 
+/** Post actions that depend on where the Viewer was opened from; each is null where that place has none. */
+@Immutable
+internal class ViewerContextActions(
+    val showRelated: ((Post) -> Unit)? = null,
+    val removeFromCodex: ((Post) -> Unit)? = null,
+)
+
 /**
  * Identifies the post, links its creator, and offers a compact action row, so its tags stay near the
- * top of the sheet. Liking stays in the sheet; the other actions close it.
+ * top of the sheet. The row's More menu holds the rest of the feed post menu's actions. Liking stays
+ * in the sheet; the other actions close it.
  */
 @Composable
 private fun ViewerInfoActions(
@@ -399,6 +415,7 @@ private fun ViewerInfoActions(
     onAction: (ViewerAction) -> Unit,
     onGoToSearch: () -> Unit,
     onOpenCreatorFallback: ((Post) -> Unit)?,
+    contextActions: ViewerContextActions,
 ) {
     val post = selection.post
     val creators = if (onOpenCreatorFallback != null) creatorProfileActions(post, creatorBrowsingSources) else emptyList()
@@ -406,15 +423,27 @@ private fun ViewerInfoActions(
         action()
         controls.setInfoSheetVisible(false)
     }
-    fun openCreator(creator: CreatorProfileAction) = closeThen {
+    fun openCreator(creator: CreatorProfileAction) {
         controls.setPlaybackEnabled(false)
         creator.profile?.let { onAction(ViewerAction.OpenCreator(it)) } ?: onOpenCreatorFallback?.invoke(post)
+    }
+    val menuActions = LocalPostMenuActions.current
+    val share = menuActions.shareFor(post)
+    val relatedSupported = LocalRelatedPostsSupport.current(post.id.source)
+    val moreActions = buildList {
+        contextActions.showRelated?.takeIf { relatedSupported }?.let { show ->
+            add(PostMenuAction("More like this", Icons.Default.AutoAwesome) { show(post) })
+        }
+        creators.drop(1).forEach { creator -> add(PostMenuAction(creator.label, Icons.Default.Person) { openCreator(creator) }) }
+        if (selection.mediaIndex > 0) add(PostMenuAction("Start over", Icons.Default.Replay) { controls.jumpToMedia(post.id, 0) })
+        add(PostMenuAction("Go to Search", Icons.Default.Search) { controls.setPlaybackEnabled(false); onGoToSearch() })
+        addAll(menuActions.availableFor(post))
     }
     Column {
         PostActionHeader(
             post,
             showPostId = true,
-            creator = creators.firstOrNull()?.let { creator -> HeaderLink(creator.label) { openCreator(creator) } },
+            creator = creators.firstOrNull()?.let { creator -> HeaderLink(creator.label) { closeThen { openCreator(creator) } } },
         )
         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), Arrangement.SpaceEvenly) {
             ViewerLikeAction(liked) { onAction(ViewerAction.ToggleLike) }
@@ -422,14 +451,8 @@ private fun ViewerInfoActions(
             ViewerInfoAction(Icons.Default.Download, "Device", "Save to device", selection.canDownload) {
                 closeThen { onAction(ViewerAction.Download) }
             }
-            ViewerInfoAction(Icons.Default.Share, "Share", "Share") { closeThen { onAction(ViewerAction.Share) } }
-            ViewerInfoMoreActions(
-                otherCreators = creators.drop(1),
-                onOpenCreator = ::openCreator,
-                onGoToSearch = { closeThen { controls.setPlaybackEnabled(false); onGoToSearch() } },
-                linkActions = LocalPostLinkActions.current.availableFor(post),
-                onLinkAction = { action -> closeThen(action.run) },
-            )
+            ViewerInfoAction(Icons.Default.Share, "Share", "Share", enabled = share != null) { share?.let(::closeThen) }
+            ViewerInfoMoreActions(moreActions, contextActions.removeFromCodex?.let { remove -> { remove(post) } }, ::closeThen)
         }
         HorizontalDivider()
     }
@@ -455,24 +478,22 @@ private fun ViewerCodexAction(inCodex: Boolean, onClick: () -> Unit) {
     }
 }
 
+/** The feed post menu's remaining actions, with Remove from Codex last and marked as destructive. */
 @Composable
-private fun ViewerInfoMoreActions(
-    otherCreators: List<CreatorProfileAction>,
-    onOpenCreator: (CreatorProfileAction) -> Unit,
-    onGoToSearch: () -> Unit,
-    linkActions: List<PostLinkAction>,
-    onLinkAction: (PostLinkAction) -> Unit,
-) {
+private fun ViewerInfoMoreActions(actions: List<PostMenuAction>, removeFromCodex: (() -> Unit)?, closeThen: (() -> Unit) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
         ViewerInfoAction(Icons.Default.MoreHoriz, "More", "More post actions") { expanded = true }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            otherCreators.forEach { creator ->
-                DropdownMenuItem(text = { Text(creator.label) }, onClick = { onOpenCreator(creator) })
+            actions.forEach { action ->
+                DropdownMenuItem(text = { Text(action.label) }, onClick = { closeThen(action.run) })
             }
-            DropdownMenuItem(text = { Text("Go to Search") }, onClick = onGoToSearch)
-            linkActions.forEach { action ->
-                DropdownMenuItem(text = { Text(action.label) }, onClick = { onLinkAction(action) })
+            removeFromCodex?.let { remove ->
+                HorizontalDivider()
+                DropdownMenuItem(
+                    text = { Text("Remove from Codex", color = MaterialTheme.colorScheme.error) },
+                    onClick = { closeThen(remove) },
+                )
             }
         }
     }

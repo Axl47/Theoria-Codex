@@ -44,6 +44,7 @@ import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.ViewerMediaPrefetcher
 import com.theoriacodex.app.viewer.ViewerPostResolver
+import com.theoriacodex.app.viewer.ViewerContextActions
 import com.theoriacodex.app.viewer.ViewerScreen
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.ViewerRestorationRequest
@@ -170,7 +171,6 @@ internal data class ViewerDownloadRequest(
 /** Side effects emitted by the immutable Viewer reducer and hosted by the destination. */
 internal data class ViewerRouteEffectCallbacks(
     val onSavePost: (Post, ViewerLaunchContext) -> Unit,
-    val onSharePost: (Post?) -> Unit,
     val onDownloadMedia: suspend (ViewerDownloadRequest?) -> Unit,
     val onToggleLike: suspend (Post) -> Unit,
     val onOpenCreatorProfile: suspend (CreatorProfile) -> Unit,
@@ -195,6 +195,8 @@ internal data class ViewerRouteScreenCallbacks(
     val onGoToSearch: () -> Unit,
     val onDismissRelatedPosts: (ViewerStreamSource) -> Unit = {},
     val onRetryRelatedPosts: (ViewerStreamSource) -> Unit = {},
+    val onShowRelatedPosts: (ViewerStreamSource, Post) -> Unit = { _, _ -> },
+    val onRemoveFromCodex: (codexId: String, Post) -> Unit = { _, _ -> },
     val onOpenCreatorFallback: ((Post) -> Unit)? = null,
 )
 
@@ -436,6 +438,21 @@ private fun ViewerRouteRenderer(
             latestScreenCallbacks.value.onGoToSearch()
         },
         onOpenCreatorFallback = screenCallbacks.onOpenCreatorFallback,
+        contextActions = rememberViewerContextActions(related.source, activeSession?.context, latestScreenCallbacks),
+    )
+}
+
+@Composable
+private fun rememberViewerContextActions(
+    relatedSource: ViewerStreamSource?,
+    launch: ViewerLaunchContext?,
+    callbacks: State<ViewerRouteScreenCallbacks>,
+) = remember(relatedSource, launch, callbacks) {
+    ViewerContextActions(
+        showRelated = relatedSource?.takeIf { it in ViewerRelatedShelves.SOURCES }?.let { source ->
+            { post -> callbacks.value.onShowRelatedPosts(source, post) }
+        },
+        removeFromCodex = launch?.removableCodexId()?.let { id -> { post -> callbacks.value.onRemoveFromCodex(id, post) } },
     )
 }
 
@@ -564,7 +581,6 @@ private suspend fun handleViewerEffect(
         is ViewerEffect.SavePost -> post(effect.postId)?.let { selected ->
             viewerOwner.session.value?.context?.let { context -> callbacks.onSavePost(selected, context) }
         }
-        is ViewerEffect.ShareMedia -> callbacks.onSharePost(post(effect.postId))
         is ViewerEffect.DownloadMedia -> callbacks.onDownloadMedia(viewerDownloadRequest(effect, currentState))
         is ViewerEffect.SetLiked -> post(effect.postId)?.let { selected ->
             val launchAction = viewerOwner.session.value?.onToggleLike
