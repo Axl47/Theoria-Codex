@@ -1,5 +1,6 @@
 package com.theoriacodex.app.codex
 
+import kotlin.coroutines.EmptyCoroutineContext
 import androidx.lifecycle.ViewModelStore
 import com.theoriacodex.app.related.LikeToggleOutcome
 import com.theoriacodex.app.related.RelatedPostsLoading
@@ -234,7 +235,9 @@ class FollowedCodexViewModelTest {
         val adapter = object : SourceAdapter by TestAdapter(SourceKey.PIXIV), CreatorPostsSourceAdapter {
             override suspend fun searchCreatorPosts(creator: CreatorProfile, pageToken: String?) = fetch(creator, pageToken)
         }
-        return FollowedCodexViewModel(TestRegistry(listOf(adapter)), cache, relatedLoader)
+        return FollowedCodexViewModel(
+            TestRegistry(listOf(adapter)), cache, relatedLoader, providerContext = EmptyCoroutineContext,
+        )
     }
 
     private class TrackingCacheRepository : CacheRepository {

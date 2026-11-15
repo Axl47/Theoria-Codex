@@ -35,7 +35,7 @@ class UnifiedSearchOrchestratorTest {
     fun `prepared continuation retains client side exclusions`() = runTest {
         val adapter = FakeAdapter(SourceKey.PIXIV, supportedCapabilities().copy(supportsExcludeTagsServerSide = false),
             listOf(post(SourceKey.PIXIV, "allowed"), post(SourceKey.PIXIV, "blocked", listOf("blocked"))))
-        val orchestrator = UnifiedSearchOrchestrator(mapOf(adapter.sourceKey to adapter))
+        val orchestrator = testOrchestrator(mapOf(adapter.sourceKey to adapter))
         val query = sampleQuery().copy(excludeTerms = listOf(SearchTerm("blocked")))
         val initial = orchestrator.search(query, setOf(adapter.sourceKey), emptyMap(), emptyMap())
         val continued = orchestrator.search(query, setOf(adapter.sourceKey), emptyMap(), emptyMap(), initial.queriesBySource)
@@ -53,7 +53,7 @@ class UnifiedSearchOrchestratorTest {
             excludeTerms = listOf(SearchTerm("comic")),
         )
 
-        UnifiedSearchOrchestrator(mapOf(capped.sourceKey to capped, unlimited.sourceKey to unlimited))
+        testOrchestrator(mapOf(capped.sourceKey to capped, unlimited.sourceKey to unlimited))
             .search(query, setOf(capped.sourceKey, unlimited.sourceKey), emptyMap(), emptyMap())
 
         assertEquals(listOf("landscape", "sky"), capped.lastSearchQuery?.includeTags)
@@ -72,7 +72,7 @@ class UnifiedSearchOrchestratorTest {
                 return Page(emptyList(), null)
             }
         }
-        val result = UnifiedSearchOrchestrator(mapOf(fast.sourceKey to fast, slow.sourceKey to slow), 500L)
+        val result = testOrchestrator(mapOf(fast.sourceKey to fast, slow.sourceKey to slow), 500L)
             .search(sampleQuery(), setOf(fast.sourceKey, slow.sourceKey), emptyMap(), emptyMap())
         assertEquals(500L, currentTime)
         assertTrue(cancelled)
@@ -84,7 +84,7 @@ class UnifiedSearchOrchestratorTest {
     fun `query preparation overlaps other providers and retains the prepared continuation query`() = runTest {
         val pixiv = FakeAdapter(SourceKey.PIXIV, supportedCapabilities(), emptyList())
         val gelbooru = FakeAdapter(SourceKey.GELBOORU, supportedCapabilities(), emptyList())
-        val result = UnifiedSearchOrchestrator(mapOf(pixiv.sourceKey to pixiv, gelbooru.sourceKey to gelbooru))
+        val result = testOrchestrator(mapOf(pixiv.sourceKey to pixiv, gelbooru.sourceKey to gelbooru))
             .search(sampleQuery(), setOf(gelbooru.sourceKey, pixiv.sourceKey), emptyMap(), emptyMap(),
                 prepareQuery = { source, query ->
                     if (source == SourceKey.GELBOORU) {
@@ -109,7 +109,7 @@ class UnifiedSearchOrchestratorTest {
             }
         }
         val query = sampleQuery().withIncludeTermGroups(listOf(SearchTermGroup(listOf("a", "b", "c").map(::SearchTerm))))
-        val result = UnifiedSearchOrchestrator(mapOf(adapter.sourceKey to adapter)).searchSource(adapter, query, null)
+        val result = testOrchestrator(mapOf(adapter.sourceKey to adapter)).searchSource(adapter, query, null)
         assertEquals(2, peak)
         assertEquals(200L, currentTime)
         assertEquals(listOf("a", "b", "c"), result.items.map { it.id.sourcePostId })
@@ -124,7 +124,7 @@ class UnifiedSearchOrchestratorTest {
             listOf(SearchTermGroup.single(required), SearchTermGroup(listOf(cat, dog))),
         )
         val adapter = BranchingAdapter()
-        val orchestrator = UnifiedSearchOrchestrator(mapOf(SourceKey.PIXIV to adapter))
+        val orchestrator = testOrchestrator(mapOf(SourceKey.PIXIV to adapter))
 
         val first = orchestrator.searchSource(adapter, query, null)
         val second = orchestrator.searchSource(adapter, query, first.nextPageToken)
@@ -150,7 +150,7 @@ class UnifiedSearchOrchestratorTest {
             dateRange = null,
             minScore = null,
         )
-        val orchestrator = UnifiedSearchOrchestrator(
+        val orchestrator = testOrchestrator(
             adaptersBySource = mapOf(
                 SourceKey.PIXIV to FakeAdapter(
                     sourceKey = SourceKey.PIXIV,
@@ -198,7 +198,7 @@ class UnifiedSearchOrchestratorTest {
 
     @Test
     fun `interleaves successful sources with weights`() = runTest {
-        val orchestrator = UnifiedSearchOrchestrator(
+        val orchestrator = testOrchestrator(
             adaptersBySource = mapOf(
                 SourceKey.PIXIV to FakeAdapter(
                     sourceKey = SourceKey.PIXIV,
@@ -229,7 +229,7 @@ class UnifiedSearchOrchestratorTest {
 
     @Test
     fun `explicit zero weight is not replaced by an equal share`() = runTest {
-        val orchestrator = UnifiedSearchOrchestrator(
+        val orchestrator = testOrchestrator(
             adaptersBySource = mapOf(
                 SourceKey.PIXIV to FakeAdapter(
                     sourceKey = SourceKey.PIXIV,
@@ -269,7 +269,7 @@ class UnifiedSearchOrchestratorTest {
             capabilities = supportedCapabilities(),
             posts = listOf(post(SourceKey.GELBOORU, "g1")),
         )
-        val orchestrator = UnifiedSearchOrchestrator(
+        val orchestrator = testOrchestrator(
             adaptersBySource = mapOf(
                 SourceKey.PIXIV to pixivAdapter,
                 SourceKey.GELBOORU to gelbooruAdapter,
@@ -297,7 +297,7 @@ class UnifiedSearchOrchestratorTest {
             capabilities = supportedCapabilities(),
             posts = listOf(post(SourceKey.GELBOORU, "g1")),
         )
-        val orchestrator = UnifiedSearchOrchestrator(
+        val orchestrator = testOrchestrator(
             adaptersBySource = mapOf(SourceKey.GELBOORU to adapter),
         )
         val query = Query(
@@ -346,7 +346,7 @@ class UnifiedSearchOrchestratorTest {
                 post(SourceKey.PIXIV, "p2", tags = listOf("landscape", "nsfw")),
             ),
         )
-        val orchestrator = UnifiedSearchOrchestrator(
+        val orchestrator = testOrchestrator(
             adaptersBySource = mapOf(SourceKey.PIXIV to pixivAdapter)
         )
         val query = Query(
@@ -373,7 +373,7 @@ class UnifiedSearchOrchestratorTest {
 
     @Test
     fun `propagates typed source failure reason`() = runTest {
-        val orchestrator = UnifiedSearchOrchestrator(
+        val orchestrator = testOrchestrator(
             adaptersBySource = mapOf(
                 SourceKey.PIXIV to FakeAdapter(
                     sourceKey = SourceKey.PIXIV,
@@ -402,7 +402,7 @@ class UnifiedSearchOrchestratorTest {
     @Test
     fun `propagates source cancellation instead of publishing a failed source`() = runTest {
         val expected = CancellationException("search superseded")
-        val orchestrator = UnifiedSearchOrchestrator(
+        val orchestrator = testOrchestrator(
             adaptersBySource = mapOf(
                 SourceKey.PIXIV to FakeAdapter(
                     sourceKey = SourceKey.PIXIV,
@@ -431,7 +431,7 @@ class UnifiedSearchOrchestratorTest {
     @Test
     fun `a file two sources host appears once, from the source interleaved first`() = runTest {
         val mirrored = "0123456789abcdef0123456789abcdef"
-        val orchestrator = UnifiedSearchOrchestrator(
+        val orchestrator = testOrchestrator(
             mapOf(
                 SourceKey.DANBOORU to FakeAdapter(
                     SourceKey.DANBOORU, supportedCapabilities(),
@@ -454,7 +454,7 @@ class UnifiedSearchOrchestratorTest {
     @Test
     fun `a date search keeps the copy of a file that is in range`() = runTest {
         val mirrored = "0123456789abcdef0123456789abcdef"
-        val orchestrator = UnifiedSearchOrchestrator(
+        val orchestrator = testOrchestrator(
             mapOf(
                 SourceKey.DANBOORU to FakeAdapter(
                     SourceKey.DANBOORU, supportedCapabilities(),
@@ -478,7 +478,7 @@ class UnifiedSearchOrchestratorTest {
     @Test
     fun `a slow source's copy of a file already shown is left out`() = runTest {
         val mirrored = "0123456789abcdef0123456789abcdef"
-        val orchestrator = UnifiedSearchOrchestrator(
+        val orchestrator = testOrchestrator(
             mapOf(
                 SourceKey.DANBOORU to FakeAdapter(
                     SourceKey.DANBOORU, supportedCapabilities(),
@@ -501,7 +501,7 @@ class UnifiedSearchOrchestratorTest {
 
     @Test
     fun `a slow source never holds back results and only appends below them`() = runTest {
-        val orchestrator = UnifiedSearchOrchestrator(
+        val orchestrator = testOrchestrator(
             mapOf(
                 SourceKey.PIXIV to FakeAdapter(SourceKey.PIXIV, supportedCapabilities(), listOf(post(SourceKey.PIXIV, "fast"))),
                 SourceKey.GELBOORU to FakeAdapter(
@@ -523,7 +523,7 @@ class UnifiedSearchOrchestratorTest {
 
     @Test
     fun `sources answering together are interleaved without a partial publication`() = runTest {
-        val orchestrator = UnifiedSearchOrchestrator(
+        val orchestrator = testOrchestrator(
             mapOf(
                 SourceKey.PIXIV to FakeAdapter(SourceKey.PIXIV, supportedCapabilities(), listOf(post(SourceKey.PIXIV, "a"))),
                 SourceKey.GELBOORU to FakeAdapter(
@@ -543,7 +543,7 @@ class UnifiedSearchOrchestratorTest {
 
     @Test
     fun `a source failing late keeps the published results and reports its failure`() = runTest {
-        val orchestrator = UnifiedSearchOrchestrator(
+        val orchestrator = testOrchestrator(
             mapOf(
                 SourceKey.PIXIV to FakeAdapter(SourceKey.PIXIV, supportedCapabilities(), listOf(post(SourceKey.PIXIV, "kept"))),
                 SourceKey.GELBOORU to FakeAdapter(

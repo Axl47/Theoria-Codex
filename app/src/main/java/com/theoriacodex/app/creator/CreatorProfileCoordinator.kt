@@ -13,6 +13,9 @@ import com.theoriacodex.domain.model.AccountFeed
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** Stateless provider boundary. The route owns admission, continuation, and request lifetime. */
@@ -35,6 +38,8 @@ class CreatorProfileCoordinator(
     /** Shared with the Viewer, so a card and the Viewer asking for one post at once fetch it once. */
     private val postResolutions: PostResolutionFlights = PostResolutionFlights(),
     private val fileMirrors: FileMirrorIndex = FileMirrorIndex(),
+    /** Account and creator pages are fetched and parsed here, off the main thread. Tests pass [kotlin.coroutines.EmptyCoroutineContext]. */
+    private val providerContext: CoroutineContext = Dispatchers.Default,
 ) : CreatorRouteEngine {
     override fun supports(creator: CreatorProfile): Boolean = accountAdapterFor(creator) != null || adapterFor(creator) != null
 
@@ -43,7 +48,7 @@ class CreatorProfileCoordinator(
 
     override suspend fun accountDetails(creator: CreatorProfile): AccountDetails? {
         val adapter = accountAdapterFor(creator) ?: return null
-        return withTimeoutOrNull(SOURCE_TIMEOUT_MS) { adapter.accountDetails(creator) }
+        return withTimeoutOrNull(SOURCE_TIMEOUT_MS) { withContext(providerContext) { adapter.accountDetails(creator) } }
     }
 
     /** An account's feeds, uploads included, come from its account adapter; any other creator is an uploads search. */
@@ -54,7 +59,9 @@ class CreatorProfileCoordinator(
             "Creator browsing is not available for ${creator.source.displayName()}."
         }
         return withTimeoutOrNull(SOURCE_TIMEOUT_MS) {
-            account?.accountPosts(creator, feed, pageToken) ?: search?.searchCreatorPosts(creator, pageToken)
+            withContext(providerContext) {
+                account?.accountPosts(creator, feed, pageToken) ?: search?.searchCreatorPosts(creator, pageToken)
+            }
         }?.also { page -> fileMirrors.learn(page.items) }
             ?: error(if (feed == AccountFeed.FAVORITES) "Favorites timed out. Try again." else "Creator uploads timed out. Try again.")
     }
