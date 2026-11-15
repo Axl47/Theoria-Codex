@@ -149,7 +149,7 @@ internal fun CodexDetailScreen(
     val supportsLanguage = remember(sourceOptions) { supportsCodexLanguageFilter(sourceOptions.toSet()) }
     val supportsFullColor = remember(sourceOptions) { supportsCodexFullColorFilter(sourceOptions.toSet()) }
     val filters = remember(fabRestoreState) { fabRestoreState.savedCollectionFilters() }
-    val feed = rememberCodexDetailFeed(posts, filters, fabRestoreState, durationStates, resolveUnknownAnimatedDurations, related, likedPostIds)
+    val feed = rememberCodexDetailFeed(posts, filters, fabRestoreState, durationStates, resolveUnknownAnimatedDurations, related, likedPostIds, sortMode)
     val applyFilters = { updated: CodexCollectionFilters -> onFabRestoreStateChange(fabRestoreState.withCollectionFilters(updated)) }
     CodexFilterReconciliationEffect(filters, sourceOptions, supportsLanguage, supportsFullColor, applyFilters)
     val resolveAllDurations = feed.durationFilterActive || sortMode.usesDuration
@@ -307,6 +307,7 @@ private fun rememberCodexDetailFeed(
     resolveUnknownAnimatedDurations: Boolean,
     relatedShelf: RelatedShelfBinding?,
     likedPostIds: Set<PostId>,
+    sortMode: CodexSortMode,
 ): CodexDetailFeed {
     val durationMinBucket = fabRestoreState.durationMinBucket
     val durationMaxBucket = fabRestoreState.durationMaxBucket
@@ -317,7 +318,8 @@ private fun rememberCodexDetailFeed(
     val durationFilterActive = !animatedDurationRange.isFullRange
     val durationMetadata = rememberDurationFilterMetadata(posts, durationStates, durationFilterActive, retainKey = "codex-detail")
     val acquiredDurations = durationMetadata.knownDurationMsByPostId
-    val presentedPosts = durationMetadata.presentedPosts ?: posts
+    // The filter's reveal keeps shown cards in place, which a length sort must not do as lengths arrive.
+    val presentedPosts = durationMetadata.presentedPosts?.takeUnless { sortMode.usesDuration } ?: posts
     val visiblePosts = remember(presentedPosts, filters, unknownDurationPolicy, acquiredDurations) {
         filterCodexCollectionPosts(presentedPosts, filters, unknownDurationPolicy, knownDurationMsByPostId = acquiredDurations)
     }
