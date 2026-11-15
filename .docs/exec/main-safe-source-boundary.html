@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Make every source call safe from the main thread</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f7f4; --surface: #ffffff; --text: #202124; --muted: #5f6368; --border: #d7d7d0;
+      --accent: #0f766e; --accent-soft: #dff3ef; --risk: #9a3412; --risk-soft: #ffedd5; --code: #111827;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #151716; --surface: #202321; --text: #f0f2ef; --muted: #b8beb7; --border: #3a403c;
+        --accent: #5eead4; --accent-soft: #123b37; --risk: #fdba74; --risk-soft: #43230f; --code: #0b0f0d;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+    header, main { max-width: 1180px; margin: 0 auto; padding: 24px; }
+    header { padding-top: 36px; }
+    h1, h2, h3 { line-height: 1.15; margin: 0 0 12px; }
+    h1 { font-size: clamp(2rem, 4vw, 3.25rem); }
+    h2 { margin-top: 36px; font-size: 1.55rem; }
+    h3 { margin-top: 24px; font-size: 1.1rem; }
+    p { margin: 0 0 14px; }
+    li { margin-bottom: 6px; }
+    a { color: var(--accent); }
+    nav { position: sticky; top: 0; z-index: 10; border-block: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(10px); }
+    nav ul { display: flex; gap: 6px; max-width: 1180px; margin: 0 auto; padding: 8px 24px; list-style: none; overflow-x: auto; }
+    nav li { margin: 0; }
+    nav a { display: block; padding: 6px 10px; border-radius: 6px; text-decoration: none; white-space: nowrap; }
+    nav a:hover { background: var(--accent-soft); }
+    section { padding: 22px; margin: 18px 0; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+    section > h2:first-child { margin-top: 0; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.95rem; }
+    th, td { padding: 9px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-weight: 650; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }
+    pre { overflow-x: auto; padding: 14px; border-radius: 8px; background: var(--code); color: #f8fafc; }
+    details { margin: 12px 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: color-mix(in srgb, var(--surface) 88%, var(--bg)); }
+    summary { cursor: pointer; font-weight: 700; }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; color: var(--muted); }
+    .pill { padding: 4px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); }
+    .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin: 18px 0 0; }
+    .card { padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+    .card strong { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.82rem; letter-spacing: 0.02em; text-transform: uppercase; }
+    .callout { margin: 14px 0; padding: 12px 14px; border-left: 4px solid var(--accent); background: var(--accent-soft); border-radius: 6px; }
+    .risk { border-left-color: var(--risk); background: var(--risk-soft); }
+    .status-table td:first-child { width: 180px; color: var(--muted); font-weight: 650; }
+    @media print { nav { position: static; } section, .card { break-inside: avoid; } body { background: #fff; color: #000; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ExecPlan: Make every source call safe from the main thread</h1>
+    <p>After this plan, any screen can call any provider source from the main thread and no parsing or other source work will run there. The guarantee lives in the source layer itself, so a new screen or a new source cannot reintroduce the problem, and the dispatcher switches that individual screens added over time to protect themselves are removed.</p>
+    <div class="meta" aria-label="Plan metadata">
+      <span class="pill">Status: Proposed, in review</span>
+      <span class="pill">Owner: Claude (orchestrator)</span>
+      <span class="pill">Created: 2026-11-15</span>
+      <span class="pill">Updated: 2026-11-15</span>
+      <span class="pill">Plan file: .docs/exec/main-safe-source-boundary.html</span>
+      <span class="pill">Audit item: B1</span>
+    </div>
+    <div class="dashboard">
+      <div class="card"><strong>Next Action</strong>Two review rounds, then Phase 0 (convert one adapter and measure the effect on its tests).</div>
+      <div class="card"><strong>Main Risk</strong>Removing a caller's dispatcher switch that was also covering the caller's own computation, which would move that computation onto the main thread. Each removal is judged individually and checked with the tooling from the observability plan.</div>
+      <div class="card"><strong>Validation</strong>A contract test that calls every capability of every adapter from a stand-in main thread; the parsing benchmark gate; a logcat-silent tour on the emulator.</div>
+      <div class="card"><strong>Affected Areas</strong>All adapters in <code>core-sources</code>, its HTTP client, and about eight callers in <code>app</code>.</div>
+    </div>
+  </header>
+
+  <nav aria-label="Plan sections">
+    <ul>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#context">Context</a></li>
+      <li><a href="#design">Design</a></li>
+      <li><a href="#phases">Phases</a></li>
+      <li><a href="#work-plan">Work Plan</a></li>
+      <li><a href="#validation">Validation</a></li>
+      <li><a href="#living-log">Living Log</a></li>
+      <li><a href="#recovery">Recovery</a></li>
+      <li><a href="#appendix">Appendix</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <section id="purpose">
+      <h2>Purpose / Big Picture</h2>
+      <p>The <strong>main thread</strong> builds and lays out the screen. Work that is not drawing, such as turning a provider's response into posts, delays frames when it runs there. In Kotlin, a <code>suspend</code> function is expected to be <strong>main-safe</strong>: callable from the main thread without blocking it, because the function itself moves its heavy work to a background thread.</p>
+      <p>The source adapters do not meet that expectation. They wait for the HTTP response without blocking, but then continue on whatever thread called them and parse there. Whether parsing happens off the main thread is therefore decided by each caller. For You, related posts, comments, tag counts and the Viewer wrap their calls in a background dispatcher. Search, Followed Codex and Creator profiles did not, which was audit finding A1.</p>
+      <p>A1 fixed those three callers. This plan removes the cause: adapters become main-safe at their entry points, a test proves it for every capability of every adapter, and a runtime check reports any source request that starts on the main thread. A developer can then write <code>adapter.search(...)</code> from a ViewModel and get the right behaviour without knowing any of this.</p>
+    </section>
+
+    <section id="context">
+      <h2>Context And Orientation</h2>
+      <ul>
+        <li><strong>Source adapter</strong>: one class per provider in <code>core-sources</code>. Every adapter implements <code>SourceAdapter</code> and any of ten optional <strong>capability interfaces</strong> (creator posts, comments, related posts, tag counts and so on), all declared in <code>core-domain/src/main/kotlin/com/theoriacodex/domain/adapter/SourceAdapter.kt</code>. Together they declare about 25 suspend functions.</li>
+        <li><strong>Registry</strong>: <code>SourceAdapterRegistry.adapterFor(sourceKey)</code> returns the adapter object. Callers find capabilities by type test, for example <code>registry.adapterFor(source) as? CommentsSourceAdapter</code> (24 such tests in 13 files under <code>app/src/main</code>).</li>
+        <li><strong>Dispatcher</strong>: the coroutine setting that decides which thread pool runs a piece of code. <code>Dispatchers.Default</code> is the background pool for computation.</li>
+        <li><strong>Custom Sites</strong>: user-added sources served by family adapters in <code>core-sources/.../custom/Families.kt</code>. The repository's cross-source parity rule requires them to get the same treatment.</li>
+      </ul>
+      <table>
+        <thead><tr><th>File or module</th><th>Role in this plan</th></tr></thead>
+        <tbody>
+          <tr><td><code>core-sources/src/main/kotlin/com/theoriacodex/sources/</code>: <code>danbooru/DanbooruSourceAdapter.kt</code>, <code>gelbooru/GelbooruSourceAdapter.kt</code>, <code>pixiv/PixivSourceAdapter.kt</code>, <code>nhentai/NhentaiSourceAdapter.kt</code>, <code>hitomi/HitomiSourceAdapter.kt</code>, <code>iwara/IwaraSourceAdapter.kt</code>, <code>rule34/AbstractRule34KvsVideoSourceAdapter.kt</code>, <code>rule34/Rule34PahealSourceAdapter.kt</code>, <code>rule34/Rule34GenSourceAdapter.kt</code>, <code>custom/Families.kt</code></td><td>The adapters. Together about 80 <code>override suspend fun</code> entry points. None switches dispatcher today; the only dispatcher uses in the module are Hitomi's <code>NonCancellable</code> blocks and two IO scopes.</td></tr>
+          <tr><td><code>core-sources/.../http/OkHttpCalls.kt</code> (:27), <code>http/DefaultSourceHttpClient.kt</code> (:205)</td><td>The HTTP path. The body is read on OkHttp's thread and returned as text or bytes; the adapter parses after the call returns.</td></tr>
+          <tr><td><code>core-sources/.../common/SourceAdapterCommon.kt</code></td><td>Shared adapter helpers; the new wrapper belongs here.</td></tr>
+          <tr><td><code>core-domain/.../orchestration/UnifiedSearchOrchestrator.kt</code></td><td>Runs a search across several adapters and merges the pages. A1 added a background switch here. It stays, because merging is the orchestrator's own work.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/</code>: <code>ui/routes/ViewerRouteWorkflow.kt</code> (<code>providerDispatcher</code>, four uses), <code>related/RelatedPostsLoader.kt</code>, <code>comments/CommentsLoader.kt</code>, <code>search/TagCountCoordinator.kt</code>, <code>search/SearchTermCountCoordinator.kt</code>, <code>search/SearchSuggestionRefresher.kt</code>, <code>codex/LiveCodexFeed.kt</code>, <code>creator/CreatorProfileViewModel.kt</code></td><td>Callers that switch dispatcher around adapter calls today (the last two since A1). Candidates for removal.</td></tr>
+          <tr><td><code>app/.../recommend/ForYouCoordinator.kt</code></td><td>Also switches dispatcher, but around its own ranking work as well. Not a removal candidate.</td></tr>
+        </tbody>
+      </table>
+      <div class="callout"><strong>Depends on.</strong> Audit finding A1 (merged first) and phases 1 and 2 of the observability plan (<code>.docs/exec/main-thread-observability.html</code>), which provide <code>OffMainWork.note(label)</code> and the benchmark scenario that passes through a real parser.</div>
+    </section>
+
+    <section id="design">
+      <h2>Design</h2>
+      <h3>One wrapper at every adapter entry point</h3>
+      <p>A single helper in <code>SourceAdapterCommon.kt</code>:</p>
+      <pre><code>/** Runs source work off the main thread. Every public suspend entry point of an adapter starts with this. */
+internal suspend fun &lt;T&gt; sourceCall(block: suspend CoroutineScope.() -&gt; T): T =
+    if (coroutineContext[ContinuationInterceptor] is MainCoroutineDispatcher) withContext(Dispatchers.Default, block)
+    else coroutineScope(block)</code></pre>
+      <p>Each <code>override suspend fun</code> in an adapter becomes <code>= sourceCall { … }</code>. Called from the main thread, the body moves to the background pool and the result is delivered back to the caller. Called from a background or test dispatcher, it runs in place, so existing callers pay nothing and adapter tests keep their virtual time. <code>MainCoroutineDispatcher</code> is part of the coroutines core library, so the plain Kotlin module can test for it without Android classes. Entry points that only build a value from their arguments (no request, no parsing) may stay unwrapped with a one-line comment saying so.</p>
+      <p>Phase 0 checks this choice against the conventional alternative, an unconditional <code>withContext(dispatcher)</code> with the dispatcher injected into each adapter. The conventional form is stricter but adds a constructor parameter to every adapter and makes delays inside adapters real in tests.</p>
+
+      <h3>A contract test instead of a convention</h3>
+      <p>A convention across 80 functions will be forgotten. A test in <code>core-sources</code> builds every adapter with a fake HTTP client and calls each capability function from a single-thread dispatcher that extends <code>MainCoroutineDispatcher</code> and so stands in for the main thread. The fake client fails the test if it is reached on that thread and otherwise throws a marker exception, which the test treats as success. No real responses are needed. The call table has one row per interface function (about 25) and applies to every adapter that implements the interface, so a new adapter is covered by adding it to the adapter list.</p>
+
+      <h3>A runtime check at the one place all sources pass through</h3>
+      <p><code>DefaultSourceHttpClient</code> calls <code>OffMainWork.note("source-http")</code> where a request starts. After this plan, a source request that starts on the main thread means an entry point is missing its wrapper, or something outside the adapters (a sign-in flow, for example) is using the client from the main thread and will parse there too. Either is reported once with a stack and fails the benchmark gate on exercised paths.</p>
+
+      <h3>Remove the per-caller switches that only protected adapter calls</h3>
+      <p>For each candidate in the table above: if the block inside <code>withContext(...)</code> contains only adapter calls, remove the switch and the constructor parameter that fed it. If it also does the caller's own computation, leave it and write why in the Decision Log.</p>
+
+      <h3>Alternatives considered and rejected</h3>
+      <table>
+        <thead><tr><th>Alternative</th><th>Why not</th></tr></thead>
+        <tbody>
+          <tr><td>Parse inside the HTTP read callback, which already runs on OkHttp's thread.</td><td>Every request site in every adapter would have to move its parsing and post-processing into a lambda, a larger rewrite than wrapping entry points, and it would run CPU work on OkHttp's dispatcher threads.</td></tr>
+          <tr><td>Have the registry return wrapping objects.</td><td>Callers find capabilities with <code>as?</code>. A wrapper that does not implement the same interfaces makes those tests return null and features disappear silently. Avoiding that needs either one decorator per capability plus a new accessor at all 24 call sites, or a reflection proxy, which is fragile under R8 and with default interface methods.</td></tr>
+          <tr><td>Keep the rule in callers and add a lint check.</td><td>This is the current state plus policing. It keeps the knowledge in the wrong layer.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="phases">
+      <h2>Phases</h2>
+      <article>
+        <h3>Phase 0: Convert one adapter</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Decide between the main-only switch and the injected dispatcher on evidence.</td></tr>
+          <tr><td>Edits</td><td>Add <code>sourceCall</code>; wrap the entry points of <code>DanbooruSourceAdapter</code>; write the contract test for that adapter only.</td></tr>
+          <tr><td>Commands</td><td><code>./gradlew :core-sources:test --offline</code>, noting the task time before and after.</td></tr>
+          <tr><td>Promote if</td><td>The contract test fails without the wrapper and passes with it, no existing test needs changes, and module test time does not grow by more than a few seconds. Otherwise switch to the injected dispatcher and record why.</td></tr>
+        </tbody></table>
+      </article>
+      <article>
+        <h3>Phase 1: All adapters and the full contract test</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Every capability of every adapter, Custom Sites families included, is main-safe and proven so.</td></tr>
+          <tr><td>Acceptance</td><td>The contract test lists every adapter class in <code>core-sources</code> and passes. Removing the wrapper from any one entry point that makes a request makes it fail.</td></tr>
+        </tbody></table>
+      </article>
+      <article>
+        <h3>Phase 2: Runtime check at the HTTP client</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>A source request that starts on the main thread is reported.</td></tr>
+          <tr><td>Acceptance</td><td>On the emulator's acceptance build, <code>adb -s emulator-5554 logcat -s TheoriaThreads</code> stays silent during the tour in Validation. Any line that does appear from outside the adapters is recorded as a finding and fixed in this phase only if the fix is the same wrapper.</td></tr>
+        </tbody></table>
+      </article>
+      <article>
+        <h3>Phase 3: Remove redundant caller switches</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Callers no longer carry dispatcher plumbing whose only purpose was protecting adapter calls.</td></tr>
+          <tr><td>Acceptance</td><td>Host tests pass. The parsing benchmark still reports zero violations. Main-thread time for a search page on the emulator is no worse than the A1 result recorded in <code>/Users/axel/.cache/theoria-thread-audit/results/A1.json</code>.</td></tr>
+        </tbody></table>
+      </article>
+    </section>
+
+    <section id="work-plan">
+      <h2>Work Plan</h2>
+      <ol>
+        <li>Add <code>sourceCall</code> to <code>core-sources/.../common/SourceAdapterCommon.kt</code> with the comment shown above.</li>
+        <li>Add <code>core-sources/src/test/kotlin/com/theoriacodex/sources/AdapterMainSafetyContractTest.kt</code>: the stand-in main dispatcher, the fake <code>SourceHttpClient</code>, the adapter list, and the call table keyed by capability interface. Reuse the argument builders the existing adapter tests already have.</li>
+        <li>Wrap entry points adapter by adapter, one commit per group: Danbooru and Gelbooru; the three Rule34 adapters and their abstract base; Pixiv; Nhentai; Hitomi; Iwara; Custom Sites families. In each, wrap the public <code>override suspend fun</code> only; private helpers stay as they are. Where one entry point calls another on the same adapter the inner wrapper runs in place, so nesting is harmless.</li>
+        <li>Hitomi's caches use <code>withContext(NonCancellable)</code> and their own IO scope. Leave them; the wrapper goes around the adapter entry points that reach them.</li>
+        <li>Add <code>OffMainWork.note("source-http")</code> at the start of the request path in <code>core-sources/.../http/DefaultSourceHttpClient.kt</code>. Keep the <code>source-parse</code> markers that the observability plan added to the parse helpers.</li>
+        <li>For each caller in the Context table, read the <code>withContext</code> block. Remove the switch and its dispatcher parameter when the block is only adapter calls; update the caller's tests if they passed a test dispatcher for that parameter. Record each decision.</li>
+        <li>Update the class comment on <code>SourceAdapter</code> in <code>core-domain</code> to state the contract: every suspend function is safe to call from the main thread.</li>
+      </ol>
+      <p>Not touched: <code>UnifiedSearchOrchestrator</code>'s own switch, <code>ForYouCoordinator</code>'s ranking, the registries, the capability <code>as?</code> pattern, and the data layer (Room repositories already move their work off the main thread and Room's blocking calls assert against it).</p>
+    </section>
+
+    <section id="validation">
+      <h2>Validation And Acceptance</h2>
+      <p>Commands run from the repository root. Robolectric tests need Java 21 or newer (see <code>AGENTS.md</code>).</p>
+      <table>
+        <thead><tr><th>Check</th><th>Command or action</th><th>Expected result</th></tr></thead>
+        <tbody>
+          <tr><td>Contract test</td><td><code>./gradlew :core-sources:test --tests '*AdapterMainSafetyContractTest*' --offline</code></td><td>Passes for every adapter. Fails when one wrapper is removed (try one, then restore it).</td></tr>
+          <tr><td>All host tests</td><td><code>./gradlew :core-domain:test :core-sources:test :app-logic:test :app:testDebugUnitTest --offline</code></td><td>Pass.</td></tr>
+          <tr><td>Pre-PR check</td><td><code>scripts/check.sh --record</code></td><td>Passes.</td></tr>
+          <tr><td>Benchmark gate</td><td><code>searchProviderParsePaging</code> from the observability plan, on <code>emulator-5554</code> with verified APKs.</td><td>Zero <code>OffMainViolation</code> sections after Phase 3.</td></tr>
+          <tr><td>Tour</td><td>Acceptance APK (verified with <code>scripts/verify_device_apk.py</code>) on the emulator. Visit Search and load three pages, open a Creator profile, open Followed, open a post and its related posts and comments, type in the search box to trigger suggestions and tag counts. Drive by accessibility text; no screenshots where provider media shows.</td><td><code>logcat -s TheoriaThreads</code> prints nothing. Each screen loads content as before.</td></tr>
+          <tr><td>No regression</td><td>Repeat the A1 trace scenario with the shared script in <code>/Users/axel/.cache/theoria-thread-audit/tools/</code>, five runs.</td><td>Main-thread time per search page within run-to-run spread of the A1 "after" numbers.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="living-log">
+      <h2>Living Log</h2>
+      <h3>Progress</h3>
+      <ul>
+        <li>[x] 2026-11-15 - Plan drafted from the threading audit (B1).</li>
+        <li>[ ] Review round 1 (Opus high, GPT-6.1 Sol adversarial) merged.</li>
+        <li>[ ] Review round 2 merged.</li>
+        <li>[ ] Phase 0 prototype and decision.</li>
+        <li>[ ] Phase 1 adapters converted, contract test complete.</li>
+        <li>[ ] Phase 2 runtime check.</li>
+        <li>[ ] Phase 3 caller switches removed.</li>
+      </ul>
+      <h3>Surprises And Discoveries</h3>
+      <ul>
+        <li>Observation: three adapters keep private parse helpers outside the shared ones (Nhentai, Hitomi) and nine files parse HTML rather than JSON. Evidence: <code>NhentaiSourceAdapter.kt:615</code>, <code>HitomiProtocol.kt:142</code>, Jsoup users under <code>gelbooru/</code>, <code>rule34/</code>, <code>nhentai/</code>, <code>custom/</code>. Consequence: marking parse helpers alone cannot cover every source, which is why the guarantee sits at the entry points and the runtime check at the HTTP client.</li>
+      </ul>
+      <h3>Decision Log</h3>
+      <ul>
+        <li>Decision: Wrap adapter entry points rather than wrap adapters in the registry or move parsing into the HTTP callback. Rationale: see Alternatives. Date/Author: 2026-11-15 / Claude.</li>
+        <li>Decision: Switch only when the caller is on a main dispatcher, pending Phase 0. Rationale: no cost for callers already in the background, no constructor changes, virtual time preserved in tests. Date/Author: 2026-11-15 / Claude.</li>
+        <li>Decision: Keep the orchestrator's own background switch. Rationale: it merges pages, which is its own work, and it is a shared layer rather than a per-screen workaround. Date/Author: 2026-11-15 / Claude.</li>
+      </ul>
+      <h3>Outcomes And Retrospective</h3>
+      <p>Not started.</p>
+    </section>
+
+    <section id="recovery">
+      <h2>Idempotence And Recovery</h2>
+      <p>No data, schema or stored setting changes. Each adapter group is its own commit and can be reverted alone; a half-converted state is safe because unconverted adapters behave as they do today and callers keep their switches until Phase 3. Phase 3 is the only step that removes protection, so it lands last and in one commit that can be reverted without touching the adapters. If the contract test proves flaky on one adapter, exclude that adapter with a comment naming the reason rather than weakening the fake client.</p>
+    </section>
+
+    <section id="appendix">
+      <h2>Appendix: Evidence And Notes</h2>
+      <details>
+        <summary>Where parsing runs today</summary>
+        <pre><code>// core-sources/.../danbooru/DanbooruSourceAdapter.kt, searchTags (about :208-226)
+val response = request(...)                       // suspends; body read on OkHttp's thread
+val rawRecords = parseJsonArray(response, gson, site.label)   // resumes on the caller's thread
+val records = rawRecords.mapNotNull { ... }
+return canonicalPostPage(items = records.mapNotNull(::parsePost), nextPageToken = nextPageToken)</code></pre>
+      </details>
+      <details>
+        <summary>Capability interfaces and their suspend functions</summary>
+        <p><code>SourceAdapter</code> (search, trendingTags, autocompleteTags, quickQuery, resolvePost), <code>SearchMetadataSourceAdapter</code> (resolveSearchMetadata), <code>CreatorPostsSourceAdapter</code> (searchCreatorPosts), <code>AccountProfileSourceAdapter</code> (accountDetails, accountPosts), <code>FileHashLookupSourceAdapter</code> (findByFileHash), <code>RelatedPostsSourceAdapter</code> (relatedPosts), <code>CommentsSourceAdapter</code> (comments), <code>MediaRecoverySourceAdapter</code> (recoverPostMedia), <code>DurationMetadataSourceAdapter</code> (resolveDurationMetadata), <code>FacetedSearchSourceAdapter</code> (autocompleteFaceted, featuredFacetedSuggestions), <code>TagCountLookupSourceAdapter</code> (fetchTagCounts, fetchTagCountsIncrementally). Confirm against the file before writing the call table.</p>
+      </details>
+    </section>
+  </main>
+</body>
+</html>
