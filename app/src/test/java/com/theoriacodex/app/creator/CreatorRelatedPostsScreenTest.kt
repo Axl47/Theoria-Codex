@@ -5,6 +5,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -75,7 +76,10 @@ class CreatorRelatedPostsScreenTest {
         compose.onNodeWithText("No new related posts").assertIsDisplayed()
         compose.onNodeWithContentDescription("Unlike post").assertIsDisplayed()
         compose.onNodeWithText("Dismiss").performClick()
-        compose.onNodeWithText("No uploads match the current filters.").assertIsDisplayed()
+        // Releasing the seed changes the feed's filter inputs, which refilter off the main thread.
+        val emptyMessage = "No uploads match the current filters."
+        compose.waitUntil(5_000) { compose.onAllNodesWithText(emptyMessage).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(emptyMessage).assertIsDisplayed()
         compose.runOnIdle { assertEquals(listOf(CreatorAction.DismissRelatedPosts), actions) }
     }
 

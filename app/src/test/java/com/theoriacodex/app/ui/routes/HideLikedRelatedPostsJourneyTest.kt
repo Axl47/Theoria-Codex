@@ -101,6 +101,8 @@ class HideLikedRelatedPostsJourneyTest {
             }
             compose.onNode(verticalGrid).performScrollToNode(hasText("Dismiss"))
             compose.onNodeWithText("Dismiss").performClick()
+            // Releasing the retained likes changes the feed's filter inputs, which refilter off the main thread.
+            compose.waitUntil(5_000) { compose.onAllNodesWithTag(searchCardTestTag(seed.id)).fetchSemanticsNodes().isEmpty() }
             compose.onNode(verticalGrid).performScrollToIndex(0)
             compose.onNodeWithTag(searchCardTestTag(seed.id)).assertDoesNotExist()
             compose.onNodeWithTag(searchCardTestTag(recommendation.id)).assertDoesNotExist()
