@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ExecPlan: Take video player work off the main thread</title>
+  <title>ExecPlan: Measure and reduce video player work on the main thread</title>
   <style>
     :root {
       color-scheme: light dark;
@@ -54,21 +54,21 @@
 </head>
 <body>
   <header>
-    <h1>ExecPlan: Take video player work off the main thread</h1>
-    <p>After this plan, creating, preparing, rebinding, cooling and releasing the feed's preview players no longer runs on the thread that draws the screen, so scrolling a grid of autoplaying videos cannot lose frames to player housekeeping. The plan starts with a measurement that decides whether the work is needed at all and how far it should go, because it touches playback, the one area where a regression is immediately visible.</p>
+    <h1>ExecPlan: Measure and reduce video player work on the main thread</h1>
+    <p>Feed video previews are driven from the main thread, the thread that draws the screen. This plan first makes that cost measurable and makes the autoplay check honest, then, only if a phone measurement shows the cost matters, tries the cheapest change that removes the measured part. Moving the players to their own thread is the last and most expensive option, not the starting point.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: Proposed, in review</span>
+      <span class="pill">Status: Proposed, review round 1 merged</span>
       <span class="pill">Owner: Claude (orchestrator)</span>
       <span class="pill">Created: 2026-11-15</span>
-      <span class="pill">Updated: 2026-11-15</span>
+      <span class="pill">Updated: 2026-11-16</span>
       <span class="pill">Plan file: .docs/exec/video-players-off-main-thread.html</span>
       <span class="pill">Audit item: B3</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Two review rounds, then Phase 0: measure how much main-thread time player operations take, on the emulator and then on the phone.</div>
-      <div class="card"><strong>Main Risk</strong>Surface and player lifecycles running on two threads: black cards, a leaked decoder, or a crash on a released surface. Reduced by one owner object per card, one player thread, and the existing autoplay benchmark as the regression check.</div>
-      <div class="card"><strong>Validation</strong>Trace sums of the existing player trace sections on the main thread, the macrobenchmark's autoplay contract (every visible video playing), and frame timing before and after.</div>
-      <div class="card"><strong>Affected Areas</strong><code>viewer/FeedPreviewPlayerPool.kt</code>, <code>search/FeedMediaComponents.kt</code>, <code>viewer/VideoPlaybackInfrastructure.kt</code>, <code>viewer/ExoVideoComponents.kt</code>. The Viewer's own player only if Phase 0 says so.</div>
+      <div class="card"><strong>Next Action</strong>Review round 2, then Phase 1 (instrumentation and the stricter autoplay check), which needs only the emulator.</div>
+      <div class="card"><strong>Main Risk</strong>Spending a large rewrite on a cost that is not what makes frames late, or trading smoother scrolling for cards that stay blank. Reduced by a numeric gate on the phone before any redesign, and by measuring time-to-first-frame per card in every phase.</div>
+      <div class="card"><strong>Needs The User</strong>Phase 2 and every later acceptance run on the physical phone, with the isolated benchmark package.</div>
+      <div class="card"><strong>Must Hold</strong>Every visible video card autoplays at the same time.</div>
     </div>
   </header>
 
@@ -76,7 +76,8 @@
     <ul>
       <li><a href="#purpose">Purpose</a></li>
       <li><a href="#context">Context</a></li>
-      <li><a href="#design">Design</a></li>
+      <li><a href="#measure">What to measure</a></li>
+      <li><a href="#options">Options</a></li>
       <li><a href="#phases">Phases</a></li>
       <li><a href="#work-plan">Work Plan</a></li>
       <li><a href="#validation">Validation</a></li>
@@ -89,172 +90,164 @@
   <main>
     <section id="purpose">
       <h2>Purpose / Big Picture</h2>
-      <p>Every visible animated card in a feed plays at once. That is a product rule, and it means a scroll through a video-heavy feed continuously creates, starts, stops and recycles video players. The video library (Media3 ExoPlayer) gives each player an <strong>application thread</strong>: the one thread on which the app must make every call to that player and on which the player reports back. By default that is the main thread, which also draws the screen.</p>
-      <p>Decoding itself already happens elsewhere. What runs on the main thread is the housekeeping: building a player, handing it a video, attaching and detaching the drawing surface as cards scroll, stopping it, and releasing it, a call that waits for the decoder to shut down. The app already works around this by pooling players and spacing the expensive calls out with timers (60 ms between starts, 250 ms between cool-downs, one release per second). That keeps single frames from stacking several of these calls, but each call still lands on a frame.</p>
-      <p>When this plan is complete, feed preview players live on a dedicated player thread. The main thread only tells that thread what it wants (this video, on this surface, playing or paused) and receives state back (first frame shown, playing, size, error). The visible behaviour is unchanged: the same cards play at the same moments. The expected gain is fewer slow frames while scrolling video feeds, and the timers become a tuning choice instead of a necessity.</p>
-      <div class="callout risk"><strong>This plan may end at Phase 0.</strong> The audit that proposed it was a code read, not a measurement. If player housekeeping turns out to be a small share of main-thread time and of slow frames, the right outcome is to record that and stop.</div>
+      <p>The app plays several short videos at once in its feeds. Each is a Media3 ExoPlayer. A player decodes on its own playback thread, but it is <em>controlled</em> from one "application thread": creating it, preparing it, attaching and detaching the surface it draws into, play and pause, and every event it reports back. In this app that thread is the main thread, because the standard video view (<code>PlayerView</code>) requires it.</p>
+      <p>The threading audit recorded this as the largest remaining category of non-drawing work on the main thread, and also the least measured. The existing pool already limits the damage: players are reused, and creation, preparation and release are paced so they do not pile into one frame. Whether what remains makes frames late on the phone is not known.</p>
+      <p>Review of the first draft, which went straight to a "player thread" design, changed the plan in three ways:</p>
+      <ul>
+        <li><strong>The slowest call was not being timed.</strong> Detaching a player from its surface blocks the calling thread until the playback thread confirms, for up to two seconds in Media3 1.11.1. That happens on the main thread whenever a card is recycled, and no trace section covers it.</li>
+        <li><strong>The autoplay check cannot see a blank card.</strong> A card reports "playing" from the player's own flag, which stays true with no surface attached. Any change to surface handling could pass every existing check while showing nothing.</li>
+        <li><strong>The rewrite is much larger than drafted.</strong> A custom surface lifecycle has to replace what <code>PlayerView</code> does (cropping, keeping the screen on, first-frame handling, reuse inside the scrolling grid), and the Viewer's player pool reaches into the feed pool in both directions.</li>
+      </ul>
+      <p>So the required outcome of this plan is smaller and comes first: every piece of main-thread player work is visible in a trace, the autoplay check fails on a blank card, and one phone session produces a go or no-go with numbers. Anything after that is conditional.</p>
     </section>
 
     <section id="context">
       <h2>Context And Orientation</h2>
-      <ul>
-        <li><strong>Feed preview player</strong>: a muted, looping ExoPlayer that plays a card's video in the Search, For You, Creator and Codex grids.</li>
-        <li><strong>Pool and lease</strong>: <code>FeedPreviewPlayerPool</code> owns preview players for the whole app. A card <em>leases</em> one while it is on screen and returns it when it scrolls away; the pool pauses it, later "cools" it (stops it and clears its video) and eventually releases it.</li>
-        <li><strong>Surface</strong>: the buffer a player draws video frames into. The app uses <code>TextureView</code>, a view whose surface is composited by RenderThread like any other view content.</li>
-        <li><strong><code>PlayerView</code></strong>: Media3's ready-made view that owns a <code>TextureView</code>, sizes it to the video and connects it to a player. It only accepts a player whose application thread is the main thread.</li>
-        <li><strong>Autoplay contract</strong>: the macrobenchmark asserts that every visible video is playing during each gesture (24 prepares and 24 first frames in Search, 10 and 10 in the Viewer in the last recorded run). Any change here must keep that passing.</li>
-      </ul>
       <table>
-        <thead><tr><th>File (under <code>app/src/main/java/com/theoriacodex/app/</code>)</th><th>Role in this plan</th></tr></thead>
+        <thead><tr><th>File</th><th>Role</th></tr></thead>
         <tbody>
-          <tr><td><code>viewer/FeedPreviewPlayerPool.kt</code> (394 lines)</td><td>The preview pool. Takes a <code>Handler</code> (main looper by default), asserts the main thread in <code>acquire</code>, <code>resume</code> and return paths, and paces prepare, cooling and release with three runnables. <code>createPlayer()</code> (:164) builds the ExoPlayer.</td></tr>
-          <tr><td><code>viewer/ReusableVideoSlotPool</code> (used by both pools)</td><td>Pure bookkeeping of which player is leased, idle or expired. No Android or player calls; reused as is.</td></tr>
-          <tr><td><code>search/FeedMediaComponents.kt</code> (399 lines)</td><td>The card's video composable. Acquires a lease (:160-186), adds a <code>Player.Listener</code>, sets <code>playWhenReady</code>, hosts a <code>PlayerView</code> through <code>AndroidView</code> (:292-315) and assigns <code>playerView.player</code>.</td></tr>
-          <tr><td><code>viewer/ExoVideoComponents.kt</code></td><td><code>createTexturePlayerView</code> inflates <code>res/layout/player_view_texture.xml</code> (a <code>PlayerView</code> with <code>surface_type="texture_view"</code>, <code>resize_mode="fit"</code>, <code>keep_content_on_player_reset="true"</code>). Also defines the trace sections <code>TheoriaPreviewPlayerCreate</code>, <code>…Prepare</code>, <code>…Rebind</code>, <code>…Cool</code>, <code>…Release</code> and their Viewer equivalents, which already wrap the calls this plan is about.</td></tr>
-          <tr><td><code>viewer/VideoPlaybackInfrastructure.kt</code> (417 lines)</td><td>Builds players (<code>playerBuilder</code>, :218), owns both pools, the video cache and <code>feedPositionHandoff</code>, which lets the Viewer continue from the position a card reached by calling the card player's <code>seekTo</code>.</td></tr>
-          <tr><td><code>viewer/ViewerVideoPlayerPool.kt</code>, <code>viewer/ViewerVideoPlayer.kt</code>, <code>viewer/ViewerMediaSession.kt</code>, <code>viewer/ViewerAutoPictureInPicture.kt</code>, <code>viewer/ViewerRotation.kt</code></td><td>The Viewer's single full-screen player with its media session, picture-in-picture, rotation and a progress bar that reads the position every frame. Out of scope unless Phase 0 shows it matters.</td></tr>
-          <tr><td><code>viewer/ScrubPreviewPlayer.kt</code></td><td>A separate player used for scrub thumbnails. Out of scope.</td></tr>
-          <tr><td><code>macrobenchmark/src/main/java/com/theoriacodex/macrobenchmark/TheoriaMacrobenchmark.kt</code></td><td><code>searchConcurrentAutoplayScroll</code>, <code>mixedMediaFiveFeedJourney</code> and <code>viewerRepeatedSwipes</code> are the scenarios that exercise the pools.</td></tr>
+          <tr><td><code>app/.../search/FeedMediaComponents.kt</code></td><td>The video card. Leases a player and listens to it (:158-185), publishes "playing" from <code>isPlaying</code> (:224-226, :279), hosts <code>PlayerView</code> through <code>AndroidView</code> (:289-317) with <code>RESIZE_MODE_ZOOM</code> (:295, :304), so video is cropped to fill the card. Detaches the player on recycle (:256) and on view reset or release (:305, :311, :315).</td></tr>
+          <tr><td><code>app/.../viewer/FeedPreviewPlayerPool.kt</code></td><td>The feed pool: reuse, pacing, <code>createPlayer()</code> (:164), <code>recycle</code> (:117), <code>stopForViewer()</code> (:135). Also defines <code>ReusableVideoSlotPool</code> (:249). Idle players are released one per second after 30 seconds idle, and not while the Viewer plays.</td></tr>
+          <tr><td><code>app/.../viewer/VideoPlaybackInfrastructure.kt</code>, <code>ViewerVideoPlayerPool.kt</code></td><td>Opening the Viewer stops feed previews synchronously (<code>VideoPlaybackInfrastructure.kt</code> :186); the Viewer pool's cleanup reads the feed pool's active count (<code>ViewerVideoPlayerPool.kt</code> :30).</td></tr>
+          <tr><td><code>app/.../viewer/FeedVideoPositionHandoff.kt</code></td><td>The Viewer publishes its position and the feed card seeks to it when the user returns. The direction is Viewer to feed only.</td></tr>
+          <tr><td><code>app/src/main/res/layout/player_view_texture.xml</code></td><td><code>PlayerView</code> settings in use: texture surface, <code>keepScreenOn</code>, transparent shutter, content kept across player reset.</td></tr>
+          <tr><td><code>macrobenchmark/.../TheoriaMacrobenchmark.kt</code>, <code>MixedMediaFeedJourney.kt</code></td><td>Benchmarks. <code>searchConcurrentAutoplayScroll</code> checks "playing" from card semantics after each fling, waiting up to 15 seconds (:301, :357). <code>mixedMediaFiveFeedJourney</code> also samples pixels for motion (<code>MixedMediaFeedJourney.kt</code> :136) and is the only scenario that exercises create, prepare, rebind, cool and release.</td></tr>
         </tbody>
       </table>
-      <p>Media3 is at 1.11.1 (<code>gradle/libs.versions.toml</code>). Two of its documented facts carry the design and must be re-checked against that version's source in Phase 0: <code>ExoPlayer.Builder.setLooper</code> chooses the application thread, and one such thread may serve several players; <code>PlayerView.setPlayer</code> rejects a player whose application looper is not the main looper.</p>
+      <p>Existing trace sections: <code>TheoriaPreviewPlayerCreate</code>, <code>…Prepare</code>, <code>…Rebind</code>, <code>…Cool</code>, <code>…Release</code> and Viewer equivalents. They nest (<code>Prepare</code> contains <code>Create</code> and <code>Rebind</code>), and <code>stopForViewer</code> reuses the <code>Cool</code> name for different work.</p>
+      <p>Media3 1.11.1 facts established in review from the published classes: <code>PlayerView.setPlayer</code> requires the main thread and a main-thread player; a player may be given another application thread with <code>ExoPlayer.Builder.setLooper</code> and may be constructed on a different thread from it; clearing or replacing a surface waits for the playback thread up to <code>DEFAULT_DETACH_SURFACE_TIMEOUT_MS</code> (2,000 ms) and a timeout becomes a player error; <code>release()</code> waits up to 500 ms; attaching the first surface does not wait.</p>
     </section>
 
-    <section id="design">
-      <h2>Design</h2>
-      <h3>Phase 0 decides between three outcomes</h3>
+    <section id="measure">
+      <h2>What to measure, and the decision rule</h2>
+      <h3>Signals added in Phase 1</h3>
+      <ul>
+        <li><strong>Trace sections for all main-thread player work</strong>: surface attach and detach, recycle, play and pause, resume, the Viewer's stop of feed previews under its own name, and the Viewer prepare that is missing today. The trace query sums <em>self</em> time so nested sections are not counted twice, and the captures include main-thread call-stack samples so time inside <code>androidx.media3</code> outside any section is still attributed.</li>
+        <li><strong>An honest "playing" state.</strong> A card reports playing only when the player says so <em>and</em> at least one frame has been rendered since the current surface was attached. The benchmarks read the same card description, so they inherit the stricter meaning.</li>
+        <li><strong>Time to first frame per card</strong>: from surface attach to the first rendered frame, emitted as a trace slice. This is the regression guard for every later change.</li>
+        <li><strong>A query script</strong> in <code>scripts/</code> that reads a Perfetto trace and reports, per scenario: frames, late frames from the platform's frame timeline, and for each late frame the main-thread self time spent in player work inside that frame and in the gap before it, split into construction and prepare, surface attach and detach, and commands and events.</li>
+      </ul>
+      <h3>Decision rule for the phone session (Phase 2)</h3>
+      <p>Three complete runs of the same benchmark APK, on the phone, of <code>mixedMediaFiveFeedJourney</code> and <code>searchConcurrentAutoplayScroll</code>, traces retained. With the frame budget taken from the phone's actual refresh rate:</p>
+      <ul>
+        <li><strong>Stop</strong> if late frames are under 1% of frames in both scenarios, or if player work takes a quarter of the frame budget or more in fewer than 30% of late frames. The plan closes with the numbers recorded.</li>
+        <li><strong>Otherwise</strong> one experiment is authorised: the option below that targets the category with the most time in late frames.</li>
+      </ul>
+      <p>These thresholds are proposals. The user can change them before the session; they are fixed before the data is read.</p>
+      <h3>Rule for keeping an experiment</h3>
+      <p>Against the Phase 2 baseline, same phone, same conditions, three runs each: late frames in the mixed journey fall by at least a quarter; the 95th percentile of time to first frame is no more than 10% worse; the stricter autoplay check and the pixel-motion check pass in every iteration. Otherwise the experiment is reverted and recorded.</p>
+    </section>
+
+    <section id="options">
+      <h2>Options, cheapest first</h2>
       <table>
-        <thead><tr><th>Outcome</th><th>When</th><th>Work</th></tr></thead>
+        <thead><tr><th>If late frames are dominated by</th><th>Try</th><th>Notes from review</th></tr></thead>
         <tbody>
-          <tr><td>Stop</td><td>Player sections take a negligible share of main-thread time and do not line up with slow frames.</td><td>Record the numbers; close the plan.</td></tr>
-          <tr><td>Pre-build only</td><td>Player creation dominates and the rest is small.</td><td>Build spare players on a background thread ahead of need and hand them to the pool. The players keep the main thread as their application thread, so nothing else changes. Requires confirming that a player built with an explicit <code>setLooper(mainLooper)</code> may be constructed on another thread, as <code>ScrubPreviewPlayer</code> already sets that looper explicitly.</td></tr>
-          <tr><td>Player thread</td><td>Prepare, rebind, cool or release are a real share, or slow frames line up with them.</td><td>The design below.</td></tr>
+          <tr><td>Construction and prepare</td><td><strong>A. Build players ahead of time on a background thread.</strong></td><td>Allowed by Media3. The setup after <code>build()</code> (<code>FeedPreviewPlayerPool.kt</code> :168-176) calls the player, so it moves into the builder or runs on main after hand-over. Spares need a cap and a release path; each holds a playback thread.</td></tr>
+          <tr><td>Surface attach and detach</td><td><strong>B. Stop detaching on the hot path.</strong></td><td>Candidates, to be compared in a short spike: keep a player bound to its view across recycling and only swap the media; attach the next view before detaching the old one (<code>PlayerView.switchTargetView</code>); a <code>SurfaceView</code> trial, which Android recommends where feasible but has clipping and animation limits inside a scrolling grid.</td></tr>
+          <tr><td>Commands and event delivery, or A and B were not enough</td><td><strong>C. A player thread for feed previews.</strong></td><td>Needs its own design revision and review before any code. Requirements below.</td></tr>
         </tbody>
       </table>
-
-      <h3>Player thread design (feed previews)</h3>
-      <p>One <code>HandlerThread</code>, owned by <code>VideoPlaybackInfrastructure</code>, is the application thread for every preview player. The pool keeps its logic and moves onto that thread: its <code>Handler</code> parameter already exists, and its main-thread assertions become player-thread assertions.</p>
-      <p>The card no longer touches an <code>ExoPlayer</code>. It holds a small main-thread object, a <strong>preview session</strong>, with four operations and one state stream:</p>
-      <pre><code>interface FeedPreviewSession {
-    val state: StateFlow&lt;FeedPreviewState&gt;      // firstFrameShown, isPlaying, videoSize, durationMs, error
-    fun attach(textureView: TextureView)        // main thread
-    fun detach()                                // main thread
-    fun setActive(active: Boolean)              // play or pause
-    fun seekTo(positionMs: Long)                // for the feed-to-Viewer position handoff
-    fun close()                                 // returns the lease
-}</code></pre>
-      <p>Each operation posts to the player thread, where the pool acquires the lease, prepares, plays, pauses and returns it. The listener that today writes Compose state from the main thread writes the <code>StateFlow</code> from the player thread instead.</p>
-      <p><strong>Surface handling</strong> replaces <code>PlayerView</code> for cards, because <code>PlayerView</code> cannot take such a player. The session listens to the <code>TextureView</code>'s surface callbacks on the main thread. When the surface becomes available it wraps it in a <code>Surface</code> and posts <code>player.setVideoSurface(surface)</code>. When the view reports the surface is going away, it answers that it will release the texture itself, posts <code>player.clearVideoSurface()</code>, and releases the <code>Surface</code> and its texture only after the player thread confirms the player has let go. That ordering is the one new hazard, so it lives in one class with a state machine that is host-tested. Sizing the video to "fit" becomes a Compose aspect-ratio modifier driven by <code>videoSize</code> from the state.</p>
-      <p><strong>Pacing.</strong> The spacing constants stay as they are in the first version. Once the calls are off the main thread they are measured again, and shortened only where that helps cards start sooner without hurting decoder availability. This plan does not promise to delete them.</p>
-      <p><strong>What stays on the main thread:</strong> the <code>TextureView</code> itself and its composition by RenderThread. Whether <code>TextureView</code> is the right surface type is a separate question, not part of this plan.</p>
-
-      <h3>Alternatives considered</h3>
-      <table>
-        <thead><tr><th>Alternative</th><th>Why not (for now)</th></tr></thead>
-        <tbody>
-          <tr><td>Share one playback thread between preview players (<code>setPlaybackLooper</code>) to make create and release cheaper.</td><td>All simultaneous previews would decode-feed on one thread, which risks the autoplay contract; it also leaves the calls on the main thread.</td></tr>
-          <tr><td>Move the Viewer player as well.</td><td>It is one player, tied to a media session, picture-in-picture, rotation and a per-frame position read. Higher risk for less gain; revisit only with Phase 0 evidence.</td></tr>
-          <tr><td>Keep <code>PlayerView</code> and wrap the off-thread player in a forwarding player that reports the main looper.</td><td><code>PlayerView</code> would then call the real player from the main thread, which the player rejects.</td></tr>
-        </tbody>
-      </table>
+      <h3>Requirements a player-thread design must meet (from review)</h3>
+      <ul>
+        <li><strong>Surface ownership per view, not per card.</strong> One binding object per <code>TextureView</code> owns the listener and every texture, each with a generation number. It answers <code>false</code> to <code>onSurfaceTextureDestroyed</code> and releases the texture itself, exactly once, only after the player has confirmed detach or been released. The main thread never waits for the player thread. A transition table covers: the view moving to another card with its texture still available; a texture destroyed without the view detaching (memory trim); closing during prepare; a detach that times out.</li>
+        <li><strong>Identities.</strong> Sessions, leases and surfaces carry generations; commands and events from an old generation are dropped, and surfaces are cleared with the identity-checking <code>clearVideoSurface(surface)</code>.</li>
+        <li><strong>One queue is a shared stall.</strong> A blocking detach or release holds up every other preview's attach, play and events. The design states this cost, measures queue age, resets the poster when a surface is re-attached, and handles a detach timeout without leaving the card on a blank frame.</li>
+        <li><strong>Viewer integration both ways.</strong> Stopping previews for the Viewer becomes asynchronous, so the design defines the order in which previews give up decoders and cache ranges and the Viewer starts, without blocking main. Active counts become atomic counters. <code>resume</code> folds into activation.</li>
+        <li><strong>What replaces <code>PlayerView</code>.</strong> A table for each setting in use: cropping to fill computed from video size including pixel aspect ratio, <code>keepScreenOn</code>, first-frame and poster rules, content kept across reset, sizing for an already-playing player.</li>
+        <li><strong>State ownership.</strong> Which thread owns each one-shot flag in the card's listener; callbacks into Compose arrive on main; a seek from the position hand-over cannot run before the lease exists.</li>
+        <li><strong>Tests.</strong> <code>MediaBufferingBenchmarkTest</code> and <code>ViewerVideoPlayerPoolTest</code> call the pool on the main looper and must be reworked; interleaving tests cover two sessions and one reused player. The first step posts through a handler on main, so ordering bugs appear before the thread moves.</li>
+      </ul>
+      <p>Out of scope in every option: the full-screen Viewer player (media session, picture-in-picture) and the scrub preview player.</p>
     </section>
 
     <section id="phases">
       <h2>Phases</h2>
       <article>
-        <h3>Phase 0: Measure, then choose</h3>
+        <h3>Phase 1: Make it measurable (emulator)</h3>
         <table class="status-table"><tbody>
-          <tr><td>Goal</td><td>Know how much main-thread time the player sections take per scenario and whether slow frames coincide with them.</td></tr>
-          <tr><td>Method</td><td>Run <code>searchConcurrentAutoplayScroll</code>, <code>mixedMediaFiveFeedJourney</code> and <code>viewerRepeatedSwipes</code> on the benchmark build. From each trace take, for the main thread only: the summed and worst duration of each <code>TheoriaPreviewPlayer*</code> and <code>TheoriaViewerPlayer*</code> section, the time spent attaching and detaching surfaces (add a temporary trace section around the <code>playerView.player = …</code> assignments if the existing ones do not cover it), and the number of slow frames that overlap any of them. Emulator first, for the method; then the same on the phone, because the emulator's decoders are not representative.</td></tr>
-          <tr><td>Decision rule</td><td>Player thread if, on the phone, player sections overlap at least one in five slow frames in a feed scenario, or any single section regularly exceeds half a frame (about 4 ms at 120 Hz). Pre-build only if creation alone meets that bar. Otherwise stop. Record the numbers and the choice in the Decision Log.</td></tr>
-          <tr><td>Also verify</td><td>The two Media3 facts in Context, by reading the 1.11.1 sources, and a ten-line spike proving a player on a background looper renders into a manually supplied <code>TextureView</code> surface.</td></tr>
+          <tr><td>Goal</td><td>The signals in "What to measure" exist, and the autoplay check fails on a blank card.</td></tr>
+          <tr><td>Acceptance</td><td>Host tests for the playing-state rule (playing without a rendered frame is not "playing"; re-attaching a surface resets it). An instrumented test on fixture media detaches a playing card's surface and asserts the card stops reporting playing. On the emulator's benchmark build, one captured run of the mixed journey through the query script lists every new section with non-zero counts and a time-to-first-frame value per card; the script's totals match a manual check of one late frame. Existing benchmark scenarios still pass their autoplay contract on the emulator.</td></tr>
+          <tr><td>Not established here</td><td>Any performance conclusion. Emulator timings do not represent the phone's decoders.</td></tr>
         </tbody></table>
       </article>
       <article>
-        <h3>Phase 1: Session and surface binding behind the existing behaviour</h3>
+        <h3>Phase 2: Phone baseline and decision (needs the user)</h3>
         <table class="status-table"><tbody>
-          <tr><td>Goal</td><td>Cards use <code>FeedPreviewSession</code> and a plain <code>TextureView</code>, with players still on the main thread. This isolates the view change from the thread change.</td></tr>
-          <tr><td>Acceptance</td><td>Host tests for the surface state machine (available, destroyed, re-available, close during each). Macrobenchmark autoplay contract passes on the emulator. No visual difference in card sizing, first-frame reveal or thumbnail handoff, checked on fixture media.</td></tr>
+          <tr><td>Goal</td><td>Apply the decision rule.</td></tr>
+          <tr><td>Steps</td><td>With the user's go-ahead: verify the benchmark APK's application ID (<code>com.theoriacodex.benchmark</code>) and signing with <code>scripts/verify_device_apk.py</code>, keep the screen awake for the run and restore the setting afterwards, run both scenarios three times, run the query script, keep all traces.</td></tr>
+          <tr><td>Outcome</td><td>Stop, or the name of the one authorised experiment, recorded in the Decision Log with the numbers.</td></tr>
         </tbody></table>
       </article>
       <article>
-        <h3>Phase 2: Move the pool and its players to the player thread</h3>
+        <h3>Phase 3: One experiment (conditional)</h3>
         <table class="status-table"><tbody>
-          <tr><td>Goal</td><td>No preview player call runs on the main thread.</td></tr>
-          <tr><td>Acceptance</td><td>In a trace of <code>searchConcurrentAutoplayScroll</code>, the main thread contains zero <code>TheoriaPreviewPlayer*</code> sections; they appear on the player thread. Autoplay contract passes. Frame-time percentiles are no worse than before on the emulator. Opening the Viewer from a playing card continues from the card's position. Backgrounding and returning, rotating, and leaving a feed release every player (the active and total player counters in the trace return to their idle values).</td></tr>
+          <tr><td>Goal</td><td>Implement option A or B behind a build-time switch, prove correctness on the emulator, then measure on the phone against the Phase 2 baseline.</td></tr>
+          <tr><td>Acceptance</td><td>The keep rule in "What to measure". For option B the spike also records what the scrolling grid does to a reused view's texture, which decides whether option C's surface design is even necessary.</td></tr>
         </tbody></table>
       </article>
       <article>
-        <h3>Phase 3: Re-tune pacing</h3>
+        <h3>Phase 4: Player thread (conditional, separate review)</h3>
         <table class="status-table"><tbody>
-          <tr><td>Goal</td><td>Spacing constants reflect decoder limits, not main-thread protection.</td></tr>
-          <tr><td>Acceptance</td><td>Each changed constant has a before and after number for time to first frame and for decoder failures in the journey. Constants that show no benefit from changing stay.</td></tr>
-        </tbody></table>
-      </article>
-      <article>
-        <h3>Phase 4: Physical-device acceptance</h3>
-        <table class="status-table"><tbody>
-          <tr><td>Goal</td><td>The gain is real on hardware.</td></tr>
-          <tr><td>Acceptance</td><td>Three complete macrobenchmark runs of the same APK before and after on the phone, as <code>AGENTS.md</code> requires for performance acceptance, with the autoplay contract in each. This runs as part of the end-of-audit device session and needs the user's go-ahead.</td></tr>
+          <tr><td>Entry</td><td>Phase 3 was kept or reverted, late frames are still above the stop threshold, and the remaining time is in commands, events or surface work that A and B cannot remove.</td></tr>
+          <tr><td>Before code</td><td>This plan is revised with a full design that meets the requirements list and goes through two review rounds again.</td></tr>
         </tbody></table>
       </article>
     </section>
 
     <section id="work-plan">
-      <h2>Work Plan</h2>
-      <p>Assuming Phase 0 chooses the player thread. Paths are under <code>app/src/main/java/com/theoriacodex/app/</code>.</p>
+      <h2>Work Plan (Phase 1 only; later phases are specified when authorised)</h2>
       <ol>
-        <li>Add <code>viewer/FeedPreviewSession.kt</code>: the interface above, <code>FeedPreviewState</code>, and the implementation that posts to a handler. Add <code>viewer/PreviewSurfaceBinding.kt</code>: the surface state machine, written so its transitions are plain functions testable without Android.</li>
-        <li>In <code>search/FeedMediaComponents.kt</code>, replace the lease, listener and <code>PlayerView</code> code with a session: create it in the existing <code>DisposableEffect</code>, collect its state, host a <code>TextureView</code> in <code>AndroidView</code> with an aspect-ratio modifier, call <code>setActive</code> where <code>playWhenReady</code> is set today, and close it on dispose. Keep the trace sections.</li>
-        <li>Point <code>feedPositionHandoff</code> at <code>session::seekTo</code>.</li>
-        <li>Phase 2: give <code>VideoPlaybackInfrastructure</code> the player <code>HandlerThread</code>; pass its handler to <code>FeedPreviewPlayerPool</code>; add <code>.setLooper(playerThread.looper)</code> in <code>createPlayer()</code>; rename <code>checkMainThread()</code> to assert the pool's handler thread. <code>hasActiveViewerPlayer</code>, which the pool reads to hold back releases while the Viewer plays, becomes a volatile or atomic read.</li>
-        <li>Remove <code>createTexturePlayerView</code> use from the feed. Keep the layout and function for the Viewer.</li>
-        <li>Update <code>FeedPreviewPlayerPoolTest</code> and the feed media tests under <code>app/src/test</code> for the handler change; add tests for the session's ordering (attach before bind, close during prepare, detach while playing).</li>
+        <li>In <code>FeedMediaComponents.kt</code>, wrap the surface attach and detach sites (:256, :305, :311, :315 and the factory and update blocks) and the play and pause effect (:189-194) in named trace sections; in <code>FeedPreviewPlayerPool.kt</code>, do the same for <code>recycle</code>, <code>resume</code> and <code>stopForViewer</code> (new name); add the missing Viewer prepare section. Add the names to <code>MediaTraceSections</code>.</li>
+        <li>Track "frame rendered since this surface was attached" in the card (from <code>onRenderedFirstFrame</code> and surface changes) and use it in the playing state at :224-226. Emit the time-to-first-frame slice.</li>
+        <li>Add <code>scripts/trace_player_frames.py</code> using Perfetto's trace processor; if the capture helper written during the audit fixes fits, promote it into <code>scripts/</code> with it. Document the capture configuration, including main-thread call-stack sampling, in the script's header.</li>
+        <li>Tests: the playing-state rule in <code>app/src/test</code>; the detach test in <code>app/src/androidTest</code> on fixture media.</li>
       </ol>
-      <p>Not touched: <code>ReusableVideoSlotPool</code>, the Viewer player and pool, the scrub preview player, the video cache, load control and renderers.</p>
+      <p>The benchmark scenario set does not change, so stored phone baselines stay comparable; the stricter playing rule can only make the autoplay contract harder to pass.</p>
     </section>
 
     <section id="validation">
       <h2>Validation And Acceptance</h2>
-      <p>Commands run from the repository root. Robolectric tests need Java 21 or newer (see <code>AGENTS.md</code>). Emulator work uses only the <code>theoria-search-test</code> AVD (<code>emulator-5554</code>) and the benchmark and acceptance packages, never <code>com.theoriacodex</code>. Close any <code>agent-device</code> session before <code>am instrument</code>.</p>
       <table>
         <thead><tr><th>Check</th><th>Command or action</th><th>Expected result</th></tr></thead>
         <tbody>
-          <tr><td>Host tests</td><td><code>./gradlew :app:testDebugUnitTest --offline</code></td><td>Pass, including the surface state machine and session ordering tests.</td></tr>
+          <tr><td>Host tests</td><td><code>./gradlew :app-logic:test :app:testDebugUnitTest --offline</code> (Java 21 or newer)</td><td>Pass.</td></tr>
           <tr><td>Pre-PR check</td><td><code>scripts/check.sh --record</code></td><td>Passes.</td></tr>
-          <tr><td>Autoplay contract</td><td>Verify APKs with <code>scripts/verify_benchmark_fixture_apk.py</code> and <code>scripts/verify_macrobenchmark_runner_apk.py</code>, then run <code>searchConcurrentAutoplayScroll</code> and <code>mixedMediaFiveFeedJourney</code> on the emulator.</td><td>Every visible video reported playing in every iteration, same prepare and first-frame counts as before.</td></tr>
-          <tr><td>Thread proof</td><td>Query one trace for <code>TheoriaPreviewPlayer%</code> slices grouped by thread.</td><td>None on the main thread after Phase 2.</td></tr>
-          <tr><td>Frames</td><td>Frame timing from the same runs, five iterations before and after.</td><td>No worse on the emulator; the phone decides the gain.</td></tr>
-          <tr><td>Lifecycle tour</td><td>Benchmark build with fixture media: scroll a feed, open and close the Viewer from a playing card, rotate, background and return, leave the feed.</td><td>Cards resume playing, the Viewer starts at the card's position, player counters return to idle, no <code>IllegalStateException</code> or surface errors in logcat.</td></tr>
-          <tr><td>Device-only behaviour</td><td>Run <code>gh workflow run device-validation.yml --ref &lt;branch&gt;</code> before merging, since this is a playback change.</td><td>Emulator tests on Android 16 and 17 pass.</td></tr>
+          <tr><td>Blank-card detection</td><td>The instrumented detach test, run on the emulator following the device steps in <code>AGENTS.md</code></td><td>Fails on the parent commit (the card keeps reporting playing), passes after.</td></tr>
+          <tr><td>Signals present</td><td>One emulator capture of the mixed journey on <code>com.theoriacodex.benchmark</code>, through the query script</td><td>Every section and the per-card first-frame time appear; totals match a hand check.</td></tr>
+          <tr><td>Autoplay contract</td><td>Existing macrobenchmark scenarios on the emulator</td><td>Pass with the stricter rule. Fixture media only, so no provider content is shown.</td></tr>
+          <tr><td>Playback change</td><td><code>gh workflow run device-validation.yml --ref &lt;branch&gt;</code></td><td>Passes on Android 16 and 17.</td></tr>
+          <tr><td>Phone decision</td><td>Phase 2</td><td>Numbers and outcome recorded; needs the user.</td></tr>
         </tbody>
       </table>
-      <p>Builds and emulators do not establish hardware playback or picture-in-picture behaviour. The phone session in Phase 4 covers hardware decoding; picture-in-picture is unaffected because the Viewer player is out of scope.</p>
     </section>
 
     <section id="living-log">
       <h2>Living Log</h2>
       <h3>Progress</h3>
       <ul>
-        <li>[x] 2026-11-15 - Plan drafted from the threading audit (B3).</li>
-        <li>[ ] Review round 1 (Opus high, GPT-6.1 Sol adversarial) merged.</li>
+        <li>[x] 2026-11-15 - Plan drafted from the threading audit (B3) as a player-thread design.</li>
+        <li>[x] 2026-11-16 - Review round 1 (Opus high, GPT-6.1 Sol adversarial) merged; plan restructured around measurement.</li>
         <li>[ ] Review round 2 merged.</li>
-        <li>[ ] Phase 0 measurement and decision.</li>
-        <li>[ ] Phase 1 session and surface binding.</li>
-        <li>[ ] Phase 2 player thread.</li>
-        <li>[ ] Phase 3 pacing.</li>
-        <li>[ ] Phase 4 phone acceptance.</li>
+        <li>[ ] Phase 1 merged.</li>
+        <li>[ ] Phase 2 decision recorded (needs the user).</li>
       </ul>
       <h3>Surprises And Discoveries</h3>
       <ul>
-        <li>Observation: the calls in question are already wrapped in named trace sections. Evidence: <code>MediaTraceSections</code> in <code>viewer/ExoVideoComponents.kt</code>. Consequence: Phase 0 needs no new instrumentation for create, prepare, cool and release.</li>
-        <li>Observation: the pool already takes its <code>Handler</code> as a parameter. Evidence: <code>FeedPreviewPlayerPool</code> constructor. Consequence: moving the pool is a small change; the work is in the card and its surface.</li>
+        <li>Observation: surface detach blocks the main thread until the playback thread confirms, up to two seconds, and is not traced. Evidence: Media3 1.11.1 <code>ExoPlayerImpl.setVideoOutputInternal</code>; <code>FeedMediaComponents.kt</code> :256.</li>
+        <li>Observation: "playing" survives a missing surface, and the benchmark waits up to 15 seconds for it. Evidence: <code>FeedMediaComponents.kt</code> :224-226; <code>TheoriaMacrobenchmark.kt</code> :357.</li>
+        <li>Observation: feed cards crop to fill; the first draft said fit. Evidence: <code>FeedMediaComponents.kt</code> :295.</li>
+        <li>Observation: opening the Viewer calls into the feed pool synchronously, and the Viewer pool reads the feed pool's state. Evidence: <code>VideoPlaybackInfrastructure.kt</code> :186; <code>ViewerVideoPlayerPool.kt</code> :30.</li>
+        <li>Observation: position hand-over runs from Viewer to feed only. Evidence: <code>FeedVideoPositionHandoff.kt</code>.</li>
+        <li>Observation: the repository has no trace-query tooling. Evidence: <code>scripts/</code>.</li>
       </ul>
       <h3>Decision Log</h3>
       <ul>
-        <li>Decision: Gate the whole plan on Phase 0 and allow it to end there. Rationale: the cost was inferred from code, the change is risky, and the existing pacing may already be enough. Date/Author: 2026-11-15 / Claude.</li>
-        <li>Decision: Feed previews only. Rationale: they are many and churn during scroll; the Viewer has one player with many platform integrations. Date/Author: 2026-11-15 / Claude.</li>
-        <li>Decision: Split the view change (Phase 1) from the thread change (Phase 2). Rationale: each can be verified and reverted alone. Date/Author: 2026-11-15 / Claude.</li>
+        <li>Decision: The plan's required outcome is measurement and an honest autoplay check; redesign is conditional. Rationale: both reviews showed the first draft could approve a large rewrite without evidence of benefit, and that its regression check could not see its main risk. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: Try cheaper options before a player thread, chosen by where late-frame time is. Rationale: construction and surface costs each have a smaller fix. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: Keep the player-thread option as requirements only. Rationale: specifying a surface lifecycle in detail before knowing it is needed is wasted design; when it is needed it gets its own review. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: Numeric thresholds are fixed before the phone session and can be changed by the user until then. Rationale: a rule written after the data fits the data. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: Do not preserve "feed to Viewer" position continuation as a requirement. Rationale: it does not exist today. Date/Author: 2026-11-16 / Claude.</li>
       </ul>
       <h3>Outcomes And Retrospective</h3>
       <p>Not started.</p>
@@ -262,26 +255,18 @@
 
     <section id="recovery">
       <h2>Idempotence And Recovery</h2>
-      <p>No stored data is touched. Phases 1 and 2 are separate commits; reverting Phase 2 alone returns players to the main thread while keeping the session, and reverting both restores <code>PlayerView</code>. If the autoplay contract fails after Phase 2 and the cause is not found within one investigation, revert Phase 2 and record the trace. Temporary trace sections added in Phase 0 are removed before the plan closes unless Phase 2 keeps them. Benchmark output and traces under <code>build/reports/</code> and <code>macrobenchmark/build/outputs/</code> are pruned once their numbers are recorded here.</p>
+      <p>Phase 1 adds trace sections, one stricter state rule and a script; each can be reverted alone. If the stricter playing rule makes an existing benchmark fail, that is a finding about the current app, recorded before anything is relaxed. Experiments in Phase 3 sit behind a build-time switch and are removed if not kept. Phone traces and benchmark outputs are acceptance evidence: keep every iteration until the decision is recorded and the user agrees they can go.</p>
     </section>
 
     <section id="appendix">
       <h2>Appendix: Evidence And Notes</h2>
       <details>
-        <summary>How a card binds a player today</summary>
-        <pre><code>// search/FeedMediaComponents.kt (about :160-186), on the main thread
-val lease = traceMediaSection(MediaTraceSections.PREVIEW_PREPARE) { pool.acquire(location, headers) }
-val player = lease.player
-val handoff = infrastructure.feedPositionHandoff.bind(mediaKey, player::seekTo)
-player.addListener(listener)
-...
-onDispose { handoff.close(); recycleFeedPreviewPlayer(state, lease, listener, pool) }</code></pre>
+        <summary>Review round 1: what changed</summary>
+        <p>The player-thread design moved from "the plan" to the last of three options. Phase 1 now adds the missing trace sections, the stricter playing state, time to first frame and a query script. The decision rule has numbers, three runs and a stop outcome. Corrected facts: crop not fit, hand-over direction, file locations, the Viewer's calls into the feed pool, idle release timing, which benchmark scenario exercises the pool. Unsupported claims about past autoplay counts were removed.</p>
       </details>
       <details>
-        <summary>Pool pacing today</summary>
-        <pre><code>FEED_PREVIEW_PREPARE_SPACING_MS = 60      FEED_PREVIEW_COOL_SPACING_MS = 250
-FEED_PREVIEW_RELEASE_SPACING_MS = 1_000   FEED_PREVIEW_WARM_IDLE_GRACE_MS = 750
-FEED_PREVIEW_IDLE_TIMEOUT_MS = 30_000     FEED_PREVIEW_EXCESS_RELEASE_DELAY_MS = 5_000</code></pre>
+        <summary>Phone session outputs</summary>
+        <p>To be filled in during Phase 2.</p>
       </details>
     </section>
   </main>
