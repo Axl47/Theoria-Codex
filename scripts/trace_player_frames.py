@@ -28,6 +28,8 @@ Definitions (one trace may hold several iterations; `report` groups traces by th
                         slice if that is later. Intervals never overlap.
   budget                the frame's own expected duration from the timeline.
   player-heavy          a late frame whose interval holds player section self time of at least a quarter of its budget.
+  player share          player-heavy late frames over late frames; "joined" divides by late frames with an interval
+                        only, since frames without a doFrame slice (RenderThread-only redraws) can never be heavy.
   self time             a player section's duration minus the player sections nested inside it.
   player work           (sampled) a main-thread sample inside a player section, or with a Media3 frame on its
                         stack. Media3 samples outside sections while a Viewer player is active are reported apart and
@@ -298,6 +300,7 @@ class FrameSummary:
     late: int = 0
     other_jank: int = 0
     without_do_frame: int = 0
+    late_joined: int = 0
     player_heavy_late: int = 0
     late_category_ns: dict[str, int] = field(default_factory=lambda: {name: 0 for name in CATEGORIES})
 
@@ -309,6 +312,7 @@ class FrameSummary:
             if not result.late:
                 continue
             self.late += 1
+            self.late_joined += result.interval is not None
             self.player_heavy_late += result.player_heavy
             for name, ns in result.player_ns.items():
                 self.late_category_ns[CATEGORY_OF[name]] += ns
@@ -320,6 +324,10 @@ class FrameSummary:
     @property
     def player_share(self) -> float | None:
         return self.player_heavy_late / self.late if self.late else None
+
+    @property
+    def player_share_joined(self) -> float | None:
+        return self.player_heavy_late / self.late_joined if self.late_joined else None
 
 
 def section_totals(sections: Iterable[Section]) -> dict[str, dict[str, float]]:
@@ -643,6 +651,8 @@ class ScenarioTraces:
             "frames_without_do_frame": summary.without_do_frame,
             "player_heavy_late_frames": summary.player_heavy_late,
             "player_share": summary.player_share,
+            "late_frames_joined": summary.late_joined,
+            "player_share_joined": summary.player_share_joined,
             "late_frame_section_ms": {name: ns / NS_PER_MS for name, ns in summary.late_category_ns.items()},
             "sections": section_totals(self.sections),
             "demand_to_first_frame": presentation_summary(self.presentations, "demand"),
@@ -678,7 +688,8 @@ def print_scenario(scenario: str, values: dict[str, Any]) -> None:
     print(f"{scenario} ({len(values['traces'])} trace(s))")
     print(f"  frames {values['frames']}, late {values['late_frames']} ({fraction(values['late_rate'])}), "
           f"other jank {values['other_jank_frames']}, without doFrame {values['frames_without_do_frame']}")
-    print(f"  player-heavy late {values['player_heavy_late_frames']} (player share {fraction(values['player_share'])})")
+    print(f"  player-heavy late {values['player_heavy_late_frames']} (player share {fraction(values['player_share'])}, "
+          f"{fraction(values['player_share_joined'])} of the {values['late_frames_joined']} joined)")
     print("  section self time inside late frames: " + ", ".join(
         f"{name} {ms:.1f} ms" for name, ms in values["late_frame_section_ms"].items()))
     print("  sections (count, self ms):")

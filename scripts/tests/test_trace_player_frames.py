@@ -54,10 +54,13 @@ class AttributionTest(unittest.TestCase):
 
     def test_summary_counts_late_other_jank_and_player_share(self) -> None:
         summary = frames.FrameSummary()
-        summary.add(frames.attribute_frames(self.timeline, self.do_frames, self.sections))
-        self.assertEqual((3, 2, 1, 1, 1), (summary.frames, summary.late, summary.other_jank,
-                                           summary.without_do_frame, summary.player_heavy_late))
-        self.assertEqual(0.5, summary.player_share)
+        # A late frame without a doFrame slice counts toward the share but not the joined share.
+        unjoined = TimelineRow(4, ts=150, dur=20, jank_type="App Deadline Missed", expected_ts=148, expected_dur=16)
+        summary.add(frames.attribute_frames([*self.timeline, unjoined], self.do_frames, self.sections))
+        self.assertEqual((4, 3, 2, 1, 2, 1), (summary.frames, summary.late, summary.late_joined, summary.other_jank,
+                                              summary.without_do_frame, summary.player_heavy_late))
+        self.assertAlmostEqual(1 / 3, summary.player_share)
+        self.assertEqual(0.5, summary.player_share_joined)
         self.assertEqual({"construction": 4, "prepare": 6, "surface": 5, "commands_events": 0},
                          summary.late_category_ns)
 
