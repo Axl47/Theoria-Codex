@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Catch main-thread work automatically</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f7f4; --surface: #ffffff; --text: #202124; --muted: #5f6368; --border: #d7d7d0;
+      --accent: #0f766e; --accent-soft: #dff3ef; --risk: #9a3412; --risk-soft: #ffedd5; --code: #111827;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #151716; --surface: #202321; --text: #f0f2ef; --muted: #b8beb7; --border: #3a403c;
+        --accent: #5eead4; --accent-soft: #123b37; --risk: #fdba74; --risk-soft: #43230f; --code: #0b0f0d;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+    header, main { max-width: 1180px; margin: 0 auto; padding: 24px; }
+    header { padding-top: 36px; }
+    h1, h2, h3 { line-height: 1.15; margin: 0 0 12px; }
+    h1 { font-size: clamp(2rem, 4vw, 3.25rem); }
+    h2 { margin-top: 36px; font-size: 1.55rem; }
+    h3 { margin-top: 24px; font-size: 1.1rem; }
+    p { margin: 0 0 14px; }
+    li { margin-bottom: 6px; }
+    a { color: var(--accent); }
+    nav { position: sticky; top: 0; z-index: 10; border-block: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(10px); }
+    nav ul { display: flex; gap: 6px; max-width: 1180px; margin: 0 auto; padding: 8px 24px; list-style: none; overflow-x: auto; }
+    nav li { margin: 0; }
+    nav a { display: block; padding: 6px 10px; border-radius: 6px; text-decoration: none; white-space: nowrap; }
+    nav a:hover { background: var(--accent-soft); }
+    section { padding: 22px; margin: 18px 0; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+    section > h2:first-child { margin-top: 0; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.95rem; }
+    th, td { padding: 9px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-weight: 650; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }
+    pre { overflow-x: auto; padding: 14px; border-radius: 8px; background: var(--code); color: #f8fafc; }
+    details { margin: 12px 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: color-mix(in srgb, var(--surface) 88%, var(--bg)); }
+    summary { cursor: pointer; font-weight: 700; }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; color: var(--muted); }
+    .pill { padding: 4px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); }
+    .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin: 18px 0 0; }
+    .card { padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+    .card strong { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.82rem; letter-spacing: 0.02em; text-transform: uppercase; }
+    .callout { margin: 14px 0; padding: 12px 14px; border-left: 4px solid var(--accent); background: var(--accent-soft); border-radius: 6px; }
+    .risk { border-left-color: var(--risk); background: var(--risk-soft); }
+    .status-table td:first-child { width: 180px; color: var(--muted); font-weight: 650; }
+    @media print { nav { position: static; } section, .card { break-inside: avoid; } body { background: #fff; color: #000; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ExecPlan: Catch main-thread work automatically</h1>
+    <p>After this plan, work that has been declared "background only", starting with parsing provider responses, fails an automated emulator test when Search runs it on the main thread, and is logged in every build the first time each call site does it. Debug builds also report disk access on the main thread. Today none of this is checked: the same class of problem has been found by reading code and fixed screen by screen.</p>
+    <div class="meta" aria-label="Plan metadata">
+      <span class="pill">Status: Ready to implement (two review rounds merged)</span>
+      <span class="pill">Owner: Claude (orchestrator)</span>
+      <span class="pill">Created: 2026-11-15</span>
+      <span class="pill">Updated: 2026-11-16</span>
+      <span class="pill">Plan file: .docs/exec/main-thread-observability.html</span>
+      <span class="pill">Audit item: B4</span>
+    </div>
+    <div class="dashboard">
+      <div class="card"><strong>Next Action</strong>Phase 1 (marker, checker, parse sites), then Phase 2 once audit fix A1 is merged.</div>
+      <div class="card"><strong>Main Risk</strong>A gate that cannot fail. Reduced by requiring positive evidence in every run (pages requested, parses counted, third-page cards shown), a permanent control through the app's real checker, and two recorded negative controls.</div>
+      <div class="card"><strong>Validation</strong>Host tests, <code>scripts/check.sh --record</code>, and a new emulator journey test that the Main workflow runs on Android 16 and 17.</div>
+      <div class="card"><strong>Affected Areas</strong><code>core-domain</code> diagnostics, <code>core-sources</code> parse sites, <code>app</code> startup and diagnostics, journey fixtures and tests.</div>
+    </div>
+  </header>
+
+  <nav aria-label="Plan sections">
+    <ul>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#context">Context</a></li>
+      <li><a href="#design">Design</a></li>
+      <li><a href="#coverage">Coverage</a></li>
+      <li><a href="#phases">Phases</a></li>
+      <li><a href="#work-plan">Work Plan</a></li>
+      <li><a href="#validation">Validation</a></li>
+      <li><a href="#living-log">Living Log</a></li>
+      <li><a href="#recovery">Recovery</a></li>
+      <li><a href="#appendix">Appendix</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <section id="purpose">
+      <h2>Purpose / Big Picture</h2>
+      <p>An Android app draws on two threads. The <strong>main thread</strong> runs Compose (building and laying out the screen), input handling, and in this app every video player call. <strong>RenderThread</strong> turns what the main thread recorded into pixels. Other work that lands on the main thread, such as parsing a provider's JSON response, delays the next frame.</p>
+      <p>A threading audit on 2026-11-15 found such work in seven places (findings A1 to A7, fixed separately). Nothing would have caught them: the journey and benchmark fixtures hand back ready-made posts, so no test ever parses a response; there is no StrictMode (Android's detector for disk and network access on the main thread); and the diagnostics log records failures, not threading.</p>
+      <p>This plan delivers three things:</p>
+      <ul>
+        <li><strong>A marker and a gate.</strong> Shared code marks the work that must not run on the main thread. An emulator journey test drives a search through a real source adapter and fails unless that marked work ran, and ran off the main thread. The test runs automatically on every push to <code>main</code>.</li>
+        <li><strong>A log line in real use.</strong> In every build, the first time each distinct call site runs marked work on the main thread, the diagnostics log and logcat record it.</li>
+        <li><strong>A debug detector.</strong> Debug builds report disk reads and writes on the main thread.</li>
+      </ul>
+      <p>The gate covers the Search path and nothing else. The two refactors that follow extend it for their own work: the source-boundary plan adds device tests that call sources directly from the main thread, and the feed-presenter plan must assert that its presenter ran and never on the main thread. Adding a marker without such an assertion gives logging, not a gate.</p>
+      <p>Two things from earlier drafts are not in this plan: slow-frame counts per screen, and a watchdog that samples the main thread during stalls. The reasons are in the Decision Log.</p>
+    </section>
+
+    <section id="context">
+      <h2>Context And Orientation</h2>
+      <ul>
+        <li><strong>Source adapter</strong>: one class per provider in the <code>core-sources</code> module. It makes HTTP requests and parses the response into the app's <code>Post</code> model.</li>
+        <li><strong>Diagnostics log</strong>: a private, bounded, redacted on-device log (<code>DiagnosticLogStore</code>). Code calls <code>Diagnostics.report(area, message, error)</code>. <code>Diagnostics</code> lives in <code>core-domain</code> and has one installable sink (<code>Diagnostics.kt</code> :13-18), because <code>core-domain</code> and <code>core-sources</code> are plain Kotlin modules with no Android classes.</li>
+        <li><strong>Journey test</strong>: an instrumented test under <code>app/src/androidTest/java/com/theoriacodex/app/journeys/</code> that launches the real app shell with fixture data. <code>AppJourneyFixture</code> builds a <code>JourneyAppContainer</code> (fixed today at two sources with 60 posts each, :48-51) and launches <code>JourneyTestActivity</code>. The Main workflow calls <code>device-validation.yml</code>, which runs every journey class in two shards on each of Android 16 and 17, in one process per shard; there is no list of tests to update.</li>
+        <li><strong>Fixture registry</strong>: <code>app/src/fixtures/.../JourneySourceRegistry.kt</code> builds the same <code>UnifiedSearchOrchestrator</code> the app uses (:29), but its adapters return ready-made posts. <code>JourneyAppContainer</code> takes a <code>SourceHttpClient</code> (:83), a no-network client by default.</li>
+        <li><strong>Search's thread path</strong>: Search runs in a ViewModel coroutine on the main thread (<code>SearchViewModel.kt</code> :795) through <code>SearchCoordinator</code> (:498) into the orchestrator. Audit fix A1 gives the orchestrator <code>providerContext: CoroutineContext = Dispatchers.Default</code>; with <code>EmptyCoroutineContext</code> there, provider calls and their parsing run on the main thread again.</li>
+        <li><strong>Danbooru adapter</strong> (<code>danbooru/DanbooruSourceAdapter.kt</code>): fixed page size of 40 (:308); pages newest-first results with an id cursor <code>b&lt;id&gt;</code> (:222); drops posts without a numeric id (:256); parses with <code>parseJsonArray</code> (:217).</li>
+        <li><strong>Build types</strong>: <code>debug</code> (<code>com.theoriacodex.debug</code>), <code>release</code> and <code>personalRelease</code> (<code>com.theoriacodex</code>, production, never used for tests), <code>releaseAcceptance</code>, <code>benchmarkRelease</code>. All but <code>debug</code> are minified, and no mapping file is kept, so their stack frames are renamed and may be merged.</li>
+      </ul>
+      <h3>Parse sites in <code>core-sources</code></h3>
+      <table>
+        <thead><tr><th>Kind</th><th>Where</th></tr></thead>
+        <tbody>
+          <tr><td>Shared JSON helpers</td><td><code>common/SourceAdapterCommon.kt</code>: <code>parseJsonArray</code> (:66), <code>parseJsonObject</code> (:74), <code>parseJsonElement</code> (:82). Used by Danbooru, Gelbooru, Iwara, Nhentai, Pixiv, <code>PixivAuthApi</code>, Rule34 common and Rule34 Paheal; Custom Sites reuse the Danbooru and Gelbooru adapters.</td></tr>
+          <tr><td>JSON outside the helpers</td><td><code>hitomi/HitomiProtocol.kt</code> (:143), <code>hitomi/HitomiPageTokenCodec.kt</code> (:18), <code>custom/ProbeEvidence.kt</code> (:95), the error-body parse in <code>DanbooruSourceAdapter.kt</code> (:244).</td></tr>
+          <tr><td>HTML and XML documents (Jsoup)</td><td><code>rule34/Rule34PahealSourceAdapter.kt</code> (:77, :126, :154, :161, :208), <code>rule34/AbstractRule34KvsVideoSourceAdapter.kt</code> (:56, :120, :182, :186), <code>rule34/Rule34GenSourceAdapter.kt</code> (:26), <code>nhentai/NhentaiMirrorParser.kt</code> (:11), <code>gelbooru/GelbooruComments.kt</code> (:26, :52), <code>gelbooru/GelbooruAccounts.kt</code> (:22), <code>gelbooru/GelbooruRelatedPostsParser.kt</code> (:13), <code>custom/SiteProber.kt</code> (:190, :220).</td></tr>
+          <tr><td>HTML fragment (Jsoup)</td><td><code>common/CommentText.kt</code> (:16), which uses fragment parsing and must keep it.</td></tr>
+          <tr><td>Outside the module</td><td><code>PixivUgoiraPlayer.kt</code> (:660) in <code>app</code> parses a provider response.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="design">
+      <h2>Design</h2>
+      <h3>1. The contract marker</h3>
+      <p>A new object in <code>core-domain</code>, <code>OffMainWork</code>, with <code>note(label)</code> and <code>install(checker)</code>. Labels are constants on the object (<code>SOURCE_PARSE</code>, and <code>SELF_TEST</code> for the control), never data. <code>install</code> returns the checker it replaced, so a test can wrap the app's checker and put it back. The call goes where background-only work executes, for example the first line of a parse helper, never at the start of a <code>suspend</code> function that callers may correctly invoke from the main thread before it switches.</p>
+      <p>With no checker installed, <code>note</code> is one volatile read. The app installs its checker next to <code>startDiagnostics()</code>, in the main process only (no other process calls an adapter). Off the main thread the checker does nothing. On the main thread it:</p>
+      <ul>
+        <li>increments a per-label counter that is never capped;</li>
+        <li>for the first twenty distinct call sites in the process, captures a stack, writes one logcat line (tag <code>TheoriaThreads</code>) and one <code>Diagnostics</code> report (area <code>main-thread</code>). A call site is identified by the label and the stack's top frames below <code>note</code>. After twenty, it writes one line saying the limit was reached and stops capturing stacks, so a repeating violation costs a counter increment.</li>
+      </ul>
+      <p>The checker never throws. In minified builds the frames are renamed and distinct callers can merge into one identity; there the report means "a violation exists under this label", to be reproduced in a debug build, where stacks are readable. That limitation is accepted and not tested.</p>
+
+      <h3>2. Call sites in this plan</h3>
+      <p>The three shared JSON helpers; three new helpers beside them, <code>parseHtml</code>, <code>parseXml</code> and <code>parseHtmlFragment</code>, which call <code>note</code> and then the matching Jsoup function; every site in the Context table routed through one of those six (the Hitomi sites and <code>ProbeEvidence</code> may call <code>note</code> directly if a helper does not fit); and one <code>note</code> in <code>PixivUgoiraPlayer</code>'s parse.</p>
+
+      <h3>3. The gate: a journey test through a real parser</h3>
+      <p><strong>Fixture.</strong> <code>JourneySourceRegistry</code> gains an optional parameter naming sources to serve through a real adapter. For those it constructs <code>DanbooruSourceAdapter</code> with a small in-memory <code>SourceHttpClient</code> that keeps a request log. <code>AppJourneyFixture</code> gains hooks for that parameter and for the post list. The gate's posts are provider-compatible: 100 posts with numeric ids and local image files as media, so three pages of 40 exist. The in-memory client answers <code>/posts.json</code> with JSON generated from those posts, honouring <code>limit</code> and both paging forms (<code>page=N</code> and the <code>b&lt;id&gt;</code> cursor), and passes other requests to the container's existing client. The adapter passes non-HTTP media locations through unchanged (<code>SourceAdapterCommon.kt</code> :299-305). No provider data is recorded or stored.</p>
+      <p><strong>Test.</strong> It installs a recorder that counts calls and threads per label and forwards every call to the app's checker, and restores the app's checker afterwards. It opens Search on that source with the default newest-first order, and scrolls (using the scroll helper moved from <code>SearchNavigationJourneyTest</code> into <code>AppJourneyFixture</code>) until the request log shows three distinct page values. It then asserts:</p>
+      <ul>
+        <li>at least three distinct page values among <code>/posts.json</code> requests;</li>
+        <li>at least as many <code>SOURCE_PARSE</code> calls as responses served;</li>
+        <li>no <code>SOURCE_PARSE</code> call on the main thread;</li>
+        <li>a card for a known third-page post exists, found by its test tag (<code>searchCardTestTag(PostId(source, id))</code>).</li>
+      </ul>
+      <p><strong>Permanent control.</strong> A second test calls <code>OffMainWork.note(SELF_TEST)</code> on the main thread and asserts that the <em>app's</em> checker counted it and that a <code>main-thread</code> report reached the diagnostics sink. This proves on a device that startup installs the real checker, its main-thread detection works and its reporting path is connected.</p>
+      <p><strong>Generator check (host).</strong> A host test runs generated JSON through the adapter and compares what the parser can carry: ids, tags, media location and the next-page token. A parser change that would empty the journey fails on the host first.</p>
+
+      <h3>4. StrictMode in debug builds</h3>
+      <p>Debug builds extend the main thread's existing policy, so Android's network-on-main protection stays: <code>StrictMode.ThreadPolicy.Builder(StrictMode.getThreadPolicy()).detectDiskReads().detectDiskWrites().penaltyListener(executor, listener)</code>. The listener counts every violation and reports each distinct topmost app frame once (area <code>strictmode</code>, plus logcat), up to twenty. StrictMode sees disk access performed on the main thread. It does not see the main thread waiting for another thread's disk access, which is what finding A5 was.</p>
+    </section>
+
+    <section id="coverage">
+      <h2>What these signals do and do not cover</h2>
+      <table>
+        <thead><tr><th>Audit finding</th><th>Gate</th><th>Other signal from this plan</th><th>Still needs</th></tr></thead>
+        <tbody>
+          <tr><td>A1 parsing on main</td><td>Search path only</td><td><code>main-thread</code> log line for any path a user actually hits</td><td>Creator, Followed Codex, related posts and comments are not driven by the gate; the source-boundary plan's direct-call tests cover the adapters themselves</td></tr>
+          <tr><td>A2 GIF decoding in the draw pass</td><td>No</td><td>Log line once its renderer carries a marker</td><td>A trace for per-frame cost</td></tr>
+          <tr><td>A3 feed filtering in composition</td><td>No, until the feed-presenter plan adds its own assertion</td><td>Log line once the presenter carries a marker</td><td>A trace for per-pass cost</td></tr>
+          <tr><td>A4 software bitmaps uploaded by RenderThread</td><td>No</td><td>None</td><td>A trace with upload slices</td></tr>
+          <tr><td>A5 main thread waiting on a disk write</td><td>No</td><td>None; StrictMode does not see waits</td><td>A trace or code review</td></tr>
+          <tr><td>A6 Viewer reducer cost</td><td>No; it runs on main by design</td><td>None</td><td>A microbenchmark</td></tr>
+          <tr><td>A7 reads queued behind writes</td><td>No; the UI keeps drawing</td><td>None</td><td>The latency test added with the A7 fix</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="phases">
+      <h2>Phases</h2>
+      <article>
+        <h3>Phase 1: Marker, checker and call sites</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Marked work on the main thread is counted and reported per call site in every build.</td></tr>
+          <tr><td>Commands</td><td><code>./gradlew :core-domain:test :core-sources:test :app-logic:test :app:testDebugUnitTest --offline</code></td></tr>
+          <tr><td>Acceptance</td><td>Host tests: with a fake "is main" probe, the ledger reports each call site once, stops capturing at twenty, and keeps counting. <code>install</code> returns the previous checker. Existing source tests pass unchanged with the parse sites routed through the helpers, including a comment-text test that still gets fragment semantics. <code>grep -rn "Jsoup\.\|JsonParser\.\|fromJson" core-sources/src/main</code> finds parsing only inside the helpers and the sites the Appendix lists as calling <code>note</code> directly.</td></tr>
+        </tbody></table>
+      </article>
+      <article>
+        <h3>Phase 2: The journey gate (needs A1 merged)</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>An automated emulator test that fails when Search parses on the main thread, and fails when no parsing happens.</td></tr>
+          <tr><td>Commands</td><td>Build <code>:app:assembleDebug :app:assembleDebugAndroidTest</code>. Follow the device steps in <code>AGENTS.md</code>: verify both APKs with <code>scripts/verify_device_apk.py</code>, confirm <code>ro.kernel.qemu</code> is <code>1</code> on the target serial, close any <code>agent-device</code> session, <code>adb -s &lt;serial&gt; install -r -t</code> both, then <code>adb -s &lt;serial&gt; shell am instrument -w -e class com.theoriacodex.app.journeys.SourceParsingThreadJourneyTest com.theoriacodex.debug.test/androidx.test.runner.AndroidJUnitRunner</code>.</td></tr>
+          <tr><td>Acceptance</td><td>Both tests pass. Negative controls, each done once with its output recorded in the Appendix and then undone: (1) build the fixture's orchestrator with <code>providerContext = EmptyCoroutineContext</code>; the journey fails on "no <code>SOURCE_PARSE</code> call on the main thread" while the control test still passes. (2) make the in-memory client return the first page's body for every request; the journey fails on the third-page card or on distinct page values, and the record says which. After merge, the new class appears in one shard per Android version in the Main workflow and passes.</td></tr>
+        </tbody></table>
+      </article>
+      <article>
+        <h3>Phase 3: StrictMode in debug</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Disk access on the main thread from app code is reported in debug builds, and network-on-main still throws.</td></tr>
+          <tr><td>Acceptance</td><td>An instrumented test reads a file on the main thread and asserts the listener's violation count rose and the violation's stack contains the test; it uses the uncapped count, so earlier tests in the same process cannot use up the reporting limit. A second asserts that opening a socket on the main thread still throws <code>NetworkOnMainThreadException</code>. A manual debug run on the emulator lists existing violations; each distinct app call site is recorded in Surprises as a finding and not fixed here.</td></tr>
+        </tbody></table>
+      </article>
+    </section>
+
+    <section id="work-plan">
+      <h2>Work Plan</h2>
+      <ol>
+        <li><strong>Contract object.</strong> Add <code>core-domain/src/main/kotlin/com/theoriacodex/domain/diagnostics/OffMainWork.kt</code>: label constants, <code>fun interface OffMainChecker { fun check(label: String) }</code>, <code>install</code> returning the previous checker, <code>note</code>. Test in <code>core-domain/src/test</code>.</li>
+        <li><strong>Parse helpers and sites.</strong> In <code>SourceAdapterCommon.kt</code>, call <code>OffMainWork.note(OffMainWork.SOURCE_PARSE)</code> first in the three JSON helpers and add <code>parseHtml</code>, <code>parseXml</code>, <code>parseHtmlFragment</code>. Route every site in the Context table through them or add a direct <code>note</code>; list the direct ones in the Appendix. Add the <code>note</code> in <code>PixivUgoiraPlayer</code>.</li>
+        <li><strong>Ledger.</strong> Add <code>app-logic/src/main/kotlin/com/theoriacodex/app/diagnostics/OffMainViolationLedger.kt</code>: per-label counts, call-site identity from a stack, first report per site, the limit and what happens after it. Pure Kotlin, host-tested.</li>
+        <li><strong>Android glue.</strong> Add <code>app/src/main/java/com/theoriacodex/app/diagnostics/ThreadDiagnostics.kt</code> with <code>installOffMainChecker()</code> (main-looper check, the ledger, <code>Log.w</code>, <code>Diagnostics.report</code>) and, in Phase 3, <code>installDebugStrictMode()</code>. Call <code>installOffMainChecker()</code> from <code>startDiagnostics()</code> in <code>TheoriaApplication</code> (defined at :85, called at :64 for the main process).</li>
+        <li><strong>Parsing fixture.</strong> Add <code>app/src/fixtures/java/com/theoriacodex/app/fixtures/ProviderShapedSource.kt</code> (in-memory client with a request log, the JSON generator, the provider-compatible post builder). Extend <code>JourneySourceRegistry</code>, <code>JourneyAppContainer</code> and <code>AppJourneyFixture</code> with the optional hooks, defaulting to today's behaviour so existing journeys and benchmarks are unchanged. Add the generator's host test under <code>app/src/test</code>.</li>
+        <li><strong>Journey test.</strong> Add <code>app/src/androidTest/java/com/theoriacodex/app/journeys/SourceParsingThreadJourneyTest.kt</code>; move <code>scrollToFirstVisibleCard</code> from <code>SearchNavigationJourneyTest</code> (:272) into <code>AppJourneyFixture</code>.</li>
+        <li><strong>StrictMode.</strong> <code>installDebugStrictMode()</code> guarded by <code>BuildConfig.DEBUG</code>, called on the main thread at startup; its two instrumented tests under <code>app/src/androidTest</code>.</li>
+      </ol>
+      <p>Not in this plan: a macrobenchmark scenario through a parser (the results script compares against a fixed scenario set at <code>scripts/benchmark_results.py</code> :136-139 and nothing runs the benchmark automatically); slow-frame counts; fixing anything these tools reveal.</p>
+      <p>Commits: one per phase. Two pull requests: Phase 1 with Phase 3, which need nothing else, and Phase 2 after A1 is on <code>main</code>.</p>
+    </section>
+
+    <section id="validation">
+      <h2>Validation And Acceptance</h2>
+      <p>Commands run from the repository root. Robolectric tests need Java 21 or newer (<code>JAVA_HOME</code> as described in <code>AGENTS.md</code>). Device work uses only the <code>theoria-search-test</code> AVD and isolated packages, never <code>com.theoriacodex</code>; the journey uses solid-colour local images, so no provider media is shown.</p>
+      <table>
+        <thead><tr><th>Check</th><th>Command or action</th><th>Expected result</th></tr></thead>
+        <tbody>
+          <tr><td>Host tests</td><td><code>./gradlew :core-domain:test :core-sources:test :app-logic:test :app:testDebugUnitTest --offline</code></td><td>Pass, including the ledger and the generator check.</td></tr>
+          <tr><td>Pre-PR check</td><td><code>scripts/check.sh --record</code></td><td>Passes.</td></tr>
+          <tr><td>Gate, positive</td><td>The <code>am instrument</code> command in Phase 2</td><td>Two tests pass.</td></tr>
+          <tr><td>Gate, negative</td><td>The two controls in Phase 2</td><td>Each fails the journey on the expected assertion; outputs recorded.</td></tr>
+          <tr><td>Automation</td><td>The Main workflow run after the Phase 2 pull request merges</td><td>The class runs in one shard per Android version and passes.</td></tr>
+          <tr><td>StrictMode</td><td>The two instrumented tests in Phase 3</td><td>Disk read counted; network on main still throws.</td></tr>
+        </tbody>
+      </table>
+      <p>If the journey test is flaky, it is fixed or the plan is reopened; it is not excluded and left counted as a gate.</p>
+    </section>
+
+    <section id="living-log">
+      <h2>Living Log</h2>
+      <h3>Progress</h3>
+      <ul>
+        <li>[x] 2026-11-15 - Plan drafted from the threading audit (B4).</li>
+        <li>[x] 2026-11-15 - Review round 1 (Opus high, GPT-6.1 Sol adversarial) merged.</li>
+        <li>[x] 2026-11-16 - Review round 2 merged; plan ready to implement.</li>
+        <li>[ ] Phases 1 and 3 merged.</li>
+        <li>[ ] Phase 2 merged (after A1).</li>
+      </ul>
+      <h3>Surprises And Discoveries</h3>
+      <ul>
+        <li>Observation: no existing test parses a provider response. Evidence: <code>JourneySourceRegistry.kt</code>, <code>BenchmarkFixtureActivity.kt</code> :81.</li>
+        <li>Observation: the macrobenchmark is run only by hand and its results script rejects a changed scenario set. Evidence: <code>scripts/benchmark_results.py</code> :136-139. Consequence: the gate is a journey test.</li>
+        <li>Observation: the Danbooru adapter needs numeric ids, a 40-post page and an id cursor, which today's fixture posts do not provide. Evidence: <code>DanbooruSourceAdapter.kt</code> :222, :256, :308; <code>AppJourneyFixture.kt</code> :48-51.</li>
+        <li>Observation: A1 made the orchestrator's provider dispatcher a constructor parameter, so the gate's negative control is a one-line fixture change. Evidence: A1 commit, <code>UnifiedSearchOrchestrator.kt</code>.</li>
+        <li>Observation: journey classes share one process per shard, so a test-installed checker must be restored and process-wide limits must not be asserted on. Evidence: <code>scripts/verify_debug_device.sh</code> :35-42.</li>
+        <li>Observation: release builds are minified with no mapping file kept. Evidence: <code>app/build.gradle.kts</code> :231.</li>
+      </ul>
+      <h3>Decision Log</h3>
+      <ul>
+        <li>Decision: The required outcome is a threading gate for annotated work plus debug detection, not a production performance monitor. Rationale: review showed the monitor's signals could not serve as acceptance for the other findings and its cost was unmeasured. Date/Author: 2026-11-15 / Claude.</li>
+        <li>Decision: The gate is an emulator journey test, not a macrobenchmark metric. Rationale: journeys run on every push to <code>main</code>. Date/Author: 2026-11-15 / Claude.</li>
+        <li>Decision: Markers sit where background-only work executes, never at suspend entry points. Rationale: a main-safe suspend function is correctly called from the main thread. Date/Author: 2026-11-15 / Claude.</li>
+        <li>Decision: The gate needs positive evidence, a control through the app's real checker, and two recorded negative controls. Rationale: zero violations also describes a test that parsed nothing, and a test double proves nothing about startup. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: State the gate's coverage as the Search path only. Rationale: other screens can regress independently; later plans add their own assertions. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: Report per call site up to twenty, then count only. Rationale: one old offender must not hide new ones, and a repeating violation must not allocate a stack each time. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: Install the checker in the main process only, and do nothing off the main thread. Rationale: the benchmark process was the only reason for every process and it is no longer involved; trace sections on every parse served nothing the gate uses. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: Drop slow-frame counts per screen. Rationale: no plan consumes them; the video and feed plans measure with traces. If added later: name screens by route plus home tab, prefer AndroidX JankStats over a hand-written listener, keep it out of the production package until its cost is measured on the phone. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: Drop the stall watchdog. Rationale: it measures delayed message delivery, not a cause, wakes the main thread constantly on the production package, and its stacks would be unreadable. Date/Author: 2026-11-15 / Claude.</li>
+        <li>Decision: StrictMode extends the existing thread policy. Rationale: a fresh policy would drop network-on-main protection. Date/Author: 2026-11-15 / Claude.</li>
+        <li>Decision: Generate provider-shaped JSON from fixture posts. Rationale: no provider content in the repository. Date/Author: 2026-11-15 / Claude.</li>
+      </ul>
+      <h3>Outcomes And Retrospective</h3>
+      <p>Not started.</p>
+    </section>
+
+    <section id="recovery">
+      <h2>Idempotence And Recovery</h2>
+      <p>Nothing here migrates or deletes data. Every phase is additive and can be reverted by reverting its commit. The negative controls are one-line edits in fixture code: undo them and confirm with <code>git status --short</code> that nothing else changed. Instrumented-test reports that serve as acceptance evidence are kept until the phase's pull request has merged, then pruned as <code>AGENTS.md</code> describes.</p>
+    </section>
+
+    <section id="appendix">
+      <h2>Appendix: Evidence And Notes</h2>
+      <details>
+        <summary>Review rounds: what changed</summary>
+        <p>Round 1: gate moved from a macrobenchmark metric to a journey test; positive evidence and negative controls; per-call-site reporting; corrected parse-site list; StrictMode policy extension; watchdog dropped; frame counts restricted. Round 2: coverage stated as Search only; negative control uses A1's dispatcher parameter; fixture made compatible with the Danbooru adapter (numeric ids, 100 posts, id cursor) with hooks in <code>AppJourneyFixture</code>; cards found by test tag and pages by the client's request log; the recorder forwards to and restores the app's checker and the control exercises the real one; behaviour after the reporting limit defined and the mapping-file claim removed; fragment parsing preserved and missing parse sites added; checker installed in the main process only with no trace sections; frame counts dropped.</p>
+      </details>
+      <details>
+        <summary>Parse sites that call <code>note</code> directly</summary>
+        <p>To be filled in during Phase 1.</p>
+      </details>
+      <details>
+        <summary>Negative control outputs</summary>
+        <p>To be filled in during Phase 2.</p>
+      </details>
+    </section>
+  </main>
+</body>
+</html>
