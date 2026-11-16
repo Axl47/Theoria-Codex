@@ -16,6 +16,7 @@ import com.theoriacodex.app.di.TheoriaAppContainerOwner
 import com.theoriacodex.app.diagnostics.DiagnosticLogStore
 import com.theoriacodex.app.diagnostics.DiagnosticReporter
 import com.theoriacodex.app.diagnostics.installCrashCapture
+import com.theoriacodex.app.diagnostics.installOffMainChecker
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.app.media.AnimatedWebPDecoder
 import com.theoriacodex.app.media.UndecodableImageEviction
@@ -85,6 +86,7 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
     private fun startDiagnostics() {
         val store = DiagnosticLogStore(filesDir.resolve("theoria_codex/diagnostics"))
         Diagnostics.install(store)
+        installOffMainChecker()
         installCrashCapture(store)
         diagnosticReporter = DiagnosticReporter(this, store)
         Diagnostics.report("app", "Started ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")

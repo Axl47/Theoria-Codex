@@ -57,7 +57,7 @@
     <h1>ExecPlan: Catch main-thread work automatically</h1>
     <p>After this plan, work that has been declared "background only", starting with parsing provider responses, fails an automated emulator test when Search runs it on the main thread, and is logged in every build the first time each call site does it. Debug builds also report disk access on the main thread. Today none of this is checked: the same class of problem has been found by reading code and fixed screen by screen.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: Ready to implement (two review rounds merged)</span>
+      <span class="pill">Status: In progress (Phases 1 and 3)</span>
       <span class="pill">Owner: Claude (orchestrator)</span>
       <span class="pill">Created: 2026-11-15</span>
       <span class="pill">Updated: 2026-11-16</span>
@@ -238,6 +238,7 @@
         <li>[x] 2026-11-15 - Plan drafted from the threading audit (B4).</li>
         <li>[x] 2026-11-15 - Review round 1 (Opus high, GPT-6.1 Sol adversarial) merged.</li>
         <li>[x] 2026-11-16 - Review round 2 merged; plan ready to implement.</li>
+        <li>[x] 2026-11-16 - Phase 1: <code>OffMainWork</code> marker, shared <code>ViolationLedger</code>, <code>MainThreadWorkChecker</code> and its Android glue installed from <code>startDiagnostics()</code>; host tests pass.</li>
         <li>[ ] Phases 1 and 3 merged.</li>
         <li>[ ] Phase 2 merged (after A1).</li>
       </ul>
@@ -262,6 +263,9 @@
         <li>Decision: Drop slow-frame counts per screen. Rationale: no plan consumes them; the video and feed plans measure with traces. If added later: name screens by route plus home tab, prefer AndroidX JankStats over a hand-written listener, keep it out of the production package until its cost is measured on the phone. Date/Author: 2026-11-16 / Claude.</li>
         <li>Decision: Drop the stall watchdog. Rationale: it measures delayed message delivery, not a cause, wakes the main thread constantly on the production package, and its stacks would be unreadable. Date/Author: 2026-11-15 / Claude.</li>
         <li>Decision: StrictMode extends the existing thread policy. Rationale: a fresh policy would drop network-on-main protection. Date/Author: 2026-11-15 / Claude.</li>
+        <li>Decision: The per-site counting and limit live in one class, <code>ViolationLedger</code> (app-logic), used by both the off-main checker and the StrictMode listener; the main-thread probe, stack capture and frame trimming live in <code>MainThreadWorkChecker</code> (app-logic, host-tested with a fake probe). The plan's single <code>OffMainViolationLedger</code> became these two because the StrictMode listener needs the same report-once-per-site-up-to-twenty logic. Rationale: one implementation of the limit instead of two. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: The limit notice is written on the first violation after the twentieth site is reported, whatever its site, and says later sites are counted rather than claiming a twenty-first exists. Rationale: knowing whether a later violation is a new site would need its stack, which is what the limit avoids. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: A report carries the call site's frames as the stack of a never-thrown <code>CallSiteStack</code> throwable, passed to <code>Log.w</code> and <code>Diagnostics.report</code>. Rationale: both already print and redact a throwable's stack; no new formatting code. Date/Author: 2026-11-16 / Claude.</li>
         <li>Decision: Generate provider-shaped JSON from fixture posts. Rationale: no provider content in the repository. Date/Author: 2026-11-15 / Claude.</li>
       </ul>
       <h3>Outcomes And Retrospective</h3>
