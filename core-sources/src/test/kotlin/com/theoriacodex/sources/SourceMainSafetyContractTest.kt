@@ -12,6 +12,7 @@ import com.theoriacodex.sources.custom.CustomSiteHttpClient
 import com.theoriacodex.sources.custom.FixtureSiteTransport
 import com.theoriacodex.sources.custom.SiteFamilyRegistry
 import com.theoriacodex.sources.custom.SiteProber
+import com.theoriacodex.sources.hitomi.HitomiMediaUrlResolver
 import com.theoriacodex.sources.hitomi.HitomiNozomi
 import com.theoriacodex.sources.hitomi.HitomiNozomiRequest
 import com.theoriacodex.sources.hitomi.RoutingHitomiHttpClient
@@ -73,7 +74,10 @@ class SourceMainSafetyContractTest {
             val adapter = requireNotNull(registry.adapterFor(fixture.source))
             assertOffCaller(fixture.source.id, expected = 2) { adapter.search(providerPageQuery(fixture.source), null).items.size }
         }
-        val hitomiHttp = RoutingHitomiHttpClient().apply { binaryIndexes[HitomiNozomi.urlFor(HitomiNozomiRequest())] = listOf(43, 42) }
+        val hitomiHttp = RoutingHitomiHttpClient().apply {
+            binaryIndexes[HitomiNozomi.urlFor(HitomiNozomiRequest())] = listOf(43, 42)
+            textRoutes[HitomiMediaUrlResolver.GG_CONFIGURATION_URL] = resource("/hitomi/2026-07-10/gg-shape.js")
+        }
         val hitomi = requireNotNull(
             RealAdapterRegistry(FakeCredentialsProvider(), RecordingHttpClient(hitomiHttp), setOf(SourceKey.HITOMI))
                 .adapterFor(SourceKey.HITOMI),
@@ -142,6 +146,8 @@ class SourceMainSafetyContractTest {
         assertEquals("$row: work ran on the calling thread", emptyList<Event>(), seen.filter { it.thread === standInThread.get() })
     }
 
+    private fun resource(path: String) = requireNotNull(javaClass.getResource(path)).readText()
+
     private fun record(kind: String) {
         events += Event(kind, Thread.currentThread())
     }
@@ -190,7 +196,7 @@ class SourceMainSafetyContractTest {
     private companion object {
         /** Sources Phase 1 has not converted yet. Empty, and removed, once the whole boundary is wrapped. */
         val NOT_YET_CONVERTED = setOf(
-            SourceKey.HITOMI, SourceKey.IWARA,
+            SourceKey.IWARA,
             SourceKey.RULE34VIDEO, SourceKey.RULE34GEN, SourceKey.RULE34PAHEAL,
         )
         const val HTTP = "http"

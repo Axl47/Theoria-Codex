@@ -27,11 +27,14 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.canonicalHitomiArtistIdentity
 import com.theoriacodex.domain.query.QueryHash
 import com.theoriacodex.sources.common.classifyHttpFailure
+import com.theoriacodex.sources.common.sourceCall
 import com.theoriacodex.sources.http.SourceHttpClient
 import java.io.IOException
 import java.security.MessageDigest
 import java.util.Locale
+import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.supervisorScope
@@ -61,6 +64,8 @@ class HitomiSourceAdapter(
     private val mediaCandidates: suspend (HitomiMediaFile) -> List<HitomiMediaCandidate> = { file ->
         mediaUrlResolver.candidates(file)
     },
+    /** Where entry points run; tests pass EmptyCoroutineContext to keep virtual time. Production never sets it. */
+    private val callContext: CoroutineContext = Dispatchers.Default,
 ) : SourceAdapter, FacetedSearchSourceAdapter, CreatorPostsSourceAdapter, MediaRecoverySourceAdapter, TagCountLookupSourceAdapter {
     override val sourceKey: SourceKey = SourceKey.HITOMI
 
@@ -90,8 +95,9 @@ class HitomiSourceAdapter(
 
     private val postMapper = HitomiPostMapper(mediaUrlResolver, mediaCandidates)
 
-    override suspend fun recoverPostMedia(post: Post, failedMedia: ImageRef): Post? =
+    override suspend fun recoverPostMedia(post: Post, failedMedia: ImageRef): Post? = sourceCall(callContext) {
         postMapper.recoverPostMedia(post, failedMedia)
+    }
 
     private val pageTokenCodec = HitomiPageTokenCodec()
     private val suggestionCounts = HitomiByteBudgetCache<String, Int>(
@@ -123,8 +129,8 @@ class HitomiSourceAdapter(
         }
     }
 
-    override suspend fun search(query: Query, pageToken: String?): Page<Post> {
-        return try {
+    override suspend fun search(query: Query, pageToken: String?): Page<Post> = sourceCall(callContext) {
+        try {
             searchInternal(query, pageToken)
         } catch (error: CancellationException) {
             throw error
@@ -347,12 +353,16 @@ class HitomiSourceAdapter(
         )
     }
 
-    override suspend fun fetchTagCounts(tags: List<String>): Map<String, Int> =
+    override suspend fun fetchTagCounts(tags: List<String>): Map<String, Int> = sourceCall(callContext) {
         autocompleteTagCounts(sourceKey, tags, ::autocompleteTags)
-    override suspend fun trendingTags(limit: Int): List<TagSuggestion> = emptyList()
+    }
 
-    override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> {
-        return autocompleteFaceted(
+    override suspend fun trendingTags(limit: Int): List<TagSuggestion> = sourceCall(callContext) {
+        emptyList()
+    }
+
+    override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = sourceCall(callContext) {
+        autocompleteFaceted(
             prefix = prefix,
             scope = FacetedSearchScope.All,
             limit = limit,
@@ -369,8 +379,8 @@ class HitomiSourceAdapter(
         prefix: String,
         scope: FacetedSearchScope,
         limit: Int,
-    ): List<FacetedTagSuggestion> {
-        return try {
+    ): List<FacetedTagSuggestion> = sourceCall(callContext) {
+        try {
             autocompleteFacetedInternal(prefix, scope, limit)
         } catch (error: CancellationException) {
             throw error
@@ -388,14 +398,14 @@ class HitomiSourceAdapter(
     override suspend fun featuredFacetedSuggestions(
         scope: FacetedSearchScope,
         limit: Int,
-    ): List<FacetedTagSuggestion> {
-        if (limit <= 0 || scope !in supportedSearchScopes) return emptyList()
+    ): List<FacetedTagSuggestion> = sourceCall(callContext) {
+        if (limit <= 0 || scope !in supportedSearchScopes) return@sourceCall emptyList()
         val values = when (scope.facet) {
             SearchFacet.TYPE -> HITOMI_FEATURED_TYPES
             SearchFacet.LANGUAGE -> HITOMI_FEATURED_LANGUAGES
             else -> emptyList()
         }
-        return values.take(limit).map { value ->
+        values.take(limit).map { value ->
             FacetedTagSuggestion(
                 text = value,
                 facet = requireNotNull(scope.facet),
@@ -439,14 +449,14 @@ class HitomiSourceAdapter(
             }
     }
 
-    override suspend fun quickQuery(kind: QuickQueryKind): Query {
+    override suspend fun quickQuery(kind: QuickQueryKind): Query = sourceCall(callContext) {
         val sort = when (kind) {
             QuickQueryKind.POPULAR_TODAY -> SortMode.POPULAR
             QuickQueryKind.TOP_7D, QuickQueryKind.TOP_30D -> SortMode.TOP
             QuickQueryKind.NEWEST -> SortMode.NEWEST
             QuickQueryKind.RANDOM -> SortMode.RANDOM
         }
-        return Query(
+        Query(
             mode = QueryMode.Source(SourceKey.HITOMI),
             includeTags = emptyList(),
             excludeTags = emptyList(),
@@ -456,11 +466,11 @@ class HitomiSourceAdapter(
         )
     }
 
-    override suspend fun resolvePost(id: PostId): Post? {
-        if (id.source != SourceKey.HITOMI) return null
+    override suspend fun resolvePost(id: PostId): Post? = sourceCall(callContext) {
+        if (id.source != SourceKey.HITOMI) return@sourceCall null
         val galleryId = id.sourcePostId.trim().toIntOrNull()?.takeIf { value -> value > 0 }
-            ?: return null
-        return try {
+            ?: return@sourceCall null
+        try {
             fetchGallery(galleryId, sparse = false)
         } catch (error: HitomiGalleryException) {
             throw SourceAdapterException(
@@ -474,10 +484,10 @@ class HitomiSourceAdapter(
     override suspend fun searchCreatorPosts(
         creator: CreatorProfile,
         pageToken: String?,
-    ): Page<Post> {
+    ): Page<Post> = sourceCall(callContext) {
         val artist = creator.canonicalHitomiArtistIdentity()
-            ?: return Page(items = emptyList(), nextPageToken = null)
-        return search(
+            ?: return@sourceCall Page(items = emptyList(), nextPageToken = null)
+        search(
             query = Query(
                 mode = QueryMode.Source(SourceKey.HITOMI),
                 includeTerms = listOf(

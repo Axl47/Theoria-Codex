@@ -27,7 +27,9 @@ import java.time.OffsetDateTime
 import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
@@ -52,6 +54,7 @@ internal abstract class HitomiSourceAdapterTestFixture {
         randomSnapshotCacheMaxBytes: Long = HitomiRandomSnapshotCache.DEFAULT_MAX_BYTES,
         mediaCalls: AtomicInteger = AtomicInteger(0),
         candidateProvider: (suspend (HitomiMediaFile) -> List<HitomiMediaCandidate>)? = null,
+        callContext: CoroutineContext = Dispatchers.Default,
     ): HitomiSourceAdapter {
         return HitomiSourceAdapter(
             httpClient = http,
@@ -67,6 +70,7 @@ internal abstract class HitomiSourceAdapterTestFixture {
                     candidate(file, HitomiMediaFormat.ORIGINAL, "image/jpeg", "original"),
                 )
             },
+            callContext = callContext,
         )
     }
 
