@@ -5,6 +5,8 @@ import com.theoriacodex.data.repository.DEFAULT_MEDIA_DURATION_ENTRY_LIMIT
 import com.theoriacodex.data.repository.MediaDurationRepository
 import com.theoriacodex.data.repository.StoredMediaDurationKey
 import com.theoriacodex.data.repository.StoredMediaDurationState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class RoomMediaDurationRepository(
     private val database: TheoriaRoomDatabase,
@@ -17,22 +19,22 @@ class RoomMediaDurationRepository(
         require(maxEntries > 0) { "Media duration entry limit must be positive" }
     }
 
+    /**
+     * Looks up a stored duration with a plain WAL read, so per-card lookups never queue behind writes
+     * on Room's transaction executor. Only an expired retry needs the transaction, which re-reads the
+     * row before deleting it in case a newer state was stored meanwhile.
+     */
     override suspend fun get(key: StoredMediaDurationKey): StoredMediaDurationState? {
+        val state = withContext(Dispatchers.IO) { dao.find(key) }?.toStoredState() ?: return null
+        if (!state.isExpiredRetry()) return state
         return database.withTransaction {
-            val entity = dao.find(
-                key.postId.source.id,
-                key.postId.sourcePostId,
-                key.mediaFingerprint,
-            ) ?: return@withTransaction null
-            val state = entity.toStoredState()
-            if (
-                state is StoredMediaDurationState.RetryableFailure &&
-                state.retryAtEpochMs <= clock()
-            ) {
+            val entity = dao.find(key) ?: return@withTransaction null
+            val current = entity.toStoredState()
+            if (current.isExpiredRetry()) {
                 dao.delete(entity.source, entity.sourcePostId, entity.mediaFingerprint)
                 null
             } else {
-                state
+                current
             }
         }
     }
@@ -43,7 +45,13 @@ class RoomMediaDurationRepository(
             dao.trimToLimit(maxEntries)
         }
     }
+
+    private fun StoredMediaDurationState.isExpiredRetry() =
+        this is StoredMediaDurationState.RetryableFailure && retryAtEpochMs <= clock()
 }
+
+private fun MediaDurationDao.find(key: StoredMediaDurationKey): MediaDurationEntity? =
+    find(key.postId.source.id, key.postId.sourcePostId, key.mediaFingerprint)
 
 private fun MediaDurationEntity.toStoredState(): StoredMediaDurationState {
     return when (decision) {

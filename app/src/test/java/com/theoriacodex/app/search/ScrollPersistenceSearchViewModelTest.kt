@@ -36,12 +36,12 @@ import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
 import java.util.Collections
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.TimeoutException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
@@ -52,10 +52,10 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -163,6 +163,7 @@ internal class ScrollPersistenceSearchViewModelTest : SearchViewModelTestFixture
             owner.onAction(SearchAction.ScrollChanged(5, 50))
             runCurrent()
             store.clear()
+            runCurrent()
 
             assertEquals(
                 listOf(durableQueryHash to SearchScrollState(4, 40)),
@@ -194,6 +195,7 @@ internal class ScrollPersistenceSearchViewModelTest : SearchViewModelTestFixture
             runCurrent()
 
             store.clear()
+            runCurrent()
 
             assertEquals(listOf(SearchScrollState(8, 80)), uiRestore.writeSnapshot().map { it.second })
             owner.onAction(SearchAction.ScrollChanged(9, 90))
@@ -203,7 +205,7 @@ internal class ScrollPersistenceSearchViewModelTest : SearchViewModelTestFixture
         }
 
     @Test
-    fun `clear joins one begun durable write and returns only after acknowledgement`() =
+    fun `clear returns without waiting for a begun durable write, which still lands once`() =
         runTest(mainDispatcherRule.dispatcher) {
             val uiRestore = BlockingUiRestoreRepository()
             val owner = viewModel(
@@ -226,13 +228,14 @@ internal class ScrollPersistenceSearchViewModelTest : SearchViewModelTestFixture
             uiRestore.firstWriteStarted.await()
             val executor = Executors.newSingleThreadExecutor()
             try {
-                val clear = executor.submit<Unit> { store.clear() }
+                executor.submit<Unit> { store.clear() }.get(5L, TimeUnit.SECONDS)
+                assertEquals(emptyList<SearchScrollState>(), uiRestore.writeSnapshot().map { it.second })
 
-                assertThrows(TimeoutException::class.java) {
-                    clear.get(100L, TimeUnit.MILLISECONDS)
-                }
                 uiRestore.releaseFirstWrite.complete(Unit)
-                clear.get(5L, TimeUnit.SECONDS)
+                withContext(Dispatchers.IO) {
+                    withTimeout(5_000L) { while (uiRestore.writeSnapshot().isEmpty()) delay(10L) }
+                    delay(100L)
+                }
 
                 assertEquals(
                     listOf(SearchScrollState(1, 10)),

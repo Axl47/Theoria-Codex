@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.withContext
 
 /**
  * One Room-backed owner for Codex membership, reusable post snapshots, and profile likes.
@@ -263,13 +264,13 @@ class RoomCodexLikesRepository(
         return dao.observeLibraryPosts(ids).decodePostSnapshots(retainedPayloads, "library:${ids.joinToString("\u0000")}")
     }
 
+    // Single-statement reads skip withTransaction: its one serialized executor and BEGIN IMMEDIATE
+    // would queue them behind likes, imports and cleaning. WAL readers see the last committed state.
     override suspend fun hasLibraryData(source: SourceKey): Boolean =
-        database.withTransaction { dao.hasPosts(source.id) }
+        withContext(Dispatchers.IO) { dao.hasPosts(source.id) }
 
-    override suspend fun getPost(postId: PostId): Post? {
-        return database.withTransaction {
-            dao.post(postId.source.id, postId.sourcePostId)?.let(codec::decodePost)
-        }
+    override suspend fun getPost(postId: PostId): Post? = withContext(Dispatchers.IO) {
+        dao.post(postId.source.id, postId.sourcePostId)?.let(codec::decodePost)
     }
 
     override suspend fun addItems(codexId: String, posts: List<Post>): Int {
