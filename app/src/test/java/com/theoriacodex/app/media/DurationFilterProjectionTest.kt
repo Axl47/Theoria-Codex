@@ -2,8 +2,11 @@ package com.theoriacodex.app.media
 
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -47,5 +50,30 @@ class DurationFilterProjectionTest {
         assertEquals(2, keys)
         assertEquals(1, fresh.readiness.pendingCount)
         org.junit.Assert.assertTrue(fresh.knownDurationMsByPostId.isEmpty())
+    }
+
+    @Test fun `a length that changes nothing shown keeps the presented list, and only an in-place length change renews its key`() {
+        val posts = List(12) { testPost(SourceKey.RULE34VIDEO, "v$it") }
+        val projection = DurationFilterProjection()
+        fun known(vararg lengths: Pair<Int, Long>) = lengths.associate { (index, ms) ->
+            mediaDurationKey(posts[index]) to MediaDurationState.Known(ms, MediaDurationProvenance.CONTAINER_PROBE)
+        }
+        val first = projection.project(posts, known(0 to 1_000), true)
+        assertEquals(listOf(posts[0]), first.presentedPosts)
+
+        // v5 is behind the frontier, which waits at v1: nothing presented changes.
+        val unrevealing = projection.project(posts, known(0 to 1_000, 5 to 1_000), true)
+        assertSame(first.presentedPosts, unrevealing.presentedPosts)
+        assertSame(first.presentedDurationsKey, unrevealing.presentedDurationsKey)
+
+        // v1 reveals itself: a longer list, and the shown post kept its length.
+        val revealing = projection.project(posts, known(0 to 1_000, 1 to 1_000, 5 to 1_000), true)
+        assertEquals(posts.take(2), revealing.presentedPosts)
+        assertSame(first.presentedDurationsKey, revealing.presentedDurationsKey)
+
+        // v0 changes length in place: the same posts, but a filter over them must run again.
+        val changed = projection.project(posts, known(0 to 2_000, 1 to 1_000, 5 to 1_000), true)
+        assertSame(revealing.presentedPosts, changed.presentedPosts)
+        assertNotSame(revealing.presentedDurationsKey, changed.presentedDurationsKey)
     }
 }

@@ -61,8 +61,8 @@ class OffMainComputationTest {
     private fun show() = compose.setContent {
         val list = list
         val input = input
-        val value = rememberComputedOffMain(list, input, extend = { previous, appended ->
-            extend(previous, appended, input)
+        val value = rememberComputedOffMain(list, input, extend = { previous ->
+            list.appendedTo(previous.list)?.let { extend(previous.value, it, input) }
         }) { compute(list, input) }
         frames += Frame(list, input, value)
     }

@@ -63,6 +63,12 @@ internal data class DurationFilterMetadata(
     /** Revealed posts in stable order; null means a feed has nothing to hold back. */
     val presentedPosts: List<Post>? = null,
     val revealFrontier: Int = Int.MAX_VALUE,
+    /**
+     * Stands for [knownDurationMsByPostId] in a filter over exactly [presentedPosts]. Frames of one projection share it
+     * while every presented post that stays in place keeps its length, so such a filter skips a length that changed
+     * nothing shown and may filter just the posts a length newly revealed.
+     */
+    val presentedDurationsKey: Any = UNSCOPED_DURATIONS,
 ) {
     val blocksPaging: Boolean
         get() = !isPrepared || readiness.blocksPaging
@@ -83,6 +89,7 @@ internal data class DurationFilterMetadata(
     )
 
     companion object {
+        private val UNSCOPED_DURATIONS = Any()
         val EMPTY = DurationFilterMetadata(emptyMap(), emptyMap())
         val RESOLVING = DurationFilterMetadata(
             emptyMap(), emptyMap(), DurationFilterReadiness(1, 1), isPrepared = false,
