@@ -1,7 +1,9 @@
 package com.theoriacodex.app.search
 
 import androidx.compose.runtime.Composable
+import com.theoriacodex.app.ui.components.FeedTraceSections
 import com.theoriacodex.app.ui.components.rememberComputedOffMain
+import com.theoriacodex.app.viewer.traceMediaSection
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
@@ -18,10 +20,12 @@ internal fun rememberFilteredFeed(
     marks: PostMarkInputs = NO_MARKS,
 ): List<Post> {
     val filter = { candidates: List<Post> ->
-        filterSearchResults(
-            candidates, filters, marks.liked, marks.saved, marks.watched, unknownDurationPolicy, knownDurations,
-            marks.retained,
-        )
+        traceMediaSection(FeedTraceSections.FILTER) {
+            filterSearchResults(
+                candidates, filters, marks.liked, marks.saved, marks.watched, unknownDurationPolicy, knownDurations,
+                marks.retained,
+            )
+        }
     }
     return rememberComputedOffMain(
         posts, filters, marks, unknownDurationPolicy, knownDurations,

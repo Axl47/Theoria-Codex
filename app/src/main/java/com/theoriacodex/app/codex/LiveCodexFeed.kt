@@ -4,6 +4,8 @@ import com.theoriacodex.app.related.RelatedPostsLoading
 import com.theoriacodex.app.related.RelatedPostsRouteController
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.related.UnsupportedRelatedPostsLoader
+import com.theoriacodex.app.ui.components.FeedTraceSections
+import com.theoriacodex.app.viewer.traceMediaSection
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.coroutines.mapConcurrent
 import com.theoriacodex.data.repository.CodexSortMode
@@ -22,7 +24,7 @@ internal fun sortLiveCodexPosts(
     sort: CodexSortMode,
     usage: Map<String, CodexUsage> = emptyMap(),
     durations: Map<PostId, Long> = emptyMap(),
-): List<Post> = posts.sortedWith(liveCodexOrder(sort, usage, durations))
+): List<Post> = traceMediaSection(FeedTraceSections.SORT) { posts.sortedWith(liveCodexOrder(sort, usage, durations)) }
 
 /** Live posts were never saved, so their post date stands in for save time. */
 private fun liveCodexOrder(sort: CodexSortMode, usage: Map<String, CodexUsage>, durations: Map<PostId, Long>): Comparator<Post> {

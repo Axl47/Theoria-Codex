@@ -1,5 +1,7 @@
 package com.theoriacodex.app.media
 
+import com.theoriacodex.app.ui.components.FeedTraceSections
+import com.theoriacodex.app.viewer.traceMediaSection
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -142,13 +144,15 @@ internal fun knownMediaDurations(
     posts: List<Post>,
     states: Map<MediaDurationKey, MediaDurationState>,
     keysByPostId: Map<PostId, MediaDurationKey> = mediaDurationKeysByPostId(posts),
-): Map<PostId, Long> = buildMap {
-    posts.forEach { post ->
-        val duration = animatedDurationMs(post)
-            ?: keysByPostId[post.id]
-                ?.let(states::get)
-                ?.let { state -> (state as? MediaDurationState.Known)?.durationMs }
-        if (duration != null) put(post.id, duration)
+): Map<PostId, Long> = traceMediaSection(FeedTraceSections.KNOWN_DURATIONS) {
+    buildMap {
+        posts.forEach { post ->
+            val duration = animatedDurationMs(post)
+                ?: keysByPostId[post.id]
+                    ?.let(states::get)
+                    ?.let { state -> (state as? MediaDurationState.Known)?.durationMs }
+            if (duration != null) put(post.id, duration)
+        }
     }
 }
 
