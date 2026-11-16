@@ -57,7 +57,7 @@
     <h1>ExecPlan: Measure and reduce video player work on the main thread</h1>
     <p>Feed video previews are driven from the main thread, the thread that draws the screen. This plan first makes that cost measurable, then, only if a phone measurement shows the cost matters, tries the cheapest change that removes the measured part. Moving the players to their own thread is the last and most expensive option, not the starting point.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: Phase 1 ready to implement (two review rounds merged)</span>
+      <span class="pill">Status: Phase 1 built, in review</span>
       <span class="pill">Owner: Claude (orchestrator)</span>
       <span class="pill">Created: 2026-11-15</span>
       <span class="pill">Updated: 2026-11-16</span>
@@ -65,7 +65,7 @@
       <span class="pill">Audit item: B3</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Phase 1: trace sections, first-frame timing and the query script. Emulator only.</div>
+      <div class="card"><strong>Next Action</strong>Review and merge Phase 1, then confirm the thresholds and run Phase 2 on the phone.</div>
       <div class="card"><strong>Main Risk</strong>Spending a large rewrite on a cost that is not what makes frames late, or trading smoother scrolling for cards that stay blank. Reduced by a numeric rule on the phone before any redesign, with an "inconclusive" outcome that authorises nothing, and by measuring time to first frame in every phase.</div>
       <div class="card"><strong>Needs The User</strong>Phase 2 and every later acceptance run on the physical phone, with the isolated benchmark package. The thresholds below are proposals until the user confirms them.</div>
       <div class="card"><strong>Must Hold</strong>Every visible video card autoplays at the same time.</div>
@@ -131,10 +131,10 @@
       <table>
         <thead><tr><th>Category</th><th>Sections</th></tr></thead>
         <tbody>
-          <tr><td>Construction</td><td>The existing create section; <code>PlayerView</code> inflation under its own name, so it is not counted as surface work.</td></tr>
-          <tr><td>Prepare</td><td>The existing prepare and rebind sections, and the hand-over seek (:169 and <code>FeedVideoPositionHandoff.publish</code>).</td></tr>
-          <tr><td>Surface</td><td>Assigning or clearing <code>playerView.player</code> at :256, :305, :311, :315 and in the factory and update blocks; only when the assignment actually changes the player.</td></tr>
-          <tr><td>Commands and events</td><td>Play and pause (:189-194); pool <code>recycle</code>, <code>resume</code>, cool and release; the Viewer's stop of feed previews under its own name; the bodies of the card's own player-listener callbacks.</td></tr>
+          <tr><td>Construction</td><td>The existing create section; <code>PlayerView</code> inflation under its own name, so it is not counted as surface work. Names: <code>TheoriaPreviewPlayerCreate</code>, <code>TheoriaPreviewViewInflate</code>.</td></tr>
+          <tr><td>Prepare</td><td>The existing prepare and rebind sections, and the hand-over seek (:169 and <code>FeedVideoPositionHandoff.publish</code>, both through the seek the card binds). Names: <code>TheoriaPreviewPrepare</code>, <code>TheoriaPreviewPlayerPrepare</code>, <code>TheoriaPreviewPlayerRebind</code>, <code>TheoriaPreviewHandoffSeek</code>.</td></tr>
+          <tr><td>Surface</td><td>Assigning or clearing <code>playerView.player</code> at :256, :305, :311, :315 and in the factory and update blocks; only when the assignment actually changes the player. Names: <code>TheoriaPreviewSurfaceAttach</code> (any non-null player, including a replacement), <code>TheoriaPreviewSurfaceDetach</code> (clearing).</td></tr>
+          <tr><td>Commands and events</td><td>Play and pause (:189-194); pool <code>recycle</code>, <code>resume</code>, cool and release; the Viewer's stop of feed previews under its own name; the bodies of the card's own player-listener callbacks. Names: <code>TheoriaPreviewPlayPause</code>, <code>TheoriaPreviewPlayerRecycle</code>, <code>TheoriaPreviewPlayerResume</code>, <code>TheoriaPreviewPlayerCool</code>, <code>TheoriaPreviewPlayerRelease</code>, <code>TheoriaPreviewStopForViewer</code>, <code>TheoriaPreviewListenerBind</code> (the card adding or removing its listener and reading the ready duration), <code>TheoriaPreviewPlayerEvent</code>.</td></tr>
         </tbody>
       </table>
       <p>The script uses each section's <em>self</em> time (its duration minus the sections nested inside it), so nothing is counted twice.</p>
@@ -162,6 +162,7 @@
         <li><strong>Decision runs</strong> use macrobenchmark's default trace capture, unsampled. Phase 1's first step confirms on the emulator that this capture contains the frame timeline, the app's own sections and the <code>doFrame</code> slices; if anything is missing, the plan records the exact capture configuration that adds it before going further.</li>
         <li><strong>The sampled run</strong> is taken outside macrobenchmark with a written Perfetto configuration (CPU call-stack sampling of the benchmark process, which is profileable), kept in the script's header. The benchmark build is minified, so its R8 mapping file is kept next to the APK and used to name the samples.</li>
         <li><strong>On the emulator</strong>, macrobenchmark needs the instrumentation argument <code>androidx.benchmark.suppressErrors=EMULATOR</code>. It is passed on the command line for emulator runs only and is not committed to the build.</li>
+        <li><strong>Confirmed in Phase 1</strong> (emulator, androidx.benchmark 1.5.0): the default capture's config, read back from the trace's <code>trace_config_pbtxt</code>, has <code>android.surfaceflinger.frametimeline</code>, <code>atrace_apps: "*"</code> (the app's synchronous and asynchronous sections) and the <code>view</code> atrace category (<code>Choreographer#doFrame &lt;token&gt;</code>). Nothing had to be added. The benchmark fixture runs in a second process, <code>com.theoriacodex.benchmark:benchmarkFixture</code>, so the script reads the package's process and its <code>:name</code> processes, joining frames to doFrame slices within each process, and the sampled configuration matches <code>com.theoriacodex.benchmark*</code>.</li>
         <li><strong>Offline use</strong>: the script takes the path to a <code>trace_processor_shell</code> binary and names the version it was written against, so it does not download anything at run time.</li>
       </ul>
     </section>
@@ -299,6 +300,7 @@
         <li>[x] 2026-11-15 - Plan drafted from the threading audit (B3) as a player-thread design.</li>
         <li>[x] 2026-11-16 - Review round 1 (Opus high, GPT-6.1 Sol adversarial) merged; plan restructured around measurement.</li>
         <li>[x] 2026-11-16 - Review round 2 (same reviewers) merged; Phase 1 final.</li>
+        <li>[x] 2026-11-16 - Phase 1 built: trace sections, per-presentation first-frame slices, <code>scripts/trace_player_frames.py</code> with its unit test, and the sampled-capture configuration (evidence in the appendix).</li>
         <li>[ ] Phase 1 merged.</li>
         <li>[ ] Thresholds confirmed by the user.</li>
         <li>[ ] Phase 2 decision recorded (needs the user).</li>
@@ -312,6 +314,12 @@
         <li>Observation: feed cards crop to fill; the first draft said fit. Evidence: <code>FeedMediaComponents.kt</code> :295.</li>
         <li>Observation: opening the Viewer calls into the feed pool synchronously, and the Viewer pool reads the feed pool's state. Evidence: <code>VideoPlaybackInfrastructure.kt</code> :186; <code>ViewerVideoPlayerPool.kt</code> :30.</li>
         <li>Observation: the repository has no trace-query tooling. Evidence: <code>scripts/</code>.</li>
+        <li>Observation: macrobenchmark's default capture already holds everything the script reads, but the benchmark fixture runs in its own process, <code>com.theoriacodex.benchmark:benchmarkFixture</code>, and a lookup by the package name alone finds no frames or sections. Evidence: <code>trace_config_pbtxt</code> and the <code>process</code> table of the Phase 1 emulator traces.</li>
+        <li>Observation: on the emulator about 97% of frames carry "App Deadline Missed", so emulator late rates say nothing about the phone, as the plan assumed. Evidence: the Phase 1 report in the appendix.</li>
+        <li>Observation: the existing autoplay scenarios fail on this emulator with and without Phase 1, so the emulator cannot show that Phase 1 keeps them passing. The mixed journey's pixel-motion check is marginal: one base-commit iteration passed in about 28 minutes, with steps using most of their 15 s retry windows, and a second base run failed at "Search down 0". Three Phase 1 runs failed at "Search down 1", "Search up 0" and "Search setup", and every video presentation in the traced runs had already rendered its first frame. The Search scenario failed on both builds, with different messages. Phase 1 changes no player state: the one skipped call is a same-player <code>setPlayer</code>, which Media3 ignores. Evidence: appendix, "Phase 1 evidence".</li>
+        <li>Observation: the shared emulator exited on its own during a Phase 1 capture (04:07:38Z), with no crash report or system log entry. The orchestrator reports two earlier exits in its GPU renderer during this audit. It was cold-booted again with <code>-crash-report-mode never</code>. Evidence: <code>adb devices</code> empty, no <code>qemu-system</code> process, stale AVD locks.</li>
+        <li>Observation: callstack sampling recorded no stacks for the fixture process when that process started after the capture. traced_perf matches <code>target_cmdline</code> when it first samples a process, and a freshly forked app may still carry the zygote's name. With the fixture started first and a 2048-page ring buffer, every main-thread sample had a stack and none were lost (before: 27k lost records). Evidence: the two sampled captures in the appendix.</li>
+        <li>Observation: R8 merges classes and inlines methods, so one obfuscated frame can stand for several original methods. Evidence: the mapping's line ranges for <code>sb2.u</code> list <code>FileReadScope$readData$2</code> and <code>TheoriaApplication$onCreate$1</code>.</li>
       </ul>
       <h3>Decision Log</h3>
       <ul>
@@ -324,9 +332,16 @@
         <li>Decision: An experiment is compared with its switch-off build in the same session and kept only when the two sides do not overlap. Rationale: a baseline from another day carries device drift, and three runs cannot resolve small differences. Date/Author: 2026-11-16 / Claude.</li>
         <li>Decision: The first-frame guard runs from the lease request, not from surface attach. Rationale: otherwise moving delay before attach would look like an improvement. Date/Author: 2026-11-16 / Claude.</li>
         <li>Decision: Numeric thresholds are fixed before the phone session and can be changed by the user until then. Rationale: a rule written after the data fits the data. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: The Viewer's stop of feed previews gets one section, <code>TheoriaPreviewStopForViewer</code>, inside <code>FeedPreviewPlayerPool.stopForViewer</code>. It replaces the per-player cool section there, and the call at <code>ViewerVideoPlayerPool.kt</code> :42 gets no second section, because that call reaches only <code>stopForViewer</code>. Consequence: the mixed journey's <code>previewPlayerCoolCount</code> no longer counts stops for the Viewer, which matches its README meaning. A lower count cannot trip <code>benchmark_results.py compare</code>, which flags only values above the stored limit. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: Surface sections are emitted only when <code>playerView.player</code> changes. Skipping a same-player assignment changes no behaviour, because Media3 1.11.1 <code>PlayerView.setPlayer</code> returns at once when given the player it holds (checked in its bytecode). <code>TheoriaPreviewSurfaceAttach</code> covers replacements as well as first attaches; a replacement includes the blocking detach of the old player. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: The card adding and removing its listener, and reading the ready duration, sit in <code>TheoriaPreviewListenerBind</code> (commands and events), so no player call is left untraced and the existing prepare section keeps its extent. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: An abandoned presentation closes its asynchronous slices inside a <code>TheoriaPreviewAbandoned</code> section on the main thread, and the script treats a slice whose end falls inside that section as abandoned. Rationale: Android's async trace API carries no extra data and trace processor does not expose the cookie, so containment is the exact link. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: The attach-to-first-frame slice starts at the presentation's first surface attach and is not restarted by a later re-attach. Rationale: it is diagnostic only, and one slice per presentation keeps the async slice pairing simple. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: Frames janky only for reasons other than an app deadline miss, "Unknown Jank" and "Dropped Frame" included, are counted as "other jank". Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: A sampled frame resolves to the outer method of each R8 line range it covers, and counts as Media3 only when every candidate is Media3. Rationale: sampled frames carry no line number, and a merged class would otherwise put app code into the Media3 count. The estimate therefore leans low. Date/Author: 2026-11-16 / Claude.</li>
       </ul>
       <h3>Outcomes And Retrospective</h3>
-      <p>Not started.</p>
+      <p>Phase 1: every main-thread call into a preview player is traced, and the script reads the default macrobenchmark capture and a sampled capture. Met: the unit test, per-presentation first-frame times, the abandoned count, the hand check, and named Media3 frames with the outside-sections estimate. Partly met: the unsampled mixed-journey capture showed 11 of the 16 sections. Interactive captures added the Viewer, idle-cooling, release and hand-off paths, for 15 of 16; <code>TheoriaPreviewPlayerRebind</code> never fired in any capture. Not met on the emulator: the existing autoplay scenarios fail there on the base commit as well. No performance conclusion is drawn from emulator numbers.</p>
     </section>
 
     <section id="recovery">
@@ -344,6 +359,28 @@
         <summary>Review round 2: what changed</summary>
         <p>Every decision quantity is now defined: which frames, what "late" means, the join to the main thread, the interval a frame owns, the per-frame budget, how runs are combined. An inconclusive outcome was added. The keep rule compares both builds in one session, covers Search as well as the mixed journey, and requires non-overlapping runs. The stricter "playing" rule and its tests moved to the entry of surface-handling experiments, with the signal design from review. Measured section time and sampled estimates are separate, and the capture setup is written out. The first-frame guard starts at the lease request and reports abandoned presentations. Option A is chosen by construction time only; option B no longer lists attaching the next view first, which does not avoid the wait. Corrected facts: the Viewer's prepare is already traced and its stop of feed previews is not; <code>recycle</code> starts at :111; a second benchmark scenario also exercises the pool; where <code>MediaTraceSections</code> lives; the runner APK check and host-only preflight for Phase 2.</p>
         <p>Not adopted: a continuous-playback stall detector for every scenario. The plan instead states what the pixel check proves and requires the stricter rule and a freeze test before any change to surface handling.</p>
+      </details>
+      <details open>
+        <summary>Phase 1 evidence (emulator, not for performance conclusions)</summary>
+        <p>Build: benchmarkRelease of <code>7f8a9361</code> on <code>theoria-search-test</code> (API 36). The APK, its R8 mapping, the hand-checked trace and the working sampled trace are kept under <code>build/reports/player-trace/</code> until the PR merges; other raw traces were deleted after their reports were saved as JSON there.</p>
+        <table>
+          <thead><tr><th>Capture</th><th>What it shows</th></tr></thead>
+          <tbody>
+            <tr><td>Mixed journey, unsampled, attempt 1</td><td>4,200 frames, 4,060 late (96.7%). 11 of 16 sections non-zero; none from the Viewer, idle cooling, release, rebind or hand-off. Demand to first frame, shown 3: 427.1, 347.6, 234.5 ms. Abandoned 0.</td></tr>
+            <tr><td>Hand check, attempt 1, frame 104597</td><td>Checked against the trace's tables in trace processor SQL, not the Perfetto UI. Interval 1253723720056 to 1253892380722 ns (it starts at the previous doFrame's end, which is after the expected start), budget 16.67 ms, jank "SurfaceFlinger CPU Deadline Missed, App Deadline Missed, Buffer Stuffing". Player self time: SurfaceDetach 51.684 ms, Recycle 0.029 ms, ListenerBind 0.013 ms. These match the script.</td></tr>
+            <tr><td>Interactive drive with Viewer, flings and 38 s in the background (sampled config)</td><td>1,914 frames, 1,798 late. 15 of 16 sections non-zero: Create 5, ViewInflate 19, Prepare 19, PlayerPrepare 8, HandoffSeek 1, SurfaceAttach 19, SurfaceDetach 19 (611.1 ms self), PlayPause 51, Recycle 19, Resume 38, Cool 3, Release 4, StopForViewer 2, ListenerBind 38, PlayerEvent 252; Rebind 0. Demand to first frame, shown 19, p50 443.6 ms, max 2394.2 ms; attach to first frame p50 290.9 ms. Abandoned 0.</td></tr>
+            <tr><td>Sampled, same drive</td><td>2,844 main-thread samples over 177 s, all with stacks, no lost records. Media3 samples: 33 inside player sections, 168 outside (outside share 83.6%). Top outside frames: <code>PlayerView.updateForCurrentTrackSelections</code>, <code>ListenerSet.flushEvents</code>, <code>ExoPlayerImpl.updatePlaybackInfo</code> (14 each), <code>MediaMetricsListener.onEvents</code> (9).</td></tr>
+            <tr><td>First sampled attempt</td><td>The fixture started after the capture: no stacks for its process, 27k lost records. Kept only as the reason for the start-order and ring-buffer settings.</td></tr>
+          </tbody>
+        </table>
+        <p>Autoplay check on the emulator (with <code>androidx.benchmark.suppressErrors=EMULATOR</code> on the command line only):</p>
+        <table>
+          <thead><tr><th>Scenario</th><th>Base <code>6f051cf2</code></th><th>Phase 1</th></tr></thead>
+          <tbody>
+            <tr><td>Mixed journey</td><td>Iteration 0 passed (about 28 min); that run then stopped when its process was force-stopped during a lock handover. A second run failed in iteration 0: "Search down 0: every visibly presented MP4/GIF/WebP/Ugoira preview must render changing frames".</td><td>Three runs failed in iteration 0, at "Search down 1", "Search up 0" and "Search setup", with the same pixel-motion message.</td></tr>
+            <tr><td>Search</td><td>Failed: "A visible Search fixture video stopped autoplaying".</td><td>Failed: "Search fixture did not expose at least two simultaneously visible playing videos within 15000ms".</td></tr>
+          </tbody>
+        </table>
       </details>
       <details>
         <summary>Phone session outputs</summary>

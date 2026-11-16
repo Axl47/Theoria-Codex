@@ -89,20 +89,35 @@ class PresentationTest(unittest.TestCase):
 
 
 class DeobfuscatorTest(unittest.TestCase):
-    def test_names_obfuscated_classes_and_methods(self) -> None:
-        mapping = (
-            "androidx.media3.exoplayer.ExoPlayerImpl -> c2.a0:\n"
-            "    int counter -> a\n"
-            "    1:5:void setVideoOutputInternal(java.lang.Object):10:14 -> b\n"
-            "androidx.media3.common.Kept -> androidx.media3.common.Kept:\n"
-        )
+    mapping = (
+        "androidx.media3.exoplayer.ExoPlayerImpl -> c2.a0:\n"
+        "    int counter -> a\n"
+        # Range 1:5 inlines an app method into setVideoOutputInternal, which is the outer frame.
+        "    1:5:void com.app.Helper.check():3:3 -> b\n"
+        "    1:5:void setVideoOutputInternal(java.lang.Object):10:14 -> b\n"
+        # A class R8 merged into this one owns method c in another range.
+        "    1:2:void play():20:21 -> c\n"
+        "    3:4:void com.app.Merged.run():7:8 -> c\n"
+        "androidx.media3.common.Kept -> androidx.media3.common.Kept:\n"
+    )
+
+    def deobfuscator(self) -> frames.Deobfuscator:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "mapping.txt"
-            path.write_text(mapping)
-            deobfuscator = frames.Deobfuscator(path)
-        self.assertEqual("androidx.media3.exoplayer.ExoPlayerImpl.setVideoOutputInternal",
-                         deobfuscator.name("void c2.a0.b(java.lang.Object)"))
+            path.write_text(self.mapping)
+            return frames.Deobfuscator(path)
+
+    def test_frames_resolve_to_the_outer_method_of_each_range(self) -> None:
+        deobfuscator = self.deobfuscator()
+        self.assertEqual("androidx.media3.exoplayer.ExoPlayerImpl.setVideoOutputInternal", deobfuscator.name("c2.a0.b"))
+        self.assertEqual("androidx.media3.exoplayer.ExoPlayerImpl.play|com.app.Merged.run",
+                         deobfuscator.name("c2.a0.c"))
         self.assertEqual("androidx.media3.common.Kept.run", deobfuscator.name("androidx.media3.common.Kept.run"))
+
+    def test_only_unambiguous_media3_frames_count(self) -> None:
+        deobfuscator = self.deobfuscator()
+        self.assertTrue(frames.is_media3(deobfuscator.name("c2.a0.b")))
+        self.assertFalse(frames.is_media3(deobfuscator.name("c2.a0.c")))
 
 
 if __name__ == "__main__":

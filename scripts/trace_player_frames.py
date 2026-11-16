@@ -34,10 +34,13 @@ Definitions (one trace may hold several iterations; `report` groups traces by th
 
 Sampled capture (`config` prints it): unsampled decision runs use macrobenchmark's default capture. The sampled
 run is separate because sampling adds load. Install the benchmark APK, keep the build's R8 mapping file
-(app/build/outputs/mapping/benchmarkRelease/mapping.txt) next to it, start
+(app/build/outputs/mapping/benchmarkRelease/mapping.txt) next to it, start the scenario's app process, then start
 `adb -s <serial> shell perfetto --txt -c - -o /data/misc/perfetto-traces/player-sampled.pftrace < config.txt`
-in the background, drive the scenario, then pull the trace. The benchmark process is profileable, which callstack
-sampling requires on user builds.
+in the background, drive the scenario, then pull the trace. Start the app first: traced_perf matches a process when it
+first samples it, and a process forked after the capture began can still carry the zygote's name then and go without
+stacks for the whole capture. The larger ring buffer keeps the kernel from dropping samples while stacks are copied. The benchmark process is profileable, which callstack
+sampling requires on user builds. Both patterns end in * because the benchmark fixture runs in the
+":benchmarkFixture" process.
 """
 from __future__ import annotations
 
@@ -69,7 +72,7 @@ data_sources {{ config {{ name: "linux.ftrace" target_buffer: 0 ftrace_config {{
   ftrace_events: "task/task_rename"
   atrace_categories: "gfx"
   atrace_categories: "view"
-  atrace_apps: "{package}"
+  atrace_apps: "{package}*"
   buffer_size_kb: 16384
   drain_period_ms: 250
 }} }} }}
@@ -79,7 +82,8 @@ data_sources {{ config {{ name: "linux.process_stats" target_buffer: 1 process_s
 data_sources {{ config {{ name: "android.surfaceflinger.frametimeline" target_buffer: 1 }} }}
 data_sources {{ config {{ name: "linux.perf" target_buffer: 0 perf_event_config {{
   timebase {{ counter: SW_CPU_CLOCK frequency: 500 timestamp_clock: PERF_CLOCK_MONOTONIC }}
-  callstack_sampling {{ scope {{ target_cmdline: "{package}" }} kernel_frames: false }}
+  callstack_sampling {{ scope {{ target_cmdline: "{package}*" }} kernel_frames: false }}
+  ring_buffer_pages: 2048
 }} }} }}
 duration_ms: {duration_ms}
 """
@@ -363,41 +367,44 @@ def presentation_summary(presentations: Iterable[Presentation], kind: str) -> di
     }
 
 
-def union_intervals(sections: Iterable[Section]) -> list[tuple[int, int]]:
-    merged: list[list[int]] = []
-    for section in sorted(sections, key=lambda item: item.ts):
-        if merged and section.ts <= merged[-1][1]:
-            merged[-1][1] = max(merged[-1][1], section.end)
-        else:
-            merged.append([section.ts, section.end])
-    return [(start, end) for start, end in merged]
+class Coverage:
+    """The union of some sections' intervals, for asking whether a timestamp falls inside any of them."""
 
+    def __init__(self, sections: Iterable[Section]) -> None:
+        merged: list[list[int]] = []
+        for section in sorted(sections, key=lambda item: item.ts):
+            if merged and section.ts <= merged[-1][1]:
+                merged[-1][1] = max(merged[-1][1], section.end)
+            else:
+                merged.append([section.ts, section.end])
+        self.starts = [start for start, _ in merged]
+        self.ends = [end for _, end in merged]
 
-def count_inside(intervals: list[tuple[int, int]], timestamps: Iterable[int]) -> tuple[int, int]:
-    """(inside, outside) counts of [timestamps] against disjoint sorted [intervals]."""
-    starts = [start for start, _ in intervals]
-    inside = outside = 0
-    for ts in timestamps:
-        index = bisect.bisect_right(starts, ts) - 1
-        if index >= 0 and ts < intervals[index][1]:
-            inside += 1
-        else:
-            outside += 1
-    return inside, outside
+    def __contains__(self, ts: int) -> bool:
+        index = bisect.bisect_right(self.starts, ts) - 1
+        return index >= 0 and ts < self.ends[index]
 
 
 # ---------------------------------------------------------------------------------------------------------------------
 # R8 mapping: names the sampled Java frames of the minified benchmark build.
 
 
+MAPPING_RANGE = re.compile(r"^(\d+:\d+):")
+
+
 class Deobfuscator:
-    """Maps "obf.Class.method" frame names back through an R8 mapping file."""
+    """Maps "obf.Class.method" frame names back through an R8 mapping file.
+
+    Sampled frames carry no line number, and R8 merges classes and inlines methods, so one obfuscated method can hold
+    several original ones. Each line range lists its inlined frames innermost first; the range's last line is the
+    method the code lives in. A frame resolves to those outer methods, fully qualified and joined with "|".
+    """
 
     def __init__(self, mapping: Path) -> None:
         self.classes: dict[str, str] = {}
-        self.methods: dict[tuple[str, str], set[str]] = defaultdict(set)
+        outer: dict[tuple[str, str, str], str] = {}
         current: str | None = None
-        for line in mapping.read_text(encoding="utf-8").splitlines():
+        for number, line in enumerate(mapping.read_text(encoding="utf-8").splitlines()):
             if not line or line.startswith("#"):
                 continue
             if not line.startswith(" "):
@@ -406,8 +413,14 @@ class Deobfuscator:
                 current = obfuscated
             elif current and "(" in line and " -> " in line:
                 signature, _, obfuscated = line.strip().partition(" -> ")
-                name = signature.split("(")[0].split()[-1].split(":")[-1]
-                self.methods[(current, obfuscated)].add(name.rsplit(".", 1)[-1])
+                line_range = MAPPING_RANGE.match(signature)
+                name = signature.split("(")[0].split()[-1]
+                qualified = name if "." in name else f"{self.classes[current]}.{name}"
+                # Later lines of the same range replace earlier ones; a line without a range stands alone.
+                outer[(current, obfuscated, line_range.group(1) if line_range else f"#{number}")] = qualified
+        self.methods: dict[tuple[str, str], set[str]] = defaultdict(set)
+        for (owner, obfuscated, _), qualified in outer.items():
+            self.methods[(owner, obfuscated)].add(qualified)
 
     def name(self, frame: str) -> str:
         match = re.search(r"([\w$.]+)\.([\w$<>]+)(?:\(|$)", frame)
@@ -415,8 +428,12 @@ class Deobfuscator:
             return frame
         owner, method = match.groups()
         originals = self.methods.get((owner, method))
-        resolved = "|".join(sorted(originals)) if originals else method
-        return f"{self.classes.get(owner, owner)}.{resolved}"
+        return "|".join(sorted(originals)) if originals else f"{self.classes.get(owner, owner)}.{method}"
+
+
+def is_media3(frame: str) -> bool:
+    """True when every method a resolved frame may be is Media3's."""
+    return all(name.startswith("androidx.media3.") for name in frame.split("|"))
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -447,53 +464,59 @@ def sql_list(names: Iterable[str]) -> str:
     return ", ".join(f"'{name}'" for name in names)
 
 
-def main_thread_filter(package: str) -> str:
-    return (f"t.upid = (select upid from process where name = '{package}' order by start_ts desc limit 1) "
-            "and t.tid = (select pid from process where upid = t.upid)")
+def app_threads_sql(package: str) -> str:
+    """CTEs naming the app's processes (the package and its ":name" processes) and their main threads."""
+    return f"""
+        with app as (select upid, pid from process where name = '{package}' or name glob '{package}:*'),
+        main as (select t.utid, app.upid from thread t join app on t.upid = app.upid and t.tid = app.pid)
+    """
 
 
-def read_main_sections(tp: TraceProcessor, package: str, names: Iterable[str]) -> list[Section]:
-    rows = tp.query(f"""
-        select s.name, s.ts, s.dur from slice s join thread_track tt on s.track_id = tt.id join thread t using(utid)
-        where {main_thread_filter(package)} and s.name in ({sql_list(names)})
-    """)
-    end = trace_end(tp)
-    return [Section(row["name"] or "", int(row["ts"] or 0),
-                    int(row["dur"] or 0) if int(row["dur"] or 0) >= 0 else end - int(row["ts"] or 0))
-            for row in rows]
+@dataclass
+class ProcessRows:
+    """Everything `report` reads from one app process of one trace."""
+
+    timeline: list[TimelineRow] = field(default_factory=list)
+    do_frames: list[Section] = field(default_factory=list)
+    player_sections: list[Section] = field(default_factory=list)
+    abandoned: list[Section] = field(default_factory=list)
+    presentation_slices: list[Section] = field(default_factory=list)
 
 
-def trace_end(tp: TraceProcessor) -> int:
-    return int(tp.query("select end_ts from trace_bounds")[0]["end_ts"] or 0)
-
-
-def read_frames(tp: TraceProcessor, package: str) -> tuple[list[TimelineRow], list[Section]]:
-    timeline = tp.query(f"""
-        select cast(a.name as int) as token, a.ts, a.dur, a.jank_type, e.ts as expected_ts, e.dur as expected_dur
+def read_processes(tp: TraceProcessor, package: str) -> dict[int, ProcessRows]:
+    """Reads one trace in a single trace_processor run; sections still open at the end are clipped to it."""
+    rows = tp.query(app_threads_sql(package) + f"""
+        select 'frame' as kind, a.upid, a.name, a.ts, a.dur, a.jank_type, e.ts as expected_ts, e.dur as expected_dur
         from actual_frame_timeline_slice a
-        join (select upid, name, min(ts) as ts, max(dur) as dur from expected_frame_timeline_slice group by upid, name) e
-          on e.upid = a.upid and e.name = a.name
-        where a.upid = (select upid from process where name = '{package}' order by start_ts desc limit 1)
+        join (select upid, name, min(ts) as ts, max(dur) as dur from expected_frame_timeline_slice
+              group by upid, name) e on e.upid = a.upid and e.name = a.name
+        where a.upid in (select upid from app)
+        union all
+        select 'main', m.upid, s.name, s.ts,
+               iif(s.dur < 0, (select end_ts from trace_bounds) - s.ts, s.dur), null, null, null
+        from slice s join thread_track tt on s.track_id = tt.id join main m on m.utid = tt.utid
+        where s.name in ({sql_list([*CATEGORY_OF, ABANDONED_SECTION])}) or s.name glob 'Choreographer#doFrame [0-9]*'
+        union all
+        select 'async', pt.upid, s.name, s.ts, s.dur, null, null, null
+        from slice s join process_track pt on s.track_id = pt.id
+        where pt.upid in (select upid from app) and s.name in ({sql_list([DEMAND_SLICE, ATTACH_SLICE])})
     """)
-    do_frames = tp.query(f"""
-        select s.name, s.ts, s.dur from slice s join thread_track tt on s.track_id = tt.id join thread t using(utid)
-        where {main_thread_filter(package)} and s.name glob 'Choreographer#doFrame [0-9]*' and s.dur >= 0
-    """)
-    rows = [TimelineRow(int(row["token"] or 0), int(row["ts"] or 0), int(row["dur"] or 0), row["jank_type"] or "",
-                        int(row["expected_ts"] or 0), int(row["expected_dur"] or 0)) for row in timeline]
-    sections = [Section(row["name"] or "", int(row["ts"] or 0), int(row["dur"] or 0))
-                for row in do_frames if DO_FRAME.match(row["name"] or "")]
-    return rows, sections
-
-
-def read_presentations(tp: TraceProcessor, package: str) -> list[Presentation]:
-    rows = tp.query(f"""
-        select s.name, s.ts, s.dur from slice s join process_track pt on s.track_id = pt.id
-        where pt.upid = (select upid from process where name = '{package}' order by start_ts desc limit 1)
-          and s.name in ({sql_list([DEMAND_SLICE, ATTACH_SLICE])})
-    """)
-    slices = [Section(row["name"] or "", int(row["ts"] or 0), int(row["dur"] or 0)) for row in rows]
-    return classify_presentations(slices, read_main_sections(tp, package, [ABANDONED_SECTION]))
+    processes: dict[int, ProcessRows] = defaultdict(ProcessRows)
+    for row in rows:
+        process = processes[int(row["upid"] or 0)]
+        name, ts, dur = row["name"] or "", int(row["ts"] or 0), int(row["dur"] or 0)
+        if row["kind"] == "frame":
+            process.timeline.append(TimelineRow(int(name), ts, dur, row["jank_type"] or "",
+                                                int(row["expected_ts"] or 0), int(row["expected_dur"] or 0)))
+        elif row["kind"] == "async":
+            process.presentation_slices.append(Section(name, ts, dur))
+        elif name == ABANDONED_SECTION:
+            process.abandoned.append(Section(name, ts, dur))
+        elif name in CATEGORY_OF:
+            process.player_sections.append(Section(name, ts, dur))
+        elif DO_FRAME.match(name):
+            process.do_frames.append(Section(name, ts, dur))
+    return processes
 
 
 def scenario_of(trace: Path) -> str:
@@ -541,22 +564,21 @@ class ScenarioTraces:
 def read_scenarios(args: argparse.Namespace) -> dict[str, ScenarioTraces]:
     scenarios: dict[str, ScenarioTraces] = {}
     for trace in args.traces:
-        tp = TraceProcessor(args.trace_processor, trace)
-        timeline, do_frames = read_frames(tp, args.package)
-        sections = read_main_sections(tp, args.package, CATEGORY_OF)
-        results = attribute_frames(timeline, do_frames, sections)
         scenario = scenarios.setdefault(scenario_of(trace), ScenarioTraces())
         scenario.traces.append(str(trace))
-        scenario.summary.add(results)
-        scenario.sections.extend(sections)
-        scenario.presentations.extend(read_presentations(tp, args.package))
-        scenario.late_frames.extend(
-            {"trace": trace.name, "token": result.token, "interval_ns": result.interval,
-             "budget_ms": result.budget / NS_PER_MS,
-             "player_ms": {name: ns / NS_PER_MS for name, ns in result.player_ns.items()},
-             "player_heavy": result.player_heavy}
-            for result in results if result.late
-        )
+        # Frame tokens are vsync ids shared by every process, so each process is joined on its own.
+        for process in read_processes(TraceProcessor(args.trace_processor, trace), args.package).values():
+            results = attribute_frames(process.timeline, process.do_frames, process.player_sections)
+            scenario.summary.add(results)
+            scenario.sections.extend(process.player_sections)
+            scenario.presentations.extend(classify_presentations(process.presentation_slices, process.abandoned))
+            scenario.late_frames.extend(
+                {"trace": trace.name, "token": result.token, "interval_ns": result.interval,
+                 "budget_ms": result.budget / NS_PER_MS,
+                 "player_ms": {name: ns / NS_PER_MS for name, ns in result.player_ns.items()},
+                 "player_heavy": result.player_heavy}
+                for result in results if result.late
+            )
     return scenarios
 
 
@@ -602,11 +624,12 @@ def sampled(args: argparse.Namespace) -> int:
                   select c.id, c.parent_id, f.name from stack_profile_callsite c
                   join stack_profile_frame f on c.frame_id = f.id
               """)}
-    samples = tp.query(f"""
-        select ps.ts, ps.callsite_id from perf_sample ps join thread t using(utid)
-        where {main_thread_filter(args.package)} and ps.callsite_id is not null
+    samples = tp.query(app_threads_sql(args.package) + """
+        select ps.ts, ps.callsite_id, m.upid from perf_sample ps join main m on m.utid = ps.utid
+        where ps.callsite_id is not null
     """)
-    sections = union_intervals(read_main_sections(tp, args.package, CATEGORY_OF))
+    coverage = {upid: Coverage(process.player_sections)
+                for upid, process in read_processes(tp, args.package).items()}
     stacks: dict[str, list[str]] = {}
 
     def stack(callsite: str) -> list[str]:
@@ -616,18 +639,17 @@ def sampled(args: argparse.Namespace) -> int:
             stacks[callsite] = [name] + (stack(parent) if parent else [])
         return stacks[callsite]
 
-    media3_samples = []
-    for sample in samples:
-        media3 = [name for name in stack(sample["callsite_id"] or "") if name.startswith("androidx.media3.")]
-        if media3:
-            media3_samples.append((int(sample["ts"] or 0), media3[0]))
-    inside, outside = count_inside(sections, (ts for ts, _ in media3_samples))
-    starts = [start for start, _ in sections]
+    inside = outside = 0
     top: dict[str, int] = defaultdict(int)
-    for ts, leaf in media3_samples:
-        index = bisect.bisect_right(starts, ts) - 1
-        if index < 0 or ts >= sections[index][1]:
-            top[leaf] += 1
+    for sample in samples:
+        media3 = [name for name in stack(sample["callsite_id"] or "") if is_media3(name)]
+        if not media3:
+            continue
+        if int(sample["ts"] or 0) in coverage.get(int(sample["upid"] or 0), Coverage([])):
+            inside += 1
+        else:
+            outside += 1
+            top[media3[0]] += 1
     result = {
         "main_thread_samples": len(samples),
         "media3_samples_inside_sections": inside,
