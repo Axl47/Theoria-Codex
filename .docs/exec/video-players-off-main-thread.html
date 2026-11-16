@@ -67,7 +67,7 @@
     <div class="dashboard">
       <div class="card"><strong>Next Action</strong>Finish the phone captures, then apply the Phase 2 rule once the user has confirmed the thresholds.</div>
       <div class="card"><strong>Main Risk</strong>Spending a large rewrite on a cost that is not what makes frames late, or trading smoother scrolling for cards that stay blank. Reduced by a numeric rule on the phone before any redesign, with an "inconclusive" outcome that authorises nothing, and by measuring time to first frame in every phase.</div>
-      <div class="card"><strong>Needs The User</strong>Phase 2 and every later acceptance run on the physical phone, with the isolated benchmark package. The thresholds below are proposals until the user confirms them.</div>
+      <div class="card"><strong>Needs The User</strong>Phase 2 and every later acceptance run on the physical phone, with the isolated benchmark package. The user confirmed the thresholds on 2026-11-16, before any phone data was read.</div>
       <div class="card"><strong>Must Hold</strong>Every visible video card autoplays at the same time.</div>
     </div>
   </header>
@@ -169,7 +169,7 @@
 
     <section id="rules">
       <h2>Decision rules</h2>
-      <p>All thresholds are proposals. The user can change them before the phone session; they are fixed before any data is read.</p>
+      <p>The user confirmed these thresholds and the keep rule on 2026-11-16, before any phone data was read. They do not change after data is read.</p>
       <h3>Phase 2: stop, go or inconclusive</h3>
       <p>Three complete runs of the same benchmark APK on the phone, of <code>mixedMediaFiveFeedJourney</code> and <code>searchConcurrentAutoplayScroll</code>, unsampled, traces retained. For each scenario and each run, over all of that run's iterations:</p>
       <ul>
@@ -180,12 +180,12 @@
       <table>
         <thead><tr><th>Outcome</th><th>Condition</th><th>What follows</th></tr></thead>
         <tbody>
-          <tr><td><strong>Inconclusive</strong></td><td>In either scenario the three late rates differ by more than a factor of two, or the sampled run's untraced estimate inside late frames is larger than the section self time inside late frames of that same run.</td><td>No experiment is authorised. The numbers go to the user, who chooses between a repeat session, more instrumentation, or closing the plan.</td></tr>
+          <tr><td><strong>Inconclusive</strong></td><td>In either scenario the three late rates differ by more than a factor of two, or the sampled run's untraced estimate inside late frames is larger than the section self time inside late frames of that same run.</td><td>No experiment is authorised. The report says what is missing and names the smallest instrumentation that would resolve it, with its cost, as a recommendation. The user allows a round of instrumentation where it is warranted, but it is not started without the orchestrator.</td></tr>
           <tr><td><strong>Stop</strong></td><td>Late rate under 1% in both scenarios, or player share under 30% in both.</td><td>The plan closes with the numbers recorded.</td></tr>
           <tr><td><strong>Go</strong></td><td>Neither of the above.</td><td>One experiment: the option whose category holds the most section time inside late frames.</td></tr>
         </tbody>
       </table>
-      <p><strong>Which measure decides.</strong> Stop and go use only the unsampled runs' section measures. Sections record wall time, including the main thread's blocked waits for the playback thread, and those waits are the largest player cost measured so far. The sampled run can only make the outcome inconclusive. It does that when its untraced player time in late frames exceeds the time the sections hold there, meaning the sections miss most of the work (proposed ratio: 1). Both sides of that check are time inside the same run's late frames. The earlier version compared Media3 samples inside sections with Media3 samples outside them. That made it inconclusive by construction: sampling cannot see blocked waits, and "inside" left out non-Media3 work such as view inflation. On "go", the section categories still choose the option, and the untraced estimate is reported beside them.</p>
+      <p><strong>Which measure decides.</strong> Stop and go use only the unsampled runs' section measures. Sections record wall time, including the main thread's blocked waits for the playback thread, and those waits are the largest player cost measured so far. The sampled run can only make the outcome inconclusive. It does that when its untraced player time in late frames exceeds the time the sections hold there, meaning the sections miss most of the work (ratio: 1). Both sides of that check are time inside the same run's late frames. The earlier version compared Media3 samples inside sections with Media3 samples outside them. That made it inconclusive by construction: sampling cannot see blocked waits, and "inside" left out non-Media3 work such as view inflation. On "go", the section categories still choose the option, and the untraced estimate is reported beside them.</p>
       <p>A player-heavy late frame shows that player work was on the main thread while the frame ran late. It does not prove the frame would have been on time without it. That is why "go" authorises an experiment that is then measured, not a redesign.</p>
       <h3>Phase 3: keep or revert an experiment</h3>
       <p>The experiment sits behind a build-time switch. One phone session runs the switch-off and switch-on builds alternately, three runs each, so drift in the device affects both sides. The experiment is kept only if all of these hold:</p>
@@ -216,7 +216,7 @@
         <li><strong>A</strong> keeps the main thread as the application thread, so this work stays; A removes construction only.</li>
         <li><strong>B</strong> also keeps it. B removes the surface detach on recycling, the largest section cost measured on the emulator, which is almost entirely a blocked wait. A player release still blocks, and a texture the grid destroys still detaches inside the library's callback, which no section sees.</li>
         <li><strong>C</strong> is the only option that moves Media3's event delivery off the main thread. It also has to replace <code>PlayerView</code>, because <code>PlayerView.setPlayer</code> rejects a player whose application thread is not the main thread (Media3 1.11.1). <code>updateForCurrentTrackSelections</code> therefore goes away under C, and whatever replaces it on the main thread is that design's own cost.</li>
-        <li><strong>Under every option</strong>, platform diagnostics are on for preview players (<code>VideoPlaybackInfrastructure.playerBuilder</code> does not turn them off). Their listener, <code>MediaMetricsListener</code>, and its session manager run on the main thread. <code>ExoPlayer.Builder.setUsePlatformDiagnostics(false)</code> would remove that work for previews. This plan does not authorise that change; it is listed so the user can add it.</li>
+        <li><strong>Under every option</strong>, platform diagnostics are on for preview players (<code>VideoPlaybackInfrastructure.playerBuilder</code> does not turn them off). Their listener, <code>MediaMetricsListener</code>, and its session manager run on the main thread. <code>ExoPlayer.Builder.setUsePlatformDiagnostics(false)</code> would remove that work for previews. The user authorised that change on 2026-11-16 as its own switch, measured separately; another thread implements and measures it, outside this plan's scope.</li>
       </ul>
       <h3>Entry requirement for any surface-handling experiment (B or C)</h3>
       <p>Before the experiment, the card's "playing" state becomes "the player says playing <em>and</em> a frame has been rendered on the current surface", so a blank card cannot report playing. The signal, from review:</p>
@@ -312,7 +312,7 @@
         <li>[x] 2026-11-16 - Phase 1 built: trace sections, per-presentation first-frame slices, <code>scripts/trace_player_frames.py</code> with its unit test, and the sampled-capture configuration (evidence in the appendix).</li>
         <li>[x] 2026-11-16 - Phase 1 merged (#111, #112).</li>
         <li>[x] 2026-11-16 - Phase 2 host-only preflight recorded (appendix, "Phone session outputs").</li>
-        <li>[ ] Thresholds confirmed by the user.</li>
+        <li>[x] 2026-11-16 - Thresholds and keep rule confirmed by the user.</li>
         <li>[ ] Phase 2 decision recorded (needs the user).</li>
       </ul>
       <h3>Surprises And Discoveries</h3>
@@ -352,6 +352,7 @@
         <li>Decision: The attach-to-first-frame slice starts at the presentation's first surface attach and is not restarted by a later re-attach. Rationale: it is diagnostic only, and one slice per presentation keeps the async slice pairing simple. Date/Author: 2026-11-16 / Claude.</li>
         <li>Decision: Frames janky only for reasons other than an app deadline miss, "Unknown Jank" and "Dropped Frame" included, are counted as "other jank". Date/Author: 2026-11-16 / Claude.</li>
         <li>Decision: Phase 2's stop and go use the unsampled section measures only. The sampled check is time against time: inconclusive when the untraced Media3 estimate inside late frames (samples × sampling period) exceeds the section self time inside late frames of the same run, with a proposed ratio of 1. Media3 samples taken while a Viewer player is active are not counted. Rationale: the first rule compared Media3 samples inside sections with those outside. Sampling cannot see blocked waits, and "inside" left out non-Media3 work, so the rule was inconclusive by construction. On the emulator the old measure read 83.6% outside; the new one reads 232 ms untraced against 975.5 ms traced (24%). The section categories still choose the option, and the plan states which options can reach the untraced work. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision (the user's, 2026-11-16, before any phone data was read): the Phase 2 thresholds stand as written. Stop: late rate under 1% in both scenarios, or player share under 30% in both. Inconclusive: the three runs' late rates differ by more than 2&times;, or the sampled run's untraced estimate inside late frames exceeds that run's section self time there; on that outcome the report names what is missing and the smallest instrumentation that would resolve it, with its cost, and a round of it may be authorised where warranted. Go: the experiment is chosen by the data (construction to A, surface to B). The Phase 3 keep rule stands as written. Separately, turning off platform diagnostics for preview players is authorised as its own switch, measured separately by another thread. Date/Author: 2026-11-16 / the user, recorded by Claude.</li>
         <li>Decision: <code>verify_performance_device.sh</code> requires only that <code>ANDROID_SERIAL</code> is connected, authorized and physical, instead of exactly one connected device. Rationale: every device command in it uses <code>adb -s</code>, and the one-device rule blocked phone batches whenever the shared emulator was up. The debug lane keeps its one-device rule, which protects the personal phone. Approved by the user. Date/Author: 2026-11-16 / Claude.</li>
         <li>Decision: A sampled frame resolves to the outer method of each R8 line range it covers, and counts as Media3 only when every candidate is Media3. Rationale: sampled frames carry no line number, and a merged class would otherwise put app code into the Media3 count. The estimate therefore leans low. Date/Author: 2026-11-16 / Claude.</li>
       </ul>
