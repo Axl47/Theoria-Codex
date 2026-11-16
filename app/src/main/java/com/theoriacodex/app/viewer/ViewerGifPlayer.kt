@@ -1,4 +1,4 @@
-@file:Suppress("DEPRECATION") // Movie remains the API 26-compatible controllable GIF backend.
+@file:Suppress("DEPRECATION") // Movie is kept because it seeks to any time, which drives scrubbing and speed control.
 
 package com.theoriacodex.app.viewer
 
@@ -6,7 +6,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import android.graphics.Movie
 import android.util.Log
-import androidx.core.graphics.withTranslation
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
@@ -21,10 +20,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
+import kotlin.math.roundToInt
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
@@ -164,19 +166,22 @@ private fun ViewerGifMovie(
     }
 }
 
+/** Draws the newest frame [ViewerGifFrameRenderer] finished for [positionMs]; decoding stays off the main thread. */
 @Composable
 private fun ViewerGifCanvas(movie: Movie, positionMs: () -> Long, modifier: Modifier) {
+    val renderer = remember(movie) { ViewerGifFrameRenderer.of(movie) }
+    val latestPosition by rememberUpdatedState(positionMs)
+    DisposableEffect(renderer) { onDispose(renderer::close) }
+    LaunchedEffect(renderer) { snapshotFlow { latestPosition() }.collect { renderer.request(it.toInt()) } }
     Canvas(modifier) {
-        val width = movie.width().toFloat().coerceAtLeast(1f)
-        val height = movie.height().toFloat().coerceAtLeast(1f)
-        val scale = minOf(size.width / width, size.height / height)
-        drawIntoCanvas { canvas ->
-            canvas.nativeCanvas.withTranslation((size.width - width * scale) / 2f, (size.height - height * scale) / 2f) {
-                scale(scale, scale)
-                movie.setTime(positionMs().toInt())
-                movie.draw(this, 0f, 0f)
-            }
-        }
+        val frame = renderer.frame ?: return@Canvas
+        val scale = minOf(size.width / frame.width, size.height / frame.height)
+        val drawn = IntSize((frame.width * scale).roundToInt(), (frame.height * scale).roundToInt())
+        drawImage(
+            frame,
+            dstOffset = IntOffset((size.width.roundToInt() - drawn.width) / 2, (size.height.roundToInt() - drawn.height) / 2),
+            dstSize = drawn,
+        )
     }
 }
 

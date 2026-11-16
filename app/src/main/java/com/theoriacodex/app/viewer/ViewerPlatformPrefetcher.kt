@@ -78,12 +78,8 @@ internal suspend fun prefetchViewerMedia(
             )
         }
     }
-    val request = MediaRequestFactory.imageRequest(
-        context = context,
-        url = location,
-        sourceKey = media.key.postId.source,
-        crossfade = false,
-    ).let { request ->
+    // The Viewer page's own request, so a decode kept in memory is the hardware bitmap the page then shows.
+    val request = buildViewerImageRequest(context, location, media.key.postId.source).let { request ->
         when {
             keepDecodedInMemory -> request
             // A far neighbour may reuse an existing memory entry but never adds one. Only its download matters,

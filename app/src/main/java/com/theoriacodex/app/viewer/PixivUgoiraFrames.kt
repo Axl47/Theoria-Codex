@@ -1,5 +1,6 @@
 package com.theoriacodex.app.viewer
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -31,10 +32,8 @@ internal suspend fun decodeUgoiraFrames(
             val bytes = readUgoiraFrame(zip, entry)
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-            val options = BitmapFactory.Options().apply {
-                inSampleSize = ugoiraFrameSampleSize(bounds.outWidth, bounds.outHeight, specs.size, sizeBucket)
-            }
-            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+            val sampleSize = ugoiraFrameSampleSize(bounds.outWidth, bounds.outHeight, specs.size, sizeBucket)
+            val bitmap = decodeUgoiraFrame(bytes, sampleSize, sizeBucket)
                 ?: throw IOException("Pixiv ugoira frame could not be decoded")
             decodedBytes += bitmap.allocationByteCount.toLong()
             if (decodedBytes > budget) {
@@ -51,6 +50,20 @@ internal suspend fun decodeUgoiraFrames(
     currentCoroutineContext().ensureActive()
     if (frames.isEmpty()) throw IOException("Pixiv ugoira zip could not be decoded")
     return UgoiraPlayback(frames.toList(), delays)
+}
+
+/**
+ * Display frames decode straight to [Bitmap.Config.HARDWARE], so showing a new frame each tick needs no
+ * RenderThread texture upload. Export reads pixels with `getPixels`, so its own decode stays software.
+ * A hardware decode that fails (for example when graphics memory is short) falls back to software.
+ */
+private fun decodeUgoiraFrame(bytes: ByteArray, sampleSize: Int, sizeBucket: UgoiraSizeBucket): Bitmap? {
+    fun decode(config: Bitmap.Config) = BitmapFactory.decodeByteArray(
+        bytes, 0, bytes.size,
+        BitmapFactory.Options().apply { inSampleSize = sampleSize; inPreferredConfig = config },
+    )
+    if (sizeBucket == UgoiraSizeBucket.EXPORT) return decode(Bitmap.Config.ARGB_8888)
+    return decode(Bitmap.Config.HARDWARE) ?: decode(Bitmap.Config.ARGB_8888)
 }
 
 private suspend fun readUgoiraFrame(zip: ZipFile, entry: ZipEntry): ByteArray {
