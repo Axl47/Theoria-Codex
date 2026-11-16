@@ -8,6 +8,7 @@ import com.theoriacodex.domain.source.SiteCredentials
 import com.theoriacodex.domain.source.SiteHeaders
 import com.theoriacodex.domain.source.SiteProbeResult
 import com.theoriacodex.domain.source.SiteProfile
+import com.theoriacodex.sources.common.parseHtml
 import com.theoriacodex.sources.danbooru.DanbooruSite
 import com.theoriacodex.sources.gelbooru.GelbooruSite
 import com.theoriacodex.sources.http.SourceHttpClient
@@ -16,7 +17,6 @@ import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import kotlinx.coroutines.withTimeoutOrNull
-import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 
 /**
@@ -187,7 +187,7 @@ private suspend fun homePage(address: SiteAddress, context: SiteRequestContext):
 }
 
 internal fun parseHomePage(html: String, pageUrl: String): HomePage {
-    val document = Jsoup.parse(html, pageUrl)
+    val document = parseHtml(html, pageUrl)
     val icon = siteIcon(document)
     return HomePage(siteName(document), icon?.first, icon?.second ?: 0)
 }
@@ -217,7 +217,7 @@ private fun siteIcon(document: Document): Pair<String, Int>? =
  * `og:site_name` when present, else the `<title>` up to its first separator ("Gelbooru | Anime and
  * Hentai Imageboard" → "Gelbooru"). Null when neither gives a usable name.
  */
-internal fun siteNameFromHtml(html: String): String? = siteName(Jsoup.parse(html))
+internal fun siteNameFromHtml(html: String): String? = siteName(parseHtml(html))
 
 private fun siteName(document: Document): String? {
     val ogName = document.selectFirst("meta[property=og:site_name]")?.attr("content")

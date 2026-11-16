@@ -20,16 +20,16 @@ import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.isSuccessful
 import com.theoriacodex.sources.common.normalizeBooruTag
+import com.theoriacodex.sources.common.parseHtml
 import com.theoriacodex.sources.common.parseJsonArray
+import com.theoriacodex.sources.common.parseXml
 import com.theoriacodex.sources.common.sourceNetworkFailure
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.media.inferMimeFromUrl
 import com.theoriacodex.sources.media.mimeFromFileExt
 import java.io.IOException
-import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
-import org.jsoup.parser.Parser
 
 /** Not a [com.theoriacodex.domain.adapter.FileHashLookupSourceAdapter]: its posts carry a file hash, but Shimmie's
  * `hash=` search is unverified through this RSS/HTML path, so other sites' "Find on other sites" skips Paheal. */
@@ -74,7 +74,7 @@ class Rule34PahealSourceAdapter(
         if (limit <= 0) return emptyList()
         return runCatchingPreservingCancellation {
             val html = request("$RULE34PAHEAL_BASE_URL/post/list") ?: return emptyList()
-            val doc = Jsoup.parse(html, RULE34PAHEAL_BASE_URL)
+            val doc = parseHtml(html, RULE34PAHEAL_BASE_URL)
             val counts = linkedMapOf<String, Int>()
             doc.select("div.shm-thumb.thumb[data-tags]").forEach { thumb ->
                 thumb.attr("data-tags")
@@ -123,7 +123,7 @@ class Rule34PahealSourceAdapter(
     override suspend fun resolvePost(id: PostId): Post? {
         if (id.source != SourceKey.RULE34PAHEAL) return null
         val html = request("$RULE34PAHEAL_BASE_URL/post/view/${id.sourcePostId}", allowNotFound = true) ?: return null
-        val doc = Jsoup.parse(html, RULE34PAHEAL_BASE_URL)
+        val doc = parseHtml(html, RULE34PAHEAL_BASE_URL)
         return parsePostDocument(doc, id.sourcePostId)
     }
 
@@ -151,14 +151,14 @@ class Rule34PahealSourceAdapter(
     }
 
     private fun parseRssPage(body: String, limit: Int): Page<Post> {
-        val document = Jsoup.parse(body, RULE34PAHEAL_BASE_URL, Parser.xmlParser())
+        val document = parseXml(body, RULE34PAHEAL_BASE_URL)
         val items = document.select("channel > item")
             .take(limit)
             .mapNotNull { item ->
                 val link = item.selectFirst("link")?.text()?.trim().orEmpty()
                 val sourcePostId = link.substringAfterLast('/').substringBefore('#').takeIf(String::isNotBlank)
                     ?: return@mapNotNull null
-                val descriptionDoc = Jsoup.parse(item.selectFirst("description")?.text().orEmpty(), RULE34PAHEAL_BASE_URL)
+                val descriptionDoc = parseHtml(item.selectFirst("description")?.text().orEmpty(), RULE34PAHEAL_BASE_URL)
                 val thumb = descriptionDoc.selectFirst("div.shm-thumb.thumb")
                 val image = descriptionDoc.selectFirst("img")
                 val previewUrl = item.selectFirst("media|thumbnail")?.attr("url").orEmpty().ifBlank {
@@ -205,7 +205,7 @@ class Rule34PahealSourceAdapter(
     }
 
     private fun parseHtmlSearchPage(body: String): Page<Post> {
-        val document = Jsoup.parse(body, RULE34PAHEAL_BASE_URL)
+        val document = parseHtml(body, RULE34PAHEAL_BASE_URL)
         val posts = document.select("div.shm-thumb.thumb[data-post-id]").mapNotNull { thumb ->
             val sourcePostId = thumb.attr("data-post-id").trim().takeIf(String::isNotBlank) ?: return@mapNotNull null
             val link = thumb.selectFirst("a.shm-thumb-link")?.attr("abs:href").orEmpty()

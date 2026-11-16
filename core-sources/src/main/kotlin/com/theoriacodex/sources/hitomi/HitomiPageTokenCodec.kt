@@ -2,6 +2,7 @@ package com.theoriacodex.sources.hitomi
 
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
+import com.theoriacodex.domain.diagnostics.OffMainWork
 import java.util.Base64
 
 internal class HitomiPageTokenCodec(
@@ -13,6 +14,7 @@ internal class HitomiPageTokenCodec(
     }
 
     fun decode(raw: String): DecodedHitomiPageToken {
+        OffMainWork.note(OffMainWork.SOURCE_PARSE)
         val token = try {
             val json = Base64.getUrlDecoder().decode(raw).toString(Charsets.UTF_8)
             gson.fromJson(json, HitomiPageToken::class.java)

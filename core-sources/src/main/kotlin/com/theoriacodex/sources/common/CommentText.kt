@@ -5,7 +5,6 @@ import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
-import org.jsoup.Jsoup
 import org.jsoup.nodes.TextNode
 
 /**
@@ -13,7 +12,7 @@ import org.jsoup.nodes.TextNode
  * would, `<br>` turned into newlines and every other tag dropped. The result is trimmed.
  */
 internal fun htmlFragmentToText(html: String): String {
-    val body = Jsoup.parseBodyFragment(html).body()
+    val body = parseHtmlFragment(html).body()
     body.select("script, style").remove()
     body.allElements.forEach { element ->
         element.textNodes().forEach { node -> node.text(node.wholeText.replace(WHITESPACE_RUN, " ")) }

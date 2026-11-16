@@ -2,11 +2,11 @@ package com.theoriacodex.sources.gelbooru
 
 import com.theoriacodex.domain.model.AccountDetails
 import com.theoriacodex.sources.common.htmlFragmentToText
+import com.theoriacodex.sources.common.parseHtml
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
-import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
 /**
@@ -19,7 +19,7 @@ import org.jsoup.nodes.Element
  * Returns null when the page has none of these, such as an unknown id.
  */
 internal fun parseGelbooruAccountProfile(html: String, siteUrl: String): AccountDetails? {
-    val document = Jsoup.parse(html, "$siteUrl/")
+    val document = parseHtml(html, "$siteUrl/")
     val stats = document.select("div.row.profileStatSeparator").mapNotNull { row ->
         val columns = row.children().filter { it.className().startsWith("col-") }
         if (columns.size < 2) null else columns[0].text().trim() to columns[1].text().trim()

@@ -7,12 +7,12 @@ import com.theoriacodex.sources.common.booleanValue
 import com.theoriacodex.sources.common.htmlFragmentToText
 import com.theoriacodex.sources.common.intValue
 import com.theoriacodex.sources.common.parseBooruDateTimeMs
-import org.jsoup.Jsoup
+import com.theoriacodex.sources.common.parseHtml
+import com.theoriacodex.sources.common.parseXml
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import org.jsoup.nodes.Node
 import org.jsoup.nodes.TextNode
-import org.jsoup.parser.Parser
 
 /** One page of comments scraped from a post page. [nextPid] is the `pid` offset of the following page, if any. */
 internal data class GelbooruHtmlComments(val comments: List<PostComment>, val nextPid: Int?)
@@ -23,7 +23,7 @@ internal data class GelbooruHtmlComments(val comments: List<PostComment>, val ne
  * fall back to the post page. Attribute values arrive unescaped and are plain text; `creator_id` names the commenter's account.
  */
 internal fun parseGelbooruCommentsXml(body: String, site: GelbooruSite): List<PostComment>? {
-    val root = Jsoup.parse(body, "", Parser.xmlParser()).selectFirst("comments") ?: return null
+    val root = parseXml(body).selectFirst("comments") ?: return null
     return root.select("comment").mapNotNull { element ->
         val id = element.attr("id").takeIf(String::isNotBlank) ?: return@mapNotNull null
         PostComment(
@@ -49,7 +49,7 @@ internal fun parseGelbooruCommentsXml(body: String, site: GelbooruSite): List<Po
  * The commenter's account id is the `id` of the author link's profile href; Safebooru's links carry only `uname`.
  */
 internal fun parseGelbooruCommentsHtml(html: String, site: GelbooruSite, currentPid: Int): GelbooruHtmlComments {
-    val document = Jsoup.parse(html, "${site.siteUrl}/")
+    val document = parseHtml(html, "${site.siteUrl}/")
     val bodies = document.select("div.commentBody")
     val comments = if (bodies.isNotEmpty()) {
         bodies.mapNotNull { parseCommentBody(it, site) }

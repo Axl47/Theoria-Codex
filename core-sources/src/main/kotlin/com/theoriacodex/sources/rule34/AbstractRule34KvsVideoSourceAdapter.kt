@@ -22,12 +22,12 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.isSuccessful
+import com.theoriacodex.sources.common.parseHtml
+import com.theoriacodex.sources.common.parseXml
 import com.theoriacodex.sources.common.sourceNetworkFailure
 import com.theoriacodex.sources.http.SourceHttpClient
 import java.io.IOException
-import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
-import org.jsoup.parser.Parser
 
 abstract class AbstractRule34KvsVideoSourceAdapter(
     private val httpClient: SourceHttpClient,
@@ -53,7 +53,7 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
 
         val url = pageToken ?: initialSearchUrl(queryText)
         val body = request(url)
-        val document = Jsoup.parse(body, baseUrl)
+        val document = parseHtml(body, baseUrl)
         return canonicalPostPage(
             items = parseSearchPage(document),
             nextPageToken = nextPageToken(document, queryText),
@@ -117,7 +117,7 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
         if (id.source != sourceKey) return null
         val body = request("$baseUrl/video/${id.sourcePostId}/x/", allowNotFound = true)
         if (body.isBlank()) return null
-        val document = Jsoup.parse(body, baseUrl)
+        val document = parseHtml(body, baseUrl)
         val config = parseRule34KvsConfig(document)
         val title = config.string("video_title")
             ?: document.selectFirst("meta[property=og:title]")?.attr("content")
@@ -179,11 +179,11 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
     protected abstract fun parseSearchPage(document: Document): List<Post>
 
     protected fun parseLatestRss(body: String): Page<Post> {
-        val document = Jsoup.parse(body, baseUrl, Parser.xmlParser())
+        val document = parseXml(body, baseUrl)
         val items = document.select("channel > item").mapNotNull { item ->
             val link = item.selectFirst("link")?.text()?.trim().orEmpty()
             val sourcePostId = RULE34_VIDEO_ID_REGEX.find(link)?.groupValues?.getOrNull(1) ?: return@mapNotNull null
-            val descriptionDoc = Jsoup.parse(item.selectFirst("description")?.text().orEmpty(), baseUrl)
+            val descriptionDoc = parseHtml(item.selectFirst("description")?.text().orEmpty(), baseUrl)
             val imageUrl = descriptionDoc.selectFirst("img")?.attr("abs:src").orEmpty()
             val title = item.selectFirst("title")?.text()?.trim()?.takeIf(String::isNotBlank)
             Post(

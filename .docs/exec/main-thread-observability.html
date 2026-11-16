@@ -239,6 +239,7 @@
         <li>[x] 2026-11-15 - Review round 1 (Opus high, GPT-6.1 Sol adversarial) merged.</li>
         <li>[x] 2026-11-16 - Review round 2 merged; plan ready to implement.</li>
         <li>[x] 2026-11-16 - Phase 1: <code>OffMainWork</code> marker, shared <code>ViolationLedger</code>, <code>MainThreadWorkChecker</code> and its Android glue installed from <code>startDiagnostics()</code>; host tests pass.</li>
+        <li>[x] 2026-11-16 - Phase 1: parse helpers <code>parseHtml</code>, <code>parseXml</code>, <code>parseHtmlFragment</code> added beside the marked JSON helpers; every listed site routed or marked directly (Appendix). <code>:core-sources:test</code> passes unchanged, plus a test that every helper marks its work and one that comment text keeps fragment semantics (checked to fail with a document parse).</li>
         <li>[ ] Phases 1 and 3 merged.</li>
         <li>[ ] Phase 2 merged (after A1).</li>
       </ul>
@@ -285,7 +286,14 @@
       </details>
       <details>
         <summary>Parse sites that call <code>note</code> directly</summary>
-        <p>To be filled in during Phase 1.</p>
+        <p>Every Jsoup site in the Context table now calls <code>parseHtml</code>, <code>parseXml</code> or <code>parseHtmlFragment</code> (CommentText keeps fragment parsing), and the Danbooru error body goes through <code>parseJsonObject</code> inside its existing <code>runCatching</code>. Four sites call <code>OffMainWork.note(SOURCE_PARSE)</code> directly because a helper does not fit:</p>
+        <ul>
+          <li><code>hitomi/HitomiProtocol.kt</code> <code>parseJson</code>: uses <code>JsonParser.parseString</code> and its own <code>HitomiProtocolException</code>.</li>
+          <li><code>hitomi/HitomiPageTokenCodec.kt</code> <code>decode</code>: deserializes a typed token class, not a <code>JsonElement</code>.</li>
+          <li><code>custom/ProbeEvidence.kt</code> <code>jsonBody</code>: returns null on malformed input instead of throwing.</li>
+          <li><code>app/.../viewer/PixivUgoiraPlayer.kt</code> <code>parseMetadata</code>: in the app module, outside core-sources' helpers.</li>
+        </ul>
+        <p>Not marked: <code>health/ProviderHealth.kt</code> :196 (and its caller <code>ProviderHealthCheckCli.kt</code> :126) parses the health-check CLI's case file, not a provider response, and never runs in the app. After routing, <code>grep -rn "Jsoup\.\|JsonParser\.\|fromJson" core-sources/src/main</code> finds only the helpers, the direct sites above and that case-file parse.</p>
       </details>
       <details>
         <summary>Negative control outputs</summary>

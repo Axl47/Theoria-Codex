@@ -12,6 +12,7 @@ import androidx.core.graphics.scale
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.domain.diagnostics.OffMainWork
 import com.theoriacodex.sources.credentials.PixivAuthTokens
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.http.SourceHttpClient
@@ -657,6 +658,7 @@ class PixivUgoiraClient internal constructor(
     }
 
     private fun parseMetadata(body: String): ParsedMetadata {
+        OffMainWork.note(OffMainWork.SOURCE_PARSE)
         val root = runCatching { gson.fromJson(body, JsonObject::class.java) }.getOrNull()
             ?: throw IOException("Pixiv ugoira metadata was not valid JSON")
         val metadata = root.getAsJsonObject("ugoira_metadata")
