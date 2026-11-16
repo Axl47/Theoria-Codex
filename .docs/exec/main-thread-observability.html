@@ -57,7 +57,7 @@
     <h1>ExecPlan: Catch main-thread work automatically</h1>
     <p>After this plan, work that has been declared "background only", starting with parsing provider responses, fails an automated emulator test when Search runs it on the main thread, and is logged in every build the first time each call site does it. Debug builds also report disk access on the main thread. Today none of this is checked: the same class of problem has been found by reading code and fixed screen by screen.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: Phases 1 and 3 in review (PR #107); Phase 2 waits on A1</span>
+      <span class="pill">Status: Phases 1 and 3 merged (PR #107); Phase 2 in review</span>
       <span class="pill">Owner: Claude (orchestrator)</span>
       <span class="pill">Created: 2026-11-15</span>
       <span class="pill">Updated: 2026-11-16</span>
@@ -65,7 +65,7 @@
       <span class="pill">Audit item: B4</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Merge PR #107 (Phases 1 and 3), then Phase 2 once audit fix A1 is merged.</div>
+      <div class="card"><strong>Next Action</strong>Review and merge the Phase 2 pull request, then confirm <code>SourceParsingThreadJourneyTest</code> runs and passes in one shard per Android version in the Main workflow.</div>
       <div class="card"><strong>Main Risk</strong>A gate that cannot fail. Reduced by requiring positive evidence in every run (pages requested, parses counted, third-page cards shown), a permanent control through the app's real checker, and two recorded negative controls.</div>
       <div class="card"><strong>Validation</strong>Host tests, <code>scripts/check.sh --record</code>, and a new emulator journey test that the Main workflow runs on Android 16 and 17.</div>
       <div class="card"><strong>Affected Areas</strong><code>core-domain</code> diagnostics, <code>core-sources</code> parse sites, <code>app</code> startup and diagnostics, journey fixtures and tests.</div>
@@ -242,8 +242,10 @@
         <li>[x] 2026-11-16 - Phase 1: parse helpers <code>parseHtml</code>, <code>parseXml</code>, <code>parseHtmlFragment</code> added beside the marked JSON helpers; every listed site routed or marked directly (Appendix). <code>:core-sources:test</code> passes unchanged, plus a test that every helper marks its work and one that comment text keeps fragment semantics (checked to fail with a document parse).</li>
         <li>[x] 2026-11-16 - Phase 3: <code>installDebugStrictMode()</code> (debug builds, main process) extends the main thread's policy with disk read and write detection and a listener that reports through the shared ledger.</li>
         <li>[x] 2026-11-16 - Validation: host tests and <code>scripts/check.sh --record</code> pass; on the <code>theoria-search-test</code> emulator (Android 16) <code>MainThreadWorkCheckerDeviceTest</code> (1 test) and <code>DebugStrictModeDeviceTest</code> (2 tests) pass; a manual debug launch listed the existing StrictMode violations (Surprises). PR #107 opened.</li>
-        <li>[ ] Phases 1 and 3 merged.</li>
-        <li>[ ] Phase 2 merged (after A1).</li>
+        <li>[x] 2026-11-16 - Phases 1 and 3 merged (PR #107); audit fix A1 merged (PR #109).</li>
+        <li>[x] 2026-11-16 - Phase 2: <code>ProviderShapedSource</code> (in-memory provider, JSON generator, <code>providerShapedPosts</code>) and the fixture hooks in <code>JourneySourceRegistry</code>, <code>JourneyAppContainer</code> and <code>AppJourneyFixture</code>; the host generator check <code>ProviderShapedSourceTest</code> passes.</li>
+        <li>[x] 2026-11-16 - Phase 2: <code>SourceParsingThreadJourneyTest</code> passes on the <code>theoria-search-test</code> emulator (Android 16) with <code>pages=[1, b61, b21] parses=3 mainThreadParses=0</code>; both negative controls failed on the expected assertion and were undone (Appendix); <code>SearchNavigationJourneyTest</code> (5 tests) still passes with the helpers it gave to the fixture.</li>
+        <li>[ ] Phase 2 merged, and the class passes in the Main workflow on Android 16 and 17.</li>
       </ul>
       <h3>Surprises And Discoveries</h3>
       <ul>
@@ -255,7 +257,9 @@
         <li>Observation: release builds are minified with no mapping file kept. Evidence: <code>app/build.gradle.kts</code> :231.</li>
         <li>Observation: the manual debug run reached only the "Saved data could not be opened safely" screen, because another worktree left a newer Room schema in <code>com.theoriacodex.debug</code> on the shared emulator; its data was not cleared, and StrictMode exists only in debug, so the acceptance package could not stand in. The violations listed are therefore those of process start, the app-lock gate and that error screen, not of Home, Search or the Viewer. Evidence: accessibility text of the launched app; logcat <code>TheoriaThreads</code>.</li>
         <li>Observation (finding, not fixed here): <code>AppLockViewModel</code> reads disk on the main thread when it is created: <code>getSharedPreferences("app_lock")</code> at <code>applock/AppLock.kt</code> :77 (the platform checks the preferences directory exists) and <code>preferences.getBoolean</code> at :79 (waits for the file to load). Two <code>DiskReadViolation</code> reports, the only app call sites seen in the run. Evidence: logcat <code>[strictmode] DiskReadViolation at com.theoriacodex.app.applock.AppLockViewModel.&lt;init&gt;(AppLock.kt:77)</code> and <code>(AppLock.kt:79)</code>.</li>
-        <li>Observation: until A1 is on <code>main</code>, Search parses on the main thread in every build, so the checker writes a <code>source-parse ran on the main thread</code> line per call site in real use. That is the A1 finding surfacing as designed, not a regression. Evidence: Context, "Search's thread path".</li>
+        <li>Observation: before A1 merged, Search parsed on the main thread in every build, so the checker wrote a <code>source-parse ran on the main thread</code> line per call site in real use. With A1 on <code>main</code> the gate's positive run shows no such line. Evidence: Context, "Search's thread path"; Appendix logcat.</li>
+        <li>Observation: Search runs nothing for an empty query ("Add tags and press Apply to start searching."), and the source menu keeps Danbooru inside a "Booru" folder. Consequence: the gate adds the tag <code>landscape</code>, and opens the folder before choosing Danbooru. Evidence: accessibility tree of the first failed run; <code>SourceSelector.kt</code> <code>SourceMenuChoices</code>, <code>SourceMetadata.kt</code> group <code>DANBOORU(folderLabel = "Booru")</code>.</li>
+        <li>Observation (finding, not fixed here): <code>PostDownloadsViewModel</code> reads disk on the main thread when it is created: <code>getFilesDir()</code> at <code>media/PostDownloadsViewModel.kt</code> :35, reached from <code>rememberLibraryTransferTools</code> while the shell composes. Evidence: logcat <code>[strictmode] DiskReadViolation at com.theoriacodex.app.media.PostDownloadsViewModel.&lt;init&gt;(PostDownloadsViewModel.kt:35)</code> during the journey runs.</li>
       </ul>
       <h3>Decision Log</h3>
       <ul>
@@ -276,9 +280,15 @@
         <li>Decision: <code>installDebugStrictMode()</code> is called from <code>startDiagnostics()</code>, so in the main process only, like the checker. Rationale: its reports go to the diagnostics log, which only the main process owns. Date/Author: 2026-11-16 / Claude.</li>
         <li>Decision: The permanent control is its own device test, <code>MainThreadWorkCheckerDeviceTest</code>, landing with Phase 1 instead of inside Phase 2's journey class. Rationale: it needs nothing from Phase 2 and proves the startup install now. It checks the diagnostics log for a <code>[main-thread] self-test</code> line timestamped after the test started, so a line left by an earlier run cannot satisfy it and no saved data is cleared. Date/Author: 2026-11-16 / Claude.</li>
         <li>Decision: Generate provider-shaped JSON from fixture posts. Rationale: no provider content in the repository. Date/Author: 2026-11-15 / Claude.</li>
+        <li>Decision: The provider-shaped source is a <code>DanbooruSite</code> with the source's key, a journey label and the base URL <code>https://provider.journey.invalid</code>, not the real Danbooru site, and its client ignores <code>tags</code>. Rationale: the parser is the same; a reserved host can never be reached by accident, and the real site's guest two-tag limit is not what the gate tests. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: <code>JourneyAppContainer</code> takes <code>providerShapedSources</code> and builds one <code>ProviderShapedSource</code> per named source over its own client; the registry exposes them as <code>providerShaped</code>, whose <code>pageRequests</code> is the request log (each request is answered, so its size is the responses served). <code>AppJourneyFixture</code> gains <code>fixturePosts(media)</code> and <code>providerShapedSources</code>. Defaults keep every existing journey and benchmark unchanged. Rationale: the smallest set of hooks the gate needs. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: Besides <code>scrollToFirstVisibleCard</code>, <code>addSearchTag</code> also moves from <code>SearchNavigationJourneyTest</code> into <code>AppJourneyFixture</code>; the scroll helper takes the source and a drag limit (the gate allows 80 drags to reach card 82). Rationale: the gate needs a tag (Surprises), and duplicating the tag-entry helper would be the smell <code>AGENTS.md</code> forbids. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: The third-page card is proven by scrolling until card 82 (third page: cards 80 to 99) is the first visible row, then asserting it is displayed; when the third page never arrives, the scroll helper fails first. Rationale: reuses the moved helper instead of a second scroll loop. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: The journey class holds one test; "both tests pass" in Phase 2's acceptance means the journey plus the existing <code>MainThreadWorkCheckerDeviceTest</code>, run together. Rationale: the permanent control landed with Phase 1 (see above). Date/Author: 2026-11-16 / Claude.</li>
       </ul>
       <h3>Outcomes And Retrospective</h3>
-      <p>Phases 1 and 3 (2026-11-16): marked work on the main thread is counted and reported per call site in every build, every provider-response parse is marked, and debug builds report main-thread disk access. Both are proven on the emulator through the app's real startup: the control test's report reached the diagnostics log and logcat, and a test disk read was counted at the test's own frame while network on main still threw. The first real use already found one site (app lock). Phase 2's gate is still outstanding.</p>
+      <p>Phases 1 and 3 (2026-11-16): marked work on the main thread is counted and reported per call site in every build, every provider-response parse is marked, and debug builds report main-thread disk access. Both are proven on the emulator through the app's real startup: the control test's report reached the diagnostics log and logcat, and a test disk read was counted at the test's own frame while network on main still threw. The first real use already found one site (app lock).</p>
+      <p>Phase 2 (2026-11-16): a Search through the real Danbooru parser now fails an emulator test if any marked parse runs on the main thread, and fails if it pages fewer than three times, parses fewer bodies than it served, or never shows a third-page card. Both negative controls turned it red on the expected assertion: main-thread provider calls on the main-thread count, a provider that repeats its first page on the third-page card. The gate covers Search only. The journey runs in about 75 seconds on the emulator, most of it dragging to card 82. What remains is its first run in the Main workflow after merge.</p>
     </section>
 
     <section id="recovery">
@@ -305,7 +315,28 @@
       </details>
       <details>
         <summary>Negative control outputs</summary>
-        <p>To be filled in during Phase 2.</p>
+        <p><strong>Phase 2 (2026-11-16, emulator-5554, Android 16, debug and test APKs built from this branch, both verified with <code>scripts/verify_device_apk.py</code>, <code>ro.kernel.qemu=1</code>):</strong></p>
+        <pre>Positive (restored code):
+SourceParsingThreadJourneyTest   OK
+MainThreadWorkCheckerDeviceTest  OK
+SearchNavigationJourneyTest      OK (5 tests)          OK (7 tests), 59.8 s
+I SourceParsingJourney: pages=[1, b61, b21] parses=3 mainThreadParses=0     (pid 6919, thread 6935)
+
+Control 1: JourneySourceRegistry.unifiedOrchestrator() built with providerContext = EmptyCoroutineContext
+SourceParsingThreadJourneyTest   FAILED  java.lang.AssertionError: Provider responses parsed on the main thread expected:&lt;0&gt; but was:&lt;3&gt;
+MainThreadWorkCheckerDeviceTest  OK
+I SourceParsingJourney: pages=[1, b61, b21] parses=3 mainThreadParses=3
+W TheoriaThreads: source-parse ran on the main thread
+W TheoriaThreads:   at com.theoriacodex.sources.common.SourceAdapterCommonKt.parseJsonArray(SourceAdapterCommon.kt:74)
+W TheoriaThreads:   at com.theoriacodex.sources.danbooru.DanbooruSourceAdapter.searchTags(DanbooruSourceAdapter.kt:217)
+W TheoriaThreads:   at com.theoriacodex.sources.danbooru.DanbooruSourceAdapter.search(DanbooruSourceAdapter.kt:107)
+
+Control 2: ProviderShapedSource answered every /posts.json request with the first page's body
+SourceParsingThreadJourneyTest   FAILED  on the third-page card:
+  java.lang.AssertionError: Search card 82 did not become the first visible fixture row after 80 drags
+    at AppJourneyFixture.scrollToFirstVisibleCard (AppJourneyFixture.kt:205)
+
+Both controls were one-line edits, undone before the commit; git status --short was clean of them.</pre>
         <p><strong>Phase 1 and 3 device evidence (2026-11-16, emulator-5554, Android 16, debug APK built from this branch, verified with <code>scripts/verify_device_apk.py</code>):</strong></p>
         <pre>MainThreadWorkCheckerDeviceTest  OK (1 test)
 DebugStrictModeDeviceTest        OK (2 tests)
