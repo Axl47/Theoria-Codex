@@ -19,9 +19,9 @@ internal fun AppLockRow() {
     val toggle = {
         context.findActivity().confirmDeviceOwner { result ->
             when (result) {
-                DeviceOwnerCheck.CONFIRMED -> lock.update(!lock.enabled)
+                DeviceOwnerCheck.CONFIRMED -> lock.update(lock.enabled != true)
                 // Without a screen lock the app lock already does nothing, so it may still be switched off.
-                DeviceOwnerCheck.NO_SCREEN_LOCK -> if (lock.enabled) {
+                DeviceOwnerCheck.NO_SCREEN_LOCK -> if (lock.enabled == true) {
                     lock.update(false)
                 } else {
                     Toast.makeText(context, "Set a screen lock on this device first", Toast.LENGTH_LONG).show()
@@ -33,6 +33,7 @@ internal fun AppLockRow() {
     SettingsRow(
         "App lock", "Fingerprint, face or screen lock to open", Icons.Default.Lock,
         onClick = toggle,
-        trailing = { Switch(lock.enabled, onCheckedChange = { toggle() }) },
+        // The app's content, this row included, only shows once the stored choice is known.
+        trailing = { Switch(lock.enabled == true, onCheckedChange = { toggle() }) },
     )
 }
