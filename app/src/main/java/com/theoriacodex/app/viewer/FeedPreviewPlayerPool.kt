@@ -113,15 +113,17 @@ internal class FeedPreviewPlayerPool(
         retainBinding: Boolean,
     ) {
         checkMainThread()
-        val cancelledPendingPrepare = cancelPrepare(lease.slotLease)
-        runCatching {
-            lease.player.playWhenReady = false
-            lease.player.pause()
-        }
-        if (slots.recycle(lease.slotLease, retainBinding && !cancelledPendingPrepare)) {
-            publishTraceCounters()
-            scheduleCooling()
-            scheduleCleanup()
+        traceMediaSection(MediaTraceSections.PREVIEW_PLAYER_RECYCLE) {
+            val cancelledPendingPrepare = cancelPrepare(lease.slotLease)
+            runCatching {
+                lease.player.playWhenReady = false
+                lease.player.pause()
+            }
+            if (slots.recycle(lease.slotLease, retainBinding && !cancelledPendingPrepare)) {
+                publishTraceCounters()
+                scheduleCooling()
+                scheduleCleanup()
+            }
         }
     }
 
@@ -139,9 +141,9 @@ internal class FeedPreviewPlayerPool(
             handler.removeCallbacks(prepareRunnable)
             prepareScheduled = false
         }
-        slots.resources.forEach { player ->
-            if (player.playbackState != Player.STATE_IDLE) {
-                traceMediaSection(MediaTraceSections.PREVIEW_PLAYER_COOL) { player.stop() }
+        traceMediaSection(MediaTraceSections.PREVIEW_STOP_FOR_VIEWER) {
+            slots.resources.forEach { player ->
+                if (player.playbackState != Player.STATE_IDLE) player.stop()
             }
         }
     }
@@ -149,11 +151,13 @@ internal class FeedPreviewPlayerPool(
     /** Restarts loading for a leased card that [stopForViewer] stopped; a no-op for a loaded or failed player. */
     fun resume(lease: FeedPreviewPlayerLease) {
         checkMainThread()
-        val player = lease.player
-        if (slots.isActive(lease.slotLease) && player.playbackState == Player.STATE_IDLE &&
-            player.mediaItemCount > 0 && player.playerError == null
-        ) {
-            enqueuePrepare(lease.slotLease)
+        traceMediaSection(MediaTraceSections.PREVIEW_PLAYER_RESUME) {
+            val player = lease.player
+            if (slots.isActive(lease.slotLease) && player.playbackState == Player.STATE_IDLE &&
+                player.mediaItemCount > 0 && player.playerError == null
+            ) {
+                enqueuePrepare(lease.slotLease)
+            }
         }
     }
 
