@@ -33,6 +33,7 @@ import com.theoriacodex.sources.common.optionalJsonArray
 import com.theoriacodex.sources.common.optionalJsonObject
 import com.theoriacodex.sources.common.parseJsonElement
 import com.theoriacodex.sources.common.parseJsonObject
+import com.theoriacodex.sources.common.sourceCall
 import com.theoriacodex.sources.common.sourceNetworkFailure
 import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.http.SourceHttpClient
@@ -60,7 +61,7 @@ class IwaraSourceAdapter(
         requiresCredentials = false,
     )
 
-    override suspend fun search(query: Query, pageToken: String?): Page<Post> {
+    override suspend fun search(query: Query, pageToken: String?): Page<Post> = sourceCall {
         val pageIndex = pageToken?.toIntOrNull()?.coerceAtLeast(0) ?: 0
         val compiledQuery = compileQueryText(query)
         if (compiledQuery.isBlank()) {
@@ -72,7 +73,7 @@ class IwaraSourceAdapter(
                     "page" to pageIndex.toString(),
                 ),
             )
-            return parsePagedPosts(response)
+            return@sourceCall parsePagedPosts(response)
         }
         val response = requestJsonObject(
             url = "$IWARA_API_BASE/search",
@@ -83,11 +84,11 @@ class IwaraSourceAdapter(
                 "sort" to mapSort(query.sort),
             ),
         )
-        return parsePagedPosts(response)
+        parsePagedPosts(response)
     }
 
-    override suspend fun trendingTags(limit: Int): List<TagSuggestion> {
-        if (limit <= 0) return emptyList()
+    override suspend fun trendingTags(limit: Int): List<TagSuggestion> = sourceCall {
+        if (limit <= 0) return@sourceCall emptyList()
         val response = requestJsonObject(
             url = "$IWARA_API_BASE/videos",
             query = linkedMapOf(
@@ -102,7 +103,7 @@ class IwaraSourceAdapter(
                 counts[tag] = (counts[tag] ?: 0) + 1
             }
         }
-        return counts.entries
+        counts.entries
             .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
             .take(limit)
             .map { (tag, count) ->
@@ -114,9 +115,9 @@ class IwaraSourceAdapter(
             }
     }
 
-    override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> {
+    override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = sourceCall {
         val normalized = prefix.trim()
-        if (normalized.isBlank() || limit <= 0) return emptyList()
+        if (normalized.isBlank() || limit <= 0) return@sourceCall emptyList()
         val response = requestJsonObject(
             url = "$IWARA_API_BASE/tags",
             query = linkedMapOf(
@@ -124,7 +125,7 @@ class IwaraSourceAdapter(
                 "page" to "0",
             ),
         )
-        return response.optionalJsonArray("results")
+        response.optionalJsonArray("results")
             ?.mapNotNull { element ->
                 val tag = element.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@mapNotNull null
                 val text = tag.stringValue("id").orEmpty().trim()
@@ -142,7 +143,7 @@ class IwaraSourceAdapter(
             .orEmpty()
     }
 
-    override suspend fun quickQuery(kind: QuickQueryKind): Query {
+    override suspend fun quickQuery(kind: QuickQueryKind): Query = sourceCall {
         val sort = when (kind) {
             QuickQueryKind.POPULAR_TODAY -> SortMode.POPULAR
             QuickQueryKind.TOP_7D -> SortMode.TOP
@@ -150,7 +151,7 @@ class IwaraSourceAdapter(
             QuickQueryKind.NEWEST -> SortMode.NEWEST
             QuickQueryKind.RANDOM -> SortMode.NEWEST
         }
-        return Query(
+        Query(
             mode = QueryMode.Source(SourceKey.IWARA),
             includeTags = emptyList(),
             excludeTags = emptyList(),
@@ -160,15 +161,15 @@ class IwaraSourceAdapter(
         )
     }
 
-    override suspend fun resolvePost(id: PostId): Post? {
-        if (id.source != SourceKey.IWARA) return null
+    override suspend fun resolvePost(id: PostId): Post? = sourceCall {
+        if (id.source != SourceKey.IWARA) return@sourceCall null
         val response = request(
             url = "$IWARA_API_BASE/video/${id.sourcePostId}",
             query = emptyMap(),
         )
-        if (response.statusCode == 404) return null
+        if (response.statusCode == 404) return@sourceCall null
         val root = parseJsonObject(response.body, gson, "Iwara")
-        val parsed = parseVideoPost(root) ?: return null
+        val parsed = parseVideoPost(root) ?: return@sourceCall null
         val resolvedMedia = root.stringValue("fileUrl")
             ?.trim()
             ?.takeIf(String::isNotBlank)
@@ -179,12 +180,12 @@ class IwaraSourceAdapter(
                 )
             }
         if (resolvedMedia == null) {
-            return parsed.copy(
+            return@sourceCall parsed.copy(
                 full = null,
                 media = emptyList(),
             )
         }
-        return parsed.copy(
+        parsed.copy(
             full = resolvedMedia,
             media = listOf(resolvedMedia),
         )
@@ -193,11 +194,11 @@ class IwaraSourceAdapter(
     override suspend fun searchCreatorPosts(
         creator: CreatorProfile,
         pageToken: String?,
-    ): Page<Post> {
-        if (creator.source != SourceKey.IWARA) return canonicalPostPage(emptyList(), null)
+    ): Page<Post> = sourceCall {
+        if (creator.source != SourceKey.IWARA) return@sourceCall canonicalPostPage(emptyList(), null)
         val userId = creator.uploadsQuery?.trim().takeUnless { it.isNullOrBlank() }
             ?: creator.profileId?.trim().takeUnless { it.isNullOrBlank() }
-            ?: return canonicalPostPage(emptyList(), null)
+            ?: return@sourceCall canonicalPostPage(emptyList(), null)
         val pageIndex = pageToken?.toIntOrNull()?.coerceAtLeast(0) ?: 0
         val response = requestJsonObject(
             url = "$IWARA_API_BASE/videos",
@@ -208,27 +209,28 @@ class IwaraSourceAdapter(
                 "user" to userId,
             ),
         )
-        return parsePagedPosts(response)
+        parsePagedPosts(response)
     }
 
     override fun accountFeeds(creator: CreatorProfile): List<AccountFeed> =
         if (creator.source == SourceKey.IWARA && !creator.profileId.isNullOrBlank()) listOf(AccountFeed.UPLOADS) else emptyList()
 
     /** The profile (avatar, bio, join date) and the follower total; null when the user is unknown. */
-    override suspend fun accountDetails(creator: CreatorProfile): AccountDetails? {
-        val userId = creator.profileId?.trim()?.takeIf { it.isNotBlank() && creator.source == SourceKey.IWARA } ?: return null
-        val username = iwaraUsername(creator) ?: return null
+    override suspend fun accountDetails(creator: CreatorProfile): AccountDetails? = sourceCall {
+        val userId = creator.profileId?.trim()?.takeIf { it.isNotBlank() && creator.source == SourceKey.IWARA } ?: return@sourceCall null
+        val username = iwaraUsername(creator) ?: return@sourceCall null
         val profile = request(url = "$IWARA_API_BASE/profile/$username", query = emptyMap())
-        if (profile.statusCode == 404) return null
+        if (profile.statusCode == 404) return@sourceCall null
         val followers = requestJsonObject(url = "$IWARA_API_BASE/user/$userId/followers", query = mapOf("limit" to "1"))
-        return parseIwaraAccountDetails(parseJsonObject(profile.body, gson, "Iwara"), followers.intValue("count"))
+        parseIwaraAccountDetails(parseJsonObject(profile.body, gson, "Iwara"), followers.intValue("count"))
     }
 
-    override suspend fun accountPosts(creator: CreatorProfile, feed: AccountFeed, pageToken: String?): Page<Post> =
+    override suspend fun accountPosts(creator: CreatorProfile, feed: AccountFeed, pageToken: String?): Page<Post> = sourceCall {
         when (feed) {
             AccountFeed.UPLOADS -> searchCreatorPosts(creator, pageToken)
             AccountFeed.FAVORITES -> canonicalPostPage(emptyList(), null)
         }
+    }
 
     private fun compileQueryText(query: Query): String {
         return query.includeTags

@@ -196,7 +196,6 @@ class SourceMainSafetyContractTest {
     private companion object {
         /** Sources Phase 1 has not converted yet. Empty, and removed, once the whole boundary is wrapped. */
         val NOT_YET_CONVERTED = setOf(
-            SourceKey.IWARA,
             SourceKey.RULE34VIDEO, SourceKey.RULE34GEN, SourceKey.RULE34PAHEAL,
         )
         const val HTTP = "http"
