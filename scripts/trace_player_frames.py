@@ -42,7 +42,11 @@ run is separate because sampling adds load. Install the benchmark APK, keep the 
 `adb -s <serial> shell perfetto --txt -c - -o /data/misc/perfetto-traces/player-sampled.pftrace < config.txt`
 in the background, drive the scenario, then pull the trace. Start the app first: traced_perf matches a process when it
 first samples it, and a process forked after the capture began can still carry the zygote's name then and go without
-stacks for the whole capture. The larger ring buffer keeps the kernel from dropping samples while stacks are copied.
+stacks for the whole capture. The larger perf ring buffer keeps the kernel from dropping samples while stacks are copied.
+Trace buffers are sized for a 120 Hz phone: when a ring buffer wraps, the packets that define interned call stacks and
+the start-of-trace process scan are overwritten, and trace processor then drops every sample and cannot name the app's
+processes. So the process scan has its own buffer that never overwrites, and incremental state is re-emitted every few
+seconds so a wrapped buffer still parses.
 The benchmark process is profileable, which callstack sampling requires on user builds. Both patterns end in *
 because the benchmark fixture runs in the ":benchmarkFixture" process.
 """
@@ -70,8 +74,10 @@ SAMPLING_HZ = 500
 TRACE_PROCESSOR_VERSION = "v59.1"
 
 SAMPLED_CONFIG = """\
-buffers {{ size_kb: 131072 fill_policy: RING_BUFFER }}
-buffers {{ size_kb: 8192 fill_policy: RING_BUFFER }}
+buffers {{ size_kb: 393216 fill_policy: RING_BUFFER }}
+buffers {{ size_kb: 65536 fill_policy: RING_BUFFER }}
+buffers {{ size_kb: 8192 fill_policy: DISCARD }}
+incremental_state_config {{ clear_period_ms: 5000 }}
 data_sources {{ config {{ name: "linux.ftrace" target_buffer: 0 ftrace_config {{
   ftrace_events: "sched/sched_switch"
   ftrace_events: "task/task_newtask"
@@ -82,8 +88,9 @@ data_sources {{ config {{ name: "linux.ftrace" target_buffer: 0 ftrace_config {{
   buffer_size_kb: 16384
   drain_period_ms: 250
 }} }} }}
-data_sources {{ config {{ name: "linux.process_stats" target_buffer: 1 process_stats_config {{
+data_sources {{ config {{ name: "linux.process_stats" target_buffer: 2 process_stats_config {{
   scan_all_processes_on_start: true
+  proc_stats_poll_ms: 10000
 }} }} }}
 data_sources {{ config {{ name: "android.surfaceflinger.frametimeline" target_buffer: 1 }} }}
 data_sources {{ config {{ name: "linux.perf" target_buffer: 0 perf_event_config {{
