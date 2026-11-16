@@ -15,6 +15,7 @@ import com.theoriacodex.app.codex.SavedSearchesCodexViewModel
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.di.SourceDependencies
 import com.theoriacodex.app.search.SearchCoordinator
+import com.theoriacodex.app.ui.components.rememberComputedOffMain
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.app.source.creatorBrowsingSources
@@ -54,7 +55,7 @@ internal fun SavedSearchesCodexBoundary(
     LaunchedEffect(selected, settings.runtime, available, sort, usage, durations) {
         owner.synchronize(selected, settings, available, sort, usage, durations)
     }
-    val posts = remember(feed.posts, sort, usage, durations) { sortLiveCodexPosts(feed.posts, sort, usage, durations) }
+    val posts = rememberComputedOffMain(feed.posts, sort, usage, durations) { sortLiveCodexPosts(feed.posts, sort, usage, durations) }
     content(CodexDetailDestinationState(
         codex = Codex(SAVED_SEARCHES_CODEX_ID, "Searches", 0), items = emptyList(), posts = posts,
         activeProfile = settings.activeRecommendationProfile(), availableSources = available,

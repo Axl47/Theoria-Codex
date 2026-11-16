@@ -1,6 +1,7 @@
 package com.theoriacodex.app.ui.routes
 
 import androidx.compose.runtime.Composable
+import com.theoriacodex.app.ui.components.rememberComputedOffMain
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
@@ -289,8 +290,8 @@ internal fun CodexDetailDestinationStateBoundary(
     val storedPosts by rememberRetained(codexPostsKey(codexId, storeSort), content) { codexPostsFlow(data, codexId, storeSort) }
     val usage = rememberCodexPostUsage(data.statisticsRepository, codexId, sortMode)
     val durations = rememberCodexPostDurations(storedPosts, sortMode, durationStates)
-    val sortedPosts = remember(storedPosts, sortMode, usage, durations) {
-        storedPosts?.let { posts -> usage?.let { sortCodexPosts(posts, sortMode, it, durations) } }
+    val sortedPosts = storedPosts?.let { posts ->
+        rememberComputedOffMain(posts, sortMode, usage, durations) { usage?.let { sortCodexPosts(posts, sortMode, it, durations) } }
     }
     // Changing the sort keeps showing the previous order until the new one answers.
     val shownPosts = remember(codexId) { ShownPosts() }
@@ -540,7 +541,7 @@ private fun FollowedCodexDestinationStateBoundary(
     androidx.compose.runtime.LaunchedEffect(selected, available, sort, usage, durations) {
         owner.synchronize(selected, available, sort, usage, durations)
     }
-    val posts = remember(feed.posts, sort, usage, durations) { sortLiveCodexPosts(feed.posts, sort, usage, durations) }
+    val posts = rememberComputedOffMain(feed.posts, sort, usage, durations) { sortLiveCodexPosts(feed.posts, sort, usage, durations) }
     content(CodexDetailDestinationState(
         codex = Codex(com.theoriacodex.app.codex.FOLLOWED_CODEX_ID, "Followed", 0),
         items = emptyList(), posts = posts, activeProfile = settings.activeRecommendationProfile(),

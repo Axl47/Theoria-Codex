@@ -46,9 +46,12 @@ import com.theoriacodex.app.statistics.codexIdsOutsideProfiles
 import com.theoriacodex.app.statistics.compareStats
 import com.theoriacodex.app.statistics.hasShareableActivity
 import com.theoriacodex.app.statistics.shareCodex
+import com.theoriacodex.app.ui.components.rememberComputedOffMain
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val StringSetSaver = listSaver<Set<String>, String>({ it.toList() }, { it.toSet() })
 
@@ -85,9 +88,12 @@ internal fun StatsSharePreview(
         return
     }
     val outsideProfiles = remember(profiles, includedProfiles) { codexIdsOutsideProfiles(profiles, includedProfiles) }
-    val file = remember(codices, outsideProfiles, excludedCodices, excludedPosts, name, includeOverall, overall) {
+    val buildFile = {
         val selection = StatsShareSelection(excludedCodices + outsideProfiles, excludedPosts)
         buildStatsShare(codices, selection, name, overall.takeIf { includeOverall })
+    }
+    val file = rememberComputedOffMain(codices, outsideProfiles, excludedCodices, excludedPosts, name, includeOverall, overall) {
+        buildFile()
     }
     val totals = remember(file) { compareStats(file, StatsShareFile()).yours }
     val selected = profiles.firstOrNull { it.profileId == selectedProfileId } ?: profiles.firstOrNull()
@@ -112,7 +118,7 @@ internal fun StatsSharePreview(
             onIncludedChange = { id, included -> excludedCodices = excludedCodices.withMember(id, !included) },
             onOpen = { openCodexId = it },
         )
-        ShareButtons(file, actions)
+        ShareButtons(file, buildFile, actions)
     }
 }
 
@@ -157,14 +163,15 @@ private fun ShareProfileToggle(profile: ProfileStatistics, included: Boolean, on
     }
 }
 
+/** [file] is the preview, which can trail the last tap; the shared file is rebuilt from the current selection. */
 @Composable
-private fun ShareButtons(file: StatsShareFile, actions: StatsActions) {
+private fun ShareButtons(file: StatsShareFile, buildFile: () -> StatsShareFile, actions: StatsActions) {
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val enabled = !busy && (file.codices.orEmpty().isNotEmpty() || file.overall != null)
     val run = { action: suspend (StatsShareFile) -> Unit ->
         busy = true
-        scope.launch { try { action(file) } finally { busy = false } }
+        scope.launch { try { action(withContext(Dispatchers.Default) { buildFile() }) } finally { busy = false } }
         Unit
     }
     Button(enabled = enabled, onClick = { run(actions.share) }, modifier = Modifier.fillMaxWidth()) { Text("Share file") }

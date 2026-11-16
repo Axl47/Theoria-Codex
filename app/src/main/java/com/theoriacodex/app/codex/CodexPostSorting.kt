@@ -2,7 +2,6 @@ package com.theoriacodex.app.codex
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.produceState
-import androidx.compose.runtime.remember
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.media.MediaDurationKey
@@ -11,6 +10,7 @@ import com.theoriacodex.app.media.isAnimatedPost
 import com.theoriacodex.app.media.knownMediaDurations
 import com.theoriacodex.app.search.postMediaCount
 import com.theoriacodex.app.statistics.statisticsPostKey
+import com.theoriacodex.app.ui.components.rememberComputedOffMain
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -98,16 +98,19 @@ internal fun sortCodexPosts(
 ): List<Post> = codexPostRefinement(sort, usage, durations)?.let(posts::sortedWith) ?: posts
 
 /**
- * Known animation lengths of [posts] while [sort] is a length sort; empty otherwise. Recomputed as
- * durations resolve, so posts settle into place while resolution runs.
+ * Known animation lengths of [posts] while [sort] is a length sort; empty otherwise. Recomputed off the main
+ * thread as durations resolve, so posts settle into place while resolution runs. Other sorts ignore [states].
  */
 @Composable
 internal fun rememberCodexPostDurations(
     posts: List<Post>?,
     sort: CodexSortMode,
     states: Map<MediaDurationKey, MediaDurationState>,
-): Map<PostId, Long> = remember(posts, sort, states) {
-    if (sort.usesDuration && posts != null) knownMediaDurations(posts, states) else emptyMap()
+): Map<PostId, Long> {
+    if (!sort.usesDuration || posts == null) return emptyMap()
+    return rememberComputedOffMain(posts, states, extend = { known, appended -> known + knownMediaDurations(appended, states) }) {
+        knownMediaDurations(posts, states)
+    }
 }
 
 /** Per-post usage within [codexId]. A statistics failure degrades to no usage, leaving the date order. */

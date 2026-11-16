@@ -96,11 +96,12 @@ val GELBOORU_ANIMATED_SEARCH_TAGS = listOf("video", "animated", "animation", "an
 /** Danbooru-engine sites tag animation consistently; a short group keeps within their tag limits. */
 val DANBOORU_ANIMATED_SEARCH_TAGS = listOf("animated", "video")
 
-private val animatedTags = GELBOORU_ANIMATED_SEARCH_TAGS.toSet()
-
 /** One rule for every source: animated media, or a tag that says so (covers sites whose previews are stills). */
 private fun matchesAnimatedFilter(post: Post): Boolean =
-    isAnimatedPost(post) || (post.rawTags + post.canonicalTags).any { it.lowercase() in animatedTags }
+    isAnimatedPost(post) || post.rawTags.any(::isAnimatedTag) || post.canonicalTags.any(::isAnimatedTag)
+
+/** Compares case-insensitively in place, so a filter pass copies and lowercases no tags. */
+private fun isAnimatedTag(tag: String): Boolean = GELBOORU_ANIMATED_SEARCH_TAGS.any { it.equals(tag, ignoreCase = true) }
 
 private fun matchesAnimatedDurationFilter(
     post: Post,

@@ -65,6 +65,7 @@ import com.theoriacodex.app.search.AnimatedDurationRangeControl
 import com.theoriacodex.app.search.SearchDurationFilterPresentation
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.filterSearchResults
+import com.theoriacodex.app.search.rememberFilteredFeed
 import com.theoriacodex.app.search.rememberSearchDurationFilterPresentation
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.ui.components.FeedEmptyTile
@@ -315,21 +316,9 @@ private fun rememberForYouFeed(
     )
     // Home sections are shelves, so only the result grid takes the reveal order.
     val presentedResults = durationFilter.presentedPosts.takeUnless { state.home.visible } ?: state.results
-    val visibleResults = remember(
-        presentedResults,
-        visibilityFilters,
-        durationFilter.unknownPolicy,
-        durationFilter.knownDurationMsByPostId,
-    ) {
-        filterSearchResults(
-            results = presentedResults,
-            filters = visibilityFilters,
-            likedPostIds = emptySet(),
-            savedPostIds = emptySet(),
-            unknownAnimatedDurationPolicy = durationFilter.unknownPolicy,
-            knownDurationMsByPostId = durationFilter.knownDurationMsByPostId,
-        )
-    }
+    val visibleResults = rememberFilteredFeed(
+        presentedResults, visibilityFilters, durationFilter.unknownPolicy, durationFilter.knownDurationMsByPostId,
+    )
     val related = rememberRelatedFeedPresentation(
         canonicalPosts = state.results,
         visibleCanonicalPosts = visibleResults,
