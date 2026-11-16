@@ -46,7 +46,7 @@ class SearchMetadataHydrationTest {
             },
         )
 
-        val page = UnifiedSearchOrchestrator(emptyMap()).searchSource(adapter, groupedQuery(), null)
+        val page = testOrchestrator().searchSource(adapter, groupedQuery(), null)
 
         assertEquals(listOf("canonical"), page.items.map { it.id.sourcePostId })
         assertEquals(listOf("a", "shared", "alias", "gone"), resolved)
@@ -58,7 +58,7 @@ class SearchMetadataHydrationTest {
         val sparse = post("a")
         val adapter = SparseAdapter(search = { _, _ -> Page(listOf(sparse), "next") })
 
-        val page = UnifiedSearchOrchestrator(emptyMap()).searchSource(adapter, plainQuery(), null)
+        val page = testOrchestrator().searchSource(adapter, plainQuery(), null)
 
         assertEquals(listOf(sparse), page.items)
         assertEquals("next", page.nextPageToken)
@@ -83,7 +83,7 @@ class SearchMetadataHydrationTest {
             )), null) },
             resolve = { it },
         )
-        val result = UnifiedSearchOrchestrator(
+        val result = testOrchestrator(
             mapOf(sparse.sourceKey to sparse, healthy.sourceKey to healthy), sourceTimeoutMs = 100L,
         ).search(groupedQuery(), setOf(sparse.sourceKey, healthy.sourceKey), emptyMap(), emptyMap())
 
@@ -106,7 +106,7 @@ class SearchMetadataHydrationTest {
             },
         )
         val job = launch {
-            result = UnifiedSearchOrchestrator(emptyMap()).searchSource(adapter, groupedQuery(), null)
+            result = testOrchestrator().searchSource(adapter, groupedQuery(), null)
         }
         started.await()
         job.cancelAndJoin()
@@ -121,7 +121,7 @@ class SearchMetadataHydrationTest {
             search = { _, _ -> Page(listOf(post("a")), "next") },
             resolve = { throw SourceAdapterException(SourceFailureReason.PARSE, "Changed detail page") },
         )
-        val result = UnifiedSearchOrchestrator(mapOf(adapter.sourceKey to adapter))
+        val result = testOrchestrator(mapOf(adapter.sourceKey to adapter))
             .search(groupedQuery(), setOf(adapter.sourceKey), emptyMap(), emptyMap())
 
         assertTrue(result.items.isEmpty())
@@ -140,7 +140,7 @@ class SearchMetadataHydrationTest {
                 post(sparse.id.sourcePostId, "cat", "red")
             },
         )
-        val result = UnifiedSearchOrchestrator(mapOf(adapter.sourceKey to adapter))
+        val result = testOrchestrator(mapOf(adapter.sourceKey to adapter))
             .search(groupedQuery(), setOf(adapter.sourceKey), emptyMap(), emptyMap())
 
         assertEquals(listOf("a"), result.items.map { it.id.sourcePostId })

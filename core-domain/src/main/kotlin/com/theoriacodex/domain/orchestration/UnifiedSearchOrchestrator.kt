@@ -22,6 +22,9 @@ import com.theoriacodex.domain.query.SourceCapabilityGate
 import com.theoriacodex.domain.query.withinTermLimit
 import com.theoriacodex.domain.coroutines.mapConcurrent
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -55,6 +58,11 @@ data class UnifiedSearchResult(
 class UnifiedSearchOrchestrator(
     private val adaptersBySource: Map<SourceKey, SourceAdapter>,
     private val sourceTimeoutMs: Long = 15_000L,
+    /**
+     * Runs provider calls, which parse whole response pages, so callers on the main thread stay free to draw.
+     * Tests pass [kotlin.coroutines.EmptyCoroutineContext] to keep those calls on their own dispatcher.
+     */
+    private val providerContext: CoroutineContext = Dispatchers.Default,
 ) {
     suspend fun search(
         query: Query,
@@ -91,7 +99,7 @@ class UnifiedSearchOrchestrator(
         val jobs = candidateAdapters
             .filterKeys { source -> source !in hardExcluded }
             .map { (source, adapter) ->
-                async {
+                async(providerContext) {
                     // A source with a term cap receives only the leading terms it accepts.
                     val sourceBaseQuery = sourceBaseQuery(query, portableQuery, queryOverridesBySource[source])
                         .withinTermLimit(adapter.capabilities.searchTermLimit)
@@ -223,11 +231,11 @@ class UnifiedSearchOrchestrator(
         adapter: SourceAdapter,
         query: Query,
         pageToken: String?,
-    ): Page<Post> {
+    ): Page<Post> = withContext(providerContext) {
         val groups = query.effectiveIncludeTermGroups
         val alternatives = groups.filter { group -> group.terms.size > 1 }
         if (alternatives.isEmpty() || adapter.capabilities.supportsGroupedIncludeTagsServerSide) {
-            return adapter.search(query, pageToken)
+            return@withContext adapter.search(query, pageToken)
         }
         val pivot = alternatives.minBy { group -> group.terms.size }
         require(pivot.terms.size <= MAX_FALLBACK_BRANCHES) {
@@ -256,7 +264,7 @@ class UnifiedSearchOrchestrator(
         }
         val merged = mergeBranches(visibleByBranch, query.sort)
         val nextTokens = pages.map(Page<Post>::nextPageToken)
-        return Page(
+        Page(
             items = merged,
             nextPageToken = nextTokens.takeIf { tokens -> tokens.any { it != null } }
                 ?.let(::encodeGroupedPageToken),

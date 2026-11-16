@@ -1,5 +1,6 @@
 package com.theoriacodex.app.recommend
 
+import kotlin.coroutines.EmptyCoroutineContext
 import androidx.lifecycle.SavedStateHandle
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.search.NoOpTagSuggestionStore
@@ -329,7 +330,7 @@ class ForYouCoordinatorTest {
 
     private fun registryOf(vararg adapters: SourceAdapter): SourceAdapterRegistry {
         val adaptersBySource = adapters.associateBy { adapter -> adapter.sourceKey }
-        val orchestrator = UnifiedSearchOrchestrator(adaptersBySource)
+        val orchestrator = UnifiedSearchOrchestrator(adaptersBySource, providerContext = EmptyCoroutineContext)
         return object : SourceAdapterRegistry {
             override fun availableSources(): Set<SourceKey> = adaptersBySource.keys
             override fun adapterFor(sourceKey: SourceKey): SourceAdapter? = adaptersBySource[sourceKey]
@@ -342,7 +343,7 @@ class ForYouCoordinatorTest {
         vararg adapters: SourceAdapter,
     ): SourceAdapterRegistry {
         val adaptersBySource = adapters.associateBy(SourceAdapter::sourceKey)
-        val orchestrator = UnifiedSearchOrchestrator(adaptersBySource)
+        val orchestrator = UnifiedSearchOrchestrator(adaptersBySource, providerContext = EmptyCoroutineContext)
         return object : SourceAdapterRegistry {
             override fun availableSources(): Set<SourceKey> = adaptersBySource.keys.intersect(capabilities.value)
             override fun adapterFor(sourceKey: SourceKey): SourceAdapter? {

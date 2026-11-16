@@ -1,5 +1,6 @@
 package com.theoriacodex.app.creator
 
+import kotlin.coroutines.EmptyCoroutineContext
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.domain.adapter.AccountProfileSourceAdapter
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
@@ -32,7 +33,7 @@ class AccountCoordinatorTest {
     @Test
     fun `an account's feeds and details come from its account adapter`() = runTest {
         val adapter = FakeAccountAdapter()
-        val coordinator = CreatorProfileCoordinator(registryOf(adapter))
+        val coordinator = CreatorProfileCoordinator(registryOf(adapter), providerContext = EmptyCoroutineContext)
 
         assertEquals(listOf(AccountFeed.UPLOADS, AccountFeed.FAVORITES), coordinator.accountFeeds(user))
         assertEquals(AccountDetails(uploadCount = 2), coordinator.accountDetails(user))
@@ -44,7 +45,7 @@ class AccountCoordinatorTest {
     @Test
     fun `a creator the adapter does not call an account stays an uploads search`() = runTest {
         val adapter = FakeAccountAdapter()
-        val coordinator = CreatorProfileCoordinator(registryOf(adapter))
+        val coordinator = CreatorProfileCoordinator(registryOf(adapter), providerContext = EmptyCoroutineContext)
 
         assertEquals(emptyList<AccountFeed>(), coordinator.accountFeeds(artistTag))
         assertEquals(null, coordinator.accountDetails(artistTag))

@@ -56,7 +56,8 @@ import com.theoriacodex.app.media.copyTextToClipboard
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
 import com.theoriacodex.app.search.SearchDurationFilterPresentation
 import com.theoriacodex.app.search.SearchVisibilityFilters
-import com.theoriacodex.app.search.filterSearchResults
+import com.theoriacodex.app.search.markInputs
+import com.theoriacodex.app.search.rememberFilteredFeed
 import com.theoriacodex.app.search.rememberSearchDurationFilterPresentation
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.tags.PostBoundTagSection
@@ -244,25 +245,10 @@ private fun rememberCreatorFeed(
     val retainedLikedPostIds = retainPostsUntilViewerCloses(remember(state.relatedPosts, pendingLikePostIds) {
         state.relatedPosts.retainedLikedPostIds + pendingLikePostIds
     })
-    val visibleResults = remember(
-        presentedResults,
-        visibilityFilters,
-        likedPostIds,
-        retainedLikedPostIds,
-        savedPostIds,
-        durationFilter.unknownPolicy,
-        durationFilter.knownDurationMsByPostId,
-    ) {
-        filterSearchResults(
-            results = presentedResults,
-            filters = visibilityFilters,
-            likedPostIds = likedPostIds,
-            retainedLikedPostIds = retainedLikedPostIds,
-            savedPostIds = savedPostIds,
-            unknownAnimatedDurationPolicy = durationFilter.unknownPolicy,
-            knownDurationMsByPostId = durationFilter.knownDurationMsByPostId,
-        )
-    }
+    val marks = visibilityFilters.markInputs(likedPostIds, savedPostIds, emptySet(), retainedLikedPostIds)
+    val visibleResults = rememberFilteredFeed(
+        presentedResults, visibilityFilters, durationFilter.unknownPolicy, durationFilter.knownDurationMsByPostId, marks,
+    )
     val related = rememberRelatedFeedPresentation(
         pendingLikePostIds = pendingLikePostIds,
         canonicalPosts = state.results,

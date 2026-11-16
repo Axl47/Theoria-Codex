@@ -17,6 +17,9 @@ import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.CancellationException
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 internal typealias FollowedFeedState = LiveCodexFeedState
@@ -27,6 +30,8 @@ internal class FollowedCodexViewModel(
     private val cacheRepository: CacheRepository,
     relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
     private val fileMirrors: FileMirrorIndex = FileMirrorIndex(),
+    /** Creator pages are fetched and parsed here, off the main thread. Tests pass [kotlin.coroutines.EmptyCoroutineContext]. */
+    private val providerContext: CoroutineContext = Dispatchers.Default,
 ) : ViewModel(), LiveCodexFeedOwner {
     private val feed = LiveCodexFeedController<CreatorBranch>(viewModelScope,
         fetch = { branch, _ -> fetch(branch) },
@@ -65,7 +70,9 @@ internal class FollowedCodexViewModel(
             check(creator.source in availableSources.orEmpty()) { "Source unavailable" }
             val adapter = registry.adapterFor(creator.source) as? CreatorPostsSourceAdapter
                 ?: error("Creator browsing unavailable")
-            val page = withTimeoutOrNull(15_000L) { adapter.searchCreatorPosts(creator, branch.nextPageToken) }
+            val page = withTimeoutOrNull(15_000L) {
+                withContext(providerContext) { adapter.searchCreatorPosts(creator, branch.nextPageToken) }
+            }
                 ?: error("Source timed out")
             fileMirrors.learn(page.items)
             branch.copy(

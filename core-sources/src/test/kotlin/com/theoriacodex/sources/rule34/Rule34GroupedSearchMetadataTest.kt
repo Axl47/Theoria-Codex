@@ -1,13 +1,16 @@
 package com.theoriacodex.sources.rule34
 
+import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -20,7 +23,7 @@ class Rule34GroupedSearchMetadataTest {
         for (gen in listOf(false, true)) {
             val http = VideoHttpClient(gen)
             val adapter = adapter(http, gen)
-            val orchestrator = UnifiedSearchOrchestrator(emptyMap())
+            val orchestrator = orchestrator()
 
             val first = orchestrator.searchSource(adapter, groupedQuery(), null)
 
@@ -47,7 +50,7 @@ class Rule34GroupedSearchMetadataTest {
             val adapter = adapter(http, gen)
             val query = plainQuery().withIncludeTermsAsRequired(listOf(SearchTerm("cat")))
 
-            val page = UnifiedSearchOrchestrator(emptyMap()).searchSource(adapter, query, null)
+            val page = orchestrator().searchSource(adapter, query, null)
 
             assertEquals(2, page.items.size)
             assertTrue(page.items.all { it.canonicalTags.isEmpty() && it.rawTags.isEmpty() && it.taxonomy.isEmpty() })
@@ -62,7 +65,7 @@ class Rule34GroupedSearchMetadataTest {
             val adapter = adapter(http, gen)
             val query = groupedQuery().copy(excludeTerms = listOf(SearchTerm("blue")))
 
-            val result = UnifiedSearchOrchestrator(mapOf(adapter.sourceKey to adapter))
+            val result = orchestrator(mapOf(adapter.sourceKey to adapter))
                 .search(query, setOf(adapter.sourceKey), emptyMap(), emptyMap())
 
             assertEquals(listOf("42"), result.items.map { it.id.sourcePostId })
@@ -77,12 +80,16 @@ class Rule34GroupedSearchMetadataTest {
         val adapter = adapter(http, gen = false)
         val query = plainQuery().withIncludeTermsAsRequired(listOf(SearchTerm("cat"))).copy(excludeTerms = listOf(SearchTerm("green")))
 
-        val result = UnifiedSearchOrchestrator(mapOf(adapter.sourceKey to adapter))
+        val result = orchestrator(mapOf(adapter.sourceKey to adapter))
             .search(query, setOf(adapter.sourceKey), emptyMap(), emptyMap())
 
         assertEquals(listOf("42"), result.items.map { it.id.sourcePostId })
         assertEquals(listOf("42", "43"), http.resolvedIds)
     }
+
+    /** Provider calls stay on the test's dispatcher, so request order stays deterministic. */
+    private fun orchestrator(adapters: Map<SourceKey, SourceAdapter> = emptyMap()) =
+        UnifiedSearchOrchestrator(adapters, providerContext = EmptyCoroutineContext)
 
     private fun adapter(http: SourceHttpClient, gen: Boolean): AbstractRule34KvsVideoSourceAdapter =
         if (gen) Rule34GenSourceAdapter(http) else Rule34VideoSourceAdapter(http)

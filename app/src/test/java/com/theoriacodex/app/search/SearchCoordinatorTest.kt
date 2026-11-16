@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import kotlin.coroutines.EmptyCoroutineContext
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.data.repository.InMemoryQueryRepository
 import com.theoriacodex.data.repository.InMemoryRecentsRepository
@@ -531,7 +532,7 @@ private class CountingRestoreRepository(
 
 internal class TestRegistry(adapters: List<SourceAdapter>) : SourceAdapterRegistry {
     private val bySource = adapters.associateBy(SourceAdapter::sourceKey)
-    private val orchestrator = UnifiedSearchOrchestrator(bySource)
+    private val orchestrator = UnifiedSearchOrchestrator(bySource, providerContext = EmptyCoroutineContext)
     override fun availableSources(): Set<SourceKey> = bySource.keys
     override fun adapterFor(sourceKey: SourceKey): SourceAdapter? = bySource[sourceKey]
     override fun unifiedOrchestrator(): UnifiedSearchOrchestrator = orchestrator

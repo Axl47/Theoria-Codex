@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import kotlin.coroutines.EmptyCoroutineContext
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -210,7 +211,7 @@ internal class ViewModelSearchRegistry(
 ) : SourceAdapterRegistry {
     private val adapters = listOf(adapter) + additionalAdapters
     private val orchestrator = UnifiedSearchOrchestrator(
-        adapters.associateBy(SourceAdapter::sourceKey),
+        adapters.associateBy(SourceAdapter::sourceKey), providerContext = EmptyCoroutineContext,
     )
 
     override fun availableSources(): Set<SourceKey> = adapters.mapTo(mutableSetOf(), SourceAdapter::sourceKey)

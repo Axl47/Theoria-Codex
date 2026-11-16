@@ -1,5 +1,6 @@
 package com.theoriacodex.app.creator
 
+import kotlin.coroutines.EmptyCoroutineContext
 import androidx.lifecycle.SavedStateHandle
 import com.theoriacodex.app.creator.state.CreatorAction
 import com.theoriacodex.app.creator.state.CreatorEffect
@@ -51,7 +52,7 @@ class CreatorProfileCoordinatorTest {
                 ),
             ),
         )
-        val coordinator = CreatorProfileViewModel(CreatorProfileCoordinator(singleAdapterRegistry(adapter)), SavedStateHandle(), this)
+        val coordinator = CreatorProfileViewModel(engine(singleAdapterRegistry(adapter)), SavedStateHandle(), this)
 
         coordinator.onAction(CreatorAction.OpenCreator(sampleCreator()))
         advanceUntilIdle()
@@ -73,7 +74,7 @@ class CreatorProfileCoordinatorTest {
                 "page-2" to Page(items = listOf(testPost(sourcePostId = "2", creatorProfile = sampleCreator())), nextPageToken = null),
             ),
         )
-        val coordinator = CreatorProfileViewModel(CreatorProfileCoordinator(singleAdapterRegistry(adapter)), SavedStateHandle(), this)
+        val coordinator = CreatorProfileViewModel(engine(singleAdapterRegistry(adapter)), SavedStateHandle(), this)
 
         coordinator.onAction(CreatorAction.OpenCreator(sampleCreator()))
         advanceUntilIdle()
@@ -94,7 +95,7 @@ class CreatorProfileCoordinatorTest {
                 "page-2" to Page(items = listOf(testPost(sourcePostId = "2", creatorProfile = sampleCreator())), nextPageToken = null),
             ),
         )
-        val coordinator = CreatorProfileViewModel(CreatorProfileCoordinator(singleAdapterRegistry(adapter)), SavedStateHandle(), this)
+        val coordinator = CreatorProfileViewModel(engine(singleAdapterRegistry(adapter)), SavedStateHandle(), this)
 
         coordinator.onAction(CreatorAction.OpenCreator(sampleCreator()))
         advanceUntilIdle()
@@ -110,7 +111,7 @@ class CreatorProfileCoordinatorTest {
 
     @Test
     fun `unsupported adapter state is surfaced cleanly`() = runTest {
-        val coordinator = CreatorProfileViewModel(CreatorProfileCoordinator(unsupportedRegistry()), SavedStateHandle(), this)
+        val coordinator = CreatorProfileViewModel(engine(unsupportedRegistry()), SavedStateHandle(), this)
 
         coordinator.onAction(CreatorAction.OpenCreator(sampleCreator()))
         advanceUntilIdle()
@@ -134,7 +135,7 @@ class CreatorProfileCoordinatorTest {
                 ),
             ),
         )
-        val coordinator = CreatorProfileViewModel(CreatorProfileCoordinator(singleAdapterRegistry(adapter)), SavedStateHandle(), this)
+        val coordinator = CreatorProfileViewModel(engine(singleAdapterRegistry(adapter)), SavedStateHandle(), this)
 
         coordinator.onAction(CreatorAction.OpenCreator(sampleCreator()))
         advanceUntilIdle()
@@ -165,7 +166,7 @@ class CreatorProfileCoordinatorTest {
                 ),
             ),
         )
-        val coordinator = CreatorProfileViewModel(CreatorProfileCoordinator(singleAdapterRegistry(adapter)), SavedStateHandle(), this)
+        val coordinator = CreatorProfileViewModel(engine(singleAdapterRegistry(adapter)), SavedStateHandle(), this)
 
         coordinator.onAction(CreatorAction.OpenCreator(creator))
         advanceUntilIdle()
@@ -201,7 +202,7 @@ class CreatorProfileCoordinatorTest {
         )
         val capabilities = MutableStateFlow(setOf(SourceKey.RULE34XXX))
         val coordinator = CreatorProfileViewModel(
-            CreatorProfileCoordinator(mutableRegistry(capabilities, adapter)), SavedStateHandle(), this,
+            engine(mutableRegistry(capabilities, adapter)), SavedStateHandle(), this,
         )
 
         coordinator.onAction(CreatorAction.OpenCreator(creator))
@@ -240,6 +241,9 @@ class CreatorProfileCoordinatorTest {
             uploadsQuery = profileId,
         )
     }
+
+    /** Provider calls stay on the test's dispatcher, so virtual time drives them. */
+    private fun engine(registry: SourceAdapterRegistry) = CreatorProfileCoordinator(registry, providerContext = EmptyCoroutineContext)
 
     private fun singleAdapterRegistry(adapter: SourceAdapter): SourceAdapterRegistry {
         val stubRegistry = StubAdapterRegistry()

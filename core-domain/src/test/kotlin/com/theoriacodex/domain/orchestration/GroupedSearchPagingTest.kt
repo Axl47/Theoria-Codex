@@ -40,7 +40,7 @@ class GroupedSearchPagingTest {
                 else -> error("Unexpected branch request ${query.includeTags}: $token")
             }
         }
-        val orchestrator = UnifiedSearchOrchestrator(emptyMap())
+        val orchestrator = testOrchestrator()
         val first = orchestrator.searchSource(adapter, groupedQuery(), null)
         assertTrue(first.items.isEmpty())
         assertNotNull(first.nextPageToken)
@@ -63,7 +63,7 @@ class GroupedSearchPagingTest {
         val adapter = adapter { query, _ ->
             Page(if ("cat" in query.includeTags) listOf(shared, cat) else listOf(dog, shared), null)
         }
-        val orchestrator = UnifiedSearchOrchestrator(emptyMap())
+        val orchestrator = testOrchestrator()
         val newest = orchestrator.searchSource(adapter, groupedQuery(SortMode.NEWEST), null)
         val popular = orchestrator.searchSource(adapter, groupedQuery(SortMode.POPULAR), null)
 
@@ -82,7 +82,7 @@ class GroupedSearchPagingTest {
         val healthy = adapter(SourceKey.GELBOORU) { _, _ ->
             Page(listOf(post("healthy", "cat", "red").copy(id = PostId(SourceKey.GELBOORU, "healthy"))), null)
         }
-        val result = UnifiedSearchOrchestrator(mapOf(SourceKey.PIXIV to failed, SourceKey.GELBOORU to healthy))
+        val result = testOrchestrator(mapOf(SourceKey.PIXIV to failed, SourceKey.GELBOORU to healthy))
             .search(groupedQuery(), setOf(SourceKey.PIXIV, SourceKey.GELBOORU), emptyMap(), emptyMap())
 
         assertEquals(listOf("healthy"), result.items.map { it.id.sourcePostId })
@@ -108,7 +108,7 @@ class GroupedSearchPagingTest {
             Page(listOf(post("partial", "cat", "red")), null)
         }
         val job = launch {
-            published = UnifiedSearchOrchestrator(emptyMap()).searchSource(adapter, groupedQuery(), null)
+            published = testOrchestrator().searchSource(adapter, groupedQuery(), null)
         }
         waiting.await()
         job.cancelAndJoin()
