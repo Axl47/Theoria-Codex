@@ -28,6 +28,8 @@ Definitions (one trace may hold several iterations; `report` groups traces by th
                         slice if that is later. Intervals never overlap.
   budget                the frame's own expected duration from the timeline.
   player-heavy          a late frame whose interval holds player section self time of at least a quarter of its budget.
+  player share          player-heavy late frames over late frames; "joined" divides by late frames with an interval
+                        only, since frames without a doFrame slice (RenderThread-only redraws) can never be heavy.
   self time             a player section's duration minus the player sections nested inside it.
   player work           (sampled) a main-thread sample inside a player section, or with a Media3 frame on its
                         stack. Media3 samples outside sections while a Viewer player is active are reported apart and
@@ -42,7 +44,11 @@ run is separate because sampling adds load. Install the benchmark APK, keep the 
 `adb -s <serial> shell perfetto --txt -c - -o /data/misc/perfetto-traces/player-sampled.pftrace < config.txt`
 in the background, drive the scenario, then pull the trace. Start the app first: traced_perf matches a process when it
 first samples it, and a process forked after the capture began can still carry the zygote's name then and go without
-stacks for the whole capture. The larger ring buffer keeps the kernel from dropping samples while stacks are copied.
+stacks for the whole capture. The larger perf ring buffer keeps the kernel from dropping samples while stacks are copied.
+Trace buffers are sized for a 120 Hz phone: when a ring buffer wraps, the packets that define interned call stacks and
+the start-of-trace process scan are overwritten, and trace processor then drops every sample and cannot name the app's
+processes. So the process scan has its own buffer that never overwrites, and incremental state is re-emitted every few
+seconds so a wrapped buffer still parses.
 The benchmark process is profileable, which callstack sampling requires on user builds. Both patterns end in *
 because the benchmark fixture runs in the ":benchmarkFixture" process.
 """
@@ -70,8 +76,10 @@ SAMPLING_HZ = 500
 TRACE_PROCESSOR_VERSION = "v59.1"
 
 SAMPLED_CONFIG = """\
-buffers {{ size_kb: 131072 fill_policy: RING_BUFFER }}
-buffers {{ size_kb: 8192 fill_policy: RING_BUFFER }}
+buffers {{ size_kb: 393216 fill_policy: RING_BUFFER }}
+buffers {{ size_kb: 65536 fill_policy: RING_BUFFER }}
+buffers {{ size_kb: 8192 fill_policy: DISCARD }}
+incremental_state_config {{ clear_period_ms: 5000 }}
 data_sources {{ config {{ name: "linux.ftrace" target_buffer: 0 ftrace_config {{
   ftrace_events: "sched/sched_switch"
   ftrace_events: "task/task_newtask"
@@ -82,8 +90,9 @@ data_sources {{ config {{ name: "linux.ftrace" target_buffer: 0 ftrace_config {{
   buffer_size_kb: 16384
   drain_period_ms: 250
 }} }} }}
-data_sources {{ config {{ name: "linux.process_stats" target_buffer: 1 process_stats_config {{
+data_sources {{ config {{ name: "linux.process_stats" target_buffer: 2 process_stats_config {{
   scan_all_processes_on_start: true
+  proc_stats_poll_ms: 10000
 }} }} }}
 data_sources {{ config {{ name: "android.surfaceflinger.frametimeline" target_buffer: 1 }} }}
 data_sources {{ config {{ name: "linux.perf" target_buffer: 0 perf_event_config {{
@@ -291,6 +300,7 @@ class FrameSummary:
     late: int = 0
     other_jank: int = 0
     without_do_frame: int = 0
+    late_joined: int = 0
     player_heavy_late: int = 0
     late_category_ns: dict[str, int] = field(default_factory=lambda: {name: 0 for name in CATEGORIES})
 
@@ -302,6 +312,7 @@ class FrameSummary:
             if not result.late:
                 continue
             self.late += 1
+            self.late_joined += result.interval is not None
             self.player_heavy_late += result.player_heavy
             for name, ns in result.player_ns.items():
                 self.late_category_ns[CATEGORY_OF[name]] += ns
@@ -313,6 +324,10 @@ class FrameSummary:
     @property
     def player_share(self) -> float | None:
         return self.player_heavy_late / self.late if self.late else None
+
+    @property
+    def player_share_joined(self) -> float | None:
+        return self.player_heavy_late / self.late_joined if self.late_joined else None
 
 
 def section_totals(sections: Iterable[Section]) -> dict[str, dict[str, float]]:
@@ -636,6 +651,8 @@ class ScenarioTraces:
             "frames_without_do_frame": summary.without_do_frame,
             "player_heavy_late_frames": summary.player_heavy_late,
             "player_share": summary.player_share,
+            "late_frames_joined": summary.late_joined,
+            "player_share_joined": summary.player_share_joined,
             "late_frame_section_ms": {name: ns / NS_PER_MS for name, ns in summary.late_category_ns.items()},
             "sections": section_totals(self.sections),
             "demand_to_first_frame": presentation_summary(self.presentations, "demand"),
@@ -671,7 +688,8 @@ def print_scenario(scenario: str, values: dict[str, Any]) -> None:
     print(f"{scenario} ({len(values['traces'])} trace(s))")
     print(f"  frames {values['frames']}, late {values['late_frames']} ({fraction(values['late_rate'])}), "
           f"other jank {values['other_jank_frames']}, without doFrame {values['frames_without_do_frame']}")
-    print(f"  player-heavy late {values['player_heavy_late_frames']} (player share {fraction(values['player_share'])})")
+    print(f"  player-heavy late {values['player_heavy_late_frames']} (player share {fraction(values['player_share'])}, "
+          f"{fraction(values['player_share_joined'])} of the {values['late_frames_joined']} joined)")
     print("  section self time inside late frames: " + ", ".join(
         f"{name} {ms:.1f} ms" for name, ms in values["late_frame_section_ms"].items()))
     print("  sections (count, self ms):")
