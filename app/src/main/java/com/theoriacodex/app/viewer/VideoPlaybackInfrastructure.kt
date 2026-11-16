@@ -59,9 +59,14 @@ internal const val FEED_PREVIEW_REBUFFER_MS = 1_500
  */
 internal const val VIEWER_START_BUFFER_MS = 500
 
-internal enum class VideoPlaybackProfile {
-    FEED_PREVIEW,
-    VIEWER,
+/**
+ * [usesPlatformDiagnostics]: whether Media3 reports the player's playback statistics to Android's media metrics
+ * service. Its listener runs on the player's application thread, the main thread, and nothing on screen uses it, so
+ * the many concurrent feed previews skip it (measured on the phone: B3 plan, appendix "Preview platform diagnostics").
+ */
+internal enum class VideoPlaybackProfile(val usesPlatformDiagnostics: Boolean) {
+    FEED_PREVIEW(usesPlatformDiagnostics = false),
+    VIEWER(usesPlatformDiagnostics = true),
 }
 
 internal data class VideoPlaybackIdentity(
@@ -219,6 +224,7 @@ internal class VideoPlaybackInfrastructure(
         val renderers = DefaultRenderersFactory(appContext).setEnableDecoderFallback(true)
         return ExoPlayer.Builder(appContext, renderers)
             .setLoadControl(VideoLoadControlFactory.create(profile))
+            .setUsePlatformDiagnostics(profile.usesPlatformDiagnostics)
     }
 
     /** Caches at most [maxBytes] from the start of [location] into the shared video cache. */
