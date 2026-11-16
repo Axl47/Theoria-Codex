@@ -57,7 +57,7 @@
     <h1>ExecPlan: Catch main-thread work automatically</h1>
     <p>After this plan, work that has been declared "background only", starting with parsing provider responses, fails an automated emulator test when Search runs it on the main thread, and is logged in every build the first time each call site does it. Debug builds also report disk access on the main thread. Today none of this is checked: the same class of problem has been found by reading code and fixed screen by screen.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: In progress (Phases 1 and 3)</span>
+      <span class="pill">Status: Phases 1 and 3 in review (PR #107); Phase 2 waits on A1</span>
       <span class="pill">Owner: Claude (orchestrator)</span>
       <span class="pill">Created: 2026-11-15</span>
       <span class="pill">Updated: 2026-11-16</span>
@@ -65,7 +65,7 @@
       <span class="pill">Audit item: B4</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Phase 1 (marker, checker, parse sites), then Phase 2 once audit fix A1 is merged.</div>
+      <div class="card"><strong>Next Action</strong>Merge PR #107 (Phases 1 and 3), then Phase 2 once audit fix A1 is merged.</div>
       <div class="card"><strong>Main Risk</strong>A gate that cannot fail. Reduced by requiring positive evidence in every run (pages requested, parses counted, third-page cards shown), a permanent control through the app's real checker, and two recorded negative controls.</div>
       <div class="card"><strong>Validation</strong>Host tests, <code>scripts/check.sh --record</code>, and a new emulator journey test that the Main workflow runs on Android 16 and 17.</div>
       <div class="card"><strong>Affected Areas</strong><code>core-domain</code> diagnostics, <code>core-sources</code> parse sites, <code>app</code> startup and diagnostics, journey fixtures and tests.</div>
@@ -240,6 +240,8 @@
         <li>[x] 2026-11-16 - Review round 2 merged; plan ready to implement.</li>
         <li>[x] 2026-11-16 - Phase 1: <code>OffMainWork</code> marker, shared <code>ViolationLedger</code>, <code>MainThreadWorkChecker</code> and its Android glue installed from <code>startDiagnostics()</code>; host tests pass.</li>
         <li>[x] 2026-11-16 - Phase 1: parse helpers <code>parseHtml</code>, <code>parseXml</code>, <code>parseHtmlFragment</code> added beside the marked JSON helpers; every listed site routed or marked directly (Appendix). <code>:core-sources:test</code> passes unchanged, plus a test that every helper marks its work and one that comment text keeps fragment semantics (checked to fail with a document parse).</li>
+        <li>[x] 2026-11-16 - Phase 3: <code>installDebugStrictMode()</code> (debug builds, main process) extends the main thread's policy with disk read and write detection and a listener that reports through the shared ledger.</li>
+        <li>[x] 2026-11-16 - Validation: host tests and <code>scripts/check.sh --record</code> pass; on the <code>theoria-search-test</code> emulator (Android 16) <code>MainThreadWorkCheckerDeviceTest</code> (1 test) and <code>DebugStrictModeDeviceTest</code> (2 tests) pass; a manual debug launch listed the existing StrictMode violations (Surprises). PR #107 opened.</li>
         <li>[ ] Phases 1 and 3 merged.</li>
         <li>[ ] Phase 2 merged (after A1).</li>
       </ul>
@@ -251,6 +253,9 @@
         <li>Observation: A1 made the orchestrator's provider dispatcher a constructor parameter, so the gate's negative control is a one-line fixture change. Evidence: A1 commit, <code>UnifiedSearchOrchestrator.kt</code>.</li>
         <li>Observation: journey classes share one process per shard, so a test-installed checker must be restored and process-wide limits must not be asserted on. Evidence: <code>scripts/verify_debug_device.sh</code> :35-42.</li>
         <li>Observation: release builds are minified with no mapping file kept. Evidence: <code>app/build.gradle.kts</code> :231.</li>
+        <li>Observation: the manual debug run reached only the "Saved data could not be opened safely" screen, because another worktree left a newer Room schema in <code>com.theoriacodex.debug</code> on the shared emulator; its data was not cleared, and StrictMode exists only in debug, so the acceptance package could not stand in. The violations listed are therefore those of process start, the app-lock gate and that error screen, not of Home, Search or the Viewer. Evidence: accessibility text of the launched app; logcat <code>TheoriaThreads</code>.</li>
+        <li>Observation (finding, not fixed here): <code>AppLockViewModel</code> reads disk on the main thread when it is created: <code>getSharedPreferences("app_lock")</code> at <code>applock/AppLock.kt</code> :77 (the platform checks the preferences directory exists) and <code>preferences.getBoolean</code> at :79 (waits for the file to load). Two <code>DiskReadViolation</code> reports, the only app call sites seen in the run. Evidence: logcat <code>[strictmode] DiskReadViolation at com.theoriacodex.app.applock.AppLockViewModel.&lt;init&gt;(AppLock.kt:77)</code> and <code>(AppLock.kt:79)</code>.</li>
+        <li>Observation: until A1 is on <code>main</code>, Search parses on the main thread in every build, so the checker writes a <code>source-parse ran on the main thread</code> line per call site in real use. That is the A1 finding surfacing as designed, not a regression. Evidence: Context, "Search's thread path".</li>
       </ul>
       <h3>Decision Log</h3>
       <ul>
@@ -273,7 +278,7 @@
         <li>Decision: Generate provider-shaped JSON from fixture posts. Rationale: no provider content in the repository. Date/Author: 2026-11-15 / Claude.</li>
       </ul>
       <h3>Outcomes And Retrospective</h3>
-      <p>Not started.</p>
+      <p>Phases 1 and 3 (2026-11-16): marked work on the main thread is counted and reported per call site in every build, every provider-response parse is marked, and debug builds report main-thread disk access. Both are proven on the emulator through the app's real startup: the control test's report reached the diagnostics log and logcat, and a test disk read was counted at the test's own frame while network on main still threw. The first real use already found one site (app lock). Phase 2's gate is still outstanding.</p>
     </section>
 
     <section id="recovery">
@@ -301,6 +306,18 @@
       <details>
         <summary>Negative control outputs</summary>
         <p>To be filled in during Phase 2.</p>
+        <p><strong>Phase 1 and 3 device evidence (2026-11-16, emulator-5554, Android 16, debug APK built from this branch, verified with <code>scripts/verify_device_apk.py</code>):</strong></p>
+        <pre>MainThreadWorkCheckerDeviceTest  OK (1 test)
+DebugStrictModeDeviceTest        OK (2 tests)
+
+W TheoriaThreads: self-test ran on the main thread
+W TheoriaThreads: com.theoriacodex.app.diagnostics.CallSiteStack: call site
+W TheoriaThreads:   at com.theoriacodex.app.diagnostics.MainThreadWorkCheckerDeviceTest.startupInstallsTheCheckerAndItReportsMainThreadWork$lambda$0(MainThreadWorkCheckerDeviceTest.kt:27)
+W TheoriaThreads: [strictmode] DiskReadViolation at com.theoriacodex.app.diagnostics.DebugStrictModeDeviceTest.diskReadOnTheMainThreadIsCountedAtTheReadingCode$lambda$1(DebugStrictModeDeviceTest.kt:27)
+
+Manual debug launch:
+W TheoriaThreads: [strictmode] DiskReadViolation at com.theoriacodex.app.applock.AppLockViewModel.&lt;init&gt;(AppLock.kt:77)
+W TheoriaThreads: [strictmode] DiskReadViolation at com.theoriacodex.app.applock.AppLockViewModel.&lt;init&gt;(AppLock.kt:79)</pre>
       </details>
     </section>
   </main>
