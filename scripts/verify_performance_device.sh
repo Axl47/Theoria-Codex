@@ -87,6 +87,9 @@ for ((index=1; index<=captures; index++)); do
   # Match the device setup normally performed by UTP; no persistent power setting changes.
   "${adb_command[@]}" shell input keyevent KEYCODE_WAKEUP
   "${adb_command[@]}" shell wm dismiss-keyguard
+  # adb's transport name differs between USB and wireless debugging; ro.serialno names the unit in both.
+  hardware_serial="$("${adb_command[@]}" shell getprop ro.serialno | tr -d '\r')"
+  [[ -n "$hardware_serial" ]] || { echo 'The phone did not report ro.serialno, so its runs cannot be tied to one device.' >&2; exit 2; }
   printf 'Running complete physical benchmark capture %s/%s.\n' "$index" "$captures"
   remote="/sdcard/Android/media/com.theoriacodex.macrobenchmark/capture-$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
   results="$output/raw-$index"
@@ -120,7 +123,7 @@ PY
 )"
   python3 scripts/benchmark_results.py record \
     --report "$report" --apk "$target_apk" --harness-apk "$runner_apk" \
-    --device-serial "$serial" --device-kind physical \
+    --device-serial "$serial" --device-hardware-serial "$hardware_serial" --device-kind physical \
     --output "$output/run-$index" "${record_options[@]}"
   run_records+=("$output/run-$index/run.json")
 done

@@ -2,7 +2,9 @@
 """Capture and compare complete physical AndroidX macrobenchmark runs without contacting a device.
 
 record archives the ENTIRE report directory, keeps original paths and SHA-256 evidence, and binds
-measurements to APKs, fixture source/assets, device, compilation mode, and workload contract.
+measurements to APKs, fixture source/assets, device, compilation mode, and workload contract. The
+device is the physical unit (its hardware serial), so USB and wireless-debugging runs of one phone
+compare and two phones of the same model do not.
 calibrate requires at least three distinct full reports from one target APK. Each upper limit is
 max(baseline full-run summaries) + (max - min). This gives one observed inter-run noise span of
 headroom; it is an empirical screening rule, not a statistical confidence interval. Zero dispersion
@@ -31,6 +33,31 @@ FIXTURE_DIRECTORIES = ("app/src/benchmarkRelease", "app/src/fixtures")
 
 class EvidenceError(ValueError):
     """Missing, changed, or incompatible benchmark evidence."""
+
+
+# adb names a wireless-debugging (mDNS) connection "adb-<ro.serialno>-<6 random characters>._adb-tls-connect._tcp".
+WIRELESS_TRANSPORT = re.compile(r"adb-(?P<serial>.+)-[A-Za-z0-9]{6}\._adb-tls-connect\._tcp\.?")
+
+
+def device_identity(record: dict[str, Any]) -> str:
+    """The physical unit a run was measured on: the ro.serialno recorded at capture time."""
+    return record.get("device_hardware_serial") or legacy_device_identity(record["device_serial"])
+
+
+def legacy_device_identity(transport: str) -> str:
+    """Fallback for records captured before device_hardware_serial existed, which hold only adb's transport name.
+
+    Over USB, adb's serial is the device's ro.serialno (init writes it into the USB gadget's serial number),
+    so it is the hardware serial as is. A wireless-debugging name embeds ro.serialno; parsing it out is the
+    only string-derived identity. Any other transport (ip:port from adb connect, emulator-NNNN) names a
+    connection, not a unit: it stays scoped to that transport name, as before, and never matches a
+    hardware serial.
+    """
+    if match := WIRELESS_TRANSPORT.fullmatch(transport):
+        return match["serial"]
+    if ":" in transport or transport.startswith("emulator-"):
+        return f"transport:{transport}"
+    return transport
 
 
 def metric(name: str, statistic: str = "maximum", sampled: bool = False) -> dict[str, str]:
@@ -248,12 +275,12 @@ def copy_evidence_file(source: str, destination: str) -> str:
 
 
 def record_run(report_path: Path, apk: Path, harness_apk: Path, output: Path,
-               device_serial: str, device_kind: str, compilation: str,
+               device_serial: str, device_hardware_serial: str, device_kind: str, compilation: str,
                contract: dict[str, Any] | None = None, fixture_root: Path | None = None) -> Path:
     report_path, apk, harness_apk, output = (path.resolve() for path in (report_path, apk, harness_apk, output))
     contract = contract or default_contract()
-    if not device_serial.strip() or not compilation.strip() or device_kind not in {"physical", "emulator"}:
-        raise EvidenceError("Device serial, device kind, and target compilation mode are required")
+    if not device_serial.strip() or not device_hardware_serial.strip() or not compilation.strip() or device_kind not in {"physical", "emulator"}:
+        raise EvidenceError("Device transport serial, hardware serial, device kind, and target compilation mode are required")
     if output.exists() or output.is_relative_to(report_path.parent):
         raise EvidenceError("Capture output must be new and outside the report directory")
     report = read_json(report_path)
@@ -293,7 +320,8 @@ def record_run(report_path: Path, apk: Path, harness_apk: Path, output: Path,
         "schema_version": SCHEMA_VERSION,
         "recorded_at": datetime.now(timezone.utc).isoformat(),
         "target_apk": artifacts[0], "harness_apk": artifacts[1],
-        "device_serial": device_serial, "device_kind": device_kind, "compilation": compilation,
+        "device_serial": device_serial, "device_hardware_serial": device_hardware_serial,
+        "device_kind": device_kind, "compilation": compilation,
         "contract": contract, "workload": workload, "report_context": context, "layout": layout,
         "report": {"original_path": str(report_path), "archived_path": str(archived_report),
                    "sha256": raw_hash, "canonical_sha256": digest(report)},
@@ -331,7 +359,8 @@ def setup_identity(record: dict[str, Any]) -> dict[str, Any]:
     # governor/lock mode. Normal OS boosts can flip it on the same phone between captures.
     # Retain the original observation in every report/record; compare all other context fields.
     context = {key: value for key, value in record["report_context"].items() if key != "cpuLocked"}
-    return {**{key: record[key] for key in ("device_serial", "device_kind", "compilation", "contract", "layout")},
+    return {"device": device_identity(record),
+            **{key: record[key] for key in ("device_kind", "compilation", "contract", "layout")},
             "report_context": context,
             "harness_sha256": record["harness_apk"]["sha256"], "workload_sha256": record["workload"]["sha256"]}
 
@@ -366,10 +395,20 @@ def calibrate(run_paths: list[Path]) -> dict[str, Any]:
             "limits": limits}
 
 
+def upgraded_calibration(baseline: dict[str, Any]) -> dict[str, Any]:
+    """Calibrations written before the hardware-serial identity keyed the device as identity.device_serial
+    (the transport name); re-key it exactly as their run records are re-keyed by legacy_device_identity."""
+    identity = dict(baseline["identity"])
+    if "device_serial" in identity:
+        identity["device"] = legacy_device_identity(identity.pop("device_serial"))
+    return {**baseline, "identity": identity}
+
+
 def compare(baseline_path: Path, candidate_path: Path) -> dict[str, Any]:
     baseline = read_json(baseline_path)
     if baseline.get("schema_version") != SCHEMA_VERSION or baseline.get("kind") != "calibration":
         raise EvidenceError("Not a supported calibration document")
+    baseline = upgraded_calibration(baseline)
     # Re-derive the limits from the original archived evidence; a manually widened gate cannot pass.
     verified = calibrate([Path(path) for path in baseline["baseline_records"]])
     if baseline != verified:
@@ -409,7 +448,9 @@ def main(argv: list[str] | None = None) -> int:
     record = sub.add_parser("record", help="Archive a complete raw report directory and bind the run metadata")
     for name in ("report", "apk", "harness-apk", "output"):
         record.add_argument(f"--{name}", type=Path, required=True)
-    record.add_argument("--device-serial", required=True)
+    record.add_argument("--device-serial", required=True, help="adb transport serial used for the capture")
+    record.add_argument("--device-hardware-serial", required=True,
+                        help="ro.serialno read from the device; identifies the unit across USB and wireless adb")
     record.add_argument("--device-kind", choices=("physical", "emulator"), required=True)
     record.add_argument("--compilation", required=True, help="Actual target CompilationMode, including baseline-profile mode and warmup count")
     record.add_argument("--contract", type=Path, help="Explicit alternative full-suite contract; differing contracts cannot compare")
@@ -431,7 +472,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Instrumentation passed all {args.tests} required tests")
         elif args.command == "record":
             result = record_run(args.report, args.apk, args.harness_apk, args.output, args.device_serial,
-                                args.device_kind, args.compilation, read_json(args.contract) if args.contract else None, args.fixture_root)
+                                args.device_hardware_serial, args.device_kind, args.compilation, read_json(args.contract) if args.contract else None, args.fixture_root)
             print(f"Recorded complete run: {result}")
         elif args.command == "calibrate":
             result = calibrate(args.runs)

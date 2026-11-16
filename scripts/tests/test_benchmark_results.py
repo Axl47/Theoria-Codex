@@ -12,6 +12,10 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import benchmark_results as benchmark
 
+PHONE_SERIAL = "R5CWC0SXR3A"
+USB_TRANSPORT = PHONE_SERIAL
+WIRELESS_TRANSPORT = f"adb-{PHONE_SERIAL}-OU8i1T._adb-tls-connect._tcp"
+
 
 class BenchmarkResultsTest(unittest.TestCase):
     def test_combined_workloads_retain_both_complete_contracts_and_reject_duplicates(self) -> None:
@@ -107,7 +111,7 @@ class BenchmarkResultsTest(unittest.TestCase):
     def capture(self, values=None, *, report=None, **metadata) -> Path:
         report = report or self.raw_report(values)
         destination = self.root / f"capture-{len(list(self.root.glob('capture-*')))}"
-        options = {"device_serial": "fixture-phone-1", "device_kind": "physical",
+        options = {"device_serial": USB_TRANSPORT, "device_hardware_serial": PHONE_SERIAL, "device_kind": "physical",
                    "compilation": "Partial(Require,warmupIterations=0)", "contract": self.contract, "fixture_root": self.fixture_root}
         options.update(metadata)
         return benchmark.record_run(report, self.apk, self.harness, destination, **options)
@@ -198,7 +202,7 @@ class BenchmarkResultsTest(unittest.TestCase):
 
     def test_different_device_os_compilation_harness_or_workload_cannot_compare(self) -> None:
         baseline = self.calibrated()
-        for metadata in ({"device_serial": "other-phone"}, {"device_kind": "emulator"}, {"compilation": "Full"},
+        for metadata in ({"device_hardware_serial": "other-phone"}, {"device_kind": "emulator"}, {"compilation": "Full"},
                          {"contract": self.contract | {"version": "changed-workload"}}):
             with self.subTest(metadata=metadata):
                 with self.assertRaisesRegex(benchmark.EvidenceError, "differs from calibration"):
@@ -212,6 +216,50 @@ class BenchmarkResultsTest(unittest.TestCase):
         self.harness.write_bytes(b"changed harness")
         with self.assertRaisesRegex(benchmark.EvidenceError, "differs from calibration"):
             benchmark.compare(baseline, self.capture())
+
+    def test_usb_and_wireless_captures_of_one_phone_compare_but_another_phone_of_the_model_does_not(self) -> None:
+        baseline = self.calibrated()
+        wireless = self.capture(device_serial=WIRELESS_TRANSPORT)
+        self.assertTrue(benchmark.compare(baseline, wireless)["passed"])
+        other = self.capture(device_serial="adb-R5CWC0SXR3B-x1Y2z3._adb-tls-connect._tcp", device_hardware_serial="R5CWC0SXR3B")
+        with self.assertRaisesRegex(benchmark.EvidenceError, "differs from calibration"):
+            benchmark.compare(baseline, other)
+
+    def strip_hardware_serial(self, record_path: Path, transport: str) -> Path:
+        """Rewrites a capture as one made before device_hardware_serial was recorded."""
+        record = benchmark.read_json(record_path)
+        del record["device_hardware_serial"]
+        record["device_serial"] = transport
+        record_path.write_text(json.dumps(record))
+        return record_path
+
+    def test_old_records_are_keyed_by_the_serial_their_transport_name_carries(self) -> None:
+        self.assertEqual(PHONE_SERIAL, benchmark.legacy_device_identity(USB_TRANSPORT))
+        self.assertEqual(PHONE_SERIAL, benchmark.legacy_device_identity(WIRELESS_TRANSPORT))
+        self.assertEqual("transport:192.168.1.5:5555", benchmark.legacy_device_identity("192.168.1.5:5555"))
+        self.assertEqual("transport:emulator-5554", benchmark.legacy_device_identity("emulator-5554"))
+        # An old USB calibration, written with identity.device_serial, still verifies and accepts a new wireless run.
+        runs = [self.strip_hardware_serial(self.capture({"timeToInitialDisplayMs": 300 + 5 * index}), USB_TRANSPORT)
+                for index in range(3)]
+        calibration = benchmark.calibrate(runs)
+        identity = calibration["identity"]
+        identity["device_serial"] = USB_TRANSPORT
+        del identity["device"]
+        old_baseline = self.root / "old-calibration.json"
+        benchmark.write_new_json(old_baseline, calibration)
+        self.assertTrue(benchmark.compare(old_baseline, self.capture(device_serial=WIRELESS_TRANSPORT))["passed"])
+        old_wireless = self.strip_hardware_serial(self.capture(), WIRELESS_TRANSPORT)
+        self.assertTrue(benchmark.compare(old_baseline, old_wireless)["passed"])
+
+    def test_old_ip_port_records_never_match_a_hardware_serial(self) -> None:
+        runs = [self.strip_hardware_serial(self.capture({"timeToInitialDisplayMs": 300 + 5 * index}), "192.168.1.5:5555")
+                for index in range(3)]
+        baseline = self.root / "ip-calibration.json"
+        benchmark.write_new_json(baseline, benchmark.calibrate(runs))
+        with self.assertRaisesRegex(benchmark.EvidenceError, "differs from calibration"):
+            benchmark.compare(baseline, self.capture(device_serial="192.168.1.5:5555"))
+        same_transport = self.strip_hardware_serial(self.capture(), "192.168.1.5:5555")
+        self.assertTrue(benchmark.compare(baseline, same_transport)["passed"])
 
     def test_emulator_captures_cannot_be_physical_calibration(self) -> None:
         runs = [self.capture(device_kind="emulator") for _ in range(3)]
@@ -404,7 +452,7 @@ class BenchmarkResultsTest(unittest.TestCase):
         previous = captured.read_bytes()
         report = self.raw_report()
         with self.assertRaisesRegex(benchmark.EvidenceError, "must be new"):
-            benchmark.record_run(report, self.apk, self.harness, captured.parent, "serial", "physical", "Partial", self.contract)
+            benchmark.record_run(report, self.apk, self.harness, captured.parent, "serial", "serial", "physical", "Partial", self.contract)
         self.assertEqual(previous, captured.read_bytes())
 
 
