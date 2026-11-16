@@ -57,7 +57,7 @@
     <h1>ExecPlan: Make source calls safe from any thread</h1>
     <p>After this plan, every call the app makes into a content source (search, resolve a post, comments, tag counts, sign-in, site probing) does its response handling and parsing on a background thread no matter which thread calls it. Today that is true only where the calling code remembered to switch threads, and review of this plan found several callers that did not.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: Phases 0 and 1 implemented; Phase 2 waits on its entry condition</span>
+      <span class="pill">Status: Phases 0 and 1 merged (PR #113); Phase 2 implemented, in review</span>
       <span class="pill">Owner: Claude (orchestrator)</span>
       <span class="pill">Created: 2026-11-15</span>
       <span class="pill">Updated: 2026-11-16</span>
@@ -65,7 +65,7 @@
       <span class="pill">Audit item: B1</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Review and merge the Phase 0 and 1 pull request. Phase 2 starts once Phase 2 of main-thread-observability.html (the in-memory source fixture) is merged.</div>
+      <div class="card"><strong>Next Action</strong>Review and merge the Phase 2 pull request, then confirm <code>SourceCallThreadJourneyTest</code> runs and passes on Android 16 and 17 in the Main workflow.</div>
       <div class="card"><strong>Main Risk</strong>A proof that passes while work still runs on the caller's thread. Reduced by a source scan that accepts only two exact forms of the wrapper, a host test that requires a real parse off the calling thread, and recorded negative controls.</div>
       <div class="card"><strong>Validation</strong>Host contract and completeness tests in <code>core-sources</code>, <code>scripts/check.sh --record</code>, and one emulator journey test that opens an original-post link from the real main thread.</div>
       <div class="card"><strong>Depends On</strong>Audit fix A1 merged. Phase 1 of <code>main-thread-observability.html</code> (the marker) for the host tests; its Phase 2 (the journey fixture) for the device test only.</div>
@@ -284,11 +284,15 @@ internal suspend fun &lt;T&gt; sourceCall(
         <li>[x] 2026-11-16 - Review round 2 (same reviewers) merged; plan final.</li>
         <li>[x] 2026-11-16 - Phase 0 decision recorded: continue. Every caller row in Purpose still reaches a source on the main thread on <code>main</code> after A1, and one more was found (<code>ui/TheoriaApp.kt</code> :428, the start-up Pixiv token refresh on the shell's Compose scope). The boundary rebuilt from the app's imports matches Design 1 exactly: 75 overrides of the 18 interface names, plus <code>PixivAuthApi</code> (<code>exchangeAuthorizationCode</code>, <code>refresh</code>), <code>PixivTokenCoordinator</code> (<code>activeTokens</code>, <code>refreshAfterAuthFailure</code>), <code>SiteProber.probe</code> and <code>SiteHealthCheck</code> (<code>check</code>, <code>clearsChallenge</code>); every other imported type is raw HTTP, credentials storage, host bookkeeping or a non-suspending helper. Danbooru and Pixiv converted with the plan's helper unchanged; both new tests pass for them and fail for the unconverted Gelbooru adapter and <code>SiteProber</code>. <code>:core-sources:test</code> and the three named app tests (<code>PixivPkceControllerTest</code> 10, <code>CustomSitesControllerImplTest</code> 18, <code>CreatorOpeningWorkflowTest</code> 5) pass. <code>onCounts</code>: its one consumer (<code>TagCountCoordinator.enrichCounts</code>) already runs it on its own <code>Dispatchers.Default</code> context, writes to the store under its lock, and Nhentai calls it sequentially, so any thread is safe.</li>
         <li>[x] 2026-11-16 - Phase 1 implemented on <code>perf/main-safe-source-boundary</code>: all 75 interface overrides, the four non-adapter classes and <code>fetchGelbooruProfileOwner</code> wrapped, one commit per group; both tests pass with their temporary not-yet-converted lists removed; the four negative controls recorded in the Appendix. <code>./gradlew :core-domain:test :core-sources:test :app-logic:test :app:testDebugUnitTest --offline</code> passes (25, 64, 42 and 301 test classes, no failures).</li>
-        <li>[ ] Phase 1 merged.</li>
-        <li>[ ] Phase 2 merged.</li>
+        <li>[x] 2026-11-16 - Phases 0 and 1 merged (PR #113).</li>
+        <li>[x] 2026-11-16 - Phase 2 implemented on <code>perf/source-call-thread-journey</code>: <code>ProviderShapedSource</code> answers the Danbooru single-post endpoint and carries <code>originUrl</code> as the provider's <code>source</code> field (host test <code>ProviderShapedSourceTest</code>, 2 tests); the B4 parse recorder became the shared rule <code>SourceParseRecorder</code>; <code>SourceCallThreadJourneyTest</code> passes on the <code>theoria-search-test</code> emulator (Android 16) next to <code>SourceParsingThreadJourneyTest</code>, and both negative controls failed it on the expected assertion while the Search journey still passed (Appendix).</li>
+        <li>[ ] Phase 2 merged; journey seen passing on Android 16 and 17 in the Main workflow.</li>
       </ul>
       <h3>Surprises And Discoveries</h3>
       <ul>
+        <li>Observation: the Viewer resolves the opened post a second time, through its own switch (<code>ViewerRouteWorkflow.kt</code> :100), so an original-post open makes two single-post requests. Evidence: first emulator run, <code>postRequests=[1, 1] parses=2</code>; the journey asserts that every single-post request is for the linked post rather than exactly one.</li>
+        <li>Observation: any failure on the original-post path opens the real provider URL in a browser (<code>TheoriaShell.kt</code> :651, :659), which on an emulator would load provider media. Evidence: control 2 recorded <code>browser=[https://danbooru.donmai.us/posts/1]</code>, blocked by the journey's activity monitor before any browser started.</li>
+        <li>Observation: under the Compose test rule the shell scope's continuations run through the test's frame-deferring interceptors, still on the main thread. Evidence: control 1's stack, <code>TheoriaShell$openOriginalPost$1</code> resumed via <code>FrameDeferringContinuationInterceptor</code>.</li>
         <li>Observation: two tests needed <code>EmptyCoroutineContext</code> beyond the three the design named, both for ordering rather than virtual time. Evidence: <code>NhentaiSuggestionSourceAdapterTest</code> (trending tags take queued gallery responses in order) and <code>Rule34GroupedSearchMetadataTest</code> (see Decision Log).</li>
         <li>Observation: <code>HitomiPaginationSourceAdapterTest</code>'s shared-load case passes on real threads too, but only by interleaving luck: its <code>runCurrent()</code> no longer parks the continuation on the in-flight load. Evidence: suite green before the change; it now passes <code>EmptyCoroutineContext</code> as planned.</li>
         <li>Observation: <code>PixivRequestPacingTest</code> still passes without <code>callContext</code>, but then proves nothing: a regressed pacer would wait ten real seconds and the "no virtual time passed" assertion would still hold. Evidence: run during Phase 0; the test now passes <code>EmptyCoroutineContext</code> as planned.</li>
@@ -303,6 +307,9 @@ internal suspend fun &lt;T&gt; sourceCall(
       </ul>
       <h3>Decision Log</h3>
       <ul>
+        <li>Decision (departure): the device journey opens a Danbooru link served by B4's provider-shaped Danbooru source instead of a Gelbooru link. Rationale: B4 Phase 2 merged with an in-memory Danbooru provider and a real Danbooru adapter; extending it with the single-post endpoint reuses that fixture, while Gelbooru would need a second generator. The Danbooru adapter parses <code>danbooru.donmai.us/posts/&lt;id&gt;</code> links and its <code>resolvePost</code> has no caller switch on this path, so the proof is the same. Date/Author: 2026-11-16 / Claude (implementer).</li>
+        <li>Decision: the journey blocks browser launches with an <code>Instrumentation.ActivityMonitor</code> and asserts none happened. Rationale: a failed resolve falls back to the browser with a real provider URL; blocking it keeps provider media off the emulator and turns the fallback into a named assertion. Date/Author: 2026-11-16 / Claude (implementer).</li>
+        <li>Decision: the journey's assertions run in the order request, at least one parse, none on the main thread, no browser fallback, Viewer shows the post, after a wait that ends on the Viewer, a browser launch or a timeout. Rationale: each negative control then fails on the assertion it targets instead of a generic timeout. Date/Author: 2026-11-16 / Claude (implementer).</li>
         <li>Decision (departure): the Rule34 video base adapter also takes <code>callContext</code>, which <code>Rule34VideoSourceAdapter</code> and <code>Rule34GenSourceAdapter</code> forward. Rationale: <code>Rule34GroupedSearchMetadataTest</code> drives the unified orchestrator, whose deadlines run on the virtual clock and whose metadata hydration runs two posts at once into a plain request list; on real threads it returned no results and its request-order assertions would race. The design's "stop if more than three adapters need it" clause was meant to catch a dispatcher seam spreading through the module; this is one more adapter family with the same seam, the helper and scan are unchanged, so it is recorded here instead of stopping. Date/Author: 2026-11-16 / Claude (implementer).</li>
         <li>Decision: the scan is stricter than Design 4 in three ways. It reads code with comments and string contents blanked; <code>callContext</code> may appear only as the declaration <code>callContext: CoroutineContext = Dispatchers.Default,</code>, as <code>sourceCall(callContext) {</code>, or as a subclass's <code>callContext = callContext,</code> to its base; and a constructor call of a class that declares it may not mention a dispatcher or coroutine context, which closes the positional-argument route a name-only check leaves open. Date/Author: 2026-11-16 / Claude (implementer).</li>
         <li>Decision: <code>fetchGelbooruProfileOwner</code> throws on a failed or non-success request and returns null only when the page names no owner. Rationale: the app built a profile from the creator id when the page had no owner but returned no profile when the request failed; a plain <code>String?</code> would have merged the two. Date/Author: 2026-11-16 / Claude (implementer).</li>
@@ -323,6 +330,7 @@ internal suspend fun &lt;T&gt; sourceCall(
       </ul>
       <h3>Outcomes And Retrospective</h3>
       <p>Phases 0 and 1: every function on the boundary runs its body on <code>Dispatchers.Default</code>, so each caller in the Purpose table, and the start-up token refresh found in Phase 0, no longer parses on the main thread. The caller's own work after the call still runs where the caller runs; that was never in scope. The completeness test fails for each of the four planned negative controls plus appended work and a positional dispatcher. Not proven: anything on a device (Phase 2), live Pixiv sign-in and refresh, and live site probing.</p>
+      <p>Phase 2: on the emulator, opening an original-post link from a post's menu parses the resolved post off the main thread, and the journey fails when <code>sourceCall</code> stops switching (one parse on the main thread, at <code>TheoriaShell.kt</code> :656) or when the provider answers nothing (no parse). The Search journey passed in both controls, so A1's caller switch alone does not cover this path. Still open: its first run in the Main workflow on Android 16 and 17.</p>
       <p>Lesson: a dispatcher switch inside a callee turns every virtual-time deadline around it in tests into an immediate timeout, so a main-safety change should search the tests for <code>withTimeout</code> around the converted calls before the first run.</p>
     </section>
 
@@ -361,7 +369,27 @@ Extra: `.let { it }` appended to Danbooru findByFileHash's block
   Completeness: DanbooruSourceAdapter.kt:177 findByFileHash: work appended after the sourceCall block
 Extra: Rule34GenSourceAdapter(httpClient, Gson(), Dispatchers.IO) in the registry
   Completeness: RealAdapterRegistry.kt:71: Rule34GenSourceAdapter built with a dispatcher</code></pre>
-        <p>The Phase 2 control is still to be recorded.</p>
+        <p>Phase 2 (2026-11-16, emulator-5554, Android 16, one boot <code>5bb4b2f4</code>, debug and test APKs built from this branch and verified with <code>scripts/verify_device_apk.py</code>, <code>ro.kernel.qemu=1</code>). Each pass ran <code>am instrument -w -e class …SourceCallThreadJourneyTest,…SourceParsingThreadJourneyTest</code>. Both controls were one-line edits, built, then undone before the commit (<code>git status --short</code> clean of them). An earlier attempt was discarded: the emulator exited mid-run.</p>
+        <pre><code>Positive (restored code): OK (2 tests), 29.4 s
+I SourceCallJourney: postRequests=[1, 1] parses=2 mainThreadParses=0 browser=[]
+I SourceParsingJourney: pages=[1, b61, b21] parses=3 mainThreadParses=0
+
+Control 1: sourceCall runs its block in place (`): T = block()`)
+SourceCallThreadJourneyTest     FAILED  java.lang.AssertionError: Provider responses parsed on the main thread expected:&lt;0&gt; but was:&lt;1&gt;
+SourceParsingThreadJourneyTest  OK
+I SourceCallJourney: postRequests=[1, 1] parses=2 mainThreadParses=1 browser=[]
+I SourceParsingJourney: pages=[1, b61, b21] parses=3 mainThreadParses=0
+W TheoriaThreads: source-parse ran on the main thread
+W TheoriaThreads:   at com.theoriacodex.sources.common.SourceAdapterCommonKt.parseJsonObject(SourceAdapterCommon.kt:96)
+W TheoriaThreads:   at com.theoriacodex.sources.danbooru.DanbooruSourceAdapter$resolvePost$2.invokeSuspend(DanbooruSourceAdapter.kt:169)
+W TheoriaThreads:   at com.theoriacodex.sources.danbooru.DanbooruSourceAdapter.resolvePost(DanbooruSourceAdapter.kt:167)
+W TheoriaThreads:   at com.theoriacodex.app.ui.TheoriaShell$openOriginalPost$1.invokeSuspend(TheoriaShell.kt:656)
+
+Control 2: ProviderShapedSource logs the single-post request, then answers it with nothing (the no-network fallback)
+SourceCallThreadJourneyTest     FAILED  java.lang.AssertionError: No provider response was parsed
+SourceParsingThreadJourneyTest  OK
+I SourceCallJourney: postRequests=[1] parses=0 mainThreadParses=0 browser=[https://danbooru.donmai.us/posts/1]
+  (the browser launch was blocked by the test's activity monitor)</code></pre>
       </details>
     </section>
   </main>

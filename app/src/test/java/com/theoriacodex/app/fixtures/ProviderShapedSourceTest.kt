@@ -3,6 +3,7 @@ package com.theoriacodex.app.fixtures
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
@@ -11,7 +12,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** The journey gate reads posts back through the real Danbooru parser; a parser change that would empty it fails here. */
+/** The journey gates read posts back through the real Danbooru parser; a parser change that would empty them fails here. */
 class ProviderShapedSourceTest {
     @Test
     fun theDanbooruAdapterCarriesTheGeneratedPostsAcrossThreePages() = runTest {
@@ -30,5 +31,21 @@ class ProviderShapedSourceTest {
         assertEquals(posts.map { it.id }, parsed.map { it.id })
         assertEquals(posts.map { it.canonicalTags }, parsed.map { it.canonicalTags })
         assertEquals(setOf(media.localPath), parsed.flatMap { listOf(it.preview.url, it.full?.url) }.toSet())
+    }
+
+    @Test
+    fun theDanbooruAdapterResolvesOnePostWithItsOrigin() = runTest {
+        val media = ImageRef(url = null, localPath = "/journey/landscape.png", mime = "image/png")
+        val origin = "https://danbooru.donmai.us/posts/1"
+        val posts = providerShapedPosts(SourceKey.DANBOORU, 3, media)
+            .map { if (it.id.sourcePostId == "2") it.copy(originUrl = origin) else it }
+        val source = ProviderShapedSource(posts, JourneyNoNetworkHttpClient)
+        val adapter = source.adapter(SourceKey.DANBOORU)
+
+        val resolved = adapter.resolvePost(PostId(SourceKey.DANBOORU, "2"))
+
+        assertEquals(listOf("2"), source.postRequests)
+        assertEquals(posts[1].id, resolved?.id)
+        assertEquals(origin, resolved?.originUrl)
     }
 }
