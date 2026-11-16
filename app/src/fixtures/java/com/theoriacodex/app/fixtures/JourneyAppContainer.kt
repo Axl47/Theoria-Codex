@@ -73,7 +73,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 
-/** Real app graph with test-owned storage and external providers. Never included in release. */
+/**
+ * Real app graph with test-owned storage and external providers. Never included in release. Sources named in
+ * [providerShapedSources] serve their posts as provider JSON through a real adapter ([ProviderShapedSource]).
+ */
 class JourneyAppContainer(
     context: Context,
     storageDirectory: File,
@@ -81,11 +84,15 @@ class JourneyAppContainer(
     scope: CoroutineScope,
     pageSize: Int = 20,
     httpClient: SourceHttpClient = JourneyNoNetworkHttpClient,
+    providerShapedSources: Set<SourceKey> = emptySet(),
 ) : TheoriaAppContainer, AutoCloseable {
     private val appContext = context.applicationContext
     private val ownerJob = SupervisorJob(scope.coroutineContext[Job])
     private val ownerScope = CoroutineScope(scope.coroutineContext + ownerJob + Dispatchers.IO)
-    val registry = JourneySourceRegistry(postsBySource, pageSize)
+    val registry = JourneySourceRegistry(
+        postsBySource, pageSize,
+        providerShapedSources.associateWith { ProviderShapedSource(postsBySource.getValue(it), httpClient) },
+    )
     val database = TheoriaRoomDatabase.create(appContext, storageDirectory.resolve("journey.db").absolutePath)
     private val profileWriteGuard = ProfileLibraryWriteGuard()
     val content = RoomCodexLikesRepository(database, writeGuard = profileWriteGuard)

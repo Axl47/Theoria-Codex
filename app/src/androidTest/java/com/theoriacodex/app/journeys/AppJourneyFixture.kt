@@ -2,18 +2,34 @@ package com.theoriacodex.app.journeys
 
 import android.graphics.Bitmap
 import android.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.printToString
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeWithVelocity
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import com.theoriacodex.app.fixtures.JourneyAppContainer
 import com.theoriacodex.app.fixtures.JourneyTestActivity
+import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
@@ -44,8 +60,16 @@ abstract class AppJourneyFixture {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         check(context.packageName == "com.theoriacodex.debug")
         directory = File(context.cacheDir, "journey-${UUID.randomUUID()}").apply { mkdirs() }
-        val media = solidImage("landscape", Color.CYAN)
-        posts = listOf(SourceKey.PIXIV, SourceKey.GELBOORU).associateWith { source ->
+        posts = fixturePosts(solidImage("landscape", Color.CYAN))
+        openGraph()
+    }
+
+    /**
+     * The provider posts every source serves, each in its display order. Sources in [providerShapedSources] go
+     * through a real parser and need posts it can carry (`providerShapedPosts`).
+     */
+    protected open fun fixturePosts(media: ImageRef): Map<SourceKey, List<Post>> =
+        listOf(SourceKey.PIXIV, SourceKey.GELBOORU).associateWith { source ->
             (0 until 60).map { index ->
                 Post(
                     id = PostId(source, "journey-$index"), preview = media, full = media,
@@ -58,8 +82,9 @@ abstract class AppJourneyFixture {
                 ).let { customizePost(index, it) }
             }
         }
-        openGraph()
-    }
+
+    /** Sources served as provider JSON through a real adapter instead of as ready-made posts. */
+    protected open val providerShapedSources: Set<SourceKey> = emptySet()
 
     /** Lets a journey reshape a fixture post before the graph reads it. */
     protected open fun customizePost(index: Int, post: Post): Post = post
@@ -76,7 +101,8 @@ abstract class AppJourneyFixture {
     private fun openGraph() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         container = io {
-            JourneyAppContainer(context, directory, posts, scope, pageSize = 20).also { it.awaitReady() }
+            JourneyAppContainer(context, directory, posts, scope, pageSize = 20, providerShapedSources = providerShapedSources)
+                .also { it.awaitReady() }
         }
     }
 
@@ -118,6 +144,71 @@ abstract class AppJourneyFixture {
     protected fun longPress(node: SemanticsNodeInteraction) {
         compose.waitUntil(10_000) { node.isDisplayed() }
         node.performSemanticsAction(SemanticsActions.OnLongClick)
+    }
+
+    /** Types [value] into the open Search composer and adds it as a tag. */
+    protected fun addSearchTag(value: String) {
+        val input = compose.onNodeWithTag("Search query input")
+        compose.waitUntil(10_000) {
+            input.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.isEmpty()
+        }
+        activate(input)
+        input.performTextInput(value)
+        val add = hasAnyDescendant(hasText("Add", substring = false)) and
+            isEnabled() and hasClickAction() and !hasSetTextAction()
+        compose.waitUntil(10_000) {
+            input.fetchSemanticsNode().config[SemanticsProperties.EditableText].text == value &&
+                compose.onAllNodes(add, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        activate(compose.onNode(add, useUnmergedTree = true))
+        try {
+            compose.waitUntil(10_000) {
+                input.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.isEmpty() &&
+                    compose.onAllNodes(hasText(value, substring = false) and hasClickAction())
+                        .fetchSemanticsNodes().isNotEmpty()
+            }
+        } catch (timeout: ComposeTimeoutException) {
+            throw AssertionError(
+                "Tag entry did not settle for $value; input=" +
+                    input.fetchSemanticsNode().config[SemanticsProperties.EditableText].text + "\n" +
+                    compose.onNodeWithTag("Search composer", useUnmergedTree = true).printToString(),
+                timeout,
+            )
+        }
+    }
+
+    /**
+     * Drags Search results until [source]'s card at [index] is in the first visible row. The tagged grid wrapper
+     * receives touches; its nested lazy grid owns scroll semantics.
+     */
+    protected fun scrollToFirstVisibleCard(source: SourceKey, index: Int, maxDrags: Int = 24) {
+        val grid = compose.onNodeWithTag("Search results", useUnmergedTree = true)
+        repeat(maxDrags) {
+            val viewport = grid.fetchSemanticsNode().boundsInRoot
+            val target = visibleCardBounds(source, index, viewport)
+            val previous = if (index > 0) visibleCardBounds(source, index - 1, viewport) else null
+            // Fixture cards have equal heights. The even target starts its row once the preceding
+            // card has left the viewport, leaving a real, nonzero persisted offset to restore.
+            if (target != null && previous == null) {
+                compose.onNodeWithTag(searchCardTestTag(posts.getValue(source)[index].id)).assertIsDisplayed()
+                return
+            }
+            val distance = if (target == null) viewport.height * 0.45f else {
+                (target.top - viewport.top + viewport.width * 0.08f).coerceAtMost(viewport.height * 0.45f)
+            }
+            grid.performTouchInput {
+                val start = Offset(centerX, height * 0.8f)
+                swipeWithVelocity(start, start - Offset(0f, distance), endVelocity = 0f, durationMillis = 600L)
+            }
+            compose.waitForIdle()
+        }
+        throw AssertionError("Search card $index did not become the first visible fixture row after $maxDrags drags")
+    }
+
+    private fun visibleCardBounds(source: SourceKey, index: Int, viewport: Rect): Rect? {
+        val tag = searchCardTestTag(posts.getValue(source)[index].id)
+        return compose.onAllNodesWithTag(tag).fetchSemanticsNodes().singleOrNull()?.boundsInRoot
+            ?.takeIf { bounds -> bounds.height > 0f && bounds.bottom > viewport.top && bounds.top < viewport.bottom }
     }
 
     protected fun <T> io(block: suspend () -> T): T = runBlocking(Dispatchers.IO) { block() }
