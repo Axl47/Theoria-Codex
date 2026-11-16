@@ -57,7 +57,7 @@
     <h1>ExecPlan: Make source calls safe from any thread</h1>
     <p>After this plan, every call the app makes into a content source (search, resolve a post, comments, tag counts, sign-in, site probing) does its response handling and parsing on a background thread no matter which thread calls it. Today that is true only where the calling code remembered to switch threads, and review of this plan found several callers that did not.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: Ready to implement (two review rounds merged)</span>
+      <span class="pill">Status: Phase 1 in progress</span>
       <span class="pill">Owner: Claude (orchestrator)</span>
       <span class="pill">Created: 2026-11-15</span>
       <span class="pill">Updated: 2026-11-16</span>
@@ -65,7 +65,7 @@
       <span class="pill">Audit item: B1</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Phase 0: inventory the boundary, convert Danbooru and Pixiv, and run the tests the switch can break.</div>
+      <div class="card"><strong>Next Action</strong>Phase 1: convert Nhentai, Hitomi, Iwara, the Rule34 family and the Gelbooru profile lookup.</div>
       <div class="card"><strong>Main Risk</strong>A proof that passes while work still runs on the caller's thread. Reduced by a source scan that accepts only two exact forms of the wrapper, a host test that requires a real parse off the calling thread, and recorded negative controls.</div>
       <div class="card"><strong>Validation</strong>Host contract and completeness tests in <code>core-sources</code>, <code>scripts/check.sh --record</code>, and one emulator journey test that opens an original-post link from the real main thread.</div>
       <div class="card"><strong>Depends On</strong>Audit fix A1 merged. Phase 1 of <code>main-thread-observability.html</code> (the marker) for the host tests; its Phase 2 (the journey fixture) for the device test only.</div>
@@ -282,12 +282,15 @@ internal suspend fun &lt;T&gt; sourceCall(
         <li>[x] 2026-11-15 - Plan drafted from the threading audit (B1).</li>
         <li>[x] 2026-11-16 - Review round 1 (Opus high, GPT-6.1 Sol adversarial) merged.</li>
         <li>[x] 2026-11-16 - Review round 2 (same reviewers) merged; plan final.</li>
-        <li>[ ] Phase 0 decision recorded.</li>
+        <li>[x] 2026-11-16 - Phase 0 decision recorded: continue. Every caller row in Purpose still reaches a source on the main thread on <code>main</code> after A1, and one more was found (<code>ui/TheoriaApp.kt</code> :428, the start-up Pixiv token refresh on the shell's Compose scope). The boundary rebuilt from the app's imports matches Design 1 exactly: 75 overrides of the 18 interface names, plus <code>PixivAuthApi</code> (<code>exchangeAuthorizationCode</code>, <code>refresh</code>), <code>PixivTokenCoordinator</code> (<code>activeTokens</code>, <code>refreshAfterAuthFailure</code>), <code>SiteProber.probe</code> and <code>SiteHealthCheck</code> (<code>check</code>, <code>clearsChallenge</code>); every other imported type is raw HTTP, credentials storage, host bookkeeping or a non-suspending helper. Danbooru and Pixiv converted with the plan's helper unchanged; both new tests pass for them and fail for the unconverted Gelbooru adapter and <code>SiteProber</code>. <code>:core-sources:test</code> and the three named app tests (<code>PixivPkceControllerTest</code> 10, <code>CustomSitesControllerImplTest</code> 18, <code>CreatorOpeningWorkflowTest</code> 5) pass. <code>onCounts</code>: its one consumer (<code>TagCountCoordinator.enrichCounts</code>) already runs it on its own <code>Dispatchers.Default</code> context, writes to the store under its lock, and Nhentai calls it sequentially, so any thread is safe.</li>
         <li>[ ] Phase 1 merged.</li>
         <li>[ ] Phase 2 merged.</li>
       </ul>
       <h3>Surprises And Discoveries</h3>
       <ul>
+        <li>Observation: <code>PixivRequestPacingTest</code> still passes without <code>callContext</code>, but then proves nothing: a regressed pacer would wait ten real seconds and the "no virtual time passed" assertion would still hold. Evidence: run during Phase 0; the test now passes <code>EmptyCoroutineContext</code> as planned.</li>
+        <li>Observation: a virtual-time deadline around a wrapped call expires at once in tests. Evidence: <code>SiteProberTest</code> TIMEOUT results until <code>SiteProber.probe</code> was wrapped; see the Decision Log.</li>
+        <li>Observation: one more unprotected main-thread caller. Evidence: <code>ui/TheoriaApp.kt</code> :428 calls <code>pixivTokens.activeTokens()</code> from <code>shell.scope</code> (a <code>rememberCoroutineScope</code>).</li>
         <li>Observation: Compose's coroutine dispatcher is not a main-dispatcher type, so a type check cannot recognise the most common main-thread callers. Evidence: review disassembled <code>AndroidUiDispatcher</code> in ui-android 1.11.4.</li>
         <li>Observation: several main-thread callers reach sources with no switch and are outside A1. Evidence: the table in Purpose.</li>
         <li>Observation: nearly every existing caller switch also protects the caller's own work. Evidence: the table in Caller switches.</li>
@@ -297,6 +300,10 @@ internal suspend fun &lt;T&gt; sourceCall(
       </ul>
       <h3>Decision Log</h3>
       <ul>
+        <li>Decision: A1's <code>providerContext</code> parameters stay. Rationale: the plan's Caller switches table keeps the orchestrator's switch because it also covers merging and grouping; <code>FollowedCodexViewModel</code> and <code>CreatorProfileCoordinator</code> follow the same rule. Date/Author: 2026-11-16 / Claude (implementer).</li>
+        <li>Decision: <code>SiteProber</code> and <code>SiteHealthCheck</code> convert in the same commit as Danbooru and Gelbooru. Rationale: <code>SiteProber.probe</code> runs the family adapters inside <code>withTimeoutOrNull</code>; while the prober is unwrapped that deadline runs on the test's virtual clock, which jumps to the timeout as soon as the wrapped adapter waits on a real thread (four <code>SiteProberTest</code> cases reported TIMEOUT). Wrapped, the deadline runs in real time and the cases pass unchanged. Date/Author: 2026-11-16 / Claude (implementer).</li>
+        <li>Decision: Core-sources tests run with <code>kotlinx.coroutines.stacktrace.recovery=false</code> rather than relaxing an assertion. Rationale: with assertions on, coroutines copy an exception each time it crosses a dispatcher switch, so <code>DanbooruProviderJourneyTest</code>'s <code>assertSame</code> on a propagated <code>CancellationException</code> saw a copy. Release builds do not recover stack traces, so they see the original instance; the test keeps its identity check and matches release. Date/Author: 2026-11-16 / Claude (implementer).</li>
+        <li>Decision: The contract test compares thread identity, not thread names. Rationale: coroutine debug mode renames threads (<code>stand-in-main @coroutine#41</code>), so a name comparison would also have hidden work on the stand-in thread. Date/Author: 2026-11-16 / Claude (implementer).</li>
         <li>Decision: Switch unconditionally to a background dispatcher. Rationale: the guarantee must hold for any calling thread, and the conditional form missed real callers. Date/Author: 2026-11-16 / Claude.</li>
         <li>Decision: Keep every caller switch. Rationale: they protect caller work; removing them was the first draft's weakest claim. Date/Author: 2026-11-16 / Claude.</li>
         <li>Decision: The guarantee is a named boundary (interface functions plus the non-adapter classes the app calls), not "every suspending function in the module". Rationale: the wider claim cannot be enforced without a long exception list; the narrower one can, and the parse marker covers what falls outside. Date/Author: 2026-11-16 / Claude.</li>
