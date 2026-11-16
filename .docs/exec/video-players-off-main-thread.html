@@ -65,7 +65,7 @@
       <span class="pill">Audit item: B3</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>None in this plan. Late frames come from RenderThread drawing, not player work ("Late frames" below); any follow-up there is a new plan, starting with an untraced frame count.</div>
+      <div class="card"><strong>Next Action</strong>None in this plan. Late frames come from RenderThread drawing, not player work ("Late frames" below); the 2026-11-16 addendum names <code>AnimatedImageDrawable</code> as the source of the extra redraws and shows the late frames exist without tracing. Any fix is a new plan.</div>
       <div class="card"><strong>Main Risk</strong>Spending a large rewrite on a cost that is not what makes frames late, or trading smoother scrolling for cards that stay blank. Reduced by a numeric rule on the phone before any redesign, with an "inconclusive" outcome that authorises nothing, and by measuring time to first frame in every phase.</div>
       <div class="card"><strong>Needs The User</strong>Nothing for this plan. The user confirmed the thresholds on 2026-11-16, before any phone data was read, and delegated the outcome to the orchestrator.</div>
       <div class="card"><strong>Must Hold</strong>Every visible video card autoplays at the same time.</div>
@@ -368,11 +368,36 @@
         <li>Why one frame's drawing takes 7 ms and the next 6 ms; per-frame content is not in the trace.</li>
       </ul>
 
-      <h3>Cheapest next tests (not started)</h3>
+      <h3>Cheapest next tests (both run; see the addendum below)</h3>
       <ol>
         <li>Tracing overhead: run one iteration of each scenario on the phone with no Perfetto session and read <code>dumpsys gfxinfo com.theoriacodex.benchmark framestats</code>, reset before the iteration. Compare the share of frames past their deadline with the traced late rates. About 10 minutes of phone time and no build change. It decides whether the 6% and 2% late rates are real.</li>
         <li>Source of the RenderThread-only redraws: run one mixed-journey iteration with animated images decoded as stills (a temporary build switch that leaves <code>ImageDecoderDecoder</code> out of the fixture's image loader) and count RenderThread-only frames. This is a count, not a timing, so the emulator can answer it. If they disappear, <code>AnimatedImageDrawable</code> drives them.</li>
       </ol>
+
+      <h3 id="late-frames-addendum">Addendum, 2026-11-16: the two tests</h3>
+      <p>Both tests were diagnostic only: no fix, and nothing merged into the app. The plan stays closed for player work. The scratch builds and drivers are throwaway and live outside the repository (<code>theoria-thread-audit/tools/b3_*</code>); evidence is in <code>theoria-thread-audit/emulator/b3-redraws/</code> and <code>phone/b3-untraced/</code>.</p>
+      <p><strong>Test A, the source of the RenderThread-only redraws (emulator, counts only).</strong> One mixed-journey iteration ran as built, and one with Coil's <code>ImageDecoderDecoder</code> left out, so feed GIFs and animated WebPs decode as stills. Both used the same runner with its motion check off, and loaded comparable content (276 and 309 media loads, 11 video first frames each). Over the same 153 s window:</p>
+      <table>
+        <thead><tr><th>Variant</th><th>RenderThread frame callbacks</th><th>RenderThread-only frames</th><th>UI frames</th></tr></thead>
+        <tbody>
+          <tr><td>As built</td><td>1,854</td><td>39</td><td>2,741</td></tr>
+          <tr><td>GIF and WebP as stills</td><td>1</td><td>0</td><td>2,713</td></tr>
+        </tbody>
+      </table>
+      <p>So <code>AnimatedImageDrawable</code>, which is what Coil turns animated images into, drives the redraws. Ugoira cards, drawn by the app's own renderer, still animated in the second variant and caused none. The emulator draws about 18 UI frames a second, so most callbacks land on vsyncs that also carry a UI frame; the callback count is the measure, and no emulator timing is evidence. Android's source (android16-release) refutes the obvious mechanism. A running <code>AnimatedImageDrawable</code> does not mark the frame as animating every vsync. It asks for one redraw just before its next frame is due, and asks for the very next vsync only when that frame is already due and not yet decoded. Why the phone's redraws mostly come on consecutive vsyncs is not established; decode lag across many out-of-phase cards (a quarter of the journey's cards are GIFs and a quarter animated WebPs) is a guess. From the Phase 2 traces: Search shows no animated images at all (its fixture is video only, with JPEG posters). Whether the redraws stop where no GIF card is visible cannot be answered, because every mixed feed holds GIF cards by design.</p>
+      <p><strong>Test B, the late rate without tracing (phone, one iteration each).</strong> Each scenario ran once with no Perfetto session and once under macrobenchmark's own Perfetto configuration. Frame statistics came from <code>dumpsys gfxinfo</code> for the fixture process, reset at the start of the measured steps and read at their end. The phone stayed on USB power at 41-42% battery, 32.2-33.6 &deg;C, thermal status 0. One iteration is not a calibration (that takes three runs).</p>
+      <table>
+        <thead><tr><th>Share of frames late</th><th>Search</th><th>Mixed journey</th></tr></thead>
+        <tbody>
+          <tr><td>Untraced, gfxinfo</td><td>1.21% (49 of 4,040)</td><td>6.78% (1,367 of 20,152)</td></tr>
+          <tr><td>Traced, gfxinfo</td><td>5.94% (234 of 3,938)</td><td>29.56% (6,004 of 20,313)</td></tr>
+          <tr><td>Traced, FrameTimeline, same window</td><td>1.70% (67 of 3,930)</td><td>5.42% (1,306 of 24,080)</td></tr>
+          <tr><td>Phase 2 traced FrameTimeline (three runs)</td><td>2.00%</td><td>6.10%</td></tr>
+        </tbody>
+      </table>
+      <p>The two sources define "late" differently, and both definitions were checked in Android's source. gfxinfo counts a frame as late when its GPU work completes at or after the deadline that came with its vsync (moved later when buffers are queued ahead). FrameTimeline, which this plan's traced rates use, marks "App Deadline Missed" only when the frame both finishes late and reaches the screen late; a late finish that is still shown on time counts as no jank. For the same frames, gfxinfo's late set is therefore roughly a superset of FrameTimeline's. The denominators differ too: gfxinfo counts the frames HWUI actually draws, while FrameTimeline counts frame tokens, including UI frames HWUI skipped because a RenderThread-only redraw had already drawn that vsync.</p>
+      <p>What this shows. The mixed journey's excess late frames exist without tracing (6.78% against Search's 1.21% under one definition), so the 6% is not an artefact of tracing; by FrameTimeline's looser rule, the untraced rate is at most about that. Tracing inflates late finishes by about 4.5 times under gfxinfo's definition, yet the traced FrameTimeline rates barely move, because most of those frames are still shown on time. The untraced FrameTimeline rate itself was not measured; a Perfetto session with only the FrameTimeline data source would give it at almost no cost to the app.</p>
+      <p>gfxinfo counts the RenderThread-only redraws but does not separate them. In the traced mixed window its total matches the trace exactly: 15,589 UI-driven draws, less 3,826 skipped as already drawn, plus 8,552 RenderThread-only full-window draws, gives 20,315 against gfxinfo's 20,313. The untraced total is similar (20,152), so roughly 8,500 untraced redraws is plausible but not measured. Sampling <code>dumpsys gfxinfo &lt;process&gt; framestats</code> about once a second during an untraced run would measure it: its per-frame flags mark RenderThread animation frames, but it keeps only the last 120 frames.</p>
     </section>
 
     <section id="living-log">
@@ -389,6 +414,7 @@
         <li>[x] 2026-11-16 - Phase 2 phone captures complete: three unsampled two-scenario runs and one sampled capture (appendix).</li>
         <li>[x] 2026-11-16 - Phase 2 decision recorded: inconclusive by the rule, plan closed without Phase 3 (Decision Log).</li>
         <li>[x] 2026-11-16 - Late-frame analysis from the Phase 2 traces, host only ("Late frames").</li>
+        <li>[x] 2026-11-16 - Both follow-up tests run, diagnostic only ("Late frames", addendum): animated images drive the RenderThread-only redraws, and the mixed journey's late frames exist without tracing.</li>
       </ul>
       <h3>Surprises And Discoveries</h3>
       <ul>
