@@ -55,9 +55,9 @@
 <body>
   <header>
     <h1>ExecPlan: Make source calls safe from any thread</h1>
-    <p>After this plan, every call into a content source (search, resolve a post, comments, tag counts, sign-in, site probing) does its network handling and parsing on a background thread no matter which thread calls it. Today that is true only where the calling code remembered to switch threads, and review of this plan found several callers that did not.</p>
+    <p>After this plan, every call the app makes into a content source (search, resolve a post, comments, tag counts, sign-in, site probing) does its response handling and parsing on a background thread no matter which thread calls it. Today that is true only where the calling code remembered to switch threads, and review of this plan found several callers that did not.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: Proposed, review round 1 merged</span>
+      <span class="pill">Status: Ready to implement (two review rounds merged)</span>
       <span class="pill">Owner: Claude (orchestrator)</span>
       <span class="pill">Created: 2026-11-15</span>
       <span class="pill">Updated: 2026-11-16</span>
@@ -65,10 +65,10 @@
       <span class="pill">Audit item: B1</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Review round 2, then Phase 0 (inventory and a two-adapter prototype).</div>
-      <div class="card"><strong>Main Risk</strong>A proof that passes while work still runs on the caller's thread. Reduced by checking where parsing and credential reads execute (not only where requests start), a source scan that fails on any unwrapped entry point, and recorded negative controls.</div>
-      <div class="card"><strong>Validation</strong>Host contract and completeness tests in <code>core-sources</code>, <code>scripts/check.sh --record</code>, and two emulator journey tests that call sources from the real main thread.</div>
-      <div class="card"><strong>Depends On</strong>Audit fix A1 merged, and phases 1 and 2 of <code>main-thread-observability.html</code> (the marker and the journey fixture).</div>
+      <div class="card"><strong>Next Action</strong>Phase 0: inventory the boundary, convert Danbooru and Pixiv, and run the tests the switch can break.</div>
+      <div class="card"><strong>Main Risk</strong>A proof that passes while work still runs on the caller's thread. Reduced by a source scan that accepts only two exact forms of the wrapper, a host test that requires a real parse off the calling thread, and recorded negative controls.</div>
+      <div class="card"><strong>Validation</strong>Host contract and completeness tests in <code>core-sources</code>, <code>scripts/check.sh --record</code>, and one emulator journey test that opens an original-post link from the real main thread.</div>
+      <div class="card"><strong>Depends On</strong>Audit fix A1 merged. Phase 1 of <code>main-thread-observability.html</code> (the marker) for the host tests; its Phase 2 (the journey fixture) for the device test only.</div>
     </div>
   </header>
 
@@ -97,77 +97,103 @@
         <thead><tr><th>Caller</th><th>What reaches a source on the main thread</th></tr></thead>
         <tbody>
           <tr><td><code>ui/TheoriaShell.kt</code> :656, :710 (scope from <code>rememberCoroutineScope</code>, :873)</td><td>Opening an original-post link calls <code>adapter.resolvePost</code>.</td></tr>
-          <tr><td><code>search/SearchResultCard.kt</code> :338 into <code>recommend/ForYouCoordinator.kt</code> :129</td><td>Resolving a card's preview calls <code>adapter.resolvePost</code>.</td></tr>
+          <tr><td><code>ui/TheoriaShell.kt</code> :667-669 into <code>FileCopyLookup.kt</code> :34</td><td>"Find on other sites" calls <code>findByFileHash</code>.</td></tr>
+          <tr><td><code>ui/TheoriaShell.kt</code> :460 into <code>CreatorOpeningWorkflow.fromPost</code></td><td>Opening a creator profile from a post calls <code>resolvePost</code>.</td></tr>
+          <tr><td><code>search/SearchResultCard.kt</code> :338, :344 into <code>recommend/ForYouCoordinator.kt</code> :129</td><td>Resolving a card's preview calls <code>adapter.resolvePost</code>. The shared in-flight helper (<code>SharedFlights.kt</code> :30) keeps the caller's dispatcher.</td></tr>
           <tr><td><code>creator/CreatorFollowsViewModel.kt</code> :73</td><td>Checking followed creators calls <code>searchCreatorPosts</code>.</td></tr>
           <tr><td><code>creator/CreatorOpeningWorkflow.kt</code> :43</td><td>A creator link fetches a Gelbooru profile page and runs a regular expression over the HTML, in app code.</td></tr>
-          <tr><td>Custom Sites controller (:131, :181, :195) and Pixiv sign-in (<code>PixivPkceController.kt</code> :67)</td><td>Site probing and token exchange parse JSON. Reported by review; confirmed in Phase 0.</td></tr>
+          <tr><td>Custom Sites controller (:131, :181, :195), Pixiv sign-in (<code>PixivPkceController.kt</code> :67)</td><td>Site probing and token exchange parse JSON.</td></tr>
+          <tr><td><code>settings/SettingsViewModel.kt</code> :109</td><td>Refreshing an expired Pixiv session calls <code>pixivTokens.activeTokens()</code>. Probably on main; Phase 0 confirms.</td></tr>
         </tbody>
       </table>
-      <p>Fixing those one by one leaves the next caller free to make the same mistake. This plan moves the responsibility into the sources: every suspending entry point of the <code>core-sources</code> module switches to a background dispatcher itself, and tests fail when one does not. Callers then cannot get it wrong.</p>
-      <p>What this plan no longer aims to do: remove the thread switches callers already have. Review showed almost all of them also protect the caller's own work, so they stay.</p>
+      <p>Fixing those one by one leaves the next caller free to make the same mistake. This plan moves the responsibility into the sources: each function in the boundary defined below switches to a background dispatcher itself, and tests fail when one does not.</p>
+      <p>What this plan does not do: remove the thread switches callers already have. Review showed almost all of them also protect the caller's own work, so they stay.</p>
     </section>
 
     <section id="context">
       <h2>Context And Orientation</h2>
       <ul>
         <li><strong>Dispatcher</strong>: the object that decides which thread a coroutine runs on. <code>Dispatchers.Default</code> is the shared background pool. <code>withContext(dispatcher) { … }</code> runs a block on that dispatcher and returns to the caller's; when the caller is already on that dispatcher it does not hop.</li>
-        <li><strong>Capability interfaces</strong>: <code>core-domain/src/main/kotlin/com/theoriacodex/domain/adapter/SourceAdapter.kt</code> declares <code>SourceAdapter</code> (5 suspending functions) and ten optional interfaces (13 more), such as comments, related posts, creator posts and tag counts. App code finds them with <code>as?</code> checks on the adapter (24 checks in 13 files), which is why wrapping adapters in a decorator is not practical.</li>
-        <li><strong>Adapters</strong>: under <code>core-sources/src/main/kotlin/com/theoriacodex/sources/</code>: Danbooru, Gelbooru, Pixiv, Nhentai, Hitomi, Iwara, and the Rule34 family (<code>AbstractRule34KvsVideoSourceAdapter</code>, <code>Rule34VideoSourceAdapter</code>, <code>Rule34PahealSourceAdapter</code>, <code>Rule34GenSourceAdapter</code>). Together they override 76 suspending functions. Custom Sites have no adapter classes of their own: <code>custom/Families.kt</code> builds Danbooru and Gelbooru adapters (:54, :99) and contains the probing functions (:34, :83, :121).</li>
-        <li><strong>Other suspending entry points in the module</strong>: <code>PixivAuthApi</code>, <code>PixivTokenCoordinator</code>, <code>custom/SiteProber.kt</code>, <code>custom/SiteHealthCheck.kt</code>.</li>
-        <li><strong>HTTP</strong>: <code>http/DefaultSourceHttpClient.kt</code>. All transports, including the Custom Sites client (<code>custom/CustomSiteHttpClient.kt</code> :57), go through <code>executeHttpRequest</code> (:193). Bytes are read on OkHttp's thread; the text decode happens on the thread that resumes the caller (:50, :239).</li>
-        <li><strong>A1's precedent</strong>: <code>UnifiedSearchOrchestrator</code> now takes <code>providerContext: CoroutineContext = Dispatchers.Default</code>; tests pass <code>EmptyCoroutineContext</code> to stay on their own dispatcher. This plan uses the same pattern.</li>
+        <li><strong>Capability interfaces</strong>: <code>core-domain/src/main/kotlin/com/theoriacodex/domain/adapter/SourceAdapter.kt</code> declares <code>SourceAdapter</code> (5 suspending functions) and ten optional interfaces (13 more), 18 function names in all. App code finds the optional ones with <code>as?</code> checks on the adapter (24 checks in 13 files), which is why wrapping adapters in a decorator is not practical.</li>
+        <li><strong>Adapters</strong>: under <code>core-sources/src/main/kotlin/com/theoriacodex/sources/</code>: Danbooru, Gelbooru, Pixiv, Nhentai, Hitomi, Iwara, and the Rule34 family (<code>AbstractRule34KvsVideoSourceAdapter</code>, <code>Rule34VideoSourceAdapter</code>, <code>Rule34PahealSourceAdapter</code>, <code>Rule34GenSourceAdapter</code>). Together they override 75 interface functions. Custom Sites have no adapter classes of their own: <code>custom/Families.kt</code> builds Danbooru and Gelbooru adapters (:54, :99).</li>
+        <li><strong>HTTP</strong>: <code>http/DefaultSourceHttpClient.kt</code>. Bytes are read on OkHttp's thread; the text decode happens on the thread that resumes the caller (:50, :239).</li>
+        <li><strong>A1's precedent</strong>: <code>UnifiedSearchOrchestrator</code> takes <code>providerContext: CoroutineContext = Dispatchers.Default</code>; tests pass <code>EmptyCoroutineContext</code> to stay on their own dispatcher. This plan uses the same pattern.</li>
         <li><strong>The marker</strong>: <code>OffMainWork.note(label)</code> from <code>main-thread-observability.html</code>, placed at parse sites. An installed checker sees every call and the thread it ran on.</li>
       </ul>
     </section>
 
     <section id="design">
       <h2>Design</h2>
-      <h3>1. One helper, used by every entry point</h3>
+      <h3>1. The boundary this plan guarantees</h3>
+      <p>The guarantee covers the suspending functions that code outside <code>core-sources</code> calls and that handle a provider response:</p>
+      <ul>
+        <li>The 18 function names declared in <code>SourceAdapter.kt</code>, in every class that overrides them.</li>
+        <li>The public suspending functions of the non-adapter classes the app imports: <code>PixivAuthApi</code>, <code>PixivTokenCoordinator</code> (called directly from <code>SettingsViewModel.kt</code> :109 and <code>PixivUgoiraPlayer.kt</code> :53), <code>SiteProber</code>, <code>SiteHealthCheck</code>, and the new <code>fetchGelbooruProfileOwner</code> (below). Phase 0 rebuilds this list independently of the list above, by reading every import of <code>com.theoriacodex.sources</code> in <code>app</code> and <code>app-logic</code> and every suspending function called on those types, and adds whatever it finds.</li>
+      </ul>
+      <p>Outside the guarantee, by decision:</p>
+      <ul>
+        <li><strong>The raw HTTP client.</strong> App code that calls <code>SourceHttpClient</code> itself (<code>BoundedMediaDurationProbe</code>, <code>PixivUgoiraPlayer</code>) receives bytes or text and owns what it does with them.</li>
+        <li><strong>Functions reached only through the boundary.</strong> For example <code>HitomiMediaUrlResolver.refresh</code> and the family probes in <code>Families.kt</code> (reached only through <code>SiteProber</code>, <code>SiteProber.kt</code> :65, :86, :88). They run on the background thread because their caller put them there.</li>
+        <li><strong>A future non-adapter class.</strong> The scan cannot know that a new class is called from the app. The backstop is the parse marker from the sibling plan, which reports any marked parse on the main thread in real use.</li>
+      </ul>
+
+      <h3>2. One helper, used by every function in the boundary</h3>
       <pre><code>// core-sources/.../common/SourceAdapterCommon.kt
 /** Runs a source entry point on a background dispatcher so it is safe to call from any thread. */
 internal suspend fun &lt;T&gt; sourceCall(
     context: CoroutineContext = Dispatchers.Default,
     block: suspend () -&gt; T,
 ): T = withContext(context) { block() }</code></pre>
-      <p>Every suspending entry point becomes <code>override suspend fun search(…) = sourceCall { … }</code>. The switch is unconditional. The first draft switched only when the caller's dispatcher was a "main" dispatcher type; review showed that misses Compose's own dispatcher (the one behind <code>rememberCoroutineScope</code> and <code>LaunchedEffect</code>, which is not that type) and unconfined coroutines, which are exactly the callers in the table above.</p>
+      <p>Every function in the boundary becomes <code>override suspend fun search(…) = sourceCall { … }</code>. The switch is unconditional. The first draft switched only when the caller's dispatcher was a "main" dispatcher type; review showed that misses Compose's own dispatcher (the one behind <code>rememberCoroutineScope</code> and <code>LaunchedEffect</code>, which is not that type) and unconfined coroutines, which are exactly the callers in the table above.</p>
       <p>Consequences, all intended:</p>
       <ul>
-        <li>A caller already on <code>Dispatchers.Default</code> pays nothing. Nested entry points (one adapter function calling another) pay nothing for the same reason.</li>
-        <li>An adapter whose tests rely on virtual time inside the adapter takes a constructor parameter <code>callContext: CoroutineContext = Dispatchers.Default</code> and passes it to <code>sourceCall</code>; those tests pass <code>EmptyCoroutineContext</code>. Phase 0 finds which adapters need it (candidates: Pixiv pacing, Nhentai, Gelbooru, Hitomi, the shared tag-count helper).</li>
+        <li>A caller already on <code>Dispatchers.Default</code> pays nothing. Nested calls (one adapter function calling another) pay nothing for the same reason.</li>
+        <li><strong>Tests that rely on virtual time inside an adapter.</strong> Pixiv, Nhentai and Hitomi take a constructor parameter <code>callContext: CoroutineContext = Dispatchers.Default</code> and write <code>= sourceCall(callContext) { … }</code>; their tests pass <code>EmptyCoroutineContext</code>. Review identified the tests that need it: <code>PixivRequestPacingTest.kt</code> :28, :47 (virtual clock, 10 s interval), <code>NhentaiCreatorSourceAdapterTest.kt</code> :24-31 (a real delay racing a virtual timeout), <code>HitomiPaginationSourceAdapterTest.kt</code> :349-358 (ordering through <code>runCurrent()</code>). No other adapter gets the parameter.</li>
+        <li>Nhentai tests that keep the default 350 ms request interval (<code>NhentaiSourceAdapter.kt</code> :60, :604-612) will really wait. They get slower, not wrong; pass <code>EmptyCoroutineContext</code> where the wait is noticeable.</li>
         <li>Early <code>return</code> statements inside a converted body become <code>return@sourceCall</code>.</li>
-        <li>A result that completes after its caller was cancelled is dropped (<code>withContext</code> checks cancellation on return). The caller is already cancelled, so nothing observes the difference; shared in-flight requests (Hitomi, Viewer resolution) get a test that a cancelled waiter does not cancel the others.</li>
-        <li>Callbacks passed into a source run on the background thread. The only one is <code>onCounts</code> in <code>fetchTagCountsIncrementally</code>. Its interface documentation will say "may be called on any thread", and Phase 0 confirms its single consumer (<code>TagCountCoordinator</code> into the locked tag store) is safe for that.</li>
+        <li>A result that completes after its caller was cancelled is dropped (<code>withContext</code> checks cancellation on return). The caller is already cancelled, so nothing observes the difference.</li>
+        <li><strong>Shared in-flight work keeps its semantics.</strong> <code>SharedFlights</code> runs each fetch under its own job (<code>SharedFlights.kt</code> :39-40), and the Hitomi stores use their own scope or <code>NonCancellable</code>, so the wrapper changes nothing there. No new cancellation behaviour is added; the existing tests, including <code>HitomiGlobalIndexCacheTest</code> :98 (an owner's cancellation reaches the other waiters), must pass unchanged.</li>
+        <li><strong>The count callback.</strong> <code>onCounts</code> in <code>fetchTagCountsIncrementally</code> runs on the caller's thread for adapters that use the interface's default body (<code>SourceAdapter.kt</code> :181, which only delegates) and on a background thread for Nhentai. Its documentation will say "may be called on any thread", and Phase 0 confirms its single consumer (<code>TagCountCoordinator</code> into the locked tag store) is safe for that.</li>
+        <li>Adapter state is safe with the switch: review found no <code>ThreadLocal</code> or <code>limitedParallelism</code>; the Pixiv and Nhentai mutexes sit inside the function bodies; the Gelbooru flags are already read from several threads.</li>
       </ul>
 
-      <h3>2. What gets wrapped</h3>
+      <h3>3. The Gelbooru profile lookup moves into the module</h3>
+      <p>The lookup in <code>CreatorOpeningWorkflow.kt</code> :43 becomes a top-level <code>suspend fun fetchGelbooruProfileOwner(http, creatorId, headers): String?</code> in the Gelbooru package of <code>core-sources</code>, written as <code>= sourceCall</code> and using <code>GelbooruSite.GELBOORU.baseUrl</code>. The app keeps its timeout, passes the headers it already builds (<code>SourceKey.requestHeaders()</code>, <code>SourceMetadata.kt</code> :291), and builds the <code>CreatorProfile</code>. It does not become an adapter method: that would need a cast to the concrete class or one more interface.</p>
+
+      <h3>4. Proof</h3>
+      <p><strong>Completeness test (host).</strong> <code>SourceEntryPointCompletenessTest</code> reads the module's main source files and fails unless:</p>
       <ul>
-        <li>All 76 adapter overrides.</li>
-        <li>The public suspending functions of <code>PixivAuthApi</code>, <code>PixivTokenCoordinator</code>, <code>SiteProber</code>, the family probe functions in <code>Families.kt</code>, and <code>SiteHealthCheck</code>.</li>
-        <li>The Gelbooru profile lookup in <code>CreatorOpeningWorkflow</code> moves into the Gelbooru package of <code>core-sources</code> as a wrapped function; the app keeps only the call.</li>
+        <li>every <code>override suspend fun</code> whose name is one of the 18 declared in <code>SourceAdapter.kt</code>, and every public suspending function of the listed non-adapter classes, is written as exactly <code>= sourceCall {</code> or <code>= sourceCall(callContext) {</code> (with or without a declared return type), and the function ends where that block ends, so nothing can be appended after it;</li>
+        <li>no file under any module's <code>src/main</code> passes a <code>callContext</code> argument. Production code cannot choose the dispatcher; only tests can.</li>
       </ul>
-      <p>Non-suspending adapter members (<code>accountFeeds</code>, <code>supportedSearchScopes</code> and similar) must stay free of network access and parsing; the completeness test lists them so a new one is looked at.</p>
-
-      <h3>3. Proof</h3>
-      <p><strong>Contract test (host).</strong> <code>SourceMainSafetyContractTest</code> in <code>core-sources</code> calls sources from a stand-in "main" thread: a plain single-thread dispatcher, deliberately not a main-dispatcher type. It installs an <code>OffMainWork</code> checker and uses the fake HTTP client and credentials provider from <code>RealProviderPageContractTest</code>, extended to record the calling thread. The fake client returns valid synthetic responses, so parsing really happens. For every adapter the real registry builds with all sources enabled, plus the adapters built by each Custom Sites family, and for each capability the adapter implements, the test makes one call with arguments valid for that adapter and asserts:</p>
+      <p>Matching by function name avoids resolving inheritance from source text and leaves protected hooks alone (<code>Rule34GenSourceAdapter.latestPage</code>, :25, overrides a hook of its base class, not an interface function). This test is what carries the guarantee across all 75 overrides, including mapping done after a nested call returns (<code>HitomiSourceAdapter.autocompleteTags</code>, :354).</p>
+      <p><strong>Contract test (host).</strong> <code>SourceMainSafetyContractTest</code> shows the wrapper does what the scan assumes. It calls from a stand-in "main" thread: a plain single-thread dispatcher, deliberately not a main-dispatcher type. It installs an <code>OffMainWork</code> checker. Rows:</p>
       <ul>
-        <li>the fake client was reached (rows that legitimately return before any request are declared as such in the test, with the reason);</li>
-        <li>no HTTP call, credential read or marked parse ran on the stand-in thread;</li>
-        <li>the call completed back on the stand-in thread.</li>
+        <li>one <code>search</code> per adapter the real registry builds, reusing the ten payloads in <code>RealProviderPageContractTest.kt</code> :56-84 and Hitomi's URL-routing fake (<code>HitomiSourceAdapterTestFixture.kt</code> :209);</li>
+        <li><code>PixivAuthApi.refresh</code>, <code>PixivTokenCoordinator.activeTokens</code>, <code>SiteProber.probe</code>;</li>
+        <li>one <code>search</code> made through an unconfined coroutine started on the stand-in thread.</li>
       </ul>
-      <p>It adds rows for the non-adapter entry points, for a second call that hits a cache (Hitomi caches, Pixiv ugoira metadata), and for one call made through an unconfined coroutine started on the stand-in thread.</p>
-      <p><strong>Completeness test (host).</strong> A test reads the module's source files and fails if any <code>override suspend fun</code> in a class implementing an adapter interface, or any public suspending function of the listed non-adapter classes, is not written as <code>= sourceCall</code>. This is what catches work the contract test cannot see, such as mapping done after a nested call returns (<code>HitomiSourceAdapter.autocompleteTags</code>, :354), and new adapters or interface functions added later. There is no exclusion list.</p>
-      <p><strong>Device proof.</strong> Two journey tests on the fixture from <code>main-thread-observability.html</code> (a real Danbooru adapter fed by an in-memory client): one calls <code>adapter.search</code> directly from the Android main thread; one opens an original-post link through the app shell, the path at <code>TheoriaShell.kt</code> :656. Each asserts at least one parse and none on the main thread. These prove the result with the real main looper and Compose's real dispatcher, and they fail without this plan even with A1 in place.</p>
-      <p><strong>Request-start report.</strong> <code>OffMainWork.note(SOURCE_HTTP)</code> at the top of <code>executeHttpRequest</code>. This is a separate, weaker signal than the parse marker: after this plan, a source request that starts on the main thread means some code reached the HTTP layer without going through an entry point. It is logged, not gated. App code that uses the HTTP client directly (<code>BoundedMediaDurationProbe</code>) will show up here if it runs on main; that is recorded as a finding.</p>
+      <p>Each row asserts: the call returned its expected result (for search, the payload's post count); at least one marked parse ran; no marked parse, HTTP call or credential read ran on the stand-in thread. The confined rows also assert the call resumed on the stand-in thread. The unconfined row does not, because an unconfined coroutine has no thread to return to.</p>
+      <p>The first revision planned a row for every capability of every adapter, about 75. Review showed the existing fake client returns one canned response for every request, so that would mean a new fixture set per provider, and those rows would add little once the scan guarantees the form of every function.</p>
+      <p><strong>Device proof.</strong> One journey test, <code>SourceCallThreadJourneyTest</code>, on the fixture from <code>main-thread-observability.html</code> Phase 2: open a post's menu by long press, choose "Open original post" (<code>PostMenuActions.kt</code> :45), and land in the Viewer on the resolved post. This is the path at <code>TheoriaShell.kt</code> :656, which runs on Compose's real dispatcher and has no switch of its own. Fixture requirements:</p>
+      <ul>
+        <li>the link's source must be one the fixture makes available (<code>TheoriaShell.kt</code> :648 sends the link to the browser otherwise); the journey fixture's sources are PIXIV and GELBOORU (<code>AppJourneyFixture.kt</code> :48), and the Gelbooru adapter already parses links;</li>
+        <li>the in-memory client answers that adapter's single-post endpoint as well as its search;</li>
+        <li>the test post carries an <code>originUrl</code>, set through <code>customizePost</code>, or the menu entry does not appear.</li>
+      </ul>
+      <p>It asserts the single-post request was made, the Viewer shows the resolved post, at least one parse ran, and none ran on the main thread. It fails without this plan even with A1 in place.</p>
 
-      <h3>4. Alternatives considered</h3>
+      <h3>5. Alternatives considered</h3>
       <table>
         <thead><tr><th>Alternative</th><th>Why not</th></tr></thead>
         <tbody>
           <tr><td>Switch only for main-type dispatchers (first draft)</td><td>Misses Compose scopes and unconfined coroutines; moves <code>viewModelScope</code> tests onto real threads anyway.</td></tr>
-          <tr><td>Fix each unprotected caller</td><td>Six more local switches, and the seventh caller is unprotected again.</td></tr>
+          <tr><td>Fix each unprotected caller</td><td>Nine more local switches, and the tenth caller is unprotected again.</td></tr>
           <tr><td>Decorate adapters in the registry</td><td>Callers discover capabilities with 24 type checks; a decorator would have to implement every combination of eleven interfaces.</td></tr>
           <tr><td>Parse inside the HTTP layer</td><td>Parsing is per adapter and per endpoint; the HTTP layer cannot own it.</td></tr>
-          <tr><td>One injected dispatcher for every adapter</td><td>Constructor plumbing through every adapter and the registry for something only a few tests need; the optional parameter covers those.</td></tr>
+          <tr><td>One injected dispatcher for every adapter</td><td>Constructor plumbing through every adapter and the registry for something three adapters' tests need.</td></tr>
+          <tr><td>Scan every public suspending function in the module</td><td>Kotlin members are public by default, so the scan would need a long list of exceptions for helpers that are only reached through the boundary.</td></tr>
+          <tr><td>A request-start marker in the HTTP layer</td><td>Nothing would read it, and the app's direct HTTP users would fill it with noise. Deferred.</td></tr>
         </tbody>
       </table>
     </section>
@@ -194,26 +220,29 @@ internal suspend fun &lt;T&gt; sourceCall(
       <article>
         <h3>Phase 0: Inventory and prototype</h3>
         <table class="status-table"><tbody>
-          <tr><td>Goal</td><td>Confirm the need on <code>main</code> after A1, and settle the test-time details before touching 76 functions.</td></tr>
-          <tr><td>Steps</td><td>Re-check each row of the table in Purpose and record file and line. Convert Danbooru and Pixiv. Run <code>./gradlew :core-sources:test --offline</code> and list the tests that needed <code>callContext</code>. Read <code>TagCountCoordinator</code>'s callback path for thread safety. Write the contract test for those two adapters.</td></tr>
-          <tr><td>Decision</td><td>Continue only if at least one unprotected main-thread path exists on <code>main</code>, or the user approves the work as prevention alone. Stop and report if the prototype needs more than the optional parameter to keep the module's tests deterministic.</td></tr>
+          <tr><td>Goal</td><td>Confirm the need on <code>main</code> after A1, fix the boundary list, and settle the test-time details before touching 75 functions.</td></tr>
+          <tr><td>Steps</td><td>Re-check each row of the table in Purpose and record file and line. Build the non-adapter list from the app's imports as described in Design 1. Convert Danbooru and Pixiv (with <code>callContext</code>). Read <code>TagCountCoordinator</code>'s callback path for thread safety. Write both tests for those two adapters.</td></tr>
+          <tr><td>Tests to run</td><td><code>./gradlew :core-sources:test --offline</code>, and the app tests that build real wrapped classes: <code>./gradlew :app:testDebugUnitTest --offline --tests '*PixivPkceControllerTest' --tests '*CustomSitesControllerImplTest' --tests '*CreatorOpeningWorkflowTest'</code> (deferred gates and cancellation timing at <code>PixivPkceControllerTest.kt</code> :267; a real <code>SiteProber</code> under an unconfined test dispatcher at <code>CustomSitesControllerImplTest.kt</code> :99). The last two become meaningful once <code>SiteProber</code> and the Gelbooru lookup are converted; run them again then.</td></tr>
+          <tr><td>Decision</td><td>Continue only if at least one unprotected main-thread path exists on <code>main</code>, or the user approves the work as prevention alone. Stop and report if keeping the tests deterministic needs more than <code>callContext</code> on Pixiv, Nhentai and Hitomi.</td></tr>
         </tbody></table>
       </article>
       <article>
-        <h3>Phase 1: Convert every entry point</h3>
+        <h3>Phase 1: Convert the whole boundary</h3>
         <table class="status-table"><tbody>
-          <tr><td>Goal</td><td>All entry points wrapped; contract and completeness tests pass with no exclusions.</td></tr>
-          <tr><td>Commits</td><td>One per group: helper, tests and Danbooru with Gelbooru (covers Custom Sites adapters); Pixiv with its auth and token classes; Nhentai (the file is at 824 of its 900-line budget, so watch it); Hitomi; Iwara; the Rule34 family; site probing and health check; the Gelbooru profile lookup move.</td></tr>
-          <tr><td>Acceptance</td><td><code>./gradlew :core-domain:test :core-sources:test :app:testDebugUnitTest --offline</code> passes. Negative controls recorded in the Appendix: removing the wrapper from <code>DanbooruSourceAdapter.search</code> fails both tests; removing only the outer wrapper from <code>HitomiSourceAdapter.autocompleteTags</code> fails the completeness test.</td></tr>
+          <tr><td>Goal</td><td>Every function in the boundary wrapped; both tests pass.</td></tr>
+          <tr><td>Commits</td><td>One per group: helper, tests and Danbooru with Gelbooru (covers Custom Sites adapters); Pixiv with its auth and token classes; Nhentai; Hitomi; Iwara; the Rule34 family; <code>SiteProber</code> and <code>SiteHealthCheck</code>; the Gelbooru profile lookup move.</td></tr>
+          <tr><td>Watch</td><td>Wrapping indents every function body by one level: check Detekt's line length, and Nhentai's file is at 824 of its 900-line budget.</td></tr>
+          <tr><td>Acceptance</td><td><code>./gradlew :core-domain:test :core-sources:test :app-logic:test :app:testDebugUnitTest --offline</code> passes. Negative controls recorded in the Appendix: (1) removing the wrapper from <code>DanbooruSourceAdapter.search</code> fails both tests; (2) removing only the outer wrapper from <code>HitomiSourceAdapter.autocompleteTags</code> fails the completeness test; (3) writing <code>= sourceCall(EmptyCoroutineContext) {</code> on one function fails the completeness test; (4) passing <code>callContext = Dispatchers.Main</code> where the registry builds an adapter fails the completeness test.</td></tr>
         </tbody></table>
       </article>
       <article>
         <h3>Phase 2: Device proof</h3>
         <table class="status-table"><tbody>
-          <tr><td>Goal</td><td>The two journey tests pass on the emulator and then in the Main workflow on Android 16 and 17.</td></tr>
+          <tr><td>Entry</td><td>Phase 2 of <code>main-thread-observability.html</code> is merged (it provides the in-memory source fixture).</td></tr>
+          <tr><td>Goal</td><td>The journey test passes on the emulator and then in the Main workflow on Android 16 and 17.</td></tr>
           <tr><td>Commands</td><td>As in <code>AGENTS.md</code>: verify both APKs with <code>scripts/verify_device_apk.py</code>, confirm <code>ro.kernel.qemu</code> is <code>1</code>, close any <code>agent-device</code> session, install with <code>adb -s &lt;serial&gt; install -r -t</code>, run <code>am instrument -w -e class com.theoriacodex.app.journeys.SourceCallThreadJourneyTest com.theoriacodex.debug.test/androidx.test.runner.AndroidJUnitRunner</code>.</td></tr>
-          <tr><td>Acceptance</td><td>Both pass. Negative control: with <code>sourceCall</code> temporarily changed to run its block in place, both fail on "none on the main thread" while the existing Search journey still passes; output recorded.</td></tr>
-          <tr><td>Not proven here</td><td>Pixiv sign-in and token refresh, Custom Site probing against a real site, and provider-specific pacing under live load need a live account or site. They are covered by the host contract test only; the user can confirm sign-in still works on the dev install.</td></tr>
+          <tr><td>Acceptance</td><td>Passes. Negative control: with <code>sourceCall</code> temporarily changed to run its block in place, it fails on "none on the main thread" while the existing Search journey still passes; output recorded.</td></tr>
+          <tr><td>Not proven here</td><td>Pixiv sign-in and token refresh, Custom Site probing against a real site, and provider pacing under live load need a live account or site. They are covered by the host tests only; the user can confirm sign-in still works on the dev install.</td></tr>
         </tbody></table>
       </article>
     </section>
@@ -222,14 +251,13 @@ internal suspend fun &lt;T&gt; sourceCall(
       <h2>Work Plan</h2>
       <ol>
         <li>Add <code>sourceCall</code> to <code>core-sources/.../common/SourceAdapterCommon.kt</code>.</li>
-        <li>Add <code>SourceMainSafetyContractTest</code> and <code>SourceEntryPointCompletenessTest</code> under <code>core-sources/src/test/kotlin/com/theoriacodex/sources/</code>, reusing the fakes in <code>RealProviderPageContractTest</code>. The completeness test starts with the converted files and covers the whole module by the end of Phase 1.</li>
-        <li>Convert each group as listed in Phase 1. Add <code>callContext</code> only to adapters Phase 0 identified, and pass <code>EmptyCoroutineContext</code> in those tests.</li>
+        <li>Add <code>SourceMainSafetyContractTest</code> and <code>SourceEntryPointCompletenessTest</code> under <code>core-sources/src/test/kotlin/com/theoriacodex/sources/</code>. The completeness test starts with the converted files and covers the whole boundary by the end of Phase 1.</li>
+        <li>Convert each group as listed in Phase 1. Add <code>callContext</code> to Pixiv, Nhentai and Hitomi only, and pass <code>EmptyCoroutineContext</code> in the tests named in Design 2.</li>
         <li>Document <code>onCounts</code> threading on <code>TagCountLookupSourceAdapter</code> in <code>core-domain</code>.</li>
-        <li>Move the Gelbooru profile lookup out of <code>app/.../creator/CreatorOpeningWorkflow.kt</code> into <code>core-sources/.../gelbooru/</code>; keep its timeout and null-on-failure behaviour; move or add its test.</li>
-        <li>Add <code>OffMainWork.SOURCE_HTTP</code> and the note in <code>executeHttpRequest</code>.</li>
-        <li>Add <code>app/src/androidTest/java/com/theoriacodex/app/journeys/SourceCallThreadJourneyTest.kt</code> with the two tests.</li>
+        <li>Add <code>fetchGelbooruProfileOwner</code> to <code>core-sources/.../gelbooru/</code> and call it from <code>app/.../creator/CreatorOpeningWorkflow.kt</code>; keep the timeout and null-on-failure behaviour; move or add its test.</li>
+        <li>Add <code>app/src/androidTest/java/com/theoriacodex/app/journeys/SourceCallThreadJourneyTest.kt</code> and extend the in-memory source fixture with the single-post response.</li>
       </ol>
-      <p>Not in this plan: removing caller switches; moving <code>BoundedMediaDurationProbe</code>; any change to what sources return.</p>
+      <p>Not in this plan: removing caller switches; wrapping the family probes; moving <code>BoundedMediaDurationProbe</code> or the ugoira parse in the app module; any change to what sources return.</p>
     </section>
 
     <section id="validation">
@@ -237,10 +265,10 @@ internal suspend fun &lt;T&gt; sourceCall(
       <table>
         <thead><tr><th>Check</th><th>Command or action</th><th>Expected result</th></tr></thead>
         <tbody>
-          <tr><td>Module tests</td><td><code>./gradlew :core-domain:test :core-sources:test :app-logic:test :app:testDebugUnitTest --offline</code> (Java 21 or newer for Robolectric)</td><td>Pass, including the two new tests with no exclusions.</td></tr>
+          <tr><td>Module tests</td><td><code>./gradlew :core-domain:test :core-sources:test :app-logic:test :app:testDebugUnitTest --offline</code> (Java 21 or newer for Robolectric)</td><td>Pass, including the two new tests.</td></tr>
           <tr><td>Pre-PR check</td><td><code>scripts/check.sh --record</code></td><td>Passes, including line budgets.</td></tr>
-          <tr><td>Negative controls</td><td>The three in Phases 1 and 2</td><td>Each fails the named test; outputs in the Appendix.</td></tr>
-          <tr><td>Device proof</td><td>The <code>am instrument</code> command in Phase 2</td><td>Two tests pass.</td></tr>
+          <tr><td>Negative controls</td><td>The four in Phase 1 and the one in Phase 2</td><td>Each fails the named test; outputs in the Appendix.</td></tr>
+          <tr><td>Device proof</td><td>The <code>am instrument</code> command in Phase 2</td><td>The test passes.</td></tr>
           <tr><td>Automation</td><td>Main workflow run after merge</td><td>The journey class runs and passes on Android 16 and 17.</td></tr>
           <tr><td>Behaviour unchanged</td><td>Existing journey tests and the source suite</td><td>Pass without edits other than <code>callContext</code> arguments.</td></tr>
         </tbody>
@@ -253,7 +281,7 @@ internal suspend fun &lt;T&gt; sourceCall(
       <ul>
         <li>[x] 2026-11-15 - Plan drafted from the threading audit (B1).</li>
         <li>[x] 2026-11-16 - Review round 1 (Opus high, GPT-6.1 Sol adversarial) merged.</li>
-        <li>[ ] Review round 2 merged.</li>
+        <li>[x] 2026-11-16 - Review round 2 (same reviewers) merged; plan final.</li>
         <li>[ ] Phase 0 decision recorded.</li>
         <li>[ ] Phase 1 merged.</li>
         <li>[ ] Phase 2 merged.</li>
@@ -263,17 +291,20 @@ internal suspend fun &lt;T&gt; sourceCall(
         <li>Observation: Compose's coroutine dispatcher is not a main-dispatcher type, so a type check cannot recognise the most common main-thread callers. Evidence: review disassembled <code>AndroidUiDispatcher</code> in ui-android 1.11.4.</li>
         <li>Observation: several main-thread callers reach sources with no switch and are outside A1. Evidence: the table in Purpose.</li>
         <li>Observation: nearly every existing caller switch also protects the caller's own work. Evidence: the table in Caller switches.</li>
-        <li>Observation: Custom Sites and the health check bypass <code>DefaultSourceHttpClient</code> but share <code>executeHttpRequest</code>. Evidence: <code>custom/CustomSiteHttpClient.kt</code> :57.</li>
-        <li>Observation: a test that makes the fake client throw proves only where requests start; adapters also swallow failures and fall back. Evidence: <code>AbstractRule34KvsVideoSourceAdapter.kt</code> :65.</li>
+        <li>Observation: the module's fake HTTP client returns one response for every request, so a per-capability contract test needs new fixtures for every provider. Evidence: <code>core-sources/src/test/.../testing/FakeInfrastructure.kt</code>.</li>
+        <li>Observation: the journey fixture has no Danbooru source and its client answers only searches, so an original-post journey needs a named adapter, a single-post response and an <code>originUrl</code>. Evidence: <code>AppJourneyFixture.kt</code> :48; <code>JourneyAppContainer.kt</code> :83.</li>
+        <li>Observation: an injectable dispatcher is also a way around the guarantee. Evidence: <code>= sourceCall(EmptyCoroutineContext)</code> would satisfy a scan that only looks for the helper's name.</li>
       </ul>
       <h3>Decision Log</h3>
       <ul>
         <li>Decision: Switch unconditionally to a background dispatcher. Rationale: the guarantee must hold for any calling thread, and the conditional form missed real callers. Date/Author: 2026-11-16 / Claude.</li>
         <li>Decision: Keep every caller switch. Rationale: they protect caller work; removing them was the first draft's weakest claim. Date/Author: 2026-11-16 / Claude.</li>
-        <li>Decision: The contract covers every suspending entry point of <code>core-sources</code>, not only adapters. Rationale: sign-in and probing parse on the caller's thread too. Date/Author: 2026-11-16 / Claude.</li>
-        <li>Decision: Prove execution sites with valid responses and a source scan, not a throwing client and a hand-kept list. Rationale: the earlier test could pass with parsing on main and could miss new adapters. Date/Author: 2026-11-16 / Claude.</li>
-        <li>Decision: <code>onCounts</code> may run on any thread. Rationale: one consumer, already locked; forcing the caller's thread would add a hop per batch. Date/Author: 2026-11-16 / Claude.</li>
-        <li>Decision: The request-start note is a report, not a gate. Rationale: it does not show where parsing ran. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: The guarantee is a named boundary (interface functions plus the non-adapter classes the app calls), not "every suspending function in the module". Rationale: the wider claim cannot be enforced without a long exception list; the narrower one can, and the parse marker covers what falls outside. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: The source scan carries the guarantee; the contract test is one search per adapter plus the non-adapter classes. Rationale: per-capability rows cost a new fixture set and prove nothing the scan does not. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: The scan accepts only <code>sourceCall {</code> and <code>sourceCall(callContext) {</code>, and forbids <code>callContext</code> arguments in production code. Rationale: closes the bypass through the injected dispatcher. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: One device test, through the app shell. Rationale: a direct adapter call from the main thread proves what the host test already proves. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: Do not wrap the family probes, and do not add a request-start marker or a shared-load cancellation test. Rationale: the probes are reached only through <code>SiteProber</code>; nothing reads the marker; the wrapper does not change shared-load behaviour. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: <code>onCounts</code> may run on any thread. Rationale: one consumer, already locked; forcing a thread would add a hop per batch. Date/Author: 2026-11-16 / Claude.</li>
         <li>Decision: Phase 0 can stop the plan. Rationale: after A1 the value is the unprotected callers plus prevention; if the first is empty the user decides on the second. Date/Author: 2026-11-16 / Claude.</li>
       </ul>
       <h3>Outcomes And Retrospective</h3>
@@ -289,7 +320,12 @@ internal suspend fun &lt;T&gt; sourceCall(
       <h2>Appendix: Evidence And Notes</h2>
       <details>
         <summary>Review round 1: what changed</summary>
-        <p>Unconditional switch replaces the dispatcher-type check. The caller-switch removal phase is gone. Scope widened to sign-in, token, probing and health-check entry points and the Gelbooru profile lookup. The contract test now parses real responses, checks credentials and caches, and builds its adapter list from the registry; a source scan enforces completeness. A device proof independent of A1 was added. Corrected facts: 18 interface functions, 76 overrides, <code>Rule34VideoSourceAdapter</code>, Custom Sites families build Danbooru and Gelbooru adapters, text decoding happens on the caller's thread.</p>
+        <p>Unconditional switch replaces the dispatcher-type check. The caller-switch removal phase is gone. Scope widened to sign-in, token, probing and health-check entry points and the Gelbooru profile lookup. A source scan enforces completeness. A device proof independent of A1 was added. Corrected facts: 18 interface functions, <code>Rule34VideoSourceAdapter</code>, Custom Sites families build Danbooru and Gelbooru adapters, text decoding happens on the caller's thread.</p>
+      </details>
+      <details>
+        <summary>Review round 2: what changed</summary>
+        <p>The guarantee is now a named boundary with stated exclusions. The contract test shrank from about 75 rows to one search per adapter plus the non-adapter classes, and each row now requires an expected result and a real parse. The scan matches by interface function name, accepts two exact forms, rejects appended work and forbids production <code>callContext</code> arguments, with two new negative controls. The device proof is one journey with its fixture needs spelled out; the direct-call device test was dropped. <code>callContext</code> is limited to Pixiv, Nhentai and Hitomi, and Phase 0 runs the three app tests that build wrapped classes. The family probes are not wrapped. The Gelbooru lookup is a top-level function. The request-start marker and the shared-load cancellation test were removed. Three more unprotected callers were added to the table. Corrected facts: 75 interface overrides plus one protected hook; the count callback runs on the caller's thread for every adapter except Nhentai.</p>
+        <p>Not adopted: a row per capability with cache-hit variants (cost above), and a negative control that removes a parse marker (marker coverage belongs to the sibling plan; here each row's "at least one parse" assertion catches a missing marker on its own path).</p>
       </details>
       <details>
         <summary>Negative control outputs</summary>
