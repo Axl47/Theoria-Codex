@@ -166,7 +166,9 @@ private fun rememberFeedPreviewPlayerState(
             )
         }
         val player = lease.player
-        val handoff = context.videoPlaybackInfrastructure().feedPositionHandoff.bind(mediaKey, player::seekTo)
+        val handoff = context.videoPlaybackInfrastructure().feedPositionHandoff.bind(mediaKey) { positionMs ->
+            traceMediaSection(MediaTraceSections.PREVIEW_HANDOFF_SEEK) { player.seekTo(positionMs) }
+        }
         val listener = feedPreviewPlayerListener(
             state = state,
             player = player,
@@ -174,10 +176,12 @@ private fun rememberFeedPreviewPlayerState(
             onPlaybackError = { latestOnPlaybackError() },
             onDurationKnown = { durationMs -> latestOnDurationKnown(durationMs) },
         )
-        player.addListener(listener)
-        state.lease = lease
-        state.player = player
-        publishReadyFeedDuration(state, player) { durationMs -> latestOnDurationKnown(durationMs) }
+        traceMediaSection(MediaTraceSections.PREVIEW_LISTENER_BIND) {
+            player.addListener(listener)
+            state.lease = lease
+            state.player = player
+            publishReadyFeedDuration(state, player) { durationMs -> latestOnDurationKnown(durationMs) }
+        }
         onDispose {
             handoff.close()
             recycleFeedPreviewPlayer(state, lease, listener, pool)
@@ -189,8 +193,10 @@ private fun rememberFeedPreviewPlayerState(
         runCatching {
             // A Viewer that opened and closed within the release grace stopped this still-leased player.
             if (isActive) state.lease?.let(context.videoPlaybackInfrastructure().feedPreviewPlayerPool::resume)
-            player.playWhenReady = isActive
-            if (isActive) player.play() else player.pause()
+            traceMediaSection(MediaTraceSections.PREVIEW_PLAY_PAUSE) {
+                player.playWhenReady = isActive
+                if (isActive) player.play() else player.pause()
+            }
         }
     }
     return state
@@ -206,30 +212,38 @@ private fun feedPreviewPlayerListener(
     val firstFrameTraceGate = FirstFrameTraceGate()
     return object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
-            if (state.player !== player || playbackState != Player.STATE_READY) return
-            publishReadyFeedDuration(state, player, onDurationKnown)
-            if (!isActive()) return
-            runCatching {
-                player.playWhenReady = true
-                player.play()
+            traceMediaSection(MediaTraceSections.PREVIEW_PLAYER_EVENT) {
+                if (state.player !== player || playbackState != Player.STATE_READY) return
+                publishReadyFeedDuration(state, player, onDurationKnown)
+                if (!isActive()) return
+                runCatching {
+                    player.playWhenReady = true
+                    player.play()
+                }
             }
         }
 
         override fun onRenderedFirstFrame() {
-            if (state.hasRenderedFirstFrame) return
-            firstFrameTraceGate.recordOnce(MediaTraceSections.PREVIEW_FIRST_FRAME)
-            state.hasRenderedFirstFrame = true
+            traceMediaSection(MediaTraceSections.PREVIEW_PLAYER_EVENT) {
+                if (state.hasRenderedFirstFrame) return
+                firstFrameTraceGate.recordOnce(MediaTraceSections.PREVIEW_FIRST_FRAME)
+                state.hasRenderedFirstFrame = true
+            }
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
-            state.isActuallyPlaying = isPlaying
+            traceMediaSection(MediaTraceSections.PREVIEW_PLAYER_EVENT) {
+                state.isActuallyPlaying = isPlaying
+            }
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            if (state.didNotifyError) return
-            state.didNotifyError = true
-            com.theoriacodex.domain.diagnostics.Diagnostics.report("playback", "Feed video error: ${error.errorCodeName}", error)
-            onPlaybackError()
+            traceMediaSection(MediaTraceSections.PREVIEW_PLAYER_EVENT) {
+                if (state.didNotifyError) return
+                state.didNotifyError = true
+                com.theoriacodex.domain.diagnostics.Diagnostics.report("playback", "Feed video error: ${error.errorCodeName}", error)
+                onPlaybackError()
+            }
         }
     }
 }
@@ -252,8 +266,8 @@ private fun recycleFeedPreviewPlayer(
     listener: Player.Listener,
     pool: FeedPreviewPlayerPool,
 ) {
-    lease.player.removeListener(listener)
-    runCatching { state.playerView?.player = null }
+    traceMediaSection(MediaTraceSections.PREVIEW_LISTENER_BIND) { lease.player.removeListener(listener) }
+    runCatching { state.playerView?.let { state.showPlayerIn(it, null) } }
     pool.recycle(lease, retainBinding = !state.didNotifyError)
     if (state.player === lease.player) state.player = null
     if (state.lease === lease) state.lease = null
@@ -289,8 +303,10 @@ private fun PreparedSearchVideoPreview(
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { factoryContext ->
-                createTexturePlayerView(factoryContext).apply {
-                    player = state.player
+                traceMediaSection(MediaTraceSections.PREVIEW_VIEW_INFLATE) {
+                    createTexturePlayerView(factoryContext)
+                }.apply {
+                    state.showPlayerIn(this, state.player)
                     useController = false
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     state.playerView = this
@@ -302,17 +318,17 @@ private fun PreparedSearchVideoPreview(
                 state.playerView = playerView
                 playerView.useController = false
                 playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                playerView.player = state.player
+                state.showPlayerIn(playerView, state.player)
                 playerView.isClickable = false
                 playerView.isFocusable = false
             },
             onReset = { playerView ->
                 if (state.playerView === playerView) state.playerView = null
-                playerView.player = null
+                state.showPlayerIn(playerView, null)
             },
             onRelease = { playerView ->
                 if (state.playerView === playerView) state.playerView = null
-                playerView.player = null
+                state.showPlayerIn(playerView, null)
             },
         )
         if (!state.hasRenderedFirstFrame && previewModel != null) {
@@ -341,6 +357,16 @@ private class FeedPreviewPlayerState {
         didPublishDuration = false
         hasRenderedFirstFrame = false
         isActuallyPlaying = false
+    }
+
+    /**
+     * Points [playerView] at [player] inside a surface trace section. PlayerView ignores an assignment of the player it
+     * already shows, so that case is skipped before the section and only real attaches and detaches are timed.
+     */
+    fun showPlayerIn(playerView: PlayerView, player: ExoPlayer?) {
+        if (playerView.player === player) return
+        val section = if (player == null) MediaTraceSections.PREVIEW_SURFACE_DETACH else MediaTraceSections.PREVIEW_SURFACE_ATTACH
+        traceMediaSection(section) { playerView.player = player }
     }
 }
 

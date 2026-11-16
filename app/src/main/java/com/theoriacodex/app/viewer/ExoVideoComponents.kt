@@ -22,6 +22,11 @@ internal fun createTexturePlayerView(context: Context): PlayerView {
         .inflate(R.layout.player_view_texture, FrameLayout(context), false) as PlayerView
 }
 
+/**
+ * Trace section names. The feed-preview names cover every main-thread call the app makes into a preview player;
+ * scripts/trace_player_frames.py groups them into construction, prepare, surface, and commands and events, so a
+ * new preview section belongs in that script's category table too.
+ */
 internal object MediaTraceSections {
     const val PREVIEW_PREPARE = "TheoriaPreviewPrepare"
     const val PREVIEW_FIRST_FRAME = "TheoriaPreviewFirstFrame"
@@ -30,6 +35,16 @@ internal object MediaTraceSections {
     const val PREVIEW_PLAYER_REBIND = "TheoriaPreviewPlayerRebind"
     const val PREVIEW_PLAYER_COOL = "TheoriaPreviewPlayerCool"
     const val PREVIEW_PLAYER_RELEASE = "TheoriaPreviewPlayerRelease"
+    const val PREVIEW_VIEW_INFLATE = "TheoriaPreviewViewInflate"
+    const val PREVIEW_HANDOFF_SEEK = "TheoriaPreviewHandoffSeek"
+    const val PREVIEW_SURFACE_ATTACH = "TheoriaPreviewSurfaceAttach"
+    const val PREVIEW_SURFACE_DETACH = "TheoriaPreviewSurfaceDetach"
+    const val PREVIEW_PLAY_PAUSE = "TheoriaPreviewPlayPause"
+    const val PREVIEW_PLAYER_RECYCLE = "TheoriaPreviewPlayerRecycle"
+    const val PREVIEW_PLAYER_RESUME = "TheoriaPreviewPlayerResume"
+    const val PREVIEW_STOP_FOR_VIEWER = "TheoriaPreviewStopForViewer"
+    const val PREVIEW_LISTENER_BIND = "TheoriaPreviewListenerBind"
+    const val PREVIEW_PLAYER_EVENT = "TheoriaPreviewPlayerEvent"
     const val VIEWER_PREPARE = "TheoriaViewerPrepare"
     const val VIEWER_FIRST_FRAME = "TheoriaViewerFirstFrame"
     const val VIEWER_PLAYER_CREATE = "TheoriaViewerPlayerCreate"
