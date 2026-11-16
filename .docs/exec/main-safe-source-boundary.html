@@ -57,7 +57,7 @@
     <h1>ExecPlan: Make source calls safe from any thread</h1>
     <p>After this plan, every call the app makes into a content source (search, resolve a post, comments, tag counts, sign-in, site probing) does its response handling and parsing on a background thread no matter which thread calls it. Today that is true only where the calling code remembered to switch threads, and review of this plan found several callers that did not.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: Phase 1 in progress</span>
+      <span class="pill">Status: Phases 0 and 1 implemented; Phase 2 waits on its entry condition</span>
       <span class="pill">Owner: Claude (orchestrator)</span>
       <span class="pill">Created: 2026-11-15</span>
       <span class="pill">Updated: 2026-11-16</span>
@@ -65,7 +65,7 @@
       <span class="pill">Audit item: B1</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Phase 1: convert Nhentai, Hitomi, Iwara, the Rule34 family and the Gelbooru profile lookup.</div>
+      <div class="card"><strong>Next Action</strong>Review and merge the Phase 0 and 1 pull request. Phase 2 starts once Phase 2 of main-thread-observability.html (the in-memory source fixture) is merged.</div>
       <div class="card"><strong>Main Risk</strong>A proof that passes while work still runs on the caller's thread. Reduced by a source scan that accepts only two exact forms of the wrapper, a host test that requires a real parse off the calling thread, and recorded negative controls.</div>
       <div class="card"><strong>Validation</strong>Host contract and completeness tests in <code>core-sources</code>, <code>scripts/check.sh --record</code>, and one emulator journey test that opens an original-post link from the real main thread.</div>
       <div class="card"><strong>Depends On</strong>Audit fix A1 merged. Phase 1 of <code>main-thread-observability.html</code> (the marker) for the host tests; its Phase 2 (the journey fixture) for the device test only.</div>
@@ -283,11 +283,14 @@ internal suspend fun &lt;T&gt; sourceCall(
         <li>[x] 2026-11-16 - Review round 1 (Opus high, GPT-6.1 Sol adversarial) merged.</li>
         <li>[x] 2026-11-16 - Review round 2 (same reviewers) merged; plan final.</li>
         <li>[x] 2026-11-16 - Phase 0 decision recorded: continue. Every caller row in Purpose still reaches a source on the main thread on <code>main</code> after A1, and one more was found (<code>ui/TheoriaApp.kt</code> :428, the start-up Pixiv token refresh on the shell's Compose scope). The boundary rebuilt from the app's imports matches Design 1 exactly: 75 overrides of the 18 interface names, plus <code>PixivAuthApi</code> (<code>exchangeAuthorizationCode</code>, <code>refresh</code>), <code>PixivTokenCoordinator</code> (<code>activeTokens</code>, <code>refreshAfterAuthFailure</code>), <code>SiteProber.probe</code> and <code>SiteHealthCheck</code> (<code>check</code>, <code>clearsChallenge</code>); every other imported type is raw HTTP, credentials storage, host bookkeeping or a non-suspending helper. Danbooru and Pixiv converted with the plan's helper unchanged; both new tests pass for them and fail for the unconverted Gelbooru adapter and <code>SiteProber</code>. <code>:core-sources:test</code> and the three named app tests (<code>PixivPkceControllerTest</code> 10, <code>CustomSitesControllerImplTest</code> 18, <code>CreatorOpeningWorkflowTest</code> 5) pass. <code>onCounts</code>: its one consumer (<code>TagCountCoordinator.enrichCounts</code>) already runs it on its own <code>Dispatchers.Default</code> context, writes to the store under its lock, and Nhentai calls it sequentially, so any thread is safe.</li>
+        <li>[x] 2026-11-16 - Phase 1 implemented on <code>perf/main-safe-source-boundary</code>: all 75 interface overrides, the four non-adapter classes and <code>fetchGelbooruProfileOwner</code> wrapped, one commit per group; both tests pass with their temporary not-yet-converted lists removed; the four negative controls recorded in the Appendix. <code>./gradlew :core-domain:test :core-sources:test :app-logic:test :app:testDebugUnitTest --offline</code> passes (25, 64, 42 and 301 test classes, no failures).</li>
         <li>[ ] Phase 1 merged.</li>
         <li>[ ] Phase 2 merged.</li>
       </ul>
       <h3>Surprises And Discoveries</h3>
       <ul>
+        <li>Observation: two tests needed <code>EmptyCoroutineContext</code> beyond the three the design named, both for ordering rather than virtual time. Evidence: <code>NhentaiSuggestionSourceAdapterTest</code> (trending tags take queued gallery responses in order) and <code>Rule34GroupedSearchMetadataTest</code> (see Decision Log).</li>
+        <li>Observation: <code>HitomiPaginationSourceAdapterTest</code>'s shared-load case passes on real threads too, but only by interleaving luck: its <code>runCurrent()</code> no longer parks the continuation on the in-flight load. Evidence: suite green before the change; it now passes <code>EmptyCoroutineContext</code> as planned.</li>
         <li>Observation: <code>PixivRequestPacingTest</code> still passes without <code>callContext</code>, but then proves nothing: a regressed pacer would wait ten real seconds and the "no virtual time passed" assertion would still hold. Evidence: run during Phase 0; the test now passes <code>EmptyCoroutineContext</code> as planned.</li>
         <li>Observation: a virtual-time deadline around a wrapped call expires at once in tests. Evidence: <code>SiteProberTest</code> TIMEOUT results until <code>SiteProber.probe</code> was wrapped; see the Decision Log.</li>
         <li>Observation: one more unprotected main-thread caller. Evidence: <code>ui/TheoriaApp.kt</code> :428 calls <code>pixivTokens.activeTokens()</code> from <code>shell.scope</code> (a <code>rememberCoroutineScope</code>).</li>
@@ -300,6 +303,10 @@ internal suspend fun &lt;T&gt; sourceCall(
       </ul>
       <h3>Decision Log</h3>
       <ul>
+        <li>Decision (departure): the Rule34 video base adapter also takes <code>callContext</code>, which <code>Rule34VideoSourceAdapter</code> and <code>Rule34GenSourceAdapter</code> forward. Rationale: <code>Rule34GroupedSearchMetadataTest</code> drives the unified orchestrator, whose deadlines run on the virtual clock and whose metadata hydration runs two posts at once into a plain request list; on real threads it returned no results and its request-order assertions would race. The design's "stop if more than three adapters need it" clause was meant to catch a dispatcher seam spreading through the module; this is one more adapter family with the same seam, the helper and scan are unchanged, so it is recorded here instead of stopping. Date/Author: 2026-11-16 / Claude (implementer).</li>
+        <li>Decision: the scan is stricter than Design 4 in three ways. It reads code with comments and string contents blanked; <code>callContext</code> may appear only as the declaration <code>callContext: CoroutineContext = Dispatchers.Default,</code>, as <code>sourceCall(callContext) {</code>, or as a subclass's <code>callContext = callContext,</code> to its base; and a constructor call of a class that declares it may not mention a dispatcher or coroutine context, which closes the positional-argument route a name-only check leaves open. Date/Author: 2026-11-16 / Claude (implementer).</li>
+        <li>Decision: <code>fetchGelbooruProfileOwner</code> throws on a failed or non-success request and returns null only when the page names no owner. Rationale: the app built a profile from the creator id when the page had no owner but returned no profile when the request failed; a plain <code>String?</code> would have merged the two. Date/Author: 2026-11-16 / Claude (implementer).</li>
+        <li>Decision: tests that put a virtual-time deadline around a wrapped call either pass <code>EmptyCoroutineContext</code> (where the adapter has <code>callContext</code>) or run that call in real time (<code>CreatorOpeningWorkflowTest</code>'s deep-link case, through <code>withContext(Dispatchers.Default)</code>). Date/Author: 2026-11-16 / Claude (implementer).</li>
         <li>Decision: A1's <code>providerContext</code> parameters stay. Rationale: the plan's Caller switches table keeps the orchestrator's switch because it also covers merging and grouping; <code>FollowedCodexViewModel</code> and <code>CreatorProfileCoordinator</code> follow the same rule. Date/Author: 2026-11-16 / Claude (implementer).</li>
         <li>Decision: <code>SiteProber</code> and <code>SiteHealthCheck</code> convert in the same commit as Danbooru and Gelbooru. Rationale: <code>SiteProber.probe</code> runs the family adapters inside <code>withTimeoutOrNull</code>; while the prober is unwrapped that deadline runs on the test's virtual clock, which jumps to the timeout as soon as the wrapped adapter waits on a real thread (four <code>SiteProberTest</code> cases reported TIMEOUT). Wrapped, the deadline runs in real time and the cases pass unchanged. Date/Author: 2026-11-16 / Claude (implementer).</li>
         <li>Decision: Core-sources tests run with <code>kotlinx.coroutines.stacktrace.recovery=false</code> rather than relaxing an assertion. Rationale: with assertions on, coroutines copy an exception each time it crosses a dispatcher switch, so <code>DanbooruProviderJourneyTest</code>'s <code>assertSame</code> on a propagated <code>CancellationException</code> saw a copy. Release builds do not recover stack traces, so they see the original instance; the test keeps its identity check and matches release. Date/Author: 2026-11-16 / Claude (implementer).</li>
@@ -315,7 +322,8 @@ internal suspend fun &lt;T&gt; sourceCall(
         <li>Decision: Phase 0 can stop the plan. Rationale: after A1 the value is the unprotected callers plus prevention; if the first is empty the user decides on the second. Date/Author: 2026-11-16 / Claude.</li>
       </ul>
       <h3>Outcomes And Retrospective</h3>
-      <p>Not started.</p>
+      <p>Phases 0 and 1: every function on the boundary runs its body on <code>Dispatchers.Default</code>, so each caller in the Purpose table, and the start-up token refresh found in Phase 0, no longer parses on the main thread. The caller's own work after the call still runs where the caller runs; that was never in scope. The completeness test fails for each of the four planned negative controls plus appended work and a positional dispatcher. Not proven: anything on a device (Phase 2), live Pixiv sign-in and refresh, and live site probing.</p>
+      <p>Lesson: a dispatcher switch inside a callee turns every virtual-time deadline around it in tests into an immediate timeout, so a main-safety change should search the tests for <code>withTimeout</code> around the converted calls before the first run.</p>
     </section>
 
     <section id="recovery">
@@ -336,7 +344,24 @@ internal suspend fun &lt;T&gt; sourceCall(
       </details>
       <details>
         <summary>Negative control outputs</summary>
-        <p>To be filled in during Phases 1 and 2.</p>
+        <p>Each control was one edit, run with <code>./gradlew :core-sources:test --offline --tests '*SourceMainSafetyContractTest' --tests '*SourceEntryPointCompletenessTest'</code>, then reverted (<code>git status --short</code> clean).</p>
+        <pre><code>(1) DanbooruSourceAdapter.search without sourceCall: 7 tests, 3 failed
+  Completeness: DanbooruSourceAdapter.kt:107 search: body is not `= sourceCall {` or `= sourceCall(callContext) {`
+  Contract: AIBOORU: work ran on the calling thread [http, source-parse on stand-in-main]
+  Contract: unconfined: work ran on the calling thread [http, source-parse on stand-in-main]
+(2) HitomiSourceAdapter.autocompleteTags outer wrapper replaced by run { }: 7 tests, 1 failed
+  Completeness: HitomiSourceAdapter.kt:364 autocompleteTags: body is not `= sourceCall {` ...
+(3) DanbooruSourceAdapter.quickQuery as sourceCall(EmptyCoroutineContext): 7 tests, 1 failed
+  Completeness: DanbooruSourceAdapter.kt:164 quickQuery: body is not `= sourceCall {` ...
+(4) RealAdapterRegistry builds Nhentai with callContext = Dispatchers.Main: 7 tests, 2 failed
+  Completeness: RealAdapterRegistry.kt:52: callContext used outside its declaration
+  Completeness: RealAdapterRegistry.kt:50: NhentaiSourceAdapter built with a dispatcher
+  (Contract also failed: Dispatchers.Main is absent on the JVM.)
+Extra: `.let { it }` appended to Danbooru findByFileHash's block
+  Completeness: DanbooruSourceAdapter.kt:177 findByFileHash: work appended after the sourceCall block
+Extra: Rule34GenSourceAdapter(httpClient, Gson(), Dispatchers.IO) in the registry
+  Completeness: RealAdapterRegistry.kt:71: Rule34GenSourceAdapter built with a dispatcher</code></pre>
+        <p>The Phase 2 control is still to be recorded.</p>
       </details>
     </section>
   </main>
