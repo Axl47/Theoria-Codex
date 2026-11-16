@@ -38,7 +38,7 @@ class CodexPostDurationsTest {
         var sort by mutableStateOf(CodexSortMode.LONGEST)
         var durations = emptyMap<PostId, Long>()
         compose.setContent {
-            val value = rememberCodexPostDurations(shown, sort, states)
+            val value = rememberCodexPostDurations(shown, sort, states, codexId = "c")
             SideEffect { durations = value }
         }
         compose.runOnIdle {

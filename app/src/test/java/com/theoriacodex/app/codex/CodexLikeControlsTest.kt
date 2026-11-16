@@ -29,6 +29,7 @@ class CodexLikeControlsTest {
         compose.setContent {
             MaterialTheme {
                 CodexDetailScreen(
+                    codexId = "searches",
                     codexName = "Searches", posts = listOf(post), sortMode = CodexSortMode.NEWEST_SAVED,
                     availableSources = emptySet(), creatorBrowsingSources = emptySet(),
                     onOpenViewer = { _, _ -> }, onAddPostsToAnotherCodex = {}, onRemovePosts = {}, onSavePostToDevice = {},

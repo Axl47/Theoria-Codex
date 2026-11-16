@@ -318,6 +318,7 @@ private fun rememberForYouFeed(
     val presentedResults = durationFilter.presentedPosts.takeUnless { state.home.visible } ?: state.results
     val visibleResults = rememberFilteredFeed(
         presentedResults, visibilityFilters, durationFilter.unknownPolicy, durationFilter.knownDurationMsByPostId,
+        retainKey = "for-you",
     )
     val related = rememberRelatedFeedPresentation(
         canonicalPosts = state.results,

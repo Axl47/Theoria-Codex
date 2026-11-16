@@ -17,6 +17,7 @@ import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import java.util.IdentityHashMap
 import kotlinx.coroutines.flow.first
 
 /** Stats figures a Codex, or a post within one, can sort by: time watched and times opened. */
@@ -81,12 +82,21 @@ internal fun codexPostRefinement(
     }
 }
 
-/** Known lengths first, then animated posts still unresolved, then posts with no animation. */
-private fun lengthGroups(durations: Map<PostId, Long>): Comparator<Post> = compareBy { post ->
-    when {
-        post.id in durations -> 0
-        isAnimatedPost(post) -> 1
-        else -> 2
+/**
+ * Known lengths first, then animated posts still unresolved, then posts with no animation. A sort compares each post
+ * many times and telling an animated post apart reads its media, so each comparator (one per sort) works out a post's
+ * group once.
+ */
+private fun lengthGroups(durations: Map<PostId, Long>): Comparator<Post> {
+    val groups = IdentityHashMap<Post, Int>()
+    return compareBy { post ->
+        groups.getOrPut(post) {
+            when {
+                post.id in durations -> 0
+                isAnimatedPost(post) -> 1
+                else -> 2
+            }
+        }
     }
 }
 
@@ -101,19 +111,41 @@ internal fun sortCodexPosts(
 /**
  * Known animation lengths of [posts] while [sort] is a length sort; empty otherwise. Recomputed off the main
  * thread as durations resolve, so posts settle into place while resolution runs. Other sorts ignore [states].
+ * Kept per [codexId] while the Viewer is open, so an unchanged Codex does not recompute them on return.
  */
 @Composable
 internal fun rememberCodexPostDurations(
     posts: List<Post>?,
     sort: CodexSortMode,
     states: Map<MediaDurationKey, MediaDurationState>,
+    codexId: String,
 ): Map<PostId, Long> {
     if (!sort.usesDuration || posts == null) return emptyMap()
     return rememberComputedOffMain(
-        posts, states, section = FeedTraceSections.KNOWN_DURATIONS,
+        posts, states, section = FeedTraceSections.KNOWN_DURATIONS, retainKey = "codex-durations:$codexId",
         extend = { known, appended -> known + knownMediaDurations(appended, states) },
     ) {
         knownMediaDurations(posts, states)
+    }
+}
+
+/**
+ * A saved Codex's [posts] (null until loaded) in [sort] order; null until [usage] is read for a usage sort. The order
+ * and the known lengths it needs are kept per [codexId] while the Viewer is open.
+ */
+@Composable
+internal fun rememberSortedCodexPosts(
+    codexId: String,
+    posts: List<Post>?,
+    sort: CodexSortMode,
+    usage: Map<String, CodexUsage>?,
+    durationStates: Map<MediaDurationKey, MediaDurationState>,
+): List<Post>? {
+    val durations = rememberCodexPostDurations(posts, sort, durationStates, codexId)
+    return posts?.let {
+        rememberComputedOffMain(posts, sort, usage, durations, section = FeedTraceSections.SORT, retainKey = "codex-sort:$codexId") {
+            usage?.let { sortCodexPosts(posts, sort, it, durations) }
+        }
     }
 }
 

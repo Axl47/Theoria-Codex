@@ -16,9 +16,10 @@ import kotlinx.coroutines.withContext
  */
 internal val LocalFeedComputationContext = staticCompositionLocalOf<CoroutineContext> { Dispatchers.Default }
 
-private class ListFrame<E, T>(val list: List<E>, val inputs: Array<out Any?>, val value: T)
+/** A value computed from exactly [list] and [inputs]. */
+internal class ListFrame<E, T>(val list: List<E>, val inputs: Array<out Any?>, val value: T)
 
-private class FrameCache<E, T> {
+internal class FrameCache<E, T> {
     var frame: ListFrame<E, T>? = null
 }
 
@@ -32,6 +33,10 @@ private class FrameCache<E, T> {
  * - A change to [inputs] alone (a filter toggle, a resolved duration, a sort) recomputes on [LocalFeedComputationContext]
  *   while the previous result stays on screen, so the list never flashes empty or loading.
  *
+ * - With a [retainKey], the last frame also survives the Viewer in [FeedRetainedState]. The first composition back
+ *   reuses it only when [list] is the same object and [inputs] are equal, which is exactly what [compute] would
+ *   return; anything else is computed in place, as on a first visit.
+ *
  * [compute] and [extend] must only read [list] and [inputs]. With a [section] (one of [FeedTraceSections]), every
  * pass runs inside that trace section, on whichever thread it runs.
  */
@@ -40,16 +45,18 @@ internal fun <E, T> rememberComputedOffMain(
     list: List<E>,
     vararg inputs: Any?,
     section: String? = null,
+    retainKey: String? = null,
     extend: ((previous: T, appended: List<E>) -> T)? = null,
     compute: () -> T,
 ): T {
     // Every frame holds a value computed from exactly its own list and inputs, so this plain cache stays correct
     // even when a composition is discarded; [published] only asks for recomposition when an off-main value lands.
     val cache = remember { FrameCache<E, T>() }
+    val retained = retainKey?.let { rememberRetainedFrameCache<E, T>(it) }
     val published = remember { mutableIntStateOf(0) }
     val background = LocalFeedComputationContext.current
     published.intValue
-    val previous = cache.frame
+    val previous = cache.frame ?: retained?.frame?.takeIf { it.list === list && it.inputs.sameAs(inputs) }
     val frame = when {
         previous == null -> ListFrame(list, inputs, traced(section, compute))
         previous.list === list -> previous
@@ -58,12 +65,13 @@ internal fun <E, T> rememberComputedOffMain(
         else -> ListFrame(list, inputs, traced(section, compute))
     }
     cache.frame = frame
+    retained?.frame = frame
     LaunchedEffect(*inputs) {
         if (frame.inputs.sameAs(inputs)) return@LaunchedEffect
         val value = withContext(background) { traced(section, compute) }
         // A newer list was computed in place with these inputs meanwhile; it already covers this answer.
         if (cache.frame?.list !== list) return@LaunchedEffect
-        cache.frame = ListFrame(list, inputs, value)
+        cache.frame = ListFrame(list, inputs, value).also { retained?.frame = it }
         published.intValue++
     }
     return frame.value

@@ -8,7 +8,8 @@ import com.theoriacodex.domain.model.PostId
 
 /**
  * The feed's [posts] that [filters] let through. A page appended to [posts] filters only that page; a filter, mark or
- * duration change refilters off the main thread while the previous list stays on screen.
+ * duration change refilters off the main thread while the previous list stays on screen. [retainKey] names the feed,
+ * so an unchanged result is not filtered again when the feed returns from the Viewer.
  */
 @Composable
 internal fun rememberFilteredFeed(
@@ -17,6 +18,7 @@ internal fun rememberFilteredFeed(
     unknownDurationPolicy: UnknownAnimatedDurationPolicy,
     knownDurations: Map<PostId, Long>,
     marks: PostMarkInputs = NO_MARKS,
+    retainKey: String,
 ): List<Post> {
     val filter = { candidates: List<Post> ->
         filterSearchResults(
@@ -25,7 +27,7 @@ internal fun rememberFilteredFeed(
         )
     }
     return rememberComputedOffMain(
-        posts, filters, marks, unknownDurationPolicy, knownDurations, section = FeedTraceSections.FILTER,
+        posts, filters, marks, unknownDurationPolicy, knownDurations, section = FeedTraceSections.FILTER, retainKey = retainKey,
         extend = { previous, appended -> previous + filter(appended) },
     ) { filter(posts) }
 }

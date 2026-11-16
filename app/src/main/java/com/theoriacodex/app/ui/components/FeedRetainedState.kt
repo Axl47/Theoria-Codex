@@ -16,12 +16,17 @@ import com.theoriacodex.app.media.DurationFilterProjection
 internal class FeedRetainedState : ViewModel() {
     private val durationProjections = mutableMapOf<String, DurationFilterProjection>()
     private val gridStates = mutableMapOf<String, LazyStaggeredGridState>()
+    private val frameCaches = mutableMapOf<String, FrameCache<*, *>>()
 
     fun durationProjection(key: String): DurationFilterProjection =
         durationProjections.getOrPut(key) { DurationFilterProjection() }
 
     fun gridState(key: String, create: () -> LazyStaggeredGridState): LazyStaggeredGridState =
         gridStates.getOrPut(key, create)
+
+    /** One [rememberComputedOffMain] call site owns each key, so its element and value types never change. */
+    @Suppress("UNCHECKED_CAST")
+    fun <E, T> frameCache(key: String): FrameCache<E, T> = frameCaches.getOrPut(key) { FrameCache<E, T>() } as FrameCache<E, T>
 }
 
 /**
@@ -50,4 +55,11 @@ internal fun rememberRetainedFeedGridState(key: String): LazyStaggeredGridState 
 internal fun rememberRetainedDurationProjection(key: String): DurationFilterProjection {
     val retained = viewModel<FeedRetainedState>()
     return remember(retained, key) { retained.durationProjection(key) }
+}
+
+/** The last frame of a [rememberComputedOffMain] call, kept while the Viewer covers the feed. */
+@Composable
+internal fun <E, T> rememberRetainedFrameCache(key: String): FrameCache<E, T> {
+    val retained = viewModel<FeedRetainedState>()
+    return remember(retained, key) { retained.frameCache(key) }
 }
