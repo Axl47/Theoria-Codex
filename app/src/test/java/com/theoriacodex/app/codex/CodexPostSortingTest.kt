@@ -1,5 +1,6 @@
 package com.theoriacodex.app.codex
 
+import com.theoriacodex.app.media.isAnimatedPost
 import com.theoriacodex.app.statistics.statisticsPostKey
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.CodexPostStatistics
@@ -8,9 +9,11 @@ import com.theoriacodex.data.repository.CodexStatistics
 import com.theoriacodex.data.repository.InMemoryStatisticsRepository
 import com.theoriacodex.data.repository.LifetimeStatistics
 import com.theoriacodex.domain.model.CreatorProfile
+import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import kotlin.random.Random
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -74,6 +77,43 @@ class CodexPostSortingTest {
             sortCodexPosts(listOf(still, unresolved, short, long), sort, emptyMap(), durations).map { it.id.sourcePostId }
         assertEquals(listOf("long", "short", "unresolved", "still"), lengthIds(CodexSortMode.LONGEST))
         assertEquals(listOf("short", "long", "unresolved", "still"), lengthIds(CodexSortMode.SHORTEST))
+    }
+
+    @Test fun `length sorts keep the order of the comparator that classified posts on every comparison`() {
+        // Videos by source and by media, stills, known lengths with ties, unresolved animations, shared post dates.
+        val random = Random(7)
+        val posts = List(240) { index ->
+            val video = ImageRef("https://example.com/$index.mp4", null, "video/mp4")
+            when (index % 4) {
+                0 -> testPost(source = SourceKey.RULE34VIDEO, sourcePostId = "s$index")
+                1 -> testPost(sourcePostId = "m$index").copy(full = video, media = listOf(video))
+                else -> testPost(sourcePostId = "p$index")
+            }.copy(createdAtEpochMs = random.nextLong(40))
+        }.shuffled(random)
+        val durations = posts.filter { isAnimatedPost(it) && random.nextInt(3) > 0 }
+            .associate { it.id to 1_000L * random.nextInt(1, 20) }
+        // The previous comparator, kept as the reference order.
+        fun reference(sort: CodexSortMode): Comparator<Post> {
+            val groups = compareBy<Post> { post ->
+                when {
+                    post.id in durations -> 0
+                    isAnimatedPost(post) -> 1
+                    else -> 2
+                }
+            }
+            return if (sort == CodexSortMode.LONGEST) {
+                groups.thenByDescending { durations[it.id] }
+            } else {
+                groups.thenBy { durations[it.id] }
+            }
+        }
+        for (sort in listOf(CodexSortMode.LONGEST, CodexSortMode.SHORTEST)) {
+            assertEquals(posts.sortedWith(reference(sort)), sortCodexPosts(posts, sort, emptyMap(), durations))
+            assertEquals(
+                posts.sortedWith(reference(sort).thenByDescending { it.createdAtEpochMs }),
+                sortLiveCodexPosts(posts, sort, emptyMap(), durations),
+            )
+        }
     }
 
     @Test fun `post usage reads one Codex's watch time and opens`() = runTest {

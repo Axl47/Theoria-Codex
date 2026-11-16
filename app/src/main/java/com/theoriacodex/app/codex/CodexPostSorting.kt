@@ -17,6 +17,7 @@ import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import java.util.IdentityHashMap
 import kotlinx.coroutines.flow.first
 
 /** Stats figures a Codex, or a post within one, can sort by: time watched and times opened. */
@@ -81,12 +82,21 @@ internal fun codexPostRefinement(
     }
 }
 
-/** Known lengths first, then animated posts still unresolved, then posts with no animation. */
-private fun lengthGroups(durations: Map<PostId, Long>): Comparator<Post> = compareBy { post ->
-    when {
-        post.id in durations -> 0
-        isAnimatedPost(post) -> 1
-        else -> 2
+/**
+ * Known lengths first, then animated posts still unresolved, then posts with no animation. A sort compares each post
+ * many times and telling an animated post apart reads its media, so each comparator (one per sort) works out a post's
+ * group once.
+ */
+private fun lengthGroups(durations: Map<PostId, Long>): Comparator<Post> {
+    val groups = IdentityHashMap<Post, Int>()
+    return compareBy { post ->
+        groups.getOrPut(post) {
+            when {
+                post.id in durations -> 0
+                isAnimatedPost(post) -> 1
+                else -> 2
+            }
+        }
     }
 }
 
