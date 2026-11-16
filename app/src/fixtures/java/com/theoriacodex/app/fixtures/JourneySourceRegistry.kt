@@ -18,12 +18,22 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
 import java.util.concurrent.CopyOnWriteArrayList
 
-/** Controlled external provider responses; production coordinators still own execution and paging. */
-class JourneySourceRegistry(postsBySource: Map<SourceKey, List<Post>>, private val pageSize: Int) : SourceAdapterRegistry {
+/**
+ * Controlled external provider responses; production coordinators still own execution and paging. Sources in
+ * [providerShaped] go through a real adapter that parses generated provider JSON; the others return ready-made posts,
+ * and only those are logged in [requests].
+ */
+class JourneySourceRegistry(
+    postsBySource: Map<SourceKey, List<Post>>,
+    private val pageSize: Int,
+    val providerShaped: Map<SourceKey, ProviderShapedSource> = emptyMap(),
+) : SourceAdapterRegistry {
     data class Request(val source: SourceKey, val query: Query, val pageToken: String?)
     val requests = CopyOnWriteArrayList<Request>()
     val resolveRequests = CopyOnWriteArrayList<PostId>()
-    private val adapters = postsBySource.mapValues { (source, posts) -> FixtureAdapter(source, posts) }
+    private val adapters: Map<SourceKey, SourceAdapter> = postsBySource.mapValues { (source, posts) ->
+        providerShaped[source]?.adapter(source) ?: FixtureAdapter(source, posts)
+    }
     override fun availableSources() = adapters.keys
     override fun adapterFor(sourceKey: SourceKey): SourceAdapter? = adapters[sourceKey]
     override fun unifiedOrchestrator() = UnifiedSearchOrchestrator(adapters)
