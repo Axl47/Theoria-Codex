@@ -1,6 +1,7 @@
 package com.theoriacodex.sources.http
 
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.sources.common.sourceCall
 import com.theoriacodex.sources.custom.isVerificationChallenge
 import java.io.IOException
 import okhttp3.OkHttpClient
@@ -18,11 +19,11 @@ class SiteHealthCheck internal constructor(
     constructor(tracker: HostOutageTracker, okHttpClient: OkHttpClient = defaultSourceOkHttpClient) :
         this(tracker, { spec -> executeHttpRequest(spec, okHttpClient) })
 
-    suspend fun check(url: String, headers: Map<String, String>, countChallenges: Boolean) {
+    suspend fun check(url: String, headers: Map<String, String>, countChallenges: Boolean): Unit = sourceCall {
         val response = runCatchingPreservingCancellation { fetch(url, headers) }.getOrElse { error ->
             // A page over the size limit still answered, so the site is up.
             if (error is IOException) tracker.recordFailure(url, error) else tracker.clear(hostOf(url))
-            return
+            return@sourceCall
         }
         val down = when (val kind = HostOutageTracker.outageKindOf(response.statusCode, response.headers)) {
             HostOutageKind.CHALLENGE -> kind.takeIf { countChallenges }
@@ -38,13 +39,13 @@ class SiteHealthCheck internal constructor(
      * a challenge in its text. Unlike [check] this leaves the tracker alone, so checking changes nothing
      * until the check is completed. Throws [IOException] when the site can't be reached at all.
      */
-    suspend fun clearsChallenge(url: String, headers: Map<String, String>): Boolean {
+    suspend fun clearsChallenge(url: String, headers: Map<String, String>): Boolean = sourceCall {
         val response = runCatchingPreservingCancellation { fetch(url, headers) }.getOrElse { error ->
             if (error is IOException) throw error
             // A page over the size limit still answered.
-            return true
+            return@sourceCall true
         }
-        return HostOutageTracker.outageKindOf(response.statusCode, response.headers) == null
+        HostOutageTracker.outageKindOf(response.statusCode, response.headers) == null
     }
 
     private suspend fun fetch(url: String, headers: Map<String, String>): SourceByteResponse = transport(

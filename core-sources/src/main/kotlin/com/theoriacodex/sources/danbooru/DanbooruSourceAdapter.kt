@@ -43,6 +43,7 @@ import com.theoriacodex.sources.common.optionalJsonObject
 import com.theoriacodex.sources.common.parseJsonArray
 import com.theoriacodex.sources.common.parseJsonObject
 import com.theoriacodex.sources.common.parseOffsetDateTimeMs
+import com.theoriacodex.sources.common.sourceCall
 import com.theoriacodex.sources.common.sourceNetworkFailure
 import com.theoriacodex.sources.common.sourceQuickQuery
 import com.theoriacodex.sources.common.stringValue
@@ -103,46 +104,47 @@ class DanbooruSourceAdapter(
         searchTermLimit = site.searchTermLimit,
     )
 
-    override suspend fun search(query: Query, pageToken: String?): Page<Post> =
+    override suspend fun search(query: Query, pageToken: String?): Page<Post> = sourceCall {
         searchTags(compileTags(query), idCursor = query.sort == SortMode.NEWEST, pageToken)
+    }
 
-    override suspend fun searchCreatorPosts(creator: CreatorProfile, pageToken: String?): Page<Post> {
+    override suspend fun searchCreatorPosts(creator: CreatorProfile, pageToken: String?): Page<Post> = sourceCall {
         val artistTag = creator.uploadsQuery?.trim()
-        if (creator.source != sourceKey || artistTag.isNullOrBlank()) return canonicalPostPage(emptyList(), null)
-        return searchTags(artistTag, idCursor = true, pageToken)
+        if (creator.source != sourceKey || artistTag.isNullOrBlank()) return@sourceCall canonicalPostPage(emptyList(), null)
+        searchTags(artistTag, idCursor = true, pageToken)
     }
 
     override fun accountFeeds(creator: CreatorProfile): List<AccountFeed> =
         if (creator.source == sourceKey) danbooruAccountFeeds(creator) else emptyList()
 
     /** `/users/<id>.json` for the join date and upload count, and the `ordfav:` post count for favorites. */
-    override suspend fun accountDetails(creator: CreatorProfile): AccountDetails? {
-        val name = danbooruAccountName(creator)?.takeIf { creator.source == sourceKey } ?: return null
+    override suspend fun accountDetails(creator: CreatorProfile): AccountDetails? = sourceCall {
+        val name = danbooruAccountName(creator)?.takeIf { creator.source == sourceKey } ?: return@sourceCall null
         val user = creator.profileId?.let { id -> parseJsonObject(request("/users/$id.json"), gson, site.label) }
         val favorites = request("/counts/posts.json", mapOf("tags" to danbooruFavoritesTags(name)))
-        return parseDanbooruAccountDetails(user, parseDanbooruPostCount(parseJsonObject(favorites, gson, site.label)))
+        parseDanbooruAccountDetails(user, parseDanbooruPostCount(parseJsonObject(favorites, gson, site.label)))
     }
 
     /** Favorites page by number: `ordfav:` lists by favorite order, so an id cursor (`b<id>`) would skip posts. */
-    override suspend fun accountPosts(creator: CreatorProfile, feed: AccountFeed, pageToken: String?): Page<Post> {
+    override suspend fun accountPosts(creator: CreatorProfile, feed: AccountFeed, pageToken: String?): Page<Post> = sourceCall {
         val name = danbooruAccountName(creator)?.takeIf { creator.source == sourceKey }
-            ?: return canonicalPostPage(emptyList(), null)
-        return when (feed) {
+            ?: return@sourceCall canonicalPostPage(emptyList(), null)
+        when (feed) {
             AccountFeed.UPLOADS -> searchCreatorPosts(creator, pageToken)
             AccountFeed.FAVORITES -> searchTags(danbooruFavoritesTags(name), idCursor = false, pageToken)
         }
     }
 
-    override suspend fun trendingTags(limit: Int): List<TagSuggestion> {
+    override suspend fun trendingTags(limit: Int): List<TagSuggestion> = sourceCall {
         val response = request(
             path = "/tags.json",
             query = mapOf("limit" to limit.coerceIn(1, 50).toString(), "search[order]" to "count"),
         )
-        return parseJsonArray(response, gson, site.label).mapNotNull { parseTagSuggestion(it, "trending") }
+        parseJsonArray(response, gson, site.label).mapNotNull { parseTagSuggestion(it, "trending") }
     }
 
-    override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> {
-        if (prefix.isBlank()) return emptyList()
+    override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = sourceCall {
+        if (prefix.isBlank()) return@sourceCall emptyList()
         val response = request(
             path = "/tags.json",
             query = mapOf(
@@ -151,34 +153,38 @@ class DanbooruSourceAdapter(
                 "search[order]" to "count",
             ),
         )
-        return parseJsonArray(response, gson, site.label).mapNotNull { parseTagSuggestion(it, "tag") }
+        parseJsonArray(response, gson, site.label).mapNotNull { parseTagSuggestion(it, "tag") }
     }
 
-    override suspend fun fetchTagCounts(tags: List<String>): Map<String, Int> =
+    override suspend fun fetchTagCounts(tags: List<String>): Map<String, Int> = sourceCall {
         autocompleteTagCounts(sourceKey, tags, ::autocompleteTags)
+    }
 
-    override suspend fun quickQuery(kind: QuickQueryKind): Query = sourceQuickQuery(source = sourceKey, kind = kind)
+    override suspend fun quickQuery(kind: QuickQueryKind): Query = sourceCall {
+        sourceQuickQuery(source = sourceKey, kind = kind)
+    }
 
-    override suspend fun resolvePost(id: PostId): Post? {
-        if (id.source != sourceKey) return null
+    override suspend fun resolvePost(id: PostId): Post? = sourceCall {
+        if (id.source != sourceKey) return@sourceCall null
         val record = parseJsonObject(request(path = "/posts/${id.sourcePostId}.json"), gson, site.label)
         if (record.has("id") && record.stringValue("file_url").isNullOrBlank()) {
             // The post exists but its files are withheld, which "not found" would misreport.
             throw SourceAdapterException(SourceFailureReason.AUTH_REQUIRED, "${site.label} doesn't show this post to this account")
         }
-        return parsePost(record)
+        parsePost(record)
     }
 
-    override suspend fun findByFileHash(md5: String): Post? =
+    override suspend fun findByFileHash(md5: String): Post? = sourceCall {
         searchTags("md5:$md5", idCursor = false, pageToken = null).items.firstOrNull()
+    }
 
     /**
      * Live comments newest first, 100 to a page, without deleted ones. A full page means another
      * may follow, so the total is known only when everything fit on the first page. Danbooru comments
      * are flat, so [parent] is ignored.
      */
-    override suspend fun comments(post: Post, pageToken: String?, parent: PostComment?): CommentPage {
-        if (post.id.source != sourceKey) return CommentPage(emptyList(), total = 0, nextPageToken = null)
+    override suspend fun comments(post: Post, pageToken: String?, parent: PostComment?): CommentPage = sourceCall {
+        if (post.id.source != sourceKey) return@sourceCall CommentPage(emptyList(), total = 0, nextPageToken = null)
         val pageIndex = pageToken?.toIntOrNull()?.coerceAtLeast(1) ?: 1
         val response = request(
             path = "/comments.json",
@@ -195,7 +201,7 @@ class DanbooruSourceAdapter(
         // Fullness counts every raw record, so a dropped deleted comment never ends paging early.
         val hasMore = records.size() >= DANBOORU_COMMENTS_PAGE_SIZE
         val comments = records.mapNotNull { parseDanbooruComment(it, sourceKey, site.baseUrl) }
-        return CommentPage(
+        CommentPage(
             comments = comments,
             total = comments.size.takeIf { pageIndex == 1 && !hasMore },
             nextPageToken = (pageIndex + 1).toString().takeIf { hasMore },
