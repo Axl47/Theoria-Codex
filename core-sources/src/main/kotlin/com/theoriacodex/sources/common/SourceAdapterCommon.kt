@@ -8,6 +8,7 @@ import com.google.gson.JsonObject
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
+import com.theoriacodex.domain.diagnostics.OffMainWork
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
@@ -17,6 +18,9 @@ import com.theoriacodex.sources.media.inferMimeFromUrl
 import com.theoriacodex.sources.media.mimeFromFileExt
 import com.theoriacodex.sources.http.SourceHttpResponse
 import java.io.IOException
+import org.jsoup.Jsoup
+import org.jsoup.nodes.Document
+import org.jsoup.parser.Parser
 
 internal fun sourceQuickQuery(
     source: SourceKey,
@@ -63,7 +67,11 @@ internal fun originUrlOrNull(source: String?, pixivId: Long? = null): String? {
 private const val PIXIV_ARTWORK_URL = "https://www.pixiv.net/artworks/"
 private val PXIMG_ARTWORK_ID_REGEX = Regex("""^https?://i\d*\.pximg\.net/.*/(\d+)_(?:p\d+|ugoira)""")
 
+// Every parse of a provider response goes through these helpers, which mark it as background-only work so the
+// app reports any that runs on the main thread (see OffMainWork).
+
 internal fun parseJsonArray(body: String, gson: Gson, errorLabel: String): JsonArray {
+    OffMainWork.note(OffMainWork.SOURCE_PARSE)
     return runCatching { gson.fromJson(body, JsonArray::class.java) }.getOrNull()
         ?: throw SourceAdapterException(
             reason = SourceFailureReason.PARSE,
@@ -72,6 +80,7 @@ internal fun parseJsonArray(body: String, gson: Gson, errorLabel: String): JsonA
 }
 
 internal fun parseJsonObject(body: String, gson: Gson, errorLabel: String): JsonObject {
+    OffMainWork.note(OffMainWork.SOURCE_PARSE)
     return runCatching { gson.fromJson(body, JsonObject::class.java) }.getOrNull()
         ?: throw SourceAdapterException(
             reason = SourceFailureReason.PARSE,
@@ -80,11 +89,28 @@ internal fun parseJsonObject(body: String, gson: Gson, errorLabel: String): Json
 }
 
 internal fun parseJsonElement(body: String, gson: Gson, errorLabel: String): JsonElement {
+    OffMainWork.note(OffMainWork.SOURCE_PARSE)
     return runCatching { gson.fromJson(body, JsonElement::class.java) }.getOrNull()
         ?: throw SourceAdapterException(
             reason = SourceFailureReason.PARSE,
             message = "$errorLabel returned malformed JSON",
         )
+}
+
+internal fun parseHtml(html: String, baseUri: String = ""): Document {
+    OffMainWork.note(OffMainWork.SOURCE_PARSE)
+    return Jsoup.parse(html, baseUri)
+}
+
+internal fun parseXml(xml: String, baseUri: String = ""): Document {
+    OffMainWork.note(OffMainWork.SOURCE_PARSE)
+    return Jsoup.parse(xml, baseUri, Parser.xmlParser())
+}
+
+/** Parses [html] as the contents of a body element, as a browser treats a fragment. */
+internal fun parseHtmlFragment(html: String): Document {
+    OffMainWork.note(OffMainWork.SOURCE_PARSE)
+    return Jsoup.parseBodyFragment(html)
 }
 
 internal fun sourceNetworkFailure(siteLabel: String, error: IOException): Nothing {

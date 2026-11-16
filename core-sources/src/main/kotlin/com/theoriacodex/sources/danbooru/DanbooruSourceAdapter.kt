@@ -241,7 +241,7 @@ class DanbooruSourceAdapter(
         }
         if (!response.isSuccessful()) {
             // Danbooru explains rejected searches (such as the tag limit) in a JSON `message`.
-            val providerMessage = runCatching { gson.fromJson(response.body, JsonObject::class.java) }.getOrNull()
+            val providerMessage = runCatching { parseJsonObject(response.body, gson, site.label) }.getOrNull()
                 ?.stringValue("message")?.trim()?.takeIf(String::isNotBlank)
             throw SourceAdapterException(
                 reason = classifyHttpFailure(response.statusCode),

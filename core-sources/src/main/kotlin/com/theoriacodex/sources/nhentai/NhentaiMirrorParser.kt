@@ -4,11 +4,11 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchFacet
-import org.jsoup.Jsoup
+import com.theoriacodex.sources.common.parseHtml
 
 internal object NhentaiMirrorParser {
     fun parseGalleryMetadata(body: String): NhentaiMirrorMetadata? {
-        val document = Jsoup.parse(body)
+        val document = parseHtml(body)
         val taxonomy = document.select("section#tags a.tag, li.tags a.tag_btn")
             .mapNotNull { link ->
                 val href = link.attr("href").trim()

@@ -3,8 +3,8 @@ package com.theoriacodex.sources.rule34
 import com.google.gson.Gson
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.common.canonicalPostPage
+import com.theoriacodex.sources.common.parseHtml
 import com.theoriacodex.sources.http.SourceHttpClient
-import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 
 class Rule34GenSourceAdapter(
@@ -23,7 +23,7 @@ class Rule34GenSourceAdapter(
 
     // This site's RSS links thumbnails that answer 404, while its listing page has working ones.
     override suspend fun latestPage() = canonicalPostPage(
-        items = parseSearchPage(Jsoup.parse(request("$baseUrl/latest-updates/"), baseUrl)),
+        items = parseSearchPage(parseHtml(request("$baseUrl/latest-updates/"), baseUrl)),
         nextPageToken = null,
     )
 

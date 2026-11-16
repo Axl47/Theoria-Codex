@@ -2,6 +2,7 @@ package com.theoriacodex.sources.hitomi
 
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.theoriacodex.domain.diagnostics.OffMainWork
 import java.net.URLEncoder
 import java.util.Locale
 
@@ -140,6 +141,7 @@ object HitomiProtocol {
     }
 
     private fun parseJson(body: String, label: String) = try {
+        OffMainWork.note(OffMainWork.SOURCE_PARSE)
         JsonParser.parseString(body)
     } catch (error: RuntimeException) {
         throw HitomiProtocolException("Hitomi $label was malformed JSON: ${error.message}", error)

@@ -1,6 +1,6 @@
 package com.theoriacodex.sources.gelbooru
 
-import org.jsoup.Jsoup
+import com.theoriacodex.sources.common.parseHtml
 
 /** Returns null when the post page's related block is absent, versus an empty present block. */
 internal fun parseGelbooruRelatedPostIds(
@@ -10,7 +10,7 @@ internal fun parseGelbooruRelatedPostIds(
     limit: Int,
 ): List<String>? {
     if (limit <= 0) return emptyList()
-    val document = Jsoup.parse(html, "$baseUrl/")
+    val document = parseHtml(html, "$baseUrl/")
     val heading = document.getElementsContainingOwnText(RELATED_HEADING)
         .firstOrNull { element -> element.ownText().trim().startsWith(RELATED_HEADING) }
         ?: return null

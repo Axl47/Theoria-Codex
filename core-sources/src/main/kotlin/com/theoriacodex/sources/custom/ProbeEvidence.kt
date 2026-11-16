@@ -2,6 +2,7 @@ package com.theoriacodex.sources.custom
 
 import com.google.gson.JsonElement
 import com.google.gson.JsonParser
+import com.theoriacodex.domain.diagnostics.OffMainWork
 import com.theoriacodex.domain.source.ProbeFailure
 import com.theoriacodex.sources.gelbooru.looksLikeGelbooruAuthFailure
 import com.theoriacodex.sources.http.SourceHttpResponse
@@ -91,8 +92,10 @@ internal fun probeFailureOf(error: IOException): ProbeFailure = when (error) {
     else -> ProbeFailure.HTTP_ERROR
 }
 
-private fun SourceHttpResponse.jsonBody(): JsonElement? =
-    body.takeIf(String::isNotBlank)?.let { runCatching { JsonParser.parseString(it) }.getOrNull() }
+private fun SourceHttpResponse.jsonBody(): JsonElement? = body.takeIf(String::isNotBlank)?.let {
+    OffMainWork.note(OffMainWork.SOURCE_PARSE)
+    runCatching { JsonParser.parseString(it) }.getOrNull()
+}
 
 private fun SourceHttpResponse.looksLikeHtml(): Boolean {
     val start = body.trimStart().take(HTML_SNIFF_CHARS).lowercase()
