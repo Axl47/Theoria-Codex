@@ -191,12 +191,6 @@ android {
         .orNull
         ?.toIntOrNull()
     val versionNameOverride = providers.gradleProperty("theoria.versionName").orNull
-    // Whether feed preview players report playback statistics to Android's media metrics service. Their listener
-    // runs on the main thread; -Ptheoria.previewPlatformDiagnostics=false builds the measured alternative (B3 plan).
-    val previewPlatformDiagnostics = providers.gradleProperty("theoria.previewPlatformDiagnostics")
-        .orElse("true")
-        .get()
-        .toBooleanStrict()
 
     defaultConfig {
         applicationId = "com.theoriacodex"
@@ -222,7 +216,6 @@ android {
         buildConfigField("boolean", "BENCHMARK_FIXTURES_ENABLED", "false")
         buildConfigField("boolean", "DEVELOPER_COPY_ENABLED", "false")
         buildConfigField("String", "DEVELOPER_COPY_CERT_SHA256", "\"\"")
-        buildConfigField("boolean", "PREVIEW_PLATFORM_DIAGNOSTICS", previewPlatformDiagnostics.toString())
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
