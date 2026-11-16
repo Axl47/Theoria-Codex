@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ExecPlan: One background presenter for every feed</title>
+  <title>ExecPlan: One retained presenter per feed</title>
   <style>
     :root {
       color-scheme: light dark;
@@ -54,21 +54,21 @@
 </head>
 <body>
   <header>
-    <h1>ExecPlan: One background presenter for every feed</h1>
-    <p>After this plan, every list of posts the app shows (Search, For You, Creator profiles, saved and live Codexes, related shelves, and the Viewer's lists) is sorted, filtered and projected by one shared piece of code that runs on a background thread and hands the screen a finished list. Screens stop computing lists while they are being drawn, the copies of that logic in each screen are deleted, and a filter or sort behaves the same everywhere.</p>
+    <h1>ExecPlan: One retained presenter per feed</h1>
+    <p>Each feed screen decides what to show (sort, hide by filters, wait for video lengths, build the related shelf) in its own chain of steps inside the screen code. This plan would give every paged feed one owner for that decision: it computes off the main thread, survives opening and closing the Viewer, and hands the screen one consistent result. Whether to do it is decided by a measurement after audit fix A3 lands, because A3 already moves the heavy steps off the main thread.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: Proposed, in review</span>
+      <span class="pill">Status: Proposed, review round 1 merged; round 2 waits for A3</span>
       <span class="pill">Owner: Claude (orchestrator)</span>
       <span class="pill">Created: 2026-11-15</span>
-      <span class="pill">Updated: 2026-11-15</span>
+      <span class="pill">Updated: 2026-11-16</span>
       <span class="pill">Plan file: .docs/exec/shared-feed-presenter.html</span>
       <span class="pill">Audit item: B2</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Two review rounds; refresh line references once audit finding A3 has merged; then Phase 0 (pin current behaviour with tests).</div>
-      <div class="card"><strong>Main Risk</strong>Each screen's chain has small behaviours of its own (reveal order, posts kept visible until the Viewer closes, shelves versus grid). Unifying them can change one silently. Reduced by pinning current outputs in tests first and converting one screen per commit.</div>
-      <div class="card"><strong>Validation</strong>Host tests comparing presenter output with today's functions, the macrobenchmark's feed journeys and autoplay contract, slow-frame summaries before and after, and a scroll-restoration tour on the emulator.</div>
-      <div class="card"><strong>Affected Areas</strong>A new <code>feed</code> package in <code>app</code>; the feed-building code of eight screens; <code>app-logic</code> filters.</div>
+      <div class="card"><strong>Next Action</strong>Refresh file references once A3 is merged, run review round 2, then Phase 0 (measure and decide).</div>
+      <div class="card"><strong>Main Risk</strong>Making results arrive later than the screen that shows them: an empty grid for a frame when returning from the Viewer, the previous search's posts under a new query, a tap that opens the Viewer with a list and filters that disagree. Each is a named requirement with a test.</div>
+      <div class="card"><strong>Validation</strong>Behaviour pinned first with timed Compose tests on today's code; host tests for the presenter; emulator journey tests; phone numbers at the end-of-audit session.</div>
+      <div class="card"><strong>Depends On</strong>A3 merged; phases 1 and 2 of <code>main-thread-observability.html</code>.</div>
     </div>
   </header>
 
@@ -76,9 +76,9 @@
     <ul>
       <li><a href="#purpose">Purpose</a></li>
       <li><a href="#context">Context</a></li>
+      <li><a href="#requirements">Requirements</a></li>
       <li><a href="#design">Design</a></li>
       <li><a href="#phases">Phases</a></li>
-      <li><a href="#work-plan">Work Plan</a></li>
       <li><a href="#validation">Validation</a></li>
       <li><a href="#living-log">Living Log</a></li>
       <li><a href="#recovery">Recovery</a></li>
@@ -89,147 +89,128 @@
   <main>
     <section id="purpose">
       <h2>Purpose / Big Picture</h2>
-      <p>Compose builds a screen by running its functions on the <strong>main thread</strong>. Anything those functions compute delays the frame. Every feed screen in this app turns raw posts into the list it shows in several steps, and runs most of them inside the screen function itself: put the posts in the chosen order, attach known video lengths, apply the visibility filters (animated only, hide liked, hide saved, hide watched, date range, length range), and work out which related posts to show. Each step walks the whole loaded list, and each reruns whenever any input changes: a page arrives, a like is toggled, one more video length becomes known.</p>
-      <p>Audit finding A3 moved the heaviest of those steps to a background thread, one step at a time and screen by screen. That removes the frame cost but leaves three problems. The logic still exists in a slightly different form per screen, which the repository's maintainability rule treats as a defect. Each step that moves to the background adds a frame of delay, so a chain of three shows two intermediate states built from a mix of old and new inputs. And the logic cannot be tested without a screen.</p>
-      <p>When this plan is complete there is one <strong>feed presenter</strong>: a plain function from "everything this feed depends on" to "what this feed shows", run on a background thread, one result per input snapshot. A screen passes its inputs in and renders what comes out. A developer can see it working in three ways: the presenter's tests cover each screen's rules without Android; the main-thread check from the observability plan stays silent while feeds update; and slow-frame counts for feed screens do not rise when filters are toggled or pages arrive.</p>
+      <p>A feed is a scrolling list of posts: Search results, a For You result grid, a creator's posts, a Codex. Before a post is drawn the app applies, in order: the chosen sort; the visibility filters (hide viewed, hide liked, media type and others); the length filter, which needs video durations that arrive over time and reveals posts in a stable order as they become known; and the related-posts shelf.</p>
+      <p>Today each screen wires those steps together itself, in composition (the code that builds the screen, on the main thread). Audit finding A3 moves the expensive steps off the main thread but keeps one background step per stage per screen. Two things remain after A3:</p>
+      <ul>
+        <li><strong>The same wiring exists in about ten places</strong>, each slightly different, so a rule change has to be made and tested per screen.</li>
+        <li><strong>Stages finish at different times.</strong> The screen can briefly combine a new filter with an old list, and paging, scroll restoration and saved scroll position each read whichever pieces are current.</li>
+      </ul>
+      <p>The first draft claimed more than that: that every stage costs a frame of delay and that unfinished work is thrown away on each change. Review showed both claims were overstated, and that the first design would have broken returning from the Viewer. So this plan now starts with a measurement and a go or no-go, and the design below is what would be built on a go.</p>
     </section>
 
     <section id="context">
       <h2>Context And Orientation</h2>
-      <ul>
-        <li><strong>Feed</strong>: any scrolling list or shelf of posts.</li>
-        <li><strong>Visibility filters</strong>: <code>SearchVisibilityFilters</code> and <code>filterSearchResults</code> in <code>app-logic/src/main/kotlin/com/theoriacodex/app/search/SearchVisibilityFilters.kt</code>. Pure functions.</li>
-        <li><strong>Duration projection</strong>: <code>DurationFilterProjection</code> in <code>app/src/main/java/com/theoriacodex/app/media/DurationFilterProjection.kt</code>. It matches posts to video lengths that are resolved in the background, and keeps a <em>reveal order</em> so posts do not jump as lengths arrive. It is the one step that already ran off the main thread before the audit, through <code>produceState</code> with <code>withContext(Dispatchers.Default)</code>, and it keeps state between runs.</li>
-        <li><strong>Related projection</strong>: <code>buildRelatedFeedProjection</code>, used by <code>rememberRelatedFeedPresentation</code> in <code>app/.../ui/components/RelatedFeedPresentation.kt</code>, decides where related posts appear among the main results.</li>
-        <li><strong>Codex sorting</strong>: <code>sortCodexPosts</code>, <code>sortLiveCodexPosts</code> and <code>rememberCodexPostDurations</code> in <code>app/.../codex/CodexPostSorting.kt</code>. <code>ShownPosts</code> keeps the previous order on screen until a new sort has an answer.</li>
-        <li><strong>Marks</strong>: the sets of liked, saved and watched post ids, plus posts "retained" so a card does not vanish the moment it is liked while the Viewer is open.</li>
-      </ul>
-      <p>Paths below are under <code>app/src/main/java/com/theoriacodex/app/</code>. Line numbers are from commit <code>95677b65</code>, before A3; refresh them after A3 merges.</p>
+      <p>File and line references are from <code>main</code> before A3 and will be refreshed when A3 merges.</p>
       <table>
-        <thead><tr><th>Surface</th><th>Where its list is built today</th><th>Steps</th></tr></thead>
+        <thead><tr><th>Piece</th><th>Where</th><th>What matters here</th></tr></thead>
         <tbody>
-          <tr><td>Search</td><td><code>search/SearchFeed.kt</code> (:60-105)</td><td>duration, filter, related</td></tr>
-          <tr><td>For You</td><td><code>recommend/ForYouScreen.kt</code> <code>rememberForYouFeed</code> (:291-340)</td><td>duration, filter, related; home shelves are exempt from reveal order</td></tr>
-          <tr><td>Creator profile</td><td><code>creator/CreatorProfileScreen.kt</code> (:240-270)</td><td>duration, filter, related</td></tr>
-          <tr><td>Saved Codex</td><td><code>ui/routes/DestinationStateBoundaries.kt</code> (:288-297), <code>codex/CodexDetailScreen.kt</code> (:319), <code>app-logic/.../codex/CodexCollectionFilters.kt</code> (:40), <code>ui/routes/SavedCodexRoute.kt</code> (:138)</td><td>sort, duration, filter</td></tr>
-          <tr><td>Followed and saved-search Codexes</td><td><code>ui/routes/DestinationStateBoundaries.kt</code> (:543), <code>ui/routes/SavedSearchesCodexBoundary.kt</code> (:57), <code>codex/LiveCodexFeed.kt</code> (:88)</td><td>sort</td></tr>
-          <tr><td>Related shelves</td><td><code>ui/components/RelatedFeedPresentation.kt</code> (:30-70), used by Search, For You, Creator, <code>codex/CodexRelatedShelf.kt</code> (:42), <code>recents/RecentsRelated.kt</code> (:108)</td><td>duration, filter, related projection</td></tr>
-          <tr><td>Viewer</td><td><code>ui/routes/ViewerRoute.kt</code> (:152, :694)</td><td>filter</td></tr>
+          <tr><td>Retained feed state</td><td><code>ui/components/FeedRetainedState.kt</code> (:12-15)</td><td>The Viewer is its own destination, so a feed leaves composition every time a post opens. This holder keeps length history and the grid state alive across that.</td></tr>
+          <tr><td>Length filter</td><td><code>media/DurationFilterProjection.kt</code>, <code>app-logic/.../media/DurationReveal.kt</code></td><td>Stateful: reveal order depends on the sequence of snapshots it has seen (:59-74). It tells an appended page (keep showing, mark as still preparing, block paging) from a replaced list (show nothing until resolved) (:36-42, :63-65).</td></tr>
+          <tr><td>Search</td><td><code>search/SearchFeed.kt</code> (:60-146), <code>search/SearchScrollEffects.kt</code> (:41-85), <code>ui/components/FeedPageDemandEffect.kt</code> (:38)</td><td>Mixes current state with filtered output for counts, index mapping, restoration (fires once), scroll persistence and page demand (reset when filters change).</td></tr>
+          <tr><td>Codex lists</td><td><code>ui/routes/DestinationStateBoundaries.kt</code> (:286-297, :539-543), <code>codex/CodexDetailScreen.kt</code> (:148, :319-325), <code>app-logic/.../codex/CodexCollectionFilters.kt</code> (:13-55), <code>codex/CodexPostSorting.kt</code></td><td>Sorting happens in the route boundary and feeds the header, selection and Viewer list; length and filter steps happen in the screen. Codex filters add source, language and full colour. Length sorts need known lengths even when the length filter is off.</td></tr>
+          <tr><td>For You, Creator</td><td><code>recommend/ForYouScreen.kt</code> (:291-340), <code>creator/CreatorProfileScreen.kt</code> (:240-270), <code>search/SearchDurationFilterPresentation.kt</code> (:33)</td><td>Use the shared length wrapper. For You's home shelves filter at most ten posts per shelf.</td></tr>
+          <tr><td>Related shelf</td><td><code>ui/components/RelatedFeedPresentation.kt</code> (:30-70)</td><td>A second post list with its own, non-retained length projection and filter.</td></tr>
+          <tr><td>Followed Codex</td><td><code>codex/LiveCodexFeed.kt</code> (:88), <code>FollowedCodexViewModel.kt</code> (:42-49)</td><td>The controller already receives sort, usage and lengths and sorts for its related-shelf anchor; the same posts are sorted again in composition.</td></tr>
+          <tr><td>Viewer return</td><td><code>ViewerReturnTransition.kt</code> (:265-288)</td><td>The return animation needs the card laid out on the first frame; liked posts are kept visible until the Viewer closes.</td></tr>
         </tbody>
       </table>
-      <div class="callout"><strong>Depends on.</strong> Audit finding A3 (merged first; this plan replaces what it added) and phase 1 of the observability plan (<code>.docs/exec/main-thread-observability.html</code>) for <code>OffMainWork.note</code> and the slow-frame summaries.</div>
-      <div class="callout risk"><strong>Product rules that must survive.</strong> Every visibly presented animated card autoplays at once. Search restores its scroll position. A list never flashes empty or shows a loading state because a filter recomputed.</div>
+      <p><strong>Out of scope</strong>, each for a stated reason: the Viewer's own post list and related drawer (<code>ui/routes/ViewerRoute.kt</code> :152, :684-694), which accumulate posts for the session by design; Recents (<code>recents/RecentsRelated.kt</code> :108), which has no filters or lengths; Library Saved shelves (<code>ui/routes/SavedCodexRoute.kt</code> :136-141), which ignore reveal order; For You home shelves, which are small. They keep A3's helper.</p>
+    </section>
+
+    <section id="requirements">
+      <h2>Requirements the design must meet</h2>
+      <ol>
+        <li><strong>Warm return shows the full list on the first frame.</strong> The presenter, its last result and its running work live in the retained holder, keyed per feed. "No result" happens only on a feed's first visit and after the process was killed. No composition renders an empty grid on return from the Viewer.</li>
+        <li><strong>A result is shown only for the context it was computed for.</strong> Every input carries a context key (applied query, creator feed, Codex id). A held result from another context is never shown. A held result from the same context that lags behind its input counts as "preparing": it stays on screen and paging is blocked, as today for an appended page.</li>
+        <li><strong>One snapshot for everything.</strong> The posts drawn, the filters reported, tap payloads that open the Viewer, the related shelf, index mapping, counts, scroll restoration, saved scroll position and page demand all come from one result. Restoration, saving and paging act only when that result is current: same context, and computed from the very list the screen state holds now.</li>
+        <li><strong>Surface rules stay expressible without flags.</strong> Search-style and Codex-style filtering are two typed cases. Known lengths are computed once and feed both the length sort and the length filter. The related shelf's projection stays separate and non-retained.</li>
+        <li><strong>Reveal history is explicit.</strong> The presenter is a state transition, not a pure function. Skipping an intermediate snapshot may change the order among posts whose lengths arrived late; membership and the order of everything else may not change. This is an accepted, tested difference.</li>
+        <li><strong>Cheap change detection.</strong> A new input is skipped when every field is the same object as last time; nothing compares lists deeply. Inputs are sent after composition, not during it.</li>
+        <li><strong>No extra work per change.</strong> A like or a related-shelf update must not re-sort; marks are narrowed to the enabled hide rules as today.</li>
+      </ol>
     </section>
 
     <section id="design">
-      <h2>Design</h2>
-      <h3>One input, one output</h3>
-      <pre><code>data class FeedInput(
+      <h2>Design (built only on a go from Phase 0)</h2>
+      <h3>Types</h3>
+      <pre><code>// app/src/main/java/com/theoriacodex/app/feed/ (needs media duration types, so it lives in app)
+class FeedInput(
+    val context: Any,                    // applied query hash, creator feed key, or Codex id
     val posts: List&lt;Post&gt;,
-    val order: FeedOrder?,                 // Codex sort with its usage; null keeps the given order
-    val filters: SearchVisibilityFilters,
-    val marks: FeedMarks,                  // liked, saved, watched, retained ids
-    val durations: FeedDurationInput,      // resolved states, whether the length filter is on, unknown-length policy, reveal exemption
-    val related: RelatedPostsUiState?,     // null for feeds without related posts
+    val sort: CodexSort?,
+    val durationStates: Map&lt;…&gt;,
+    val length: LengthFilter?,           // range, unknown-length policy, reveal on or off
+    val filter: FeedFilter,
+    val related: RelatedPostsUiState?,
 )
-
-data class FeedPresentation(
-    val input: FeedInput,                  // the snapshot this was computed from
-    val visiblePosts: List&lt;Post&gt;,
-    val durationMetadata: DurationFilterMetadata,
-    val related: RelatedFeedProjection?,
+sealed interface FeedFilter {            // each: apply(posts, knownLengths)
+    class Search(filters, marks, policy) : FeedFilter
+    class Codex(filters, policy) : FeedFilter
+}
+class FeedPresentation(
+    val input: FeedInput,
+    val canonical: List&lt;Post&gt;,           // sorted, unfiltered: header, selection, Viewer list
+    val visible: List&lt;Post&gt;,
+    val duration: DurationFilterFrame,
+    val related: RelatedFeedPresentation?,
 )</code></pre>
-      <p><code>FeedPresenter.present(input)</code> runs the steps in a fixed order (sort, duration projection, filter, related projection) by calling the functions that exist today. This plan moves and joins logic; it does not rewrite the rules. One presenter instance belongs to one feed, because the duration step remembers its reveal order; instances for a feed's main list are kept across a visit to the Viewer the same way <code>rememberRetainedDurationProjection</code> keeps the projection today. The presenter calls <code>OffMainWork.note("feed-present")</code> first, so running it on the main thread is reported.</p>
-
-      <h3>Running it: latest input wins, nothing is cancelled half-way</h3>
-      <p>A single composable, <code>rememberFeedPresentation(presenter, input)</code>, feeds inputs into a conflated stream (only the newest waiting input is kept) and computes them one at a time on <code>Dispatchers.Default</code>. A computation in progress always finishes and publishes before the next starts. This matters because video lengths resolve in bursts: restarting the computation on every change, which is what keying a <code>produceState</code> on its inputs does, can keep the list from updating until the burst ends.</p>
-      <p>Until the first result exists the composable returns nothing and the screen shows what it shows today while its first page loads. After that the previous result stays on screen until the next is ready, which generalises what <code>ShownPosts</code> does for Codex sorting. Because each result carries the input it came from, code that needs an exact match can check it: paging asks for the next page only when the shown result reflects the current posts, and scroll restoration waits for a result computed from the restored posts.</p>
-
-      <h3>Cost of the work itself</h3>
-      <p>The presenter is the place to stop redoing work, but only where a measurement asks for it. Two changes are in scope because the audit identified them: the animated-only filter lowercases every tag of every post on each pass (<code>SearchVisibilityFilters.kt</code> :102-103), which becomes a per-post value computed once; and under a length sort the whole Codex is re-sorted each time one length resolves, which the conflated runner already reduces to one sort per burst. Incremental filtering of appended pages is not planned unless the slow-frame data shows a need.</p>
-
-      <h3>Alternatives considered</h3>
-      <table>
-        <thead><tr><th>Alternative</th><th>Why not</th></tr></thead>
-        <tbody>
-          <tr><td>Keep A3's per-step background helper and stop.</td><td>Leaves the per-screen copies, chained one-frame delays with mixed snapshots, and untestable rules.</td></tr>
-          <tr><td>Move the whole pipeline into each screen's ViewModel as a <code>StateFlow</code>.</td><td>The inputs have different owners: filter toggles are saved UI state, marks and video lengths are app-wide flows collected in composition. Each ViewModel would first have to take ownership of all of them, a larger change with no extra benefit for frames. The presenter is written so a ViewModel can host it later.</td></tr>
-          <tr><td>Do the work in the data layer (queries that filter and sort).</td><td>Most feeds are provider pages held in memory, not database rows.</td></tr>
-        </tbody>
-      </table>
+      <h3>Owner and lifetime</h3>
+      <p><code>FeedRetainedState</code> gains one <code>FeedPresenter</code> per feed key. The presenter owns the retained length projection, the last <code>FeedPresentation</code>, and a worker on <code>Dispatchers.Default</code> in the holder's scope, so it outlives the screen. The screen still gathers inputs (they come from several state holders) and submits them from a side effect; it reads the presenter's current result as state. The worker runs each accepted input to completion and keeps only the latest waiting one. Results are published only for the presenter's current context; changing context drops the held result.</p>
+      <p>Hosting compared: in composition (first draft) loses the result whenever the Viewer opens; in each screen's ViewModel would move ownership of inputs that today live in several places; in the retained holder keeps input ownership where it is and gives the lifetime needed. The retained holder is chosen.</p>
+      <h3>Per surface</h3>
+      <ul>
+        <li><strong>Search, For You result grid, Creator</strong>: build their existing feed object entirely from one result and add the "current" condition to restoration, persistence and page demand.</li>
+        <li><strong>Codex detail</strong>: the presenter is hosted in <code>CodexDetailScreen</code>, keyed by Codex id. The route boundary passes unsorted posts, the sort and usage; header, selection, source options and the Viewer list read <code>canonical</code>. "Loading" means no result for this Codex yet.</li>
+        <li><strong>Followed and saved-search Codexes</strong>: the controller keeps calling the same pure sort for its anchor; a test asserts its order equals the presenter's <code>canonical</code>.</li>
+      </ul>
+      <h3>Smaller alternative, kept on the table</h3>
+      <p>Keep A3's per-stage helper, extract the wiring that is duplicated across screens into shared functions, and add the "current" condition only where a mismatch is reproduced. This removes duplication without a new owner and is the fallback on a no-go.</p>
     </section>
 
     <section id="phases">
       <h2>Phases</h2>
       <article>
-        <h3>Phase 0: Pin today's behaviour</h3>
+        <h3>Phase 0: Measure and decide (after A3)</h3>
         <table class="status-table"><tbody>
-          <tr><td>Goal</td><td>A host test per surface that states, for representative inputs, exactly which posts are shown and in what order, computed with today's functions.</td></tr>
-          <tr><td>Cases</td><td>Each filter alone and combined; a post liked while the Viewer is open; lengths resolving in two bursts under the length filter and under a length sort; For You home shelves versus the result grid; Nhentai source mode in Search; a replaced list versus an appended page.</td></tr>
-          <tr><td>Acceptance</td><td>Tests pass against current code and fail when a rule is deliberately broken (try one).</td></tr>
+          <tr><td>Goal</td><td>Know what A3 left, and pin today's behaviour.</td></tr>
+          <tr><td>Steps</td><td>1. A surface table: for each feed, which steps it runs, in which order, with which rules (the differences listed in Context, confirmed in code). 2. Timed Compose tests (<code>createComposeRule</code>, controllable dispatcher) around the current feed functions, written as input sequences and the outputs shown after each: append a page, replace the list, change a filter mid-page, a burst of length updates, open and close the Viewer, like a post in the Viewer, restore scroll beyond the loaded range. 3. On the emulator with 60, 300 and 1,000 loaded posts: main-thread time in feed presentation per interaction, time from input change to the list updating, and whether any frame shows a mismatched or empty list, including returning from the Viewer with the length filter on (review suspects an empty frame exists there today).</td></tr>
+          <tr><td>Go</td><td>Any of: a mismatch or empty frame is reproduced that the single-snapshot design removes; feed presentation still costs more than 2 ms on the main thread per interaction at 300 posts; the user wants the consolidation for maintainability. The outcome and numbers go in the Decision Log.</td></tr>
+          <tr><td>No-go</td><td>Do the smaller alternative, or close the plan.</td></tr>
         </tbody></table>
       </article>
       <article>
-        <h3>Phase 1: Presenter, runner, and Search</h3>
+        <h3>Phase 1: Presenter and Search</h3>
         <table class="status-table"><tbody>
-          <tr><td>Goal</td><td>Search builds its feed through the presenter.</td></tr>
-          <tr><td>Acceptance</td><td>Phase 0's Search tests pass when driven through <code>FeedPresenter</code>. Runner tests cover: a burst of inputs yields the last one, an in-flight computation publishes, the previous result is held. On the emulator: scroll position is restored after leaving and reopening Search and after closing the Viewer; toggling each filter never shows an empty or loading state; the autoplay benchmark passes; <code>logcat -s TheoriaThreads</code> is silent.</td></tr>
+          <tr><td>Goal</td><td>Search runs on the presenter with every requirement met.</td></tr>
+          <tr><td>Acceptance</td><td>Phase 0's Search sequences pass unchanged, except the documented late-arrival order. New tests: no empty-grid composition on warm return; a tap during a pending computation opens the Viewer with a list and filters from the same result; clearing a restrictive filter does not request a page; restoration is not acknowledged against a result that is not current; a context change never shows the previous context's posts. Presenter host tests cover two schedules reaching the same final input. The observability marker for the presenter is asserted in a journey test: at least one run, none on the main thread.</td></tr>
         </tbody></table>
       </article>
       <article>
-        <h3>Phase 2: For You and Creator</h3>
-        <table class="status-table"><tbody>
-          <tr><td>Acceptance</td><td>Their Phase 0 tests pass through the presenter; the five-feed benchmark journey passes; home shelves keep their order.</td></tr>
-        </tbody></table>
+        <h3>Phase 2: For You result grid and Creator</h3>
+        <table class="status-table"><tbody><tr><td>Acceptance</td><td>Their Phase 0 sequences pass; Creator tab changes follow the context rule.</td></tr></tbody></table>
       </article>
       <article>
-        <h3>Phase 3: Codexes</h3>
-        <table class="status-table"><tbody>
-          <tr><td>Goal</td><td>Saved, Followed and saved-search Codexes sort and filter through the presenter; <code>ShownPosts</code> is deleted because the runner provides its behaviour.</td></tr>
-          <tr><td>Acceptance</td><td>Changing the sort keeps the previous order until the new one appears. Under a length sort with lengths still resolving, posts settle without the list resetting its scroll position.</td></tr>
-        </tbody></table>
+        <h3>Phase 3: Codex lists</h3>
+        <table class="status-table"><tbody><tr><td>Acceptance</td><td>Codex sequences pass, including a sort change keeping the old order on screen until the new one is ready; the per-screen hold that exists today is removed; the Followed anchor test passes.</td></tr></tbody></table>
       </article>
       <article>
-        <h3>Phase 4: Related shelves and the Viewer's lists</h3>
-        <table class="status-table"><tbody>
-          <tr><td>Acceptance</td><td>Related shelves in Search, For You, Creator, Codex and Recents show the same posts as before; the Viewer's list after a filter change matches the feed it was opened from.</td></tr>
-        </tbody></table>
+        <h3>Phase 4: Remove replaced wiring</h3>
+        <table class="status-table"><tbody><tr><td>Acceptance</td><td>A3's helper is used only by the out-of-scope surfaces listed in Context; no feed screen calls the stage functions directly.</td></tr></tbody></table>
       </article>
-      <article>
-        <h3>Phase 5: Delete what is replaced, then measure</h3>
-        <table class="status-table"><tbody>
-          <tr><td>Goal</td><td>No screen calls <code>filterSearchResults</code>, <code>sortCodexPosts</code>, <code>sortLiveCodexPosts</code>, <code>buildRelatedFeedProjection</code> or <code>rememberDurationFilterMetadata</code> directly; the helper A3 introduced has no callers and is removed.</td></tr>
-          <tr><td>Acceptance</td><td><code>grep</code> finds those calls only inside the <code>feed</code> package and tests. Slow-frame summaries for Search, For You and a large Codex are no worse than before the plan, compared on the same emulator boot.</td></tr>
-        </tbody></table>
-      </article>
-    </section>
-
-    <section id="work-plan">
-      <h2>Work Plan</h2>
-      <ol>
-        <li>Add <code>app/src/test/java/com/theoriacodex/app/feed/FeedBehaviourTest.kt</code> with the Phase 0 cases, written against a small function type <code>(FeedInput) -&gt; FeedPresentation</code> so the same cases run first against an adapter over today's functions and later against the presenter.</li>
-        <li>Add <code>app/src/main/java/com/theoriacodex/app/feed/FeedPresenter.kt</code> (input and output types, the presenter) and <code>feed/FeedPresentationRunner.kt</code> (<code>rememberFeedPresentation</code> and the retained-presenter helper). The runner's stream logic is a plain class so it can be tested with a test dispatcher.</li>
-        <li>Move the per-post "is animated by tag" computation out of the filter loop in <code>SearchVisibilityFilters.kt</code>.</li>
-        <li>Convert Search: <code>search/SearchFeed.kt</code> builds a <code>FeedInput</code> and maps the result into the existing <code>SearchFeed</code> value, so the rest of the screen is untouched. Adjust <code>rememberSearchScrollAndPaging</code> to gate on <code>presentation.input.posts</code>.</li>
-        <li>Convert the remaining surfaces in the order of the phases, one commit each: <code>recommend/ForYouScreen.kt</code>; <code>creator/CreatorProfileScreen.kt</code>; <code>ui/routes/DestinationStateBoundaries.kt</code> with <code>codex/CodexDetailScreen.kt</code>, <code>ui/routes/SavedCodexRoute.kt</code> and <code>CodexCollectionFilters.kt</code>; <code>ui/routes/SavedSearchesCodexBoundary.kt</code> and <code>codex/LiveCodexFeed.kt</code>; <code>ui/components/RelatedFeedPresentation.kt</code> and its five callers; <code>ui/routes/ViewerRoute.kt</code>.</li>
-        <li>Delete <code>ShownPosts</code>, the per-screen <code>remember</code> chains, the A3 helper, and <code>rememberDurationFilterMetadata</code>'s own <code>produceState</code> once nothing calls them. Keep <code>DurationFilterProjection</code> itself; the presenter owns an instance.</li>
-      </ol>
-      <p>Not touched: how posts are loaded and paged, the duration resolver, the filter controls and their saved state, and <code>settings/StatsSharePreview.kt</code>, which is not a feed and keeps the fix A3 gave it.</p>
-      <p>One pull request per phase from Phase 1 on. Phase 0's tests ship with Phase 1.</p>
+      <p>Each phase is one pull request, verified on the emulator with the journey tests and, because feeds drive autoplay, the existing autoplay benchmark scenarios. Navigation and playback are touched, so each also runs <code>gh workflow run device-validation.yml --ref &lt;branch&gt;</code>.</p>
     </section>
 
     <section id="validation">
       <h2>Validation And Acceptance</h2>
-      <p>Commands run from the repository root. Robolectric tests need Java 21 or newer (see <code>AGENTS.md</code>). Emulator work uses only the <code>theoria-search-test</code> AVD (<code>emulator-5554</code>) with the acceptance or benchmark packages, verified first with <code>scripts/verify_device_apk.py</code>; use accessibility text and logs, not screenshots, wherever provider media could show.</p>
       <table>
         <thead><tr><th>Check</th><th>Command or action</th><th>Expected result</th></tr></thead>
         <tbody>
-          <tr><td>Behaviour tests</td><td><code>./gradlew :app:testDebugUnitTest --tests '*FeedBehaviourTest*' --tests '*FeedPresentationRunnerTest*' --offline</code></td><td>Pass for every converted surface.</td></tr>
-          <tr><td>All host tests and pre-PR check</td><td><code>./gradlew :app-logic:test :app:testDebugUnitTest --offline</code>, then <code>scripts/check.sh --record</code></td><td>Pass.</td></tr>
-          <tr><td>Autoplay and journeys</td><td><code>searchConcurrentAutoplayScroll</code>, <code>searchDurationEnrichmentConcurrentAutoplayScroll</code> and <code>mixedMediaFiveFeedJourney</code> on the emulator.</td><td>Autoplay contract holds; frame timing no worse.</td></tr>
-          <tr><td>No flash, no jump</td><td>On fixture data: toggle each filter in Search, For You and a Codex; change a Codex sort; open and close the Viewer; leave and reopen Search.</td><td>The list is never empty or loading in between, and the first visible post after returning is the one that was visible before (read from accessibility text).</td></tr>
-          <tr><td>Main-thread check</td><td><code>adb -s emulator-5554 logcat -s TheoriaThreads</code> during the above.</td><td>No <code>feed-present</code> line.</td></tr>
-          <tr><td>Slow frames</td><td>Diagnostics <code>frames</code> lines for Search, For You and Codex before and after, same boot, five visits each.</td><td>Slow-frame share not higher after.</td></tr>
+          <tr><td>Host tests</td><td><code>./gradlew :app-logic:test :app:testDebugUnitTest --offline</code> (Java 21 or newer)</td><td>Pass, including Phase 0's sequences and the presenter tests.</td></tr>
+          <tr><td>Pre-PR check</td><td><code>scripts/check.sh --record</code></td><td>Passes.</td></tr>
+          <tr><td>Journeys</td><td>Existing journey tests plus the presenter marker assertion, on the emulator per <code>AGENTS.md</code></td><td>Pass.</td></tr>
+          <tr><td>Autoplay</td><td>Existing macrobenchmark autoplay scenarios on the emulator's benchmark package</td><td>Contract holds; cards are not rebuilt on Viewer return.</td></tr>
+          <tr><td>Emulator timings</td><td>Phase 0's measurement repeated after each phase</td><td>Not worse; recorded as approximate.</td></tr>
+          <tr><td>Phone</td><td>End-of-audit session, three runs, retained evidence</td><td>Performance acceptance; needs the user.</td></tr>
         </tbody>
       </table>
     </section>
@@ -238,25 +219,29 @@ data class FeedPresentation(
       <h2>Living Log</h2>
       <h3>Progress</h3>
       <ul>
-        <li>[x] 2026-11-15 - Plan drafted from the threading audit (B2), against the code before A3.</li>
-        <li>[ ] Review round 1 (Opus high, GPT-6.1 Sol adversarial) merged.</li>
-        <li>[ ] Review round 2 merged; references refreshed after A3.</li>
-        <li>[ ] Phase 0 and Phase 1 (Search).</li>
-        <li>[ ] Phase 2 (For You, Creator).</li>
-        <li>[ ] Phase 3 (Codexes).</li>
-        <li>[ ] Phase 4 (related shelves, Viewer).</li>
-        <li>[ ] Phase 5 (deletion and measurement).</li>
+        <li>[x] 2026-11-15 - Plan drafted from the threading audit (B2).</li>
+        <li>[x] 2026-11-16 - Review round 1 (Opus high, GPT-6.1 Sol adversarial) merged.</li>
+        <li>[ ] References refreshed after A3 merges.</li>
+        <li>[ ] Review round 2 merged.</li>
+        <li>[ ] Phase 0 decision recorded.</li>
       </ul>
       <h3>Surprises And Discoveries</h3>
       <ul>
-        <li>Observation: keying a background computation on its inputs restarts it on every change and discards the unfinished result. Evidence: <code>produceState(null, posts, states, active)</code> in <code>media/DurationFilterProjection.kt</code>. Consequence: the runner is a conflated stream that lets each computation finish.</li>
-        <li>Observation: there are eight call sites of the filter and five of the related presentation, more than the five screens the audit named. Evidence: the surface table above. Consequence: the Viewer route and Recents are in scope.</li>
+        <li>Observation: feeds leave composition whenever the Viewer opens, so anything not in the retained holder starts empty on return. Evidence: <code>FeedRetainedState.kt</code> :12-15.</li>
+        <li>Observation: the length filter already distinguishes an appended page from a replaced list. Evidence: <code>DurationFilterProjection.kt</code> :36-42.</li>
+        <li>Observation: a cancelled background step can still finish and advance reveal history; what is lost is delivery of its result, not the work. The first draft described this wrongly. Evidence: <code>DurationFilterProjection.kt</code> :19, :60.</li>
+        <li>Observation: reveal order depends on which snapshots were processed. Evidence: <code>DurationReveal.kt</code> :59-74.</li>
+        <li>Observation: Search treats an empty filtered list as "no results" even when posts are loaded. Evidence: <code>search/SearchResultsBody.kt</code> :73.</li>
+        <li>Observation: the Viewer accumulates posts for its session and does not mirror the feed. Evidence: <code>ViewerRoute.kt</code> :551, :684.</li>
       </ul>
       <h3>Decision Log</h3>
       <ul>
-        <li>Decision: The presenter composes the existing rule functions and does not rewrite them. Rationale: the goal is one place and one thread, not new behaviour. Date/Author: 2026-11-15 / Claude.</li>
-        <li>Decision: Host the presenter in composition, not in ViewModels. Rationale: its inputs are owned in several places today; see Alternatives. Date/Author: 2026-11-15 / Claude.</li>
-        <li>Decision: Results carry their input. Rationale: paging and scroll restoration need to know whether the shown list reflects the current posts. Date/Author: 2026-11-15 / Claude.</li>
+        <li>Decision: Gate the plan on a measurement after A3. Rationale: A3 addresses the main-thread cost; what remains is duplication and coherence, which may or may not justify a new owner. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: Host the presenter in the retained holder. Rationale: the only option that returns a full list on the first frame after the Viewer without moving input ownership. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: Results carry a context key and are shown only within it. Rationale: holding the previous result is right for an appended page or a sort change and wrong for a new query. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: Two typed filter cases, not one filter type with options. Rationale: Codex and Search rules differ in kind. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: Viewer, Recents, Library Saved shelves and For You home shelves are out. Rationale: different rules or no work to move. Date/Author: 2026-11-16 / Claude.</li>
+        <li>Decision: Accept a different order among late-arriving lengths when snapshots are skipped. Rationale: preserving it exactly would require processing every snapshot, which is the cost being removed. Date/Author: 2026-11-16 / Claude.</li>
       </ul>
       <h3>Outcomes And Retrospective</h3>
       <p>Not started.</p>
@@ -264,33 +249,14 @@ data class FeedPresentation(
 
     <section id="recovery">
       <h2>Idempotence And Recovery</h2>
-      <p>No stored data or settings change. Each surface converts in its own commit and can be reverted alone; converted and unconverted screens coexist because both call the same rule functions. Nothing is deleted until Phase 5, so until then a revert restores the previous chain exactly. If a converted screen shows a behaviour difference that the Phase 0 tests did not cover, add the missing case to the tests first, then fix or revert.</p>
+      <p>No stored data changes. Each surface moves in its own pull request and can be reverted alone; until Phase 4 the old wiring still exists, so a revert restores it exactly. Phase 0's tests stay after a no-go: they document current behaviour either way.</p>
     </section>
 
     <section id="appendix">
       <h2>Appendix: Evidence And Notes</h2>
       <details>
-        <summary>The Search chain today (before A3)</summary>
-        <pre><code>// search/SearchFeed.kt
-val durationMetadata = rememberDurationFilterMetadata(displayResults, durationStates, animatedDurationFilterActive, retainKey = "search")
-val presentedResults = durationMetadata.presentedPosts ?: displayResults
-val marks = visibilityFilters.markInputs(likedPostIds, savedPostIds, watchedPostIds, retainedLikedPostIds)
-val visibleResults = remember(presentedResults, visibilityFilters, marks, unknownDurationPolicy, acquiredDurations) {
-    filterSearchResults(presentedResults, visibilityFilters, marks.liked, marks.saved, marks.watched,
-        unknownDurationPolicy, acquiredDurations, marks.retained)
-}
-val related = rememberRelatedFeedPresentation(canonicalPosts = displayResults, visibleCanonicalPosts = visibleResults, ...)</code></pre>
-      </details>
-      <details>
-        <summary>The Codex chain today (before A3)</summary>
-        <pre><code>// ui/routes/DestinationStateBoundaries.kt
-val durations = rememberCodexPostDurations(storedPosts, sortMode, durationStates)
-val sortedPosts = remember(storedPosts, sortMode, usage, durations) {
-    storedPosts?.let { posts -&gt; usage?.let { sortCodexPosts(posts, sortMode, it, durations) } }
-}
-// Changing the sort keeps showing the previous order until the new one answers.
-val shownPosts = remember(codexId) { ShownPosts() }
-sortedPosts?.let { shownPosts.latest = it }</code></pre>
+        <summary>Review round 1: what changed</summary>
+        <p>The plan gained a go or no-go after A3 and a smaller fallback. The presenter moved from composition into the retained holder, keeps its last result, and publishes per context. Paging, restoration and persistence require a current result. The input type gained a context key, a sort, a typed filter and a length setting; the output gained the canonical list. The Viewer, Recents, Library Saved shelves and For You home shelves left scope. Codex hosting moved into the detail screen. Behaviour is pinned with timed Compose tests instead of function comparisons. The claims about one frame per stage and discarded work were withdrawn.</p>
       </details>
     </section>
   </main>
