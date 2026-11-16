@@ -57,7 +57,7 @@
     <h1>ExecPlan: Measure and reduce video player work on the main thread</h1>
     <p>Feed video previews are driven from the main thread, the thread that draws the screen. This plan first makes that cost measurable, then, only if a phone measurement shows the cost matters, tries the cheapest change that removes the measured part. Moving the players to their own thread is the last and most expensive option, not the starting point.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: Phase 2 capturing on the phone</span>
+      <span class="pill">Status: Phase 2 blocked on device availability</span>
       <span class="pill">Owner: Claude (orchestrator)</span>
       <span class="pill">Created: 2026-11-15</span>
       <span class="pill">Updated: 2026-11-16</span>
@@ -65,7 +65,7 @@
       <span class="pill">Audit item: B3</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Finish the phone captures, then apply the Phase 2 rule once the user has confirmed the thresholds.</div>
+      <div class="card"><strong>Next Action</strong>Run the phone batch in a window when the emulator is not connected (blocked, see Surprises), then apply the Phase 2 rule once the user has confirmed the thresholds.</div>
       <div class="card"><strong>Main Risk</strong>Spending a large rewrite on a cost that is not what makes frames late, or trading smoother scrolling for cards that stay blank. Reduced by a numeric rule on the phone before any redesign, with an "inconclusive" outcome that authorises nothing, and by measuring time to first frame in every phase.</div>
       <div class="card"><strong>Needs The User</strong>Phase 2 and every later acceptance run on the physical phone, with the isolated benchmark package. The thresholds below are proposals until the user confirms them.</div>
       <div class="card"><strong>Must Hold</strong>Every visible video card autoplays at the same time.</div>
@@ -331,6 +331,7 @@
         <li>Observation: callstack sampling recorded no stacks for the fixture process when that process started after the capture. traced_perf matches <code>target_cmdline</code> when it first samples a process, and a freshly forked app may still carry the zygote's name. With the fixture started first and a 2048-page ring buffer, every main-thread sample had a stack and none were lost (before: 27k lost records). Evidence: the two sampled captures in the appendix.</li>
         <li>Observation: CPU-clock sampling cannot see blocked time, so the Phase 2 rule as first written would have been inconclusive by construction. On the emulator, 605 of SurfaceDetach's 611 ms, 84 of PlayerCreate's 114 ms and 76 of PlayerRelease's 80 ms were blocked. Inside late frames, the sampled run found 30 samples in sections against 975.5 ms of section self time, and the old measure read 83.6% of Media3 samples outside sections. Evidence: the sampled trace's <code>thread_state</code> and the appendix.</li>
         <li>Observation: <code>PlayerView.setPlayer</code> rejects a player whose application looper is not the main looper, and calls <code>updateForCurrentTrackSelections</code> itself. A player thread therefore cannot keep <code>PlayerView</code>, and part of that view update already sits inside the surface-attach section. Evidence: Media3 1.11.1 <code>PlayerView</code> bytecode.</li>
+        <li>Observation: the phone batch cannot run while the emulator is connected. <code>verify_performance_device.sh</code> requires that <code>adb devices</code> lists exactly one device, equal to <code>ANDROID_SERIAL</code>, before the install and again before each of the three captures, so the emulator has to stay disconnected for the whole batch, not just its start. At preflight only the phone was listed; when the phone lock was taken (2026-11-16 ~05:00Z) another audit thread had just booted the shared emulator and held its lock. The batch was not started, no phone command beyond the read-only pre-batch checks ran, and the phone lock was released at once. The check was left as it is. Pre-batch reading: battery 50%, 30.6 °C, USB powered, thermal status 0. Evidence: <code>scripts/device_validation_common.sh</code> <code>selected_device</code>; <code>adb devices</code> listed <code>R5CWC0SXR3A</code> and <code>emulator-5554</code>.</li>
         <li>Observation: R8 merges classes and inlines methods, so one obfuscated frame can stand for several original methods. Evidence: the mapping's line ranges for <code>sb2.u</code> list <code>FileReadScope$readData$2</code> and <code>TheoriaApplication$onCreate$1</code>.</li>
       </ul>
       <h3>Decision Log</h3>
