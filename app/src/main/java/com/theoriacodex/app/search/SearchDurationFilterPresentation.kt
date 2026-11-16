@@ -3,6 +3,7 @@ package com.theoriacodex.app.search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import com.theoriacodex.app.media.AnimatedDurationRange
+import com.theoriacodex.app.media.DurationFilterMetadata
 import com.theoriacodex.app.media.DurationFilterReadiness
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
@@ -18,6 +19,7 @@ internal data class SearchDurationFilterPresentation(
     val readiness: DurationFilterReadiness,
     val presentedPosts: List<Post>?,
     val blocksPaging: Boolean,
+    val metadata: DurationFilterMetadata,
 )
 
 @Composable
@@ -40,5 +42,6 @@ internal fun rememberSearchDurationFilterPresentation(
         readiness = readiness,
         presentedPosts = metadata.presentedPosts,
         blocksPaging = metadata.blocksPaging,
+        metadata = metadata,
     )
 }

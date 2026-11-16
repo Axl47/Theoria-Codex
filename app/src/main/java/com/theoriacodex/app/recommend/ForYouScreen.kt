@@ -317,7 +317,7 @@ private fun rememberForYouFeed(
     // Home sections are shelves, so only the result grid takes the reveal order.
     val presentedResults = durationFilter.presentedPosts.takeUnless { state.home.visible } ?: state.results
     val visibleResults = rememberFilteredFeed(
-        presentedResults, visibilityFilters, durationFilter.unknownPolicy, durationFilter.knownDurationMsByPostId,
+        presentedResults, visibilityFilters, durationFilter.unknownPolicy, durationFilter.metadata,
         retainKey = "for-you",
     )
     val related = rememberRelatedFeedPresentation(
