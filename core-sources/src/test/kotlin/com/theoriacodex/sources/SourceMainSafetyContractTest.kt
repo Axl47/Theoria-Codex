@@ -68,7 +68,7 @@ class SourceMainSafetyContractTest {
 
     @Test
     fun `every registry adapter searches off the calling thread`() {
-        for (fixture in providerPageFixtures().filterNot { it.source in NOT_YET_CONVERTED }) {
+        for (fixture in providerPageFixtures()) {
             val http = RecordingHttpClient(FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(200, fixture.body) })
             val registry = RealAdapterRegistry(RecordingCredentials(providerPageCredentials()), http, setOf(fixture.source))
             val adapter = requireNotNull(registry.adapterFor(fixture.source))
@@ -82,7 +82,7 @@ class SourceMainSafetyContractTest {
             RealAdapterRegistry(FakeCredentialsProvider(), RecordingHttpClient(hitomiHttp), setOf(SourceKey.HITOMI))
                 .adapterFor(SourceKey.HITOMI),
         )
-        if (SourceKey.HITOMI !in NOT_YET_CONVERTED) assertOffCaller("hitomi", expected = 2) { hitomi.search(providerPageQuery(SourceKey.HITOMI), null).items.size }
+        assertOffCaller("hitomi", expected = 2) { hitomi.search(providerPageQuery(SourceKey.HITOMI), null).items.size }
     }
 
     @Test
@@ -194,10 +194,6 @@ class SourceMainSafetyContractTest {
     }
 
     private companion object {
-        /** Sources Phase 1 has not converted yet. Empty, and removed, once the whole boundary is wrapped. */
-        val NOT_YET_CONVERTED = setOf(
-            SourceKey.RULE34VIDEO, SourceKey.RULE34GEN, SourceKey.RULE34PAHEAL,
-        )
         const val HTTP = "http"
         const val CREDENTIALS = "credentials"
         val TOKEN_RESPONSE = SourceHttpResponse(200, """{"access_token":"new-access","refresh_token":"new-refresh","expires_in":3600}""")

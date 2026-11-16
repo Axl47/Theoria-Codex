@@ -91,8 +91,14 @@ class Rule34GroupedSearchMetadataTest {
     private fun orchestrator(adapters: Map<SourceKey, SourceAdapter> = emptyMap()) =
         UnifiedSearchOrchestrator(adapters, providerContext = EmptyCoroutineContext)
 
+    // The orchestrator's deadlines run on the virtual clock and hydration runs two posts at once, so the
+    // adapter stays on the test dispatcher too.
     private fun adapter(http: SourceHttpClient, gen: Boolean): AbstractRule34KvsVideoSourceAdapter =
-        if (gen) Rule34GenSourceAdapter(http) else Rule34VideoSourceAdapter(http)
+        if (gen) {
+            Rule34GenSourceAdapter(http, callContext = EmptyCoroutineContext)
+        } else {
+            Rule34VideoSourceAdapter(http, callContext = EmptyCoroutineContext)
+        }
 
     private fun plainQuery() = Query(
         mode = QueryMode.Unified, includeTerms = emptyList(), excludeTerms = emptyList(),

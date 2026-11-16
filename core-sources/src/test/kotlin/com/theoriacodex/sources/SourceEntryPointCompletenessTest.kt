@@ -43,8 +43,7 @@ class SourceEntryPointCompletenessTest {
             assertTrue("$name not found", boundary.any { it.kind == Kind.TOP_LEVEL && it.name == name })
         }
 
-        val violations = boundary.filterNot { function -> NOT_YET_CONVERTED.any(function.file.path::endsWith) }
-            .mapNotNull { function -> function.violation()?.let { "${function.where}: $it" } }
+        val violations = boundary.mapNotNull { function -> function.violation()?.let { "${function.where}: $it" } }
         assertEquals("boundary functions not written as `= sourceCall {`", emptyList<String>(), violations)
     }
 
@@ -147,16 +146,20 @@ class SourceEntryPointCompletenessTest {
         /** Top-level functions app code calls directly with a provider response to handle. */
         val BOUNDARY_FUNCTIONS = emptySet<String>()
 
-        /** Files Phase 1 has not converted yet. Empty, and removed, once the whole boundary is wrapped. */
-        val NOT_YET_CONVERTED = listOf(
-            "rule34/AbstractRule34KvsVideoSourceAdapter.kt",
-            "rule34/Rule34PahealSourceAdapter.kt",
-        )
+        /** A constructor parameter that defaults to the background dispatcher; only tests pass another. */
+        const val CALL_CONTEXT_DECLARATION = "callContext: CoroutineContext = Dispatchers.Default,"
 
-        const val CALL_CONTEXT_DECLARATION = "private val callContext: CoroutineContext = Dispatchers.Default,"
-        /** The only code callContext may appear in, with the offset of the name in each. */
-        val ALLOWED_CALL_CONTEXT_USES = listOf(CALL_CONTEXT_DECLARATION to 12, "sourceCall(callContext) {" to 11)
-        val DISPATCHER_WORDS = Regex("""Dispatchers|CoroutineContext|coroutineContext|CoroutineDispatcher|callContext""")
+        /**
+         * The only code callContext may appear in, with the offset of the name in each: its declaration, the
+         * wrapper, and a subclass handing its own parameter to its base class.
+         */
+        val ALLOWED_CALL_CONTEXT_USES = listOf(
+            CALL_CONTEXT_DECLARATION to 0,
+            "sourceCall(callContext) {" to 11,
+            "callContext = callContext," to 0,
+            "callContext = callContext," to 14,
+        )
+        val DISPATCHER_WORDS = Regex("""Dispatchers|CoroutineContext|coroutineContext|CoroutineDispatcher""")
 
         val FUNCTION = Regex(
             """(?m)^([ \t]*)(?:@[\w.]+(?:\([^)\n]*\))?\s+)*((?:(?:public|internal|private|protected|override|suspend|final|open|inline|operator)\s+)*)""" +

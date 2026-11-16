@@ -6,13 +6,17 @@ import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.parseHtml
 import com.theoriacodex.sources.http.SourceHttpClient
 import org.jsoup.nodes.Document
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.Dispatchers
 
 class Rule34GenSourceAdapter(
     httpClient: SourceHttpClient,
     gson: Gson = Gson(),
+    callContext: CoroutineContext = Dispatchers.Default,
 ) : AbstractRule34KvsVideoSourceAdapter(
     httpClient = httpClient,
     gson = gson,
+    callContext = callContext,
 ) {
     override val sourceKey: SourceKey = SourceKey.RULE34GEN
     override val baseUrl: String = RULE34GEN_BASE_URL

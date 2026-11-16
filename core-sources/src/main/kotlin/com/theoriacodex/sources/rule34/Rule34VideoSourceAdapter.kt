@@ -4,13 +4,17 @@ import com.google.gson.Gson
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.http.SourceHttpClient
 import org.jsoup.nodes.Document
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.Dispatchers
 
 class Rule34VideoSourceAdapter(
     httpClient: SourceHttpClient,
     gson: Gson = Gson(),
+    callContext: CoroutineContext = Dispatchers.Default,
 ) : AbstractRule34KvsVideoSourceAdapter(
     httpClient = httpClient,
     gson = gson,
+    callContext = callContext,
 ) {
     override val sourceKey: SourceKey = SourceKey.RULE34VIDEO
     override val baseUrl: String = RULE34VIDEO_BASE_URL
