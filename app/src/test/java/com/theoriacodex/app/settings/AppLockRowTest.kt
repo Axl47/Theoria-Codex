@@ -4,15 +4,17 @@ import android.app.Application
 import android.app.KeyguardManager
 import android.content.Context
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.app.applock.AppLockViewModel
-import com.theoriacodex.app.applock.appLockViewModel
+import kotlinx.coroutines.Dispatchers
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -26,7 +28,7 @@ import org.robolectric.shadows.ShadowToast
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class AppLockRowTest {
-    @get:Rule val composeRule = createComposeRule()
+    @get:Rule val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     private val keyguard =
         shadowOf(ApplicationProvider.getApplicationContext<Context>().getSystemService(KeyguardManager::class.java))
@@ -42,7 +44,7 @@ class AppLockRowTest {
 
         composeRule.runOnIdle {
             assertEquals("Set a screen lock on this device first", ShadowToast.getTextOfLatestToast())
-            assertFalse(lock.enabled)
+            assertEquals(false, lock.enabled)
         }
     }
 
@@ -53,7 +55,7 @@ class AppLockRowTest {
 
         composeRule.onNodeWithText("App lock").performClick()
 
-        composeRule.runOnIdle { assertFalse(lock.enabled) }
+        composeRule.runOnIdle { assertEquals(false, lock.enabled) }
     }
 
     @Test
@@ -64,15 +66,16 @@ class AppLockRowTest {
 
         composeRule.onNodeWithText("App lock").performClick()
 
-        composeRule.runOnIdle { assertTrue(lock.enabled) }
+        composeRule.runOnIdle { assertEquals(true, lock.enabled) }
     }
 
+    /** The row's lock, reading its stored choice inline so each test starts from a known choice. */
     private fun showRow(): AppLockViewModel {
-        lateinit var lock: AppLockViewModel
-        composeRule.setContent {
-            lock = appLockViewModel()
-            MaterialTheme { AppLockRow() }
+        val factory = viewModelFactory {
+            initializer { AppLockViewModel(ApplicationProvider.getApplicationContext(), Dispatchers.Unconfined) }
         }
+        val lock = ViewModelProvider(composeRule.activity, factory)[AppLockViewModel::class.java]
+        composeRule.setContent { MaterialTheme { AppLockRow() } }
         return lock
     }
 }
