@@ -10,6 +10,7 @@ import com.theoriacodex.app.media.isAnimatedPost
 import com.theoriacodex.app.media.knownMediaDurations
 import com.theoriacodex.app.search.postMediaCount
 import com.theoriacodex.app.statistics.statisticsPostKey
+import com.theoriacodex.app.ui.components.FeedTraceSections
 import com.theoriacodex.app.ui.components.rememberComputedOffMain
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.StatisticsRepository
@@ -108,7 +109,10 @@ internal fun rememberCodexPostDurations(
     states: Map<MediaDurationKey, MediaDurationState>,
 ): Map<PostId, Long> {
     if (!sort.usesDuration || posts == null) return emptyMap()
-    return rememberComputedOffMain(posts, states, extend = { known, appended -> known + knownMediaDurations(appended, states) }) {
+    return rememberComputedOffMain(
+        posts, states, section = FeedTraceSections.KNOWN_DURATIONS,
+        extend = { known, appended -> known + knownMediaDurations(appended, states) },
+    ) {
         knownMediaDurations(posts, states)
     }
 }

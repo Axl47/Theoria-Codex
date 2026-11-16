@@ -4,10 +4,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import com.theoriacodex.app.ui.components.LocalFeedComputationContext
 import com.theoriacodex.app.ui.components.rememberRetainedDurationProjection
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /** One key preparation per result snapshot; no fingerprint work on duration publication. */
@@ -57,8 +57,9 @@ internal fun rememberDurationFilterMetadata(
     } else {
         remember { DurationFilterProjection() }
     }
+    val background = LocalFeedComputationContext.current
     val frame by produceState<DurationFilterFrame?>(null, posts, states, active) {
-        value = withContext(Dispatchers.Default) { DurationFilterFrame(posts, active, projection.project(posts, states, active)) }
+        value = withContext(background) { DurationFilterFrame(posts, active, projection.project(posts, states, active)) }
     }
     if (!active) return DurationFilterMetadata.EMPTY
     val current = frame?.takeIf { it.active && it.covers(posts) } ?: return DurationFilterMetadata.RESOLVING

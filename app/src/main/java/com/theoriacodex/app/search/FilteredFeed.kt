@@ -1,6 +1,7 @@
 package com.theoriacodex.app.search
 
 import androidx.compose.runtime.Composable
+import com.theoriacodex.app.ui.components.FeedTraceSections
 import com.theoriacodex.app.ui.components.rememberComputedOffMain
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -24,7 +25,7 @@ internal fun rememberFilteredFeed(
         )
     }
     return rememberComputedOffMain(
-        posts, filters, marks, unknownDurationPolicy, knownDurations,
+        posts, filters, marks, unknownDurationPolicy, knownDurations, section = FeedTraceSections.FILTER,
         extend = { previous, appended -> previous + filter(appended) },
     ) { filter(posts) }
 }
