@@ -237,7 +237,8 @@ ANDROID_SERIAL=YOUR_PHONE_SERIAL scripts/verify_performance_device.sh compare \
   /path/to/new-baseline-evidence/baseline.json /path/to/new-candidate-evidence
 ```
 
-Calibration runs the full workload three times on the same APK/device. Comparison requires a new
+Every device command in it names `ANDROID_SERIAL`, so other devices, such as a shared emulator, may stay
+connected; the serial must still be a physical device. Calibration runs the full workload three times on the same APK/device. Comparison requires a new
 complete run with the same fixture code/assets, runner, device, OS and compilation mode. It fails on
 regressed startup, frame-tail, peak-memory, player-churn or transport metrics, and rejects incomplete
 or incompatible evidence. Limits derive from observed baseline dispersion, not a fixed percentage.
