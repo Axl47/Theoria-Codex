@@ -9,6 +9,7 @@ import com.theoriacodex.domain.source.SiteHeaders
 import com.theoriacodex.domain.source.SiteProbeResult
 import com.theoriacodex.domain.source.SiteProfile
 import com.theoriacodex.sources.common.parseHtml
+import com.theoriacodex.sources.common.sourceCall
 import com.theoriacodex.sources.danbooru.DanbooruSite
 import com.theoriacodex.sources.gelbooru.GelbooruSite
 import com.theoriacodex.sources.http.SourceHttpClient
@@ -42,14 +43,14 @@ class SiteProber(
         credentials: SiteCredentials? = null,
         headers: SiteHeaders = SiteHeaders(),
         knownFamily: ProtocolFamily? = null,
-    ): SiteProbeResult {
+    ): SiteProbeResult = sourceCall {
         val address = when (val parsed = SiteAddress.parse(input)) {
-            is SiteAddressParse.Invalid -> return SiteProbeResult.InvalidAddress(parsed.error)
+            is SiteAddressParse.Invalid -> return@sourceCall SiteProbeResult.InvalidAddress(parsed.error)
             is SiteAddressParse.Valid -> parsed.address
         }
-        builtInHosts[address.host.removePrefix("www.")]?.let { return SiteProbeResult.AlreadyBuiltIn(it) }
+        builtInHosts[address.host.removePrefix("www.")]?.let { return@sourceCall SiteProbeResult.AlreadyBuiltIn(it) }
         val anonymous = SiteRequestContext(http = BudgetedHttpClient(http, maxRequests), headers = headers)
-        return withTimeoutOrNull(deadlineMs) {
+        withTimeoutOrNull(deadlineMs) {
             if (credentials != null) {
                 probeWithKeys(address, anonymous, credentials, knownFamily)
             } else {

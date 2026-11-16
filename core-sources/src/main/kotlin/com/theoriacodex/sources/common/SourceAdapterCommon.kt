@@ -18,9 +18,22 @@ import com.theoriacodex.sources.media.inferMimeFromUrl
 import com.theoriacodex.sources.media.mimeFromFileExt
 import com.theoriacodex.sources.http.SourceHttpResponse
 import java.io.IOException
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.parser.Parser
+
+/**
+ * Runs a source entry point on a background dispatcher so it is safe to call from any thread, the main thread
+ * included. Every function on the source boundary is written as `= sourceCall { … }`; a few adapters accept a
+ * `callContext` so their tests can keep virtual time. SourceEntryPointCompletenessTest enforces both forms.
+ */
+internal suspend fun <T> sourceCall(
+    context: CoroutineContext = Dispatchers.Default,
+    block: suspend () -> T,
+): T = withContext(context) { block() }
 
 internal fun sourceQuickQuery(
     source: SourceKey,

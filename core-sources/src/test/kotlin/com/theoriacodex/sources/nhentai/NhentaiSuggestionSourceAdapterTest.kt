@@ -13,6 +13,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.testing.FakeHttpClient
 import java.util.ArrayDeque
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -220,7 +221,8 @@ internal class NhentaiSuggestionSourceAdapterTest : NhentaiSourceAdapterTestFixt
                 """.trimIndent(),
             ),
         )
-        val adapter = NhentaiSourceAdapter(httpClient = httpClient, minRequestIntervalMs = 0L)
+        // The queued detail responses must be taken in gallery order, which only one thread guarantees.
+        val adapter = NhentaiSourceAdapter(httpClient = httpClient, minRequestIntervalMs = 0L, callContext = EmptyCoroutineContext)
 
         val suggestions = adapter.trendingTags(limit = 3)
 

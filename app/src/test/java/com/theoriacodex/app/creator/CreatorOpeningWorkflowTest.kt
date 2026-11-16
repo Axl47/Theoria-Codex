@@ -15,7 +15,9 @@ import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -57,7 +59,8 @@ class CreatorOpeningWorkflowTest {
 
     @Test fun `creator links retain native identities and Gelbooru author query`() = runTest {
         for (source in listOf(SourceKey.PIXIV, SourceKey.HITOMI, SourceKey.GELBOORU)) {
-            val opened = workflow(source, { null }).fromDeepLink(link(source), setOf(source))
+            // The Gelbooru lookup runs on a background dispatcher, so the workflow's timeout must run in real time.
+            val opened = withContext(Dispatchers.Default) { workflow(source, { null }).fromDeepLink(link(source), setOf(source)) }
             assertEquals("owner", opened?.profileId)
             assertEquals(when (source) {
                 SourceKey.HITOMI -> "artist:owner"

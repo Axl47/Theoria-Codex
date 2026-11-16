@@ -24,14 +24,19 @@ import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.isSuccessful
 import com.theoriacodex.sources.common.parseHtml
 import com.theoriacodex.sources.common.parseXml
+import com.theoriacodex.sources.common.sourceCall
 import com.theoriacodex.sources.common.sourceNetworkFailure
 import com.theoriacodex.sources.http.SourceHttpClient
 import java.io.IOException
 import org.jsoup.nodes.Document
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.Dispatchers
 
 abstract class AbstractRule34KvsVideoSourceAdapter(
     private val httpClient: SourceHttpClient,
     private val gson: Gson = Gson(),
+    /** Where entry points run; tests pass EmptyCoroutineContext to keep virtual time. Production never sets it. */
+    private val callContext: CoroutineContext = Dispatchers.Default,
 ) : SourceAdapter, SearchMetadataSourceAdapter, TagCountLookupSourceAdapter {
     abstract override val sourceKey: SourceKey
     protected abstract val baseUrl: String
@@ -47,22 +52,22 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
         requiresCredentials = false,
     )
 
-    override suspend fun search(query: Query, pageToken: String?): Page<Post> {
+    override suspend fun search(query: Query, pageToken: String?): Page<Post> = sourceCall(callContext) {
         val queryText = compileRule34VideoSearchText(query)
-        if (queryText.isBlank()) return latestPage()
+        if (queryText.isBlank()) return@sourceCall latestPage()
 
         val url = pageToken ?: initialSearchUrl(queryText)
         val body = request(url)
         val document = parseHtml(body, baseUrl)
-        return canonicalPostPage(
+        canonicalPostPage(
             items = parseSearchPage(document),
             nextPageToken = nextPageToken(document, queryText),
         )
     }
 
-    override suspend fun trendingTags(limit: Int): List<TagSuggestion> {
-        if (limit <= 0) return emptyList()
-        return runCatchingPreservingCancellation {
+    override suspend fun trendingTags(limit: Int): List<TagSuggestion> = sourceCall(callContext) {
+        if (limit <= 0) return@sourceCall emptyList()
+        runCatchingPreservingCancellation {
             request("$baseUrl/tags_json.php?id=true&advanced_search=true")
         }.map { body ->
             parseTagSuggestionsFromSelect2(body, gson, "trending").take(limit).ifEmpty {
@@ -89,21 +94,22 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
         return suggestions.values.take(limit)
     }
 
-    override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> {
+    override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = sourceCall(callContext) {
         val normalized = prefix.trim()
-        if (normalized.isBlank() || limit <= 0) return emptyList()
-        return runCatchingPreservingCancellation {
+        if (normalized.isBlank() || limit <= 0) return@sourceCall emptyList()
+        runCatchingPreservingCancellation {
             request("$baseUrl/tags_json.php?id=true&advanced_search=true&q=${encodePathSegment(normalized)}")
         }.map { body ->
             parseTagSuggestionsFromSelect2(body, gson, "tag").take(limit)
         }.getOrDefault(emptyList())
     }
 
-    override suspend fun fetchTagCounts(tags: List<String>): Map<String, Int> =
+    override suspend fun fetchTagCounts(tags: List<String>): Map<String, Int> = sourceCall(callContext) {
         autocompleteTagCounts(sourceKey, tags, ::autocompleteTags)
+    }
 
-    override suspend fun quickQuery(kind: QuickQueryKind): Query {
-        return Query(
+    override suspend fun quickQuery(kind: QuickQueryKind): Query = sourceCall(callContext) {
+        Query(
             mode = QueryMode.Source(sourceKey),
             includeTags = emptyList(),
             excludeTags = emptyList(),
@@ -113,10 +119,10 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
         )
     }
 
-    override suspend fun resolvePost(id: PostId): Post? {
-        if (id.source != sourceKey) return null
+    override suspend fun resolvePost(id: PostId): Post? = sourceCall(callContext) {
+        if (id.source != sourceKey) return@sourceCall null
         val body = request("$baseUrl/video/${id.sourcePostId}/x/", allowNotFound = true)
-        if (body.isBlank()) return null
+        if (body.isBlank()) return@sourceCall null
         val document = parseHtml(body, baseUrl)
         val config = parseRule34KvsConfig(document)
         val title = config.string("video_title")
@@ -137,7 +143,7 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
             )
         val videoRef = ImageRef(url = videoUrl, localPath = null, mime = "video/mp4", videoVariants = config.videoVariants())
 
-        return Post(
+        Post(
             id = PostId(source = sourceKey, sourcePostId = id.sourcePostId),
             preview = ImageRef(url = previewUrl, localPath = null, mime = "image/jpeg"),
             full = videoRef,
@@ -157,9 +163,9 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
         )
     }
 
-    override suspend fun resolveSearchMetadata(post: Post): Post? {
-        if (post.full != null) return post
-        return resolvePost(post.id)?.let { resolved ->
+    override suspend fun resolveSearchMetadata(post: Post): Post? = sourceCall(callContext) {
+        if (post.full != null) return@sourceCall post
+        resolvePost(post.id)?.let { resolved ->
             resolved.copy(
                 preview = resolved.preview.takeIf { it.url != null } ?: post.preview,
                 title = resolved.title ?: post.title,

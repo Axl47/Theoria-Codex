@@ -44,6 +44,7 @@ import com.theoriacodex.sources.common.normalizeBooruTag
 import com.theoriacodex.sources.common.objectList
 import com.theoriacodex.sources.common.parseJsonArray
 import com.theoriacodex.sources.common.parseJsonElement
+import com.theoriacodex.sources.common.sourceCall
 import com.theoriacodex.sources.common.sourceNetworkFailure
 import com.theoriacodex.sources.common.sourceQuickQuery
 import com.theoriacodex.sources.common.stringValue
@@ -108,13 +109,14 @@ private class GelbooruFamilyAdapter(
         supportsGroupedIncludeTagsServerSide = site.orGroup != null,
     )
 
-    override suspend fun search(query: Query, pageToken: String?): Page<Post> =
+    override suspend fun search(query: Query, pageToken: String?): Page<Post> = sourceCall {
         searchPosts(compileTags(query), pageToken)
+    }
 
-    override suspend fun searchCreatorPosts(creator: CreatorProfile, pageToken: String?): Page<Post> {
+    override suspend fun searchCreatorPosts(creator: CreatorProfile, pageToken: String?): Page<Post> = sourceCall {
         val uploadsQuery = creator.uploadsQuery?.trim()
-        if (creator.source != sourceKey || uploadsQuery.isNullOrBlank()) return canonicalPostPage(emptyList(), null)
-        return searchPosts(uploadsQuery, pageToken)
+        if (creator.source != sourceKey || uploadsQuery.isNullOrBlank()) return@sourceCall canonicalPostPage(emptyList(), null)
+        searchPosts(uploadsQuery, pageToken)
     }
 
     override fun accountFeeds(creator: CreatorProfile): List<AccountFeed> {
@@ -126,57 +128,58 @@ private class GelbooruFamilyAdapter(
     }
 
     /** Statistics, avatar and bio from the profile page; null on sites without public profiles. */
-    override suspend fun accountDetails(creator: CreatorProfile): AccountDetails? {
+    override suspend fun accountDetails(creator: CreatorProfile): AccountDetails? = sourceCall {
         val profileId = creator.profileId
-        if (creator.source != sourceKey || !site.publicProfiles || profileId == null) return null
+        if (creator.source != sourceKey || !site.publicProfiles || profileId == null) return@sourceCall null
         val html = request(
             url = "${site.siteUrl}/index.php",
             query = mapOf("page" to "account", "s" to "profile", "id" to profileId),
             scanBody = false,
         )
-        return parseGelbooruAccountProfile(html, site.siteUrl)
+        parseGelbooruAccountProfile(html, site.siteUrl)
     }
 
-    override suspend fun accountPosts(creator: CreatorProfile, feed: AccountFeed, pageToken: String?): Page<Post> =
+    override suspend fun accountPosts(creator: CreatorProfile, feed: AccountFeed, pageToken: String?): Page<Post> = sourceCall {
         when (feed) {
             AccountFeed.UPLOADS -> searchCreatorPosts(creator, pageToken)
             AccountFeed.FAVORITES -> favoritePosts(creator, pageToken)
         }
+    }
 
-    override suspend fun trendingTags(limit: Int): List<TagSuggestion> {
+    override suspend fun trendingTags(limit: Int): List<TagSuggestion> = sourceCall {
         val items = requestTagList(
             "orderby" to "count",
             "order" to "desc",
             "limit" to limit.coerceIn(1, 50).toString(),
         )
-        return items.orEmpty().mapNotNull { parseTag(it, "trending") }
+        items.orEmpty().mapNotNull { parseTag(it, "trending") }
     }
 
-    override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> {
+    override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = sourceCall {
         val normalized = prefix.trim()
-        if (normalized.isBlank()) return emptyList()
-        site.autocompleteUrl?.let { url -> return autocompleteFrom(url, normalized, limit) }
+        if (normalized.isBlank()) return@sourceCall emptyList()
+        site.autocompleteUrl?.let { url -> return@sourceCall autocompleteFrom(url, normalized, limit) }
         val items = requestTagList(
             "name_pattern" to "$normalized%",
             "orderby" to "count",
             "order" to "desc",
             "limit" to limit.coerceIn(1, 30).toString(),
-        ) ?: return autocompleteFrom("${site.siteUrl}/autocomplete.php", normalized, limit)
-        return items.mapNotNull { parseTag(it, "tag") }
+        ) ?: return@sourceCall autocompleteFrom("${site.siteUrl}/autocomplete.php", normalized, limit)
+        items.mapNotNull { parseTag(it, "tag") }
     }
 
-    override suspend fun fetchTagCounts(tags: List<String>): Map<String, Int> {
+    override suspend fun fetchTagCounts(tags: List<String>): Map<String, Int> = sourceCall {
         val normalizedTags = tags.map(::normalizeBooruTag).filter(String::isNotBlank).distinct()
         val countsByName = linkedMapOf<String, Int>()
         normalizedTags.chunked(TAG_COUNT_BATCH_SIZE).forEach { chunk ->
             val items = requestTagList("names" to chunk.joinToString(" "), "limit" to chunk.size.toString())
-                ?: return autocompleteTagCounts(sourceKey, normalizedTags, ::autocompleteTags)
+                ?: return@sourceCall autocompleteTagCounts(sourceKey, normalizedTags, ::autocompleteTags)
             items.forEach { raw ->
                 val tag = parseTag(raw, "tag") ?: return@forEach
                 tag.count?.let { count -> countsByName.putIfAbsent(tag.text, count) }
             }
         }
-        return countsByName
+        countsByName
     }
 
     override fun nativeCommentAnchor(commentId: String): String? = "c$commentId".takeIf { site.commentAnchors }
@@ -191,14 +194,14 @@ private class GelbooruFamilyAdapter(
      * are never DAPI tokens, so any page token goes straight to the post page. [parent] is ignored:
      * these sites have no replies.
      */
-    override suspend fun comments(post: Post, pageToken: String?, parent: PostComment?): CommentPage {
-        if (post.id.source != sourceKey) return CommentPage(emptyList(), total = 0, nextPageToken = null)
+    override suspend fun comments(post: Post, pageToken: String?, parent: PostComment?): CommentPage = sourceCall {
+        if (post.id.source != sourceKey) return@sourceCall CommentPage(emptyList(), total = 0, nextPageToken = null)
         val postId = post.id.sourcePostId
         if (pageToken == null && !commentsApiDisabled) {
             val query = apiQuery("s" to "comment", "q" to "index", "post_id" to postId, json = false)
             val body = requestBody(site.apiUrl, query)
             parseGelbooruCommentsXml(body, site)?.let { comments ->
-                return CommentPage(comments, total = comments.size, nextPageToken = null)
+                return@sourceCall CommentPage(comments, total = comments.size, nextPageToken = null)
             }
             // Comment text can mention keys, so the key-failure scan runs only on answers that are not comments.
             throwIfAuthFailure(body)
@@ -216,7 +219,7 @@ private class GelbooruFamilyAdapter(
             scanBody = false,
         )
         val page = parseGelbooruCommentsHtml(html, site, currentPid = pid)
-        return CommentPage(
+        CommentPage(
             comments = page.comments,
             total = if (pid == 0 && page.nextPid == null) page.comments.size else null,
             nextPageToken = page.nextPid?.toString(),
@@ -241,20 +244,22 @@ private class GelbooruFamilyAdapter(
     private suspend fun autocompleteFrom(url: String, prefix: String, limit: Int): List<TagSuggestion> =
         parseAutocompleteSuggestions(request(url, mapOf("q" to prefix)), gson, site.label).take(limit)
 
-    override suspend fun quickQuery(kind: QuickQueryKind): Query = sourceQuickQuery(source = sourceKey, kind = kind)
+    override suspend fun quickQuery(kind: QuickQueryKind): Query = sourceCall {
+        sourceQuickQuery(source = sourceKey, kind = kind)
+    }
 
-    override suspend fun resolvePost(id: PostId): Post? {
-        if (id.source != sourceKey) return null
+    override suspend fun resolvePost(id: PostId): Post? = sourceCall {
+        if (id.source != sourceKey) return@sourceCall null
         val lookup = when (site.postLookup) {
             GelbooruPostLookup.ID_PARAMETER -> "id" to id.sourcePostId
             GelbooruPostLookup.ID_TAG -> "tags" to "id:${id.sourcePostId}"
         }
         val response = requestApi("s" to "post", "q" to "index", lookup, "limit" to "1")
-        return parseItems(response, POST_ENVELOPE).firstOrNull()?.let(::parsePost)
+        parseItems(response, POST_ENVELOPE).firstOrNull()?.let(::parsePost)
     }
 
-    override suspend fun relatedPosts(seed: PostId, limit: Int): List<Post> {
-        if (seed.source != sourceKey || limit <= 0) return emptyList()
+    override suspend fun relatedPosts(seed: PostId, limit: Int): List<Post> = sourceCall {
+        if (seed.source != sourceKey || limit <= 0) return@sourceCall emptyList()
         val html = request(
             url = "${site.siteUrl}/index.php",
             query = mapOf("page" to "post", "s" to "view", "id" to seed.sourcePostId),
@@ -268,9 +273,9 @@ private class GelbooruFamilyAdapter(
             reason = SourceFailureReason.PARSE,
             message = "${site.label} related-post block was not found",
         )
-        if (relatedIds.isEmpty()) return emptyList()
+        if (relatedIds.isEmpty()) return@sourceCall emptyList()
 
-        return resolvePosts(relatedIds, RELATED_HYDRATION_CONCURRENCY).postsOrThrow()
+        resolvePosts(relatedIds, RELATED_HYDRATION_CONCURRENCY).postsOrThrow()
     }
 
     /** A page of the account's public favorites: the DAPI answers `fav:<id>` in the same order as the site's favorites list. */
@@ -280,7 +285,9 @@ private class GelbooruFamilyAdapter(
         return searchPosts("fav:$profileId", pageToken)
     }
 
-    override suspend fun findByFileHash(md5: String): Post? = searchPosts("md5:$md5", pageToken = null).items.firstOrNull()
+    override suspend fun findByFileHash(md5: String): Post? = sourceCall {
+        searchPosts("md5:$md5", pageToken = null).items.firstOrNull()
+    }
 
     private suspend fun searchPosts(tags: String, pageToken: String?): Page<Post> {
         val pageIndex = pageToken?.toIntOrNull()?.coerceAtLeast(0) ?: 0

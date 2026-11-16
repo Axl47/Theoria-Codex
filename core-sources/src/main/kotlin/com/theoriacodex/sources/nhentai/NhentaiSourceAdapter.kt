@@ -43,6 +43,7 @@ import com.theoriacodex.sources.common.matchesChallenge
 import com.theoriacodex.sources.common.optionalJsonArray
 import com.theoriacodex.sources.common.parseJsonArray as parseSourceJsonArray
 import com.theoriacodex.sources.common.parseJsonObject as parseSourceJsonObject
+import com.theoriacodex.sources.common.sourceCall
 import com.theoriacodex.sources.common.sourceNetworkFailure
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
@@ -50,6 +51,8 @@ import com.theoriacodex.sources.http.THEORIA_SOURCE_USER_AGENT
 import com.theoriacodex.sources.media.mimeFromFileExt
 import java.io.IOException
 import java.net.URLEncoder
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -58,6 +61,8 @@ class NhentaiSourceAdapter(
     private val httpClient: SourceHttpClient,
     private val gson: Gson = Gson(),
     private val minRequestIntervalMs: Long = 350L,
+    /** Where entry points run; tests pass EmptyCoroutineContext to keep virtual time. Production never sets it. */
+    private val callContext: CoroutineContext = Dispatchers.Default,
 ) : SourceAdapter, TagCountLookupSourceAdapter, FacetedSearchSourceAdapter, RelatedPostsSourceAdapter, CreatorPostsSourceAdapter,
     CommentsSourceAdapter {
     override val sourceKey: SourceKey = SourceKey.NHENTAI
@@ -88,7 +93,7 @@ class NhentaiSourceAdapter(
     private var lastRequestAtEpochMs: Long = 0L
     private val tagInfoByKey = BoundedLruCache<String, List<NhentaiTagInfo>>(TAG_CACHE_MAX_KEYS)
 
-    override suspend fun search(query: Query, pageToken: String?): Page<Post> {
+    override suspend fun search(query: Query, pageToken: String?): Page<Post> = sourceCall(callContext) {
         val directGalleryId = query.directNhentaiGalleryIdCandidate()
         if (directGalleryId != null) {
             val resolved = resolvePost(
@@ -97,7 +102,7 @@ class NhentaiSourceAdapter(
                     sourcePostId = directGalleryId,
                 )
             )
-            return canonicalPostPage(
+            return@sourceCall canonicalPostPage(
                 items = listOfNotNull(resolved),
                 nextPageToken = null,
             )
@@ -141,16 +146,16 @@ class NhentaiSourceAdapter(
             null
         }
 
-        return canonicalPostPage(
+        canonicalPostPage(
             items = normalizedPosts,
             nextPageToken = nextPageToken,
         )
     }
 
-    override suspend fun searchCreatorPosts(creator: CreatorProfile, pageToken: String?): Page<Post> {
-        if (creator.source != sourceKey) return Page(emptyList(), null)
-        val artist = creator.profileId?.takeIf(String::isNotBlank) ?: return Page(emptyList(), null)
-        return search(
+    override suspend fun searchCreatorPosts(creator: CreatorProfile, pageToken: String?): Page<Post> = sourceCall(callContext) {
+        if (creator.source != sourceKey) return@sourceCall Page(emptyList(), null)
+        val artist = creator.profileId?.takeIf(String::isNotBlank) ?: return@sourceCall Page(emptyList(), null)
+        search(
             query = Query(
                 mode = QueryMode.Source(sourceKey),
                 includeTerms = listOf(SearchTerm(artist, SearchFacet.ARTIST, NHENTAI_ARTIST_NAMESPACE)),
@@ -187,8 +192,8 @@ class NhentaiSourceAdapter(
         }
     }
 
-    override suspend fun trendingTags(limit: Int): List<TagSuggestion> {
-        if (limit <= 0) return emptyList()
+    override suspend fun trendingTags(limit: Int): List<TagSuggestion> = sourceCall(callContext) {
+        if (limit <= 0) return@sourceCall emptyList()
         val root = requireNotNull(requestJsonObject(
             url = NHENTAI_GALLERIES_ALL_URL,
             query = mapOf("page" to "1"),
@@ -213,18 +218,18 @@ class NhentaiSourceAdapter(
                 allowNotFound = true,
             )
         }
-        return collectNhentaiTagSuggestions(
+        collectNhentaiTagSuggestions(
             galleries = detailedGalleries.filterNotNull(),
             prefix = null,
             limit = limit,
         )
     }
 
-    override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> {
+    override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = sourceCall(callContext) {
         val normalizedPrefix = prefix.trim()
-        if (normalizedPrefix.isBlank() || limit <= 0) return emptyList()
+        if (normalizedPrefix.isBlank() || limit <= 0) return@sourceCall emptyList()
 
-        return requestTagSearch(normalizedPrefix)
+        requestTagSearch(normalizedPrefix)
             .map(::tagSuggestion)
             .take(limit)
     }
@@ -233,13 +238,13 @@ class NhentaiSourceAdapter(
         prefix: String,
         scope: FacetedSearchScope,
         limit: Int,
-    ): List<FacetedTagSuggestion> {
+    ): List<FacetedTagSuggestion> = sourceCall(callContext) {
         val normalizedPrefix = prefix.trim()
         if (normalizedPrefix.isBlank() || limit <= 0 || scope !in supportedSearchScopes) {
-            return emptyList()
+            return@sourceCall emptyList()
         }
 
-        return requestTagSearch(normalizedPrefix)
+        requestTagSearch(normalizedPrefix)
             .asSequence()
             .map(NhentaiTagInfo::toFacetedSuggestion)
             .filter { suggestion ->
@@ -252,13 +257,13 @@ class NhentaiSourceAdapter(
             .toList()
     }
 
-    override suspend fun fetchTagCounts(tags: List<String>): Map<String, Int> {
+    override suspend fun fetchTagCounts(tags: List<String>): Map<String, Int> = sourceCall(callContext) {
         val counts = linkedMapOf<String, Int>()
         fetchTagCountsIncrementally(tags) { counts.putAll(it) }
-        return counts
+        counts
     }
 
-    override suspend fun fetchTagCountsIncrementally(tags: List<String>, onCounts: (Map<String, Int>) -> Unit) {
+    override suspend fun fetchTagCountsIncrementally(tags: List<String>, onCounts: (Map<String, Int>) -> Unit): Unit = sourceCall(callContext) {
         tags.asSequence()
             .map(::normalizeNhentaiTag)
             .filter(String::isNotBlank)
@@ -268,7 +273,7 @@ class NhentaiSourceAdapter(
             }
     }
 
-    override suspend fun quickQuery(kind: QuickQueryKind): Query {
+    override suspend fun quickQuery(kind: QuickQueryKind): Query = sourceCall(callContext) {
         val sort = when (kind) {
             QuickQueryKind.POPULAR_TODAY -> SortMode.POPULAR
             QuickQueryKind.TOP_7D -> SortMode.TOP
@@ -276,7 +281,7 @@ class NhentaiSourceAdapter(
             QuickQueryKind.NEWEST -> SortMode.NEWEST
             QuickQueryKind.RANDOM -> SortMode.RANDOM
         }
-        return Query(
+        Query(
             mode = QueryMode.Source(SourceKey.NHENTAI),
             includeTags = emptyList(),
             excludeTags = emptyList(),
@@ -286,17 +291,17 @@ class NhentaiSourceAdapter(
         )
     }
 
-    override suspend fun resolvePost(id: PostId): Post? {
-        if (id.source != SourceKey.NHENTAI) return null
-        val galleryId = id.sourcePostId.trim().takeIf(String::isDigitsOnly) ?: return null
+    override suspend fun resolvePost(id: PostId): Post? = sourceCall(callContext) {
+        if (id.source != SourceKey.NHENTAI) return@sourceCall null
+        val galleryId = id.sourcePostId.trim().takeIf(String::isDigitsOnly) ?: return@sourceCall null
 
         val response = requestDirect(
             url = "$NHENTAI_GALLERY_URL_PREFIX/$galleryId",
             query = emptyMap(),
         )
-        if (response.statusCode == 404) return null
+        if (response.statusCode == 404) return@sourceCall null
         if (shouldUseMirrorFallback(response)) {
-            return resolvePostFromMirrorPage(galleryId)
+            return@sourceCall resolvePostFromMirrorPage(galleryId)
         }
         if (!response.isSuccessful()) {
             throw SourceAdapterException(
@@ -306,19 +311,19 @@ class NhentaiSourceAdapter(
         }
 
         val root = parseJsonObject(response.body)
-        return parseNhentaiGallery(root)
+        parseNhentaiGallery(root)
     }
 
     /** Uses the site's More like this recommendations without substituting a tag search. */
-    override suspend fun relatedPosts(seed: PostId, limit: Int): List<Post> {
-        if (seed.source != SourceKey.NHENTAI || limit <= 0) return emptyList()
-        val galleryId = seed.sourcePostId.trim().takeIf(String::isDigitsOnly) ?: return emptyList()
+    override suspend fun relatedPosts(seed: PostId, limit: Int): List<Post> = sourceCall(callContext) {
+        if (seed.source != SourceKey.NHENTAI || limit <= 0) return@sourceCall emptyList()
+        val galleryId = seed.sourcePostId.trim().takeIf(String::isDigitsOnly) ?: return@sourceCall emptyList()
         val root = requireNotNull(requestJsonObject(url = "$NHENTAI_GALLERY_URL_PREFIX/$galleryId/related"))
         val galleries = root.optionalJsonArray("result") ?: throw SourceAdapterException(
             reason = SourceFailureReason.PARSE,
             message = "NHentai related galleries were not found in the response",
         )
-        return galleries.asSequence()
+        galleries.asSequence()
             .mapNotNull { element ->
                 element.takeIf(JsonElement::isJsonObject)?.asJsonObject?.let(::parseNhentaiGallery)
             }
@@ -332,9 +337,9 @@ class NhentaiSourceAdapter(
      * Comments exist only on the direct API; the mirrors do not carry them, so a blocked request
      * fails instead of falling back. Replies do not exist on nhentai, so [parent] is ignored.
      */
-    override suspend fun comments(post: Post, pageToken: String?, parent: PostComment?): CommentPage {
+    override suspend fun comments(post: Post, pageToken: String?, parent: PostComment?): CommentPage = sourceCall(callContext) {
         val galleryId = post.id.sourcePostId.trim().takeIf { post.id.source == sourceKey && it.isDigitsOnly() }
-            ?: return CommentPage(emptyList(), total = 0, nextPageToken = null)
+            ?: return@sourceCall CommentPage(emptyList(), total = 0, nextPageToken = null)
         val pageIndex = pageToken?.toIntOrNull()?.coerceAtLeast(1) ?: 1
         val root = requireNotNull(
             requestJsonObject(
@@ -342,7 +347,7 @@ class NhentaiSourceAdapter(
                 query = mapOf("page" to pageIndex.toString(), "per_page" to NHENTAI_COMMENTS_PER_PAGE.toString()),
             ),
         )
-        return parseNhentaiCommentPage(root, pageIndex)
+        parseNhentaiCommentPage(root, pageIndex)
     }
 
     private suspend fun requestJsonObjectOrMirrorSearch(

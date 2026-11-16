@@ -19,6 +19,12 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
 }
 
+tasks.withType<Test>().configureEach {
+    // Release builds run without coroutine stack-trace recovery, which copies an exception each time it crosses
+    // the dispatcher switch every source entry point makes. Tests match release so exception identity holds.
+    systemProperty("kotlinx.coroutines.stacktrace.recovery", "false")
+}
+
 tasks.register<JavaExec>("providerHealthCheck") {
     group = "verification"
     description = "Runs opt-in live provider health checks and writes build/reports/provider-health/provider-health.json."

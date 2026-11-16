@@ -1,5 +1,6 @@
 package com.theoriacodex.sources.gelbooru
 
+import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.model.AccountDetails
 import com.theoriacodex.domain.model.AccountFeed
 import com.theoriacodex.domain.model.CreatorProfile
@@ -8,6 +9,7 @@ import com.theoriacodex.sources.testing.ScriptedHttpClient
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GelbooruAccountsTest {
@@ -100,6 +102,20 @@ class GelbooruAccountsTest {
         http.enqueueGet(index, mapOf("page" to "dapi", "json" to "1", "s" to "post", "q" to "index", "pid" to "0", "limit" to "40", "tags" to "user:alice"), body = "[]")
 
         assertEquals(emptyList<Any>(), gelbooru().accountPosts(account, AccountFeed.UPLOADS, pageToken = null).items)
+        http.assertExhausted()
+    }
+
+    @Test
+    fun `the profile owner lookup names the account and fails loudly on a refused page`() = runTest {
+        val profile = mapOf("page" to "account", "s" to "profile", "id" to "9")
+        val headers = mapOf("User-Agent" to "theoria")
+        http.enqueueGet(index, profile, body = "<a href='?tags=user:author_name'>Posts</a>", requiredHeaders = headers)
+        http.enqueueGet(index, profile, body = "<p>No uploads</p>")
+        http.enqueueGet(index, profile, statusCode = 403)
+
+        assertEquals("author_name", fetchGelbooruProfileOwner(http, "9", headers))
+        assertNull(fetchGelbooruProfileOwner(http, "9", emptyMap()))
+        assertTrue(runCatching { fetchGelbooruProfileOwner(http, "9", emptyMap()) }.exceptionOrNull() is SourceAdapterException)
         http.assertExhausted()
     }
 }

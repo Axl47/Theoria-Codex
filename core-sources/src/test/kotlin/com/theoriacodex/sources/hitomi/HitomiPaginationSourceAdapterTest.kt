@@ -27,6 +27,7 @@ import java.time.OffsetDateTime
 import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.TimeoutCancellationException
@@ -335,7 +336,8 @@ internal class HitomiPaginationSourceAdapterTest : HitomiSourceAdapterTestFixtur
             binaryIndexes[english] = listOf(5, 4, 3)
             binaryIndexes[japanese] = listOf(2, 1)
         }
-        val adapter = adapter(http, pageSize = 1, randomSnapshotCacheMaxBytes = 300L)
+        // runCurrent() must park the continuation on the in-flight load, which only the test dispatcher orders.
+        val adapter = adapter(http, pageSize = 1, randomSnapshotCacheMaxBytes = 300L, callContext = EmptyCoroutineContext)
         val originalQuery = query(sort = SortMode.RANDOM)
         val first = adapter.search(originalQuery, null)
         adapter.search(randomLanguageQuery("english"), null)

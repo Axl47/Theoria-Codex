@@ -23,6 +23,7 @@ import com.theoriacodex.sources.common.normalizeBooruTag
 import com.theoriacodex.sources.common.parseHtml
 import com.theoriacodex.sources.common.parseJsonArray
 import com.theoriacodex.sources.common.parseXml
+import com.theoriacodex.sources.common.sourceCall
 import com.theoriacodex.sources.common.sourceNetworkFailure
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.media.inferMimeFromUrl
@@ -50,7 +51,7 @@ class Rule34PahealSourceAdapter(
         requiresCredentials = false,
     )
 
-    override suspend fun search(query: Query, pageToken: String?): Page<Post> {
+    override suspend fun search(query: Query, pageToken: String?): Page<Post> = sourceCall {
         val normalizedQuery = query.includeTags
             .map(::normalizeBooruTag)
             .filter(String::isNotBlank)
@@ -62,18 +63,18 @@ class Rule34PahealSourceAdapter(
             } else {
                 "$RULE34PAHEAL_BASE_URL/rss/images/${encodePathSegment(normalizedQuery)}/1"
             }
-        val body = request(url) ?: return canonicalPostPage(items = emptyList(), nextPageToken = null)
-        return if (body.trimStart().startsWith("<?xml") || body.contains("<rss")) {
+        val body = request(url) ?: return@sourceCall canonicalPostPage(items = emptyList(), nextPageToken = null)
+        if (body.trimStart().startsWith("<?xml") || body.contains("<rss")) {
             parseRssPage(body, limit = 40)
         } else {
             parseHtmlSearchPage(body)
         }
     }
 
-    override suspend fun trendingTags(limit: Int): List<TagSuggestion> {
-        if (limit <= 0) return emptyList()
-        return runCatchingPreservingCancellation {
-            val html = request("$RULE34PAHEAL_BASE_URL/post/list") ?: return emptyList()
+    override suspend fun trendingTags(limit: Int): List<TagSuggestion> = sourceCall {
+        if (limit <= 0) return@sourceCall emptyList()
+        runCatchingPreservingCancellation {
+            val html = request("$RULE34PAHEAL_BASE_URL/post/list") ?: return@sourceCall emptyList()
             val doc = parseHtml(html, RULE34PAHEAL_BASE_URL)
             val counts = linkedMapOf<String, Int>()
             doc.select("div.shm-thumb.thumb[data-tags]").forEach { thumb ->
@@ -94,23 +95,23 @@ class Rule34PahealSourceAdapter(
         }.getOrDefault(emptyList())
     }
 
-    override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> {
+    override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = sourceCall {
         val normalized = prefix.trim()
-        if (normalized.isBlank() || limit <= 0) return emptyList()
+        if (normalized.isBlank() || limit <= 0) return@sourceCall emptyList()
         val response = request(
             "$RULE34PAHEAL_BASE_URL/browser_search/${encodePathSegment(normalized)}",
             headers = emptyMap(),
-        ) ?: return emptyList()
+        ) ?: return@sourceCall emptyList()
         val root = parseJsonArray(response, gson, "rule34.paheal.net browser search")
         val values = root.get(1)?.takeIf { it.isJsonArray }?.asJsonArray?.toList().orEmpty()
-        return values.mapNotNull { item ->
+        values.mapNotNull { item ->
             val text = item.asStringOrNull()?.trim().orEmpty()
             if (text.isBlank()) null else TagSuggestion(text = text, type = "tag", count = null)
         }.take(limit)
     }
 
-    override suspend fun quickQuery(kind: QuickQueryKind): Query {
-        return Query(
+    override suspend fun quickQuery(kind: QuickQueryKind): Query = sourceCall {
+        Query(
             mode = QueryMode.Source(SourceKey.RULE34PAHEAL),
             includeTags = emptyList(),
             excludeTags = emptyList(),
@@ -120,11 +121,11 @@ class Rule34PahealSourceAdapter(
         )
     }
 
-    override suspend fun resolvePost(id: PostId): Post? {
-        if (id.source != SourceKey.RULE34PAHEAL) return null
-        val html = request("$RULE34PAHEAL_BASE_URL/post/view/${id.sourcePostId}", allowNotFound = true) ?: return null
+    override suspend fun resolvePost(id: PostId): Post? = sourceCall {
+        if (id.source != SourceKey.RULE34PAHEAL) return@sourceCall null
+        val html = request("$RULE34PAHEAL_BASE_URL/post/view/${id.sourcePostId}", allowNotFound = true) ?: return@sourceCall null
         val doc = parseHtml(html, RULE34PAHEAL_BASE_URL)
-        return parsePostDocument(doc, id.sourcePostId)
+        parsePostDocument(doc, id.sourcePostId)
     }
 
     private suspend fun request(

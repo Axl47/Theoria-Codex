@@ -6,6 +6,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.testing.FakeHttpClient
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.test.runTest
@@ -25,7 +26,8 @@ class NhentaiCreatorSourceAdapterTest {
                 return SourceHttpResponse(200, """[{"id":1,"type":"tag","name":"first","count":42}]""")
             }
         }
-        val adapter = NhentaiSourceAdapter(http, minRequestIntervalMs = 0)
+        // The slow request must race the virtual timeout, so the lookup stays on the test dispatcher.
+        val adapter = NhentaiSourceAdapter(http, minRequestIntervalMs = 0, callContext = EmptyCoroutineContext)
         val counts = mutableMapOf<String, Int>()
 
         val completed = withTimeoutOrNull(4_000) {

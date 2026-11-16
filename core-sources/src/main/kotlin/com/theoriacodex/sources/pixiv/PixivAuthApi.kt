@@ -7,6 +7,7 @@ import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.isSuccessful
 import com.theoriacodex.sources.common.longValue
 import com.theoriacodex.sources.common.parseJsonObject
+import com.theoriacodex.sources.common.sourceCall
 import com.theoriacodex.sources.common.sourceNetworkFailure
 import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.credentials.PixivAuthTokens
@@ -45,7 +46,7 @@ class PixivAuthApi(
         code: String,
         codeVerifier: String,
         redirectUri: String,
-    ): PixivAuthTokens {
+    ): PixivAuthTokens = sourceCall {
         val response = try {
             httpClient.postForm(
                 url = TOKEN_URL,
@@ -67,11 +68,11 @@ class PixivAuthApi(
                 message = "Pixiv token exchange failed (${response.statusCode})",
             )
         }
-        return parseTokenResponse(response.body)
+        parseTokenResponse(response.body)
     }
 
-    suspend fun refresh(refreshToken: String): PixivAuthTokens {
-        return refreshMutex.withLock {
+    suspend fun refresh(refreshToken: String): PixivAuthTokens = sourceCall {
+        refreshMutex.withLock {
             val response = try {
                 httpClient.postForm(
                     url = TOKEN_URL,
