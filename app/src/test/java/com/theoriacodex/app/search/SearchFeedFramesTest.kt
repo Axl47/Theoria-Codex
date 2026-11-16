@@ -25,6 +25,7 @@ import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchContentUiState
 import com.theoriacodex.app.search.state.SearchRestorationUiState
 import com.theoriacodex.app.search.state.SearchUiState
+import com.theoriacodex.app.testing.SteppedDispatcher
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.ui.components.FeedTraceSections
 import com.theoriacodex.app.ui.components.LocalFeedComputationContext
@@ -35,8 +36,6 @@ import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
-import kotlin.coroutines.CoroutineContext
-import kotlinx.coroutines.CoroutineDispatcher
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -46,8 +45,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowTrace
 
 /**
- * Pins what the Search feed shows after every frame, on today's code (plan `.docs/exec/shared-feed-presenter.html`,
- * Phase 0). Frames advance by hand and background work runs only when [background] is drained, so each step shows
+ * Pins what the Search feed shows after every frame (plan `.docs/exec/shared-feed-presenter.html`, Phases 0 and 1). Frames advance by hand and background work runs only when [background] is drained, so each step shows
  * whether a result was computed in the frame itself (on the main thread) or waited for the background. Opening the
  * Viewer removes the feed from composition, as navigating to its destination does; [feedShown] stands in for that.
  */
@@ -126,31 +124,90 @@ class SearchFeedFramesTest {
         assertEquals(Frame(ids(0..4) + "v6", filterPasses = 1), frame())
     }
 
-    @Test fun `returning from the Viewer with the length filter off filters the whole list again on the first frame`() {
+    @Test fun `returning from the Viewer with the length filter off reuses the kept result`() {
         show()
-        feedShown = false
-        assertEquals(Frame(null, filterPasses = 0), frame())
+        openViewer()
 
         feedShown = true
-        // The helper's result did not survive the Viewer, so the first frame back filters every loaded post in place.
-        assertEquals(Frame(ids(0..7), filterPasses = 1), frame())
+        assertEquals(Frame(ids(0..7), filterPasses = 0), frame())
         assertEquals(0, drain())
         assertEquals(Frame(ids(0..7), filterPasses = 0), frame())
     }
 
-    @Test fun `returning from the Viewer with the length filter on shows no results for one frame`() {
+    @Test fun `returning from the Viewer with the length filter on shows the full list on the first frame`() {
         lengthFilterOn()
         durations = posts.take(8).associate { known(it, SHORT_MS) }
         show()
-        feedShown = false
-        assertEquals(Frame(null, filterPasses = 0), frame())
+        openViewer()
 
         feedShown = true
-        // Today's behaviour, which Phase 1a removes: the length frame did not survive the Viewer, so the first frame
-        // back presents nothing and Search draws "no results" until the background projection answers.
-        assertEquals(Frame(emptyList(), filterPasses = 1), frame())
+        // The kept length frame and the kept filter result cover the same list, so nothing is redone.
+        assertEquals(Frame(ids(0..7), filterPasses = 0), frame())
+        assertEquals(0, drain())
+        assertEquals(Frame(ids(0..7), filterPasses = 0), frame())
+    }
+
+    @Test fun `a filter changed while the Viewer was open is applied in place on the first frame back`() {
+        liked = setOf(posts[1].id)
+        show()
+        openViewer()
+        fab = fab.copy(hideLiked = true)
+
+        feedShown = true
+        assertEquals(Frame(ids(0..7) - "v1", filterPasses = 1), frame())
+        assertEquals(0, drain())
+    }
+
+    @Test fun `a filter changed while the Viewer was open applies on the first frame back with the length filter on`() {
+        lengthFilterOn()
+        durations = posts.take(8).associate { known(it, SHORT_MS) }
+        liked = setOf(posts[1].id)
+        show()
+        openViewer()
+        fab = fab.copy(hideLiked = true)
+
+        feedShown = true
+        assertEquals(Frame(ids(0..7) - "v1", filterPasses = 1), frame())
+        assertEquals(0, drain())
+        assertEquals(Frame(ids(0..7) - "v1", filterPasses = 0), frame())
+    }
+
+    @Test fun `a length that resolved while the Viewer was open shows after the projection answers`() {
+        lengthFilterOn()
+        durations = posts.take(7).associate { known(it, SHORT_MS) }
+        show()
+        openViewer()
+        durations = durations + known(posts[7], SHORT_MS)
+
+        feedShown = true
+        // The first frame is the one the Viewer covered; the new length lands as any arriving length does.
+        assertEquals(Frame(ids(0..6), filterPasses = 0), frame())
         assertEquals(0, drain())
         assertEquals(Frame(ids(0..7), filterPasses = 1), frame())
+    }
+
+    @Test fun `a page that arrived while the Viewer was open is filtered in place on the first frame back`() {
+        show()
+        openViewer()
+        state = searchState(posts)
+
+        feedShown = true
+        assertEquals(Frame(ids(0..11), filterPasses = 1), frame())
+        assertEquals(0, drain())
+    }
+
+    @Test fun `a page that arrived while the Viewer was open with the length filter on keeps the loaded posts until it is measured`() {
+        lengthFilterOn()
+        durations = posts.associate { known(it, SHORT_MS) }
+        show()
+        openViewer()
+        state = searchState(posts)
+
+        feedShown = true
+        // The kept length frame covers the start of the longer list, as for a page arriving with the feed on screen.
+        assertEquals(Frame(ids(0..7), filterPasses = 0), frame())
+        assertEquals(0, drain())
+        assertEquals(Frame(ids(0..11), filterPasses = 1), frame())
     }
 
     @Test fun `a post liked in the Viewer stays until the return finishes, then leaves after a background pass`() {
@@ -164,6 +221,7 @@ class SearchFeedFramesTest {
 
         feedShown = true
         transition.begin(posts[2].id)
+        // The marks changed, so the kept result does not apply and the first frame filters in place.
         assertEquals(Frame(ids(0..7), filterPasses = 1), frame())
         assertEquals(0, drain())
 
@@ -185,6 +243,11 @@ class SearchFeedFramesTest {
         assertEquals(Frame(ids(0..11), filterPasses = 1), frame())
         assertEquals(listOf(SearchAction.LoadNextPage, SearchAction.ScrollRestorationApplied(1L)), actions.toList())
         assertEquals(9, grid.firstVisibleItemIndex)
+    }
+
+    private fun openViewer() {
+        feedShown = false
+        assertEquals(Frame(null, filterPasses = 0), frame())
     }
 
     private fun show(withGrid: Boolean = false) {
@@ -259,20 +322,6 @@ class SearchFeedFramesTest {
         content = SearchContentUiState(results = results, hasExecutedSearch = true, canLoadMore = true),
         restoration = SearchRestorationUiState.Restored(false),
     )
-
-    /** Queues background work until [drain] runs it on the test thread. */
-    private class SteppedDispatcher : CoroutineDispatcher() {
-        private val queue = ArrayDeque<Runnable>()
-        val pending get() = queue.size
-
-        override fun dispatch(context: CoroutineContext, block: Runnable) {
-            queue += block
-        }
-
-        fun drain() {
-            while (queue.isNotEmpty()) queue.removeFirst().run()
-        }
-    }
 
     private companion object {
         const val SHORT_MS = 4_000L // inside the 0-10 s range the length filter tests use

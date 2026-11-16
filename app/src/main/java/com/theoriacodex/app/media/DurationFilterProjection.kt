@@ -16,6 +16,15 @@ internal class DurationFilterProjection(private val keyFactory: (Post) -> MediaD
     private var keys = emptyMap<PostId, MediaDurationKey>()
     private var reveal = DurationReveal()
 
+    /** The last frame this projection answered. A feed returning from the Viewer starts from it instead of nothing. */
+    @Volatile var lastFrame: DurationFilterFrame? = null
+        private set
+
+    /** [project] as a frame. The posts, states and switch of [lastFrame] answer with [lastFrame] itself. */
+    @Synchronized fun frame(posts: List<Post>, states: Map<MediaDurationKey, MediaDurationState>, active: Boolean): DurationFilterFrame =
+        lastFrame?.takeIf { it.posts === posts && it.active == active && it.states == states }
+            ?: DurationFilterFrame(posts, states, active, project(posts, states, active)).also { lastFrame = it }
+
     @Synchronized fun project(posts: List<Post>, states: Map<MediaDurationKey, MediaDurationState>, active: Boolean): DurationFilterMetadata {
         if (!active) {
             reveal = DurationReveal()
@@ -31,7 +40,12 @@ internal class DurationFilterProjection(private val keyFactory: (Post) -> MediaD
     }
 }
 
-private data class DurationFilterFrame(val posts: List<Post>, val active: Boolean, val metadata: DurationFilterMetadata)
+internal data class DurationFilterFrame(
+    val posts: List<Post>,
+    val states: Map<MediaDurationKey, MediaDurationState>,
+    val active: Boolean,
+    val metadata: DurationFilterMetadata,
+)
 
 /** The last frame stays valid while [posts] only appended to it; a replacement waits with resolving feedback. */
 private fun DurationFilterFrame.covers(posts: List<Post>): Boolean {
@@ -44,6 +58,8 @@ private fun DurationFilterFrame.covers(posts: List<Post>): Boolean {
 /**
  * Presents duration metadata for [posts]. Pass [retainKey] for a feed's main list, so its reveal
  * order survives the Viewer; the projection then owns which posts may appear, and in what order.
+ * Coming back from the Viewer, the first frame shows the projection's last frame while it still
+ * covers [posts], and the background answer replaces it as usual.
  */
 @Composable
 internal fun rememberDurationFilterMetadata(
@@ -58,8 +74,8 @@ internal fun rememberDurationFilterMetadata(
         remember { DurationFilterProjection() }
     }
     val background = LocalFeedComputationContext.current
-    val frame by produceState<DurationFilterFrame?>(null, posts, states, active) {
-        value = withContext(background) { DurationFilterFrame(posts, active, projection.project(posts, states, active)) }
+    val frame by produceState(projection.lastFrame, posts, states, active) {
+        value = withContext(background) { projection.frame(posts, states, active) }
     }
     if (!active) return DurationFilterMetadata.EMPTY
     val current = frame?.takeIf { it.active && it.covers(posts) } ?: return DurationFilterMetadata.RESOLVING

@@ -79,7 +79,9 @@ internal fun rememberSearchFeed(
         state.relatedPosts.retainedLikedPostIds + pendingLikePostIds
     })
     val marks = visibilityFilters.markInputs(likedPostIds, savedPostIds, watchedPostIds, retainedLikedPostIds)
-    val visibleResults = rememberFilteredFeed(presentedResults, visibilityFilters, unknownDurationPolicy, acquiredDurations, marks)
+    val visibleResults = rememberFilteredFeed(
+        presentedResults, visibilityFilters, unknownDurationPolicy, acquiredDurations, marks, retainKey = "search",
+    )
     val related = rememberRelatedFeedPresentation(
         pendingLikePostIds = pendingLikePostIds,
         canonicalPosts = displayResults, visibleCanonicalPosts = visibleResults,

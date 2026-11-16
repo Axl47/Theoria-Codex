@@ -248,6 +248,7 @@ private fun rememberCreatorFeed(
     val marks = visibilityFilters.markInputs(likedPostIds, savedPostIds, emptySet(), retainedLikedPostIds)
     val visibleResults = rememberFilteredFeed(
         presentedResults, visibilityFilters, durationFilter.unknownPolicy, durationFilter.knownDurationMsByPostId, marks,
+        retainKey = state.selectedFeed.retainKey,
     )
     val related = rememberRelatedFeedPresentation(
         pendingLikePostIds = pendingLikePostIds,
