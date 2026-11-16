@@ -149,7 +149,6 @@ class SourceEntryPointCompletenessTest {
 
         /** Files Phase 1 has not converted yet. Empty, and removed, once the whole boundary is wrapped. */
         val NOT_YET_CONVERTED = listOf(
-            "nhentai/NhentaiSourceAdapter.kt",
             "hitomi/HitomiSourceAdapter.kt",
             "iwara/IwaraSourceAdapter.kt",
             "rule34/AbstractRule34KvsVideoSourceAdapter.kt",
