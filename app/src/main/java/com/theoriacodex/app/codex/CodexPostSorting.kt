@@ -12,7 +12,6 @@ import com.theoriacodex.app.search.postMediaCount
 import com.theoriacodex.app.statistics.statisticsPostKey
 import com.theoriacodex.app.ui.components.FeedTraceSections
 import com.theoriacodex.app.ui.components.rememberComputedOffMain
-import com.theoriacodex.app.viewer.traceMediaSection
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -97,9 +96,7 @@ internal fun sortCodexPosts(
     sort: CodexSortMode,
     usage: Map<String, CodexUsage>,
     durations: Map<PostId, Long> = emptyMap(),
-): List<Post> = traceMediaSection(FeedTraceSections.SORT) {
-    codexPostRefinement(sort, usage, durations)?.let(posts::sortedWith) ?: posts
-}
+): List<Post> = codexPostRefinement(sort, usage, durations)?.let(posts::sortedWith) ?: posts
 
 /**
  * Known animation lengths of [posts] while [sort] is a length sort; empty otherwise. Recomputed off the main
@@ -112,7 +109,10 @@ internal fun rememberCodexPostDurations(
     states: Map<MediaDurationKey, MediaDurationState>,
 ): Map<PostId, Long> {
     if (!sort.usesDuration || posts == null) return emptyMap()
-    return rememberComputedOffMain(posts, states, extend = { known, appended -> known + knownMediaDurations(appended, states) }) {
+    return rememberComputedOffMain(
+        posts, states, section = FeedTraceSections.KNOWN_DURATIONS,
+        extend = { known, appended -> known + knownMediaDurations(appended, states) },
+    ) {
         knownMediaDurations(posts, states)
     }
 }
