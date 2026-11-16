@@ -57,7 +57,7 @@
     <h1>ExecPlan: Measure and reduce video player work on the main thread</h1>
     <p>Feed video previews are driven from the main thread, the thread that draws the screen. This plan first makes that cost measurable, then, only if a phone measurement shows the cost matters, tries the cheapest change that removes the measured part. Moving the players to their own thread is the last and most expensive option, not the starting point.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: Phase 1 built, in review</span>
+      <span class="pill">Status: Phase 2 capturing on the phone</span>
       <span class="pill">Owner: Claude (orchestrator)</span>
       <span class="pill">Created: 2026-11-15</span>
       <span class="pill">Updated: 2026-11-16</span>
@@ -65,7 +65,7 @@
       <span class="pill">Audit item: B3</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Review and merge Phase 1, then confirm the thresholds and run Phase 2 on the phone.</div>
+      <div class="card"><strong>Next Action</strong>Finish the phone captures, then apply the Phase 2 rule once the user has confirmed the thresholds.</div>
       <div class="card"><strong>Main Risk</strong>Spending a large rewrite on a cost that is not what makes frames late, or trading smoother scrolling for cards that stay blank. Reduced by a numeric rule on the phone before any redesign, with an "inconclusive" outcome that authorises nothing, and by measuring time to first frame in every phase.</div>
       <div class="card"><strong>Needs The User</strong>Phase 2 and every later acceptance run on the physical phone, with the isolated benchmark package. The thresholds below are proposals until the user confirms them.</div>
       <div class="card"><strong>Must Hold</strong>Every visible video card autoplays at the same time.</div>
@@ -310,7 +310,8 @@
         <li>[x] 2026-11-16 - Review round 1 (Opus high, GPT-6.1 Sol adversarial) merged; plan restructured around measurement.</li>
         <li>[x] 2026-11-16 - Review round 2 (same reviewers) merged; Phase 1 final.</li>
         <li>[x] 2026-11-16 - Phase 1 built: trace sections, per-presentation first-frame slices, <code>scripts/trace_player_frames.py</code> with its unit test, and the sampled-capture configuration (evidence in the appendix).</li>
-        <li>[ ] Phase 1 merged.</li>
+        <li>[x] 2026-11-16 - Phase 1 merged (#111, #112).</li>
+        <li>[x] 2026-11-16 - Phase 2 host-only preflight recorded (appendix, "Phone session outputs").</li>
         <li>[ ] Thresholds confirmed by the user.</li>
         <li>[ ] Phase 2 decision recorded (needs the user).</li>
       </ul>
@@ -397,7 +398,10 @@
       </details>
       <details>
         <summary>Phone session outputs</summary>
-        <p>To be filled in during Phase 2.</p>
+        <p><strong>Preflight (host only, 2026-11-16, before any phone command).</strong> Base <code>c96a2350</code>. <code>BENCHMARK_SCENARIO=mixedMediaFiveFeedJourney,searchConcurrentAutoplayScroll scripts/verify_performance_device.sh calibrate DIR</code> runs, in order: the workload contract for the two scenarios; a Gradle dry run of <code>:macrobenchmark:connectedBenchmarkReleaseAndroidTest</code> with the class filter for exactly those two tests (141 tasks, all skipped; the script never runs that task, it installs with adb); <code>:app:assembleBenchmarkRelease :macrobenchmark:assembleBenchmarkRelease</code> and the stale-startup-profile check; <code>verify_device_apk.py</code> for <code>com.theoriacodex.benchmark</code> and <code>com.theoriacodex.macrobenchmark</code>. Only then does it touch the device: it requires exactly one connected device equal to <code>ANDROID_SERIAL</code> with <code>ro.kernel.qemu</code> not 1, reads the build fingerprint, sends wake and home key events, installs the two APKs with <code>install -r</code>, and three times: wake, <code>wm dismiss-keyguard</code>, <code>am instrument</code> of the runner for the two tests, <code>am force-stop com.theoriacodex.benchmark</code>, pull and delete its own output folder under <code>/sdcard/Android/media/com.theoriacodex.macrobenchmark/</code>. Then <code>benchmark_results.py</code> calibrates on the host. No command names <code>com.theoriacodex</code> or <code>com.theoriacodex.debug</code>, and none changes a setting.</p>
+        <p>Checked on the build the batch uses: <code>verify_device_apk.py</code> (benchmark 1.7.0, not debuggable, debug certificate; runner debuggable, debug certificate), <code>verify_benchmark_fixture_apk.py</code> (<code>:benchmarkFixture</code> process, fixture video packaged) and <code>verify_macrobenchmark_runner_apk.py</code> (no listener configuration). The target manifest carries <code>&lt;profileable&gt;</code>, which callstack sampling needs on a user build. SHA-256: target <code>9b36aed1…</code>, runner <code>5c7ea845…</code>, R8 mapping <code>43799ddc…</code>.</p>
+        <p>The one-device check means the script stops if the emulator is also connected when a run starts; at preflight only the phone was listed. That is left as is.</p>
+        <p>Commands the batch needs that the script does not contain, all with <code>adb -s R5CWC0SXR3A</code>: before the batch, <code>getprop ro.product.model</code> and <code>ro.kernel.qemu</code>, <code>dumpsys battery</code> and <code>dumpsys thermalservice</code> (read only; required by the phone protocol). For the sampled capture, a throwaway driver outside the repository (<code>theoria-thread-audit/tools/b3_phone_sampled.sh</code>): <code>pm path com.theoriacodex.benchmark</code> and <code>sha256sum</code> of that path, to prove the installed target is the calibrated APK (read only, no reinstall); wake and <code>wm dismiss-keyguard</code> as in the script; <code>am instrument</code> of the runner for <code>mixedMediaFiveFeedJourney</code> with the script's arguments plus <code>androidx.benchmark.killExistingPerfettoRecordings false</code>, because macrobenchmark otherwise stops other Perfetto sessions when it starts its own; <code>pidof com.theoriacodex.benchmark:benchmarkFixture</code> polled until the fixture exists, so sampling starts after the process has its own name; <code>perfetto --txt -c - -o /data/misc/perfetto-traces/b3-phase2-sampled.pftrace</code> with the configuration from <code>trace_player_frames.py config</code>; then <code>am force-stop com.theoriacodex.benchmark</code>, pull and delete the trace file and the runner's output folder. Against the phone rules: only the benchmark target and runner are run or stopped, nothing is installed beyond the script's two APKs, no setting, governor or permission changes, no screenshots or recordings are taken by the batch (the mixed journey's pixel check reads the screen in memory inside the runner, as in every calibrate run, and shows fixture media only). The sampled run's macrobenchmark session runs alongside the sampled session, so its load is not the unsampled runs' load; the sampled run is used only for its own untraced-against-traced check, as the rule says.</p>
       </details>
     </section>
   </main>
