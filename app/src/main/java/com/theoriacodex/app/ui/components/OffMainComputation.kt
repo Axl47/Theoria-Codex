@@ -4,8 +4,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
+import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+/**
+ * Where feed presentation work runs off the main thread: [rememberComputedOffMain] and the duration filter's
+ * projection. Always [Dispatchers.Default] in the app; frame-by-frame tests provide a dispatcher they step by hand.
+ */
+internal val LocalFeedComputationContext = staticCompositionLocalOf<CoroutineContext> { Dispatchers.Default }
 
 private class ListFrame<E, T>(val list: List<E>, val inputs: Array<out Any?>, val value: T)
 
@@ -20,7 +28,7 @@ private class FrameCache<E, T> {
  * - A new [list] is computed in place, in the same frame as the rest of the screen, so paging tiles, scroll
  *   restoration and the staggered grid's lanes see the list and its result together. When [list] only appended to
  *   the previous one and [inputs] are unchanged, [extend] (if given) adds the result for the appended items alone.
- * - A change to [inputs] alone (a filter toggle, a resolved duration, a sort) recomputes on [Dispatchers.Default]
+ * - A change to [inputs] alone (a filter toggle, a resolved duration, a sort) recomputes on [LocalFeedComputationContext]
  *   while the previous result stays on screen, so the list never flashes empty or loading.
  *
  * [compute] and [extend] must only read [list] and [inputs].
@@ -36,6 +44,7 @@ internal fun <E, T> rememberComputedOffMain(
     // even when a composition is discarded; [published] only asks for recomposition when an off-main value lands.
     val cache = remember { FrameCache<E, T>() }
     val published = remember { mutableIntStateOf(0) }
+    val background = LocalFeedComputationContext.current
     published.intValue
     val previous = cache.frame
     val frame = when {
@@ -48,7 +57,7 @@ internal fun <E, T> rememberComputedOffMain(
     cache.frame = frame
     LaunchedEffect(*inputs) {
         if (frame.inputs.sameAs(inputs)) return@LaunchedEffect
-        val value = withContext(Dispatchers.Default) { compute() }
+        val value = withContext(background) { compute() }
         // A newer list was computed in place with these inputs meanwhile; it already covers this answer.
         if (cache.frame?.list !== list) return@LaunchedEffect
         cache.frame = ListFrame(list, inputs, value)
