@@ -210,6 +210,25 @@ class SearchFeedFramesTest {
         assertEquals(Frame(ids(0..11), filterPasses = 1), frame())
     }
 
+    @Test fun `a post snapshot replaced while the Viewer was open shows the old frame until the projection answers`() {
+        lengthFilterOn()
+        durations = posts.take(8).associate { known(it, SHORT_MS) }
+        show()
+        openViewer()
+        // The Viewer resolved v3 again: a new list, same ids, and a corrected length outside the range.
+        state = searchState(posts.take(8).toMutableList().apply { this[3] = this[3].copy(durationMs = LONG_MS) })
+
+        feedShown = true
+        // The kept length frame covers a list with the same ids, so the first frame is the one the Viewer covered.
+        assertEquals(Frame(ids(0..7), filterPasses = 0), frame())
+        assertEquals(Frame(ids(0..7), filterPasses = 0), frame())
+        // One background projection reads the new snapshot; the corrected length then hides v3 in place.
+        assertEquals(0, drain())
+        assertEquals(Frame(ids(0..7) - "v3", filterPasses = 1), frame())
+        assertEquals(0, drain())
+        assertEquals(Frame(ids(0..7) - "v3", filterPasses = 0), frame())
+    }
+
     @Test fun `a post liked in the Viewer stays until the return finishes, then leaves after a background pass`() {
         fab = fab.copy(hideLiked = true)
         show()

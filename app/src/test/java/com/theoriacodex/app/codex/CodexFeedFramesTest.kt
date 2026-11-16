@@ -106,6 +106,24 @@ class CodexFeedFramesTest {
         assertEquals(Frame(listOf("v6") + longest), drainedFrame())
     }
 
+    @Test fun `a filter change on screen keeps the previous result until its one background pass`() {
+        // No post matches "Animated only", so the grid goes empty ("No matching posts") and back.
+        stored = stills
+        show()
+        assertEquals(Frame(stills.map { it.id.sourcePostId }), frame())
+
+        fab = fab.copy(animatedOnly = true)
+        assertEquals(Frame(listOf("s0", "s1", "s2")), frame())
+        assertEquals(1, drainedPasses().filter)
+        assertEquals(Frame(emptyList()), frame())
+
+        // Cleared from the empty result: the empty grid stays until the pass lands, then the posts return.
+        fab = fab.copy(animatedOnly = false)
+        assertEquals(Frame(emptyList()), frame())
+        assertEquals(1, drainedPasses().filter)
+        assertEquals(Frame(listOf("s0", "s1", "s2")), frame())
+    }
+
     @Test fun `another Codex in the same entry never shows the first one's posts, and the first keeps its own result`() {
         show()
         openViewer()
@@ -178,6 +196,14 @@ class CodexFeedFramesTest {
         background.drain()
         assertEquals(before, passes())
         return frame()
+    }
+
+    /** Runs queued background work and returns the traced passes it held. */
+    private fun drainedPasses(): Frame {
+        val before = passes()
+        background.drain()
+        val after = passes()
+        return Frame(null, after.knownLengths - before.knownLengths, after.sort - before.sort, after.filter - before.filter)
     }
 
     private fun passes(): Frame {
