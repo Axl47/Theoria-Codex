@@ -38,7 +38,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
-import org.junit.Ignore
 import org.junit.Test
 
 /**
@@ -82,7 +81,6 @@ class SourceMainSafetyContractTest {
         if (SourceKey.HITOMI !in NOT_YET_CONVERTED) assertOffCaller("hitomi", expected = 2) { hitomi.search(providerPageQuery(SourceKey.HITOMI), null).items.size }
     }
 
-    @Ignore("Pixiv is converted in the next group")
     @Test
     fun `pixiv sign-in and token refresh run off the calling thread`() {
         val authApi = PixivAuthApi(RecordingHttpClient(FakeHttpClient().apply { nextPostResponse = TOKEN_RESPONSE }))
@@ -92,7 +90,6 @@ class SourceMainSafetyContractTest {
         assertOffCaller("refresh", expected = "new-access") { authApi.refresh("old-refresh").accessToken }
     }
 
-    @Ignore("Pixiv is converted in the next group")
     @Test
     fun `an expired pixiv session refreshes off the calling thread`() {
         val credentials = RecordingCredentials(FakeCredentialsProvider().apply { pixivTokens = PixivAuthTokens("old", "old-refresh", 1L) })
@@ -193,7 +190,7 @@ class SourceMainSafetyContractTest {
     private companion object {
         /** Sources Phase 1 has not converted yet. Empty, and removed, once the whole boundary is wrapped. */
         val NOT_YET_CONVERTED = setOf(
-            SourceKey.PIXIV, SourceKey.NHENTAI, SourceKey.HITOMI, SourceKey.IWARA,
+            SourceKey.NHENTAI, SourceKey.HITOMI, SourceKey.IWARA,
             SourceKey.RULE34VIDEO, SourceKey.RULE34GEN, SourceKey.RULE34PAHEAL,
         )
         const val HTTP = "http"

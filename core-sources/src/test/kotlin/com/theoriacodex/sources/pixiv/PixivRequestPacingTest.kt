@@ -8,6 +8,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.credentials.PixivAuthTokens
 import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.testing.FakeCredentialsProvider
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -27,6 +28,8 @@ class PixivRequestPacingTest {
             credentialsProvider = credentials,
             clock = { testScheduler.currentTime + 1_000_000L },
             minRequestIntervalMs = 10_000L,
+            // A pacing wait must show on the virtual clock, so the calls stay on the test dispatcher.
+            callContext = EmptyCoroutineContext,
         )
         val ugoira = Post(
             id = PostId(SourceKey.PIXIV, "12345"),

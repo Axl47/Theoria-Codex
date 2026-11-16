@@ -2,6 +2,7 @@ package com.theoriacodex.sources.pixiv
 
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
+import com.theoriacodex.sources.common.sourceCall
 import com.theoriacodex.sources.credentials.PixivAuthTokens
 import com.theoriacodex.sources.credentials.PixivCredentialSession
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
@@ -16,18 +17,18 @@ class PixivTokenCoordinator(
 ) {
     private val refreshMutex = Mutex()
 
-    suspend fun activeTokens(): PixivAuthTokens {
+    suspend fun activeTokens(): PixivAuthTokens = sourceCall {
         val current = requiredTokens()
-        if (isUsable(current)) return current
-        return refreshMutex.withLock {
+        if (isUsable(current)) return@sourceCall current
+        refreshMutex.withLock {
             val session = credentialsProvider.getPixivSession()
             val latest = requireTokens(session.tokens)
             if (isUsable(latest)) latest else refreshAndPersist(session)
         }
     }
 
-    suspend fun refreshAfterAuthFailure(failed: PixivAuthTokens): PixivAuthTokens {
-        return refreshMutex.withLock {
+    suspend fun refreshAfterAuthFailure(failed: PixivAuthTokens): PixivAuthTokens = sourceCall {
+        refreshMutex.withLock {
             val session = credentialsProvider.getPixivSession()
             val latest = requireTokens(session.tokens)
             if (latest.accessToken != failed.accessToken) {

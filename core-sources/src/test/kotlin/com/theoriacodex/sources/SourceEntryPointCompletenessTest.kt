@@ -142,14 +142,13 @@ class SourceEntryPointCompletenessTest {
         const val SOURCE_ADAPTER_FILE = "core-domain/src/main/kotlin/com/theoriacodex/domain/adapter/SourceAdapter.kt"
 
         /** Classes outside the adapters that app code calls directly with a provider response to handle. */
-        val BOUNDARY_CLASSES = listOf("SiteProber", "SiteHealthCheck")
+        val BOUNDARY_CLASSES = listOf("PixivAuthApi", "PixivTokenCoordinator", "SiteProber", "SiteHealthCheck")
 
         /** Top-level functions app code calls directly with a provider response to handle. */
         val BOUNDARY_FUNCTIONS = emptySet<String>()
 
         /** Files Phase 1 has not converted yet. Empty, and removed, once the whole boundary is wrapped. */
         val NOT_YET_CONVERTED = listOf(
-            "pixiv/PixivSourceAdapter.kt",
             "nhentai/NhentaiSourceAdapter.kt",
             "hitomi/HitomiSourceAdapter.kt",
             "iwara/IwaraSourceAdapter.kt",
