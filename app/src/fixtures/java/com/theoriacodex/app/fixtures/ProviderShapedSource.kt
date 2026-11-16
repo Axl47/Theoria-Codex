@@ -18,8 +18,9 @@ import java.util.concurrent.CopyOnWriteArrayList
 /**
  * A provider served from memory to the real Danbooru adapter, so a journey parses provider-shaped JSON instead of
  * receiving ready-made posts. It answers `/posts.json` newest first from [posts], honouring `limit` and both paging
- * forms (`page=N` and the `b<id>` cursor); `tags` is ignored. Every other request goes to [fallback]. The JSON is
- * generated from fixture posts, so no provider data is recorded or stored.
+ * forms (`page=N` and the `b<id>` cursor); `tags` is ignored. It answers `/posts/<id>.json` with that post, or 404.
+ * Every other request goes to [fallback]. The JSON is generated from fixture posts, so no provider data is recorded
+ * or stored.
  */
 class ProviderShapedSource(posts: List<Post>, private val fallback: SourceHttpClient) : SourceHttpClient {
     private val newestFirst = posts.sortedByDescending { it.id.sourcePostId.toLong() }
@@ -27,11 +28,19 @@ class ProviderShapedSource(posts: List<Post>, private val fallback: SourceHttpCl
     /** The `page` value of every `/posts.json` request, in order; each one was answered. */
     val pageRequests = CopyOnWriteArrayList<String>()
 
+    /** The id of every single-post request, in order; each one was answered. */
+    val postRequests = CopyOnWriteArrayList<String>()
+
     fun adapter(source: SourceKey): SourceAdapter =
         DanbooruSourceAdapter(DanbooruSite(source = source, label = "Journey ${source.id}", baseUrl = BASE_URL), this)
 
     override suspend fun get(url: String, query: Map<String, String>, headers: Map<String, String>): SourceHttpResponse {
-        if (url != "$BASE_URL/posts.json") return fallback.get(url, query, headers)
+        if (url != "$BASE_URL/posts.json") {
+            val postId = SINGLE_POST.matchEntire(url)?.groupValues?.get(1) ?: return fallback.get(url, query, headers)
+            postRequests += postId
+            val post = newestFirst.firstOrNull { it.id.sourcePostId == postId } ?: return SourceHttpResponse(404, "{}")
+            return SourceHttpResponse(200, post.toDanbooruJson().toString())
+        }
         val page = query["page"] ?: "1"
         pageRequests += page
         val limit = query["limit"]?.toInt() ?: DEFAULT_LIMIT
@@ -50,6 +59,7 @@ class ProviderShapedSource(posts: List<Post>, private val fallback: SourceHttpCl
     private companion object {
         const val BASE_URL = "https://provider.journey.invalid"
         const val DEFAULT_LIMIT = 20
+        val SINGLE_POST = Regex(Regex.escape(BASE_URL) + """/posts/(\d+)\.json""")
     }
 }
 
@@ -77,4 +87,5 @@ private fun Post.toDanbooruJson() = JsonObject().apply {
     addProperty("tag_string", canonicalTags.joinToString(" "))
     addProperty("tag_string_artist", creatorProfile?.profileId)
     addProperty("created_at", createdAtEpochMs?.let { Instant.ofEpochMilli(it).toString() })
+    addProperty("source", originUrl)
 }

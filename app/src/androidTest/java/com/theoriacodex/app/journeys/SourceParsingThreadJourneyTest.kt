@@ -1,6 +1,5 @@
 package com.theoriacodex.app.journeys
 
-import android.os.Looper
 import android.util.Log
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
@@ -11,15 +10,11 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import com.theoriacodex.app.fixtures.providerShapedPosts
 import com.theoriacodex.app.search.searchCardTestTag
-import com.theoriacodex.domain.diagnostics.OffMainChecker
-import com.theoriacodex.domain.diagnostics.OffMainWork
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
-import java.util.concurrent.atomic.AtomicInteger
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 
 /**
@@ -31,17 +26,7 @@ class SourceParsingThreadJourneyTest : AppJourneyFixture() {
     override val providerShapedSources = setOf(SOURCE)
     override fun fixturePosts(media: ImageRef) = mapOf(SOURCE to providerShapedPosts(SOURCE, POST_COUNT, media))
 
-    private val recorder = ParseRecorder()
-
-    @Before
-    fun recordParses() {
-        recorder.appChecker = OffMainWork.install(recorder)
-    }
-
-    @After
-    fun restoreAppChecker() {
-        OffMainWork.install(recorder.appChecker)
-    }
+    @get:Rule val recorder = SourceParseRecorder()
 
     @Test
     fun searchParsesEveryProviderPageOffTheMainThread() {
@@ -68,21 +53,6 @@ class SourceParsingThreadJourneyTest : AppJourneyFixture() {
         assertTrue("$parses parses for ${pages.size} responses", parses >= pages.size)
         assertEquals("Provider responses parsed on the main thread", 0, mainThreadParses)
         compose.onNodeWithTag(searchCardTestTag(posts.getValue(SOURCE)[THIRD_PAGE_CARD].id)).assertIsDisplayed()
-    }
-
-    /** Counts source parses and those on the main thread, and forwards every call to the app's checker. */
-    private class ParseRecorder : OffMainChecker {
-        @Volatile var appChecker: OffMainChecker? = null
-        val parses = AtomicInteger()
-        val mainThreadParses = AtomicInteger()
-
-        override fun check(label: String) {
-            if (label == OffMainWork.SOURCE_PARSE) {
-                parses.incrementAndGet()
-                if (Looper.getMainLooper().isCurrentThread) mainThreadParses.incrementAndGet()
-            }
-            appChecker?.check(label)
-        }
     }
 
     private companion object {
