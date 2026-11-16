@@ -1,0 +1,109 @@
+from __future__ import annotations
+
+from pathlib import Path
+import sys
+import tempfile
+import unittest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import trace_player_frames as frames
+from trace_player_frames import Section, TimelineRow
+
+
+def do_frame(token: int, ts: int, dur: int) -> Section:
+    return Section(f"Choreographer#doFrame {token}", ts, dur)
+
+
+class AttributionTest(unittest.TestCase):
+    """Hand-written rows in nanoseconds; each frame has a 16 ns budget, so 4 ns of player time makes it heavy."""
+
+    timeline = [
+        # Token 1 appears for two layers; the longer row is the late one and must win.
+        TimelineRow(1, ts=100, dur=20, jank_type="None", expected_ts=100, expected_dur=16),
+        TimelineRow(1, ts=100, dur=30, jank_type="App Deadline Missed, Buffer Stuffing", expected_ts=100,
+                    expected_dur=16),
+        TimelineRow(2, ts=116, dur=22, jank_type="App Deadline Missed", expected_ts=116, expected_dur=16),
+        # Janky for a compositor reason only, and never reached the main thread.
+        TimelineRow(3, ts=140, dur=10, jank_type="Buffer Stuffing", expected_ts=132, expected_dur=16),
+    ]
+    do_frames = [do_frame(0, 80, 10), do_frame(1, 102, 20), do_frame(2, 124, 12)]
+    sections = [
+        # Before frame 1's expected start and after doFrame 0: belongs to no frame.
+        Section("TheoriaPreviewPlayerCreate", 92, 6),
+        # Nested: 6 ns of prepare self time around 4 ns of construction.
+        Section("TheoriaPreviewPrepare", 104, 10),
+        Section("TheoriaPreviewPlayerCreate", 106, 4),
+        # Spans the boundary between frame 1 (ends 122) and frame 2.
+        Section("TheoriaPreviewSurfaceDetach", 120, 5),
+    ]
+
+    def test_intervals_start_at_expected_start_or_previous_do_frame_end(self) -> None:
+        intervals = frames.frame_intervals(frames.select_frames(self.timeline), self.do_frames)
+        self.assertEqual({1: (100, 122), 2: (122, 136)}, intervals)
+
+    def test_frames_attribute_self_time_without_double_counting(self) -> None:
+        results = {result.token: result for result in frames.attribute_frames(self.timeline, self.do_frames,
+                                                                               self.sections)}
+        self.assertEqual({"TheoriaPreviewPrepare": 6, "TheoriaPreviewPlayerCreate": 4,
+                          "TheoriaPreviewSurfaceDetach": 2}, results[1].player_ns)
+        self.assertEqual({"TheoriaPreviewSurfaceDetach": 3}, results[2].player_ns)
+        self.assertTrue(results[1].late and results[1].player_heavy)
+        self.assertTrue(results[2].late)
+        self.assertFalse(results[2].player_heavy)
+        self.assertIsNone(results[3].interval)
+
+    def test_summary_counts_late_other_jank_and_player_share(self) -> None:
+        summary = frames.FrameSummary()
+        summary.add(frames.attribute_frames(self.timeline, self.do_frames, self.sections))
+        self.assertEqual((3, 2, 1, 1, 1), (summary.frames, summary.late, summary.other_jank,
+                                           summary.without_do_frame, summary.player_heavy_late))
+        self.assertEqual(0.5, summary.player_share)
+        self.assertEqual({"construction": 4, "prepare": 6, "surface": 5, "commands_events": 0},
+                         summary.late_category_ns)
+
+    def test_section_totals_report_counts_self_time_and_missing_names(self) -> None:
+        totals = frames.section_totals(self.sections)
+        self.assertEqual({"count": 2, "self_ms": 10 / frames.NS_PER_MS}, totals["TheoriaPreviewPlayerCreate"])
+        self.assertEqual(6 / frames.NS_PER_MS, totals["TheoriaPreviewPrepare"]["self_ms"])
+        self.assertEqual(0, totals["TheoriaPreviewPlayPause"]["count"])
+
+
+class PresentationTest(unittest.TestCase):
+    def test_slices_ending_inside_an_abandoned_section_are_abandoned(self) -> None:
+        demand, ms = frames.DEMAND_SLICE, frames.NS_PER_MS
+        presentations = frames.classify_presentations(
+            [Section(demand, 0, 2_500 * ms), Section(demand, 10 * ms, 20 * ms), Section(demand, 3_000 * ms, -1),
+             Section(frames.ATTACH_SLICE, 15 * ms, 15 * ms)],
+            [Section(frames.ABANDONED_SECTION, 2_499 * ms, 2 * ms)],
+        )
+        summary = frames.presentation_summary(presentations, "demand")
+        self.assertEqual((1, 1, 1, 1), (summary["shown"], summary["abandoned"], summary["abandoned_over_2s"],
+                                        summary["open_at_end"]))
+        self.assertEqual([20.0], summary["shown_ms"])
+        self.assertEqual([2_500.0], summary["abandoned_ms"])
+        self.assertEqual(1, frames.presentation_summary(presentations, "attach")["shown"])
+
+    def test_nearest_rank_percentile(self) -> None:
+        self.assertEqual(95, frames.nearest_rank(list(range(1, 101)), 0.95))
+        self.assertEqual(3, frames.nearest_rank([3, 1, 2], 0.95))
+
+
+class DeobfuscatorTest(unittest.TestCase):
+    def test_names_obfuscated_classes_and_methods(self) -> None:
+        mapping = (
+            "androidx.media3.exoplayer.ExoPlayerImpl -> c2.a0:\n"
+            "    int counter -> a\n"
+            "    1:5:void setVideoOutputInternal(java.lang.Object):10:14 -> b\n"
+            "androidx.media3.common.Kept -> androidx.media3.common.Kept:\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "mapping.txt"
+            path.write_text(mapping)
+            deobfuscator = frames.Deobfuscator(path)
+        self.assertEqual("androidx.media3.exoplayer.ExoPlayerImpl.setVideoOutputInternal",
+                         deobfuscator.name("void c2.a0.b(java.lang.Object)"))
+        self.assertEqual("androidx.media3.common.Kept.run", deobfuscator.name("androidx.media3.common.Kept.run"))
+
+
+if __name__ == "__main__":
+    unittest.main()
