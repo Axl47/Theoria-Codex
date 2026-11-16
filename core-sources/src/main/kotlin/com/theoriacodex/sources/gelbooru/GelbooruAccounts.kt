@@ -1,8 +1,14 @@
 package com.theoriacodex.sources.gelbooru
 
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.diagnostics.OffMainWork
 import com.theoriacodex.domain.model.AccountDetails
+import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.htmlFragmentToText
+import com.theoriacodex.sources.common.isSuccessful
 import com.theoriacodex.sources.common.parseHtml
+import com.theoriacodex.sources.common.sourceCall
+import com.theoriacodex.sources.http.SourceHttpClient
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -37,6 +43,33 @@ internal fun parseGelbooruAccountProfile(html: String, siteUrl: String): Account
     )
     return details.takeIf { it != AccountDetails() }
 }
+
+/**
+ * The account name gelbooru.com's profile page for [creatorId] searches uploads with (`user:<name>`), or null
+ * when the page names none. A failed request throws, so callers can tell a missing name from a failed lookup.
+ */
+suspend fun fetchGelbooruProfileOwner(
+    http: SourceHttpClient,
+    creatorId: String,
+    headers: Map<String, String>,
+): String? = sourceCall {
+    val response = http.get(
+        GelbooruSite.GELBOORU.apiUrl,
+        query = mapOf("page" to "account", "s" to "profile", "id" to creatorId),
+        headers = headers,
+    )
+    if (!response.isSuccessful()) {
+        throw SourceAdapterException(classifyHttpFailure(response.statusCode), "Gelbooru profile failed (${response.statusCode})")
+    }
+    parseGelbooruProfileOwner(response.body)
+}
+
+private fun parseGelbooruProfileOwner(html: String): String? {
+    OffMainWork.note(OffMainWork.SOURCE_PARSE)
+    return PROFILE_OWNER.find(html)?.groupValues?.getOrNull(1)?.trim()?.takeIf(String::isNotBlank)
+}
+
+private val PROFILE_OWNER = Regex("""user:([A-Za-z0-9_:-]+)""", RegexOption.IGNORE_CASE)
 
 /** The text of everything that follows [title] inside its parent. */
 private fun textAfter(title: Element): String =

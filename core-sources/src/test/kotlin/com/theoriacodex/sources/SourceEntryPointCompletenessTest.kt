@@ -144,7 +144,7 @@ class SourceEntryPointCompletenessTest {
         val BOUNDARY_CLASSES = listOf("PixivAuthApi", "PixivTokenCoordinator", "SiteProber", "SiteHealthCheck")
 
         /** Top-level functions app code calls directly with a provider response to handle. */
-        val BOUNDARY_FUNCTIONS = emptySet<String>()
+        val BOUNDARY_FUNCTIONS = setOf("fetchGelbooruProfileOwner")
 
         /** A constructor parameter that defaults to the background dispatcher; only tests pass another. */
         const val CALL_CONTEXT_DECLARATION = "callContext: CoroutineContext = Dispatchers.Default,"
