@@ -129,14 +129,12 @@ internal suspend fun prepareViewerPostsForLaunch(
 internal fun mergeViewerPosts(current: List<Post>, incoming: List<Post>): List<Post> {
     if (incoming.isEmpty()) return current
     if (current.isEmpty()) return incoming
-    val seen = current
-        .mapTo(mutableSetOf()) { post -> "${post.id.source.id}:${post.id.sourcePostId}" }
-    val merged = current.toMutableList()
-    incoming.forEach { post ->
-        val key = "${post.id.source.id}:${post.id.sourcePostId}"
-        if (seen.add(key)) {
-            merged += post
-        }
-    }
-    return merged
+    return current + newViewerPosts(current, incoming)
+}
+
+/** The posts of [incoming] that [current] lacks, in order and without repeats. */
+internal fun newViewerPosts(current: List<Post>, incoming: List<Post>): List<Post> {
+    if (incoming.isEmpty()) return emptyList()
+    val seen = current.mapTo(mutableSetOf()) { post -> "${post.id.source.id}:${post.id.sourcePostId}" }
+    return incoming.filter { post -> seen.add("${post.id.source.id}:${post.id.sourcePostId}") }
 }
