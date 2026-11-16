@@ -12,6 +12,15 @@ selected_device() {
   printf '%s\n' "$selected"
 }
 
+# For lanes that send every adb command with -s: only the named device must be connected and
+# authorized, so a shared emulator may stay connected beside a phone.
+require_connected_device() {
+  if [[ "$("${ADB:-adb}" -s "$1" get-state 2>/dev/null | tr -d '\r')" != device ]]; then
+    echo "Device $1 is not connected and authorized." >&2
+    return 2
+  fi
+}
+
 require_physical_device() {
   local qemu
   qemu="$("${ADB:-adb}" -s "$1" shell getprop ro.kernel.qemu | tr -d '\r')"

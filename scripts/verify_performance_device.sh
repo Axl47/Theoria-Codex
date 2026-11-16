@@ -56,8 +56,9 @@ readonly target_apk="app/build/outputs/apk/benchmarkRelease/app-benchmarkRelease
 readonly runner_apk="macrobenchmark/build/outputs/apk/benchmarkRelease/macrobenchmark-benchmarkRelease.apk"
 adb_command=("${ADB:-adb}" -s "$serial")
 
+# Every device command below uses adb -s, so other connected devices (a shared emulator) are allowed.
 require_selected_phone() {
-  [[ "$(selected_device)" == "$serial" ]]
+  require_connected_device "$serial"
   require_physical_device "$serial"
 }
 
