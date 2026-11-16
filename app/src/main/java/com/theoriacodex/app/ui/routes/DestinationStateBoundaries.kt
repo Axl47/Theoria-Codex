@@ -33,7 +33,7 @@ import com.theoriacodex.app.codex.FOLLOWED_CODEX_ID
 import com.theoriacodex.app.codex.observeCodexLibraryUsage
 import com.theoriacodex.app.codex.usesUsage
 import com.theoriacodex.app.codex.storeOrder
-import com.theoriacodex.app.codex.sortCodexPosts
+import com.theoriacodex.app.codex.rememberSortedCodexPosts
 import com.theoriacodex.app.codex.rememberCodexPostUsage
 import com.theoriacodex.app.codex.rememberCodexPostDurations
 import com.theoriacodex.app.media.MediaDurationState
@@ -290,12 +290,7 @@ internal fun CodexDetailDestinationStateBoundary(
     val storeSort = sortMode.storeOrder
     val storedPosts by rememberRetained(codexPostsKey(codexId, storeSort), content) { codexPostsFlow(data, codexId, storeSort) }
     val usage = rememberCodexPostUsage(data.statisticsRepository, codexId, sortMode)
-    val durations = rememberCodexPostDurations(storedPosts, sortMode, durationStates)
-    val sortedPosts = storedPosts?.let { posts ->
-        rememberComputedOffMain(posts, sortMode, usage, durations, section = FeedTraceSections.SORT) {
-            usage?.let { sortCodexPosts(posts, sortMode, it, durations) }
-        }
-    }
+    val sortedPosts = rememberSortedCodexPosts(codexId, storedPosts, sortMode, usage, durationStates)
     // Changing the sort keeps showing the previous order until the new one answers.
     val shownPosts = remember(codexId) { ShownPosts() }
     sortedPosts?.let { shownPosts.latest = it }
@@ -540,11 +535,13 @@ private fun FollowedCodexDestinationStateBoundary(
     }
     val usage = rememberCodexPostUsage(data.statisticsRepository, FOLLOWED_CODEX_ID, sort).orEmpty()
     val feed = owner.state.collectAsStateWithLifecycle().value
-    val durations = rememberCodexPostDurations(feed.posts, sort, durationStates)
+    val durations = rememberCodexPostDurations(feed.posts, sort, durationStates, FOLLOWED_CODEX_ID)
     androidx.compose.runtime.LaunchedEffect(selected, available, sort, usage, durations) {
         owner.synchronize(selected, available, sort, usage, durations)
     }
-    val posts = rememberComputedOffMain(feed.posts, sort, usage, durations, section = FeedTraceSections.SORT) {
+    val posts = rememberComputedOffMain(
+        feed.posts, sort, usage, durations, section = FeedTraceSections.SORT, retainKey = "codex-sort:$FOLLOWED_CODEX_ID",
+    ) {
         sortLiveCodexPosts(feed.posts, sort, usage, durations)
     }
     content(CodexDetailDestinationState(

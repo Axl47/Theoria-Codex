@@ -71,7 +71,7 @@ import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
 import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
 import com.theoriacodex.app.related.RelatedShelfBinding
 import com.theoriacodex.app.viewer.PixivUgoiraClient
-import com.theoriacodex.app.viewer.traceMediaSection
+import com.theoriacodex.app.ui.components.rememberComputedOffMain
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.CreatorProfile
@@ -99,6 +99,7 @@ private fun CodexUnavailable(loading: Boolean, onBack: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun CodexDetailScreen(
+    codexId: String,
     codexName: String?,
     posts: List<Post>,
     sortMode: CodexSortMode,
@@ -146,12 +147,12 @@ internal fun CodexDetailScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
     var editSelection by rememberCodexEditSelection(posts)
-    val gridState = rememberRetainedFeedGridState("codex-detail")
+    val gridState = rememberRetainedFeedGridState("codex-detail:$codexId")
     val sourceOptions = remember(posts, availableSources) { codexSearchSourceOptions(posts, availableSources).map(CodexSearchSourceOption::source) }
     val supportsLanguage = remember(sourceOptions) { supportsCodexLanguageFilter(sourceOptions.toSet()) }
     val supportsFullColor = remember(sourceOptions) { supportsCodexFullColorFilter(sourceOptions.toSet()) }
     val filters = remember(fabRestoreState) { fabRestoreState.savedCollectionFilters() }
-    val feed = rememberCodexDetailFeed(posts, filters, fabRestoreState, durationStates, resolveUnknownAnimatedDurations, related, likedPostIds, sortMode)
+    val feed = rememberCodexDetailFeed(codexId, posts, filters, fabRestoreState, durationStates, resolveUnknownAnimatedDurations, related, likedPostIds, sortMode)
     val applyFilters = { updated: CodexCollectionFilters -> onFabRestoreStateChange(fabRestoreState.withCollectionFilters(updated)) }
     CodexFilterReconciliationEffect(filters, sourceOptions, supportsLanguage, supportsFullColor, applyFilters)
     val resolveAllDurations = feed.durationFilterActive || sortMode.usesDuration
@@ -291,7 +292,7 @@ private fun CodexDetailFilterFab(
 }
 
 /** What the collection grid shows once the saved filters and known durations are applied, plus any related shelf. */
-private data class CodexDetailFeed(
+internal data class CodexDetailFeed(
     val visiblePosts: List<Post>,
     val acquiredDurations: Map<PostId, Long>,
     val durationFilterActive: Boolean,
@@ -300,8 +301,10 @@ private data class CodexDetailFeed(
     val related: CodexRelatedFeed?,
 )
 
+/** The grid's feed for Codex [codexId]: [posts] after the length step and [filters], plus any related shelf. */
 @Composable
-private fun rememberCodexDetailFeed(
+internal fun rememberCodexDetailFeed(
+    codexId: String,
     posts: List<Post>,
     filters: CodexCollectionFilters,
     fabRestoreState: FeedFabRestoreState,
@@ -318,14 +321,15 @@ private fun rememberCodexDetailFeed(
     }
     val unknownDurationPolicy = unknownAnimatedDurationPolicy(resolveUnknownAnimatedDurations)
     val durationFilterActive = !animatedDurationRange.isFullRange
-    val durationMetadata = rememberDurationFilterMetadata(posts, durationStates, durationFilterActive, retainKey = "codex-detail")
+    val durationMetadata = rememberDurationFilterMetadata(posts, durationStates, durationFilterActive, retainKey = "codex-detail:$codexId")
     val acquiredDurations = durationMetadata.knownDurationMsByPostId
     // The filter's reveal keeps shown cards in place, which a length sort must not do as lengths arrive.
     val presentedPosts = durationMetadata.presentedPosts?.takeUnless { sortMode.usesDuration } ?: posts
-    val visiblePosts = remember(presentedPosts, filters, unknownDurationPolicy, acquiredDurations) {
-        traceMediaSection(FeedTraceSections.FILTER) {
-            filterCodexCollectionPosts(presentedPosts, filters, unknownDurationPolicy, knownDurationMsByPostId = acquiredDurations)
-        }
+    val visiblePosts = rememberComputedOffMain(
+        presentedPosts, filters, unknownDurationPolicy, acquiredDurations,
+        section = FeedTraceSections.FILTER, retainKey = "codex-filter:$codexId",
+    ) {
+        filterCodexCollectionPosts(presentedPosts, filters, unknownDurationPolicy, knownDurationMsByPostId = acquiredDurations)
     }
     val resolvingDurations = durationMetadata.readiness.isResolving
     val durationsBlockPaging = durationMetadata.blocksPaging

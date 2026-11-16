@@ -177,6 +177,7 @@ private fun CodexDetailContent(
     )
     val liveOwner = state.followedOwner ?: state.savedSearchOwner
     CodexDetailScreen(
+        codexId = codexId,
         codexName = state.codex?.name,
         onTitleLongPress = { shell.overlays.codexActionTargetId = codexId },
         customHeader = virtualUi?.header,

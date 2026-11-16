@@ -80,6 +80,7 @@ class NavigationChromeTest {
         compose.setContent {
             MaterialTheme {
                 CodexDetailScreen(
+                    codexId = "collection",
                     codexName = "Collection", posts = listOf(first, hidden, second),
                     sortMode = CodexSortMode.OLDEST_SAVED,
                     availableSources = setOf(SourceKey.PIXIV, SourceKey.GELBOORU),

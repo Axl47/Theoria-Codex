@@ -52,11 +52,13 @@ internal fun SavedSearchesCodexBoundary(
     }
     val usage = rememberCodexPostUsage(data.statisticsRepository, SAVED_SEARCHES_CODEX_ID, sort).orEmpty()
     val feed = owner.state.collectAsStateWithLifecycle().value
-    val durations = rememberCodexPostDurations(feed.posts, sort, durationStates)
+    val durations = rememberCodexPostDurations(feed.posts, sort, durationStates, SAVED_SEARCHES_CODEX_ID)
     LaunchedEffect(selected, settings.runtime, available, sort, usage, durations) {
         owner.synchronize(selected, settings, available, sort, usage, durations)
     }
-    val posts = rememberComputedOffMain(feed.posts, sort, usage, durations, section = FeedTraceSections.SORT) {
+    val posts = rememberComputedOffMain(
+        feed.posts, sort, usage, durations, section = FeedTraceSections.SORT, retainKey = "codex-sort:$SAVED_SEARCHES_CODEX_ID",
+    ) {
         sortLiveCodexPosts(feed.posts, sort, usage, durations)
     }
     content(CodexDetailDestinationState(

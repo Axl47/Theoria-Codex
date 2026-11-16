@@ -32,6 +32,7 @@ class CodexEditModeTest {
             BackHandler { destinationBacks++ }
             MaterialTheme {
                 CodexDetailScreen(
+                    codexId = "mine",
                     codexName = "Mine", posts = listOf(post), sortMode = CodexSortMode.NEWEST_SAVED,
                     availableSources = emptySet(), creatorBrowsingSources = emptySet(),
                     onOpenViewer = { _, _ -> }, onAddPostsToAnotherCodex = {}, onRemovePosts = {}, onSavePostToDevice = {},
