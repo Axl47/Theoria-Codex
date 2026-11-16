@@ -245,6 +245,7 @@
         <li>[x] 2026-11-16 - Phases 1 and 3 merged (PR #107); audit fix A1 merged (PR #109).</li>
         <li>[x] 2026-11-16 - Phase 2: <code>ProviderShapedSource</code> (in-memory provider, JSON generator, <code>providerShapedPosts</code>) and the fixture hooks in <code>JourneySourceRegistry</code>, <code>JourneyAppContainer</code> and <code>AppJourneyFixture</code>; the host generator check <code>ProviderShapedSourceTest</code> passes.</li>
         <li>[x] 2026-11-16 - Phase 2: <code>SourceParsingThreadJourneyTest</code> passes on the <code>theoria-search-test</code> emulator (Android 16) with <code>pages=[1, b61, b21] parses=3 mainThreadParses=0</code>; both negative controls failed on the expected assertion and were undone (Appendix); <code>SearchNavigationJourneyTest</code> (5 tests) still passes with the helpers it gave to the fixture.</li>
+        <li>[x] 2026-11-16 - Phase 2: <code>scripts/check.sh --record</code> passes; PR #112 opened; a branch run of <code>device-validation.yml</code> (run 43805329051) passed every shard, and <code>SourceParsingThreadJourneyTest</code> ran in part 1 on both Android 16 and 17 (about 26 s each) with <code>pages=[1, b61, b21] parses=3 mainThreadParses=0</code>.</li>
         <li>[ ] Phase 2 merged, and the class passes in the Main workflow on Android 16 and 17.</li>
       </ul>
       <h3>Surprises And Discoveries</h3>
