@@ -44,6 +44,7 @@ import com.theoriacodex.app.viewer.FirstFrameTraceGate
 import com.theoriacodex.app.viewer.MediaTraceSections
 import com.theoriacodex.app.viewer.FeedPreviewPlayerLease
 import com.theoriacodex.app.viewer.FeedPreviewPlayerPool
+import com.theoriacodex.app.viewer.PreviewPresentationTrace
 import com.theoriacodex.app.viewer.createTexturePlayerView
 import com.theoriacodex.app.viewer.playbackDiagnosticsSemantics
 import com.theoriacodex.app.viewer.traceMediaSection
@@ -158,6 +159,7 @@ private fun rememberFeedPreviewPlayerState(
     DisposableEffect(mediaKey, location, sourceKey, leased) {
         if (!leased) return@DisposableEffect onDispose {}
         state.reset()
+        state.presentation.begin()
         val pool = context.videoPlaybackInfrastructure().feedPreviewPlayerPool
         val lease = traceMediaSection(MediaTraceSections.PREVIEW_PREPARE) {
             pool.acquire(
@@ -183,6 +185,7 @@ private fun rememberFeedPreviewPlayerState(
             publishReadyFeedDuration(state, player) { durationMs -> latestOnDurationKnown(durationMs) }
         }
         onDispose {
+            state.presentation.end()
             handoff.close()
             recycleFeedPreviewPlayer(state, lease, listener, pool)
         }
@@ -227,6 +230,7 @@ private fun feedPreviewPlayerListener(
             traceMediaSection(MediaTraceSections.PREVIEW_PLAYER_EVENT) {
                 if (state.hasRenderedFirstFrame) return
                 firstFrameTraceGate.recordOnce(MediaTraceSections.PREVIEW_FIRST_FRAME)
+                state.presentation.onFirstFrame()
                 state.hasRenderedFirstFrame = true
             }
         }
@@ -351,6 +355,7 @@ private class FeedPreviewPlayerState {
     var didPublishDuration = false
     var hasRenderedFirstFrame by mutableStateOf(false)
     var isActuallyPlaying by mutableStateOf(false)
+    val presentation = PreviewPresentationTrace()
 
     fun reset() {
         didNotifyError = false
@@ -367,6 +372,7 @@ private class FeedPreviewPlayerState {
         if (playerView.player === player) return
         val section = if (player == null) MediaTraceSections.PREVIEW_SURFACE_DETACH else MediaTraceSections.PREVIEW_SURFACE_ATTACH
         traceMediaSection(section) { playerView.player = player }
+        if (player != null) presentation.onSurfaceAttached()
     }
 }
 
