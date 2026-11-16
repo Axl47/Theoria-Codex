@@ -68,6 +68,45 @@ class AttributionTest(unittest.TestCase):
         self.assertEqual(0, totals["TheoriaPreviewPlayPause"]["count"])
 
 
+class SampleShareTest(unittest.TestCase):
+    """Frame 1 (late) owns [100, 122) and frame 2 (on time) owns [130, 136); a detach section covers [104, 110)."""
+
+    flush = "androidx.media3.common.util.ListenerSet.flushEvents"
+    timeline = [
+        TimelineRow(1, ts=100, dur=30, jank_type="App Deadline Missed", expected_ts=100, expected_dur=16),
+        TimelineRow(2, ts=130, dur=10, jank_type="None", expected_ts=130, expected_dur=16),
+    ]
+    do_frames = [do_frame(1, 102, 20), do_frame(2, 131, 5)]
+    sections = [Section("TheoriaPreviewSurfaceDetach", 104, 6)]
+    samples = [
+        frames.Sample(90, flush),  # before every interval
+        frames.Sample(105, "androidx.media3.exoplayer.ExoPlayerImpl.setVideoOutputInternal"),  # inside the section
+        frames.Sample(112, flush),  # Media3 outside sections
+        frames.Sample(116, "androidx.media3.session.MediaSessionImpl.onEvents"),  # while the Viewer plays
+        frames.Sample(120, None),  # app work
+        frames.Sample(125, flush),  # between intervals
+        frames.Sample(132, flush),  # the on-time frame
+        frames.Sample(134, None),
+    ]
+
+    def test_samples_split_by_frame_and_by_player_work(self) -> None:
+        shares = frames.new_sample_shares()
+        viewer = frames.Coverage(frames.windows_while_positive([(0, 0), (115, 1), (118, 0)], end=200))
+        frames.add_sample_shares(shares, frames.attribute_frames(self.timeline, self.do_frames, self.sections),
+                                 self.samples, frames.Coverage(self.sections), viewer)
+        late, every = shares["late_frames"], shares["all_frames"]
+        self.assertEqual((4, 1, 1, 1), (late.samples, late.inside_sections, late.media3_outside, late.viewer_media3))
+        self.assertEqual(0.5, late.player_share)
+        self.assertEqual({self.flush: 1}, dict(late.top_outside))
+        self.assertEqual((6, 1, 2, 1), (every.samples, every.inside_sections, every.media3_outside,
+                                        every.viewer_media3))
+        self.assertEqual({self.flush: 2}, dict(every.top_outside))
+
+    def test_counter_windows_run_until_the_next_point_or_the_end(self) -> None:
+        self.assertEqual([(10, 20), (30, 50)], [(window.ts, window.end) for window in
+                                                frames.windows_while_positive([(30, 1), (10, 2), (20, 0)], end=50)])
+
+
 class PresentationTest(unittest.TestCase):
     def test_slices_ending_inside_an_abandoned_section_are_abandoned(self) -> None:
         demand, ms = frames.DEMAND_SLICE, frames.NS_PER_MS

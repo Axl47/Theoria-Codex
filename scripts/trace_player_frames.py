@@ -5,7 +5,8 @@ The plan is .docs/exec/video-players-off-main-thread.html; its "What to measure"
 
   frames      report [TRACE ...]      late frames, player-heavy late frames, section time per category,
                                       every player section's count, and time to first frame per presentation
-  sampled     sampled TRACE --mapping the share of main-thread Media3 samples outside every player section
+  sampled     sampled TRACE --mapping the share of main-thread samples that are player work, in late frames and
+                                      in all frames, split inside and outside player sections
   config      print the sampled-capture Perfetto configuration below
 
 Usage:
@@ -28,6 +29,9 @@ Definitions (one trace may hold several iterations; `report` groups traces by th
   budget                the frame's own expected duration from the timeline.
   player-heavy          a late frame whose interval holds player section self time of at least a quarter of its budget.
   self time             a player section's duration minus the player sections nested inside it.
+  player work           (sampled) a main-thread sample inside a player section, or with a Media3 frame on its
+                        stack. Media3 samples outside sections while a Viewer player is active are reported apart and
+                        not counted.
   presentation          the TheoriaPreviewDemandToFirstFrame / TheoriaPreviewAttachToFirstFrame asynchronous slices.
                         A slice whose end falls inside a TheoriaPreviewAbandoned section is abandoned; one still open
                         when the trace ends is reported as open.
@@ -38,9 +42,9 @@ run is separate because sampling adds load. Install the benchmark APK, keep the 
 `adb -s <serial> shell perfetto --txt -c - -o /data/misc/perfetto-traces/player-sampled.pftrace < config.txt`
 in the background, drive the scenario, then pull the trace. Start the app first: traced_perf matches a process when it
 first samples it, and a process forked after the capture began can still carry the zygote's name then and go without
-stacks for the whole capture. The larger ring buffer keeps the kernel from dropping samples while stacks are copied. The benchmark process is profileable, which callstack
-sampling requires on user builds. Both patterns end in * because the benchmark fixture runs in the
-":benchmarkFixture" process.
+stacks for the whole capture. The larger ring buffer keeps the kernel from dropping samples while stacks are copied.
+The benchmark process is profileable, which callstack sampling requires on user builds. Both patterns end in *
+because the benchmark fixture runs in the ":benchmarkFixture" process.
 """
 from __future__ import annotations
 
@@ -61,6 +65,8 @@ from pathlib import Path
 from typing import Any, Iterable
 
 DEFAULT_PACKAGE = "com.theoriacodex.benchmark"
+# CPU-clock sampling only fires while a thread runs, so blocked time inside sections never appears in samples.
+SAMPLING_HZ = 500
 TRACE_PROCESSOR_VERSION = "v59.1"
 
 SAMPLED_CONFIG = """\
@@ -81,7 +87,7 @@ data_sources {{ config {{ name: "linux.process_stats" target_buffer: 1 process_s
 }} }} }}
 data_sources {{ config {{ name: "android.surfaceflinger.frametimeline" target_buffer: 1 }} }}
 data_sources {{ config {{ name: "linux.perf" target_buffer: 0 perf_event_config {{
-  timebase {{ counter: SW_CPU_CLOCK frequency: 500 timestamp_clock: PERF_CLOCK_MONOTONIC }}
+  timebase {{ counter: SW_CPU_CLOCK frequency: {sampling_hz} timestamp_clock: PERF_CLOCK_MONOTONIC }}
   callstack_sampling {{ scope {{ target_cmdline: "{package}*" }} kernel_frames: false }}
   ring_buffer_pages: 2048
 }} }} }}
@@ -113,6 +119,7 @@ CATEGORY_OF = {name: category for category, names in CATEGORIES.items() for name
 DEMAND_SLICE = "TheoriaPreviewDemandToFirstFrame"
 ATTACH_SLICE = "TheoriaPreviewAttachToFirstFrame"
 ABANDONED_SECTION = "TheoriaPreviewAbandoned"
+VIEWER_ACTIVE_COUNTER = "TheoriaViewerActivePlayers"
 APP_DEADLINE_MISSED = "App Deadline Missed"
 HEAVY_FRACTION = 0.25
 LONG_ABANDON_NS = 2_000_000_000
@@ -385,6 +392,84 @@ class Coverage:
         return index >= 0 and ts < self.ends[index]
 
 
+def windows_while_positive(points: Iterable[tuple[int, float]], end: int) -> list[Section]:
+    """Stretches where a counter is above zero; each value holds until the next point, the last one until [end]."""
+    ordered = sorted(points)
+    windows = []
+    for index, (ts, value) in enumerate(ordered):
+        until = ordered[index + 1][0] if index + 1 < len(ordered) else end
+        if value > 0 and until > ts:
+            windows.append(Section("window", ts, until - ts))
+    return windows
+
+
+@dataclass(frozen=True)
+class Sample:
+    """One main-thread call-stack sample; [media3_frame] is the Media3 frame nearest the leaf, if any."""
+
+    ts: int
+    media3_frame: str | None
+
+
+@dataclass
+class SampleShare:
+    """Main-thread samples taken inside some frames' main-thread intervals, sorted by whether they are player work.
+
+    Player work is a sample inside a feed-preview player section, or one with a Media3 frame on its stack. Media3
+    samples outside every section while a Viewer player is active are counted apart and are not player work: the stack
+    cannot say which player they serve, and feed previews are stopped while the Viewer plays.
+    """
+
+    samples: int = 0
+    inside_sections: int = 0
+    media3_outside: int = 0
+    viewer_media3: int = 0
+    top_outside: dict[str, int] = field(default_factory=lambda: defaultdict(int))
+
+    def add(self, sample: Sample, in_section: bool, viewer_active: bool) -> None:
+        self.samples += 1
+        if in_section:
+            self.inside_sections += 1
+        elif sample.media3_frame and viewer_active:
+            self.viewer_media3 += 1
+        elif sample.media3_frame:
+            self.media3_outside += 1
+            self.top_outside[sample.media3_frame] += 1
+
+    @property
+    def player_share(self) -> float | None:
+        return (self.inside_sections + self.media3_outside) / self.samples if self.samples else None
+
+    def to_json(self, top: int) -> dict[str, object]:
+        return {
+            "samples": self.samples,
+            "player_share": self.player_share,
+            "inside_sections": self.inside_sections,
+            "media3_outside_sections": self.media3_outside,
+            "media3_while_viewer_active": self.viewer_media3,
+            "top_outside_media3_frames": dict(sorted(self.top_outside.items(), key=lambda item: -item[1])[:top]),
+        }
+
+
+def new_sample_shares() -> dict[str, SampleShare]:
+    return {"late_frames": SampleShare(), "all_frames": SampleShare()}
+
+
+def add_sample_shares(shares: dict[str, SampleShare], results: Iterable[FrameResult], samples: Iterable[Sample],
+                      sections: Coverage, viewer: Coverage) -> None:
+    """Adds one process's samples to the late-frame and all-frame shares, by the frame interval holding each."""
+    intervals = sorted((*result.interval, result.late) for result in results if result.interval)
+    starts = [start for start, _, _ in intervals]
+    for sample in samples:
+        index = bisect.bisect_right(starts, sample.ts) - 1
+        if index < 0 or sample.ts >= intervals[index][1]:
+            continue
+        in_section, viewer_active = sample.ts in sections, sample.ts in viewer
+        shares["all_frames"].add(sample, in_section, viewer_active)
+        if intervals[index][2]:
+            shares["late_frames"].add(sample, in_section, viewer_active)
+
+
 # ---------------------------------------------------------------------------------------------------------------------
 # R8 mapping: names the sampled Java frames of the minified benchmark build.
 
@@ -624,12 +709,19 @@ def sampled(args: argparse.Namespace) -> int:
                   select c.id, c.parent_id, f.name from stack_profile_callsite c
                   join stack_profile_frame f on c.frame_id = f.id
               """)}
-    samples = tp.query(app_threads_sql(args.package) + """
+    rows = tp.query(app_threads_sql(args.package) + """
         select ps.ts, ps.callsite_id, m.upid from perf_sample ps join main m on m.utid = ps.utid
         where ps.callsite_id is not null
     """)
-    coverage = {upid: Coverage(process.player_sections)
-                for upid, process in read_processes(tp, args.package).items()}
+    viewer_points: dict[int, list[tuple[int, float]]] = defaultdict(list)
+    trace_end = 0
+    for row in tp.query(app_threads_sql(args.package) + f"""
+        select c.ts, c.value, t.upid, (select end_ts from trace_bounds) as trace_end
+        from counter c join process_counter_track t on c.track_id = t.id
+        where t.name = '{VIEWER_ACTIVE_COUNTER}' and t.upid in (select upid from app)
+    """):
+        viewer_points[int(row["upid"] or 0)].append((int(row["ts"] or 0), float(row["value"] or 0)))
+        trace_end = int(row["trace_end"] or 0)
     stacks: dict[str, list[str]] = {}
 
     def stack(callsite: str) -> list[str]:
@@ -639,36 +731,47 @@ def sampled(args: argparse.Namespace) -> int:
             stacks[callsite] = [name] + (stack(parent) if parent else [])
         return stacks[callsite]
 
-    inside = outside = 0
-    top: dict[str, int] = defaultdict(int)
-    for sample in samples:
-        media3 = [name for name in stack(sample["callsite_id"] or "") if is_media3(name)]
-        if not media3:
-            continue
-        if int(sample["ts"] or 0) in coverage.get(int(sample["upid"] or 0), Coverage([])):
-            inside += 1
-        else:
-            outside += 1
-            top[media3[0]] += 1
+    samples: dict[int, list[Sample]] = defaultdict(list)
+    for row in rows:
+        media3 = next((name for name in stack(row["callsite_id"] or "") if is_media3(name)), None)
+        samples[int(row["upid"] or 0)].append(Sample(int(row["ts"] or 0), media3))
+    totals = new_sample_shares()
+    summary = FrameSummary()
+    # Frame tokens are vsync ids shared by every process, so each process is joined on its own.
+    for upid, process in read_processes(tp, args.package).items():
+        results = attribute_frames(process.timeline, process.do_frames, process.player_sections)
+        summary.add(results)
+        add_sample_shares(totals, results, samples.get(upid, []), Coverage(process.player_sections),
+                          Coverage(windows_while_positive(viewer_points.get(upid, []), trace_end)))
+    traced_ms = sum(summary.late_category_ns.values()) / NS_PER_MS
+    untraced_ms = totals["late_frames"].media3_outside * 1000 / SAMPLING_HZ
     result = {
-        "main_thread_samples": len(samples),
-        "media3_samples_inside_sections": inside,
-        "media3_samples_outside_sections": outside,
-        "outside_share": outside / (inside + outside) if inside + outside else None,
-        "top_outside_media3_frames": dict(sorted(top.items(), key=lambda item: -item[1])[:args.top]),
+        "main_thread_samples": len(rows),
+        **{key: share.to_json(args.top) for key, share in totals.items()},
+        # The plan's Phase 2 check: untraced player time against traced player time, both inside late frames.
+        "late_frame_section_self_ms": traced_ms,
+        "late_frame_untraced_media3_ms_estimate": untraced_ms,
+        "untraced_to_traced": untraced_ms / traced_ms if traced_ms else None,
     }
     if args.json:
         print(json.dumps(result, indent=2))
-    else:
-        print(f"main-thread samples {result['main_thread_samples']}; Media3 samples inside player sections "
-              f"{inside}, outside {outside} (outside share {fraction(result['outside_share'])})")
-        for name, count in result["top_outside_media3_frames"].items():
+        return 0
+    print(f"main-thread samples {len(rows)}; inside late frames: section self time {traced_ms:.1f} ms, untraced Media3 "
+          f"estimate {untraced_ms:.1f} ms (ratio {fraction(result['untraced_to_traced'])})")
+    for key in totals:
+        values: dict[str, Any] = result[key]  # type: ignore[assignment]
+        print(f"{key.replace('_', ' ')}: {values['samples']} samples, player share {fraction(values['player_share'])} "
+              f"(inside sections {values['inside_sections']}, Media3 outside sections "
+              f"{values['media3_outside_sections']}; Media3 while a Viewer player is active, not counted "
+              f"{values['media3_while_viewer_active']})")
+        for name, count in values["top_outside_media3_frames"].items():
             print(f"  {count:>6}  {name}")
     return 0
 
 
 def config(args: argparse.Namespace) -> int:
-    print(SAMPLED_CONFIG.format(package=args.package, duration_ms=args.duration_s * 1000), end="")
+    print(SAMPLED_CONFIG.format(package=args.package, duration_ms=args.duration_s * 1000, sampling_hz=SAMPLING_HZ),
+          end="")
     return 0
 
 
