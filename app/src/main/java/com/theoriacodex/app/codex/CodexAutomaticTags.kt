@@ -20,13 +20,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -45,6 +42,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.source.SourceIcon
 import com.theoriacodex.app.tags.TagChipRow
+import com.theoriacodex.app.tags.TagFilterField
+import com.theoriacodex.app.tags.normalizedTagFilterText
 import com.theoriacodex.app.tags.TagPickerChip
 import com.theoriacodex.app.tags.compactTagCount
 import com.theoriacodex.app.tags.tagChipChunks
@@ -369,7 +368,7 @@ private fun AutoSaveTagPicker(
     var filter by remember(source) { mutableStateOf("") }
     val visibleRows = filterAutomaticTagRows(rows, filter)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        AutomaticTagFilterField(filter, { filter = it }, Modifier.weight(1f))
+        TagFilterField(filter, { filter = it }, Modifier.weight(1f))
         if (canClose) TextButton(onClick = onClose) { Text("Done") }
     }
     when {
@@ -410,35 +409,4 @@ private fun AutoSaveMessage(text: String) {
     )
 }
 
-@Composable
-internal fun AutomaticTagFilterField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = modifier,
-        label = { Text("Filter tags") },
-        singleLine = true,
-        leadingIcon = {
-            Icon(imageVector = Icons.Default.Search, contentDescription = null)
-        },
-        trailingIcon = value.takeIf(String::isNotEmpty)?.let {
-            {
-                IconButton(onClick = { onValueChange("") }) {
-                    Icon(imageVector = Icons.Default.Close, contentDescription = "Clear tag filter")
-                }
-            }
-        },
-    )
-}
-
-internal fun String.normalizedTagFilterText(): String = trim()
-    .lowercase()
-    .replace('_', ' ')
-    .replace(TAG_FILTER_WHITESPACE, " ")
-
-private val TAG_FILTER_WHITESPACE = Regex("\\s+")
 private val AUTO_SAVE_TAG_LIST_HEIGHT = 320.dp

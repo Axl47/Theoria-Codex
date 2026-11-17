@@ -78,6 +78,25 @@ class PostTagActionSectionTest {
         assertEquals("猫", postTagChipLabel("猫", null))
     }
 
+    @Test
+    fun `tag filter matches names or translations and drops emptied groups`() {
+        val artist = SearchTerm("someone", SearchFacet.ARTIST, "artist")
+        val longHair = SearchTerm("long_hair")
+        val cat = SearchTerm("猫")
+        val groups = listOf(PostActionTermGroup("Artists", listOf(artist)), PostActionTermGroup("Tags", listOf(longHair, cat)))
+        val translations = mapOf("猫" to "Cat")
+
+        assertEquals(groups, filterPostTagGroups(groups, "", translations))
+        assertEquals(
+            listOf(PostActionTermGroup("Tags", listOf(longHair))),
+            filterPostTagGroups(groups, "Long  Hair".normalizedTagFilterText(), translations),
+        )
+        assertEquals(
+            listOf(PostActionTermGroup("Tags", listOf(cat))),
+            filterPostTagGroups(groups, "cat".normalizedTagFilterText(), translations),
+        )
+    }
+
     private fun samplePost(
         canonicalTags: List<String> = emptyList(),
         taxonomy: List<PostTaxonomyTerm>,
