@@ -57,11 +57,11 @@ import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
+import com.theoriacodex.app.search.rememberCarriedFilter
 import com.theoriacodex.app.search.unknownAnimatedDurationPolicy
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
-import com.theoriacodex.app.ui.components.FeedTraceSections
 import com.theoriacodex.app.ui.components.FeedFilterSheet
 import com.theoriacodex.app.ui.components.FeedScrollSignal
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
@@ -71,7 +71,6 @@ import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
 import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
 import com.theoriacodex.app.related.RelatedShelfBinding
 import com.theoriacodex.app.viewer.PixivUgoiraClient
-import com.theoriacodex.app.ui.components.rememberComputedOffMain
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.CreatorProfile
@@ -325,12 +324,9 @@ internal fun rememberCodexDetailFeed(
     val acquiredDurations = durationMetadata.knownDurationMsByPostId
     // The filter's reveal keeps shown cards in place, which a length sort must not do as lengths arrive.
     val presentedPosts = durationMetadata.presentedPosts?.takeUnless { sortMode.usesDuration } ?: posts
-    val visiblePosts = rememberComputedOffMain(
-        presentedPosts, filters, unknownDurationPolicy, acquiredDurations,
-        section = FeedTraceSections.FILTER, retainKey = "codex-filter:$codexId",
-    ) {
-        filterCodexCollectionPosts(presentedPosts, filters, unknownDurationPolicy, knownDurationMsByPostId = acquiredDurations)
-    }
+    val visiblePosts = rememberCarriedFilter(
+        presentedPosts, durationMetadata, filters, unknownDurationPolicy, retainKey = "codex-filter:$codexId",
+    ) { candidates, known -> filterCodexCollectionPosts(candidates, filters, unknownDurationPolicy, known) }
     val resolvingDurations = durationMetadata.readiness.isResolving
     val durationsBlockPaging = durationMetadata.blocksPaging
     val related = relatedShelf?.let { shelf ->

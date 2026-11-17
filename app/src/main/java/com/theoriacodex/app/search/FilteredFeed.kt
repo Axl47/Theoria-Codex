@@ -24,18 +24,32 @@ internal fun rememberFilteredFeed(
     durations: DurationFilterMetadata,
     marks: PostMarkInputs = NO_MARKS,
     retainKey: String,
+): List<Post> = rememberCarriedFilter(posts, durations, filters, marks, unknownDurationPolicy, retainKey = retainKey) { candidates, known ->
+    filterSearchResults(
+        candidates, filters, marks.liked, marks.saved, marks.watched, unknownDurationPolicy, known, marks.retained,
+    )
+}
+
+/**
+ * [filter] over [posts] with the known lengths of [durations], computed as [rememberFilteredFeed] describes: the result
+ * is carried over to a longer or revealed list, and recomputed off the main thread when [inputs] (everything else
+ * [filter] reads, compared by equality) or the lengths change. [filter] must keep or drop each post on its own.
+ */
+@Composable
+internal fun rememberCarriedFilter(
+    posts: List<Post>,
+    durations: DurationFilterMetadata,
+    vararg inputs: Any?,
+    retainKey: String,
+    filter: (candidates: List<Post>, known: Map<PostId, Long>) -> List<Post>,
 ): List<Post> {
     val known = durations.knownDurationMsByPostId
-    val filter = { candidates: List<Post> ->
-        filterSearchResults(
-            candidates, filters, marks.liked, marks.saved, marks.watched, unknownDurationPolicy, known, marks.retained,
-        )
-    }
+    val pass = { candidates: List<Post> -> filter(candidates, known) }
     val durationsKey = if (posts === durations.presentedPosts) durations.presentedDurationsKey else known
     return rememberComputedOffMain(
-        posts, filters, marks, unknownDurationPolicy, durationsKey, section = FeedTraceSections.FILTER, retainKey = retainKey,
-        extend = { previous -> extendFiltered(previous, posts, known, filter) },
-    ) { FilteredPosts(filter(posts), known) }.visible
+        posts, *inputs, durationsKey, section = FeedTraceSections.FILTER, retainKey = retainKey,
+        extend = { previous -> extendFiltered(previous, posts, known, pass) },
+    ) { FilteredPosts(pass(posts), known) }.visible
 }
 
 /** A visibility filter's result and the known lengths it read. */
