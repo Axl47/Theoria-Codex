@@ -2,6 +2,7 @@ package com.theoriacodex.macrobenchmark
 
 import android.content.ComponentName
 import android.content.Intent
+import android.os.Build
 import android.os.SystemClock
 import androidx.benchmark.macro.BaselineProfileMode
 import androidx.benchmark.macro.CompilationMode
@@ -19,6 +20,7 @@ import androidx.test.uiautomator.Direction
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
+import org.junit.Assume.assumeFalse
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -95,78 +97,84 @@ class TheoriaMacrobenchmark {
     }
 
     @Test
-    fun searchConcurrentAutoplayScroll() = benchmarkRule.measureRepeated(
-        packageName = TARGET_PACKAGE,
-        metrics = listOf(
-            fixtureFrameTimingMetric(),
-            fixtureMemoryUsageMetric(),
-            countMetric(TRACE_PREVIEW_PREPARE, "previewPrepare"),
-            countMetric(TRACE_PREVIEW_FIRST_FRAME, "previewFirstFrame"),
-            countMetric(TRACE_MEDIA_LOAD, "mediaLoad"),
-        ),
-        compilationMode = COMPILATION_MODE,
-        startupMode = null,
-        iterations = INTERACTION_ITERATIONS,
-        setupBlock = {
-            pressHome()
-            startActivityAndWait(fixtureIntent(SCENARIO_SEARCH))
-            device.requireObject(SEARCH_GRID_TAG, "Search fixture grid")
-            device.requireAllVisibleSearchVideosPlaying()
-        },
-    ) {
-        val grid = device.requireObject(SEARCH_GRID_TAG, "Search fixture grid")
-        grid.setGestureMargin(device.displayWidth / 6)
-        repeat(SEARCH_SCROLL_STEPS) {
-            grid.fling(Direction.DOWN)
-            device.requireAllVisibleSearchVideosPlaying()
-        }
-        repeat(SEARCH_SCROLL_STEPS) {
-            grid.fling(Direction.UP)
-            device.requireAllVisibleSearchVideosPlaying()
+    fun searchConcurrentAutoplayScroll() {
+        assumeSearchAutoplayDecodersAvailable()
+        benchmarkRule.measureRepeated(
+            packageName = TARGET_PACKAGE,
+            metrics = listOf(
+                fixtureFrameTimingMetric(),
+                fixtureMemoryUsageMetric(),
+                countMetric(TRACE_PREVIEW_PREPARE, "previewPrepare"),
+                countMetric(TRACE_PREVIEW_FIRST_FRAME, "previewFirstFrame"),
+                countMetric(TRACE_MEDIA_LOAD, "mediaLoad"),
+            ),
+            compilationMode = COMPILATION_MODE,
+            startupMode = null,
+            iterations = INTERACTION_ITERATIONS,
+            setupBlock = {
+                pressHome()
+                startActivityAndWait(fixtureIntent(SCENARIO_SEARCH))
+                device.requireObject(SEARCH_GRID_TAG, "Search fixture grid")
+                device.requireAllVisibleSearchVideosPlaying()
+            },
+        ) {
+            val grid = device.requireObject(SEARCH_GRID_TAG, "Search fixture grid")
+            grid.setGestureMargin(device.displayWidth / 6)
+            repeat(SEARCH_SCROLL_STEPS) {
+                grid.fling(Direction.DOWN)
+                device.requireAllVisibleSearchVideosPlaying()
+            }
+            repeat(SEARCH_SCROLL_STEPS) {
+                grid.fling(Direction.UP)
+                device.requireAllVisibleSearchVideosPlaying()
+            }
         }
     }
 
     @Test
-    fun searchDurationEnrichmentConcurrentAutoplayScroll() = benchmarkRule.measureRepeated(
-        packageName = TARGET_PACKAGE,
-        metrics = listOf(
-            fixtureFrameTimingMetric(),
-            fixtureMemoryUsageMetric(),
-            countMetric(TRACE_PREVIEW_PREPARE, "previewPrepare"),
-            countMetric(TRACE_PREVIEW_FIRST_FRAME, "previewFirstFrame"),
-            countMetric(TRACE_MEDIA_LOAD, "mediaLoad"),
-            countMetric(TRACE_DURATION_DEMAND, "durationDemand"),
-            countMetric(TRACE_DURATION_RESOLVE, "durationResolve"),
-            countMetric(TRACE_DURATION_PROBE, "durationProbe"),
-            countMetric(TRACE_DURATION_PUBLISH, "durationPublish"),
-            countMetric(TRACE_DURATION_SETTLED, "durationSettled"),
-            durationWorkloadMetric(),
-            durationBatchMetric(),
-        ),
-        compilationMode = COMPILATION_MODE,
-        startupMode = null,
-        iterations = INTERACTION_ITERATIONS,
-        setupBlock = {
-            pressHome()
-            startActivityAndWait(fixtureIntent(SCENARIO_SEARCH_DURATION))
-            device.requireObject(SEARCH_GRID_TAG, "Duration Search fixture grid")
-            device.requireDurationWaiting()
-            device.requireAllVisibleSearchVideosPlaying()
-        },
-    ) {
-        sendDurationStartSignal()
-        val grid = device.requireObject(SEARCH_GRID_TAG, "Duration Search fixture grid")
-        grid.setGestureMargin(device.displayWidth / 6)
-        repeat(SEARCH_SCROLL_STEPS) {
-            grid.fling(Direction.DOWN)
+    fun searchDurationEnrichmentConcurrentAutoplayScroll() {
+        assumeSearchAutoplayDecodersAvailable()
+        benchmarkRule.measureRepeated(
+            packageName = TARGET_PACKAGE,
+            metrics = listOf(
+                fixtureFrameTimingMetric(),
+                fixtureMemoryUsageMetric(),
+                countMetric(TRACE_PREVIEW_PREPARE, "previewPrepare"),
+                countMetric(TRACE_PREVIEW_FIRST_FRAME, "previewFirstFrame"),
+                countMetric(TRACE_MEDIA_LOAD, "mediaLoad"),
+                countMetric(TRACE_DURATION_DEMAND, "durationDemand"),
+                countMetric(TRACE_DURATION_RESOLVE, "durationResolve"),
+                countMetric(TRACE_DURATION_PROBE, "durationProbe"),
+                countMetric(TRACE_DURATION_PUBLISH, "durationPublish"),
+                countMetric(TRACE_DURATION_SETTLED, "durationSettled"),
+                durationWorkloadMetric(),
+                durationBatchMetric(),
+            ),
+            compilationMode = COMPILATION_MODE,
+            startupMode = null,
+            iterations = INTERACTION_ITERATIONS,
+            setupBlock = {
+                pressHome()
+                startActivityAndWait(fixtureIntent(SCENARIO_SEARCH_DURATION))
+                device.requireObject(SEARCH_GRID_TAG, "Duration Search fixture grid")
+                device.requireDurationWaiting()
+                device.requireAllVisibleSearchVideosPlaying()
+            },
+        ) {
+            sendDurationStartSignal()
+            val grid = device.requireObject(SEARCH_GRID_TAG, "Duration Search fixture grid")
+            grid.setGestureMargin(device.displayWidth / 6)
+            repeat(SEARCH_SCROLL_STEPS) {
+                grid.fling(Direction.DOWN)
+                device.requireAllVisibleSearchVideosPlaying()
+            }
+            repeat(SEARCH_SCROLL_STEPS) {
+                grid.fling(Direction.UP)
+                device.requireAllVisibleSearchVideosPlaying()
+            }
+            device.requireDurationSettled()
             device.requireAllVisibleSearchVideosPlaying()
         }
-        repeat(SEARCH_SCROLL_STEPS) {
-            grid.fling(Direction.UP)
-            device.requireAllVisibleSearchVideosPlaying()
-        }
-        device.requireDurationSettled()
-        device.requireAllVisibleSearchVideosPlaying()
     }
 
     @Test
@@ -285,6 +293,21 @@ class TheoriaMacrobenchmark {
     }
 
 }
+
+/**
+ * Skips the Search autoplay scenarios on Android emulators, which cannot keep the fixture's twelve visible
+ * videos playing at once: the goldfish H.264 decoder has four host slots, Media3 falls back to the software
+ * decoder for the rest, and from about six software decoders on, at least one card stops playing. Phones
+ * decode them all in hardware, so the simultaneous-autoplay assertion still runs there unchanged.
+ */
+private fun assumeSearchAutoplayDecodersAvailable() {
+    assumeFalse(
+        "Search autoplay scenarios are phone-only: the emulator cannot decode 12 simultaneous videos",
+        Build.HARDWARE in EMULATOR_HARDWARE,
+    )
+}
+
+private val EMULATOR_HARDWARE = setOf("goldfish", "ranchu")
 
 private fun sendDurationStartSignal() {
     val signal = Intent(ACTION_BENCHMARK_DURATION_START).setComponent(
