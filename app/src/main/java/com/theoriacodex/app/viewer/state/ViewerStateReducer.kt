@@ -17,18 +17,7 @@ internal fun createViewerUiState(
     requiresResolution: (Post) -> Boolean = { false },
     initialMediaIndices: Map<PostId, Int> = emptyMap(),
 ): ViewerUiState {
-    val pages = posts.map { post ->
-        post.toViewerPageState(
-            selectedMediaIndex = initialMediaIndices[post.id] ?: 0,
-            resolution = ViewerResolutionState(
-                status = if (requiresResolution(post)) {
-                    ViewerResolutionStatus.IDLE
-                } else {
-                    ViewerResolutionStatus.NOT_REQUIRED
-                },
-            ),
-        )
-    }
+    val pages = posts.map { post -> post.toNewViewerPageState(requiresResolution, initialMediaIndices) }
     val currentPageIndex = initialPageIndex.coerceInPages(pages)
     val currentPage = pages.getOrNull(currentPageIndex)
     return ViewerUiState(
@@ -41,6 +30,17 @@ internal fun createViewerUiState(
         overview = overviewFor(currentPage),
     )
 }
+
+/** A page entering a session: its launch media index, and idle until resolved when it [requiresResolution]. */
+private fun Post.toNewViewerPageState(
+    requiresResolution: (Post) -> Boolean,
+    initialMediaIndices: Map<PostId, Int>,
+): ViewerPageState = toViewerPageState(
+    selectedMediaIndex = initialMediaIndices[id] ?: 0,
+    resolution = ViewerResolutionState(
+        status = if (requiresResolution(this)) ViewerResolutionStatus.IDLE else ViewerResolutionStatus.NOT_REQUIRED,
+    ),
+)
 
 internal fun Post.toViewerPageState(
     selectedMediaIndex: Int = 0,
@@ -100,6 +100,7 @@ internal fun reduceViewerState(state: ViewerUiState, action: ViewerAction): View
     val session = state.session ?: return ViewerReduction(state)
     return when (action) {
         is ViewerAction.ReplaceSession -> error("Handled above")
+        is ViewerAction.AppendPosts -> state.ifCurrentSession(action.session) { appendPosts(action) }
         is ViewerAction.SelectPage -> state.selectPage(action.pageIndex)
         is ViewerAction.SelectMedia -> state.selectMedia(action.mediaIndex)
         is ViewerAction.SelectOverviewMedia -> state.selectMedia(action.mediaIndex)
@@ -182,6 +183,13 @@ private fun ViewerUiState.replaceSession(action: ViewerAction.ReplaceSession): V
         },
     )
 }
+
+/** Builds pages only for the appended posts, so a live session's new feed page costs what it adds. */
+private fun ViewerUiState.appendPosts(action: ViewerAction.AppendPosts): ViewerUiState = copy(
+    pages = pages + action.posts.map { post ->
+        post.toNewViewerPageState({ it.id in action.resolutionRequiredPostIds }, action.initialMediaIndices)
+    },
+)
 
 private fun ViewerUiState.reduceToggleOverview(): ViewerReduction =
     ViewerReduction(
