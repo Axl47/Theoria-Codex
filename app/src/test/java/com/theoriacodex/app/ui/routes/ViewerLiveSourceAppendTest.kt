@@ -6,6 +6,7 @@ import com.theoriacodex.app.testing.SteppedDispatcher
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.ViewerViewModel
+import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.SourceKey
@@ -15,6 +16,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 /** A live session grows with its source's feed; the whole-list work runs off the thread that applies it. */
@@ -49,6 +51,35 @@ class ViewerLiveSourceAppendTest {
         background.drain()
         runCurrent()
         assertEquals(posts.take(3), owner.session.value?.posts)
+    }
+
+    @Test fun `an append builds pages for the new posts only and keeps the current post`() = runTest {
+        val owner = viewer(this)
+        owner.onAction(ViewerAction.SelectPage(1))
+        val before = owner.state.value.pages
+        launch { appendLiveSourcePosts(owner, source, background) }
+        runCurrent()
+        background.drain()
+        runCurrent()
+
+        val after = owner.state.value
+        assertEquals(posts.take(3).map { it.id }, after.pages.map { it.post.id })
+        before.forEachIndexed { index, page -> assertSame(page, after.pages[index]) }
+        assertEquals(1, after.currentPageIndex)
+        assertEquals(1, owner.session.value?.context?.startIndex)
+    }
+
+    @Test fun `a session replaced during the background work gets nothing appended`() = runTest {
+        val owner = viewer(this)
+        launch { appendLiveSourcePosts(owner, source, background) }
+        runCurrent()
+        val replacement = owner.session.value!!.copy(sessionId = "other", posts = posts.take(1))
+        owner.replaceSession(replacement)
+
+        background.drain()
+        runCurrent()
+        assertEquals(posts.take(1), owner.session.value?.posts)
+        assertEquals(listOf(posts[0].id), owner.state.value.pages.map { it.post.id })
     }
 
     private fun viewer(scope: TestScope) = ViewerViewModel(SavedStateHandle(), scopeOverride = scope.backgroundScope).apply {

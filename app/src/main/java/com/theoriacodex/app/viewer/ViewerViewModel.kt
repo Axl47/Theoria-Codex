@@ -139,7 +139,7 @@ internal class ViewerViewModel(
             }
         }
         reduction.effects.forEach(::handleEffect)
-        if (action is ViewerAction.SelectPage || action is ViewerAction.ReplaceSession ||
+        if (action is ViewerAction.SelectPage || action is ViewerAction.ReplaceSession || action is ViewerAction.AppendPosts ||
             action is ViewerAction.PlaybackCompleted || action is ViewerAction.SlideshowAdvance) {
             reconcileResolutionLookahead()
             showComments()
@@ -172,7 +172,7 @@ internal class ViewerViewModel(
     fun replaceSession(session: ViewerSession) {
         val isNewLaunch = state.value.session != session.toViewerSessionIdentity()
         mutableSession.value = session
-        onAction(session.toReplaceViewerSessionAction { post -> postResolver?.requiresResolution(post) == true })
+        onAction(session.toReplaceViewerSessionAction(::requiresResolution))
         if (isNewLaunch && session.initialMediaIndex > 0) onAction(ViewerAction.SelectMedia(session.initialMediaIndex))
         if (isNewLaunch) {
             val target = session.focusComment
@@ -194,6 +194,33 @@ internal class ViewerViewModel(
         replaceSession(replacement)
         if (currentMediaIndex > 0) onAction(ViewerAction.SelectMedia(currentMediaIndex))
     }
+
+    /**
+     * Appends to the live session the [posts] that [basis], an earlier snapshot of it, lacked. Unlike [updateSession]
+     * it builds pages for the new posts only and keeps the session's work, selection and playback, so a feed page
+     * costs what it adds. Ignored once another session replaced [basis]; posts it gained since are not repeated.
+     */
+    fun appendSessionPosts(basis: ViewerSession, posts: List<Post>) {
+        val current = mutableSession.value ?: return
+        if (current.sessionId != basis.sessionId) return
+        val added = if (current.posts === basis.posts) posts else newViewerPosts(current.posts, posts)
+        if (added.isEmpty()) return
+        val updated = current.copy(
+            posts = current.posts + added,
+            context = current.context.copy(startIndex = state.value.currentPageIndex),
+        )
+        mutableSession.value = updated
+        onAction(
+            ViewerAction.AppendPosts(
+                session = updated.toViewerSessionIdentity(),
+                posts = added,
+                resolutionRequiredPostIds = updated.resolutionRequiredPostIds(added, ::requiresResolution),
+                initialMediaIndices = updated.initialMediaIndices,
+            ),
+        )
+    }
+
+    private fun requiresResolution(post: Post): Boolean = postResolver?.requiresResolution(post) == true
 
     fun applyResolvedPost(resolved: Post) {
         val current = mutableSession.value ?: return
@@ -563,12 +590,18 @@ internal fun ViewerSession.toReplaceViewerSessionAction(
         initialMediaIndices = initialMediaIndices,
         relatedNavigation = relatedNavigation,
         relatedPostIds = relatedPostIds,
-        resolutionRequiredPostIds = posts
-            .asSequence()
-            .filter { post -> requiresResolution(post) || requiresViewerPostResolution(post, context.streamSource) }
-            .mapTo(linkedSetOf(), Post::id),
+        resolutionRequiredPostIds = resolutionRequiredPostIds(posts, requiresResolution),
     )
 }
+
+/** Which of [candidates] must resolve before the Viewer can show their media. */
+private fun ViewerSession.resolutionRequiredPostIds(
+    candidates: List<Post>,
+    requiresResolution: (Post) -> Boolean,
+): Set<PostId> = candidates
+    .asSequence()
+    .filter { post -> requiresResolution(post) || requiresViewerPostResolution(post, context.streamSource) }
+    .mapTo(linkedSetOf(), Post::id)
 
 private fun restoredViewerState(savedStateHandle: SavedStateHandle): ViewerUiState {
     val sessionId = savedStateHandle.get<String>(AppRouteSavedStateKeys.VIEWER_SESSION_ID)
