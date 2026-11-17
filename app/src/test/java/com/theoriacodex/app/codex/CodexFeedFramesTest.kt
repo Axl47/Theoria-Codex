@@ -12,6 +12,7 @@ import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationProvenance
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.mediaDurationKey
+import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.testing.SteppedDispatcher
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.ui.components.FeedTraceSections
@@ -19,6 +20,7 @@ import com.theoriacodex.app.ui.components.LocalFeedComputationContext
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -49,6 +51,7 @@ class CodexFeedFramesTest {
     private var fab by mutableStateOf(FeedFabRestoreState())
     private var durations by mutableStateOf(states(videos))
     private var feedShown by mutableStateOf(true)
+    private var sort by mutableStateOf(CodexSortMode.LONGEST)
     private var shown: List<String>? = null
 
     private val longest = listOf("v1", "v3", "v4", "v0", "v5", "v2", "s0", "s1", "s2")
@@ -152,6 +155,49 @@ class CodexFeedFramesTest {
         assertEquals(Frame(longest, knownLengths = 1, sort = 1, filter = 1), frame())
     }
 
+    @Test fun `with the length filter on, an arriving length that reveals nothing costs no filter pass`() {
+        lengthFilterOn(knownMs = mapOf("v0" to SHORT_MS))
+        show()
+        assertEquals(Frame(listOf("v0")), frame())
+
+        // v4 lies behind the reveal frontier, which waits at v1: the length step presents the very same list.
+        durations = durations + (mediaDurationKey(videos[4]) to known(SHORT_MS))
+        assertEquals(Frame(listOf("v0")), frame())
+        assertEquals(0, drainedPasses().filter)
+        assertEquals(Frame(listOf("v0")), frame())
+        assertEquals(0, drainedPasses().filter)
+        assertEquals(Frame(listOf("v0")), frame())
+    }
+
+    @Test fun `with the length filter on, each revealing length is filtered in place and equals a whole pass`() {
+        lengthFilterOn(knownMs = emptyMap())
+        show()
+        val arriving = videos.mapIndexed { index, video -> video to if (index % 3 == 1) LONG_MS else SHORT_MS }
+        val knownMs = mutableMapOf<PostId, Long>()
+        arriving.forEachIndexed { index, (video, ms) ->
+            durations = durations + (mediaDurationKey(video) to known(ms))
+            knownMs[video.id] = ms
+            val before = shown
+            assertEquals(Frame(before), frame())
+            assertEquals(0, drainedPasses().filter)
+            val whole = filterCodexCollectionPosts(
+                videos.take(index + 1), fab.savedCollectionFilters(), UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND, knownMs,
+            ).map { it.id.sourcePostId }
+            // The length step answered in the background; the newly revealed post is filtered alone, in the frame.
+            assertEquals(Frame(whole, filter = 1), frame())
+            assertEquals(Frame(whole), drainedFrame())
+        }
+        assertEquals(listOf("v0", "v2", "v3", "v5"), shown)
+    }
+
+    private fun lengthFilterOn(knownMs: Map<String, Long>) {
+        sort = CodexSortMode.NEWEST_SAVED
+        stored = videos
+        fab = fab.copy(durationMaxBucket = 2)
+        durations = videos.filter { it.id.sourcePostId in knownMs }
+            .associate { mediaDurationKey(it) to known(knownMs.getValue(it.id.sourcePostId)) }
+    }
+
     private fun show() {
         compose.mainClock.autoAdvance = false
         compose.setContent {
@@ -160,7 +206,6 @@ class CodexFeedFramesTest {
                     SideEffect { shown = null }
                     return@CompositionLocalProvider
                 }
-                val sort = CodexSortMode.LONGEST
                 val sorted = rememberSortedCodexPosts(codexId, stored, sort, emptyMap(), durations)
                 val feed = rememberCodexDetailFeed(
                     codexId, sorted.orEmpty(), fab.savedCollectionFilters(), fab, durations,
@@ -222,4 +267,9 @@ class CodexFeedFramesTest {
     private fun known(ms: Long) = MediaDurationState.Known(ms, MediaDurationProvenance.CONTAINER_PROBE)
 
     private fun List<Post>.ids() = map { it.id.sourcePostId }.toSet()
+
+    private companion object {
+        const val SHORT_MS = 4_000L // inside the 0-10 s range of duration bucket 2
+        const val LONG_MS = 30_000L
+    }
 }
