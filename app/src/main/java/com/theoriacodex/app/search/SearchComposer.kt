@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.BookmarkAdd
 import com.theoriacodex.app.ui.components.NameEntryDialog
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Close
@@ -161,10 +162,7 @@ private fun SearchComposerContent(
         excludeNext -> ComposerAddTarget.Excluded
         else -> ComposerAddTarget.Required
     }
-    // A narrowed scope asks for one tag type, and saved tags are general tags.
-    val savedTagMatches = savedTags.all.takeIf { state.query.selectedScope.isAll || state.query.selectedScope.facet == SearchFacet.TAG }.orEmpty()
-    val suggestions = composerSuggestions(target, state.suggestions.facetedAutocomplete, state.suggestions.autocomplete)
-        .withSavedTags(target, input, savedTagMatches, draft)
+    val suggestions = composerSuggestions(target, state, savedTags.all)
     val liveSelection = selection?.takeIf { selected ->
         if (selected.excluded) selected.term in terms.excluded else terms.groups.any { selected.term in it.terms }
     }
@@ -527,6 +525,8 @@ private fun ComposerSuggestionList(
             ) {
                 if (suggestion.saved) {
                     Icon(Icons.Default.Star, "Saved tag", Modifier.size(18.dp), MaterialTheme.colorScheme.primary)
+                } else if (suggestion.searched) {
+                    Icon(Icons.Default.History, "Searched before", Modifier.size(18.dp), MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Column(Modifier.weight(1f)) {
                     Text(suggestion.text, style = MaterialTheme.typography.bodyLarge)

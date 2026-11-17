@@ -16,6 +16,7 @@ import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.StatisticsRepository
+import com.theoriacodex.data.repository.StatisticsTagKey
 import com.theoriacodex.data.repository.UiRestoreRepository
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.diagnostics.Diagnostics
@@ -54,7 +55,13 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -78,13 +85,20 @@ class SearchCoordinator(
     private val firstPageStore: SearchFirstPageStore? = null,
     private val clock: () -> Long = System::currentTimeMillis,
     private val computationDispatcher: CoroutineDispatcher = Dispatchers.Default,
-    /** Runs seen-tag bookkeeping after results return; tests pass their scheduler-backed scope. */
+    /** Runs seen-tag bookkeeping and watches search counts; tests pass their scheduler-backed scope. */
     seenTagScope: CoroutineScope = CoroutineScope(SupervisorJob() + computationDispatcher),
     /** Shared with the Viewer, so a post both ask for at once is fetched once. */
     private val postResolutions: PostResolutionFlights = PostResolutionFlights(),
     private val fileMirrors: FileMirrorIndex = FileMirrorIndex(),
 ) : SearchExecutionService {
     private val seenTags = SeenTagRecorder(statisticsRepository, tagSuggestionStore, computationDispatcher, seenTagScope)
+
+    /** Kept current so local suggestions can rank searched tags without waiting on storage. */
+    private val searchCounts: StateFlow<Map<StatisticsTagKey, Long>> = statisticsRepository.observeStatistics()
+        .map { statistics -> statistics.searchesByTag }
+        .distinctUntilChanged()
+        .catch { emit(emptyMap()) }
+        .stateIn(seenTagScope, SharingStarted.Eagerly, emptyMap())
 
     /** Every page of results passes here, so tags and file copies are learned once per page. */
     private fun listed(posts: List<Post>) {
@@ -99,6 +113,7 @@ class SearchCoordinator(
         clock = clock,
         supportedSearchScopes = ::supportedSearchScopes,
         effectiveEnabledSources = ::effectiveEnabledSources,
+        searchCounts = searchCounts::value,
     )
     private val tagCounts = TagCountCoordinator(registry, tagSuggestionStore, ::autocompletePrefixForSource,
         clock = clock, dispatcher = computationDispatcher)
@@ -540,8 +555,10 @@ class SearchCoordinator(
             recentsRepository.recordSearch(result.query, result.executionKey, kind, sources)
         }
         if (result.completedSuccessfully) runCatchingPreservingCancellation {
-            statisticsRepository.recordSearch(result.statuses.filter { it.state != SourceRunState.EXCLUDED }
-                .mapTo(mutableSetOf()) { it.source })
+            statisticsRepository.recordSearch(
+                sources = result.statuses.filter { it.state != SourceRunState.EXCLUDED }.mapTo(mutableSetOf()) { it.source },
+                tags = result.query.includeTerms.filter(SearchTerm::isPortableGeneralTag).mapTo(mutableSetOf(), SearchTerm::value),
+            )
         }
     }
 

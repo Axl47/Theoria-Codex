@@ -1,10 +1,14 @@
 package com.theoriacodex.app.search
 
 import com.theoriacodex.app.search.state.SearchAction
+import com.theoriacodex.app.search.state.SearchQueryUiState
+import com.theoriacodex.app.search.state.SearchSuggestionsUiState
+import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.search.state.emptySearchQuery
 import com.theoriacodex.app.tags.TagChipState
 import com.theoriacodex.data.repository.FavoriteTagEntry
+import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.QueryMode
@@ -148,6 +152,37 @@ class SearchComposerModelTest {
             none.withSavedTags(ComposerAddTarget.Excluded, "-blue", listOf(blueHair), gelbooruDraft()).rows.single().add,
         )
         assertTrue(none.withSavedTags(ComposerAddTarget.Alternative(0, artist), "blue", listOf(blueHair), gelbooruDraft(include = listOf(artist.terms.single()))).rows.isEmpty())
+    }
+
+    @Test fun `searched tags lead in their given order, merging provider rows and skipping draft tags`() {
+        val provider = composerSuggestions(
+            ComposerAddTarget.Required, emptyList(),
+            listOf(TagSuggestion("blueberry", type = null, count = 5), TagSuggestion("blue_hair", type = null, count = 9)),
+        )
+        val searched = listOf("sky", "Blue_Hair", "blue_eyes")
+        val draft = gelbooruDraft(include = listOf(SearchTerm("SKY")))
+
+        val rows = provider.withSearchedTags(ComposerAddTarget.Required, searched, draft).rows
+        assertEquals(listOf("blue_hair", "blue_eyes", "blueberry"), rows.map { it.text })
+        assertEquals(listOf(true, true, false), rows.map { it.searched })
+        assertEquals(provider.rows[1].meta, rows[0].meta)
+        assertEquals(SearchAction.AddIncludeTerm(SearchTerm("blue_eyes")), rows[1].add)
+        assertTrue(provider.withSearchedTags(ComposerAddTarget.Alternative(0, artist), searched, draft).rows.none { it.searched })
+    }
+
+    @Test fun `only general tag scopes show searched tags`() {
+        fun rows(scope: FacetedSearchScope) = composerSuggestions(
+            ComposerAddTarget.Required,
+            SearchUiState(
+                query = SearchQueryUiState(draft = emptySearchQuery(QueryMode.Source(SourceKey.HITOMI)), selectedScope = scope),
+                suggestions = SearchSuggestionsUiState(input = "sk", searchedTags = listOf("sky")),
+            ),
+            savedTags = emptyList(),
+        ).rows.map { it.text }
+
+        assertEquals(listOf("sky"), rows(FacetedSearchScope.All))
+        assertEquals(listOf("sky"), rows(FacetedSearchScope(SearchFacet.TAG)))
+        assertEquals(emptyList<String>(), rows(FacetedSearchScope(SearchFacet.TAG, "female")))
     }
 
     @Test fun `removal undo stands only until another edit`() {
