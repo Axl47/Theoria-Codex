@@ -36,7 +36,7 @@ TEST_APK = ROOT / "app/build/outputs/apk/androidTest/debug/app-debug-androidTest
 DEBUG_PACKAGE = "com.theoriacodex.debug"
 TEST_CLASS = "com.theoriacodex.app.viewer.MediaBufferingBenchmarkTest"
 RUNNER = "com.theoriacodex.debug.test/androidx.test.runner.AndroidJUnitRunner"
-SCENARIOS = ("feedToViewer", "viewerSeekAndScrub", "galleryPaging", "viewerSwipe", "feedScroll")
+SCENARIOS = ("feedToViewer", "viewerSeekAndScrub", "viewerInstantDrag", "galleryPaging", "viewerSwipe", "feedScroll")
 DEVICE_MEDIA = "cache/media-bench"
 STATUS_PREFIX = "INSTRUMENTATION_STATUS: mediaBench="
 
@@ -88,6 +88,19 @@ METRICS = {
     "feed_scroll_back_playing_ms": ("ms", "scrolling back until the two returning cards play again"),
     "feed_scroll_session_mb": ("MB", "bytes of all six clips over the scroll session"),
 }
+# viewerInstantDrag: one 1 s instant-seek drag (a move every 16 ms) per stretch of the 90 s video, resting and released.
+for _kind, _where in (
+    ("buffered", "forward within the buffer"),
+    ("watched", "back into the watched first seconds"),
+    ("unbuffered", "forward past the buffer, to 90%"),
+):
+    METRICS |= {
+        f"instant_{_kind}_drag_frames": ("frames", f"frames shown while dragging {_where} (higher is better)"),
+        f"instant_{_kind}_drag_gap_ms": ("ms", f"longest wait for a new frame while dragging {_where}"),
+        f"instant_{_kind}_rest_ms": ("ms", f"last move {_where} to a frame of the target's keyframe group"),
+        f"instant_{_kind}_release_ms": ("ms", f"release {_where} to the frame at the target"),
+        f"instant_{_kind}_mb": ("MB", f"bytes downloaded for the drag {_where} and its release"),
+    }
 
 
 def generate_media() -> None:
