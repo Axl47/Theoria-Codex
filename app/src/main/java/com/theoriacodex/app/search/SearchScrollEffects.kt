@@ -38,7 +38,8 @@ internal fun SearchScrollRestorationEffect(
         }
     }
     val canRestore = state.canApplyScrollRestoration && (restoration?.resetToTop == true || visibilityReady)
-    LaunchedEffect(restoration?.scrollRequestId, canRestore) {
+    // A retry needs the posts that arrived, which can reach the projection after the state that loaded them.
+    LaunchedEffect(restoration?.scrollRequestId, canRestore, projection.entries.size) {
         val request = restoration ?: return@LaunchedEffect
         val restored = request.scrollState ?: return@LaunchedEffect
         if (!canRestore) return@LaunchedEffect
@@ -46,13 +47,23 @@ internal fun SearchScrollRestorationEffect(
         // Jumping lines up every column at the target, which later forces the grid to reshuffle.
         val gridIsLive = request.keepLiveGrid && gridState.layoutInfo.visibleItemsInfo.isNotEmpty()
         if (activeProjection.entries.isNotEmpty() && !gridIsLive) {
-            gridState.scrollToItem(
-                index = activeProjection.gridIndexForCanonicalIndex(restored.firstVisibleItemIndex),
-                scrollOffset = restored.firstVisibleItemOffsetPx.coerceAtLeast(0),
-            )
+            val index = activeProjection.gridIndexForCanonicalIndex(restored.firstVisibleItemIndex)
+            val offset = restored.firstVisibleItemOffsetPx.coerceAtLeast(0)
+            // The request stays open; the list end asks for the next page, and its posts retry the jump.
+            if (!gridState.jumpToRestoredPosition(index, offset, state.content.canLoadMore)) return@LaunchedEffect
         }
         dispatch(SearchAction.ScrollRestorationApplied(request.scrollRequestId))
     }
+}
+
+/**
+ * False when too few posts below the anchor stop the grid at the list end, above the saved position,
+ * while more pages could still supply them.
+ */
+private suspend fun LazyStaggeredGridState.jumpToRestoredPosition(index: Int, offset: Int, canLoadMore: Boolean): Boolean {
+    scrollToItem(index, offset)
+    val reached = firstVisibleItemIndex == index && firstVisibleItemScrollOffset == offset
+    return reached || canScrollForward || !canLoadMore
 }
 
 @Composable

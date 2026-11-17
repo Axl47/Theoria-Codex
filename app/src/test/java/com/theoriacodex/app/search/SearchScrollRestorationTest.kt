@@ -138,6 +138,21 @@ class SearchScrollRestorationTest {
         }
     }
 
+    @Test fun `loaded anchor too near the list end waits for the next page instead of settling above it`() {
+        state.value = state.value.copy(restoration = SearchRestorationUiState.Restored(false, SearchScrollState(18, 17), 1L))
+        render()
+        compose.runOnIdle {
+            assertTrue(acknowledgements.isEmpty())
+            assertTrue(writes.isEmpty())
+            state.value = state.value.copy(content = state.value.content.copy(results = posts.take(40)))
+        }
+        compose.runOnIdle {
+            assertEquals(listOf(1L), acknowledgements)
+            assertEquals(18, grid.firstVisibleItemIndex)
+            assertEquals(17, grid.firstVisibleItemScrollOffset)
+        }
+    }
+
     @Test fun `failed page retains request and exhausted results permit fallback`() {
         state.value = state.value.copy(content = state.value.content.copy(
             error = SearchErrorUiState("Failed page", SearchRequestKind.PAGE, true), canLoadMore = false,
