@@ -68,6 +68,7 @@ import com.theoriacodex.app.source.displayName
 import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
@@ -128,32 +129,7 @@ fun PostTagActionSection(
     var tagsCollapsed by remember(post.id) { mutableStateOf(sheetExtras?.tagsInitiallyCollapsed == true) }
     val foldsTags = sheetExtras != null && !loading && terms.isNotEmpty()
     val collapsed = foldsTags && tagsCollapsed
-    var filterText by remember(post.id) { mutableStateOf("") }
-    var filterOpen by remember(post.id) { mutableStateOf(false) }
-    var focusFilter by remember(post.id) { mutableStateOf(false) }
-    val normalizedFilter = filterText.normalizedTagFilterText()
-    val shownGroups = remember(termGroups, translations, normalizedFilter) {
-        filterPostTagGroups(termGroups, normalizedFilter, translations)
-    }
-    val behindIcon = foldsTags && sheetExtras?.filterBehindIcon == true
-    val filter = TagFilter(
-        available = terms.size > COLLAPSE_TAGS_OVER,
-        behindIcon = behindIcon,
-        open = !behindIcon || filterOpen,
-        text = filterText,
-        focus = focusFilter,
-        onText = { filterText = it },
-        onOpen = {
-            filterOpen = true
-            focusFilter = true
-            tagsCollapsed = false
-        },
-        onClose = {
-            filterOpen = false
-            focusFilter = false
-        },
-        onFocused = { focusFilter = false },
-    )
+    val filter = rememberTagFilter(post.id, termGroups, translations, foldsTags && sheetExtras.filterBehindIcon) { tagsCollapsed = false }
     val draftGroups = draft?.effectiveIncludeTermGroups.orEmpty()
     val targetGroup = draftGroups.indexOfFirst { group -> targetTerm in group.terms }.takeIf { it >= 0 }
     val searchActions = LocalPostTagSearchActions.current
@@ -186,7 +162,7 @@ fun PostTagActionSection(
                 items.item(key = "loading") { Text("Loading tags...", style = MaterialTheme.typography.bodySmall) }
             } else {
                 val fold = TagFold(foldsTags, tagsCollapsed) { tagsCollapsed = !tagsCollapsed }
-                items.postTagSections(shownGroups, terms, expandedGroups, { label -> expandedGroups = expandedGroups + label }, fold, filter, sheetExtras, chip)
+                items.postTagSections(filter.groups, terms, expandedGroups, { label -> expandedGroups = expandedGroups + label }, fold, filter, sheetExtras, chip)
             }
             items.item(key = "footer") { footer() }
         }
@@ -508,10 +484,12 @@ private fun PostTagQueryTray(
 private class TagFold(val enabled: Boolean, val collapsed: Boolean, val onToggle: () -> Unit)
 
 /**
- * The filter over a long tag list. It is [available] past the length where groups start folding; [open]
- * shows the field, which is always unless it waits [behindIcon]. [focus] asks a freshly opened field for the keyboard.
+ * The filter over a long tag list and the [groups] it leaves. It is [available] past the length where groups
+ * start folding; [open] shows the field, which is always unless it waits [behindIcon]. [focus] asks a freshly
+ * opened field for the keyboard.
  */
 private class TagFilter(
+    val groups: List<PostActionTermGroup>,
     val available: Boolean,
     val behindIcon: Boolean,
     val open: Boolean,
@@ -523,6 +501,41 @@ private class TagFilter(
     val onFocused: () -> Unit,
 ) {
     val active: Boolean get() = text.isNotBlank()
+}
+
+/** One post's filter state; a new post starts with the filter empty and, behind its button, closed. */
+@Composable
+private fun rememberTagFilter(
+    postId: PostId,
+    termGroups: List<PostActionTermGroup>,
+    translations: Map<String, String>,
+    behindIcon: Boolean,
+    onOpen: () -> Unit,
+): TagFilter {
+    var text by remember(postId) { mutableStateOf("") }
+    var open by remember(postId) { mutableStateOf(false) }
+    var focus by remember(postId) { mutableStateOf(false) }
+    val normalized = text.normalizedTagFilterText()
+    val groups = remember(termGroups, translations, normalized) { filterPostTagGroups(termGroups, normalized, translations) }
+    return TagFilter(
+        groups = groups,
+        available = termGroups.sumOf { it.terms.size } > COLLAPSE_TAGS_OVER,
+        behindIcon = behindIcon,
+        open = !behindIcon || open,
+        text = text,
+        focus = focus,
+        onText = { text = it },
+        onOpen = {
+            open = true
+            focus = true
+            onOpen()
+        },
+        onClose = {
+            open = false
+            focus = false
+        },
+        onFocused = { focus = false },
+    )
 }
 
 /** The groups keeping only tags whose name or translation contains [normalizedFilter]; empty groups drop out. */
