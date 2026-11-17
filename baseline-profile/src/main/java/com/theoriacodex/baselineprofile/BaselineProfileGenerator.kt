@@ -62,8 +62,9 @@ class BaselineProfileGenerator {
         device.pressBack()
         device.wait(Until.findObject(By.res(FEED_MEDIA)), UI_TIMEOUT_MS)
             ?: error("Viewer did not return to the fixture feed")
-        (device.wait(Until.findObject(By.res(SEARCH_BAR)), UI_TIMEOUT_MS)
-            ?: error("Search bar was unavailable")).click()
+        // The flings tucked the search bar away and it stays tucked across the Viewer, so open the editor from the strip.
+        (device.wait(Until.findObject(By.desc(EXPAND_SEARCH)), UI_TIMEOUT_MS)
+            ?: error("Collapsed search strip was unavailable")).click()
         device.waitForIdle()
         device.pressBack()
     }
@@ -85,7 +86,7 @@ class BaselineProfileGenerator {
         const val PACKAGE_NAME = "com.theoriacodex.baselineprofile"
         const val FEED_FLINGS = 3
         const val VIEWER_SWIPES = 3
-        const val SEARCH_BAR = "Search bar"
+        const val EXPAND_SEARCH = "Expand Search"
         val FEED_MEDIA: Pattern = Pattern.compile("search_media_pixiv_benchmark_video_.*")
         val VIEWER_MEDIA: Pattern = Pattern.compile("viewer_video_pixiv_benchmark_video_.*")
         const val UI_TIMEOUT_MS = 15_000L
