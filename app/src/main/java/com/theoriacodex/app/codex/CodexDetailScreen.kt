@@ -334,7 +334,7 @@ internal fun rememberCodexDetailFeed(
     val resolvingDurations = durationMetadata.readiness.isResolving
     val durationsBlockPaging = durationMetadata.blocksPaging
     val related = relatedShelf?.let { shelf ->
-        rememberCodexRelatedFeed(shelf, posts, visiblePosts, filters, likedPostIds, durationStates, unknownDurationPolicy, durationFilterActive)
+        rememberCodexRelatedFeed("codex-detail:$codexId", shelf, posts, visiblePosts, filters, likedPostIds, durationStates, unknownDurationPolicy, durationFilterActive)
     }
     return remember(visiblePosts, acquiredDurations, durationFilterActive, resolvingDurations, durationsBlockPaging, related) {
         CodexDetailFeed(visiblePosts, acquiredDurations, durationFilterActive, resolvingDurations, durationsBlockPaging, related)
