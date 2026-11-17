@@ -203,14 +203,16 @@ internal fun composerSuggestions(
 
 /**
  * Every autocomplete row for the target: saved tags, then searched tags, then the provider's. A narrowed
- * scope asks for one tag type, and saved and searched tags are general tags, so only a tag scope shows them.
+ * scope asks for one tag type, and saved and searched tags are general tags, so only a general tag scope shows them.
  */
 internal fun composerSuggestions(
     target: ComposerAddTarget,
     state: SearchUiState,
     savedTags: List<FavoriteTagEntry>,
 ): ComposerSuggestions {
-    val generalTagScope = state.query.selectedScope.isAll || state.query.selectedScope.facet == SearchFacet.TAG
+    val scope = state.query.selectedScope
+    // Namespaced tag scopes, such as Hitomi's female and male tags, would lose their namespace.
+    val generalTagScope = scope.isAll || (scope.facet == SearchFacet.TAG && scope.sourceNamespace == null)
     val draft = state.query.draft
     return composerSuggestions(target, state.suggestions.facetedAutocomplete, state.suggestions.autocomplete)
         .withSearchedTags(target, state.suggestions.searchedTags.takeIf { generalTagScope }.orEmpty(), draft)

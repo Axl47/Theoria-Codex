@@ -10,6 +10,7 @@ import com.theoriacodex.app.search.parseScopedInput
 import com.theoriacodex.app.search.resolveSupportedScope
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
+import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.normalizedForMode
 import com.theoriacodex.domain.model.Query
@@ -555,8 +556,9 @@ object SearchDraftReducer {
         }
         if (state.query.draft.mode != QueryMode.Source(SourceKey.GELBOORU)) return true
         val normalized = normalizeGelbooruToken(parsed.value)
-        return state.suggestions.autocomplete.any { suggestion ->
-            sourceTagsMatch(SourceKey.GELBOORU, suggestion.text, normalized)
+        // A tag searched before on Gelbooru is as confirmed as one its autocomplete returned.
+        return (state.suggestions.autocomplete.map(TagSuggestion::text) + state.suggestions.searchedTags).any { tag ->
+            sourceTagsMatch(SourceKey.GELBOORU, tag, normalized)
         }
     }
 

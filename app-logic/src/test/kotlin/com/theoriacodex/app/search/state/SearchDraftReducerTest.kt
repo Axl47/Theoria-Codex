@@ -220,6 +220,7 @@ class SearchDraftReducerTest {
         val initial = state(query).copy(
             suggestions = SearchSuggestionsUiState(
                 autocomplete = listOf(TagSuggestion("blue_hair", "tag", 10)),
+                searchedTags = listOf("night_sky"),
             ),
         )
 
@@ -228,6 +229,7 @@ class SearchDraftReducerTest {
 
         assertFalse(rejected.accepted)
         assertTrue(accepted.accepted)
+        assertTrue(SearchDraftReducer.addIncludeAlternative(initial, 0, SearchTerm("night_sky")).accepted)
         assertEquals(
             listOf(SearchTerm("landscape"), SearchTerm("blue_hair")),
             accepted.state.query.draft.includeTerms,
