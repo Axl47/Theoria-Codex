@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.KeyguardManager
 import android.app.Application
 import android.content.Context
+import android.content.SharedPreferences
 import android.hardware.biometrics.BiometricManager
 import android.hardware.biometrics.BiometricPrompt
 import android.os.CancellationSignal
@@ -36,10 +37,15 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.R
 import com.theoriacodex.app.ui.findActivity
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** How long the app may be away from the front before it asks again. */
 internal const val APP_LOCK_GRACE_MS = 60_000L
@@ -71,20 +77,42 @@ internal class AppLockSession {
 /**
  * The lock choice and this run's [session]. It is scoped to the activity, so an unlock survives rotation and ends
  * with the process: a fresh start is always locked. The choice is kept on this device, outside the settings file,
- * so exporting or restoring a backup never switches it.
+ * so exporting or restoring a backup never switches it. The first read, which can wait on disk, runs on [io].
  */
-internal class AppLockViewModel(application: Application) : AndroidViewModel(application) {
-    private val preferences = application.getSharedPreferences("app_lock", Context.MODE_PRIVATE)
+internal class AppLockViewModel @JvmOverloads constructor(
+    application: Application,
+    private val io: CoroutineContext = Dispatchers.IO,
+) : AndroidViewModel(application) {
+    /** The loaded file, set together with [enabled]; writes to it only queue, so they can run on the main thread. */
+    private var preferences: SharedPreferences? = null
     val session = AppLockSession()
-    var enabled by mutableStateOf(preferences.getBoolean(KEY_ENABLED, false))
-        private set
-    val locked: Boolean get() = enabled && !session.unlocked
 
-    /** Called once the owner has proved themselves, so switching the lock on leaves the app open. */
+    /** The stored choice, or null until it has been read. The app counts as locked until then. */
+    var enabled by mutableStateOf<Boolean?>(null)
+        private set
+    val locked: Boolean get() = enabled != false && !session.unlocked
+
+    init {
+        viewModelScope.launch {
+            val (loaded, stored) = withContext(io) {
+                val loaded = application.getSharedPreferences("app_lock", Context.MODE_PRIVATE)
+                loaded to loaded.getBoolean(KEY_ENABLED, false)
+            }
+            preferences = loaded
+            enabled = stored
+        }
+    }
+
+    /**
+     * Called once the owner has proved themselves, so switching the lock on leaves the app open. The write is applied
+     * in call order and outlives this ViewModel. Before the choice is read this does nothing; Settings, its only
+     * caller, sits behind [AppLockGate], which draws nothing until then.
+     */
     fun update(value: Boolean) {
-        preferences.edit { putBoolean(KEY_ENABLED, value) }
+        val loaded = preferences ?: return
         enabled = value
         session.unlock()
+        loaded.edit { putBoolean(KEY_ENABLED, value) }
     }
 
     private companion object {
@@ -99,13 +127,13 @@ internal fun appLockViewModel(): AppLockViewModel =
 
 /**
  * Shows [content] only while the app is unlocked. A locked app does not compose [content] at all, so nothing plays or
- * can be read behind the lock; its saved UI state is kept and restored on unlock. While the lock is on, Android also
- * leaves the app out of the recent-apps preview.
+ * can be read behind the lock; its saved UI state is kept and restored on unlock. Until the stored choice is read the
+ * gate shows nothing: neither [content] nor a prompt its owner may have switched off. While the lock is on or not yet
+ * known, Android also leaves the app out of the recent-apps preview.
  */
 @Composable
-internal fun AppLockGate(content: @Composable () -> Unit) {
+internal fun AppLockGate(lock: AppLockViewModel = appLockViewModel(), content: @Composable () -> Unit) {
     val activity = LocalContext.current.findActivity()
-    val lock = appLockViewModel()
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, lock) {
         val observer = LifecycleEventObserver { _, event ->
@@ -118,12 +146,12 @@ internal fun AppLockGate(content: @Composable () -> Unit) {
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    LaunchedEffect(lock.enabled, activity) { activity?.setRecentsScreenshotEnabled(!lock.enabled) }
+    LaunchedEffect(lock.enabled, activity) { activity?.setRecentsScreenshotEnabled(lock.enabled == false) }
     val savedState = rememberSaveableStateHolder()
-    if (lock.locked) {
-        AppLockScreen(onUnlocked = lock.session::unlock)
-    } else {
-        savedState.SaveableStateProvider("content", content)
+    when {
+        lock.enabled == null -> Unit
+        lock.locked -> AppLockScreen(onUnlocked = lock.session::unlock)
+        else -> savedState.SaveableStateProvider("content", content)
     }
 }
 
