@@ -89,12 +89,13 @@ internal fun rememberRecentsRelated(
     val key = "$filter:${source?.id}"
     val currentOnShownPostsChanged by rememberUpdatedState(onShownPostsChanged)
     LaunchedEffect(key, shownPosts) { currentOnShownPostsChanged(key, shownPosts) }
-    return rememberRecentsRelatedSlot(binding, shownPosts, cards, onLongPress)
+    return rememberRecentsRelatedSlot("recents:$key", binding, shownPosts, cards, onLongPress)
 }
 
 /** Builds the slot for [binding] while it has a request; the shelf's cards share the Recents tiles' behavior. */
 @Composable
 private fun rememberRecentsRelatedSlot(
+    retainKey: String,
     binding: RelatedShelfBinding?,
     shownPosts: List<Post>,
     cards: RecentsPostCards,
@@ -106,6 +107,7 @@ private fun rememberRecentsRelatedSlot(
         cards.onDurationPostVisibilityChanged, cards.onAuthoritativeDurationKnown,
     )
     val presentation = rememberRelatedFeedPresentation(
+        retainKey = retainKey,
         canonicalPosts = shownPosts,
         visibleCanonicalPosts = shownPosts,
         relatedState = binding.state,

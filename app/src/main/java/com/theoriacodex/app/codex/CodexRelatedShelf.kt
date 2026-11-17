@@ -27,6 +27,7 @@ internal data class CodexRelatedFeed(
 /** Projects [shelf] into the collection, filtering its posts by the collection's own media filters. */
 @Composable
 internal fun rememberCodexRelatedFeed(
+    retainKey: String,
     shelf: RelatedShelfBinding,
     posts: List<Post>,
     visiblePosts: List<Post>,
@@ -40,6 +41,7 @@ internal fun rememberCodexRelatedFeed(
         SearchVisibilityFilters(animatedOnly = filters.animatedOnly, animatedDurationRange = filters.animatedDurationRange)
     }
     val presentation = rememberRelatedFeedPresentation(
+        retainKey = retainKey,
         canonicalPosts = posts,
         visibleCanonicalPosts = visiblePosts,
         relatedState = shelf.state,
