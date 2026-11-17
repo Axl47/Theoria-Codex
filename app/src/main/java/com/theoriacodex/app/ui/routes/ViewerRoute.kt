@@ -51,6 +51,7 @@ import com.theoriacodex.app.viewer.ViewerRestorationRequest
 import com.theoriacodex.app.viewer.ViewerReturnTransition
 import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.mergeViewerPosts
+import com.theoriacodex.app.viewer.newViewerPosts
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.withRelatedPosts
 import com.theoriacodex.app.related.requestOrNull
@@ -65,11 +66,14 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
+import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Dependencies whose lifetime is longer than one Viewer destination composition. */
 internal data class ViewerRouteDependencies(
@@ -548,17 +552,30 @@ private fun ViewerLiveSourceMergeEffect(
         liveSourceState.watchedPostIds,
         liveSourceState.unknownAnimatedDurationPolicy,
     ) {
-        val currentSession = viewerOwner.session.value ?: return@LaunchedEffect
-        val incoming = liveSourceState.visiblePostsFor(currentSession) ?: return@LaunchedEffect
-        val merged = mergeViewerPosts(currentSession.posts, incoming)
-        if (merged.size != currentSession.posts.size) {
-            viewerOwner.updateSession { latest ->
-                if (latest.sessionId == currentSession.sessionId) {
-                    latest.copy(posts = mergeViewerPosts(latest.posts, incoming))
-                } else {
-                    latest
-                }
-            }
+        appendLiveSourcePosts(viewerOwner, liveSourceState)
+    }
+}
+
+/**
+ * Appends to the live session what its source has loaded since, under the launch's filters. Filtering the source's
+ * feed and finding the posts the session lacks walk both whole lists, so they run on [background]; the caller's
+ * thread only appends the result.
+ */
+internal suspend fun appendLiveSourcePosts(
+    viewerOwner: ViewerViewModel,
+    liveSourceState: ViewerRouteLiveSourceState,
+    background: CoroutineContext = Dispatchers.Default,
+) {
+    val session = viewerOwner.session.value ?: return
+    val appended = withContext(background) {
+        liveSourceState.visiblePostsFor(session)?.let { incoming -> newViewerPosts(session.posts, incoming) }
+    }
+    if (appended.isNullOrEmpty()) return
+    viewerOwner.updateSession { latest ->
+        when {
+            latest.sessionId != session.sessionId -> latest
+            latest.posts === session.posts -> latest.copy(posts = latest.posts + appended)
+            else -> latest.copy(posts = mergeViewerPosts(latest.posts, appended))
         }
     }
 }
