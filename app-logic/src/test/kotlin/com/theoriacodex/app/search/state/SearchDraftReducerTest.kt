@@ -1,6 +1,7 @@
 package com.theoriacodex.app.search.state
 
 import com.theoriacodex.app.search.NhentaiLanguageFilter
+import com.theoriacodex.app.search.SearchAutocompleteResult
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.ImageRef
@@ -234,6 +235,17 @@ class SearchDraftReducerTest {
             listOf(SearchTerm("landscape"), SearchTerm("blue_hair")),
             accepted.state.query.draft.includeTerms,
         )
+    }
+
+    @Test
+    fun `an autocomplete result with only a searched Gelbooru tag can commit its input`() {
+        val result = SearchAutocompleteResult(
+            input = "night_sky",
+            selectedScope = FacetedSearchScope.All,
+            searchedTags = listOf("night_sky"),
+        )
+
+        assertTrue(state(query(QueryMode.Source(SourceKey.GELBOORU))).withAutocompleteResult(result).suggestions.canCommitInput)
     }
 
     @Test
