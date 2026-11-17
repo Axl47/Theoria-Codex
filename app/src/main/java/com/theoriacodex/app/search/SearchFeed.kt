@@ -82,6 +82,7 @@ internal fun rememberSearchFeed(
         presentedResults, visibilityFilters, unknownDurationPolicy, durationMetadata, marks, retainKey = "search",
     )
     val related = rememberRelatedFeedPresentation(
+        retainKey = "search",
         pendingLikePostIds = pendingLikePostIds,
         canonicalPosts = displayResults, visibleCanonicalPosts = visibleResults,
         relatedState = state.relatedPosts, visibilityFilters = visibilityFilters,

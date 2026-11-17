@@ -10,6 +10,7 @@
 ### Fixed
 
 - A video you paused in the Viewer stays paused, at the speed you picked, while the feed behind it loads more posts. Before, each newly loaded page started it playing again at normal speed.
+- With a video length filter on, the related posts shelf comes back from the Viewer with its posts showing. Before, posts whose length had been looked up disappeared from it for a moment.
 
 ## [1.7.0] - 2026-11-15
 

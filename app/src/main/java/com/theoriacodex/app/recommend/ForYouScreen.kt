@@ -321,6 +321,7 @@ private fun rememberForYouFeed(
         retainKey = "for-you",
     )
     val related = rememberRelatedFeedPresentation(
+        retainKey = "for-you",
         canonicalPosts = state.results,
         visibleCanonicalPosts = visibleResults,
         relatedState = state.relatedPosts,
