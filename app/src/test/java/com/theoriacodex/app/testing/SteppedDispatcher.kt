@@ -14,4 +14,12 @@ internal class SteppedDispatcher : CoroutineDispatcher() {
     fun drain() {
         while (queue.isNotEmpty()) queue.removeFirst().run()
     }
+
+    /** Runs what is queued now newest first, as if the earlier work were delayed, then anything that queued. */
+    fun drainNewestFirst() {
+        val queued = queue.reversed()
+        queue.clear()
+        queued.forEach(Runnable::run)
+        drain()
+    }
 }

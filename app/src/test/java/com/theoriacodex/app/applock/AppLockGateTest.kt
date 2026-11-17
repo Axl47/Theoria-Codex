@@ -3,12 +3,14 @@ package com.theoriacodex.app.applock
 import android.app.Application
 import android.app.KeyguardManager
 import android.content.Context
+import android.os.Looper
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.core.content.edit
 import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.app.testing.SteppedDispatcher
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -17,7 +19,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/** The stored lock choice is read off the main thread; nothing protected may be drawn before it is known. */
+/**
+ * The stored lock choice is read off the main thread; nothing protected may be drawn before it is known, and
+ * changes are stored in the order they were made.
+ */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class AppLockGateTest {
@@ -47,6 +52,22 @@ class AppLockGateTest {
 
         io.drain()
         compose.onNodeWithText(PROTECTED).assertExists()
+    }
+
+    @Test fun `switching the lock off and then on stores on, even if the first write would be slower`() {
+        val lock = AppLockViewModel(app, io)
+        io.drain()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        lock.update(false)
+        lock.update(true)
+        io.drainNewestFirst()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        val next = AppLockViewModel(app, io)
+        io.drain()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(true, next.enabled)
     }
 
     private fun showGate(storedEnabled: Boolean): AppLockViewModel {

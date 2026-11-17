@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.KeyguardManager
 import android.app.Application
 import android.content.Context
+import android.content.SharedPreferences
 import android.hardware.biometrics.BiometricManager
 import android.hardware.biometrics.BiometricPrompt
 import android.os.CancellationSignal
@@ -76,14 +77,14 @@ internal class AppLockSession {
 /**
  * The lock choice and this run's [session]. It is scoped to the activity, so an unlock survives rotation and ends
  * with the process: a fresh start is always locked. The choice is kept on this device, outside the settings file,
- * so exporting or restoring a backup never switches it. It is read and written on [io], off the main thread.
+ * so exporting or restoring a backup never switches it. The first read, which can wait on disk, runs on [io].
  */
 internal class AppLockViewModel @JvmOverloads constructor(
     application: Application,
     private val io: CoroutineContext = Dispatchers.IO,
 ) : AndroidViewModel(application) {
-    /** Opening the file can wait on disk, so it is only touched on [io]. */
-    private val preferences by lazy { application.getSharedPreferences("app_lock", Context.MODE_PRIVATE) }
+    /** The loaded file, set together with [enabled]; writes to it only queue, so they can run on the main thread. */
+    private var preferences: SharedPreferences? = null
     val session = AppLockSession()
 
     /** The stored choice, or null until it has been read. The app counts as locked until then. */
@@ -93,16 +94,25 @@ internal class AppLockViewModel @JvmOverloads constructor(
 
     init {
         viewModelScope.launch {
-            val stored = withContext(io) { preferences.getBoolean(KEY_ENABLED, false) }
-            if (enabled == null) enabled = stored
+            val (loaded, stored) = withContext(io) {
+                val loaded = application.getSharedPreferences("app_lock", Context.MODE_PRIVATE)
+                loaded to loaded.getBoolean(KEY_ENABLED, false)
+            }
+            preferences = loaded
+            enabled = stored
         }
     }
 
-    /** Called once the owner has proved themselves, so switching the lock on leaves the app open. */
+    /**
+     * Called once the owner has proved themselves, so switching the lock on leaves the app open. The write is applied
+     * in call order and outlives this ViewModel. Before the choice is read this does nothing; Settings, its only
+     * caller, sits behind [AppLockGate], which draws nothing until then.
+     */
     fun update(value: Boolean) {
+        val loaded = preferences ?: return
         enabled = value
         session.unlock()
-        viewModelScope.launch(io) { preferences.edit { putBoolean(KEY_ENABLED, value) } }
+        loaded.edit { putBoolean(KEY_ENABLED, value) }
     }
 
     private companion object {
