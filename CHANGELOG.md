@@ -2,15 +2,28 @@
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-11-17
+
+### Added
+
+- Inside a Codex, including Likes, Saved searches and Followed, posts can sort by Longest, Shortest, Most watched, Most opened, Most pages, Fewest pages and Creator (A–Z). Longest and Shortest appear only in Codices with videos or animations. They look up any unknown lengths, and posts move into place as the lengths arrive.
+
 ### Changed
 
+- Newest and Oldest inside a Codex are now called Recently added and Oldest first, matching the Library.
 - Account pages in landscape fit the avatar, name, stats, Uploads/Favorites switch and Follow into one bar, so the grid gets most of the screen. The bio sits behind the info button.
 - Closing a post keeps the feed where you left it. If the post's card is off screen, for example after swiping to another post, the feed scrolls only far enough to show it instead of centring it.
+- Search's bar stays tucked away after you close a post instead of expanding and pushing the results down.
+- Search results, feed filters and sorting are worked out in the background, so scrolling doesn't stutter while a page arrives.
+- GIFs, large images and Ugoira animations in the Viewer draw with less stutter.
 
 ### Fixed
 
 - A video you paused in the Viewer stays paused, at the speed you picked, while the feed behind it loads more posts. Before, each newly loaded page started it playing again at normal speed.
 - With a video length filter on, the related posts shelf comes back from the Viewer with its posts showing. Before, posts whose length had been looked up disappeared from it for a moment.
+- After Android reloads the app, Search returns to where you were even when that is below the posts loaded so far.
+- In a Codex's edit mode, tapping a post's checkmark selects it, and Back ends selection before it leaves the Codex.
+- The stats card in Settings has a title like the other groups.
 
 ## [1.7.0] - 2026-11-15
 
