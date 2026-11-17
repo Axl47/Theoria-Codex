@@ -251,6 +251,7 @@ private fun rememberCreatorFeed(
         retainKey = state.selectedFeed.retainKey,
     )
     val related = rememberRelatedFeedPresentation(
+        retainKey = state.selectedFeed.retainKey,
         pendingLikePostIds = pendingLikePostIds,
         canonicalPosts = state.results,
         visibleCanonicalPosts = visibleResults,
