@@ -194,6 +194,7 @@ private fun ViewerGifTimeline(
         MediaTimelineBar(
             positionMs = { animation.positionMs }, durationMs = duration,
             onSeekStarted = { onScrubbing(true) },
+            onSeekMoved = animation::seekTo,
             onSeekCancelled = { onScrubbing(false) },
             preview = { target ->
                 ViewerGifCanvas(movie, { target.coerceAtMost(duration - 1L) }, Modifier.fillMaxSize())

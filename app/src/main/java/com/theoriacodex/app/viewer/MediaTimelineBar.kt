@@ -75,6 +75,8 @@ internal val VIEWER_TIMELINE_TRACK_HEIGHT = 34.dp
  * The seekable timeline shared by video, GIF and ugoira. [leading] holds the player's own buttons.
  * [positionMs] is read while drawing, so playback redraws the track each frame but recomposes only
  * when the shown second changes. A track that is not [seekable] only shows progress.
+ * A drag shows [preview]s and seeks once, through [onSeekFinished] on release; with instant seek it shows no
+ * preview and calls [onSeekMoved] on every move instead, still ending in [onSeekFinished].
  */
 @Composable
 fun MediaTimelineBar(
@@ -82,6 +84,7 @@ fun MediaTimelineBar(
     durationMs: Long,
     modifier: Modifier = Modifier,
     onSeekStarted: () -> Unit = {},
+    onSeekMoved: (Long) -> Unit,
     onSeekFinished: (Long) -> Unit,
     onSeekCancelled: () -> Unit = {},
     preview: @Composable (Long) -> Unit,
@@ -94,7 +97,7 @@ fun MediaTimelineBar(
     val safeDuration = durationMs.coerceAtLeast(1L)
     val latestPosition by rememberUpdatedState(positionMs)
     val callbacks = rememberUpdatedState(
-        TimelineSeekCallbacks(onSeekStarted, onSeekFinished, onSeekCancelled, onInteractionActiveChanged),
+        TimelineSeekCallbacks(onSeekStarted, onSeekMoved, onSeekFinished, onSeekCancelled, onInteractionActiveChanged),
     )
     val scrub = remember { TimelineScrubState(callbacks) }
     val displayPosition: () -> Long = { if (scrub.active) scrub.positionMs else latestPosition().coerceIn(0L, safeDuration) }
@@ -184,6 +187,7 @@ private class HoldScrubFollower(
 /** What the timeline tells its player about a drag. */
 private class TimelineSeekCallbacks(
     val onStarted: () -> Unit,
+    val onMoved: (Long) -> Unit,
     val onFinished: (Long) -> Unit,
     val onCancelled: () -> Unit,
     val onInteractionActiveChanged: (Boolean) -> Unit,
@@ -208,7 +212,7 @@ private class TimelineScrubState(private val callbacks: State<TimelineSeekCallba
 
     fun moveTo(x: Float, durationMs: Long, instantSeek: Boolean) {
         positionMs = ((x / widthPx).coerceIn(0f, 1f).toDouble() * durationMs).roundToLong().coerceIn(0L, durationMs)
-        if (instantSeek) callbacks.value.onFinished(positionMs)
+        if (instantSeek) callbacks.value.onMoved(positionMs)
     }
 
     /** A released drag seeks; anything else leaves playback where it was. */
@@ -432,7 +436,7 @@ internal fun ViewerPendingTimeline(
             ViewerPlaybackFooter {
                 MediaTimelineBar(
                     positionMs = { 0L }, durationMs = durationMs,
-                    onSeekFinished = {}, preview = {},
+                    onSeekMoved = {}, onSeekFinished = {}, preview = {},
                     playbackRate = playbackRate,
                     leading = {
                         TimelinePlaybackButton(isPaused = paused, onToggle = {

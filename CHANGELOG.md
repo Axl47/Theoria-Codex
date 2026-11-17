@@ -6,6 +6,10 @@
 
 - Posts with more than 16 tags get a Filter tags field above their tags in the Viewer's info sheet and in Search. It matches tag names and translations and shows every match, including tags hidden behind "+N more". In landscape, the Viewer keeps the field behind a search button in the Tags header.
 
+### Changed
+
+- With Instant Seek on, the video follows your finger while you drag its timeline instead of freezing until you stop. It pauses and goes silent during the drag, then plays from exactly where you let go.
+
 ## [1.8.0] - 2026-11-17
 
 ### Added

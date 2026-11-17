@@ -9,6 +9,7 @@ import android.os.Trace
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.ScrubbingModeParameters
 import androidx.media3.exoplayer.SeekParameters
 
 internal const val VIEWER_PLAYER_IDLE_TIMEOUT_MS = 30_000L
@@ -58,6 +59,8 @@ internal class ViewerVideoPlayerPool(
         checkMainThread()
         if (!slots.isActive(lease)) return
         traceMediaSection(MediaTraceSections.VIEWER_PLAYER_RETURN) {
+            // A page can leave mid-drag, after its player's binding let go; the next lease must not start held.
+            lease.resource.setScrubbingModeEnabled(false)
             lease.resource.pause()
             lease.resource.stop()
             lease.resource.clearMediaItems()
@@ -71,6 +74,7 @@ internal class ViewerVideoPlayerPool(
 
     private fun createPlayer(): ExoPlayer = traceMediaSection(MediaTraceSections.VIEWER_PLAYER_CREATE) {
         infrastructure.playerBuilder(VideoPlaybackProfile.VIEWER)
+            .setScrubbingModeParameters(VIEWER_SCRUBBING)
             .build()
             .apply {
                 addAnalyticsListener(MediaLoadTraceListener)
@@ -95,3 +99,26 @@ internal class ViewerVideoPlayerPool(
         check(Looper.myLooper() == Looper.getMainLooper()) { "Viewer players must be leased on the main thread" }
     }
 }
+
+/**
+ * An instant-seek drag's move to [targetMs]. Scrubbing mode holds playback and shows the keyframe at or before the
+ * target ([VIEWER_SCRUBBING]): one seek runs at a time, a newer target replaces any queued one, and a target in the
+ * keyframe group already shown costs nothing. [endScrub] ends it.
+ */
+internal fun ExoPlayer.scrubTo(targetMs: Long) {
+    if (!isScrubbingModeEnabled) setScrubbingModeEnabled(true)
+    seekTo(targetMs)
+}
+
+/** Ends an instant-seek drag's scrubbing mode, so playback resumes; returns whether a drag had begun it. */
+internal fun ExoPlayer.endScrub(): Boolean = isScrubbingModeEnabled.also { scrubbing -> if (scrubbing) setScrubbingModeEnabled(false) }
+
+/**
+ * Scrubbing mode for instant-seek drags: Media3's defaults, with each seek snapped to the keyframe at or before its
+ * target. A keyframe shows after its own bytes and one decode, where an exact seek first downloads and decodes up to
+ * the target; the release's exact seek then reads on from the keyframe the drag fetched.
+ */
+private val VIEWER_SCRUBBING = ScrubbingModeParameters.DEFAULT.buildUpon()
+    // Fractions of the duration: any distance before the target, none after it.
+    .setFractionalSeekTolerance(1.0, 0.0)
+    .build()
