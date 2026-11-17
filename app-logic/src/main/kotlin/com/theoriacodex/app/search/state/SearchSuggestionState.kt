@@ -13,6 +13,7 @@ fun SearchUiState.withAutocompleteResult(result: SearchAutocompleteResult): Sear
         input = result.input,
         autocomplete = result.autocomplete,
         facetedAutocomplete = result.facetedAutocomplete,
+        searchedTags = result.searchedTags,
         canCommitInput = SearchDraftReducer.canCommitInput(
             copy(suggestions = suggestions.copy(autocomplete = result.autocomplete)),
             result.input,

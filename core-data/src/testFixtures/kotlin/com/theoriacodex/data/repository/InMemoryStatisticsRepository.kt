@@ -34,8 +34,8 @@ class InMemoryStatisticsRepository(
             codexOpen?.let { StatisticsPolicies.recordCodexPostOpen(watched, it.codexId, it.postKey, it.label) } ?: watched
         }
 
-    override suspend fun recordSearch(sources: Set<SourceKey>) = mutate { current ->
-        StatisticsPolicies.recordSearch(current, sources)
+    override suspend fun recordSearch(sources: Set<SourceKey>, tags: Set<String>) = mutate { current ->
+        StatisticsPolicies.recordSearch(current, sources, tags)
     }
 
     override suspend fun mergeRestored(imported: LifetimeStatistics) = mutate { current ->

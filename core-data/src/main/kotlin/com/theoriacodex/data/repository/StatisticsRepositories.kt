@@ -58,6 +58,7 @@ internal data class StatisticsStoreRecord(
     @field:SerializedName("watchedByTag") val watchedByTag: List<StatisticsTagCountRecord> = emptyList(),
     @field:SerializedName("searchCount") val searchCount: Long = 0L,
     @field:SerializedName("searchesBySource") val searchesBySource: Map<String, Long> = emptyMap(),
+    @field:SerializedName("searchesByTag") val searchesByTag: List<StatisticsTagCountRecord> = emptyList(),
     @field:SerializedName("forYouSearchCount") val forYouSearchCount: Long = 0L,
     @field:SerializedName("forYouSaveCount") val forYouSaveCount: Long = 0L,
     @field:SerializedName("postUrlCopyCount") val postUrlCopyCount: Long = 0L,
@@ -67,14 +68,6 @@ internal data class StatisticsStoreRecord(
     val translatedSourceCharacterCount: Long = 0L,
 ) {
     fun toDomain(): LifetimeStatistics {
-        val tags = linkedMapOf<StatisticsTagKey, Long>()
-        watchedByTag.forEach { record ->
-            val source = SourceKey.parse(record.source) ?: return@forEach
-            val tag = record.tag.trim().takeIf(String::isNotBlank) ?: return@forEach
-            if (record.count <= 0L) return@forEach
-            val key = StatisticsTagKey(source, tag)
-            tags[key] = (tags[key] ?: 0L).saturatingAdd(record.count)
-        }
         return StatisticsPolicies.normalize(
             LifetimeStatistics(
                 history = history.mapKeys { LocalDate.parse(it.key) },
@@ -86,9 +79,10 @@ internal data class StatisticsStoreRecord(
                 codexMs = codexMs,
                 watchedPostCount = watchedPostCount,
                 watchedBySource = watchedBySource.decodeSourceCounts(),
-                watchedByTag = tags,
+                watchedByTag = watchedByTag.decodeTagCounts(),
                 searchCount = searchCount,
                 searchesBySource = searchesBySource.decodeSourceCounts(),
+                searchesByTag = searchesByTag.decodeTagCounts(),
                 forYouSearchCount = forYouSearchCount,
                 forYouSaveCount = forYouSaveCount,
                 postUrlCopyCount = postUrlCopyCount,
@@ -125,6 +119,9 @@ internal data class StatisticsStoreRecord(
         require(watchedByTag.all { record -> record.count >= 0L }) {
             "Watched tag counts must be non-negative"
         }
+        require(searchesByTag.all { record -> record.count >= 0L }) {
+            "Search tag counts must be non-negative"
+        }
         require(codexEntryCounts.values.all { value -> value >= 0L }) {
             "Codex entry counts must be non-negative"
         }
@@ -144,11 +141,10 @@ internal data class StatisticsStoreRecord(
                 codexMs = normalized.codexMs,
                 watchedPostCount = normalized.watchedPostCount,
                 watchedBySource = normalized.watchedBySource.encodeSourceCounts(),
-                watchedByTag = normalized.watchedByTag.entries
-                    .sortedWith(compareBy({ it.key.source.id }, { it.key.tag }))
-                    .map { (key, count) -> StatisticsTagCountRecord(key.source.id, key.tag, count) },
+                watchedByTag = normalized.watchedByTag.encodeTagCounts(),
                 searchCount = normalized.searchCount,
                 searchesBySource = normalized.searchesBySource.encodeSourceCounts(),
+                searchesByTag = normalized.searchesByTag.encodeTagCounts(),
                 forYouSearchCount = normalized.forYouSearchCount,
                 forYouSaveCount = normalized.forYouSaveCount,
                 postUrlCopyCount = normalized.postUrlCopyCount,
@@ -217,6 +213,7 @@ internal object StatisticsPolicies {
         watchedByTag = current.watchedByTag.mergeWith(imported.watchedByTag, ::maxOf),
         searchCount = maxOf(current.searchCount, imported.searchCount),
         searchesBySource = current.searchesBySource.mergeWith(imported.searchesBySource, ::maxOf),
+        searchesByTag = current.searchesByTag.mergeWith(imported.searchesByTag, ::maxOf),
         forYouSearchCount = maxOf(current.forYouSearchCount, imported.forYouSearchCount),
         forYouSaveCount = maxOf(current.forYouSaveCount, imported.forYouSaveCount),
         postUrlCopyCount = maxOf(current.postUrlCopyCount, imported.postUrlCopyCount),
@@ -241,13 +238,10 @@ internal object StatisticsPolicies {
             codexMs = statistics.codexMs.coerceAtLeast(0L),
             watchedPostCount = statistics.watchedPostCount.coerceAtLeast(0L),
             watchedBySource = statistics.watchedBySource.normalizeCounts(),
-            watchedByTag = statistics.watchedByTag.entries.mapNotNull { (key, count) ->
-                val tag = key.tag.trim().takeIf(String::isNotBlank) ?: return@mapNotNull null
-                val normalizedCount = count.coerceAtLeast(0L).takeIf { it > 0L } ?: return@mapNotNull null
-                StatisticsTagKey(key.source, tag) to normalizedCount
-            }.toMap(),
+            watchedByTag = statistics.watchedByTag.normalizeTagCounts(),
             searchCount = statistics.searchCount.coerceAtLeast(0L),
             searchesBySource = statistics.searchesBySource.normalizeCounts(),
+            searchesByTag = statistics.searchesByTag.normalizeTagCounts(),
             forYouSearchCount = statistics.forYouSearchCount.coerceAtLeast(0L),
             forYouSaveCount = statistics.forYouSaveCount.coerceAtLeast(0L),
             postUrlCopyCount = statistics.postUrlCopyCount.coerceAtLeast(0L),
@@ -310,30 +304,27 @@ internal object StatisticsPolicies {
         tags: Set<String>,
         date: LocalDate = LocalDate.now(),
     ): LifetimeStatistics {
-        val normalizedTags = tags.mapNotNullTo(linkedSetOf()) { tag ->
-            tag.trim().takeIf(String::isNotBlank)
-        }
-        val sourceCounts = current.watchedBySource.increment(source)
-        val tagCounts = current.watchedByTag.toMutableMap()
-        normalizedTags.forEach { tag ->
-            val key = StatisticsTagKey(source, tag)
-            tagCounts[key] = (tagCounts[key] ?: 0L).saturatingAdd(1L)
-        }
         return current.copy(
             history = current.history.updateDay(date) { it.copy(watchedPostCount = it.watchedPostCount.saturatingAdd(1L)) },
             watchedPostCount = current.watchedPostCount.saturatingAdd(1L),
-            watchedBySource = sourceCounts,
-            watchedByTag = tagCounts,
+            watchedBySource = current.watchedBySource.increment(source),
+            watchedByTag = current.watchedByTag.incrementTags(setOf(source), tags),
         )
     }
 
-    fun recordSearch(current: LifetimeStatistics, sources: Set<SourceKey>, date: LocalDate = LocalDate.now()): LifetimeStatistics {
+    fun recordSearch(
+        current: LifetimeStatistics,
+        sources: Set<SourceKey>,
+        tags: Set<String> = emptySet(),
+        date: LocalDate = LocalDate.now(),
+    ): LifetimeStatistics {
         var sourceCounts = current.searchesBySource
         sources.forEach { source -> sourceCounts = sourceCounts.increment(source) }
         return current.copy(
             history = current.history.updateDay(date) { it.copy(searchCount = it.searchCount.saturatingAdd(1L)) },
             searchCount = current.searchCount.saturatingAdd(1L),
             searchesBySource = sourceCounts,
+            searchesByTag = current.searchesByTag.incrementTags(sources, tags),
         )
     }
 
@@ -454,8 +445,8 @@ class DataStoreStatisticsRepository(
             codexOpen?.let { StatisticsPolicies.recordCodexPostOpen(watched, it.codexId, it.postKey, it.label) } ?: watched
         }
 
-    override suspend fun recordSearch(sources: Set<SourceKey>) = mutate { current ->
-        StatisticsPolicies.recordSearch(current, sources, LocalDate.now(clock))
+    override suspend fun recordSearch(sources: Set<SourceKey>, tags: Set<String>) = mutate { current ->
+        StatisticsPolicies.recordSearch(current, sources, tags, LocalDate.now(clock))
     }
 
     override suspend fun recordForYouSearch() = mutate(StatisticsPolicies::recordForYouSearch)
@@ -525,3 +516,40 @@ private fun Map<SourceKey, Long>.normalizeCounts(): Map<SourceKey, Long> {
 private fun <K> Map<K, Long>.increment(key: K): Map<K, Long> {
     return toMutableMap().apply { this[key] = (this[key] ?: 0L).saturatingAdd(1L) }
 }
+
+/** Counts each non-blank tag once under every source in [sources]. */
+private fun Map<StatisticsTagKey, Long>.incrementTags(sources: Set<SourceKey>, tags: Set<String>): Map<StatisticsTagKey, Long> {
+    val normalizedTags = tags.mapNotNullTo(linkedSetOf()) { tag -> tag.trim().takeIf(String::isNotBlank) }
+    if (normalizedTags.isEmpty() || sources.isEmpty()) return this
+    return toMutableMap().apply {
+        sources.forEach { source ->
+            normalizedTags.forEach { tag ->
+                val key = StatisticsTagKey(source, tag)
+                this[key] = (this[key] ?: 0L).saturatingAdd(1L)
+            }
+        }
+    }
+}
+
+private fun List<StatisticsTagCountRecord>.decodeTagCounts(): Map<StatisticsTagKey, Long> {
+    val tags = linkedMapOf<StatisticsTagKey, Long>()
+    forEach { record ->
+        val source = SourceKey.parse(record.source) ?: return@forEach
+        val tag = record.tag.trim().takeIf(String::isNotBlank) ?: return@forEach
+        if (record.count <= 0L) return@forEach
+        val key = StatisticsTagKey(source, tag)
+        tags[key] = (tags[key] ?: 0L).saturatingAdd(record.count)
+    }
+    return tags
+}
+
+private fun Map<StatisticsTagKey, Long>.encodeTagCounts(): List<StatisticsTagCountRecord> =
+    entries.sortedWith(compareBy({ it.key.source.id }, { it.key.tag }))
+        .map { (key, count) -> StatisticsTagCountRecord(key.source.id, key.tag, count) }
+
+private fun Map<StatisticsTagKey, Long>.normalizeTagCounts(): Map<StatisticsTagKey, Long> =
+    entries.mapNotNull { (key, count) ->
+        val tag = key.tag.trim().takeIf(String::isNotBlank) ?: return@mapNotNull null
+        val normalizedCount = count.coerceAtLeast(0L).takeIf { it > 0L } ?: return@mapNotNull null
+        StatisticsTagKey(key.source, tag) to normalizedCount
+    }.toMap()

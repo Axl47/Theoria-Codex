@@ -989,6 +989,7 @@ internal class SearchViewModel(
                 input = "",
                 autocomplete = emptyList(),
                 facetedAutocomplete = emptyList(),
+                searchedTags = emptyList(),
                 canCommitInput = false,
             ),
         )

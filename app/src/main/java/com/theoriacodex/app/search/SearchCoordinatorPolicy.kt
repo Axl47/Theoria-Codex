@@ -76,6 +76,10 @@ internal const val FACETED_AUTOCOMPLETE_LIMIT = 20
 internal const val FACETED_AUTOCOMPLETE_CACHE_LIMIT = 120
 internal const val AUTOCOMPLETE_CACHE_MATCH_LIMIT = 120
 internal const val AUTOCOMPLETE_RESULT_LIMIT = 20
+
+/** Previously searched tags shown ahead of provider suggestions, few enough to keep those in view. */
+internal const val SEARCHED_TAG_SUGGESTION_LIMIT = 3
+
 internal const val AUTOCOMPLETE_REQUEST_TIMEOUT_MS = 4_000L
 internal const val AUTOCOMPLETE_REFRESH_INTERVAL_MS = 15L * 60L * 1000L
 internal const val MAX_AUTOCOMPLETE_REFRESH_KEYS = 256

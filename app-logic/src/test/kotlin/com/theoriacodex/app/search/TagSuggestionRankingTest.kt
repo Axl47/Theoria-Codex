@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.data.repository.StatisticsTagKey
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.SearchFacet
@@ -29,6 +30,26 @@ class TagSuggestionRankingTest {
 
         assertEquals(listOf(pixiv), rankTagSuggestions(listOf(pixiv), "hatsune", 10))
         assertEquals("初音ミク", rankTagSuggestions(listOf(pixiv), "miku", 10).single().text)
+    }
+
+    @Test
+    fun `searched tags rank by closeness, then search count, merging spellings within the sources in scope`() {
+        val counts = mapOf(
+            StatisticsTagKey(SourceKey.PIXIV, "Animation") to 2L,
+            StatisticsTagKey(SourceKey.GELBOORU, "animation") to 5L,
+            StatisticsTagKey(SourceKey.GELBOORU, "animal_ears") to 3L,
+            StatisticsTagKey(SourceKey.GELBOORU, "fan_art") to 9L,
+            StatisticsTagKey(SourceKey.GELBOORU, "an") to 1L,
+            StatisticsTagKey(SourceKey.DANBOORU, "anime") to 99L,
+        )
+        val sources = setOf(SourceKey.PIXIV, SourceKey.GELBOORU)
+
+        assertEquals(
+            listOf("an", "animation", "animal_ears", "fan_art"),
+            rankSearchedTags(counts, sources, "an", limit = 10),
+        )
+        assertEquals(listOf("Animation"), rankSearchedTags(counts, setOf(SourceKey.PIXIV), "AN", limit = 10))
+        assertEquals(emptyList<String>(), rankSearchedTags(counts, sources, " ", limit = 10))
     }
 
     @Test

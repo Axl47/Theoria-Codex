@@ -33,7 +33,7 @@ class StatisticsRepositoriesTest {
             UsageDurationDelta(totalMs = 4_000L, browsingMs = 1_500L, watchingMs = 2_000L)
         )
         repository.recordWatchedPost(SourceKey.PIXIV, setOf(" blue_hair ", "blue_hair", ""))
-        repository.recordSearch(setOf(SourceKey.PIXIV, SourceKey.GELBOORU))
+        repository.recordSearch(setOf(SourceKey.PIXIV, SourceKey.GELBOORU), setOf(" animation ", "animation", ""))
         repository.recordForYouSearch()
         repository.recordForYouSave()
         repository.recordPostUrlCopy()
@@ -52,6 +52,10 @@ class StatisticsRepositoriesTest {
         assertEquals(1L, statistics.searchCount)
         assertEquals(1L, statistics.searchesBySource.getValue(SourceKey.PIXIV))
         assertEquals(1L, statistics.searchesBySource.getValue(SourceKey.GELBOORU))
+        assertEquals(
+            mapOf(StatisticsTagKey(SourceKey.PIXIV, "animation") to 1L, StatisticsTagKey(SourceKey.GELBOORU, "animation") to 1L),
+            statistics.searchesByTag,
+        )
         assertEquals(1L, statistics.forYouSearchCount)
         assertEquals(1L, statistics.forYouSaveCount)
         assertEquals(1L, statistics.postUrlCopyCount)
@@ -67,7 +71,7 @@ class StatisticsRepositoriesTest {
         val first = DataStoreStatisticsRepository(directory, firstScope)
         first.recordWatchedPost(SourceKey.PIXIV, setOf("landscape"), CodexPostOpen("first", "PIXIV:1", "A post"))
         first.recordWatchedPost(SourceKey.GELBOORU, setOf("landscape"))
-        first.recordSearch(setOf(SourceKey.PIXIV))
+        first.recordSearch(setOf(SourceKey.PIXIV), setOf("animation"))
         first.addUsageDuration(UsageDurationDelta(totalMs = 12_345L, codexMs = 2_345L))
         first.recordTranslationUsage(phraseCount = 3L, sourceCharacterCount = 18L)
         first.recordCodexPostOpen("first", "PIXIV:1", "A post")
@@ -89,6 +93,7 @@ class StatisticsRepositoriesTest {
         assertEquals(2L, restored.watchedPostCount)
         assertEquals(1L, restored.watchedByTag.getValue(StatisticsTagKey(SourceKey.PIXIV, "landscape")))
         assertEquals(1L, restored.watchedByTag.getValue(StatisticsTagKey(SourceKey.GELBOORU, "landscape")))
+        assertEquals(mapOf(StatisticsTagKey(SourceKey.PIXIV, "animation") to 1L), restored.searchesByTag)
         assertEquals(12_345L, restored.totalForegroundMs)
         assertEquals(2_345L, restored.codexMs)
         assertEquals(3L, restored.translatedPhraseCount)

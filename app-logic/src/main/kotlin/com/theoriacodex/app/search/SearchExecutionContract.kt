@@ -59,6 +59,8 @@ data class SearchAutocompleteResult(
     val validationMessage: String? = null,
     val autocomplete: List<TagSuggestion> = emptyList(),
     val facetedAutocomplete: List<FacetedTagSuggestion> = emptyList(),
+    /** Previously searched tags matching the input, most-searched first; see [rankSearchedTags]. */
+    val searchedTags: List<String> = emptyList(),
 )
 
 data class SearchEnvironmentChange(

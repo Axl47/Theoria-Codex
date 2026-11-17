@@ -49,6 +49,7 @@ class DailyStatisticsTest {
             val actual = JsonParser.parseString(file.readText()).asJsonObject
             assertEquals(2, actual["schemaVersion"].asInt)
             assertEquals(0, actual["statistics"].asJsonObject.remove("history").asJsonObject.size())
+            assertEquals(0, actual["statistics"].asJsonObject.remove("searchesByTag").asJsonArray.size())
             assertEquals(JsonParser.parseString(v1).asJsonObject["statistics"], actual["statistics"])
             repository.recordAppOpen()
             repository.recordWatchedPost(SourceKey.PIXIV, emptySet())

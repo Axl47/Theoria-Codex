@@ -253,6 +253,8 @@ data class LifetimeStatistics(
     val watchedByTag: Map<StatisticsTagKey, Long> = emptyMap(),
     val searchCount: Long = 0L,
     val searchesBySource: Map<SourceKey, Long> = emptyMap(),
+    /** How many searches included each general tag, counted under every source the search ran on. */
+    val searchesByTag: Map<StatisticsTagKey, Long> = emptyMap(),
     val forYouSearchCount: Long = 0L,
     val forYouSaveCount: Long = 0L,
     val postUrlCopyCount: Long = 0L,
@@ -275,7 +277,8 @@ interface StatisticsRepository {
     suspend fun addUsageDuration(delta: UsageDurationDelta)
     /** Records a viewed post; [codexOpen] also counts it as opened from that Codex in the same write. */
     suspend fun recordWatchedPost(source: SourceKey, tags: Set<String>, codexOpen: CodexPostOpen? = null)
-    suspend fun recordSearch(sources: Set<SourceKey>)
+    /** Records one completed search over [sources]; [tags] are the general tags it included. */
+    suspend fun recordSearch(sources: Set<SourceKey>, tags: Set<String> = emptySet())
     suspend fun recordForYouSearch()
     suspend fun recordForYouSave()
     suspend fun recordPostUrlCopy()

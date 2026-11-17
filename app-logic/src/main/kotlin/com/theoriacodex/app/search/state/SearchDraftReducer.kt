@@ -66,6 +66,7 @@ object SearchDraftReducer {
                     input = "",
                     autocomplete = emptyList(),
                     facetedAutocomplete = emptyList(),
+                    searchedTags = emptyList(),
                     canCommitInput = false,
                 ),
             ),
@@ -115,6 +116,7 @@ object SearchDraftReducer {
                 suggestions = state.suggestions.copy(
                     autocomplete = emptyList(),
                     facetedAutocomplete = emptyList(),
+                    searchedTags = emptyList(),
                 ),
             ),
         )
@@ -325,6 +327,7 @@ object SearchDraftReducer {
                         input = "",
                         autocomplete = emptyList(),
                         facetedAutocomplete = emptyList(),
+                        searchedTags = emptyList(),
                         canCommitInput = false,
                     ),
                 )
@@ -389,6 +392,7 @@ object SearchDraftReducer {
                 suggestions = state.suggestions.copy(
                     autocomplete = emptyList(),
                     facetedAutocomplete = emptyList(),
+                    searchedTags = emptyList(),
                 ),
             ),
             changed = scope != state.query.selectedScope,
@@ -422,6 +426,7 @@ object SearchDraftReducer {
                     input = "",
                     autocomplete = emptyList(),
                     facetedAutocomplete = emptyList(),
+                    searchedTags = emptyList(),
                     canCommitInput = false,
                 ),
             ),

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.data.repository.StatisticsTagKey
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.SourceKey
@@ -100,6 +101,31 @@ fun rankFacetedTagSuggestions(
         .map(RankedFacetedSuggestion::suggestion)
 }
 
+/**
+ * Tags the user searched before on any of [sources] that match [prefix]: closest match first, then
+ * most-searched. Spellings that normalize alike are one tag, counted by the source that searched it most.
+ */
+fun rankSearchedTags(
+    searchCounts: Map<StatisticsTagKey, Long>,
+    sources: Set<SourceKey>,
+    prefix: String,
+    limit: Int,
+): List<String> {
+    val normalizedPrefix = normalizeMatchToken(prefix)
+    if (limit <= 0 || normalizedPrefix.isBlank()) return emptyList()
+    return searchCounts.entries
+        .filter { (key, _) -> key.source in sources }
+        .mapNotNull { (key, count) ->
+            val token = normalizeMatchToken(key.tag)
+            token.matchQuality(normalizedPrefix)?.let { quality -> SearchedTag(key.tag, token, quality, count) }
+        }
+        .groupBy(SearchedTag::token)
+        .map { (_, spellings) -> spellings.maxBy(SearchedTag::count) }
+        .sortedWith(compareBy(SearchedTag::quality).thenByDescending(SearchedTag::count).thenBy(SearchedTag::token))
+        .take(limit)
+        .map(SearchedTag::text)
+}
+
 fun tagSuggestionMatches(suggestion: TagSuggestion, prefix: String): Boolean =
     suggestion.matchQuality(prefix) != null
 
@@ -136,4 +162,11 @@ private data class RankedFacetedSuggestion(
     val suggestion: FacetedTagSuggestion,
     val quality: MatchQuality,
     val originalIndex: Int,
+)
+
+private data class SearchedTag(
+    val text: String,
+    val token: String,
+    val quality: MatchQuality,
+    val count: Long,
 )
