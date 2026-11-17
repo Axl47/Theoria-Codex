@@ -116,7 +116,7 @@ fun SearchScreen(
     onSaveSearch: (String, RecentSearchEntry) -> Unit = { _, _ -> },
     onManageSavedSearches: () -> Unit = {},
 ) {
-    val chrome = remember(composerOpen) { SearchChromeState(composerOpen) }
+    val chrome = rememberSearchChromeState(composerOpen)
     val actionPost = remember { SearchActionPostState() }
     val inputFocus = rememberSearchInputFocus()
     val scope = rememberCoroutineScope()
@@ -249,11 +249,20 @@ private fun SearchChromeLayout(
     }
 }
 
-/** Which of Search's surfaces are open. The composer's state survives recreation; the sheets' does not. */
+@Composable
+private fun rememberSearchChromeState(composerOpen: MutableState<Boolean>): SearchChromeState {
+    val barDismissed = rememberSaveable { mutableStateOf(false) }
+    return remember(composerOpen, barDismissed) { SearchChromeState(composerOpen, barDismissed) }
+}
+
+/**
+ * Which of Search's surfaces are open. The composer and the tucked-away search bar survive recreation and the
+ * Viewer round trip, so returning does not push the results down; the sheets do not.
+ */
 @Stable
-private class SearchChromeState(composerOpen: MutableState<Boolean>) {
+private class SearchChromeState(composerOpen: MutableState<Boolean>, searchBarDismissedByScroll: MutableState<Boolean>) {
     var composerOpen by composerOpen
-    var searchBarDismissedByScroll by mutableStateOf(false)
+    var searchBarDismissedByScroll by searchBarDismissedByScroll
     var showFilterSheet by mutableStateOf(false)
     var showFavoriteTagSheet by mutableStateOf(false)
 
