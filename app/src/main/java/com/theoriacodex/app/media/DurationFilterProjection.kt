@@ -81,9 +81,9 @@ private fun DurationFilterFrame.covers(posts: List<Post>): Boolean {
 }
 
 /**
- * Presents duration metadata for [posts]. Pass [retainKey] for a feed's main list, so its reveal
- * order survives the Viewer; the projection then owns which posts may appear, and in what order.
- * Coming back from the Viewer, the first frame shows the projection's last frame while it still
+ * Presents duration metadata for [posts]. Pass [retainKey] so the projection survives the Viewer: a
+ * feed's main list keeps its reveal order (the projection then owns which posts may appear, and in
+ * what order), and a related shelf keeps the lengths it resolved. Coming back from the Viewer, the first frame shows the projection's last frame while it still
  * covers [posts], and the background answer replaces it as usual.
  */
 @Composable
