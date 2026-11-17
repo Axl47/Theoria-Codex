@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- With Instant Seek on, the video follows your finger while you drag its timeline instead of freezing until you stop. It pauses and goes silent during the drag, then plays from exactly where you let go.
+
 ## [1.8.0] - 2026-11-17
 
 ### Added
