@@ -4,17 +4,21 @@ import android.graphics.Bitmap
 import android.graphics.ImageFormat
 import android.hardware.HardwareBuffer
 import android.media.ImageReader
+import android.media.MediaFormat
 import android.os.Debug
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
 import android.view.Surface
+import androidx.media3.common.Format
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime
 import androidx.media3.exoplayer.source.LoadEventInfo
 import androidx.media3.exoplayer.source.MediaLoadData
+import androidx.media3.exoplayer.video.VideoFrameMetadataListener
 import java.io.File
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CompletableDeferred
@@ -151,6 +155,50 @@ internal class PlayerProbe(val player: ExoPlayer, private val surface: Surface) 
         }
     }
 }
+
+/** Each rendered frame of a player as (elapsed-realtime clock value, position), both in ms. Attach and detach on main. */
+@androidx.annotation.OptIn(UnstableApi::class)
+internal class FrameTimes : VideoFrameMetadataListener {
+    private val frames = mutableListOf<Pair<Long, Long>>()
+    private var player: ExoPlayer? = null
+
+    fun attach(player: ExoPlayer) {
+        this.player = player
+        player.setVideoFrameMetadataListener(this)
+    }
+
+    fun detach(player: ExoPlayer) = player.clearVideoFrameMetadataListener(this)
+
+    /** Called on the playback thread as each frame is released to the surface. */
+    override fun onVideoFrameAboutToBeRendered(presentationTimeUs: Long, releaseTimeNs: Long, format: Format, mediaFormat: MediaFormat?) {
+        synchronized(frames) { frames += SystemClock.elapsedRealtime() to presentationTimeUs / US_PER_MS }
+    }
+
+    fun since(atMs: Long): List<Pair<Long, Long>> = synchronized(frames) { frames.filter { (shownAt, _) -> shownAt >= atMs } }
+
+    /**
+     * When a frame whose position is in [positions] was first on screen from [atMs] on: [atMs] itself when the frame
+     * on screen then already was, as when the player skips a seek to the keyframe it shows.
+     */
+    suspend fun await(atMs: Long, positions: LongRange): Long {
+        val showing = synchronized(frames) { frames.lastOrNull { (shownAt, _) -> shownAt < atMs } }
+        if (showing != null && showing.second in positions) return atMs
+        val deadline = SystemClock.elapsedRealtime() + PLAYER_TIMEOUT_MS
+        while (SystemClock.elapsedRealtime() < deadline) {
+            since(atMs).firstOrNull { (_, positionMs) -> positionMs in positions }?.let { (shownAt, _) -> return shownAt }
+            delay(FRAME_POLL_MS)
+        }
+        val recent = synchronized(frames) { frames.takeLast(FRAMES_REPORTED) }.map { (shownAt, positionMs) -> "$positionMs@${shownAt - atMs}" }
+        val state = withContext(Dispatchers.Main) {
+            player?.run { "state $playbackState, loading $isLoading, at $currentPosition, buffered to $bufferedPosition, error $playerError" }
+        }
+        error("No frame in $positions since ${SystemClock.elapsedRealtime() - atMs} ms ago; last frames $recent; $state")
+    }
+}
+
+private const val US_PER_MS = 1_000L
+private const val FRAME_POLL_MS = 5L
+private const val FRAMES_REPORTED = 8
 
 /** A seek [PlayerProbe.startSeek] issued at [startedAt] (elapsed realtime); [ready] completes when it is ready. */
 internal class TimedSeek(val startedAt: Long, val ready: CompletableDeferred<Long>)
