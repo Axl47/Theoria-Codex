@@ -9,13 +9,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import coil.imageLoader
-import coil.request.SuccessResult
-import coil.size.Precision
-import coil.size.Scale
-import com.theoriacodex.app.media.viewerMediaDeliveryPlan
 import com.theoriacodex.app.search.FEED_PLAYER_RELEASE_GRACE_MS
 import com.theoriacodex.app.source.requestHeaders
-import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.ImageRef
@@ -282,83 +277,26 @@ class MediaBufferingBenchmarkTest {
         )
     }
 
-    /**
-     * Instant-seek drags on a long video through the Viewer's scrubbing path ([scrubTo], [endScrub]). After a few
-     * seconds of playback, three one-second drags, a move every 16 ms, each rest on a target and release there:
-     * forward within the buffer, back into the watched stretch, and forward past the buffer. Per drag: the frames
-     * shown while moving and the longest wait between them, the rest (last move to the first frame of the target's
-     * keyframe group), the release (to the frame at the target), and the bytes downloaded.
-     */
+    /** Instant-seek drags on a long video ([instantDrags]). */
     @Test
     fun viewerInstantDrag() = runBlocking {
         val video = url("long_1.mp4")
-        val infrastructure = context.videoPlaybackInfrastructure()
         warmUpVideo()
         resetServer()
         val surface = BenchSurface()
         val frames = FrameTimes()
-        val (probe, lease) = onMain {
-            val lease = infrastructure.viewerVideoPlayerPool.acquire(video, headers)
-            PlayerProbe(lease.resource, surface.surface).also { probe ->
-                probe.attach()
-                frames.attach(lease.resource)
-                lease.resource.playWhenReady = true
-            } to lease
-        }
+        val (probe, lease) = onMain { viewerProbe(video, surface, play = true).also { (probe, _) -> frames.attach(probe.player) } }
         probe.awaitPlaying()
-        delay(INSTANT_DRAG_WATCH_MS)
-        val duration = onMain { probe.player.duration }
-        val metrics = JSONObject()
-        for (kind in listOf("buffered", "watched", "unbuffered")) {
-            val (fromMs, bufferedMs) = onMain { probe.player.currentPosition to probe.player.bufferedPosition }
-            val toMs = when (kind) {
-                "buffered" -> fromMs + (bufferedMs - fromMs) * 3 / 4
-                "watched" -> INSTANT_DRAG_WATCH_MS / 2
-                else -> (duration * INSTANT_DRAG_FAR_FRACTION).toLong()
-            }
-            val before = serverStats()
-            val drag = instantDrag(probe.player, frames, fromMs, toMs)
-            delay(SEEK_SETTLE_MS)
-            val bytes = serverStats().path("/long_1.mp4").optLong("bytes") - before.path("/long_1.mp4").optLong("bytes")
-            drag.keys().forEach { key -> metrics.put("instant_${kind}_$key", drag.get(key)) }
-            metrics.put("instant_${kind}_mb", megabytes(bytes))
-        }
+        val metrics = instantDrags(probe.player, frames) { serverStats().path("/long_1.mp4").optLong("bytes") }
         val end = serverStats()
         onMain {
             frames.detach(probe.player)
             probe.detach()
-            infrastructure.viewerVideoPlayerPool.recycle(lease)
+            context.videoPlaybackInfrastructure().viewerVideoPlayerPool.recycle(lease)
         }
         surface.close()
-        infrastructure.removeCached(video, headers)
+        context.videoPlaybackInfrastructure().removeCached(video, headers)
         report("viewerInstantDrag", metrics.put("server", end.json))
-    }
-
-    /** One instant-seek drag from [fromMs] to [toMs] that rests there and releases, timed as [viewerInstantDrag] says. */
-    private suspend fun instantDrag(player: ExoPlayer, frames: FrameTimes, fromMs: Long, toMs: Long): JSONObject {
-        val moves = (INSTANT_DRAG_MS / INSTANT_DRAG_STEP_MS).toInt()
-        val startedAt = SystemClock.elapsedRealtime()
-        var lastMoveAt = startedAt
-        for (step in 1..moves) {
-            onMain { player.scrubTo(fromMs + (toMs - fromMs) * step / moves) }
-            lastMoveAt = SystemClock.elapsedRealtime()
-            if (step < moves) delay(INSTANT_DRAG_STEP_MS)
-        }
-        val shown = frames.since(startedAt).map { it.first }.filter { it <= lastMoveAt }
-        val gap = (listOf(startedAt) + shown + lastMoveAt).zipWithNext { a, b -> b - a }.max()
-        val restAt = frames.await(lastMoveAt, toMs - INSTANT_DRAG_KEYFRAME_MS..toMs + FRAME_SLACK_MS)
-        delay(INSTANT_DRAG_REST_MS)
-        val releasedAt = SystemClock.elapsedRealtime()
-        onMain {
-            player.endScrub()
-            player.seekTo(toMs)
-        }
-        val landedAt = frames.await(releasedAt, toMs - FRAME_SLACK_MS..toMs + FRAME_SLACK_MS)
-        return JSONObject()
-            .put("drag_frames", shown.size)
-            .put("drag_gap_ms", gap)
-            .put("rest_ms", restAt - lastMoveAt)
-            .put("release_ms", landedAt - releasedAt)
     }
 
     /**
@@ -531,7 +469,7 @@ class MediaBufferingBenchmarkTest {
             )
             viewer.queueAdjacentPrefetch()
         }
-        val first = display(post, 0)
+        val first = context.displayViewerPage(post, 0)
         onMain { viewer.markShown(0) }
         val openToFirstPage = SystemClock.elapsedRealtime() - opened
         val sources = mutableMapOf<String, Int>()
@@ -539,8 +477,8 @@ class MediaBufferingBenchmarkTest {
 
         val reading = (1..READ_PAGES).map { index ->
             onMain { viewer.selectAndPrefetch(index) }
-            val ahead = pagesReadyAhead(post, index)
-            val shown = display(post, index)
+            val ahead = context.pagesReadyAhead(post, index)
+            val shown = context.displayViewerPage(post, index)
             onMain { viewer.markShown(index) }
             sources.merge(shown.source, 1, Int::plus)
             delay(READ_DWELL_MS)
@@ -551,7 +489,7 @@ class MediaBufferingBenchmarkTest {
         (READ_PAGES + 1..READ_PAGES + SKIM_PAGES).forEach { index ->
             val flipped = SystemClock.elapsedRealtime()
             onMain { viewer.selectAndPrefetch(index) }
-            val pending = scope.async { display(post, index) }
+            val pending = scope.async { context.displayViewerPage(post, index) }
             val shown = withTimeoutOrNull(SKIM_DWELL_MS) { pending.await() }
             if (shown != null) {
                 onMain { viewer.markShown(index) }
@@ -669,13 +607,7 @@ class MediaBufferingBenchmarkTest {
         val infrastructure = context.videoPlaybackInfrastructure()
         val location = "${server.baseUrl}/clip_4.mp4?warmup=$nonce"
         BenchSurface().use { surface ->
-            val (probe, lease) = onMain {
-                val lease = infrastructure.viewerVideoPlayerPool.acquire(location, headers)
-                PlayerProbe(lease.resource, surface.surface).also { probe ->
-                    probe.attach()
-                    lease.resource.playWhenReady = true
-                } to lease
-            }
+            val (probe, lease) = onMain { viewerProbe(location, surface, play = true) }
             probe.awaitFirstFrame()
             onMain {
                 probe.detach()
@@ -684,42 +616,6 @@ class MediaBufferingBenchmarkTest {
         }
         infrastructure.removeCached(location, headers)
     }
-
-    private fun ViewerViewModel.queueAdjacentPrefetch() {
-        onAction(viewerPrefetchAction(state.value.pages, state.value.currentMedia?.key, null))
-    }
-
-    /** What the page's renderer reports once its image is on screen. */
-    private fun ViewerViewModel.markShown(mediaIndex: Int) {
-        val current = state.value.currentMedia?.takeIf { it.key.mediaIndex == mediaIndex } ?: return
-        onAction(ViewerAction.MediaReady(requireNotNull(state.value.session), current.key, current.loadGeneration))
-    }
-
-    private fun ViewerViewModel.selectAndPrefetch(mediaIndex: Int) {
-        onAction(ViewerAction.SelectMedia(mediaIndex))
-        queueAdjacentPrefetch()
-    }
-
-    /** The Viewer page's own request: its location and the pager page's size, as AsyncImage resolves it. */
-    private suspend fun display(post: Post, index: Int): Shown {
-        val location = viewerMediaDeliveryPlan(post, post.media[index]).candidates.first().location
-        val metrics = context.resources.displayMetrics
-        val request = buildViewerImageRequest(context, location, post.id.source).newBuilder()
-            .size(metrics.widthPixels, metrics.heightPixels)
-            .precision(Precision.INEXACT)
-            .scale(Scale.FIT)
-            .build()
-        val started = SystemClock.elapsedRealtime()
-        val result = context.imageLoader.execute(request)
-        check(result is SuccessResult) { "Gallery page $index failed: $result" }
-        return Shown(SystemClock.elapsedRealtime() - started, result.dataSource.name.lowercase())
-    }
-
-    private fun pagesReadyAhead(post: Post, current: Int): Int =
-        (current + 1..minOf(current + READY_AHEAD_WINDOW, post.media.lastIndex)).count { index ->
-            val location = requireNotNull(post.media[index].url)
-            context.imageLoader.diskCache?.openSnapshot(location)?.use { true } == true
-        }
 
     private fun url(path: String) = "${server.baseUrl}/$path?run=$nonce"
 
@@ -734,8 +630,6 @@ class MediaBufferingBenchmarkTest {
     }
 
     private suspend fun <T> onMain(block: () -> T): T = withContext(Dispatchers.Main) { block() }
-
-    private data class Shown(val elapsedMs: Long, val source: String)
 
     private class ServerStats(val json: JSONObject) {
         fun path(path: String): JSONObject = json.optJSONObject(path) ?: JSONObject()
@@ -759,17 +653,6 @@ private const val SECOND_DRAG_FRACTION = 0.10
  * looping video passes its end).
  */
 private const val COLD_RELEASE_FRACTION = 0.46
-private const val INSTANT_DRAG_WATCH_MS = 6_000L
-private const val INSTANT_DRAG_MS = 1_000L
-private const val INSTANT_DRAG_STEP_MS = 16L
-private const val INSTANT_DRAG_REST_MS = 500L
-private const val INSTANT_DRAG_FAR_FRACTION = 0.9
-
-/** The benchmark video's keyframe interval (`scripts/media_bench_device.py`), plus a frame. */
-private const val INSTANT_DRAG_KEYFRAME_MS = 2_034L
-
-/** About a frame at 30 fps: how far a shown frame may sit from the position it stands for. */
-private const val FRAME_SLACK_MS = 40L
 private val SWIPE_VIDEOS = listOf("long_2.mp4", "long_1.mp4", "long_3.mp4")
 private const val SWIPE_WATCH_MS = 20_000L
 private const val SWIPE_SETTLE_MS = 300L
@@ -785,4 +668,3 @@ private const val READ_PAGES = 40
 private const val READ_DWELL_MS = 1_200L
 private const val SKIM_PAGES = 35
 private const val SKIM_DWELL_MS = 200L
-private const val READY_AHEAD_WINDOW = 10
