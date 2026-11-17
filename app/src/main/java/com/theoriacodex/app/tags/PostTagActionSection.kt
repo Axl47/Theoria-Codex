@@ -26,7 +26,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Icon
@@ -64,6 +68,7 @@ import com.theoriacodex.app.source.displayName
 import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
@@ -76,11 +81,14 @@ import com.theoriacodex.domain.model.SourceKey
  * [tagsInitiallyCollapsed] only sets the state when the sheet opens; later changes to it never move the
  * user's own choice. With [scrollToAfterTags], a sheet that opens collapsed starts scrolled to [afterTags].
  * [scrollToKey] names an item of [afterTags] to scroll to as soon as the list has it.
+ * [filterBehindIcon] keeps a long list's tag filter behind a search button in the "Tags" header, for
+ * sheets short on height, instead of always showing it above the tags.
  */
 class PostTagSheetExtras(
     val tagsInitiallyCollapsed: Boolean,
     val scrollToAfterTags: Boolean = false,
     val scrollToKey: Any? = null,
+    val filterBehindIcon: Boolean = false,
     val afterTags: LazyListScope.() -> Unit = {},
 )
 
@@ -121,6 +129,7 @@ fun PostTagActionSection(
     var tagsCollapsed by remember(post.id) { mutableStateOf(sheetExtras?.tagsInitiallyCollapsed == true) }
     val foldsTags = sheetExtras != null && !loading && terms.isNotEmpty()
     val collapsed = foldsTags && tagsCollapsed
+    val filter = rememberTagFilter(post.id, termGroups, translations, foldsTags && sheetExtras.filterBehindIcon) { tagsCollapsed = false }
     val draftGroups = draft?.effectiveIncludeTermGroups.orEmpty()
     val targetGroup = draftGroups.indexOfFirst { group -> targetTerm in group.terms }.takeIf { it >= 0 }
     val searchActions = LocalPostTagSearchActions.current
@@ -153,7 +162,7 @@ fun PostTagActionSection(
                 items.item(key = "loading") { Text("Loading tags...", style = MaterialTheme.typography.bodySmall) }
             } else {
                 val fold = TagFold(foldsTags, tagsCollapsed) { tagsCollapsed = !tagsCollapsed }
-                items.postTagSections(termGroups, terms, expandedGroups, { label -> expandedGroups = expandedGroups + label }, fold, sheetExtras, chip)
+                items.postTagSections(filter.groups, terms, expandedGroups, { label -> expandedGroups = expandedGroups + label }, fold, filter, sheetExtras, chip)
             }
             items.item(key = "footer") { footer() }
         }
@@ -404,12 +413,13 @@ private fun LazyListScope.postTagList(
     groups: List<PostActionTermGroup>,
     expandedGroups: Set<String>,
     onExpandGroup: (String) -> Unit,
+    filter: TagFilter,
     chip: @Composable (SearchTerm, Boolean) -> Unit,
 ) {
     if (groups.isEmpty()) {
         item(key = "empty") {
             Text(
-                text = "No search terms",
+                text = if (filter.active) "No tags match \"${filter.text.trim()}\"" else "No search terms",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -425,7 +435,7 @@ private fun LazyListScope.postTagList(
                 modifier = Modifier.padding(top = 12.dp),
             )
         }
-        val collapsed = group.label !in expandedGroups && group.terms.size > COLLAPSE_TAGS_OVER
+        val collapsed = !filter.active && group.label !in expandedGroups && group.terms.size > COLLAPSE_TAGS_OVER
         val rows = (if (collapsed) group.terms.take(COLLAPSED_TAG_COUNT) else group.terms).tagChipChunks()
         items(rows.size, key = { "row:${group.label}:$it" }, contentType = { "tags" }) { rowIndex ->
             TagChipRow {
@@ -473,6 +483,90 @@ private fun PostTagQueryTray(
 /** Whether the tag list can be folded away, and whether it is. */
 private class TagFold(val enabled: Boolean, val collapsed: Boolean, val onToggle: () -> Unit)
 
+/**
+ * The filter over a long tag list and the [groups] it leaves. It is [available] past the length where groups
+ * start folding; [open] shows the field, which is always unless it waits [behindIcon]. [focus] asks a freshly
+ * opened field for the keyboard.
+ */
+private class TagFilter(
+    val groups: List<PostActionTermGroup>,
+    val available: Boolean,
+    val behindIcon: Boolean,
+    val open: Boolean,
+    val text: String,
+    val focus: Boolean,
+    val onText: (String) -> Unit,
+    val onOpen: () -> Unit,
+    val onClose: () -> Unit,
+    val onFocused: () -> Unit,
+) {
+    val active: Boolean get() = text.isNotBlank()
+}
+
+/** One post's filter state; a new post starts with the filter empty and, behind its button, closed. */
+@Composable
+private fun rememberTagFilter(
+    postId: PostId,
+    termGroups: List<PostActionTermGroup>,
+    translations: Map<String, String>,
+    behindIcon: Boolean,
+    onOpen: () -> Unit,
+): TagFilter {
+    var text by remember(postId) { mutableStateOf("") }
+    var open by remember(postId) { mutableStateOf(false) }
+    var focus by remember(postId) { mutableStateOf(false) }
+    val normalized = text.normalizedTagFilterText()
+    val groups = remember(termGroups, translations, normalized) { filterPostTagGroups(termGroups, normalized, translations) }
+    return TagFilter(
+        groups = groups,
+        available = termGroups.sumOf { it.terms.size } > COLLAPSE_TAGS_OVER,
+        behindIcon = behindIcon,
+        open = !behindIcon || open,
+        text = text,
+        focus = focus,
+        onText = { text = it },
+        onOpen = {
+            open = true
+            focus = true
+            onOpen()
+        },
+        onClose = {
+            open = false
+            focus = false
+        },
+        onFocused = { focus = false },
+    )
+}
+
+/** The groups keeping only tags whose name or translation contains [normalizedFilter]; empty groups drop out. */
+internal fun filterPostTagGroups(
+    groups: List<PostActionTermGroup>,
+    normalizedFilter: String,
+    translations: Map<String, String>,
+): List<PostActionTermGroup> {
+    if (normalizedFilter.isEmpty()) return groups
+    fun matches(term: SearchTerm) = normalizedFilter in term.value.normalizedTagFilterText() ||
+        translations[term.value]?.normalizedTagFilterText()?.contains(normalizedFilter) == true
+    return groups.mapNotNull { group -> group.terms.filter(::matches).takeIf { it.isNotEmpty() }?.let { group.copy(terms = it) } }
+}
+
+@Composable
+private fun PostTagFilterField(filter: TagFilter) {
+    val focusRequester = remember { FocusRequester() }
+    TagFilterField(
+        value = filter.text,
+        onValueChange = filter.onText,
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp).focusRequester(focusRequester),
+        onClose = if (filter.behindIcon) filter.onClose else null,
+    )
+    if (filter.focus) {
+        LaunchedEffect(Unit) {
+            focusRequester.requestFocus()
+            filter.onFocused()
+        }
+    }
+}
+
 /** Everything between the actions and the footer: the tags (or their folded peek) with their hint, then what the sheet adds. */
 private fun LazyListScope.postTagSections(
     groups: List<PostActionTermGroup>,
@@ -480,14 +574,27 @@ private fun LazyListScope.postTagSections(
     expandedGroups: Set<String>,
     onExpandGroup: (String) -> Unit,
     fold: TagFold,
+    filter: TagFilter,
     sheetExtras: PostTagSheetExtras?,
     chip: @Composable (SearchTerm, Boolean) -> Unit,
 ) {
-    if (fold.enabled) item(key = "tags-header") { FoldHeader("Tags", "tags", terms.size.toString(), fold.collapsed, fold.onToggle) }
+    if (fold.enabled) {
+        item(key = "tags-header") {
+            FoldHeader(
+                "Tags", "tags", terms.size.toString(), fold.collapsed, fold.onToggle,
+                trailing = if (filter.available && filter.behindIcon && !filter.open) {
+                    { IconButton(onClick = filter.onOpen) { Icon(Icons.Default.Search, contentDescription = "Filter tags") } }
+                } else {
+                    null
+                },
+            )
+        }
+    }
     if (fold.enabled && fold.collapsed) {
         item(key = "tags-peek") { TagPeekRow(terms.take(PEEK_TAG_COUNT), chip) }
     } else {
-        postTagList(groups, expandedGroups, onExpandGroup, chip)
+        if (filter.available && filter.open) item(key = "tag-filter") { PostTagFilterField(filter) }
+        postTagList(groups, expandedGroups, onExpandGroup, filter, chip)
         if (groups.isNotEmpty()) postTagHint()
     }
     sheetExtras?.afterTags?.invoke(this)

@@ -36,6 +36,8 @@ import com.theoriacodex.app.search.state.SearchDraftReducer
 import com.theoriacodex.app.search.state.emptySearchQuery
 import com.theoriacodex.app.tags.QueryTray
 import com.theoriacodex.app.tags.TagChipRow
+import com.theoriacodex.app.tags.TagFilterField
+import com.theoriacodex.app.tags.normalizedTagFilterText
 import com.theoriacodex.app.tags.TagChipState
 import com.theoriacodex.app.tags.TagPickerChip
 import com.theoriacodex.app.tags.chipState
@@ -126,7 +128,7 @@ private fun ColumnScope.CodexTagSearchEditor(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AutomaticTagFilterField(filter, { filter = it }, Modifier.weight(1f))
+        TagFilterField(filter, { filter = it }, Modifier.weight(1f))
         DrawControl(drawAmount, enabled = terms.posts.isNotEmpty(), onAmount = { drawAmount = it }) {
             focusManager.clearFocus()
             drawCodexTerms(terms.posts, drawAmount)?.let { draw ->

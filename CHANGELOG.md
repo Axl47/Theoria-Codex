@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Posts with more than 16 tags get a Filter tags field above their tags in the Viewer's info sheet and in Search. It matches tag names and translations and shows every match, including tags hidden behind "+N more". In landscape, the Viewer keeps the field behind a search button in the Tags header.
+
 ## [1.8.0] - 2026-11-17
 
 ### Added

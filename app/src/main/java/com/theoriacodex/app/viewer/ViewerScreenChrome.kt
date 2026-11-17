@@ -1,5 +1,6 @@
 package com.theoriacodex.app.viewer
 
+import android.content.res.Configuration
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
@@ -46,6 +47,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
@@ -380,6 +382,7 @@ internal fun ViewerInfoSheet(
                 tagsInitiallyCollapsed = tagsStartCollapsed,
                 scrollToAfterTags = openedAtComments,
                 scrollToKey = highlightedComment,
+                filterBehindIcon = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE,
                 afterTags = {
                     commentsState?.let { state ->
                         val view = commentsView(
