@@ -121,8 +121,8 @@ internal class ViewerReturnTransition {
     var mediaSettling by mutableStateOf(false)
         private set
     private val mediaCorners = mutableMapOf<PostId, ViewerReturnCorners>()
-    private var centered = false
-    private var rowCentered = false
+    private var positioned = false
+    private var rowPositioned = false
     private val mediaBounds = mutableMapOf<PostId, Rect>()
 
     fun openedFrom(gridId: String?, bounds: Rect? = null, shelfId: ViewerReturnShelfId? = null, corners: ViewerReturnCorners = ViewerReturnCorners()) {
@@ -142,8 +142,8 @@ internal class ViewerReturnTransition {
         request = ViewerReturnRequest(originGridId, postId, originShelfId)
         mediaSettling = true
         targetBounds = null
-        centered = false
-        rowCentered = originShelfId == null
+        positioned = false
+        rowPositioned = originShelfId == null
         mediaBounds.clear()
     }
 
@@ -156,19 +156,21 @@ internal class ViewerReturnTransition {
         if (gridId == null || gridId != pending.gridId || postId != pending.postId || shelfId != pending.shelfId || bounds.isEmpty) return
         mediaBounds[postId] = bounds
         mediaCorners[postId] = corners
-        if (centered && rowCentered) selectTarget(postId)
+        if (positioned && rowPositioned) selectTarget(postId)
     }
 
-    fun centered(gridId: String, postId: PostId) {
+    /** The originating list has brought the returning card fully on screen (see [viewerReturnRevealScroll]). */
+    fun positioned(gridId: String, postId: PostId) {
         if (request?.gridId != gridId || request?.postId != postId) return
-        centered = true
-        if (rowCentered) selectTarget(postId)
+        positioned = true
+        if (rowPositioned) selectTarget(postId)
     }
 
-    fun shelfCentered(gridId: String, postId: PostId, shelfId: ViewerReturnShelfId) {
+    /** The card's horizontal shelf has brought it fully on screen; shelf returns need both axes. */
+    fun shelfPositioned(gridId: String, postId: PostId, shelfId: ViewerReturnShelfId) {
         if (request != ViewerReturnRequest(gridId, postId, shelfId)) return
-        rowCentered = true
-        if (centered) selectTarget(postId)
+        rowPositioned = true
+        if (positioned) selectTarget(postId)
     }
 
     private fun selectTarget(postId: PostId) {
@@ -186,9 +188,9 @@ internal class ViewerReturnTransition {
         targetBounds = null
         originGridId = null
         originShelfId = null
-        rowCentered = false
+        rowPositioned = false
         openingBounds = null
-        centered = false
+        positioned = false
         mediaBounds.clear()
     }
 }
@@ -278,30 +280,38 @@ internal fun ViewerReturnGridEffect(
         if (request?.gridId != gridId) return@LaunchedEffect
         val index = request.shelfId?.let(shelfIds::indexOf) ?: postIds.indexOf(request.postId)
         if (index < 0) return@LaunchedEffect
-        state.scrollWithinColumnsTo(index)
+        snapshotFlow { state.layoutInfo.visibleItemsInfo }.first { it.isNotEmpty() }
+        val arrivedFrom = state.scrollWithinColumnsTo(index)
         val item = snapshotFlow { state.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } }
             .filterNotNull().first()
         val layout = state.layoutInfo
-        state.scrollBy(viewerReturnCenterScroll(item.offset.y, item.size.height,
-            layout.viewportStartOffset, layout.viewportEndOffset))
+        state.scrollBy(viewerReturnRevealScroll(item.offset.y, item.size.height,
+            layout.viewportStartOffset + layout.beforeContentPadding,
+            layout.viewportEndOffset - layout.afterContentPadding, arrivedFrom))
         withFrameNanos { }
-        transition.centered(gridId, request.postId)
+        transition.positioned(gridId, request.postId)
     }
 }
 
 /**
  * Reaches an offscreen card through relative scrolls, including one the Viewer swiped to. Jumping
- * with scrollToItem lines every column up at the target, which later forces a reshuffle.
+ * with scrollToItem lines every column up at the target, which later forces a reshuffle. Returns the
+ * direction of the last step (-1 up, 1 down), or 0 when the card was already in the viewport.
  */
-private suspend fun LazyStaggeredGridState.scrollWithinColumnsTo(index: Int) {
+private suspend fun LazyStaggeredGridState.scrollWithinColumnsTo(index: Int): Float {
+    var arrivedFrom = 0f
     repeat(MAX_VIEWER_RETURN_SCROLL_STEPS) {
         val visible = layoutInfo.visibleItemsInfo
-        if (visible.isEmpty() || visible.any { it.index == index }) return
+        if (visible.isEmpty() || visible.any { it.index == index }) return arrivedFrom
         val viewport = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).toFloat()
-        val direction = viewerReturnScrollDirection(index, visible.maxOf { it.index })
-        if (scrollBy(direction * viewport) == 0f) return scrollToItem(index)
+        arrivedFrom = viewerReturnScrollDirection(index, visible.maxOf { it.index })
+        if (scrollBy(arrivedFrom * viewport) == 0f) {
+            scrollToItem(index)
+            return arrivedFrom
+        }
     }
     if (layoutInfo.visibleItemsInfo.none { it.index == index }) scrollToItem(index)
+    return arrivedFrom
 }
 
 /**
@@ -324,8 +334,8 @@ internal fun ViewerReturnShelfEffect(shelfId: ViewerReturnShelfId, postIds: List
         if (request?.gridId != gridId || request.shelfId != shelfId) return@LaunchedEffect
         val index = postIds.indexOf(request.postId)
         if (index < 0) return@LaunchedEffect
-        state.centerViewerReturnItem(index)
-        transition.shelfCentered(gridId, request.postId, shelfId)
+        state.revealViewerReturnItem(index)
+        transition.shelfPositioned(gridId, request.postId, shelfId)
     }
 }
 
@@ -352,8 +362,8 @@ internal fun ViewerReturnColumn(
         if (request?.gridId != gridId || request.shelfId == null) return@LaunchedEffect
         val index = rowOf(request)
         if (index < 0) return@LaunchedEffect
-        state.centerViewerReturnItem(index)
-        transition.centered(gridId, request.postId)
+        state.revealViewerReturnItem(index)
+        transition.positioned(gridId, request.postId)
     }
     CompositionLocalProvider(LocalViewerReturnGrid provides gridId, content = content)
 }
@@ -369,18 +379,54 @@ internal fun ViewerReturnShelf(
     CompositionLocalProvider(LocalViewerReturnShelf provides shelfId, content = content)
 }
 
-/** LazyRow and LazyColumn expose offsets along their own scroll axis. */
-private suspend fun LazyListState.centerViewerReturnItem(index: Int) {
-    scrollToItem(index)
+/** LazyRow and LazyColumn expose offsets along their own scroll axis; an offscreen item is jumped to first. */
+private suspend fun LazyListState.revealViewerReturnItem(index: Int) {
+    val visible = snapshotFlow { layoutInfo.visibleItemsInfo }.first { it.isNotEmpty() }
+    val arrivedFrom = when {
+        visible.any { it.index == index } -> 0f
+        index < visible.first().index -> -1f
+        else -> 1f
+    }
+    if (arrivedFrom != 0f) scrollToItem(index)
     val item = snapshotFlow { layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } }
         .filterNotNull().first()
     val layout = layoutInfo
-    scrollBy(viewerReturnCenterScroll(item.offset, item.size, layout.viewportStartOffset, layout.viewportEndOffset))
+    scrollBy(viewerReturnRevealScroll(item.offset, item.size, layout.viewportStartOffset + layout.beforeContentPadding,
+        layout.viewportEndOffset - layout.afterContentPadding, arrivedFrom))
     withFrameNanos { }
 }
 
-internal fun viewerReturnCenterScroll(itemTop: Int, itemHeight: Int, viewportStart: Int, viewportEnd: Int): Float =
-    itemTop + itemHeight / 2f - (viewportStart + viewportEnd) / 2f
+/**
+ * How far a list scrolls so the returning card is fully visible, moving it as little as possible
+ * (user decision 2026-11-16: keep the feed where it was rather than centring the card).
+ *
+ * "Visible" is `[visibleStart, visibleEnd]`: the list's viewport minus its content padding, in the
+ * list's own item offsets. Content padding is where Compose lets chrome drawn over a list sit; top and
+ * bottom bars and system insets in the current feeds are laid out outside the list, so a card under
+ * them is already outside the viewport. Floating controls (FABs, Search's collapsed corner button)
+ * do not count as covering.
+ *
+ * - Fully visible: 0, the list does not move.
+ * - Larger than the visible span: align its start with [visibleStart].
+ * - Otherwise move it just inside the nearer edge it crosses. [arrivedFrom] is the direction already
+ *   travelled to bring an offscreen card into the layout (1 forward, -1 back, 0 none); it pins the
+ *   card to the edge it entered from, so the total movement matches one minimal scroll.
+ */
+internal fun viewerReturnRevealScroll(
+    itemStart: Int, itemSize: Int, visibleStart: Int, visibleEnd: Int, arrivedFrom: Float = 0f,
+): Float {
+    val itemEnd = itemStart + itemSize
+    val toStart = itemStart - visibleStart
+    val toEnd = itemEnd - visibleEnd
+    return when {
+        itemSize > visibleEnd - visibleStart -> toStart
+        arrivedFrom > 0f -> toEnd
+        arrivedFrom < 0f -> toStart
+        toStart < 0 -> toStart
+        toEnd > 0 -> toEnd
+        else -> 0
+    }.toFloat()
+}
 
 /**
  * One progress value describes both directions: zero is fullscreen and one is the feed card. Read it

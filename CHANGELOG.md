@@ -5,6 +5,7 @@
 ### Changed
 
 - Account pages in landscape fit the avatar, name, stats, Uploads/Favorites switch and Follow into one bar, so the grid gets most of the screen. The bio sits behind the info button.
+- Closing a post keeps the feed where you left it. If the post's card is off screen, for example after swiping to another post, the feed scrolls only far enough to show it instead of centring it.
 
 ## [1.7.0] - 2026-11-15
 

@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.app.viewer.LocalViewerReturnTransition
+import com.theoriacodex.app.viewer.ViewerReturnTestFeed
 import com.theoriacodex.app.viewer.ViewerReturnTransition
 import com.theoriacodex.data.repository.RecentActivityEntry
 import com.theoriacodex.data.repository.RecentPostEntry
@@ -47,6 +48,8 @@ class RecentsViewerReturnTest {
         viewedAtEpochMs = now - age, origin = ViewerStreamSource.RECENTS, originQueryHash = null, section = RecentPostSection.WATCHED,
     )
 
+    private val feed = ViewerReturnTestFeed()
+
     private fun showAllView(): ViewerReturnTransition {
         val transition = ViewerReturnTransition()
         // A search between posts splits them into two separate rows.
@@ -57,17 +60,19 @@ class RecentsViewerReturnTest {
         val watched = listOf(first, neighbor, otherRow)
         compose.setContent {
             CompositionLocalProvider(LocalViewerReturnTransition provides transition) {
-                RecentsScreen(
-                    watchedPosts = watched, codexPosts = emptyList(), searches = listOf(search), fypSearches = emptyList(),
-                    activity = listOf(
-                        RecentActivityEntry.Watched(first), RecentActivityEntry.Watched(neighbor),
-                        RecentActivityEntry.Search(search), RecentActivityEntry.Watched(otherRow),
-                    ),
-                    onRequestSaveToCodex = {}, onSaveToDevice = {}, onOpenCreatorProfile = {}, onOpenLegacyCreatorProfile = {},
-                    onAddIncludeTerm = { _, _ -> false }, onAddExcludeTerm = { _, _ -> false },
-                    onRemoveIncludeTerm = { _, _ -> }, onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
-                    onOpenWatchedPost = { _, _ -> }, onOpenCodexPost = { _, _ -> }, onOpenSearch = {}, onOpenFypSearch = {}, onClear = {},
-                )
+                feed.Content {
+                    RecentsScreen(
+                        watchedPosts = watched, codexPosts = emptyList(), searches = listOf(search), fypSearches = emptyList(),
+                        activity = listOf(
+                            RecentActivityEntry.Watched(first), RecentActivityEntry.Watched(neighbor),
+                            RecentActivityEntry.Search(search), RecentActivityEntry.Watched(otherRow),
+                        ),
+                        onRequestSaveToCodex = {}, onSaveToDevice = {}, onOpenCreatorProfile = {}, onOpenLegacyCreatorProfile = {},
+                        onAddIncludeTerm = { _, _ -> false }, onAddExcludeTerm = { _, _ -> false },
+                        onRemoveIncludeTerm = { _, _ -> }, onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
+                        onOpenWatchedPost = { _, _ -> }, onOpenCodexPost = { _, _ -> }, onOpenSearch = {}, onOpenFypSearch = {}, onClear = {},
+                    )
+                }
             }
         }
         compose.onNodeWithTag(searchCardTestTag(first.post.id)).performClick()
@@ -75,8 +80,7 @@ class RecentsViewerReturnTest {
     }
 
     private fun assertLandsOnCard(transition: ViewerReturnTransition, post: PostId) {
-        compose.runOnIdle { transition.begin(post) }
-        compose.waitForIdle()
+        feed.closeViewerOnto(compose, transition, post)
         compose.runOnIdle { assertNotNull("$post should land on its card, not use the fallback", transition.targetBounds) }
     }
 

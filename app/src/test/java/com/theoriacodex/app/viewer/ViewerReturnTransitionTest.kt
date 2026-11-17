@@ -16,6 +16,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
@@ -98,17 +99,17 @@ class ViewerReturnTransitionTest {
         assertTrue(!transition.mediaSettling)
     }
 
-    @Test fun `only the originating grid and current post can supply a centered target`() {
+    @Test fun `only the originating grid and current post can supply a positioned target`() {
         val transition = ViewerReturnTransition()
         val target = Rect(10f, 200f, 210f, 500f)
         transition.openedFrom("origin")
         transition.begin(postId)
         transition.recordBounds("other", postId, target)
-        transition.centered("other", postId)
+        transition.positioned("other", postId)
         assertNull(transition.targetBounds)
         transition.recordBounds("origin", postId, target)
         assertNull(transition.targetBounds)
-        transition.centered("origin", postId)
+        transition.positioned("origin", postId)
         assertEquals(target, transition.targetBounds)
         transition.clear()
         assertNull(transition.request)
@@ -130,8 +131,38 @@ class ViewerReturnTransitionTest {
         assertEquals(0.3f, end.scale, 0.001f)
         assertEquals(-250f, end.translationX, 0.001f)
         assertEquals(-250f, end.translationY, 0.001f)
-        assertEquals(-250f, viewerReturnCenterScroll(100, 300, 0, 1000), 0.001f)
         assertTrue(viewerReturnGeometry(source, null, null, 1f).scale.isFinite())
+    }
+
+    @Test fun `a fully visible card does not move the list`() {
+        assertEquals(0f, viewerReturnRevealScroll(100, 300, 0, 1000))
+        assertEquals(0f, viewerReturnRevealScroll(0, 1000, 0, 1000))
+    }
+
+    @Test fun `a card off screen or partly visible scrolls just inside the edge it crosses`() {
+        assertEquals(-800f, viewerReturnRevealScroll(-800, 300, 0, 1000))
+        assertEquals(-100f, viewerReturnRevealScroll(-100, 300, 0, 1000))
+        assertEquals(200f, viewerReturnRevealScroll(900, 300, 0, 1000))
+        assertEquals(1100f, viewerReturnRevealScroll(1800, 300, 0, 1000))
+    }
+
+    @Test fun `a card reached by scrolling rests on the edge it entered from`() {
+        // Two viewports below at the start, now in view after one step forward: its end meets the bottom.
+        assertEquals(-100f, viewerReturnRevealScroll(600, 300, 0, 1000, arrivedFrom = 1f))
+        assertEquals(400f, viewerReturnRevealScroll(400, 300, 0, 1000, arrivedFrom = -1f))
+    }
+
+    @Test fun `a card taller than the visible span aligns its top`() {
+        assertEquals(-200f, viewerReturnRevealScroll(-200, 1400, 0, 1000))
+        assertEquals(300f, viewerReturnRevealScroll(300, 1400, 0, 1000))
+        assertEquals(300f, viewerReturnRevealScroll(300, 1400, 0, 1000, arrivedFrom = 1f))
+    }
+
+    @Test fun `a card under chrome padding is not visible`() {
+        // 120 px bar over the top and 200 px over the bottom of a 1000 px list.
+        assertEquals(-70f, viewerReturnRevealScroll(50, 300, 120, 800))
+        assertEquals(50f, viewerReturnRevealScroll(550, 300, 120, 800))
+        assertEquals(0f, viewerReturnRevealScroll(120, 300, 120, 800))
     }
 
     @Test fun `fallback keeps media size and slides it below the viewport`() {
@@ -158,56 +189,93 @@ class ViewerReturnTransitionTest {
         assertEquals(fullCard, transition.openingCorners)
         transition.begin(postId)
         transition.recordBounds("feed", postId, bounds, corners = caption)
-        transition.centered("feed", postId)
+        transition.positioned("feed", postId)
         assertEquals(caption, transition.targetCorners)
     }
 
-    @Test fun `Recents and Codex grid centers the exited offscreen post`() = checkGridReturn(projected = false)
+    @Test fun `grid return leaves a fully visible card where it was`() {
+        val result = gridReturn(target = 2, scrolledPx = 0f)
+        assertEquals(result.before, result.target)
+    }
 
-    @Test fun `FYP projected grid centers the exited post past inserted shelves`() = checkGridReturn(projected = true)
+    // Rows sit every 146 px in a 600 px grid: row 4 (index 8) spans 584 to 724.
+    @Test fun `grid return scrolls a card cut off at the bottom just on screen`() {
+        val result = gridReturn(target = 8, scrolledPx = 0f)
+        assertEquals(result.viewport.bottom, result.target.bottom, 2f)
+    }
 
-    private fun checkGridReturn(projected: Boolean) {
+    @Test fun `grid return scrolls a card cut off at the top just on screen`() {
+        val result = gridReturn(target = 2, scrolledPx = 200f)
+        assertEquals(result.viewport.top, result.target.top, 2f)
+    }
+
+    @Test fun `Recents and Codex grid scrolls the minimum to an exited post below`() {
+        val result = gridReturn(target = 40, scrolledPx = 0f)
+        assertEquals(result.viewport.bottom, result.target.bottom, 2f)
+    }
+
+    @Test fun `grid scrolls the minimum to an exited post above`() {
+        val result = gridReturn(target = 2, scrolledPx = 3000f)
+        assertEquals(result.viewport.top, result.target.top, 2f)
+    }
+
+    @Test fun `FYP projected grid scrolls the minimum past inserted shelves`() {
+        val result = gridReturn(target = 40, scrolledPx = 0f, projected = true)
+        assertEquals(result.viewport.bottom, result.target.bottom, 2f)
+    }
+
+    private data class GridReturn(val viewport: Rect, val before: Rect?, val target: Rect)
+
+    /** Returns to post [target] of a 600 px grid of 140 px cards first scrolled by [scrolledPx]. */
+    private fun gridReturn(target: Int, scrolledPx: Float, projected: Boolean = false): GridReturn {
         val transition = ViewerReturnTransition()
         val posts = (0..60).map { index -> post(index.toString()) }
+        val cardBounds = mutableMapOf<PostId, Rect>()
         var origin: String? = null
         var viewport = Rect.Zero
+        val feed = ViewerReturnTestFeed()
+        lateinit var state: LazyStaggeredGridState
         compose.setContent {
             CompositionLocalProvider(LocalViewerReturnTransition provides transition) {
-                val card: @Composable (Int, Post) -> Unit = { _, post ->
-                    val gridId = LocalViewerReturnGrid.current
-                    origin = gridId
-                    Box(Modifier.fillMaxWidth().height(140.dp).onGloballyPositioned {
-                        transition.recordBounds(gridId, post.id, it.boundsInWindow(clipBounds = false))
-                    })
-                }
-                val modifier = Modifier.height(600.dp).onGloballyPositioned { viewport = it.boundsInWindow() }
-                if (projected) {
-                    val entries = posts.mapIndexed { index, post -> RelatedFeedEntry.PostEntry(post, index) }
-                        .toMutableList<RelatedFeedEntry>()
-                    entries.add(5, RelatedFeedEntry.ShelfEntry(
-                        RelatedPostsUiState.Loading(RelatedPostsRequest(posts[4], 4, 1)), 4,
-                    ))
-                    TwoColumnProjectedPostStaggeredGrid(
-                        RelatedFeedProjection(entries), rememberLazyStaggeredGridState(), modifier,
-                        postContent = { index, post -> card(index, post) },
-                        shelfContent = { Box(Modifier.fillMaxWidth().height(180.dp)) },
-                    )
-                } else {
-                    TwoColumnPostStaggeredGrid(posts, rememberLazyStaggeredGridState(), modifier) { index, post ->
-                        card(index, post)
+                feed.Content {
+                    state = rememberLazyStaggeredGridState()
+                    val card: @Composable (Int, Post) -> Unit = { _, post ->
+                        val gridId = LocalViewerReturnGrid.current
+                        origin = gridId
+                        Box(Modifier.fillMaxWidth().height(140.dp).onGloballyPositioned {
+                            cardBounds[post.id] = it.boundsInWindow(clipBounds = false)
+                            transition.recordBounds(gridId, post.id, it.boundsInWindow(clipBounds = false))
+                        })
+                    }
+                    val modifier = Modifier.height(600.dp).onGloballyPositioned { viewport = it.boundsInWindow() }
+                    if (projected) {
+                        val entries = posts.mapIndexed { index, post -> RelatedFeedEntry.PostEntry(post, index) }
+                            .toMutableList<RelatedFeedEntry>()
+                        entries.add(5, RelatedFeedEntry.ShelfEntry(
+                            RelatedPostsUiState.Loading(RelatedPostsRequest(posts[4], 4, 1)), 4,
+                        ))
+                        TwoColumnProjectedPostStaggeredGrid(
+                            RelatedFeedProjection(entries), state, modifier,
+                            postContent = { index, post -> card(index, post) },
+                            shelfContent = { Box(Modifier.fillMaxWidth().height(180.dp)) },
+                        )
+                    } else {
+                        TwoColumnPostStaggeredGrid(posts, state, modifier) { index, post -> card(index, post) }
                     }
                 }
             }
         }
-        compose.runOnIdle {
-            transition.openedFrom(origin)
-            transition.begin(posts[40].id)
-        }
         compose.waitForIdle()
-        compose.runOnIdle {
-            val target = transition.targetBounds
-            assertNotNull(target)
-            assertEquals(viewport.center.y, requireNotNull(target).center.y, 2f)
+        if (scrolledPx != 0f) compose.runOnIdle { state.dispatchRawDelta(scrolledPx) }
+        compose.waitForIdle()
+        val targetId = posts[target].id
+        val before = compose.runOnIdle {
+            transition.openedFrom(origin)
+            cardBounds.remove(targetId)?.takeIf { it.overlaps(viewport) }
+        }
+        feed.closeViewerOnto(compose, transition, targetId)
+        return compose.runOnIdle {
+            GridReturn(viewport, before, requireNotNull(transition.targetBounds) { "The return must land on its card" })
         }
     }
 
@@ -257,7 +325,7 @@ class ViewerReturnTransitionTest {
             returning.openedFrom("feed")
             returning.begin(postId)
             returning.recordBounds("feed", postId, Rect(0f, 200f, 200f, 500f))
-            returning.centered("feed", postId)
+            returning.positioned("feed", postId)
             navigation.popBackStack()
         }
         compose.mainClock.advanceTimeBy(160)
@@ -313,8 +381,9 @@ class ViewerReturnTransitionTest {
         }
         compose.waitForIdle()
         compose.runOnIdle {
-            val bounds = requireNotNull(transition.targetBounds) { "The related card must replace the centered fallback" }
-            assertEquals(viewport.center.x, bounds.center.x, 2f)
+            val bounds = requireNotNull(transition.targetBounds) { "The related card must replace the fallback" }
+            assertTrue("Shelf media should be fully visible horizontally: $bounds in $viewport",
+                bounds.left >= viewport.left - 1f && bounds.right <= viewport.right + 1f)
             assertTrue("Shelf media should be fully visible: $bounds in $viewport",
                 bounds.top >= viewport.top && bounds.bottom <= viewport.bottom)
         }
@@ -327,11 +396,11 @@ class ViewerReturnTransitionTest {
         transition.openedFrom("feed", shelfId = shelf)
         transition.begin(postId)
         transition.recordBounds("feed", postId, bounds)
-        transition.centered("feed", postId)
+        transition.positioned("feed", postId)
         assertNull(transition.targetBounds)
         transition.recordBounds("feed", postId, bounds, shelf)
         assertNull(transition.targetBounds)
-        transition.shelfCentered("feed", postId, shelf)
+        transition.shelfPositioned("feed", postId, shelf)
         assertEquals(bounds, transition.targetBounds)
     }
 
