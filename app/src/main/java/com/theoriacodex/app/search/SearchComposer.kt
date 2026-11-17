@@ -162,13 +162,7 @@ private fun SearchComposerContent(
         excludeNext -> ComposerAddTarget.Excluded
         else -> ComposerAddTarget.Required
     }
-    // A narrowed scope asks for one tag type, and saved and searched tags are general tags.
-    val generalTagScope = state.query.selectedScope.isAll || state.query.selectedScope.facet == SearchFacet.TAG
-    val savedTagMatches = savedTags.all.takeIf { generalTagScope }.orEmpty()
-    val searchedTagMatches = state.suggestions.searchedTags.takeIf { generalTagScope }.orEmpty()
-    val suggestions = composerSuggestions(target, state.suggestions.facetedAutocomplete, state.suggestions.autocomplete)
-        .withSearchedTags(target, searchedTagMatches, draft)
-        .withSavedTags(target, input, savedTagMatches, draft)
+    val suggestions = composerSuggestions(target, state, savedTags.all)
     val liveSelection = selection?.takeIf { selected ->
         if (selected.excluded) selected.term in terms.excluded else terms.groups.any { selected.term in it.terms }
     }

@@ -5,6 +5,7 @@ import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.source.presentation
 import com.theoriacodex.app.search.state.SearchDraftReducer
 import com.theoriacodex.app.search.state.SearchSourceScope
+import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.tags.TagChipState
 import com.theoriacodex.app.tags.TagTapEffect
 import com.theoriacodex.app.tags.chipState
@@ -198,6 +199,22 @@ internal fun composerSuggestions(
         )
     }
     return ComposerSuggestions(rows, hiddenCount = 0)
+}
+
+/**
+ * Every autocomplete row for the target: saved tags, then searched tags, then the provider's. A narrowed
+ * scope asks for one tag type, and saved and searched tags are general tags, so only a tag scope shows them.
+ */
+internal fun composerSuggestions(
+    target: ComposerAddTarget,
+    state: SearchUiState,
+    savedTags: List<FavoriteTagEntry>,
+): ComposerSuggestions {
+    val generalTagScope = state.query.selectedScope.isAll || state.query.selectedScope.facet == SearchFacet.TAG
+    val draft = state.query.draft
+    return composerSuggestions(target, state.suggestions.facetedAutocomplete, state.suggestions.autocomplete)
+        .withSearchedTags(target, state.suggestions.searchedTags.takeIf { generalTagScope }.orEmpty(), draft)
+        .withSavedTags(target, state.suggestions.input, savedTags.takeIf { generalTagScope }.orEmpty(), draft)
 }
 
 /** Adds a general tag to [this] target; an alternative takes its group's tag type. */
