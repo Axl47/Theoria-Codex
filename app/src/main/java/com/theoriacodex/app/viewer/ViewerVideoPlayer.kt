@@ -137,15 +137,29 @@ private class ViewerVideoState {
         scrubbing = false
     }
 
+    /** An instant-seek drag's move to [target] ([ExoPlayer.scrubTo]). */
+    fun scrubTo(target: Long) {
+        position = target
+        runCatching { player?.scrubTo(target) }
+    }
+
     /**
-     * A drag's seek to [target]: on release, where [previews] may land it on the frame their popup shows, or on every
-     * move with instant seek, where no popup shows and the seek is exact.
+     * A released drag's seek to [target]. After an instant-seek drag the seek is exact and reads on from the keyframe
+     * the drag showed; otherwise [previews] may land it on the frame their popup shows.
      */
     fun release(target: Long, previews: ViewerScrubPreviews?) {
-        if (previews == null) return seek(target)
+        if (leaveScrubbingMode() || previews == null) return seek(target)
         position = runCatching { previews.seekReleased(target) }.getOrDefault(target)
         scrubbing = false
     }
+
+    /** A drag that ended without seeking; an instant-seek drag leaves playback on the last keyframe it showed. */
+    fun cancelScrub() {
+        leaveScrubbingMode()
+        scrubbing = false
+    }
+
+    private fun leaveScrubbingMode(): Boolean = runCatching { player?.endScrub() == true }.getOrDefault(false)
 
     fun jump(deltaMs: Long) {
         val active = player ?: return
@@ -404,8 +418,9 @@ private fun ViewerVideoTimeline(
         MediaTimelineBar(
             positionMs = { state.position }, durationMs = state.duration,
             onSeekStarted = { state.scrubbing = true },
+            onSeekMoved = state::scrubTo,
             onSeekFinished = { target -> state.release(target, previews) },
-            onSeekCancelled = { state.scrubbing = false },
+            onSeekCancelled = state::cancelScrub,
             preview = { target -> previews?.let { ViewerVideoScrubPreview(it, target) } },
             onInteractionActiveChanged = events.onTimelineInteractionActiveChanged,
             playbackRate = controls.playbackRate,

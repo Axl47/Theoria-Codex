@@ -106,16 +106,20 @@ class MediaTimelineBarTest {
         assertCancelledWithoutSeek()
     }
 
-    @Test fun `instant seek updates playback during a held drag without thumbnail previews`() {
+    @Test fun `instant seek moves playback during a held drag without thumbnail previews and finishes on release`() {
         showTimeline(instantSeek = true)
         track().performTouchInput { down(Offset(width * 0.25f, centerY)) }
         compose.onNodeWithTag("viewer-scrub-preview").assertDoesNotExist()
         compose.runOnIdle { assertEquals(25_000L, playbackPosition.value) }
         track().performTouchInput { moveTo(Offset(width * 0.75f, centerY)) }
         compose.onNodeWithTag("viewer-scrub-preview").assertDoesNotExist()
-        compose.runOnIdle { assertEquals(75_000L, playbackPosition.value) }
+        compose.runOnIdle {
+            assertEquals(75_000L, playbackPosition.value)
+            assertTrue(seeks.isEmpty())
+            assertTrue(dragging)
+        }
         track().performTouchInput { up() }
-        compose.runOnIdle { assertEquals(75_000L, seeks.last()); assertEquals(0, cancelled) }
+        compose.runOnIdle { assertEquals(listOf(75_000L), seeks); assertEquals(0, cancelled) }
     }
 
     @Test fun `a hold scrub moves the handle by the finger's distance and seeks on release`() {
@@ -169,6 +173,7 @@ class MediaTimelineBarTest {
                         MediaTimelineBar(
                         positionMs = { playbackPosition.value }, durationMs = 100_000L,
                         onSeekStarted = { dragging = true },
+                        onSeekMoved = { playbackPosition.value = it },
                         onSeekFinished = { seeks += it; playbackPosition.value = it; dragging = false },
                         onSeekCancelled = { cancelled++; dragging = false },
                         preview = { Text("Frame $it") },

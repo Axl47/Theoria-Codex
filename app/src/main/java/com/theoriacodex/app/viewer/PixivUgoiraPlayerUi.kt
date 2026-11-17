@@ -223,6 +223,7 @@ private fun UgoiraTimeline(
         positionMs = { animation.positionMs },
         durationMs = totalDurationMs,
         onSeekStarted = { isScrubbing.value = true },
+        onSeekMoved = onSeek,
         onSeekCancelled = { isScrubbing.value = false },
         preview = { target ->
             val previewIndex = animationFrameIndexAt(target.coerceAtMost(totalDurationMs - 1L), frameEndsMs)
