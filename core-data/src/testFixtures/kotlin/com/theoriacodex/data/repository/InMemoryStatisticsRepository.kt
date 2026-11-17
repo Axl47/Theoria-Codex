@@ -38,6 +38,10 @@ class InMemoryStatisticsRepository(
         StatisticsPolicies.recordSearch(current, sources, tags)
     }
 
+    override suspend fun seedSearchedTags(recentSearches: List<RecentSearchEntry>) = mutate { current ->
+        StatisticsPolicies.seedSearchedTags(current, recentSearches)
+    }
+
     override suspend fun mergeRestored(imported: LifetimeStatistics) = mutate { current ->
         StatisticsPolicies.mergeRestored(current, imported)
     }

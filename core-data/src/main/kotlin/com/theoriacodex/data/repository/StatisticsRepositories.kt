@@ -17,6 +17,7 @@ import com.theoriacodex.data.storage.GsonDataStoreSerializer
 import com.theoriacodex.data.storage.UnsupportedStoreSchemaException
 import com.theoriacodex.data.storage.preserveCorruptFile
 import com.theoriacodex.data.storage.updateDataInBackground
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
 import kotlinx.coroutines.CancellationException
@@ -59,6 +60,7 @@ internal data class StatisticsStoreRecord(
     @field:SerializedName("searchCount") val searchCount: Long = 0L,
     @field:SerializedName("searchesBySource") val searchesBySource: Map<String, Long> = emptyMap(),
     @field:SerializedName("searchesByTag") val searchesByTag: List<StatisticsTagCountRecord> = emptyList(),
+    @field:SerializedName("searchesByTagSeeded") val searchesByTagSeeded: Boolean = false,
     @field:SerializedName("forYouSearchCount") val forYouSearchCount: Long = 0L,
     @field:SerializedName("forYouSaveCount") val forYouSaveCount: Long = 0L,
     @field:SerializedName("postUrlCopyCount") val postUrlCopyCount: Long = 0L,
@@ -83,6 +85,7 @@ internal data class StatisticsStoreRecord(
                 searchCount = searchCount,
                 searchesBySource = searchesBySource.decodeSourceCounts(),
                 searchesByTag = searchesByTag.decodeTagCounts(),
+                searchesByTagSeeded = searchesByTagSeeded,
                 forYouSearchCount = forYouSearchCount,
                 forYouSaveCount = forYouSaveCount,
                 postUrlCopyCount = postUrlCopyCount,
@@ -145,6 +148,7 @@ internal data class StatisticsStoreRecord(
                 searchCount = normalized.searchCount,
                 searchesBySource = normalized.searchesBySource.encodeSourceCounts(),
                 searchesByTag = normalized.searchesByTag.encodeTagCounts(),
+                searchesByTagSeeded = normalized.searchesByTagSeeded,
                 forYouSearchCount = normalized.forYouSearchCount,
                 forYouSaveCount = normalized.forYouSaveCount,
                 postUrlCopyCount = normalized.postUrlCopyCount,
@@ -214,6 +218,7 @@ internal object StatisticsPolicies {
         searchCount = maxOf(current.searchCount, imported.searchCount),
         searchesBySource = current.searchesBySource.mergeWith(imported.searchesBySource, ::maxOf),
         searchesByTag = current.searchesByTag.mergeWith(imported.searchesByTag, ::maxOf),
+        searchesByTagSeeded = current.searchesByTagSeeded || imported.searchesByTagSeeded,
         forYouSearchCount = maxOf(current.forYouSearchCount, imported.forYouSearchCount),
         forYouSaveCount = maxOf(current.forYouSaveCount, imported.forYouSaveCount),
         postUrlCopyCount = maxOf(current.postUrlCopyCount, imported.postUrlCopyCount),
@@ -325,6 +330,24 @@ internal object StatisticsPolicies {
             searchCount = current.searchCount.saturatingAdd(1L),
             searchesBySource = sourceCounts,
             searchesByTag = current.searchesByTag.incrementTags(sources, tags),
+        )
+    }
+
+    /**
+     * Counts each manual search in [recentSearches] once per tag and source. A key already counted keeps
+     * the larger value, since searches made after counting began are also still in Recents.
+     */
+    fun seedSearchedTags(current: LifetimeStatistics, recentSearches: List<RecentSearchEntry>): LifetimeStatistics {
+        if (current.searchesByTagSeeded) return current
+        val seeded = recentSearches
+            .filter { entry -> entry.kind != RecentSearchKind.FYP }
+            .fold(emptyMap<StatisticsTagKey, Long>()) { counts, entry ->
+                val tags = entry.query.includeTerms.filter(SearchTerm::isPortableGeneralTag).mapTo(mutableSetOf(), SearchTerm::value)
+                counts.incrementTags(entry.sources.toSet(), tags)
+            }
+        return current.copy(
+            searchesByTag = current.searchesByTag.mergeWith(seeded, ::maxOf),
+            searchesByTagSeeded = true,
         )
     }
 
@@ -447,6 +470,10 @@ class DataStoreStatisticsRepository(
 
     override suspend fun recordSearch(sources: Set<SourceKey>, tags: Set<String>) = mutate { current ->
         StatisticsPolicies.recordSearch(current, sources, tags, LocalDate.now(clock))
+    }
+
+    override suspend fun seedSearchedTags(recentSearches: List<RecentSearchEntry>) = mutate { current ->
+        StatisticsPolicies.seedSearchedTags(current, recentSearches)
     }
 
     override suspend fun recordForYouSearch() = mutate(StatisticsPolicies::recordForYouSearch)

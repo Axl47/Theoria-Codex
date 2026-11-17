@@ -1,5 +1,8 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
@@ -62,6 +65,40 @@ class StatisticsRepositoriesTest {
         assertEquals(mapOf("codex-1" to 1L), statistics.codexEntryCounts)
         assertEquals(2L, statistics.translatedPhraseCount)
         assertEquals(7L, statistics.translatedSourceCharacterCount)
+    }
+
+    @Test
+    fun `searched tags seed once from manual recent searches without double counting`() = runTest {
+        val repository = InMemoryStatisticsRepository()
+        repository.recordSearch(setOf(SourceKey.PIXIV), setOf("animation"))
+        fun entry(tags: List<String>, kind: RecentSearchKind, sources: List<SourceKey>) = RecentSearchEntry(
+            query = Query(QueryMode.Unified, includeTags = tags, excludeTags = emptyList(), sort = SortMode.NEWEST,
+                dateRange = null, minScore = null),
+            queryHash = tags.joinToString(),
+            searchedAtEpochMs = 0L,
+            kind = kind,
+            sources = sources,
+        )
+        val recents = listOf(
+            entry(listOf("animation", "sky"), RecentSearchKind.UNIFIED, listOf(SourceKey.PIXIV, SourceKey.GELBOORU)),
+            entry(listOf("sky"), RecentSearchKind.SOURCE, listOf(SourceKey.GELBOORU)),
+            entry(listOf("seed"), RecentSearchKind.FYP, listOf(SourceKey.PIXIV)),
+        )
+
+        repository.seedSearchedTags(recents)
+        repository.seedSearchedTags(recents)
+
+        val statistics = repository.observeStatistics().first()
+        assertEquals(
+            mapOf(
+                StatisticsTagKey(SourceKey.PIXIV, "animation") to 1L,
+                StatisticsTagKey(SourceKey.GELBOORU, "animation") to 1L,
+                StatisticsTagKey(SourceKey.PIXIV, "sky") to 1L,
+                StatisticsTagKey(SourceKey.GELBOORU, "sky") to 2L,
+            ),
+            statistics.searchesByTag,
+        )
+        assertTrue(statistics.searchesByTagSeeded)
     }
 
     @Test

@@ -84,6 +84,7 @@ import com.theoriacodex.data.android.room.TheoriaRoomDatabase
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.app.post.FileMirrorIndex
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.source.SiteProfile
@@ -527,6 +528,12 @@ internal class DefaultTheoriaAppContainer(
         profileDeletion.recoverPendingDeletion()
         offlineCatalogReady.await()
         offlineMedia.recoverPendingJobs()
+        // Off the startup path: searched-tag suggestions start from what Recents remembers.
+        durableStoreScope.launch {
+            runCatchingPreservingCancellation {
+                statisticsRepository.seedSearchedTags(recentsRepository.observeSearches().first())
+            }
+        }
     }
 
     private suspend fun awaitContentStore() {
