@@ -28,8 +28,9 @@ internal class FrameCache<E, T> {
  * long feed on the main thread at every change.
  *
  * - A new [list] is computed in place, in the same frame as the rest of the screen, so paging tiles, scroll
- *   restoration and the staggered grid's lanes see the list and its result together. When [list] only appended to
- *   the previous one and [inputs] are unchanged, [extend] (if given) adds the result for the appended items alone.
+ *   restoration and the staggered grid's lanes see the list and its result together. When [inputs] are unchanged,
+ *   [extend] (if given) may derive it from the previous frame instead, for example adding the result for appended
+ *   items alone; it returns null to compute the list whole.
  * - A change to [inputs] alone (a filter toggle, a resolved duration, a sort) recomputes on [LocalFeedComputationContext]
  *   while the previous result stays on screen, so the list never flashes empty or loading.
  *
@@ -46,7 +47,7 @@ internal fun <E, T> rememberComputedOffMain(
     vararg inputs: Any?,
     section: String? = null,
     retainKey: String? = null,
-    extend: ((previous: T, appended: List<E>) -> T)? = null,
+    extend: ((previous: ListFrame<E, T>) -> T?)? = null,
     compute: () -> T,
 ): T {
     // Every frame holds a value computed from exactly its own list and inputs, so this plain cache stays correct
@@ -60,9 +61,10 @@ internal fun <E, T> rememberComputedOffMain(
     val frame = when {
         previous == null -> ListFrame(list, inputs, traced(section, compute))
         previous.list === list -> previous
-        extend != null && previous.inputs.sameAs(inputs) && list.extends(previous.list) ->
-            ListFrame(list, inputs, traced(section) { extend(previous.value, list.subList(previous.list.size, list.size)) })
-        else -> ListFrame(list, inputs, traced(section, compute))
+        else -> {
+            val carry = extend?.takeIf { previous.inputs.sameAs(inputs) }
+            ListFrame(list, inputs, traced(section) { carry?.invoke(previous) ?: compute() })
+        }
     }
     cache.frame = frame
     retained?.frame = frame
@@ -84,6 +86,20 @@ private inline fun <T> traced(section: String?, block: () -> T): T =
 private fun Array<out Any?>.sameAs(other: Array<out Any?>): Boolean =
     size == other.size && indices.all { this[it] == other[it] }
 
-/** True when this list starts with exactly the items of [previous], so only its tail is new. */
-private fun <E> List<E>.extends(previous: List<E>): Boolean =
-    size >= previous.size && previous.indices.all { this[it] === previous[it] }
+/**
+ * Reads this list as [previous] with some items removed and new items appended, matching items by identity and in
+ * order. [accept] sees each item of [previous], told whether it was kept, and may refuse. Returns the appended items,
+ * or null when [accept] refused.
+ */
+internal inline fun <E> List<E>.appendedAfterRemovals(previous: List<E>, accept: (item: E, kept: Boolean) -> Boolean): List<E>? {
+    var next = 0
+    for (item in previous) {
+        val kept = next < size && this[next] === item
+        if (kept) next++
+        if (!accept(item, kept)) return null
+    }
+    return subList(next, size)
+}
+
+/** The items appended to [previous], or null when this list does not start with exactly its items. */
+internal fun <E> List<E>.appendedTo(previous: List<E>): List<E>? = appendedAfterRemovals(previous) { _, kept -> kept }

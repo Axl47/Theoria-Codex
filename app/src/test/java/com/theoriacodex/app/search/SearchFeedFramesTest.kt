@@ -101,13 +101,14 @@ class SearchFeedFramesTest {
         assertEquals(Frame(ids(0..11) - "v1", filterPasses = 0), frame())
     }
 
-    @Test fun `each arriving length with the length filter on refilters the presented list in place`() {
+    @Test fun `each arriving length with the length filter on filters what it reveals in place`() {
         lengthFilterOn()
         show()
         assertEquals(Frame(emptyList(), filterPasses = 0), frame())
 
-        // One length per step. The projection answers in the background with a new presented list, which the
-        // visibility filter then treats as a new list and filters whole, in the frame itself.
+        // One length per step. The projection answers in the background with a longer presented list, and the
+        // visibility filter adds the result for the newly revealed post alone, in the frame itself (FilteredFeedTest
+        // checks that this equals a whole pass).
         for (index in 0..3) {
             durations = durations + known(posts[index], SHORT_MS)
             assertEquals(Frame(ids(0 until index), filterPasses = 0), frame())
@@ -122,6 +123,20 @@ class SearchFeedFramesTest {
         assertEquals(Frame(ids(0..3), filterPasses = 0), frame())
         assertEquals(0, drain())
         assertEquals(Frame(ids(0..4) + "v6", filterPasses = 1), frame())
+    }
+
+    @Test fun `an arriving length that reveals nothing costs no filter pass`() {
+        lengthFilterOn()
+        durations = known(posts[0], SHORT_MS).let(::mapOf)
+        show()
+        assertEquals(Frame(ids(0..0), filterPasses = 0), frame())
+
+        // v5 lies behind the frontier, which waits at v1: the projection presents the very same list.
+        durations = durations + known(posts[5], SHORT_MS)
+        assertEquals(Frame(ids(0..0), filterPasses = 0), frame())
+        assertEquals(0, drain())
+        assertEquals(Frame(ids(0..0), filterPasses = 0), frame())
+        assertEquals(0, drain())
     }
 
     @Test fun `returning from the Viewer with the length filter off reuses the kept result`() {

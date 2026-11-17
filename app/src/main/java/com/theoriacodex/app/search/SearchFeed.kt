@@ -73,14 +73,13 @@ internal fun rememberSearchFeed(
         state.content.results
     }
     val durationMetadata = rememberDurationFilterMetadata(displayResults, durationStates, animatedDurationFilterActive, retainKey = "search")
-    val acquiredDurations = durationMetadata.knownDurationMsByPostId
     val presentedResults = durationMetadata.presentedPosts ?: displayResults
     val retainedLikedPostIds = retainPostsUntilViewerCloses(remember(state.relatedPosts, pendingLikePostIds) {
         state.relatedPosts.retainedLikedPostIds + pendingLikePostIds
     })
     val marks = visibilityFilters.markInputs(likedPostIds, savedPostIds, watchedPostIds, retainedLikedPostIds)
     val visibleResults = rememberFilteredFeed(
-        presentedResults, visibilityFilters, unknownDurationPolicy, acquiredDurations, marks, retainKey = "search",
+        presentedResults, visibilityFilters, unknownDurationPolicy, durationMetadata, marks, retainKey = "search",
     )
     val related = rememberRelatedFeedPresentation(
         pendingLikePostIds = pendingLikePostIds,

@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import com.theoriacodex.app.ui.components.LocalFeedComputationContext
+import com.theoriacodex.app.ui.components.appendedAfterRemovals
 import com.theoriacodex.app.ui.components.rememberRetainedDurationProjection
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -15,6 +16,9 @@ internal class DurationFilterProjection(private val keyFactory: (Post) -> MediaD
     private var previousPosts: List<Post>? = null
     private var keys = emptyMap<PostId, MediaDurationKey>()
     private var reveal = DurationReveal()
+    private var presented: List<Post>? = null
+    private var presentedDurations = emptyMap<PostId, Long>()
+    private var presentedDurationsKey = Any()
 
     /** The last frame this projection answered. A feed returning from the Viewer starts from it instead of nothing. */
     @Volatile var lastFrame: DurationFilterFrame? = null
@@ -28,6 +32,7 @@ internal class DurationFilterProjection(private val keyFactory: (Post) -> MediaD
     @Synchronized fun project(posts: List<Post>, states: Map<MediaDurationKey, MediaDurationState>, active: Boolean): DurationFilterMetadata {
         if (!active) {
             reveal = DurationReveal()
+            presented = null
             return DurationFilterMetadata.EMPTY
         }
         if (previousPosts !== posts) {
@@ -36,7 +41,27 @@ internal class DurationFilterProjection(private val keyFactory: (Post) -> MediaD
         }
         val metadata = durationFilterMetadata(posts, states, active, keys)
         reveal = advanceDurationReveal(reveal, posts, metadata.stateByPostId, metadata.knownDurationMsByPostId)
-        return metadata.copy(presentedPosts = reveal.present(posts), revealFrontier = reveal.frontier)
+        val presentedPosts = stablePresented(reveal.present(posts), metadata.knownDurationMsByPostId)
+        return metadata.copy(
+            presentedPosts = presentedPosts, revealFrontier = reveal.frontier, presentedDurationsKey = presentedDurationsKey,
+        )
+    }
+
+    /**
+     * Keeps the previous presented list when nothing in it changed, so a length that changes nothing shown is no new
+     * list downstream, and starts a new [DurationFilterMetadata.presentedDurationsKey] when a post that stayed in place
+     * changed length. An arrival that moves a post to the end counts as removed and appended.
+     */
+    private fun stablePresented(next: List<Post>, known: Map<PostId, Long>): List<Post> {
+        val previous = presented
+        val keptLengths = previous != null &&
+            next.appendedAfterRemovals(previous) { post, kept -> !kept || known[post.id] == presentedDurations[post.id] } != null
+        if (!keptLengths) presentedDurationsKey = Any()
+        val unchanged = previous?.takeIf { it.size == next.size && it.indices.all { index -> it[index] === next[index] } }
+        return (unchanged ?: next).also {
+            presented = it
+            presentedDurations = known
+        }
     }
 }
 
