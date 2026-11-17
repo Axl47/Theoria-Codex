@@ -50,7 +50,6 @@ import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.ViewerRestorationRequest
 import com.theoriacodex.app.viewer.ViewerReturnTransition
 import com.theoriacodex.app.viewer.ViewerViewModel
-import com.theoriacodex.app.viewer.mergeViewerPosts
 import com.theoriacodex.app.viewer.newViewerPosts
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.withRelatedPosts
@@ -559,7 +558,7 @@ private fun ViewerLiveSourceMergeEffect(
 /**
  * Appends to the live session what its source has loaded since, under the launch's filters. Filtering the source's
  * feed and finding the posts the session lacks walk both whole lists, so they run on [background]; the caller's
- * thread only appends the result.
+ * thread only appends the result, building pages for the new posts alone.
  */
 internal suspend fun appendLiveSourcePosts(
     viewerOwner: ViewerViewModel,
@@ -571,13 +570,7 @@ internal suspend fun appendLiveSourcePosts(
         liveSourceState.visiblePostsFor(session)?.let { incoming -> newViewerPosts(session.posts, incoming) }
     }
     if (appended.isNullOrEmpty()) return
-    viewerOwner.updateSession { latest ->
-        when {
-            latest.sessionId != session.sessionId -> latest
-            latest.posts === session.posts -> latest.copy(posts = latest.posts + appended)
-            else -> latest.copy(posts = mergeViewerPosts(latest.posts, appended))
-        }
-    }
+    viewerOwner.appendSessionPosts(basis = session, posts = appended)
 }
 
 /**

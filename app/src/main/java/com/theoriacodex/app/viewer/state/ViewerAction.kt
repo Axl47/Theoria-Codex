@@ -16,6 +16,14 @@ internal sealed interface ViewerAction {
         val relatedPostIds: Set<PostId> = emptySet(),
     ) : ViewerAction
 
+    /** Adds [posts] after the live [session]'s pages, leaving the pages, selection and controls it has untouched. */
+    data class AppendPosts(
+        val session: ViewerSessionIdentity,
+        val posts: List<Post>,
+        val resolutionRequiredPostIds: Set<PostId> = emptySet(),
+        val initialMediaIndices: Map<PostId, Int> = emptyMap(),
+    ) : ViewerAction
+
     data class SelectPage(val pageIndex: Int) : ViewerAction
     data class SelectMedia(val mediaIndex: Int) : ViewerAction
     data class SelectOverviewMedia(val mediaIndex: Int) : ViewerAction
