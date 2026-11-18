@@ -661,7 +661,7 @@ class PixivUgoiraClient internal constructor(
     private fun parseMetadata(body: String): ParsedMetadata {
         OffMainWork.note(OffMainWork.SOURCE_PARSE)
         val root = try {
-            DurableJson.decodeFromString(UgoiraMetadataResponse.serializer(), body)
+            DurableJson.decodeFromString<UgoiraMetadataResponse>(body)
         } catch (_: SerializationException) {
             throw IOException("Pixiv ugoira metadata was not valid JSON")
         }

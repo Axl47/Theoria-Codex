@@ -16,7 +16,6 @@ import com.theoriacodex.sources.http.DefaultSourceHttpClient
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
-import kotlinx.serialization.builtins.ListSerializer
 
 class GitHubReleaseFeedClient(
     private val owner: String,
@@ -68,7 +67,7 @@ class GitHubReleaseFeedClient(
             assetName: String,
         ): List<RemoteUpdate> {
             val releases = try {
-                DurableJson.decodeFromString(ListSerializer(GitHubRelease.serializer()), jsonBody)
+                DurableJson.decodeFromString<List<GitHubRelease>>(jsonBody)
             } catch (_: SerializationException) {
                 return emptyList()
             }

@@ -76,7 +76,7 @@ private fun decodeCredentials(bytes: ByteArray): SourceCredentialSnapshot {
     val raw = decodeDocumentUtf8(bytes)
     checkDocumentDepth(raw)
     val record = try {
-        DurableJson.decodeFromString(DeveloperCopyCredentials.serializer(), raw)
+        DurableJson.decodeFromString<DeveloperCopyCredentials>(raw)
     } catch (_: SerializationException) {
         throw IllegalArgumentException("Unreadable developer copy credentials")
     }
