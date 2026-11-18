@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- When the next page of a feed fails to load, its error card now has Dismiss next to Retry, so you can keep browsing the posts already loaded without the card taking up the top of the screen. This covers Search, account pages, and Saved searches and Followed in the Codex, plus Search's "Source account required" notice. A new, different error shows again; errors with no posts to browse still offer only Retry.
+
 ### Fixed
 
 - Vertical and square videos fill the picture-in-picture window instead of showing black bars on the sides and top.
