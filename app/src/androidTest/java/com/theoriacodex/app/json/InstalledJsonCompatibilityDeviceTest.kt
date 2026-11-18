@@ -2,7 +2,6 @@ package com.theoriacodex.app.json
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.google.gson.GsonBuilder
 import com.theoriacodex.app.codex.encodeCodexShareFile
 import com.theoriacodex.app.search.FileBackedTagSuggestionStore
 import com.theoriacodex.app.sourceauth.CredentialPayloadRecord
@@ -14,12 +13,17 @@ import com.theoriacodex.app.statistics.StatsSharePost
 import com.theoriacodex.app.update.ChangelogSection
 import com.theoriacodex.app.update.PendingPostInstallChangelog
 import com.theoriacodex.app.update.UpdateStateSnapshot
+import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.data.repository.BackupLibrary
 import com.theoriacodex.data.repository.DATASTORE_SETTINGS_FILE_NAME
 import com.theoriacodex.data.repository.DATASTORE_STATISTICS_FILE_NAME
 import com.theoriacodex.data.repository.DATASTORE_UI_RESTORE_FILE_NAME
 import com.theoriacodex.data.repository.DataStoreSettingsRepository
 import com.theoriacodex.data.repository.DataStoreStatisticsRepository
 import com.theoriacodex.data.repository.DataStoreUiRestoreRepository
+import com.theoriacodex.data.repository.LifetimeStatistics
+import com.theoriacodex.data.repository.ProfileBackup
+import com.theoriacodex.data.repository.ProfileBackupCodec
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.storage.DurableJson
@@ -40,7 +44,10 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.VideoVariant
+import com.theoriacodex.domain.source.SiteAddress
+import com.theoriacodex.domain.source.SiteAddressParse
 import com.theoriacodex.domain.source.SiteCredentials
+import com.theoriacodex.domain.source.SiteProfile
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -55,13 +62,11 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class InstalledJsonCompatibilityDeviceTest {
-    private val gson = GsonBuilder().serializeNulls().create()
-
     @Test
     fun stableWireKeysSurviveTheInstalledTargetApk() {
-        // Backups still read the post record graph with Gson, so its Gson keys stay pinned until backups move.
-        assertJsonKeys(
-            PostStorageRecord(),
+        // Stored posts and backups share this record graph; its generated serializers must keep every key.
+        assertSerialNames(
+            PostStorageRecord.serializer(),
             "source",
             "sourcePostId",
             "previewUrl",
@@ -94,11 +99,11 @@ class InstalledJsonCompatibilityDeviceTest {
             "contentHash",
             "schemaVersion",
         )
-        assertJsonKeys(
-            ImageRefStorageRecord(),
+        assertSerialNames(
+            ImageRefStorageRecord.serializer(),
             "url", "localPath", "mime", "progressiveUrls", "fallbackUrls", "videoVariants", "isAnimated", "thumbnailUrl",
         )
-        assertJsonKeys(VideoVariantRecord(), "url", "height", "original", "mime")
+        assertSerialNames(VideoVariantRecord.serializer(), "url", "height", "original", "mime")
         val changelog = PendingPostInstallChangelog(
             releaseId = 7L,
             fromVersionCode = 6,
@@ -262,8 +267,52 @@ class InstalledJsonCompatibilityDeviceTest {
         }
     }
 
-    private fun assertJsonKeys(value: Any, vararg keys: String) {
-        assertEquals(keys.toSet(), JSONObject(gson.toJson(value)).keySetCompat())
+    private fun assertSerialNames(serializer: KSerializer<*>, vararg keys: String) {
+        val descriptor = serializer.descriptor
+        assertEquals(keys.toSet(), (0 until descriptor.elementsCount).map(descriptor::getElementName).toSet())
+    }
+
+    @Test
+    fun backupsRoundTripThroughTheInstalledCodec() {
+        val codec = ProfileBackupCodec()
+        val address = (SiteAddress.parse("safebooru.org") as SiteAddressParse.Valid).address
+        val site = SiteProfile(address.derivedSourceId, address, "Safe & 'sound'", "GELBOORU_02", addedAtEpochMs = 1L)
+        val post = Post(
+            id = PostId(SourceKey.IWARA, "backup-contract"),
+            preview = ImageRef("https://example.test/preview.mp4", null, "video/mp4", isAnimated = true),
+            full = ImageRef("https://example.test/full.mp4", null, "video/mp4", videoVariants = listOf(
+                VideoVariant("https://example.test/480.mp4", height = 480, mime = "video/mp4"),
+            )),
+            pageUrl = "https://example.test/backup-contract",
+            width = 1920,
+            height = 1080,
+            canonicalTags = listOf("a&b"),
+            rawTags = listOf("a&b"),
+            authorName = null,
+            createdAtEpochMs = 1L,
+        )
+        val backup = ProfileBackup(
+            createdAtEpochMs = 1L,
+            settings = AppSettings(oldSearchBar = true),
+            library = BackupLibrary(emptyList(), emptyList(), listOf(post), emptyList()),
+            statistics = LifetimeStatistics(watchedPostCount = 2L),
+            customSources = listOf(site),
+        )
+
+        val bytes = codec.encode(backup)
+        val wire = JSONObject(bytes.decodeToString())
+        assertEquals(
+            setOf("format", "version", "createdAt", "settings", "library", "savedSearches", "readingPositions", "statistics", "customSources"),
+            wire.keySetCompat(),
+        )
+        assertEquals(true, wire.getJSONObject("settings").getBoolean("oldSearchBar"))
+        assertEquals(2L, wire.getJSONObject("statistics").getLong("watchedPostCount"))
+        assertEquals("custom_safebooru_org", wire.getJSONArray("customSources").getJSONObject(0).getString("sourceId"))
+        val restored = codec.decode(bytes)
+        assertEquals(post, restored.library.posts.single())
+        assertEquals(true, restored.settings.oldSearchBar)
+        assertEquals(2L, restored.statistics?.watchedPostCount)
+        assertEquals(listOf(site), restored.customSources)
     }
 
     private fun <T> assertKotlinxJsonKeys(serializer: KSerializer<T>, value: T, vararg keys: String) {

@@ -1,10 +1,8 @@
 package com.theoriacodex.data.repository
 
-import com.google.gson.Gson
-import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
-import com.theoriacodex.data.storage.SavedSearchSnapshot
-import com.theoriacodex.data.storage.SavedSearchSnapshotAdapter
+import com.theoriacodex.data.storage.DurableJson
+import com.theoriacodex.data.storage.SavedSearchSnapshotSerializer
 import java.io.File
 
 /** Strict snapshot decoding without DataStore startup, migration, quarantine, or recovery writes. */
@@ -14,14 +12,13 @@ class ReadOnlyProfileBackupFiles private constructor(
 ) {
 
     val settings: AppSettings = requireNotNull(documents[DATASTORE_SETTINGS_FILE_NAME]).let { bytes ->
-        val record = requireNotNull(Gson().fromJson(decodeDocumentUtf8(bytes), SettingsDataStoreFile::class.java))
+        val record = DurableJson.decodeFromString(SettingsDataStoreFile.serializer(), decodeDocumentUtf8(bytes))
         require(record.schemaVersion == SETTINGS_DATASTORE_SCHEMA_VERSION)
         record.validate()
         record.toDomain()
     }
     val savedSearches: List<SavedSearchEntry> = documents["pinned_searches.json"]?.let { bytes ->
-        val gson = GsonBuilder().registerTypeAdapter(SavedSearchSnapshot::class.java, SavedSearchSnapshotAdapter()).create()
-        requireNotNull(gson.fromJson(decodeDocumentUtf8(bytes), SavedSearchSnapshot::class.java)).entries
+        DurableJson.decodeFromString(SavedSearchSnapshotSerializer, decodeDocumentUtf8(bytes)).entries
     }.orEmpty()
     val readingPositions: List<ReadingPosition> = documents[READING_POSITIONS_FILE_NAME]?.let { bytes ->
         decodeReadingPositions(JsonParser.parseString(decodeDocumentUtf8(bytes)).asJsonObject)

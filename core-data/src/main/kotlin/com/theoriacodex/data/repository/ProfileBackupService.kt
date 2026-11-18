@@ -1,6 +1,5 @@
 package com.theoriacodex.data.repository
 
-import com.google.gson.JsonParser
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
@@ -16,6 +15,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 
 class ProfileRestorePendingException(cause: Exception) : IllegalStateException(
     "Restore paused. Reopen Theoria to finish safely. Your existing profiles are preserved.", cause,
@@ -156,11 +160,13 @@ class ProfileBackupService(
     }
 
     private fun writeJournal(pending: PendingRestore) {
-        val record = backupObject {
-            addProperty("applyPreferences", pending.applyPreferences)
-            addProperty("selectImportedProfile", pending.selectImportedProfile)
-            add("backup", JsonParser.parseString(codec.encode(pending.backup).toString(Charsets.UTF_8)))
+        val record = buildJsonObject {
+            put("applyPreferences", pending.applyPreferences)
+            put("selectImportedProfile", pending.selectImportedProfile)
+            put("backup", codec.encodeDocument(pending.backup))
         }.toString().toByteArray(Charsets.UTF_8)
+        // Never write a journal that readJournal would refuse, or startup recovery could not finish it.
+        require(record.size <= MAX_JOURNAL_BYTES) { "Backup exceeds the 32 MiB metadata limit" }
         journalFile.parentFile?.mkdirs()
         val temporary = File.createTempFile("restore-", ".tmp", journalFile.parentFile)
         try {
@@ -172,22 +178,27 @@ class ProfileBackupService(
     }
 
     private fun readJournal(): PendingRestore {
-        require(journalFile.length() <= PROFILE_BACKUP_MAX_BYTES + 4_096L) { "Restore journal is too large" }
+        require(journalFile.length() <= MAX_JOURNAL_BYTES) { "Restore journal is too large" }
         val raw = Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
             .onUnmappableCharacter(CodingErrorAction.REPORT)
             .decode(ByteBuffer.wrap(journalFile.readBytes())).toString()
         checkDocumentDepth(raw)
-        val record = JsonParser.parseString(raw).asJsonObject
-        val preferences = requireNotNull(record.get("applyPreferences"))
-        require(preferences.isJsonPrimitive && preferences.asJsonPrimitive.isBoolean)
-        val legacyOperationId = record.get("operationId")?.let { record.backupString("operationId") }
+        val record = parseBackupObject(raw)
+        val preferences = requireNotNull(record["applyPreferences"])
+        require(preferences.isBackupBoolean())
+        val legacyOperationId = record["operationId"]?.let { record.backupString("operationId") }
         require(legacyOperationId == null || legacyOperationId.matches(Regex("[A-Za-z0-9-]{1,80}"))) { "Invalid restore operation" }
-        val backup = codec.decode(requireNotNull(record.get("backup")).toString().toByteArray(Charsets.UTF_8))
-        val selection = record.get("selectImportedProfile")
-        require(selection == null || selection.isJsonPrimitive && selection.asJsonPrimitive.isBoolean)
-        return PendingRestore(preferences.asBoolean, backup, selection?.asBoolean ?: false, legacyOperationId)
+        val backup = codec.decodeDocument(record.backupObject("backup"))
+        val selection = record["selectImportedProfile"]
+        require(selection == null || selection.isBackupBoolean())
+        return PendingRestore(preferences.isTrue(), backup, selection?.isTrue() ?: false, legacyOperationId)
     }
 }
+
+private const val MAX_JOURNAL_BYTES = PROFILE_BACKUP_MAX_BYTES + 4_096L
+
+/** A JSON true; callers have already checked [isBackupBoolean]. */
+private fun JsonElement.isTrue() = jsonPrimitive.boolean
 
 private data class PendingRestore(
     val applyPreferences: Boolean,

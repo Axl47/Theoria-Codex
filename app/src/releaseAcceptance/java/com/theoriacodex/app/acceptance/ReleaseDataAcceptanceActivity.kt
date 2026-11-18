@@ -8,7 +8,6 @@ import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.gson.Gson
-import com.google.gson.GsonBuilder
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -41,6 +40,7 @@ import com.theoriacodex.data.repository.FileBackedQueryRepository
 import com.theoriacodex.data.repository.OfflineMediaStore
 import com.theoriacodex.data.repository.ProfileLibraryIds
 import com.theoriacodex.data.repository.RecentSearchKind
+import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.PostStorageCodec
 import com.theoriacodex.data.storage.PostStorageRecord
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -93,7 +93,6 @@ class ReleaseDataAcceptanceActivity : ComponentActivity() {
 }
 
 private suspend fun verifyData(directory: File, phase: String) {
-    val gson = GsonBuilder().serializeNulls().create()
     val updateFile = File(directory, "update.json")
     val legacyUpdateFile = File(directory, "update-legacy.json")
     val shareFile = File(directory, "collection.json")
@@ -105,12 +104,13 @@ private suspend fun verifyData(directory: File, phase: String) {
     val shippedDataStores = File(directory, "datastore-shipped")
     if (phase == "write") {
         check(directory.mkdirs())
+        writeBackups(File(directory, "backup"), videoPostFixture())
         FileBackedUpdateStateStore(updateFile).update { updateState }
         legacyUpdateFile.writeText(LEGACY_UPDATE_STATE)
         FileBackedQueryRepository(directory).upsertAppliedQuery(QUERY_MODE, acceptanceQuery)
         shareFile.writeText(encodeCodexShareFile("Acceptance & <collection>", listOf(videoPostFixture())))
         statsFile.writeText(encodeStatsShare(statsShare))
-        postFile.writeText(gson.toJson(PostStorageCodec.encode(videoPostFixture())))
+        postFile.writeText(DurableJson.encodeToString(PostStorageRecord.serializer(), PostStorageCodec.encode(videoPostFixture())))
         legacyPostFile.writeText(LEGACY_VIDEO_POST)
         writeLegacyOfflineManifest(File(directory, "offline"))
         writeDataStores(dataStores, shippedDataStores)
@@ -126,11 +126,12 @@ private suspend fun verifyData(directory: File, phase: String) {
         }
     } else {
         verifyUpdateState(updateFile, legacyUpdateFile)
+        verifyBackups(File(directory, "backup"), videoPostFixture())
         verifyQueryStore(directory)
         verifyCodexShare(shareFile.readText())
         verifyStatsShare(statsFile.readText())
         verifyVideoPost(postFile.readText())
-        val legacyPost = requireNotNull(PostStorageCodec.decode(gson.fromJson(legacyPostFile.readText(), PostStorageRecord::class.java)))
+        val legacyPost = requireNotNull(PostStorageCodec.decode(DurableJson.decodeFromString(PostStorageRecord.serializer(), legacyPostFile.readText())))
         check(legacyPost.id == PostId(SourceKey.IWARA, "legacy-video"))
         check(legacyPost.preview.url == "https://example.test/preview.mp4" && legacyPost.preview.videoVariants.isEmpty())
         check(legacyPost.full?.url == "https://example.test/full.mp4" && legacyPost.full?.videoVariants == emptyList<VideoVariant>())
@@ -347,19 +348,15 @@ private val QUERY_KEYS = setOf(
     "minScore", "includeTerms", "excludeTerms", "includeTermGroups",
 )
 
+/** Null values are omitted, as the Gson store omitted them. */
 private fun verifyVideoPost(json: String) {
-    val gson = GsonBuilder().serializeNulls().create()
     val wire = JsonParser.parseString(json).asJsonObject
-    val fullVariants = wire.getAsJsonArray("fullVideoVariants")
-    check(fullVariants.size() == 2)
-    fullVariants.forEach { check(it.asJsonObject.keySet() == setOf("url", "height", "original", "mime")) }
+    val fullVariants = wire.getAsJsonArray("fullVideoVariants").map { it.asJsonObject.keySet() }
+    check(fullVariants == listOf(setOf("url", "original"), setOf("url", "height", "original", "mime")))
     val galleryMedia = wire.getAsJsonArray("media").single().asJsonObject
-    check(
-        galleryMedia.keySet() ==
-            setOf("url", "localPath", "mime", "progressiveUrls", "fallbackUrls", "videoVariants", "isAnimated", "thumbnailUrl"),
-    )
+    check(galleryMedia.keySet() == setOf("url", "mime", "progressiveUrls", "fallbackUrls", "videoVariants", "isAnimated"))
     check(galleryMedia.getAsJsonArray("videoVariants").single().asJsonObject.keySet() == setOf("url", "height", "original", "mime"))
-    val restored = requireNotNull(PostStorageCodec.decode(gson.fromJson(json, PostStorageRecord::class.java)))
+    val restored = requireNotNull(PostStorageCodec.decode(DurableJson.decodeFromString(PostStorageRecord.serializer(), json)))
     check(restored == videoPostFixture())
     check(restored.preview.videoVariants.isEmpty())
 }

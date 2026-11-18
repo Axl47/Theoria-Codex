@@ -1,9 +1,13 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
+import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SearchTermGroup
+import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -119,6 +123,19 @@ internal class FileBackedSavedSearchRepositoryTest : FileBackedRepositoryTestFix
     }
 
     @Test
+    fun `a file the Gson store wrote loads, and rewriting it keeps the same document`() = runTest {
+        val directory = tempDir("pin-golden")
+        val storage = directory.resolve("pinned_searches.json")
+        val golden = goldenPinnedSearchesFile()
+        storage.writeText(golden)
+        val repository = FileBackedSavedSearchRepository(directory)
+
+        assertEquals(goldenPins(), repository.observeSavedSearches().first())
+        repository.rename("pin-fyp", goldenPins().first().name)
+        assertEquals(DurableJson.parseToJsonElement(golden), DurableJson.parseToJsonElement(storage.readText()))
+    }
+
+    @Test
     fun `concurrent saves and removal serialize without losing pins`() = runTest {
         val directory = tempDir("pin-concurrency")
         val repository = FileBackedSavedSearchRepository(directory)
@@ -141,4 +158,29 @@ internal class FileBackedSavedSearchRepositoryTest : FileBackedRepositoryTestFix
         kind = RecentSearchKind.MULTI_SEARCH,
         sources = listOf(SourceKey.GELBOORU, SourceKey.PIXIV),
     )
+}
+
+/** golden/pinned-searches/gson-written.json, as FileBackedSavedSearchRepository wrote it under Gson. */
+internal fun goldenPinnedSearchesFile(): String = checkNotNull(
+    FileBackedSavedSearchRepositoryTest::class.java.classLoader.getResource("golden/pinned-searches/gson-written.json"),
+).readText()
+
+/** The pins behind the golden file; never edit to follow a refactor. */
+internal fun goldenPins(): List<SavedSearchEntry> {
+    val tricky = "a&b=c<d>'e"
+    val query = Query(
+        QueryMode.Unified,
+        listOf(
+            SearchTermGroup(listOf(SearchTerm("cat"), SearchTerm(tricky))),
+            SearchTermGroup.single(SearchTerm("night", SearchFacet.ARTIST, "artist")),
+        ),
+        listOf(SearchTerm("<x>")), SortMode.NEWEST, null, null,
+    )
+    val multi = RecentSearchEntry(query, "multi-hash", 100, RecentSearchKind.MULTI_SEARCH, listOf(SourceKey.GELBOORU, SourceKey.PIXIV))
+    val fyp = multi.copy(
+        queryHash = "for_you:seed",
+        kind = RecentSearchKind.FYP,
+        sourceTags = mapOf(SourceKey.GELBOORU to listOf(tricky), SourceKey.PIXIV to listOf("猫", "夜")),
+    )
+    return listOf(SavedSearchEntry("pin-fyp", "For 'you' = 猫", fyp, 300), SavedSearchEntry("pin-multi", "Cats & dogs <night>", multi, 300))
 }

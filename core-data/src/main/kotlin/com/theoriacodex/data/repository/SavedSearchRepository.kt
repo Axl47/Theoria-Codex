@@ -1,11 +1,10 @@
 package com.theoriacodex.data.repository
 
-import com.google.gson.GsonBuilder
 import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
 import com.theoriacodex.data.storage.RecentSearchPayloadCodec
 import com.theoriacodex.data.storage.SavedSearchSnapshot
-import com.theoriacodex.data.storage.SavedSearchSnapshotAdapter
+import com.theoriacodex.data.storage.SavedSearchSnapshotSerializer
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.CoroutineDispatcher
@@ -66,22 +65,20 @@ private fun fileBackedSavedSearches(
     newId: () -> String,
 ): SavedSearchRepository {
     val storageFile = baseDirectory.resolve("pinned_searches.json")
-    val fileStore = AtomicJsonFileStore(
-        ioDispatcher = ioDispatcher,
-        gson = GsonBuilder()
-            .registerTypeAdapter(SavedSearchSnapshot::class.java, SavedSearchSnapshotAdapter())
-            .create(),
-    )
+    val fileStore = AtomicJsonFileStore(ioDispatcher = ioDispatcher)
     recoveryRegistry.registerStore("Pinned searches", storageFile)
     val snapshot = runBlocking {
         fileStore.read(
             file = storageFile,
             fallback = SavedSearchSnapshot(emptyList()),
+            serializer = SavedSearchSnapshotSerializer,
             logicalStore = "Pinned searches",
             onRecovery = recoveryRegistry::record,
         )
     }
-    return MutableSavedSearchRepository(snapshot.entries, now, newId) { fileStore.write(storageFile, it) }
+    return MutableSavedSearchRepository(snapshot.entries, now, newId) {
+        fileStore.write(storageFile, it, SavedSearchSnapshotSerializer)
+    }
 }
 
 private class MutableSavedSearchRepository(

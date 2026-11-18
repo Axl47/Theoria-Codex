@@ -233,17 +233,17 @@ data class UsageDurationDelta(
 
 @Serializable
 data class CodexPostStatistics(
-    @field:com.google.gson.annotations.SerializedName("label") @SerialName("label") val label: String = "",
-    @field:com.google.gson.annotations.SerializedName("opens") @SerialName("opens") val opens: Long = 0L,
-    @field:com.google.gson.annotations.SerializedName("videoMs") @SerialName("videoMs") val videoMs: Long = 0L,
-    @field:com.google.gson.annotations.SerializedName("imageMs") @SerialName("imageMs") val imageMs: Long = 0L,
+    @SerialName("label") val label: String = "",
+    @SerialName("opens") val opens: Long = 0L,
+    @SerialName("videoMs") val videoMs: Long = 0L,
+    @SerialName("imageMs") val imageMs: Long = 0L,
 )
 
 @Serializable
 data class CodexStatistics(
-    @field:com.google.gson.annotations.SerializedName("browsingMs") @SerialName("browsingMs") val browsingMs: Long = 0L,
-    @field:com.google.gson.annotations.SerializedName("watchingMs") @SerialName("watchingMs") val watchingMs: Long = 0L,
-    @field:com.google.gson.annotations.SerializedName("posts") @SerialName("posts") val posts: Map<String, CodexPostStatistics> = emptyMap(),
+    @SerialName("browsingMs") val browsingMs: Long = 0L,
+    @SerialName("watchingMs") val watchingMs: Long = 0L,
+    @SerialName("posts") val posts: Map<String, CodexPostStatistics> = emptyMap(),
 )
 
 data class CodexUsageTarget(val codexId: String, val postKey: String? = null, val video: Boolean = false)
