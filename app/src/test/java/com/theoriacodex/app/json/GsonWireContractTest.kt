@@ -55,7 +55,7 @@ class GsonWireContractTest {
 
     @Test
     fun `representative legacy fixtures still decode through every storage family`() {
-        val fixtures = storageFixtures() + appAndProviderFixtures()
+        val fixtures = storageFixtures()
 
         fixtures.forEach { fixture ->
             val type = Class.forName(fixture.className)
@@ -132,14 +132,5 @@ private fun storageFixtures() = listOf(
         """{"codices":[],"items":{},"posts":[]}""",
         "items",
         emptyMap<String, Any>(),
-    ),
-)
-
-private fun appAndProviderFixtures() = listOf(
-    LegacyFixture(
-        "com.theoriacodex.app.sourceauth.CredentialEnvelopeRecord",
-        """{"formatVersion":1,"keyVersion":1,"iv":"aXY=","ciphertext":"Y3Q="}""",
-        "formatVersion",
-        1,
     ),
 )

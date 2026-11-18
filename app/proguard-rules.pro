@@ -199,35 +199,6 @@
     @com.google.gson.annotations.SerializedName <fields>;
 }
 
--keepclassmembers class com.theoriacodex.app.sourceauth.CredentialEnvelopeRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.app.sourceauth.CredentialPayloadRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.app.sourceauth.CustomSiteCredentialRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.app.statistics.StatsShareFile {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.app.statistics.StatsShareCodex {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.app.statistics.StatsSharePost {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.app.statistics.StatsShareOverall {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
-
 -keepclassmembers class com.theoriacodex.data.storage.VideoVariantRecord {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;

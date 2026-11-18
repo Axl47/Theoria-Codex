@@ -1,11 +1,12 @@
 package com.theoriacodex.app.statistics
 
-import com.google.gson.Gson
-import com.google.gson.annotations.SerializedName
 import com.theoriacodex.app.viewer.decodeViewerPostId
 import com.theoriacodex.data.repository.CodexPostStatistics
 import com.theoriacodex.data.repository.checkDocumentDepth
 import com.theoriacodex.data.repository.rankedStatisticsPosts
+import com.theoriacodex.data.storage.DurableJson
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 private const val STATS_SHARE_FORMAT = "theoria-codex-stats"
 private const val STATS_SHARE_VERSION = 1
@@ -19,44 +20,51 @@ private const val MAX_POST_KEY_CHARS = 256
 private const val MAX_STAT_VALUE = 1_000_000_000_000_000L
 private const val MAX_COMPARED_POSTS = 20
 
-/** The shared-file format. Holds only what the person left in; Codex ids and profile details never enter it. */
+/**
+ * The shared-file format, written with kotlinx.serialization and held to files older Gson builds wrote by
+ * StatsShareGoldenTest. Holds only what the person left in; Codex ids and profile details never enter it.
+ */
+@Serializable
 data class StatsShareFile(
-    // No defaults: a file that omits these must fail validation, and Gson would otherwise fill them in.
-    @field:SerializedName("format") val format: String? = null,
-    @field:SerializedName("version") val version: Int? = null,
-    @field:SerializedName("name") val name: String? = null,
-    @field:SerializedName("codices") val codices: List<StatsShareCodex?>? = null,
+    // Null defaults: a file that omits these must fail validation, so they never default to the current format.
+    @SerialName("format") val format: String? = null,
+    @SerialName("version") val version: Int? = null,
+    @SerialName("name") val name: String? = null,
+    @SerialName("codices") val codices: List<StatsShareCodex?>? = null,
     /** App-wide totals, absent when the person left them out or the file predates them. */
-    @field:SerializedName("overall") val overall: StatsShareOverall? = null,
+    @SerialName("overall") val overall: StatsShareOverall? = null,
 )
 
 /** The Stats page's app-wide numbers, which count everything and not only time inside Codices. */
+@Serializable
 data class StatsShareOverall(
-    @field:SerializedName("timeInAppMs") val timeInAppMs: Long = 0L,
-    @field:SerializedName("browsingMs") val browsingMs: Long = 0L,
-    @field:SerializedName("watchingMs") val watchingMs: Long = 0L,
-    @field:SerializedName("codexMs") val codexMs: Long = 0L,
-    @field:SerializedName("appOpens") val appOpens: Long = 0L,
-    @field:SerializedName("postsWatched") val postsWatched: Long = 0L,
-    @field:SerializedName("postsSaved") val postsSaved: Long = 0L,
-    @field:SerializedName("searches") val searches: Long = 0L,
+    @SerialName("timeInAppMs") val timeInAppMs: Long = 0L,
+    @SerialName("browsingMs") val browsingMs: Long = 0L,
+    @SerialName("watchingMs") val watchingMs: Long = 0L,
+    @SerialName("codexMs") val codexMs: Long = 0L,
+    @SerialName("appOpens") val appOpens: Long = 0L,
+    @SerialName("postsWatched") val postsWatched: Long = 0L,
+    @SerialName("postsSaved") val postsSaved: Long = 0L,
+    @SerialName("searches") val searches: Long = 0L,
 )
 
+@Serializable
 data class StatsShareCodex(
-    @field:SerializedName("name") val name: String? = null,
-    @field:SerializedName("entries") val entries: Long = 0L,
-    @field:SerializedName("browsingMs") val browsingMs: Long = 0L,
-    @field:SerializedName("watchingMs") val watchingMs: Long = 0L,
-    @field:SerializedName("postOpens") val postOpens: Long = 0L,
-    @field:SerializedName("posts") val posts: List<StatsSharePost?>? = null,
+    @SerialName("name") val name: String? = null,
+    @SerialName("entries") val entries: Long = 0L,
+    @SerialName("browsingMs") val browsingMs: Long = 0L,
+    @SerialName("watchingMs") val watchingMs: Long = 0L,
+    @SerialName("postOpens") val postOpens: Long = 0L,
+    @SerialName("posts") val posts: List<StatsSharePost?>? = null,
 )
 
+@Serializable
 data class StatsSharePost(
-    @field:SerializedName("key") val key: String? = null,
-    @field:SerializedName("label") val label: String? = null,
-    @field:SerializedName("opens") val opens: Long = 0L,
-    @field:SerializedName("videoMs") val videoMs: Long = 0L,
-    @field:SerializedName("imageMs") val imageMs: Long = 0L,
+    @SerialName("key") val key: String? = null,
+    @SerialName("label") val label: String? = null,
+    @SerialName("opens") val opens: Long = 0L,
+    @SerialName("videoMs") val videoMs: Long = 0L,
+    @SerialName("imageMs") val imageMs: Long = 0L,
 )
 
 /** What the person chose to leave out. A post left out of one Codex is left out everywhere it appears. */
@@ -124,14 +132,14 @@ internal fun buildStatsShare(
     overall = overall,
 )
 
-internal fun encodeStatsShare(file: StatsShareFile): String = Gson().toJson(file)
+internal fun encodeStatsShare(file: StatsShareFile): String = DurableJson.encodeToString(StatsShareFile.serializer(), file)
 
 /** Reads a file from someone else: anything malformed is rejected or dropped, and what remains is safe to display. */
 internal fun parseStatsShare(raw: String): StatsShareFile? {
     val file = runCatching {
         require(raw.toByteArray(Charsets.UTF_8).size <= STATS_SHARE_MAX_BYTES)
         checkDocumentDepth(raw)
-        Gson().fromJson(raw, StatsShareFile::class.java)
+        DurableJson.decodeFromString(StatsShareFile.serializer(), raw)
     }.getOrNull() ?: return null
     if (file.format != STATS_SHARE_FORMAT || file.version != STATS_SHARE_VERSION) return null
     return file.copy(

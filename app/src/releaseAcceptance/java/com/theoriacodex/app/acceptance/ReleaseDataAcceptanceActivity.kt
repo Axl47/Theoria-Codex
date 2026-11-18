@@ -1,6 +1,8 @@
 package com.theoriacodex.app.acceptance
 
+import android.content.Context
 import android.os.Bundle
+import android.util.Base64
 import android.util.Log
 import android.widget.TextView
 import androidx.activity.ComponentActivity
@@ -14,6 +16,17 @@ import com.theoriacodex.app.codex.codexSharePostSnapshot
 import com.theoriacodex.app.codex.encodeCodexShareFile
 import com.theoriacodex.app.codex.parseCodexShareFile
 import com.theoriacodex.app.search.FileBackedTagSuggestionStore
+import com.theoriacodex.app.sourceauth.AndroidCredentialEnvelopeStore
+import com.theoriacodex.app.sourceauth.AndroidKeystoreAesGcm
+import com.theoriacodex.app.sourceauth.CredentialEnvelopeReadResult
+import com.theoriacodex.app.sourceauth.CredentialStoreWriteResult
+import com.theoriacodex.app.sourceauth.SourceCredentialSnapshot
+import com.theoriacodex.app.statistics.StatsShareCodex
+import com.theoriacodex.app.statistics.StatsShareFile
+import com.theoriacodex.app.statistics.StatsShareOverall
+import com.theoriacodex.app.statistics.StatsSharePost
+import com.theoriacodex.app.statistics.encodeStatsShare
+import com.theoriacodex.app.statistics.parseStatsShare
 import com.theoriacodex.app.update.ChangelogSection
 import com.theoriacodex.app.update.FileBackedUpdateStateStore
 import com.theoriacodex.app.update.PendingPostInstallChangelog
@@ -34,6 +47,7 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.VideoVariant
+import com.theoriacodex.domain.source.SiteCredentials
 import java.io.File
 import java.security.MessageDigest
 import kotlinx.coroutines.CancellationException
@@ -53,7 +67,10 @@ class ReleaseDataAcceptanceActivity : ComponentActivity() {
         status.text = "Checking minified data contracts"
         lifecycleScope.launch {
             try {
-                withContext(Dispatchers.IO) { verifyData(File(cacheDir, "release-contract-$token"), phase) }
+                withContext(Dispatchers.IO) {
+                    verifyData(File(cacheDir, "release-contract-$token"), phase)
+                    verifyCredentials(applicationContext, token, phase)
+                }
                 status.text = "Minified data contracts passed: $phase"
                 Log.i(RESULT_TAG, "PASS:$token:$phase")
             } catch (cancelled: CancellationException) {
@@ -74,12 +91,14 @@ private suspend fun verifyData(directory: File, phase: String) {
     val postFile = File(directory, "post.json")
     val legacyPostFile = File(directory, "legacy-post.json")
     val tagsFile = File(directory, "tags.json")
+    val statsFile = File(directory, "stats.json")
     if (phase == "write") {
         check(directory.mkdirs())
         FileBackedUpdateStateStore(updateFile).update { updateState }
         legacyUpdateFile.writeText(LEGACY_UPDATE_STATE)
         FileBackedQueryRepository(directory).upsertAppliedQuery(QUERY_MODE, acceptanceQuery)
         shareFile.writeText(encodeCodexShareFile("Acceptance & <collection>", listOf(videoPostFixture())))
+        statsFile.writeText(encodeStatsShare(statsShare))
         postFile.writeText(gson.toJson(PostStorageCodec.encode(videoPostFixture())))
         legacyPostFile.writeText(LEGACY_VIDEO_POST)
         writeLegacyOfflineManifest(File(directory, "offline"))
@@ -97,6 +116,7 @@ private suspend fun verifyData(directory: File, phase: String) {
         verifyUpdateState(updateFile, legacyUpdateFile)
         verifyQueryStore(directory)
         verifyCodexShare(shareFile.readText())
+        verifyStatsShare(statsFile.readText())
         verifyVideoPost(postFile.readText())
         val legacyPost = requireNotNull(PostStorageCodec.decode(gson.fromJson(legacyPostFile.readText(), PostStorageRecord::class.java)))
         check(legacyPost.id == PostId(SourceKey.IWARA, "legacy-video"))
@@ -145,6 +165,80 @@ private fun verifyCodexShare(json: String) {
     check(imported.title == "Acceptance & <collection>")
     check(codexSharePostSnapshot(imported.posts.orEmpty().single())?.id == videoPostFixture().id)
 }
+
+/** Exported stats files keep readable keys, and a file a Gson build exported still imports. */
+private fun verifyStatsShare(json: String) {
+    val wire = JsonParser.parseString(json).asJsonObject
+    check(wire.keySet() == setOf("format", "version", "name", "codices", "overall"))
+    val codex = wire.getAsJsonArray("codices").single().asJsonObject
+    check(codex.keySet() == setOf("name", "entries", "browsingMs", "watchingMs", "postOpens", "posts"))
+    check(codex.getAsJsonArray("posts").single().asJsonObject.keySet() == setOf("key", "label", "opens", "videoMs", "imageMs"))
+    check(wire.getAsJsonObject("overall").keySet() == STATS_OVERALL_KEYS)
+    check(parseStatsShare(json) == statsShare)
+    check(parseStatsShare(LEGACY_STATS_SHARE) == statsShare)
+}
+
+private val statsShare = StatsShareFile(
+    format = "theoria-codex-stats",
+    version = 1,
+    name = "Sam & <Al>'s",
+    codices = listOf(StatsShareCodex("Land & <scapes>", 3L, 4L, 5L, 6L, listOf(StatsSharePost("GELBOORU:1", "Post = 1", 7L, 8L, 9L)))),
+    overall = StatsShareOverall(10L, 11L, 12L, 13L, 14L, 15L, 16L, 17L),
+)
+
+private val STATS_OVERALL_KEYS = setOf(
+    "timeInAppMs", "browsingMs", "watchingMs", "codexMs", "appOpens", "postsWatched", "postsSaved", "searches",
+)
+
+/**
+ * Credential envelopes survive R8 and a process restart: one written by this build, one as the Gson store wrote it,
+ * and two corrupt ones that must ask for reconnection. Each case has its own Keystore key, deleted in the read phase.
+ */
+private suspend fun verifyCredentials(context: Context, token: String, phase: String) {
+    fun store(case: String) = AndroidCredentialEnvelopeStore(
+        context,
+        relativeEnvelopePath = "release-contract-$token/$case.json",
+        keyAlias = "release-contract-$token-$case",
+    )
+    val directory = File(context.noBackupFilesDir, "release-contract-$token")
+    if (phase == "write") {
+        check(store("current").writeVerified(credentials) == CredentialStoreWriteResult.Success)
+        context.writeGsonEnvelope(File(directory, "gson.json"), "release-contract-$token-gson", LEGACY_CREDENTIAL_PAYLOAD)
+        context.writeGsonEnvelope(File(directory, "corrupt-payload.json"), "release-contract-$token-corrupt-payload", "{\"schemaVersion\":1,")
+        File(directory, "corrupt-envelope.json").writeText("[]")
+    } else {
+        check(store("current").read() == CredentialEnvelopeReadResult.Success(credentials))
+        val wire = JsonParser.parseString(File(directory, "current.json").readText()).asJsonObject
+        check(wire.keySet() == setOf("formatVersion", "keyVersion", "iv", "ciphertext"))
+        check(store("gson").read() == CredentialEnvelopeReadResult.Success(credentials))
+        check(store("corrupt-payload").read() == CredentialEnvelopeReadResult.ReconnectRequired)
+        check(store("corrupt-envelope").read() == CredentialEnvelopeReadResult.ReconnectRequired)
+        listOf("current", "gson", "corrupt-payload", "corrupt-envelope").forEach { check(store(it).reset()) }
+        check(directory.deleteRecursively())
+    }
+}
+
+/** Writes [payload] in an envelope exactly as the Gson store did, Base64 padding escaped as \u003d. */
+private fun Context.writeGsonEnvelope(file: File, alias: String, payload: String) {
+    val encrypted = AndroidKeystoreAesGcm(alias, "$packageName|source-credentials|format-1".toByteArray())
+        .encrypt(payload.toByteArray())
+    fun base64(bytes: ByteArray) = Base64.encodeToString(bytes, Base64.NO_WRAP).replace("=", "\\u003d")
+    file.parentFile?.mkdirs()
+    file.writeText(
+        """{"formatVersion":1,"keyVersion":1,"iv":"${base64(encrypted.iv)}","ciphertext":"${base64(encrypted.ciphertext)}"}""",
+    )
+}
+
+private val credentials = SourceCredentialSnapshot(
+    pixivAccessToken = "access=token&<1>'",
+    pixivRefreshToken = "refresh==",
+    pixivExpiresAtEpochMs = 1_800_000_000_000L,
+    gelbooruUserId = "1",
+    gelbooruApiKey = "gel&key",
+    rule34XxxUserId = "2",
+    rule34XxxApiKey = "r34=key",
+    customSites = mapOf("custom_safebooru_org" to SiteCredentials("42", "safe<key>")),
+)
 
 private val updateState = PendingPostInstallChangelog(
     releaseId = RELEASE_ID,
@@ -266,6 +360,19 @@ private const val LEGACY_VIDEO_POST = """{
 private const val LEGACY_UPDATE_STATE = """{"ignoredReleaseId":42,"remindLaterReleaseId":42,"remindLaterUntilEpochMs":123456,""" +
     """"pendingPostInstallChangelog":{"releaseId":42,"versionCode":2,"tagName":"v0.0.2","commitShaShort":"abc1234",""" +
     """"releaseName":"Tom \u0026 Jerry\u0027s \u003crelease\u003e","changelogMarkdown":"","changelogSections":[]}}"""
+
+// What the Gson exporter wrote for statsShare.
+private const val LEGACY_STATS_SHARE = """{"format":"theoria-codex-stats","version":1,"name":"Sam \u0026 \u003cAl\u003e\u0027s",""" +
+    """"codices":[{"name":"Land \u0026 \u003cscapes\u003e","entries":3,"browsingMs":4,"watchingMs":5,"postOpens":6,""" +
+    """"posts":[{"key":"GELBOORU:1","label":"Post \u003d 1","opens":7,"videoMs":8,"imageMs":9}]}],""" +
+    """"overall":{"timeInAppMs":10,"browsingMs":11,"watchingMs":12,"codexMs":13,"appOpens":14,"postsWatched":15,""" +
+    """"postsSaved":16,"searches":17}}"""
+
+// What the Gson store encrypted for credentials.
+private const val LEGACY_CREDENTIAL_PAYLOAD = """{"schemaVersion":1,"pixivAccessToken":"access\u003dtoken\u0026\u003c1\u003e\u0027",""" +
+    """"pixivRefreshToken":"refresh\u003d\u003d","pixivExpiresAtEpochMs":1800000000000,"gelbooruUserId":"1",""" +
+    """"gelbooruApiKey":"gel\u0026key","rule34XxxUserId":"2","rule34XxxApiKey":"r34\u003dkey",""" +
+    """"customSites":{"custom_safebooru_org":{"user":"42","apiKey":"safe\u003ckey\u003e"}}}"""
 
 private const val QUERY_MODE = "acceptance"
 private const val RESULT_TAG = "TheoriaReleaseData"

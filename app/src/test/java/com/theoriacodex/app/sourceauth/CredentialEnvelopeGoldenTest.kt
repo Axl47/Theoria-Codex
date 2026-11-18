@@ -2,6 +2,7 @@ package com.theoriacodex.app.sourceauth
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.theoriacodex.domain.source.SiteCredentials
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
@@ -53,6 +54,32 @@ class CredentialEnvelopeGoldenTest {
 
         assertEquals(
             CredentialEnvelopeReadResult.Success(SourceCredentialSnapshot(gelbooruUserId = "1", gelbooruApiKey = "k")),
+            read,
+        )
+    }
+
+    // An envelope the Gson store wrote and encrypted with this test's key decodes to every credential it held.
+    @Test fun `envelope written by the Gson store reads every credential`() = runTest {
+        writeEnvelope(golden("envelope-gson-written.json"))
+
+        val read = newStore().read()
+
+        assertEquals(
+            CredentialEnvelopeReadResult.Success(
+                SourceCredentialSnapshot(
+                    pixivAccessToken = "access=token&<1>'",
+                    pixivRefreshToken = "refresh==",
+                    pixivExpiresAtEpochMs = 1_800_000_000_000L,
+                    gelbooruUserId = "1",
+                    gelbooruApiKey = "gel&key",
+                    rule34XxxUserId = "2",
+                    rule34XxxApiKey = "r34=key",
+                    customSites = mapOf(
+                        "custom_safebooru_org" to SiteCredentials("42", "safe<key>"),
+                        "custom_example_com" to SiteCredentials("u", "k"),
+                    ),
+                ),
+            ),
             read,
         )
     }
