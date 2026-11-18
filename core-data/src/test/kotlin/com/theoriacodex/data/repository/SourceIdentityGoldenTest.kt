@@ -21,8 +21,9 @@ import org.junit.Test
 /**
  * Pins the persisted bytes that carry source identity, captured while `SourceKey` was still an enum.
  * Opening identity to custom sites must leave built-in output byte-identical. The only planned
- * changes are the backup `version` field (B4) and the settings file's retired `legacyImports` key,
- * dropped with the one-time legacy importers. On a mismatch the actual output is written under
+ * changes are the backup `version` field (B4), the settings file's retired `legacyImports` key,
+ * dropped with the one-time legacy importers, and the retired `lastSelectedTabRoute` key, whose
+ * tab now lives only in the UI restore store. On a mismatch the actual output is written under
  * build/golden-actual/ for review; never regenerate these files to make a refactor pass.
  */
 class SourceIdentityGoldenTest {
