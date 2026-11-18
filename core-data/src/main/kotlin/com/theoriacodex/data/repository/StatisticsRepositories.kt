@@ -3,7 +3,6 @@ package com.theoriacodex.data.repository
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.DataStoreFactory
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
-import com.google.gson.annotations.SerializedName
 import com.theoriacodex.data.storage.AsynchronousStore
 import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.data.storage.DurableStorePhase
@@ -42,9 +41,9 @@ internal const val STATISTICS_DATASTORE_SCHEMA_VERSION = 2
 
 @Serializable
 internal data class StatisticsTagCountRecord(
-    @field:SerializedName("source") @SerialName("source") val source: String = "",
-    @field:SerializedName("tag") @SerialName("tag") val tag: String = "",
-    @field:SerializedName("count") @SerialName("count") val count: Long = 0L,
+    @SerialName("source") val source: String = "",
+    @SerialName("tag") val tag: String = "",
+    @SerialName("count") val count: Long = 0L,
 )
 
 /**
@@ -53,38 +52,37 @@ internal data class StatisticsTagCountRecord(
  */
 @Serializable
 internal data class StatisticsTypedTagCountRecord(
-    @field:SerializedName("source") @SerialName("source") val source: String = "",
-    @field:SerializedName("tag") @SerialName("tag") val tag: String = "",
-    @field:SerializedName("facet") @SerialName("facet") val facet: String = "",
-    @field:SerializedName("sourceNamespace") @SerialName("sourceNamespace") val sourceNamespace: String? = null,
-    @field:SerializedName("count") @SerialName("count") val count: Long = 0L,
+    @SerialName("source") val source: String = "",
+    @SerialName("tag") val tag: String = "",
+    @SerialName("facet") val facet: String = "",
+    @SerialName("sourceNamespace") val sourceNamespace: String? = null,
+    @SerialName("count") val count: Long = 0L,
 )
 
-/** Lifetime statistics in `statistics_store_v1.json` and backups. Backups still use Gson, so it keeps both names. */
+/** Lifetime statistics in `statistics_store_v1.json` and backups. */
 @Serializable
 internal data class StatisticsStoreRecord(
-    @field:SerializedName("history") @SerialName("history") val history: Map<String, DailyActivity> = emptyMap(),
-    @field:SerializedName("codexStatistics") @SerialName("codexStatistics") val codexStatistics: Map<String, CodexStatistics> = emptyMap(),
-    @field:SerializedName("appOpenCount") @SerialName("appOpenCount") val appOpenCount: Long = 0L,
-    @field:SerializedName("totalForegroundMs") @SerialName("totalForegroundMs") val totalForegroundMs: Long = 0L,
-    @field:SerializedName("browsingMs") @SerialName("browsingMs") val browsingMs: Long = 0L,
-    @field:SerializedName("watchingMs") @SerialName("watchingMs") val watchingMs: Long = 0L,
-    @field:SerializedName("codexMs") @SerialName("codexMs") val codexMs: Long = 0L,
-    @field:SerializedName("watchedPostCount") @SerialName("watchedPostCount") val watchedPostCount: Long = 0L,
-    @field:SerializedName("watchedBySource") @SerialName("watchedBySource") val watchedBySource: Map<String, Long> = emptyMap(),
-    @field:SerializedName("watchedByTag") @SerialName("watchedByTag") val watchedByTag: List<StatisticsTagCountRecord> = emptyList(),
-    @field:SerializedName("searchCount") @SerialName("searchCount") val searchCount: Long = 0L,
-    @field:SerializedName("searchesBySource") @SerialName("searchesBySource") val searchesBySource: Map<String, Long> = emptyMap(),
-    @field:SerializedName("searchesByTag") @SerialName("searchesByTag") val searchesByTag: List<StatisticsTagCountRecord> = emptyList(),
-    @field:SerializedName("searchesByTagSeeded") @SerialName("searchesByTagSeeded") val searchesByTagSeeded: Boolean = false,
-    @field:SerializedName("searchesByTypedTag") @SerialName("searchesByTypedTag") val searchesByTypedTag: List<StatisticsTypedTagCountRecord> = emptyList(),
-    @field:SerializedName("searchesByTypedTagSeeded") @SerialName("searchesByTypedTagSeeded") val searchesByTypedTagSeeded: Boolean = false,
-    @field:SerializedName("forYouSearchCount") @SerialName("forYouSearchCount") val forYouSearchCount: Long = 0L,
-    @field:SerializedName("forYouSaveCount") @SerialName("forYouSaveCount") val forYouSaveCount: Long = 0L,
-    @field:SerializedName("postUrlCopyCount") @SerialName("postUrlCopyCount") val postUrlCopyCount: Long = 0L,
-    @field:SerializedName("codexEntryCounts") @SerialName("codexEntryCounts") val codexEntryCounts: Map<String, Long> = emptyMap(),
-    @field:SerializedName("translatedPhraseCount") @SerialName("translatedPhraseCount") val translatedPhraseCount: Long = 0L,
-    @field:SerializedName("translatedSourceCharacterCount")
+    @SerialName("history") val history: Map<String, DailyActivity> = emptyMap(),
+    @SerialName("codexStatistics") val codexStatistics: Map<String, CodexStatistics> = emptyMap(),
+    @SerialName("appOpenCount") val appOpenCount: Long = 0L,
+    @SerialName("totalForegroundMs") val totalForegroundMs: Long = 0L,
+    @SerialName("browsingMs") val browsingMs: Long = 0L,
+    @SerialName("watchingMs") val watchingMs: Long = 0L,
+    @SerialName("codexMs") val codexMs: Long = 0L,
+    @SerialName("watchedPostCount") val watchedPostCount: Long = 0L,
+    @SerialName("watchedBySource") val watchedBySource: Map<String, Long> = emptyMap(),
+    @SerialName("watchedByTag") val watchedByTag: List<StatisticsTagCountRecord> = emptyList(),
+    @SerialName("searchCount") val searchCount: Long = 0L,
+    @SerialName("searchesBySource") val searchesBySource: Map<String, Long> = emptyMap(),
+    @SerialName("searchesByTag") val searchesByTag: List<StatisticsTagCountRecord> = emptyList(),
+    @SerialName("searchesByTagSeeded") val searchesByTagSeeded: Boolean = false,
+    @SerialName("searchesByTypedTag") val searchesByTypedTag: List<StatisticsTypedTagCountRecord> = emptyList(),
+    @SerialName("searchesByTypedTagSeeded") val searchesByTypedTagSeeded: Boolean = false,
+    @SerialName("forYouSearchCount") val forYouSearchCount: Long = 0L,
+    @SerialName("forYouSaveCount") val forYouSaveCount: Long = 0L,
+    @SerialName("postUrlCopyCount") val postUrlCopyCount: Long = 0L,
+    @SerialName("codexEntryCounts") val codexEntryCounts: Map<String, Long> = emptyMap(),
+    @SerialName("translatedPhraseCount") val translatedPhraseCount: Long = 0L,
     @SerialName("translatedSourceCharacterCount")
     val translatedSourceCharacterCount: Long = 0L,
 ) {

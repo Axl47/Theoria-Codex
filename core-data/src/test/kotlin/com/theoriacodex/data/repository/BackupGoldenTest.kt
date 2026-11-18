@@ -1,5 +1,6 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CodexItem
@@ -16,6 +17,8 @@ import com.theoriacodex.domain.source.SiteAddress
 import com.theoriacodex.domain.source.SiteAddressParse
 import com.theoriacodex.domain.source.SiteProfile
 import kotlinx.coroutines.flow.first
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -41,6 +44,31 @@ class BackupGoldenTest {
     // The codec can no longer write v1; backup-v1.json is the v2 golden with version 1 and without customSources.
     @Test fun `version 1 backup decodes to the same values minus custom sources`() {
         assertEquals(goldenBackup().copy(customSources = emptyList()), codec.decode(golden("backup-v1.json")))
+    }
+
+    // The previous release reads backups this build writes: same keys, nulls omitted, defaults present.
+    @Test fun `a backup written now is the document the Gson codec wrote`() {
+        val golden = golden("backup-v2.json")
+        val written = DurableJson.parseToJsonElement(golden.decodeToString()).jsonObject
+        // Retired before this codec moved to kotlinx (3731d4c9); no build reads it from a backup.
+        val settings = written.getValue("settings").jsonObject - "lastSelectedTabRoute"
+        assertEquals(JsonObject(written + ("settings" to JsonObject(settings))),
+            DurableJson.parseToJsonElement(codec.encode(codec.decode(golden)).decodeToString()))
+    }
+
+    // The backup screen shows an IllegalArgumentException's message verbatim; parser errors must reach its generic text.
+    @Test fun `malformed JSON fails as before while invalid fields keep their message`() {
+        val v2 = golden("backup-v2.json").decodeToString()
+        val wrongTypes = listOf("\"appOpenCount\":0" to "\"appOpenCount\":{}", "\"settings\":{" to "\"settings\":[],\"x\":{",
+            "\"favoriteTagsByProfile\":{" to "\"favoriteTagsByProfile\":[],\"x\":{")
+        (listOf("{broken", "[]") + wrongTypes.map { (from, to) -> v2.replace(from, to) }).forEach { raw ->
+            val failure = runCatching { codec.decode(raw.toByteArray()) }.exceptionOrNull()
+            assertTrue(raw, failure != null && failure !is IllegalArgumentException)
+        }
+        val other = v2.replace("theoria-profile-backup", "other-format").toByteArray()
+        assertEquals("This is not a Theoria profile backup", runCatching { codec.decode(other) }.exceptionOrNull()?.message)
+        val noFavorites = v2.replace("\"favoriteTagsByProfile\":{", "\"retired\":{").toByteArray()
+        assertEquals("Backup is missing favoriteTagsByProfile", runCatching { codec.decode(noFavorites) }.exceptionOrNull()?.message)
     }
 
     // pending_profile_restore.json as ProfileBackupService.writeJournal left it after a crash mid-restore.

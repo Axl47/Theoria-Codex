@@ -3,7 +3,9 @@ package com.theoriacodex.app.json
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
 import com.google.gson.annotations.SerializedName
+import com.theoriacodex.data.storage.DurableJson
 import java.lang.reflect.Modifier
+import kotlinx.serialization.serializer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -59,7 +61,8 @@ class GsonWireContractTest {
 
         fixtures.forEach { fixture ->
             val type = Class.forName(fixture.className)
-            val decoded = gson.fromJson(fixture.json, type)
+            // Saved records are internal to core-data, so their generated serializers are looked up by class.
+            val decoded = DurableJson.decodeFromString(serializer(type), fixture.json)
             val field = type.getDeclaredField(fixture.fieldName).apply { isAccessible = true }
             val actual = field.get(decoded)
             if (actual is Map<*, *> || actual is List<*>) {
