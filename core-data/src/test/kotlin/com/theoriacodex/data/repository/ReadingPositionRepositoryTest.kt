@@ -76,7 +76,10 @@ class ReadingPositionRepositoryTest {
             {"schemaVersion":1,"positions":[
               {"source":"PIXIV","postId":"valid","section":"WATCHED","mediaNumber":3,"lastViewedAt":5},
               {"source":"FUTURE","postId":"future","section":"WATCHED","mediaNumber":4,"lastViewedAt":6},
-              {"source":"PIXIV","postId":"invalid","section":"WATCHED","mediaNumber":0,"lastViewedAt":7}
+              {"source":"PIXIV","postId":"invalid","section":"WATCHED","mediaNumber":0,"lastViewedAt":7},
+              {"source":"PIXIV","postId":"wrong-type","section":"WATCHED","mediaNumber":"three","lastViewedAt":8},
+              {"source":"PIXIV","postId":"missing-section","mediaNumber":1,"lastViewedAt":9},
+              "not a record", null
             ]}
         """.trimIndent())
         assertEquals(listOf(position("valid", 3, 5)), FileBackedReadingPositionRepository(directory).snapshot())

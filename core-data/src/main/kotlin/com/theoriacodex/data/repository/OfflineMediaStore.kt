@@ -277,7 +277,11 @@ class OfflineMediaStore internal constructor(
         return mediaBytes == files.map { it.length() }
     }
 
-    /** Every manifest version keeps its owners at the root, so they survive a post that cannot be decoded. */
+    /**
+     * Every manifest version keeps its owners at the root, so they survive a post that cannot be decoded. Only JSON
+     * strings count: decodeEachOrSkip<String> would read a number as an owner under lenient [DurableJson], and such an
+     * owner would keep the folder from ever being deleted.
+     */
     private fun salvageOwners(folder: File): Set<String> =
         runCatching { readManifest(folder, ManifestOwners.serializer())?.owners }.getOrNull().orEmpty()
             .filterIsInstance<JsonPrimitive>().filter { it.isString }.map { it.content }.toSet()

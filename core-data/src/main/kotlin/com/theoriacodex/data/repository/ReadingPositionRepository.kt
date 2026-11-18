@@ -2,6 +2,7 @@ package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.data.storage.DurableJson
+import com.theoriacodex.data.storage.decodeEachOrSkip
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
@@ -149,9 +150,9 @@ internal data class ReadingPositionRecord(
 internal fun decodeReadingPositions(document: ReadingPositionsFile, entryLimit: Int = MAX_READING_POSITIONS): List<ReadingPosition> {
     require(document.schemaVersion == 1) { "Unsupported reading-position schema ${document.schemaVersion}" }
     val entries = requireNotNull(document.positions as? JsonArray) { "Reading positions are not a list" }
-    val decoded = entries.mapNotNull { element ->
+    val decoded = entries.decodeEachOrSkip<ReadingPositionRecord>().mapNotNull { record ->
+        // An unknown source or section, or an id the domain rejects, also skips only its own entry.
         runCatching {
-            val record = DurableJson.decodeFromJsonElement(ReadingPositionRecord.serializer(), element)
             ReadingPosition(
                 postId = PostId(SourceKey.parseOrThrow(record.source), record.postId),
                 section = RecentPostSection.valueOf(record.section),
