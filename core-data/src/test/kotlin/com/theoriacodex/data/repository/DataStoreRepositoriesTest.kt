@@ -2,6 +2,7 @@ package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.DurableStorePhase
+import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.storage.sha256
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
@@ -18,7 +19,6 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -144,8 +144,9 @@ class DataStoreRepositoriesTest {
         assertNull(uiRestore.getSearchScrollState("legacy"))
         listOf(settings.storageStatus.value, uiRestore.storageStatus.value).forEach { status ->
             assertEquals(DurableStorePhase.READY, status.phase)
-            assertNull(status.corruptionRecovery)
         }
+        assertTrue(directory.setAsideCopiesOf(DATASTORE_SETTINGS_FILE_NAME).isEmpty())
+        assertTrue(directory.setAsideCopiesOf(DATASTORE_UI_RESTORE_FILE_NAME).isEmpty())
         untouchedFiles.forEach { (name, text) -> assertEquals(text, directory.resolve(name).readText()) }
         assertEquals(
             untouchedFiles.keys + DATASTORE_SETTINGS_FILE_NAME + DATASTORE_UI_RESTORE_FILE_NAME,
@@ -178,12 +179,12 @@ class DataStoreRepositoriesTest {
         val directory = tempFolder.newFolder("settings-corruption")
         directory.resolve(DATASTORE_SETTINGS_FILE_NAME).writeText("{broken")
         val scope = newScope()
-        val recovered = DataStoreSettingsRepository(directory, scope)
+        val recoveries = FileStoreRecoveryRegistry()
+        val recovered = DataStoreSettingsRepository(directory, scope, recoveries)
         val settings = recovered.observeSettings().first()
 
         assertEquals(AppSettings().scenarioPreset, settings.scenarioPreset)
-        assertTrue(directory.setAsideCopiesOf(DATASTORE_SETTINGS_FILE_NAME).isNotEmpty())
-        assertNotNull(recovered.storageStatus.value.corruptionRecovery)
+        assertRecorded(recoveries, "Settings", directory.setAsideCopiesOf(DATASTORE_SETTINGS_FILE_NAME).single())
         closeScope(scope)
     }
     @Test
@@ -309,7 +310,6 @@ class DataStoreRepositoriesTest {
         assertEquals(SearchScrollState(4, 12), repository.getSearchScrollState("query"))
         assertTrue(repository.getFeedFabRestoreStates().getValue("search").animatedOnly)
         assertEquals(2, repository.observeViewerLaunchContext().first()?.startIndex)
-        assertNull(repository.storageStatus.value.corruptionRecovery)
         assertEquals(original, file.readText())
         repository.setLastTab("search")
         closeScope(scope)
@@ -319,7 +319,7 @@ class DataStoreRepositoriesTest {
         assertEquals(SearchScrollState(4, 12), reopened.getSearchScrollState("query"))
         assertTrue(reopened.getFeedFabRestoreStates().getValue("search").animatedOnly)
         assertEquals(2, reopened.observeViewerLaunchContext().first()?.startIndex)
-        assertNull(reopened.storageStatus.value.corruptionRecovery)
+        assertTrue(directory.setAsideCopiesOf(DATASTORE_UI_RESTORE_FILE_NAME).isEmpty())
         assertFalse(file.readText().contains("settingsSectionExpansion"))
         closeScope(reopenedScope)
     }
@@ -432,12 +432,12 @@ class DataStoreRepositoriesTest {
         val directory = tempFolder.newFolder("ui-corruption")
         directory.resolve(DATASTORE_UI_RESTORE_FILE_NAME).writeText("not-json")
         val scope = newScope()
-        val repository = DataStoreUiRestoreRepository(directory, scope)
+        val recoveries = FileStoreRecoveryRegistry()
+        val repository = DataStoreUiRestoreRepository(directory, scope, recoveries)
 
         assertNull(repository.getLastTab())
         assertNull(repository.observeViewerLaunchContext().first())
-        assertNotNull(repository.storageStatus.value.corruptionRecovery)
-        assertTrue(directory.setAsideCopiesOf(DATASTORE_UI_RESTORE_FILE_NAME).isNotEmpty())
+        assertRecorded(recoveries, "Last screen", directory.setAsideCopiesOf(DATASTORE_UI_RESTORE_FILE_NAME).single())
         closeScope(scope)
     }
 
@@ -473,6 +473,13 @@ class DataStoreRepositoriesTest {
         scope.cancel()
         scope.coroutineContext.job.join()
     }
+}
+
+/** Asserts that [recoveries] reports exactly [setAside], under the Settings label [logicalStore]. */
+internal fun assertRecorded(recoveries: FileStoreRecoveryRegistry, logicalStore: String, setAside: File) {
+    val recovery = recoveries.recoveries.value.single()
+    assertEquals(logicalStore, recovery.logicalStore)
+    assertEquals(setAside.absolutePath, recovery.backupPath)
 }
 
 /** Files a store set aside beside [storeFileName] in this directory, oldest name first. */

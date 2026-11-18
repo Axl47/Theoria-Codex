@@ -259,7 +259,11 @@ internal class DefaultTheoriaAppContainer(
         pixivTokenCoordinator = pixivTokenCoordinator,
         pixivUgoiraMetadataCache = pixivUgoiraMetadataCache,
     )
-    private val siteProfiles = DataStoreSiteProfileRepository(baseDirectory = storageDirectory, scope = durableStoreScope)
+    private val siteProfiles = DataStoreSiteProfileRepository(
+        baseDirectory = storageDirectory,
+        scope = durableStoreScope,
+        recoveryRegistry = fileStoreRecoveryRegistry,
+    )
     private val siteFamilies = SiteFamilyRegistry.default()
     private val customSourceRuntime = CustomSourceRuntime(
         profiles = siteProfiles,
@@ -311,11 +315,16 @@ internal class DefaultTheoriaAppContainer(
     private val settingsRepository = DataStoreSettingsRepository(
         baseDirectory = storageDirectory,
         scope = durableStoreScope,
+        recoveryRegistry = fileStoreRecoveryRegistry,
         profileWriteGuard = profileWriteGuard,
     )
     private val profileDeletion = ProfileDeletionService(settingsRepository, contentRepository,
         File(storageDirectory, "pending_profile_deletion.json"), profileWriteGuard)
-    private val statisticsStore = DataStoreStatisticsRepository(baseDirectory = storageDirectory, scope = durableStoreScope)
+    private val statisticsStore = DataStoreStatisticsRepository(
+        baseDirectory = storageDirectory,
+        scope = durableStoreScope,
+        recoveryRegistry = fileStoreRecoveryRegistry,
+    )
     private val statisticsRepository = com.theoriacodex.app.statistics.ThumbnailStatisticsRepository(
         delegate = statisticsStore,
         scope = durableStoreScope,
@@ -359,6 +368,7 @@ internal class DefaultTheoriaAppContainer(
     private val uiRestoreRepository = DataStoreUiRestoreRepository(
         baseDirectory = storageDirectory,
         scope = durableStoreScope,
+        recoveryRegistry = fileStoreRecoveryRegistry,
     )
     private val appUsageTracker = AppUsageTracker(
         repository = statisticsRepository,

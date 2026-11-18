@@ -8,7 +8,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
-/** Application-scoped record of whole-file JSON stores that set an unreadable file aside and started empty. */
+/**
+ * Application-scoped record of stores, file stores and DataStores alike, that set an unreadable file aside with
+ * [setAsideCorruptFile] and started empty. Settings lists them under Recovered storage.
+ */
 class FileStoreRecoveryRegistry {
     private val mutableRecoveries = MutableStateFlow<List<CorruptionRecovery>>(emptyList())
 

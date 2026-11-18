@@ -37,7 +37,6 @@ enum class DurableStorePhase {
 
 data class DurableStoreStatus(
     val phase: DurableStorePhase = DurableStorePhase.PENDING,
-    val corruptionRecovery: CorruptionRecovery? = null,
     val failureReason: String? = null,
 )
 
@@ -51,8 +50,8 @@ class UnsupportedStoreSchemaException(
  * Reads and writes one DataStore JSON file through [DurableJson]. The file's top-level `schemaVersion` (absent means
  * [schemaVersion]) is checked before the typed decode: a newer one throws [UnsupportedStoreSchemaException], so a
  * rollback never replaces data a newer build wrote, whatever shape that data has. Malformed JSON, another schema
- * version, and a failed [validate] surface as [CorruptionException], which the store's corruption handler turns into
- * a reset with the original bytes kept aside.
+ * version, and a failed [validate] surface as [CorruptionException], which [openJsonDataStore]'s corruption handler turns
+ * into a reset with the original bytes set aside.
  */
 internal class JsonDataStoreSerializer<T : Any>(
     private val storeName: String,
@@ -91,8 +90,9 @@ internal class JsonDataStoreSerializer<T : Any>(
 
 /**
  * Opens [file] as a DataStore read and written by [JsonDataStoreSerializer]. An unreadable file is set aside by
- * [setAsideCorruptFile], reported to [onRecovery], and replaced by [defaultValue]. When it cannot be set aside, the
- * error propagates and the store fails to open rather than overwrite the only copy of the user's data.
+ * [setAsideCorruptFile], recorded in [recoveries] under [logicalStore], and replaced by [defaultValue]. When it cannot
+ * be set aside, the error propagates and the store fails to open rather than overwrite the only copy of the user's
+ * data. Files set aside in an earlier process are registered on first access, which keeps construction free of I/O.
  */
 internal fun <T : Any> openJsonDataStore(
     file: File,
@@ -101,17 +101,20 @@ internal fun <T : Any> openJsonDataStore(
     defaultValue: T,
     serializer: KSerializer<T>,
     scope: CoroutineScope,
+    recoveries: FileStoreRecoveryRegistry,
     validate: (T) -> Unit = {},
-    onRecovery: (CorruptionRecovery) -> Unit,
 ): DataStore<T> = DataStoreFactory.create(
     serializer = JsonDataStoreSerializer(file.name, schemaVersion, defaultValue, serializer, validate),
     corruptionHandler = ReplaceFileCorruptionHandler { corruption ->
         val reason = corruption.message ?: "${file.name} was unreadable"
-        onRecovery(setAsideCorruptFile(file, file.readBytes(), logicalStore, reason))
+        recoveries.record(setAsideCorruptFile(file, file.readBytes(), logicalStore, reason))
         defaultValue
     },
     scope = scope,
-    produceFile = { file },
+    produceFile = {
+        recoveries.registerStore(logicalStore, file)
+        file
+    },
 )
 
 internal fun ByteArray.sha256(): String {
