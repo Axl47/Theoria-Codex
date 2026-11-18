@@ -1,12 +1,11 @@
 # Fully qualified class name | durable JSON field names. Keep this synchronized with
 # app/proguard-rules.pro. Transient in-process fields are intentionally absent.
-com.theoriacodex.data.storage.LegacyImportProof|sourceFileName,sourceSchemaVersion,destinationSchemaVersion,sourceSha256,sourceByteCount,importedCounts
 com.theoriacodex.data.storage.PostStorageRecord|source,sourcePostId,previewUrl,previewLocalPath,previewMime,previewProgressiveUrls,previewFallbackUrls,previewIsAnimated,fullUrl,fullLocalPath,fullMime,fullProgressiveUrls,fullFallbackUrls,fullIsAnimated,fullVideoVariants,pageUrl,width,height,canonicalTags,rawTags,authorName,createdAtEpochMs,media,title,creatorProfile,durationMs,mediaCount,taxonomy,creatorProfiles,contentHash,schemaVersion
 com.theoriacodex.data.storage.PostTaxonomyTermStorageRecord|value,facet,sourceNamespace,count,translation
 com.theoriacodex.data.storage.CreatorProfileStorageRecord|source,displayName,profileId,profileUrl,uploadsQuery
 com.theoriacodex.data.storage.ImageRefStorageRecord|url,localPath,mime,progressiveUrls,fallbackUrls,isAnimated,videoVariants,thumbnailUrl
-com.theoriacodex.data.repository.SettingsDataStoreFile|schemaVersion,settings,legacyImports
-com.theoriacodex.data.repository.UiRestoreDataStoreFile|schemaVersion,state,legacyImports
+com.theoriacodex.data.repository.SettingsDataStoreFile|schemaVersion,settings
+com.theoriacodex.data.repository.UiRestoreDataStoreFile|schemaVersion,state
 com.theoriacodex.data.repository.StatisticsDataStoreFile|schemaVersion,statistics
 com.theoriacodex.data.repository.StatisticsStoreRecord|history,codexStatistics,appOpenCount,totalForegroundMs,browsingMs,watchingMs,codexMs,watchedPostCount,watchedBySource,watchedByTag,searchCount,searchesBySource,searchesByTag,searchesByTagSeeded,searchesByTypedTag,searchesByTypedTagSeeded,forYouSearchCount,forYouSaveCount,postUrlCopyCount,codexEntryCounts,translatedPhraseCount,translatedSourceCharacterCount
 com.theoriacodex.data.repository.StatisticsTagCountRecord|source,tag,count
@@ -23,16 +22,6 @@ com.theoriacodex.data.repository.LegacySearchScrollStateRecord|firstVisibleItemI
 com.theoriacodex.data.repository.LegacyViewerLaunchContextRecord|queryHash,startIndex,streamSource,scrollOffsetHint,recentsSection
 com.theoriacodex.data.storage.QueryStorageRecord|schemaVersion,modeType,modeSource,includeTags,excludeTags,sort,dateFromEpochMs,dateToEpochMs,minScore,includeTerms,excludeTerms,includeTermGroups
 com.theoriacodex.data.storage.SearchTermStorageRecord|value,facet,sourceNamespace
-com.theoriacodex.data.storage.LegacyRecentsStoreFile|watchedPosts,searches
-com.theoriacodex.data.storage.LegacyRecentPostRecord|post,viewedAtEpochMs,origin,originQueryHash
-com.theoriacodex.data.storage.LegacyRecentSearchRecord|query,queryHash,searchedAtEpochMs
-com.theoriacodex.data.repository.LikesStoreFile|likes
-com.theoriacodex.data.repository.LikedPostRecord|profileId,profile,source,sourcePostId,likedAtEpochMs,tags
-com.theoriacodex.data.android.room.LegacyCodexStoreFile|codices,items,posts
-com.theoriacodex.data.android.room.LegacyCodexRecord|codexId,name,createdAtEpochMs
-com.theoriacodex.data.android.room.LegacyCodexItemRecord|codexId,source,sourcePostId,savedAtEpochMs
-com.theoriacodex.data.android.room.LegacyLikesStoreFile|likes
-com.theoriacodex.data.android.room.LegacyLikedPostRecord|profileId,profile,source,sourcePostId,likedAtEpochMs,tags
 com.theoriacodex.app.sourceauth.CredentialEnvelopeRecord|formatVersion,keyVersion,iv,ciphertext
 com.theoriacodex.app.sourceauth.CredentialPayloadRecord|schemaVersion,pixivAccessToken,pixivRefreshToken,pixivExpiresAtEpochMs,gelbooruUserId,gelbooruApiKey,rule34XxxUserId,rule34XxxApiKey,customSites
 com.theoriacodex.app.sourceauth.CustomSiteCredentialRecord|user,apiKey

@@ -79,7 +79,7 @@ import com.theoriacodex.data.android.room.RoomCodexLikesRepository
 import com.theoriacodex.data.android.room.RoomMediaDurationRepository
 import com.theoriacodex.data.android.room.RoomRecentsRepository
 import com.theoriacodex.data.android.room.RoomProfileBackupStore
-import com.theoriacodex.data.android.room.awaitProfileLibraryStores
+import com.theoriacodex.data.android.room.openProfileLibrary
 import com.theoriacodex.data.android.room.TheoriaRoomDatabase
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.app.post.FileMirrorIndex
@@ -517,7 +517,7 @@ internal class DefaultTheoriaAppContainer(
         val settingsReady = async { settingsRepository.awaitReady() }
         val statisticsReady = async { statisticsStore.awaitReady() }
         val uiRestoreReady = async { uiRestoreRepository.awaitReady() }
-        val contentReady = async { awaitContentStore() }
+        val contentReady = async { openProfileLibrary(contentDatabase) }
         // The offline catalog scan is independent of profile stores; its snapshot must be warm before jobs resume.
         val offlineCatalogReady = async { offlineStore.load() }
         settingsReady.await()
@@ -534,10 +534,6 @@ internal class DefaultTheoriaAppContainer(
                 statisticsRepository.seedSearchedTags(recentsRepository.observeSearches().first())
             }
         }
-    }
-
-    private suspend fun awaitContentStore() {
-        awaitProfileLibraryStores(contentDatabase, storageDirectory, legacyJsonRecoveryRegistry)
     }
 }
 

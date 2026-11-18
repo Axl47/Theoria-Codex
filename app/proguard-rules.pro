@@ -3,10 +3,6 @@
 # and original JVM field name. Class names may still be obfuscated and optimized. Keep this list in
 # sync with GsonWireContractTest and scripts/verify_r8_json_contract.py.
 
--keepclassmembers class com.theoriacodex.data.storage.LegacyImportProof {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
 -keepclassmembers class com.theoriacodex.data.storage.PostStorageRecord {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
@@ -125,18 +121,6 @@
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
--keepclassmembers class com.theoriacodex.data.storage.LegacyRecentsStoreFile {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.storage.LegacyRecentPostRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.storage.LegacyRecentSearchRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
 -keepclassmembers class com.theoriacodex.data.repository.SettingsStoreFile {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
@@ -166,35 +150,6 @@
     @com.google.gson.annotations.SerializedName <fields>;
 }
 -keepclassmembers class com.theoriacodex.data.repository.ViewerLaunchContextRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.repository.LikesStoreFile {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.repository.LikedPostRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
-
--keepclassmembers class com.theoriacodex.data.android.room.LegacyCodexStoreFile {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.android.room.LegacyCodexRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.android.room.LegacyCodexItemRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.android.room.LegacyLikesStoreFile {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.android.room.LegacyLikedPostRecord {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }

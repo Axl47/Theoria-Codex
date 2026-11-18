@@ -10,14 +10,12 @@ import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.data.storage.DurableStorePhase
 import com.theoriacodex.data.storage.DurableStoreStatus
 import com.theoriacodex.data.storage.GsonDataStoreSerializer
-import com.theoriacodex.data.storage.LegacyImportProof
 import com.theoriacodex.data.storage.UnsupportedStoreSchemaException
 import com.theoriacodex.data.storage.preserveCorruptFile
 import com.theoriacodex.data.storage.updateDataInBackground
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -40,9 +38,6 @@ class DataStoreSettingsRepository(
     private val profileWriteGuard: ProfileLibraryWriteGuard = ProfileLibraryWriteGuard(),
 ) : SettingsRepository, AsynchronousStore {
     private val storeFile = baseDirectory.resolve(DATASTORE_SETTINGS_FILE_NAME)
-    private val legacyFile = baseDirectory.resolve("settings_store.json")
-    private val legacyArchiveFile = baseDirectory.resolve("settings_store.json.migrated-v3")
-    private val replayLegacyAfterCorruption = AtomicBoolean(false)
     private val mutableStorageStatus = MutableStateFlow(DurableStoreStatus())
     private val defaultValue = SettingsDataStoreFile()
     private val dataStore: DataStore<SettingsDataStoreFile> = DataStoreFactory.create(
@@ -66,7 +61,6 @@ class DataStoreSettingsRepository(
             },
         ),
         corruptionHandler = ReplaceFileCorruptionHandler { corruption ->
-            replayLegacyAfterCorruption.set(true)
             mutableStorageStatus.update { current ->
                 current.copy(
                     corruptionRecovery = CorruptionRecovery(
@@ -77,22 +71,11 @@ class DataStoreSettingsRepository(
             }
             defaultValue
         },
-        migrations = listOf(
-            SettingsLegacyDataMigration(
-                legacyFile = legacyFile,
-                archiveFile = legacyArchiveFile,
-                destinationExists = { storeFile.isFile },
-                shouldReplayAfterCorruption = replayLegacyAfterCorruption::get,
-                gson = gson,
-                onImported = ::recordImports,
-                onFailure = ::recordFailure,
-            )
-        ),
         scope = scope,
         produceFile = { storeFile },
     )
     private val records = dataStore.data
-        .onEach(::recordReady)
+        .onEach { mutableStorageStatus.recordReady() }
         .catch { failure ->
             recordFailure(failure)
             throw failure
@@ -259,18 +242,11 @@ class DataStoreSettingsRepository(
             if (normalized == current) {
                 stored
             } else {
-                SettingsDataStoreFile.fromDomain(
-                    settings = normalized,
-                    legacyImports = stored.legacyImports,
-                )
+                SettingsDataStoreFile.fromDomain(normalized)
             }
         }
         return requireNotNull(result).value
     }
-
-    private fun recordReady(stored: SettingsDataStoreFile) = mutableStorageStatus.recordReady(stored.legacyImports)
-
-    private fun recordImports(imports: List<LegacyImportProof>) = mutableStorageStatus.recordImports(imports)
 
     private fun recordFailure(failure: Throwable) = mutableStorageStatus.recordFailure(failure)
 }
@@ -281,11 +257,6 @@ class DataStoreUiRestoreRepository(
     gson: Gson = Gson(),
 ) : UiRestoreRepository, AsynchronousStore {
     private val storeFile = baseDirectory.resolve(DATASTORE_UI_RESTORE_FILE_NAME)
-    private val legacyUiFile = baseDirectory.resolve("ui_restore_store.json")
-    private val legacyUiArchiveFile = baseDirectory.resolve("ui_restore_store.json.migrated-v2")
-    private val legacySettingsFile = baseDirectory.resolve("settings_store.json")
-    private val legacySettingsArchiveFile = baseDirectory.resolve("settings_store.json.migrated-v3")
-    private val replayLegacyAfterCorruption = AtomicBoolean(false)
     private val mutableStorageStatus = MutableStateFlow(DurableStoreStatus())
     private val defaultValue = UiRestoreDataStoreFile()
     private val dataStore: DataStore<UiRestoreDataStoreFile> = DataStoreFactory.create(
@@ -309,7 +280,6 @@ class DataStoreUiRestoreRepository(
             },
         ),
         corruptionHandler = ReplaceFileCorruptionHandler { corruption ->
-            replayLegacyAfterCorruption.set(true)
             mutableStorageStatus.update { current ->
                 current.copy(
                     corruptionRecovery = CorruptionRecovery(
@@ -320,30 +290,11 @@ class DataStoreUiRestoreRepository(
             }
             defaultValue
         },
-        migrations = listOf(
-            UiRestoreLegacyDataMigration(
-                legacyUiFile = legacyUiFile,
-                legacyUiArchiveFile = legacyUiArchiveFile,
-                legacySettingsFile = legacySettingsFile,
-                legacySettingsArchiveFile = legacySettingsArchiveFile,
-                destinationExists = { storeFile.isFile },
-                shouldReplayAfterCorruption = replayLegacyAfterCorruption::get,
-                gson = gson,
-                onImported = ::recordImports,
-                onFailure = ::recordFailure,
-            ),
-            QueryScrollOffsetDataMigration(
-                queryFile = baseDirectory.resolve("query_store.json"),
-                gson = gson,
-                onImported = ::recordImports,
-                onFailure = ::recordFailure,
-            ),
-        ),
         scope = scope,
         produceFile = { storeFile },
     )
     private val records = dataStore.data
-        .onEach(::recordReady)
+        .onEach { mutableStorageStatus.recordReady() }
         .catch { failure ->
             recordFailure(failure)
             throw failure
@@ -421,28 +372,17 @@ class DataStoreUiRestoreRepository(
             if (next == current) {
                 stored
             } else {
-                UiRestoreDataStoreFile.fromMemoryState(
-                    state = next,
-                    legacyImports = stored.legacyImports,
-                )
+                UiRestoreDataStoreFile.fromMemoryState(next)
             }
         }
         return updated.toMemoryState()
     }
 
-    private fun recordReady(stored: UiRestoreDataStoreFile) = mutableStorageStatus.recordReady(stored.legacyImports)
-
-    private fun recordImports(imports: List<LegacyImportProof>) = mutableStorageStatus.recordImports(imports)
-
     private fun recordFailure(failure: Throwable) = mutableStorageStatus.recordFailure(failure)
 }
 
-private fun MutableStateFlow<DurableStoreStatus>.recordReady(imports: List<LegacyImportProof>) = update { current ->
-    current.copy(phase = DurableStorePhase.READY, imports = imports, failureReason = null)
-}
-
-private fun MutableStateFlow<DurableStoreStatus>.recordImports(imports: List<LegacyImportProof>) = update { current ->
-    current.copy(imports = imports)
+private fun MutableStateFlow<DurableStoreStatus>.recordReady() = update { current ->
+    current.copy(phase = DurableStorePhase.READY, failureReason = null)
 }
 
 private fun MutableStateFlow<DurableStoreStatus>.recordFailure(failure: Throwable) {

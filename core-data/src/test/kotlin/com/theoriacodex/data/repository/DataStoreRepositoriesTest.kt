@@ -1,7 +1,6 @@
 package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.storage.DurableStorePhase
-import com.theoriacodex.data.storage.sha256
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
@@ -93,75 +92,6 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
-    fun `settings imports legacy JSON once archives it and records a verifiable proof`() = runTest {
-        val directory = tempFolder.newFolder("settings-import")
-        val legacy = directory.resolve("settings_store.json")
-        val legacyBytes = representativeLegacySettings().toByteArray()
-        legacy.writeBytes(legacyBytes)
-        val scope = newScope()
-        val repository = DataStoreSettingsRepository(directory, scope)
-
-        val settings = repository.observeSettings().first()
-
-        // Catalog version 2 predates the Danbooru sites, so the import adds them once.
-        assertEquals(
-            setOf(SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.DANBOORU, SourceKey.AIBOORU),
-            settings.runtime.enabledSources,
-        )
-        assertTrue(settings.cache.cacheFullImageOnSave)
-        assertTrue(settings.viewer.invertMultiImageScrollDirection)
-        assertFalse(settings.viewer.automaticTextTranslationEnabled)
-        assertTrue(settings.viewer.enabledOcrLanguages.isEmpty())
-        assertEquals("profile-custom", settings.activeProfileId)
-        assertEquals(listOf("blue_hair"), settings.favoriteTagsByProfile.getValue("profile-custom").map { it.tags.single() })
-        assertFalse(legacy.exists())
-        val archive = directory.resolve("settings_store.json.migrated-v3")
-        assertTrue(archive.isFile)
-        assertTrue(archive.readBytes().contentEquals(legacyBytes))
-        assertTrue(directory.resolve(DATASTORE_SETTINGS_FILE_NAME).isFile)
-
-        val status = repository.storageStatus.value
-        assertEquals(DurableStorePhase.READY, status.phase)
-        val proof = status.imports.single()
-        assertEquals("settings_store.json", proof.sourceFileName)
-        assertEquals(2, proof.sourceSchemaVersion)
-        assertEquals(SETTINGS_DATASTORE_SCHEMA_VERSION, proof.destinationSchemaVersion)
-        assertEquals(legacyBytes.sha256(), proof.sourceSha256)
-        assertEquals(legacyBytes.size.toLong(), proof.sourceByteCount)
-        assertEquals(1, proof.importedCounts["profiles"])
-
-        closeScope(scope)
-    }
-
-    @Test
-    fun `settings reconstruction uses DataStore state without replaying its retained archive`() = runTest {
-        val directory = tempFolder.newFolder("settings-reconstruction")
-        directory.resolve("settings_store.json").writeText(representativeLegacySettings())
-        val firstScope = newScope()
-        val first = DataStoreSettingsRepository(directory, firstScope)
-        first.setCacheFullImageOnSave(false)
-        first.setAutomaticTextTranslationEnabled(true)
-        first.setOcrLanguageEnabled(ViewerOcrLanguage.CHINESE, true)
-        first.setOcrLanguageEnabled(ViewerOcrLanguage.KOREAN, true)
-        first.setScenarioPreset(ScenarioPreset.SLOW_NETWORK)
-        closeScope(firstScope)
-
-        val secondScope = newScope()
-        val reconstructed = DataStoreSettingsRepository(directory, secondScope)
-        val settings = reconstructed.observeSettings().first()
-
-        assertFalse(settings.cache.cacheFullImageOnSave)
-        assertTrue(settings.viewer.automaticTextTranslationEnabled)
-        assertEquals(
-            setOf(ViewerOcrLanguage.CHINESE, ViewerOcrLanguage.KOREAN),
-            settings.viewer.enabledOcrLanguages,
-        )
-        assertEquals(ScenarioPreset.SLOW_NETWORK, settings.scenarioPreset)
-        assertEquals(1, reconstructed.storageStatus.value.imports.size)
-        closeScope(secondScope)
-    }
-
-    @Test
     fun `settings ignore unknown OCR languages without resetting known preferences`() = runTest {
         val directory = tempFolder.newFolder("settings-unknown-ocr-language")
         directory.resolve(DATASTORE_SETTINGS_FILE_NAME).writeText(
@@ -185,29 +115,46 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
-    fun `an existing destination remains authoritative if stale legacy data appears later`() = runTest {
-        val directory = tempFolder.newFolder("settings-stale-legacy")
-        val firstScope = newScope()
-        val first = DataStoreSettingsRepository(directory, firstScope)
-        first.setScenarioPreset(ScenarioPreset.SLOW_NETWORK)
-        closeScope(firstScope)
-        val staleLegacy = directory.resolve("settings_store.json")
-        staleLegacy.writeText(representativeLegacySettings())
+    fun `retired legacy files and import proofs are ignored without resetting either store`() = runTest {
+        val directory = tempFolder.newFolder("retired-legacy-imports")
+        // Proof entries written by the retired importers; this one would have failed their validation.
+        val proofs = """[{"sourceFileName":"settings_store.json","sourceSchemaVersion":2,""" +
+            """"destinationSchemaVersion":9,"sourceSha256":"not-a-hash","importedCounts":{"profiles":1}}]"""
+        directory.resolve(DATASTORE_SETTINGS_FILE_NAME).writeText(
+            """{"schemaVersion":3,"settings":{"scenarioPreset":"SLOW_NETWORK"},"legacyImports":$proofs}"""
+        )
+        directory.resolve(DATASTORE_UI_RESTORE_FILE_NAME).writeText(
+            """{"schemaVersion":2,"state":{"lastTab":"search"},"legacyImports":$proofs}"""
+        )
+        val untouchedFiles = mapOf(
+            "settings_store.json" to representativeLegacySettings(),
+            "ui_restore_store.json" to """{"lastTab":"codex"}""",
+            "query_store.json" to """{"queries":{},"scrollOffsets":{"legacy":27}}""",
+        )
+        untouchedFiles.forEach { (name, text) -> directory.resolve(name).writeText(text) }
+        val scope = newScope()
+        val settings = DataStoreSettingsRepository(directory, scope)
+        val uiRestore = DataStoreUiRestoreRepository(directory, scope)
 
-        val secondScope = newScope()
-        val reconstructed = DataStoreSettingsRepository(directory, secondScope)
-
-        assertEquals(ScenarioPreset.SLOW_NETWORK, reconstructed.observeSettings().first().scenarioPreset)
-        assertTrue(reconstructed.storageStatus.value.imports.isEmpty())
-        assertTrue(staleLegacy.isFile)
-        closeScope(secondScope)
+        assertEquals(ScenarioPreset.SLOW_NETWORK, settings.observeSettings().first().scenarioPreset)
+        assertEquals("search", uiRestore.getLastTab())
+        assertNull(uiRestore.getSearchScrollState("legacy"))
+        listOf(settings.storageStatus.value, uiRestore.storageStatus.value).forEach { status ->
+            assertEquals(DurableStorePhase.READY, status.phase)
+            assertNull(status.corruptionRecovery)
+        }
+        untouchedFiles.forEach { (name, text) -> assertEquals(text, directory.resolve(name).readText()) }
+        assertEquals(
+            untouchedFiles.keys + DATASTORE_SETTINGS_FILE_NAME + DATASTORE_UI_RESTORE_FILE_NAME,
+            directory.list().orEmpty().toSet(),
+        )
+        closeScope(scope)
     }
-
     @Test
     fun `minimal pre-catalog settings gain every later source and retain legacy defaults`() = runTest {
         val directory = tempFolder.newFolder("settings-pre-catalog")
-        directory.resolve("settings_store.json").writeText(
-            """{"enabledSources":["PIXIV"],"cacheFullImageOnSave":true}"""
+        directory.resolve(DATASTORE_SETTINGS_FILE_NAME).writeText(
+            """{"schemaVersion":3,"settings":{"enabledSources":["PIXIV"],"cacheFullImageOnSave":true}}"""
         )
         val scope = newScope()
         val repository = DataStoreSettingsRepository(directory, scope)
@@ -221,52 +168,21 @@ class DataStoreRepositoriesTest {
         assertEquals(settings.runtime.enabledSources, settings.runtime.sourceWeights.keys)
         assertTrue(settings.cache.cacheFullImageOnSave)
         assertFalse(settings.contentFilters.resolveUnknownAnimatedDurations)
-        assertEquals(1, repository.storageStatus.value.imports.single().sourceSchemaVersion)
         closeScope(scope)
     }
-
     @Test
-    fun `settings corruption is backed up and deterministically replayed from the verified archive`() = runTest {
+    fun `settings corruption is backed up and resets to defaults`() = runTest {
         val directory = tempFolder.newFolder("settings-corruption")
-        directory.resolve("settings_store.json").writeText(representativeLegacySettings())
-        val firstScope = newScope()
-        DataStoreSettingsRepository(directory, firstScope).awaitReady()
-        closeScope(firstScope)
         directory.resolve(DATASTORE_SETTINGS_FILE_NAME).writeText("{broken")
-
-        val recoveredScope = newScope()
-        val recovered = DataStoreSettingsRepository(directory, recoveredScope)
+        val scope = newScope()
+        val recovered = DataStoreSettingsRepository(directory, scope)
         val settings = recovered.observeSettings().first()
 
-        assertTrue(settings.cache.cacheFullImageOnSave)
-        assertEquals("profile-custom", settings.activeProfileId)
+        assertEquals(AppSettings().scenarioPreset, settings.scenarioPreset)
         assertTrue(directory.resolve("$DATASTORE_SETTINGS_FILE_NAME.corrupt").isFile)
         assertNotNull(recovered.storageStatus.value.corruptionRecovery)
-        assertEquals(1, recovered.storageStatus.value.imports.size)
-        closeScope(recoveredScope)
+        closeScope(scope)
     }
-
-    @Test
-    fun `malformed settings migration retains the input and succeeds after a fixed retry`() = runTest {
-        val directory = tempFolder.newFolder("settings-migration-retry")
-        val legacy = directory.resolve("settings_store.json")
-        legacy.writeText("{broken")
-        val failedScope = newScope()
-        val failed = DataStoreSettingsRepository(directory, failedScope)
-
-        assertThrows(Exception::class.java) { kotlinx.coroutines.runBlocking { failed.awaitReady() } }
-        assertTrue(legacy.isFile)
-        assertEquals(DurableStorePhase.FAILED, failed.storageStatus.value.phase)
-        closeScope(failedScope)
-
-        legacy.writeText(representativeLegacySettings())
-        val retryScope = newScope()
-        val retry = DataStoreSettingsRepository(directory, retryScope)
-        assertTrue(retry.observeSettings().first().cache.cacheFullImageOnSave)
-        assertFalse(legacy.exists())
-        closeScope(retryScope)
-    }
-
     @Test
     fun `newer settings schema fails closed without corruption replacement`() = runTest {
         val directory = tempFolder.newFolder("settings-future-schema")
@@ -337,65 +253,7 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
-    fun `settings and ui legacy migrations are safe in either concurrent initialization order`() = runTest {
-        val directory = tempFolder.newFolder("concurrent-legacy-import")
-        directory.resolve("settings_store.json").writeText(representativeLegacySettings())
-        directory.resolve("ui_restore_store.json").writeText(
-            """
-            {
-              "searchScrollStates": {
-                "query": {"firstVisibleItemIndex": 4, "firstVisibleItemOffsetPx": 18}
-              },
-              "viewerLaunchContext": null
-            }
-            """.trimIndent()
-        )
-        val scope = newScope()
-        val settings = DataStoreSettingsRepository(directory, scope)
-        val uiRestore = DataStoreUiRestoreRepository(directory, scope)
-
-        coroutineScope {
-            awaitAll(
-                async(Dispatchers.Default) { settings.awaitReady() },
-                async(Dispatchers.Default) { uiRestore.awaitReady() },
-            )
-        }
-
-        assertEquals("codex", uiRestore.getLastTab())
-        assertEquals(4, uiRestore.getSearchScrollState("query")?.firstVisibleItemIndex)
-        assertTrue(directory.resolve("settings_store.json.migrated-v3").isFile)
-        assertTrue(directory.resolve("ui_restore_store.json.migrated-v2").isFile)
-        assertEquals(
-            setOf("settings_store.json", "ui_restore_store.json"),
-            uiRestore.storageStatus.value.imports.map { proof -> proof.sourceFileName }.toSet(),
-        )
-        closeScope(scope)
-    }
-
-    @Test
-    fun `ui migration records an explicit zero-count proof for blank legacy last-tab state`() = runTest {
-        val directory = tempFolder.newFolder("ui-empty-legacy-tab")
-        directory.resolve("settings_store.json").writeText(
-            """{"sourceCatalogVersion":2,"lastSelectedTabRoute":"   "}"""
-        )
-        val firstScope = newScope()
-        val first = DataStoreUiRestoreRepository(directory, firstScope)
-
-        assertNull(first.getLastTab())
-        val proof = first.storageStatus.value.imports.single()
-        assertEquals("settings_store.json", proof.sourceFileName)
-        assertEquals(0, proof.importedCounts["lastTab"])
-        closeScope(firstScope)
-
-        val secondScope = newScope()
-        val reconstructed = DataStoreUiRestoreRepository(directory, secondScope)
-        assertNull(reconstructed.getLastTab())
-        assertEquals(1, reconstructed.storageStatus.value.imports.size)
-        closeScope(secondScope)
-    }
-
-    @Test
-    fun `retired expansion field loads from current and legacy files without recovery or losing restore state`() = runTest {
+    fun `retired expansion field loads without recovery or losing restore state`() = runTest {
         val payload = """{
             "lastTab":"codex",
             "searchScrollStates":{"query":{"firstVisibleItemIndex":4,"firstVisibleItemOffsetPx":12}},
@@ -403,38 +261,30 @@ class DataStoreRepositoriesTest {
             "feedFabRestoreStates":{"search":{"animatedOnly":true}},
             "viewerLaunchContext":{"streamSource":"SEARCH","queryHash":"query","startIndex":2}
         }"""
-        for (legacy in listOf(false, true)) {
-            val directory = tempFolder.newFolder("retired-expansion-$legacy")
-            val file = directory.resolve(if (legacy) "ui_restore_store.json" else DATASTORE_UI_RESTORE_FILE_NAME)
-            val original = if (legacy) payload else
-                """{"schemaVersion":2,"state":$payload,"legacyImports":[]}"""
-            file.writeText(original)
-            val scope = newScope()
-            val repository = DataStoreUiRestoreRepository(directory, scope)
-            assertEquals("codex", repository.getLastTab())
-            assertEquals(SearchScrollState(4, 12), repository.getSearchScrollState("query"))
-            assertTrue(repository.getFeedFabRestoreStates().getValue("search").animatedOnly)
-            assertEquals(2, repository.observeViewerLaunchContext().first()?.startIndex)
-            assertNull(repository.storageStatus.value.corruptionRecovery)
-            if (legacy) {
-                assertEquals(original, directory.resolve("ui_restore_store.json.migrated-v2").readText())
-            } else {
-                assertEquals(original, file.readText())
-            }
-            repository.setLastTab("search")
-            closeScope(scope)
-            val reopenedScope = newScope()
-            val reopened = DataStoreUiRestoreRepository(directory, reopenedScope)
-            assertEquals("search", reopened.getLastTab())
-            assertEquals(SearchScrollState(4, 12), reopened.getSearchScrollState("query"))
-            assertTrue(reopened.getFeedFabRestoreStates().getValue("search").animatedOnly)
-            assertEquals(2, reopened.observeViewerLaunchContext().first()?.startIndex)
-            assertNull(reopened.storageStatus.value.corruptionRecovery)
-            assertFalse(directory.resolve(DATASTORE_UI_RESTORE_FILE_NAME).readText().contains("settingsSectionExpansion"))
-            closeScope(reopenedScope)
-        }
+        val directory = tempFolder.newFolder("retired-expansion")
+        val file = directory.resolve(DATASTORE_UI_RESTORE_FILE_NAME)
+        val original = """{"schemaVersion":2,"state":$payload}"""
+        file.writeText(original)
+        val scope = newScope()
+        val repository = DataStoreUiRestoreRepository(directory, scope)
+        assertEquals("codex", repository.getLastTab())
+        assertEquals(SearchScrollState(4, 12), repository.getSearchScrollState("query"))
+        assertTrue(repository.getFeedFabRestoreStates().getValue("search").animatedOnly)
+        assertEquals(2, repository.observeViewerLaunchContext().first()?.startIndex)
+        assertNull(repository.storageStatus.value.corruptionRecovery)
+        assertEquals(original, file.readText())
+        repository.setLastTab("search")
+        closeScope(scope)
+        val reopenedScope = newScope()
+        val reopened = DataStoreUiRestoreRepository(directory, reopenedScope)
+        assertEquals("search", reopened.getLastTab())
+        assertEquals(SearchScrollState(4, 12), reopened.getSearchScrollState("query"))
+        assertTrue(reopened.getFeedFabRestoreStates().getValue("search").animatedOnly)
+        assertEquals(2, reopened.observeViewerLaunchContext().first()?.startIndex)
+        assertNull(reopened.storageStatus.value.corruptionRecovery)
+        assertFalse(file.readText().contains("settingsSectionExpansion"))
+        closeScope(reopenedScope)
     }
-
     @Test
     fun `older feed FAB records include all saved searches by default`() {
         val state = com.google.gson.Gson().fromJson("""{"animatedOnly":true}""", FeedFabRestoreState::class.java)
@@ -461,52 +311,6 @@ class DataStoreRepositoriesTest {
         val reconstructed = DataStoreUiRestoreRepository(directory, secondScope)
 
         assertEquals(mapOf("search" to search, "codex:one" to codex, "codex:system:saved-searches" to saved), reconstructed.getFeedFabRestoreStates())
-        closeScope(secondScope)
-    }
-
-    @Test
-    fun `ui restore migrates legacy query offsets once and removes the second store`() = runTest {
-        val directory = tempFolder.newFolder("ui-query-scroll-migration")
-        directory.resolve(DATASTORE_UI_RESTORE_FILE_NAME).writeText(
-            """
-            {
-              "schemaVersion": 2,
-              "state": {
-                "searchScrollStates": {
-                  "existing": {"firstVisibleItemIndex": 6, "firstVisibleItemOffsetPx": 60}
-                }
-              },
-              "legacyImports": []
-            }
-            """.trimIndent(),
-        )
-        val queryFile = directory.resolve("query_store.json")
-        queryFile.writeText(
-            """
-            {
-              "queries": {"unified": {"modeType": "unified", "sort": "TOP"}},
-              "scrollOffsets": {"legacy": 27, "existing": 999}
-            }
-            """.trimIndent(),
-        )
-        val firstScope = newScope()
-        val first = DataStoreUiRestoreRepository(directory, firstScope)
-
-        assertEquals(SearchScrollState(0, 27), first.getSearchScrollState("legacy"))
-        assertEquals(SearchScrollState(6, 60), first.getSearchScrollState("existing"))
-        assertFalse(queryFile.readText().contains("scrollOffsets"))
-        assertTrue(queryFile.readText().contains("\"queries\""))
-        val proof = first.storageStatus.value.imports.single()
-        assertEquals("query_store.json", proof.sourceFileName)
-        assertEquals(2, proof.importedCounts["searchScrollStates"])
-        closeScope(firstScope)
-
-        val secondScope = newScope()
-        val reopened = DataStoreUiRestoreRepository(directory, secondScope)
-
-        assertEquals(SearchScrollState(0, 27), reopened.getSearchScrollState("legacy"))
-        assertEquals(1, reopened.storageStatus.value.imports.size)
-        assertFalse(queryFile.readText().contains("scrollOffsets"))
         closeScope(secondScope)
     }
 
@@ -586,7 +390,7 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
-    fun `ui restore corruption without legacy input recovers to an explicit empty state`() = runTest {
+    fun `ui restore corruption recovers to an explicit empty state`() = runTest {
         val directory = tempFolder.newFolder("ui-corruption")
         directory.resolve(DATASTORE_UI_RESTORE_FILE_NAME).writeText("not-json")
         val scope = newScope()

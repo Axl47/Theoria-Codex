@@ -8,7 +8,7 @@ Detailed architecture, storage, release, and verification notes. See the [README
 - `core-domain`: immutable domain models, source adapter contracts, query state, capability gates, unified search orchestration, and recommendation primitives.
 - `app-logic`: platform-free Search reducers, visibility filtering, feed/media policy, recommendation policy, and duration scheduling.
 - `core-data`: storage-independent repository contracts, shared policy, DataStore-backed Settings/UI restore, and the remaining bounded atomic-file repositories.
-- `core-data-android`: Room ownership for Codex membership, versioned post snapshots, and profile Likes, including verified legacy migration.
+- `core-data-android`: Room ownership for Codex membership, versioned post snapshots, and profile Likes.
 - `core-sources`: real source integrations, HTTP infrastructure, source helper policy, media MIME helpers, and opt-in live provider health tooling.
 - `core-stubs`: fixture-backed source adapters and provider contract tests for deterministic development and CI coverage.
 - `baseline-profile`: connected cold-start and top-level-navigation profile generation for the optimized release app.
@@ -35,7 +35,7 @@ Runtime state is local-first. The production owners are:
 - `theoria_codex/update_state.json`: startup updater state, ignored/remind-later choices, pending install metadata, and changelog state.
 - `theoria_codex/cache/thumbnails` and `theoria_codex/cache/full`: local media cache folders.
 
-Legacy `codex_store.json`, `likes_store.json`, `settings_store.json`, and `ui_restore_store.json` files are one-time migration inputs. Migration verifies schemas, keys, relationships, counts, hashes, and destination state before archiving any source; conflict or drift fails closed. Source credentials and pending Pixiv PKCE sessions use separate bounded AES-GCM envelopes under `noBackupFilesDir`, backed by Android Keystore and excluded from device transfer.
+Whole-file stores retired by v0.8.0 (`codex_store.json`, `likes_store.json`, `recents_store.json`, `settings_store.json`, `ui_restore_store.json`) and their `.migrated-*` archives are no longer read; the app neither imports nor deletes them. Source credentials and pending Pixiv PKCE sessions use separate bounded AES-GCM envelopes under `noBackupFilesDir`, backed by Android Keystore and excluded from device transfer.
 
 ## Deep Links And Imports
 

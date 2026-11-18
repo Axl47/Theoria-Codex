@@ -4,7 +4,6 @@ import androidx.datastore.core.CorruptionException
 import androidx.datastore.core.Serializer
 import com.google.gson.Gson
 import com.google.gson.JsonParseException
-import com.google.gson.annotations.SerializedName
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
@@ -12,7 +11,6 @@ import java.io.OutputStream
 import java.io.OutputStreamWriter
 import java.lang.reflect.Type
 import java.nio.charset.StandardCharsets
-import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
@@ -22,31 +20,6 @@ import kotlinx.coroutines.flow.StateFlow
 interface AsynchronousStore {
     val storageStatus: StateFlow<DurableStoreStatus>
     suspend fun awaitReady()
-}
-
-data class LegacyImportProof(
-    @field:SerializedName("sourceFileName")
-    val sourceFileName: String = "",
-    @field:SerializedName("sourceSchemaVersion")
-    val sourceSchemaVersion: Int = 0,
-    @field:SerializedName("destinationSchemaVersion")
-    val destinationSchemaVersion: Int = 0,
-    @field:SerializedName("sourceSha256")
-    val sourceSha256: String = "",
-    @field:SerializedName("sourceByteCount")
-    val sourceByteCount: Long = 0L,
-    @field:SerializedName("importedCounts")
-    val importedCounts: Map<String, Int> = emptyMap(),
-) {
-    internal fun isValidFor(destinationSchema: Int): Boolean {
-        return sourceFileName.isNotBlank() &&
-            sourceSchemaVersion > 0 &&
-            destinationSchemaVersion == destinationSchema &&
-            sourceSha256.length == SHA_256_HEX_LENGTH &&
-            sourceSha256.all { character -> character in '0'..'9' || character in 'a'..'f' } &&
-            sourceByteCount >= 0L &&
-            importedCounts.values.all { count -> count >= 0 }
-    }
 }
 
 data class CorruptionRecovery(
@@ -67,7 +40,6 @@ enum class DurableStorePhase {
 
 data class DurableStoreStatus(
     val phase: DurableStorePhase = DurableStorePhase.PENDING,
-    val imports: List<LegacyImportProof> = emptyList(),
     val corruptionRecovery: CorruptionRecovery? = null,
     val failureReason: String? = null,
 )
@@ -121,78 +93,6 @@ internal class GsonDataStoreSerializer<T : Any>(
     }
 }
 
-internal data class LegacyFileSnapshot(
-    val logicalFileName: String,
-    val actualFile: File,
-    val bytes: ByteArray,
-) {
-    val sha256: String = bytes.sha256()
-}
-
-internal fun readLegacySnapshot(
-    logicalFile: File,
-    archiveFile: File,
-): LegacyFileSnapshot? {
-    for (candidate in listOf(logicalFile, archiveFile)) {
-        if (!candidate.isFile) continue
-        try {
-            return LegacyFileSnapshot(
-                logicalFileName = logicalFile.name,
-                actualFile = candidate,
-                bytes = candidate.readBytes(),
-            )
-        } catch (missing: java.io.FileNotFoundException) {
-            // Another store can archive a shared legacy input concurrently. Try the archive.
-            if (candidate == archiveFile) throw missing
-        }
-    }
-    return null
-}
-
-/**
- * Retains a verified archive and removes the live legacy name only after the archive is durable.
- * Re-running this after a crash is safe, including the state where both files already exist.
- */
-fun archiveVerifiedLegacyFile(liveFile: File, archiveFile: File) {
-    if (!liveFile.isFile) return
-    val liveBytes = liveFile.readBytes()
-    if (archiveFile.isFile) {
-        check(archiveFile.readBytes().contentEquals(liveBytes)) {
-            "Refusing to replace a different legacy archive at ${archiveFile.absolutePath}"
-        }
-        check(liveFile.delete() || !liveFile.exists()) {
-            "Could not remove archived legacy file ${liveFile.absolutePath}"
-        }
-        return
-    }
-
-    archiveFile.parentFile?.mkdirs()
-    val tempFile = archiveFile.resolveSibling(".${archiveFile.name}.${System.nanoTime()}.tmp")
-    try {
-        tempFile.writeBytes(liveBytes)
-        check(tempFile.readBytes().contentEquals(liveBytes)) {
-            "Legacy archive verification failed for ${liveFile.absolutePath}"
-        }
-        try {
-            Files.move(
-                tempFile.toPath(),
-                archiveFile.toPath(),
-                StandardCopyOption.ATOMIC_MOVE,
-            )
-        } catch (_: AtomicMoveNotSupportedException) {
-            Files.move(tempFile.toPath(), archiveFile.toPath())
-        }
-        check(archiveFile.readBytes().contentEquals(liveBytes)) {
-            "Legacy archive verification failed for ${archiveFile.absolutePath}"
-        }
-        check(liveFile.delete() || !liveFile.exists()) {
-            "Could not remove archived legacy file ${liveFile.absolutePath}"
-        }
-    } finally {
-        tempFile.delete()
-    }
-}
-
 internal fun preserveCorruptFile(storeFile: File): String? {
     if (!storeFile.isFile) return null
     return runCatching {
@@ -207,5 +107,3 @@ internal fun ByteArray.sha256(): String {
         .digest(this)
         .toHexString()
 }
-
-private const val SHA_256_HEX_LENGTH = 64

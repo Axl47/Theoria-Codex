@@ -157,16 +157,6 @@ internal data class LegacySettingsStoreRecord(
 
     fun sourceSchemaVersion(): Int = sourceCatalogVersion ?: 1
 
-    fun importCounts(): Map<String, Int> {
-        return linkedMapOf(
-            "settings" to 1,
-            "profiles" to recommendationProfiles.orEmpty().size,
-            "blacklistEntries" to forYouBlacklistByProfile.orEmpty().values.sumOf(List<*>::size),
-            "favoriteTags" to favoriteTagsByProfile.orEmpty().values.sumOf(List<*>::size),
-            "providerHealth" to providerHealth.orEmpty().size,
-        )
-    }
-
     companion object {
         fun fromDomain(settings: AppSettings): LegacySettingsStoreRecord {
             return LegacySettingsStoreRecord(
@@ -366,15 +356,6 @@ internal data class LegacyUiRestoreStoreRecord(
             }.toMap(),
             feedFabRestoreStates = feedFabRestoreStates,
             viewerLaunchContext = viewerLaunchContext?.toDomain(),
-        )
-    }
-
-    fun importCounts(): Map<String, Int> {
-        return linkedMapOf(
-            "lastTab" to if (lastTab.isNullOrBlank()) 0 else 1,
-            "searchScrollStates" to searchScrollStates.size,
-            "feedFabRestoreStates" to feedFabRestoreStates.size,
-            "viewerLaunchContext" to if (viewerLaunchContext == null) 0 else 1,
         )
     }
 
