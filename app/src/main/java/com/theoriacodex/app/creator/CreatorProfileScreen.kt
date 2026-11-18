@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconToggleButton
@@ -462,7 +463,10 @@ private fun CreatorFeedBody(
             FeedEmptyTile(message = creatorEmptyMessage(state, feed))
         }
 
-        else -> CreatorGrid(state, feed, cards, gridState, onAction, onLongPress)
+        // Pull to refresh is how paging resumes after a dismissed page failure.
+        else -> PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = { onAction(CreatorAction.Refresh) }) {
+            CreatorGrid(state, feed, cards, gridState, onAction, onLongPress)
+        }
     }
 }
 

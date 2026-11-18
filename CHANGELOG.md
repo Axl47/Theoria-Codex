@@ -4,7 +4,7 @@
 
 ### Changed
 
-- When the next page of a feed fails to load, its error card now has Dismiss next to Retry, so you can keep browsing the posts already loaded without the card taking up the top of the screen. This covers Search, account pages, and Saved searches and Followed in the Codex, plus Search's "Source account required" notice. A new, different error shows again; errors with no posts to browse still offer only Retry.
+- When the next page of a feed fails to load, its error card now has Dismiss next to Retry, so you can keep browsing the posts already loaded without the card taking up the top of the screen. This covers Search, account pages, and Saved searches and Followed in the Codex, plus Search's "Source account required" notice. A new, different error shows again; errors with no posts to browse still offer only Retry. Account pages now also support pull to refresh, which resumes loading after a dismissed error.
 
 ### Fixed
 
