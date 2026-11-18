@@ -291,10 +291,9 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes") }
         val folder = directory.listFiles().orEmpty().single()
         val oldGeneration = folder.listFiles().orEmpty().single(File::isDirectory)
-        // Builds before v1.4.0 wrote the domain Post with the keys R8 assigned.
+        // Only the version changes, so the version check alone must reject an otherwise readable copy.
         editManifest(directory) { root ->
             root.addProperty("version", 2)
-            root.add("post", JsonParser.parseString("""{"a":{"a":"PIXIV","b":"42"},"d":[]}"""))
             root.add("owners", JsonArray().apply { add("codex:a"); add("codex:z") })
         }
 
@@ -310,16 +309,19 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
     }
 
     @Test
-    fun `a version 3 manifest whose post cannot be decoded keeps its owners`() = runTest {
+    fun `a version 3 manifest whose post cannot be decoded keeps its valid owners`() = runTest {
         val directory = tempDir("v3-undecodable")
         val post = gallery()
         OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes") }
-        editManifest(directory) { root -> root.addProperty("post", "not a post") }
+        editManifest(directory) { root ->
+            root.addProperty("post", "not a post")
+            root.add("owners", JsonArray().apply { add("codex:a"); add(JsonObject()); add("codex:z") })
+        }
 
         val store = OfflineMediaStore(directory)
         assertNull(store.find(post.id))
         store.save(post, post.media, "codex:b") { _, media -> media.writeText("again") }
-        assertEquals(listOf("codex:a", "codex:b"), manifestOf(directory).getAsJsonArray("owners").map { it.asString })
+        assertEquals(listOf("codex:a", "codex:b", "codex:z"), manifestOf(directory).getAsJsonArray("owners").map { it.asString })
     }
 
     @Test
