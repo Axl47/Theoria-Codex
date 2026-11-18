@@ -24,14 +24,6 @@
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
--keepclassmembers class com.theoriacodex.data.repository.UiRestoreDataStoreFile {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.repository.StatisticsDataStoreFile {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
 -keepclassmembers class com.theoriacodex.data.repository.StatisticsStoreRecord {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
@@ -76,26 +68,6 @@
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
--keepclassmembers class com.theoriacodex.data.repository.UiRestoreStoreRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.repository.FeedFabRestoreState {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.repository.SearchAnimationFilterRestoreState {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.repository.SearchScrollStateRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.repository.ViewerLaunchContextRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
 
 -keepclassmembers class com.theoriacodex.data.storage.VideoVariantRecord {
     <init>();
@@ -108,11 +80,6 @@
 }
 
 -keepclassmembers class com.theoriacodex.data.repository.SiteProfileRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
-
--keepclassmembers class com.theoriacodex.data.repository.SiteProfileStoreFile {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
