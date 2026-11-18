@@ -69,6 +69,11 @@ class DataStoreGoldenTest {
         assertEquals(SettingsDataStoreFile().toDomain().copy(oldSearchBar = true), settings)
     }
 
+    // The pre-profile-id key (`activeProfile`: USER_1 or USER_2) is retired, so such a file opens on the first profile.
+    @Test fun `settings with only the retired profile key open on the first profile`() = runTest {
+        assertEquals("profile-main", loadSettings("settings-retired-profile-key").activeProfileId)
+    }
+
     // Gson accepts "3" for Int, "true" for Boolean and "2.5" for Double.
     @Test fun `settings quoted numbers and booleans are read as their values`() = runTest {
         val settings = loadSettings("settings-quoted-numbers")

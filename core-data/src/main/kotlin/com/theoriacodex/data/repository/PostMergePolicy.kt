@@ -33,6 +33,11 @@ fun mergeSparsePost(existing: Post, incoming: Post): Post {
         mediaCount = incoming.mediaCount ?: existing.mediaCount,
         taxonomy = mergeTaxonomy(existing.taxonomy, incoming.taxonomy),
         creatorProfiles = mergeCreatorProfiles(existing.creatorProfiles, incoming.creatorProfiles),
+        // The hash names the original file, so it survives only while the snapshot still points at that file.
+        contentHash = incoming.contentHash ?: existing.contentHash.takeIf {
+            val incomingUrl = incomingFull?.url
+            incomingUrl.isNullOrBlank() || incomingUrl == existingFull?.url
+        },
     )
 }
 
