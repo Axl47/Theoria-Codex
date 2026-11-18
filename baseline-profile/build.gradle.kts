@@ -24,8 +24,8 @@ android {
 }
 
 baselineProfile {
-    // Generation intentionally uses the explicitly connected API 37 emulator/device. Keeping
-    // this out of normal assembly avoids silently starting an emulator during release builds.
+    // Generation uses only the device named by ANDROID_SERIAL (a supported API 36 or 37 emulator).
+    // Keeping this out of normal assembly avoids silently starting an emulator during release builds.
     useConnectedDevices = true
 }
 
