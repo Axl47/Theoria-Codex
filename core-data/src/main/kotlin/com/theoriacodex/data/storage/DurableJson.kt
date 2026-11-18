@@ -4,9 +4,10 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 
 /**
- * The single kotlinx.serialization configuration for saved data: files, Room payloads, and exports. Each flag
- * keeps data written by Gson, or read by an older build, behaving as it did under the plain `Gson()` it replaces.
- * Golden files that older builds wrote pin each stored format (`assertStoredFormat`, core-data test fixtures).
+ * The single kotlinx.serialization configuration for saved data (files, Room payloads, exports) and for the app's
+ * fixed-shape network, asset, and developer-copy JSON. Each flag keeps data written by Gson, or read by an older
+ * build, behaving as it did under the plain `Gson()` it replaces. Golden files that older builds wrote pin each
+ * stored format (`assertStoredFormat`, core-data test fixtures).
  * Rationale and the full compatibility contract: .docs/exec/gson-to-kotlinx-serialization.html.
  */
 @OptIn(ExperimentalSerializationApi::class)

@@ -1,17 +1,19 @@
 package com.theoriacodex.app.developercopy
 
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
 import com.theoriacodex.app.sourceauth.SourceCredentialSnapshot
 import com.theoriacodex.data.repository.PROFILE_BACKUP_MAX_BYTES
 import com.theoriacodex.data.repository.ProfileBackupCodec
 import com.theoriacodex.data.repository.checkDocumentDepth
 import com.theoriacodex.data.repository.decodeDocumentUtf8
+import com.theoriacodex.data.storage.DurableJson
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.InputStream
 import java.io.OutputStream
 import java.security.MessageDigest
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 
 internal const val PRODUCTION_PACKAGE = "com.theoriacodex"
 internal const val DEBUG_PACKAGE = "com.theoriacodex.debug"
@@ -56,32 +58,37 @@ private fun readSection(input: DataInputStream, maximum: Int): ByteArray {
     return ByteArray(length).also(input::readFully)
 }
 
-private fun encodeCredentials(snapshot: SourceCredentialSnapshot): ByteArray = JsonObject().apply {
-    addProperty("pixivAccessToken", snapshot.pixivAccessToken)
-    addProperty("pixivRefreshToken", snapshot.pixivRefreshToken)
-    addProperty("pixivExpiresAtEpochMs", snapshot.pixivExpiresAtEpochMs)
-    addProperty("gelbooruUserId", snapshot.gelbooruUserId)
-    addProperty("gelbooruApiKey", snapshot.gelbooruApiKey)
-    addProperty("rule34XxxUserId", snapshot.rule34XxxUserId)
-    addProperty("rule34XxxApiKey", snapshot.rule34XxxApiKey)
-}.toString().toByteArray(Charsets.UTF_8)
+private fun encodeCredentials(snapshot: SourceCredentialSnapshot): ByteArray = DurableJson.encodeToString(
+    DeveloperCopyCredentials.serializer(),
+    DeveloperCopyCredentials(
+        pixivAccessToken = snapshot.pixivAccessToken,
+        pixivRefreshToken = snapshot.pixivRefreshToken,
+        pixivExpiresAtEpochMs = snapshot.pixivExpiresAtEpochMs,
+        gelbooruUserId = snapshot.gelbooruUserId,
+        gelbooruApiKey = snapshot.gelbooruApiKey,
+        rule34XxxUserId = snapshot.rule34XxxUserId,
+        rule34XxxApiKey = snapshot.rule34XxxApiKey,
+    ),
+).toByteArray(Charsets.UTF_8)
 
+/** Failures carry no message or cause from the parser, whose errors quote the input and so the secrets. */
 private fun decodeCredentials(bytes: ByteArray): SourceCredentialSnapshot {
     val raw = decodeDocumentUtf8(bytes)
     checkDocumentDepth(raw)
-    val root = JsonParser.parseString(raw).asJsonObject
-    fun text(key: String): String? = root.get(key)?.takeUnless { it.isJsonNull }?.let {
-        require(it.isJsonPrimitive && it.asJsonPrimitive.isString)
-        it.asString.also { value -> require(value.isNotBlank() && value.length <= MAX_CREDENTIAL_BYTES) }
+    val record = try {
+        DurableJson.decodeFromString(DeveloperCopyCredentials.serializer(), raw)
+    } catch (_: SerializationException) {
+        throw IllegalArgumentException("Unreadable developer copy credentials")
     }
+    fun String?.checked(): String? = this?.also { value -> require(value.isNotBlank() && value.length <= MAX_CREDENTIAL_BYTES) }
     val snapshot = SourceCredentialSnapshot(
-        pixivAccessToken = text("pixivAccessToken"),
-        pixivRefreshToken = text("pixivRefreshToken"),
-        pixivExpiresAtEpochMs = root.get("pixivExpiresAtEpochMs")?.takeUnless { it.isJsonNull }?.asLong,
-        gelbooruUserId = text("gelbooruUserId"),
-        gelbooruApiKey = text("gelbooruApiKey"),
-        rule34XxxUserId = text("rule34XxxUserId"),
-        rule34XxxApiKey = text("rule34XxxApiKey"),
+        pixivAccessToken = record.pixivAccessToken.checked(),
+        pixivRefreshToken = record.pixivRefreshToken.checked(),
+        pixivExpiresAtEpochMs = record.pixivExpiresAtEpochMs,
+        gelbooruUserId = record.gelbooruUserId.checked(),
+        gelbooruApiKey = record.gelbooruApiKey.checked(),
+        rule34XxxUserId = record.rule34XxxUserId.checked(),
+        rule34XxxApiKey = record.rule34XxxApiKey.checked(),
     )
     require(snapshot.pixivAccessToken == null && snapshot.pixivRefreshToken == null &&
         snapshot.pixivExpiresAtEpochMs == null || snapshot.pixivTokens() != null)
@@ -89,6 +96,25 @@ private fun decodeCredentials(bytes: ByteArray): SourceCredentialSnapshot {
     require(snapshot.rule34XxxUserId == null && snapshot.rule34XxxApiKey == null || snapshot.rule34XxxCredentials() != null)
     return snapshot
 }
+
+/** The credential section of the copy pipe. Older builds wrote absent values as JSON null; this one omits them. */
+@Serializable
+private class DeveloperCopyCredentials(
+    @SerialName("pixivAccessToken")
+    val pixivAccessToken: String? = null,
+    @SerialName("pixivRefreshToken")
+    val pixivRefreshToken: String? = null,
+    @SerialName("pixivExpiresAtEpochMs")
+    val pixivExpiresAtEpochMs: Long? = null,
+    @SerialName("gelbooruUserId")
+    val gelbooruUserId: String? = null,
+    @SerialName("gelbooruApiKey")
+    val gelbooruApiKey: String? = null,
+    @SerialName("rule34XxxUserId")
+    val rule34XxxUserId: String? = null,
+    @SerialName("rule34XxxApiKey")
+    val rule34XxxApiKey: String? = null,
+)
 
 internal fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
     .digest(bytes).toHexString()
