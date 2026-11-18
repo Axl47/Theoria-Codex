@@ -1,7 +1,6 @@
 package com.theoriacodex.data.repository
 
 import androidx.datastore.core.DataStore
-import androidx.datastore.core.DataMigration
 import java.time.Clock
 import java.time.LocalDate
 import androidx.datastore.core.DataStoreFactory
@@ -431,18 +430,12 @@ class DataStoreStatisticsRepository(
                         supported = STATISTICS_DATASTORE_SCHEMA_VERSION,
                     )
                 }
-                require(stored.schemaVersion in 1..STATISTICS_DATASTORE_SCHEMA_VERSION) {
+                require(stored.schemaVersion == STATISTICS_DATASTORE_SCHEMA_VERSION) {
                     "Unsupported statistics schema ${stored.schemaVersion}"
                 }
                 stored.validate()
             },
         ),
-        migrations = listOf(object : DataMigration<StatisticsDataStoreFile> {
-            override suspend fun shouldMigrate(currentData: StatisticsDataStoreFile) = currentData.schemaVersion == 1
-            override suspend fun migrate(currentData: StatisticsDataStoreFile) =
-                currentData.copy(schemaVersion = STATISTICS_DATASTORE_SCHEMA_VERSION)
-            override suspend fun cleanUp() = Unit
-        }),
         corruptionHandler = ReplaceFileCorruptionHandler { corruption ->
             mutableStorageStatus.update { current ->
                 current.copy(
