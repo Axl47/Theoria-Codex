@@ -7,6 +7,7 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
+import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.nio.file.AtomicMoveNotSupportedException
@@ -93,32 +94,21 @@ class AtomicJsonFileStore private constructor(
     ): T {
         return withContext(ioDispatcher) {
             val path = file.toPath()
-            if (Files.notExists(path)) {
-                fallback
-            } else if (!Files.exists(path)) {
-                throw IOException("Could not determine whether ${file.absolutePath} is readable")
-            } else {
-                val bytes = fileOperations.readBytes(file)
-                fun quarantine(reason: String) = recover(file, bytes, fallback, logicalStore, reason, onRecovery)
-                val text = try {
-                    StandardCharsets.UTF_8.newDecoder()
-                        .onMalformedInput(CodingErrorAction.REPORT)
-                        .onUnmappableCharacter(CodingErrorAction.REPORT)
-                        .decode(ByteBuffer.wrap(bytes))
-                        .toString()
-                } catch (_: java.nio.charset.CharacterCodingException) {
-                    return@withContext quarantine("${file.name} is not valid UTF-8 JSON")
-                }
-                if (text.isBlank()) return@withContext quarantine("${file.name} is empty")
-                val decoded = try {
-                    decode(text)
-                } catch (error: RuntimeException) {
-                    if (!isMalformed(error)) throw error
-                    error.cancellationCause()?.let { cancellation -> throw cancellation }
-                    return@withContext quarantine("${file.name} contains malformed JSON")
-                }
-                decoded ?: quarantine("${file.name} contains a null JSON value")
+            if (Files.notExists(path)) return@withContext fallback
+            if (!Files.exists(path)) throw IOException("Could not determine whether ${file.absolutePath} is readable")
+            val bytes = fileOperations.readBytes(file)
+            fun quarantine(reason: String) = recover(file, bytes, fallback, logicalStore, reason, onRecovery)
+            val text = bytes.strictUtf8OrNull()
+                ?: return@withContext quarantine("${file.name} is not valid UTF-8 JSON")
+            if (text.isBlank()) return@withContext quarantine("${file.name} is empty")
+            val decoded = try {
+                decode(text)
+            } catch (error: RuntimeException) {
+                if (!isMalformed(error)) throw error
+                error.cancellationCause()?.let { cancellation -> throw cancellation }
+                return@withContext quarantine("${file.name} contains malformed JSON")
             }
+            decoded ?: quarantine("${file.name} contains a null JSON value")
         }
     }
 
@@ -309,6 +299,16 @@ internal suspend inline fun <State, Result> mutateAndPersistWithRollback(
         restore(previous)
         throw failure
     }
+}
+
+private fun ByteArray.strictUtf8OrNull(): String? = try {
+    StandardCharsets.UTF_8.newDecoder()
+        .onMalformedInput(CodingErrorAction.REPORT)
+        .onUnmappableCharacter(CodingErrorAction.REPORT)
+        .decode(ByteBuffer.wrap(this))
+        .toString()
+} catch (_: CharacterCodingException) {
+    null
 }
 
 private fun Throwable.cancellationCause(): CancellationException? {

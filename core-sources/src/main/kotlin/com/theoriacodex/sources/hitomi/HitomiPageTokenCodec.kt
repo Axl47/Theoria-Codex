@@ -8,7 +8,7 @@ import kotlinx.serialization.json.Json
 
 internal class HitomiPageTokenCodec {
     fun encode(token: HitomiPageToken): String {
-        val json = hitomiPageTokenJson.encodeToString(HitomiPageToken.serializer(), token).toByteArray(Charsets.UTF_8)
+        val json = hitomiPageTokenJson.encodeToString(token).toByteArray(Charsets.UTF_8)
         return Base64.getUrlEncoder().withoutPadding().encodeToString(json)
     }
 
@@ -16,7 +16,7 @@ internal class HitomiPageTokenCodec {
         OffMainWork.note(OffMainWork.SOURCE_PARSE)
         val token = try {
             val json = Base64.getUrlDecoder().decode(raw).toString(Charsets.UTF_8)
-            hitomiPageTokenJson.decodeFromString(HitomiPageToken.serializer(), json)
+            hitomiPageTokenJson.decodeFromString<HitomiPageToken>(json)
         } catch (error: RuntimeException) {
             throw HitomiPageTokenException("Hitomi page token was malformed", error)
         }
