@@ -1,10 +1,5 @@
 package com.theoriacodex.data.storage
 
-import com.google.gson.GsonBuilder
-import com.google.gson.JsonSerializer
-import com.google.gson.TypeAdapter
-import com.google.gson.stream.JsonReader
-import com.google.gson.stream.JsonWriter
 import com.theoriacodex.data.testing.RecordingIoDispatcher
 import java.io.File
 import java.io.IOException
@@ -18,6 +13,7 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertFalse
@@ -36,9 +32,9 @@ class AtomicJsonFileStoreTest {
             val store = AtomicJsonFileStore(ioDispatcher = dispatcher)
             val file = tempFolder.root.resolve("nested/state.json")
 
-            assertEquals(Payload("fallback"), store.read(file, Payload("fallback")))
-            store.write(file, Payload("stored"))
-            assertEquals(Payload("stored"), store.read(file, Payload("fallback")))
+            assertEquals(Payload("fallback"), store.read(file, Payload("fallback"), Payload.serializer()))
+            store.write(file, Payload("stored"), Payload.serializer())
+            assertEquals(Payload("stored"), store.read(file, Payload("fallback"), Payload.serializer()))
 
             assertTrue(dispatcher.executionThreadNames.isNotEmpty())
             assertTrue(dispatcher.executionThreadNames.all { name -> name == "atomic-json-io" })
@@ -55,7 +51,7 @@ class AtomicJsonFileStoreTest {
 
         assertEquals(
             Payload("fallback"),
-            store.read(file, Payload("fallback"), logicalStore = "Test state") { recovery = it },
+            store.read(file, Payload("fallback"), Payload.serializer(), logicalStore = "Test state") { recovery = it },
         )
         val recordedRecovery = requireNotNull(recovery)
         val quarantine = File(recordedRecovery.backupPath!!)
@@ -66,11 +62,11 @@ class AtomicJsonFileStoreTest {
         assertEquals(quarantine.absolutePath, recordedRecovery.quarantinePath)
         assertEquals(original.size.toLong(), recordedRecovery.byteCount)
 
-        store.write(file, Payload("stable"))
+        store.write(file, Payload("stable"), Payload.serializer())
         val partialTemp = tempFolder.root.resolve("state.json.interrupted.tmp")
         partialTemp.writeText("{partial")
 
-        assertEquals(Payload("stable"), store.read(file, Payload("fallback")))
+        assertEquals(Payload("stable"), store.read(file, Payload("fallback"), Payload.serializer()))
         assertArrayEquals(original, quarantine.readBytes())
         assertTrue(partialTemp.exists())
     }
@@ -84,7 +80,7 @@ class AtomicJsonFileStoreTest {
 
             assertEquals(
                 Payload("fallback"),
-                AtomicJsonFileStore().read(file, Payload("fallback"), onRecovery = recoveries::add),
+                AtomicJsonFileStore().read(file, Payload("fallback"), Payload.serializer(), onRecovery = recoveries::add),
             )
 
             assertFalse(file.exists())
@@ -94,7 +90,7 @@ class AtomicJsonFileStoreTest {
     }
 
     @Test
-    fun `kotlinx reads quarantine exactly what Gson reads quarantine`() = runTest {
+    fun `malformed, wrong-shaped, null, blank, and non-UTF-8 files are quarantined`() = runTest {
         val store = AtomicJsonFileStore()
         val cases = mapOf(
             "{broken".toByteArray() to "contains malformed JSON",
@@ -109,8 +105,8 @@ class AtomicJsonFileStoreTest {
             val recoveries = mutableListOf<CorruptionRecovery>()
 
             assertEquals(
-                KotlinxPayload("fallback"),
-                store.read(file, KotlinxPayload("fallback"), KotlinxPayload.serializer(), onRecovery = recoveries::add),
+                Payload("fallback"),
+                store.read(file, Payload("fallback"), Payload.serializer(), onRecovery = recoveries::add),
             )
 
             assertFalse(file.exists())
@@ -120,20 +116,20 @@ class AtomicJsonFileStoreTest {
     }
 
     @Test
-    fun `kotlinx writes read back and other decoding failures propagate untouched`() = runTest {
+    fun `writes read back unescaped and other decoding failures propagate untouched`() = runTest {
         val store = AtomicJsonFileStore()
         val file = tempFolder.root.resolve("nested/kotlinx.json")
-        store.write(file, KotlinxPayload("a & b"), KotlinxPayload.serializer())
+        store.write(file, Payload("a & b"), Payload.serializer())
         assertEquals("""{"value":"a & b"}""", file.readText())
         assertEquals(
-            KotlinxPayload("a & b"),
-            store.read(file, KotlinxPayload("fallback"), KotlinxPayload.serializer()),
+            Payload("a & b"),
+            store.read(file, Payload("fallback"), Payload.serializer()),
         )
 
-        val rejecting = object : KSerializer<KotlinxPayload> by KotlinxPayload.serializer() {
-            override fun deserialize(decoder: Decoder): KotlinxPayload = throw IllegalArgumentException("adapter failed")
+        val rejecting = object : KSerializer<Payload> by Payload.serializer() {
+            override fun deserialize(decoder: Decoder): Payload = throw IllegalArgumentException("adapter failed")
         }
-        val failure = runCatching { store.read(file, KotlinxPayload("fallback"), rejecting) }.exceptionOrNull()
+        val failure = runCatching { store.read(file, Payload("fallback"), rejecting) }.exceptionOrNull()
         assertEquals(IllegalArgumentException::class, failure?.let { it::class })
         assertEquals("""{"value":"a & b"}""", file.readText())
     }
@@ -146,7 +142,7 @@ class AtomicJsonFileStoreTest {
         val quarantine = file.resolveSibling("${file.name}.corrupt-${bytes.size}-${bytes.sha256()}")
         quarantine.writeBytes(bytes)
 
-        val recovered = AtomicJsonFileStore().read(file, Payload("fallback"))
+        val recovered = AtomicJsonFileStore().read(file, Payload("fallback"), Payload.serializer())
 
         assertEquals(Payload("fallback"), recovered)
         assertFalse(file.exists())
@@ -162,7 +158,7 @@ class AtomicJsonFileStoreTest {
         quarantine.writeText("different")
 
         val failure = runCatching {
-            AtomicJsonFileStore().read(file, Payload("fallback"))
+            AtomicJsonFileStore().read(file, Payload("fallback"), Payload.serializer())
         }.exceptionOrNull()
 
         assertTrue(failure is IllegalStateException)
@@ -178,7 +174,6 @@ class AtomicJsonFileStoreTest {
         val quarantineFailure = IOException("quarantine unavailable")
         val failingQuarantine = AtomicJsonFileStore(
             ioDispatcher = Dispatchers.Unconfined,
-            gson = GsonBuilder().create(),
             fileOperations = object : RecordingAtomicFileOperations() {
                 override fun writeAndSync(file: File, bytes: ByteArray) {
                     throw quarantineFailure
@@ -188,7 +183,7 @@ class AtomicJsonFileStoreTest {
 
         assertEquals(
             quarantineFailure,
-            runCatching { failingQuarantine.read(quarantineFile, Payload("fallback")) }.exceptionOrNull(),
+            runCatching { failingQuarantine.read(quarantineFile, Payload("fallback"), Payload.serializer()) }.exceptionOrNull(),
         )
         assertArrayEquals(malformed, quarantineFile.readBytes())
 
@@ -196,14 +191,13 @@ class AtomicJsonFileStoreTest {
         val readFailure = IOException("permission denied")
         val failingRead = AtomicJsonFileStore(
             ioDispatcher = Dispatchers.Unconfined,
-            gson = GsonBuilder().create(),
             fileOperations = object : RecordingAtomicFileOperations() {
                 override fun readBytes(file: File): ByteArray = throw readFailure
             },
         )
         assertEquals(
             readFailure,
-            runCatching { failingRead.read(readFile, Payload("fallback")) }.exceptionOrNull(),
+            runCatching { failingRead.read(readFile, Payload("fallback"), Payload.serializer()) }.exceptionOrNull(),
         )
         assertTrue(readFile.exists())
     }
@@ -216,7 +210,6 @@ class AtomicJsonFileStoreTest {
         val moveFailure = IOException("move unavailable")
         val store = AtomicJsonFileStore(
             ioDispatcher = Dispatchers.Unconfined,
-            gson = GsonBuilder().create(),
             fileOperations = object : RecordingAtomicFileOperations() {
                 override fun moveWithoutReplace(tempFile: File, target: File) {
                     throw moveFailure
@@ -226,7 +219,7 @@ class AtomicJsonFileStoreTest {
 
         assertEquals(
             moveFailure,
-            runCatching { store.read(file, Payload("fallback")) }.exceptionOrNull(),
+            runCatching { store.read(file, Payload("fallback"), Payload.serializer()) }.exceptionOrNull(),
         )
         assertArrayEquals(malformed, file.readBytes())
         assertFalse(file.parentFile.listFiles().orEmpty().any { candidate ->
@@ -238,17 +231,12 @@ class AtomicJsonFileStoreTest {
     fun `serialization failure preserves the prior file and cleans its temp file`() = runTest {
         val file = tempFolder.root.resolve("state.json")
         val stableStore = AtomicJsonFileStore()
-        stableStore.write(file, Payload("stable"))
+        stableStore.write(file, Payload("stable"), Payload.serializer())
         val priorBody = file.readText()
-        val failingGson = GsonBuilder()
-            .registerTypeAdapter(
-                Payload::class.java,
-                JsonSerializer<Payload> { _, _, _ -> error("serialization failed") },
-            )
-            .create()
-        val failingStore = AtomicJsonFileStore(gson = failingGson)
-
-        val failure = runCatching { failingStore.write(file, Payload("replacement")) }.exceptionOrNull()
+        val failing = object : KSerializer<Payload> by Payload.serializer() {
+            override fun serialize(encoder: Encoder, value: Payload) = error("serialization failed")
+        }
+        val failure = runCatching { stableStore.write(file, Payload("replacement"), failing) }.exceptionOrNull()
 
         assertTrue(failure is IllegalStateException)
         assertEquals(priorBody, file.readText())
@@ -266,32 +254,30 @@ class AtomicJsonFileStoreTest {
         )
         val store = AtomicJsonFileStore(
             ioDispatcher = Dispatchers.Unconfined,
-            gson = GsonBuilder().create(),
             fileOperations = operations,
         )
         val file = tempFolder.root.resolve("state.json")
 
-        store.write(file, Payload("stored"))
+        store.write(file, Payload("stored"), Payload.serializer())
 
         assertEquals(1, operations.atomicMoveCalls)
         assertEquals(1, operations.replacementCalls)
-        assertEquals(Payload("stored"), store.read(file, Payload("fallback")))
+        assertEquals(Payload("stored"), store.read(file, Payload("fallback"), Payload.serializer()))
     }
 
     @Test
     fun `ordinary move failure is surfaced without replacement and preserves prior file`() = runTest {
         val file = tempFolder.root.resolve("state.json")
-        AtomicJsonFileStore().write(file, Payload("stable"))
+        AtomicJsonFileStore().write(file, Payload("stable"), Payload.serializer())
         val priorBody = file.readText()
         val expected = IllegalStateException("move failed")
         val operations = RecordingAtomicFileOperations(atomicFailure = expected)
         val store = AtomicJsonFileStore(
             ioDispatcher = Dispatchers.Unconfined,
-            gson = GsonBuilder().create(),
             fileOperations = operations,
         )
 
-        val failure = runCatching { store.write(file, Payload("replacement")) }.exceptionOrNull()
+        val failure = runCatching { store.write(file, Payload("replacement"), Payload.serializer()) }.exceptionOrNull()
 
         assertTrue(failure is IllegalStateException)
         assertEquals(expected.message, failure?.message)
@@ -302,38 +288,19 @@ class AtomicJsonFileStoreTest {
     }
 
     @Test
-    fun `tolerant read does not swallow cancellation or unexpected adapter failures`() = runTest {
+    fun `read does not swallow cancellation`() = runTest {
         val file = tempFolder.root.resolve("state.json")
         file.writeText("{}")
         val cancellation = CancellationException("cancelled")
-        val cancellingStore = AtomicJsonFileStore(
-            gson = GsonBuilder()
-                .registerTypeAdapter(
-                    Payload::class.java,
-                    throwingReadAdapter(cancellation),
-                )
-                .create(),
-        )
-        val unexpected = IllegalArgumentException("adapter failed")
-        val failingStore = AtomicJsonFileStore(
-            gson = GsonBuilder()
-                .registerTypeAdapter(
-                    Payload::class.java,
-                    throwingReadAdapter(unexpected),
-                )
-                .create(),
-        )
+        val cancelling = object : KSerializer<Payload> by Payload.serializer() {
+            override fun deserialize(decoder: Decoder): Payload = throw cancellation
+        }
 
-        val cancellationFailure = runCatching {
-            cancellingStore.read(file, Payload("fallback"))
-        }.exceptionOrNull()
-        assertTrue(cancellationFailure is CancellationException)
-        assertEquals(cancellation.message, cancellationFailure?.message)
-        val unexpectedFailure = runCatching {
-            failingStore.read(file, Payload("fallback"))
-        }.exceptionOrNull()
-        assertTrue(unexpectedFailure is IllegalArgumentException)
-        assertEquals(unexpected.message, unexpectedFailure?.message)
+        val failure = runCatching { AtomicJsonFileStore().read(file, Payload("fallback"), cancelling) }.exceptionOrNull()
+
+        assertTrue(failure is CancellationException)
+        assertEquals(cancellation.message, failure?.message)
+        assertTrue(file.exists())
     }
 
     @Test
@@ -347,12 +314,12 @@ class AtomicJsonFileStoreTest {
                 throw IOException("fsync failed")
             }
         }
-        val store = AtomicJsonFileStore(Dispatchers.Unconfined, GsonBuilder().create(), operations)
-        assertTrue(runCatching { store.writeIntent(file, Payload("next"), maxBytes = 100) }.exceptionOrNull() is IOException)
+        val store = AtomicJsonFileStore(Dispatchers.Unconfined, operations)
+        assertTrue(runCatching { store.writeIntent(file, Payload("next"), Payload.serializer(), maxBytes = 100) }.exceptionOrNull() is IOException)
         assertEquals(1, syncCalls)
         assertEquals(0, operations.atomicMoveCalls)
         assertEquals("previous", file.readText())
-        assertTrue(runCatching { store.writeIntent(file, Payload("🙂".repeat(20)), maxBytes = 32) }.exceptionOrNull() is IllegalArgumentException)
+        assertTrue(runCatching { store.writeIntent(file, Payload("🙂".repeat(20)), Payload.serializer(), maxBytes = 32) }.exceptionOrNull() is IllegalArgumentException)
         assertEquals(1, syncCalls)
         assertEquals("previous", file.readText())
         assertTrue(tempFilesFor(file).none())
@@ -382,8 +349,8 @@ class AtomicJsonFileStoreTest {
                     events += "directory sync"
                 }
             }
-            val store = AtomicJsonFileStore(Dispatchers.Unconfined, GsonBuilder().create(), operations)
-            store.writeIntent(tempFolder.root.resolve("intent-$fallback.json"), Payload("ready"), 100)
+            val store = AtomicJsonFileStore(Dispatchers.Unconfined, operations)
+            store.writeIntent(tempFolder.root.resolve("intent-$fallback.json"), Payload("ready"), Payload.serializer(), 100)
             events += "admitted"
             assertEquals(listOfNotNull("file sync", "move", "replace".takeIf { fallback }, "directory sync", "admitted"), events)
         }
@@ -399,8 +366,8 @@ class AtomicJsonFileStoreTest {
             }
         }
         val file = tempFolder.root.resolve("new/nested/intent.json")
-        AtomicJsonFileStore(Dispatchers.Unconfined, GsonBuilder().create(), operations)
-            .writeIntent(file, Payload("ready"), 100)
+        AtomicJsonFileStore(Dispatchers.Unconfined, operations)
+            .writeIntent(file, Payload("ready"), Payload.serializer(), 100)
         assertEquals(listOf(file.parentFile, file.parentFile.parentFile, tempFolder.root), synced)
     }
 
@@ -410,31 +377,19 @@ class AtomicJsonFileStoreTest {
         val operations = object : RecordingAtomicFileOperations() {
             override fun syncDirectory(directory: File) { throw failure }
         }
-        val store = AtomicJsonFileStore(Dispatchers.Unconfined, GsonBuilder().create(), operations)
+        val store = AtomicJsonFileStore(Dispatchers.Unconfined, operations)
         val file = tempFolder.root.resolve("intent.json")
         var admitted = false
         val actual = runCatching {
-            store.writeIntent(file, Payload("ready"), 100)
+            store.writeIntent(file, Payload("ready"), Payload.serializer(), 100)
             admitted = true
         }.exceptionOrNull()
         assertTrue(actual is IOException)
         assertEquals(failure.message, actual?.message)
         assertFalse(admitted)
         assertTrue(tempFilesFor(file).none())
-        store.write(file, Payload("ordinary"))
-        assertEquals(Payload("ordinary"), store.read(file, Payload("fallback")))
-    }
-
-    private fun throwingReadAdapter(failure: RuntimeException): TypeAdapter<Payload> {
-        return object : TypeAdapter<Payload>() {
-            override fun write(out: JsonWriter, value: Payload?) {
-                out.nullValue()
-            }
-
-            override fun read(input: JsonReader): Payload {
-                throw failure
-            }
-        }
+        store.write(file, Payload("ordinary"), Payload.serializer())
+        assertEquals(Payload("ordinary"), store.read(file, Payload("fallback"), Payload.serializer()))
     }
 
     private fun tempFilesFor(file: File): Sequence<File> {
@@ -467,12 +422,8 @@ class AtomicJsonFileStoreTest {
         }
     }
 
-    private data class Payload(
-        val value: String,
-    )
-
     @Serializable
-    private data class KotlinxPayload(
+    private data class Payload(
         @SerialName("value") val value: String,
     )
 }

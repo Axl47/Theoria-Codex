@@ -1,8 +1,7 @@
 package com.theoriacodex.data.repository
 
-import com.google.gson.JsonArray
-import com.google.gson.JsonObject
 import com.theoriacodex.data.storage.AtomicJsonFileStore
+import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
@@ -14,6 +13,9 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 /** Last visible media, independent of Recents' monotonic highest-media achievement. */
 data class ReadingPosition(
@@ -47,10 +49,7 @@ const val MAX_READING_POSITIONS = 2_000
  */
 internal const val READING_POSITION_COALESCE_MS = 5_000L
 
-/**
- * Uses explicit wire fields, so release obfuscation cannot change reading-position documents.
- * The store writes compact JSON because the Viewer rewrites this file on every media change.
- */
+/** The store writes compact JSON because the Viewer rewrites this file on every media change. */
 class FileBackedReadingPositionRepository(
     baseDirectory: File,
     private val store: AtomicJsonFileStore = AtomicJsonFileStore(),
@@ -105,7 +104,7 @@ class FileBackedReadingPositionRepository(
 
     private suspend fun load(): List<ReadingPosition> {
         positions?.let { return it }
-        val document = store.read(file, JsonObject())
+        val document = store.read(file, ReadingPositionsFile(), ReadingPositionsFile.serializer())
         return decodeReadingPositions(document, entryLimit).also {
             positions = it
             updates.value = it
@@ -113,43 +112,66 @@ class FileBackedReadingPositionRepository(
     }
 
     private suspend fun persist(updated: List<ReadingPosition>) {
-        store.write(file, encodeReadingPositions(updated))
+        store.write(file, encodeReadingPositions(updated), ReadingPositionsFile.serializer())
         positions = updated
         updates.value = updated
     }
 }
 
-internal fun decodeReadingPositions(document: JsonObject, entryLimit: Int = MAX_READING_POSITIONS): List<ReadingPosition> {
-    val schema = document.get("schemaVersion")?.asInt ?: 1
-    require(schema == 1) { "Unsupported reading-position schema $schema" }
-    val decoded = document.getAsJsonArray("positions")?.mapNotNull { element ->
+/** reading_positions.json. Entries stay raw JSON so one unreadable entry is skipped instead of failing the file. */
+@Serializable
+internal data class ReadingPositionsFile(
+    @SerialName("schemaVersion")
+    val schemaVersion: Int = 1,
+    @SerialName("positions")
+    val positions: List<JsonElement> = emptyList(),
+)
+
+@Serializable
+private data class ReadingPositionRecord(
+    @SerialName("source")
+    val source: String,
+    @SerialName("postId")
+    val postId: String,
+    @SerialName("section")
+    val section: String,
+    @SerialName("mediaNumber")
+    val mediaNumber: Int,
+    @SerialName("lastViewedAt")
+    val lastViewedAt: Long,
+)
+
+/** A newer schema fails rather than being read as, or rewritten to, this one. */
+internal fun decodeReadingPositions(document: ReadingPositionsFile, entryLimit: Int = MAX_READING_POSITIONS): List<ReadingPosition> {
+    require(document.schemaVersion == 1) { "Unsupported reading-position schema ${document.schemaVersion}" }
+    val decoded = document.positions.mapNotNull { element ->
         runCatching {
-            val record = element.asJsonObject
+            val record = DurableJson.decodeFromJsonElement(ReadingPositionRecord.serializer(), element)
             ReadingPosition(
-                postId = PostId(SourceKey.parseOrThrow(record.get("source").asString), record.get("postId").asString),
-                section = RecentPostSection.valueOf(record.get("section").asString),
-                mediaNumber = record.get("mediaNumber").asInt,
-                lastViewedAt = record.get("lastViewedAt").asLong,
+                postId = PostId(SourceKey.parseOrThrow(record.source), record.postId),
+                section = RecentPostSection.valueOf(record.section),
+                mediaNumber = record.mediaNumber,
+                lastViewedAt = record.lastViewedAt,
             )
         }.getOrNull()
-    }.orEmpty()
+    }
     return normalizeReadingPositions(decoded, entryLimit)
 }
 
-private fun encodeReadingPositions(updated: List<ReadingPosition>): JsonObject = JsonObject().apply {
-    addProperty("schemaVersion", 1)
-    add("positions", JsonArray().apply {
-        updated.forEach { position ->
-            add(JsonObject().apply {
-                addProperty("source", position.postId.source.id)
-                addProperty("postId", position.postId.sourcePostId)
-                addProperty("section", position.section.name)
-                addProperty("mediaNumber", position.mediaNumber)
-                addProperty("lastViewedAt", position.lastViewedAt)
-            })
-        }
-    })
-}
+private fun encodeReadingPositions(updated: List<ReadingPosition>) = ReadingPositionsFile(
+    positions = updated.map { position ->
+        DurableJson.encodeToJsonElement(
+            ReadingPositionRecord.serializer(),
+            ReadingPositionRecord(
+                source = position.postId.source.id,
+                postId = position.postId.sourcePostId,
+                section = position.section.name,
+                mediaNumber = position.mediaNumber,
+                lastViewedAt = position.lastViewedAt,
+            ),
+        )
+    },
+)
 
 /** Fixture/default owner; production supplies the file-backed repository. */
 class InMemoryReadingPositionRepository : ReadingPositionRepository {

@@ -1,8 +1,7 @@
 package com.theoriacodex.data.repository
 
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
 import com.theoriacodex.data.storage.AtomicJsonFileStore
+import com.theoriacodex.data.storage.DurableJson
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
@@ -14,6 +13,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 class ProfileDeletionPendingException(cause: Exception) : IllegalStateException(
     "Profile removal paused. Retry removal or reopen the app to finish safely.", cause,
@@ -44,10 +45,10 @@ class ProfileDeletionService(
             }
             // Once the durable intent is admitted, caller departure cannot skip its finish or guard.
             withContext(NonCancellable) {
-                if (!pending) fileStore.writeIntent(journalFile, JsonObject().apply {
-                    addProperty("version", 1)
-                    addProperty("profileId", profileId)
-                }, maxBytes = 4_096)
+                if (!pending) {
+                    fileStore.writeIntent(journalFile, ProfileDeletionJournal(1, profileId), ProfileDeletionJournal.serializer(),
+                        maxBytes = 4_096)
+                }
                 finish(profileId)
             }
         }
@@ -88,8 +89,17 @@ class ProfileDeletionService(
         require(journalFile.length() in 1..4_096L) { "Invalid profile removal journal size" }
         val text = Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
             .decode(ByteBuffer.wrap(journalFile.readBytes())).toString()
-        val record = JsonParser.parseString(text).asJsonObject
-        require(record.get("version").asInt == 1) { "Unsupported profile removal journal" }
-        return record.get("profileId").asString.also { require(it.isNotBlank() && it.length <= 500) }
+        val record = DurableJson.decodeFromString(ProfileDeletionJournal.serializer(), text)
+        require(record.version == 1) { "Unsupported profile removal journal" }
+        return record.profileId.also { require(it.isNotBlank() && it.length <= 500) }
     }
 }
+
+/** pending_profile_deletion.json: both keys are required, so a damaged journal fails instead of guessing. */
+@Serializable
+private data class ProfileDeletionJournal(
+    @SerialName("version")
+    val version: Int,
+    @SerialName("profileId")
+    val profileId: String,
+)

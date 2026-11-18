@@ -1,7 +1,5 @@
 package com.theoriacodex.data.storage
 
-import com.google.gson.Gson
-import com.google.gson.JsonParseException
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -27,70 +25,27 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
 
 /**
- * Verified recovery for legacy JSON reads and atomic whole-file replacement on an injected IO lane.
- * Store-specific schemas remain owned by callers. Writes compact JSON; older pretty-printed files still read.
- * Stores pass a kotlinx [KSerializer] (encoded with [DurableJson]); the Gson overloads remain for JSON trees and for
- * stores the serialization migration has not reached (.docs/exec/gson-to-kotlinx-serialization.html).
+ * Verified recovery for JSON reads and atomic whole-file replacement on an injected IO lane.
+ * Store-specific schemas remain owned by callers, as kotlinx [KSerializer]s encoded with [DurableJson].
+ * Writes compact JSON; older pretty-printed files still read.
  */
-class AtomicJsonFileStore private constructor(
+class AtomicJsonFileStore internal constructor(
     private val ioDispatcher: CoroutineDispatcher,
-    private val gson: Gson,
     private val fileOperations: AtomicFileOperations,
 ) {
-    constructor(
-        ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-        gson: Gson = Gson(),
-    ) : this(
-        ioDispatcher = ioDispatcher,
-        gson = gson,
-        fileOperations = DefaultAtomicFileOperations,
-    )
+    constructor(ioDispatcher: CoroutineDispatcher = Dispatchers.IO) : this(ioDispatcher, DefaultAtomicFileOperations)
 
-    internal constructor(
-        ioDispatcher: CoroutineDispatcher,
-        gson: Gson,
-        fileOperations: AtomicFileOperations,
-        @Suppress("UNUSED_PARAMETER") testOnly: Unit = Unit,
-    ) : this(
-        ioDispatcher = ioDispatcher,
-        gson = gson,
-        fileOperations = fileOperations,
-    )
-
-    /** Gson reflective read, kept for stores that have not moved to kotlinx.serialization yet, and for JSON trees. */
-    suspend fun <T> read(
-        file: File,
-        fallback: T,
-        clazz: Class<T>,
-        logicalStore: String = file.name,
-        onRecovery: (CorruptionRecovery) -> Unit = {},
-    ): T = readDecoded(file, fallback, logicalStore, onRecovery, isMalformed = { it is JsonParseException }) { text ->
-        gson.fromJson(text, clazz)
-    }
-
-    /** kotlinx.serialization read under [DurableJson]; only a [SerializationException] counts as malformed. */
+    /**
+     * Reads [file], or returns [fallback] when it is missing. Bytes that are not UTF-8, blank, a JSON null, or that
+     * [serializer] rejects with a [SerializationException] are quarantined beside the file and reported through
+     * [onRecovery]; any other failure, such as an [IllegalArgumentException] from a record's own checks, propagates.
+     */
     suspend fun <T : Any> read(
         file: File,
         fallback: T,
         serializer: KSerializer<T>,
         logicalStore: String = file.name,
         onRecovery: (CorruptionRecovery) -> Unit = {},
-    ): T = readDecoded(file, fallback, logicalStore, onRecovery, isMalformed = { it is SerializationException }) { text ->
-        if (text.trim() == "null") null else DurableJson.decodeFromString(serializer, text)
-    }
-
-    /**
-     * Reads [file], or returns [fallback] when it is missing. Bytes that are not UTF-8, blank, a JSON null, or that
-     * [decode] rejects with an [isMalformed] failure are quarantined beside the file and reported through
-     * [onRecovery]; any other failure propagates.
-     */
-    private suspend fun <T> readDecoded(
-        file: File,
-        fallback: T,
-        logicalStore: String,
-        onRecovery: (CorruptionRecovery) -> Unit,
-        isMalformed: (RuntimeException) -> Boolean,
-        decode: (String) -> T?,
     ): T {
         return withContext(ioDispatcher) {
             val path = file.toPath()
@@ -101,30 +56,14 @@ class AtomicJsonFileStore private constructor(
             val text = bytes.strictUtf8OrNull()
                 ?: return@withContext quarantine("${file.name} is not valid UTF-8 JSON")
             if (text.isBlank()) return@withContext quarantine("${file.name} is empty")
-            val decoded = try {
-                decode(text)
-            } catch (error: RuntimeException) {
-                if (!isMalformed(error)) throw error
+            if (text.trim() == "null") return@withContext quarantine("${file.name} contains a null JSON value")
+            try {
+                DurableJson.decodeFromString(serializer, text)
+            } catch (error: SerializationException) {
                 error.cancellationCause()?.let { cancellation -> throw cancellation }
-                return@withContext quarantine("${file.name} contains malformed JSON")
+                quarantine("${file.name} contains malformed JSON")
             }
-            decoded ?: quarantine("${file.name} contains a null JSON value")
         }
-    }
-
-    suspend inline fun <reified T> read(
-        file: File,
-        fallback: T,
-        logicalStore: String = file.name,
-        noinline onRecovery: (CorruptionRecovery) -> Unit = {},
-    ): T {
-        return read(
-            file = file,
-            fallback = fallback,
-            clazz = T::class.java,
-            logicalStore = logicalStore,
-            onRecovery = onRecovery,
-        )
     }
 
     private fun <T> recover(
@@ -187,20 +126,15 @@ class AtomicJsonFileStore private constructor(
         }
     }
 
-    /** Gson reflective write, kept for stores that have not moved to kotlinx.serialization yet, and for JSON trees. */
-    suspend fun <T> write(file: File, payload: T) {
-        writePayload(file, maxBytes = null) { gson.toJson(payload) }
-    }
-
-    /** kotlinx.serialization write under [DurableJson]. */
+    /** Atomically replaces [file] with [payload] encoded under [DurableJson]. */
     suspend fun <T> write(file: File, payload: T, serializer: KSerializer<T>) {
         writePayload(file, maxBytes = null) { DurableJson.encodeToString(serializer, payload) }
     }
 
-    /** Flush a bounded operational intent before its caller starts irreversible work. */
-    suspend fun <T> writeIntent(file: File, payload: T, maxBytes: Int) {
+    /** Flush a bounded operational intent, and its new directories, before its caller starts irreversible work. */
+    suspend fun <T> writeIntent(file: File, payload: T, serializer: KSerializer<T>, maxBytes: Int) {
         require(maxBytes > 0)
-        writePayload(file, maxBytes) { gson.toJson(payload) }
+        writePayload(file, maxBytes) { DurableJson.encodeToString(serializer, payload) }
     }
 
     private suspend fun writePayload(file: File, maxBytes: Int?, encode: () -> String) {

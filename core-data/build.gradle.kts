@@ -14,7 +14,6 @@ dependencies {
     implementation(project(":core-domain"))
     implementation(libs.androidx.datastore.core)
     implementation(libs.kotlinx.coroutines.core)
-    implementation(libs.gson)
     implementation(libs.kotlinx.serialization.json)
     testFixturesImplementation(project(":core-domain"))
     testFixturesImplementation(libs.kotlinx.coroutines.core)
