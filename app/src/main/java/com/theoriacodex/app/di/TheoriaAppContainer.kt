@@ -210,6 +210,9 @@ internal class DefaultTheoriaAppContainer(
     private val durableStoreScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val offlineStore = OfflineMediaStore(File(storageDirectory, "offline_media"))
     private val fileStoreRecoveryRegistry = FileStoreRecoveryRegistry()
+    // Opened before anything starts background work: a pins file from a newer build fails construction, and a retry
+    // builds a new container while this one's stores would still be open.
+    private val savedSearches = FileBackedSavedSearchRepository(storageDirectory, recoveryRegistry = fileStoreRecoveryRegistry)
     private val tagSuggestionStore = FileBackedTagSuggestionStore(
         storeFile = File(storageDirectory, "tag_suggestions.json"),
         seedData = loadSeedTagSuggestions(appContext),
@@ -336,7 +339,6 @@ internal class DefaultTheoriaAppContainer(
     )
     private val cacheRepository = OfflineAwareCacheRepository(FileBackedCacheRepository(storageDirectory), offlineMedia)
     private val readingPositions = FileBackedReadingPositionRepository(storageDirectory)
-    private val savedSearches = FileBackedSavedSearchRepository(storageDirectory, recoveryRegistry = fileStoreRecoveryRegistry)
     private val profileBackup = ProfileBackupService(
         settings = settingsRepository,
         store = RoomProfileBackupStore(contentDatabase),
