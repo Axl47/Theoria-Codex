@@ -49,6 +49,19 @@ class HitomiProtocolTest {
         assertProtocolFailure { HitomiProtocol.parseAutocomplete("[[\"tag\"]]") }
         assertProtocolFailure { HitomiProtocol.parseAutocomplete("[[\"tag\",1,\"unknown\"]]") }
         assertProtocolFailure { HitomiProtocol.parseAutocomplete("not-json") }
+        assertProtocolFailure { HitomiProtocol.parseAutocomplete("[[\"tag\",null,\"tag\"]]") }
+        assertProtocolFailure { HitomiProtocol.parseAutocomplete("[[null,1,\"tag\"]]") }
+    }
+
+    @Test
+    fun `reads autocomplete counts sent as strings and names sent as numbers`() {
+        assertEquals(
+            listOf(
+                HitomiAutocompleteEntry(name = "kio", count = 12, namespace = "artist"),
+                HitomiAutocompleteEntry(name = "7", count = 3, namespace = "tag"),
+            ),
+            HitomiProtocol.parseAutocomplete("[[\" kio \",\"12\",\"Artist\"],[7,3.0,\"tag\",\"extra\"]]"),
+        )
     }
 
     @Test
