@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-11-17
+
 ### Added
 
 - While you type a tag in Search, tags you've searched before appear first, marked with a history icon, up to three at a time. That includes artists, groups, parodies, characters, languages and Hitomi's female and male tags: each shows where you type that kind of tag, or after a prefix like `artist:`, and is added with its type. Searches still in Recents count from the start.
