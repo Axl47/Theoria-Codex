@@ -1,10 +1,9 @@
 package com.theoriacodex.data.repository
 
-import com.google.gson.Gson
-import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.PostStorageCodec
 import com.theoriacodex.data.storage.PostStorageRecord
 import com.theoriacodex.domain.model.ImageRef
@@ -28,11 +27,19 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 
-/** Completed offline copies live outside disposable caches. The manifest is the commit point. */
+/**
+ * Completed offline copies live outside disposable caches. The manifest is the commit point.
+ * [postRecords] stores each post; tests wrap it to count decodes.
+ */
 class OfflineMediaStore(
     private val directory: File,
-    private val gson: Gson = Gson(),
+    private val postRecords: KSerializer<PostStorageRecord> = PostStorageRecord.serializer(),
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private val ownedPath = directory.absoluteFile.toPath().normalize()
@@ -270,8 +277,9 @@ class OfflineMediaStore(
         return root.getAsJsonArray("mediaBytes").map { it.asLong } == files.map { it.length() }
     }
 
-    private fun decodeStored(element: JsonElement): Post? =
-        gson.fromJson(element, PostStorageRecord::class.java)?.let(PostStorageCodec::decode)
+    // The root stays a Gson tree for the v2 reader until v2 support is retired.
+    private fun decodeStored(element: JsonElement?): Post? =
+        element?.let { PostStorageCodec.decode(DurableJson.decodeFromString(postRecords, it.toString())) }
 
     /** Root owners are plain strings that R8 never renames, so they survive even when the post cannot be decoded. */
     private fun salvageOwners(folder: File): Set<String> = runCatching {
@@ -287,12 +295,12 @@ class OfflineMediaStore(
     }
 
     private fun writeManifest(folder: File, post: Post, sourcePost: Post, owners: Set<String>) {
-        val root = JsonObject().apply {
-            addProperty("version", MANIFEST_VERSION)
-            add("post", gson.toJsonTree(PostStorageCodec.encode(post)))
-            add("sourcePost", gson.toJsonTree(PostStorageCodec.encode(sourcePost)))
-            add("owners", JsonArray().apply { owners.sorted().forEach(::add) })
-            add("mediaBytes", JsonArray().apply { post.media.forEach { add(File(checkNotNull(it.localPath) { "Offline media is missing its local path" }).length()) } })
+        val root = buildJsonObject {
+            put("version", MANIFEST_VERSION)
+            put("post", DurableJson.encodeToJsonElement(postRecords, PostStorageCodec.encode(post)))
+            put("sourcePost", DurableJson.encodeToJsonElement(postRecords, PostStorageCodec.encode(sourcePost)))
+            putJsonArray("owners") { owners.sorted().forEach { add(it) } }
+            putJsonArray("mediaBytes") { post.media.forEach { add(File(checkNotNull(it.localPath) { "Offline media is missing its local path" }).length()) } }
         }
         val temporary = File(folder, "manifest.pending")
         try {
@@ -365,7 +373,7 @@ class OfflineMediaStore(
         const val MANIFEST_NAME = "manifest.json"
         /** v2 serialized the domain Post reflectively; see [decodeLegacyOfflinePost]. */
         const val LEGACY_MANIFEST_VERSION = 2
-        /** v3 serializes the keep-ruled PostStorageRecord with stable keys. */
+        /** v3 stores each post as a PostStorageRecord with stable keys. */
         const val MANIFEST_VERSION = 3
     }
 }

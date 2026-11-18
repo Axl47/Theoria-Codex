@@ -48,13 +48,13 @@ dependencies {
     api(project(":core-data"))
     implementation(project(":core-domain"))
     implementation(libs.kotlinx.coroutines.core)
-    implementation(libs.gson)
     implementation(libs.kotlinx.serialization.json)
     // The public database factory extends RoomDatabase, so consumers need this superclass.
     api(libs.androidx.room.runtime)
     annotationProcessor(libs.androidx.room.compiler)
 
     testImplementation(libs.junit)
+    testImplementation(testFixtures(project(":core-data")))
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.androidx.room.testing)

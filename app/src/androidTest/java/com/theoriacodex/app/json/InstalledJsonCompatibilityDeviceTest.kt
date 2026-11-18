@@ -14,15 +14,23 @@ import com.theoriacodex.app.statistics.StatsSharePost
 import com.theoriacodex.app.update.ChangelogSection
 import com.theoriacodex.app.update.PendingPostInstallChangelog
 import com.theoriacodex.app.update.UpdateStateSnapshot
+import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.ImageRefStorageRecord
 import com.theoriacodex.data.storage.PostStorageCodec
 import com.theoriacodex.data.storage.PostStorageRecord
+import com.theoriacodex.data.storage.RecentSearchPayload
+import com.theoriacodex.data.storage.RecentSearchPayloadCodec
 import com.theoriacodex.data.storage.VideoVariantRecord
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchFacet
+import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.VideoVariant
 import com.theoriacodex.domain.source.SiteCredentials
@@ -40,6 +48,7 @@ class InstalledJsonCompatibilityDeviceTest {
 
     @Test
     fun stableWireKeysSurviveTheInstalledTargetApk() {
+        // Backups still read the post record graph with Gson, so its Gson keys stay pinned until backups move.
         assertJsonKeys(
             PostStorageRecord(),
             "source",
@@ -155,13 +164,13 @@ class InstalledJsonCompatibilityDeviceTest {
             createdAtEpochMs = null,
         )
 
-        val encoded = gson.toJson(PostStorageCodec.encode(post))
+        val encoded = DurableJson.encodeToString(PostStorageRecord.serializer(), PostStorageCodec.encode(post))
         val wire = JSONObject(encoded)
         assertVariantWire(wire.getJSONArray("fullVideoVariants").getJSONObject(0), fullVariants[0])
         assertVariantWire(wire.getJSONArray("fullVideoVariants").getJSONObject(1), fullVariants[1])
         assertVariantWire(wire.getJSONArray("media").getJSONObject(0).getJSONArray("videoVariants").getJSONObject(0), galleryVariants[0])
         assertEquals(post.preview.url, wire.getString("previewUrl"))
-        val restored = requireNotNull(PostStorageCodec.decode(gson.fromJson(encoded, PostStorageRecord::class.java)))
+        val restored = requireNotNull(PostStorageCodec.decode(DurableJson.decodeFromString(PostStorageRecord.serializer(), encoded)))
         assertEquals(post, restored)
         assertEquals(emptyList<VideoVariant>(), restored.preview.videoVariants)
         assertEquals(fullVariants, restored.full?.videoVariants)
@@ -176,7 +185,7 @@ class InstalledJsonCompatibilityDeviceTest {
             "fullUrl":"https://example.test/full.mp4","fullMime":"video/mp4",
             "media":[{"url":"https://example.test/gallery.webm","mime":"video/webm"}]
         }""".trimIndent()
-        val restored = requireNotNull(PostStorageCodec.decode(gson.fromJson(legacy, PostStorageRecord::class.java)))
+        val restored = requireNotNull(PostStorageCodec.decode(DurableJson.decodeFromString(PostStorageRecord.serializer(), legacy)))
         assertEquals("https://example.test/preview.mp4", restored.preview.url)
         assertEquals("https://example.test/full.mp4", restored.full?.url)
         assertEquals("https://example.test/gallery.webm", restored.media.single().url)
@@ -223,8 +232,33 @@ class InstalledJsonCompatibilityDeviceTest {
         assertEquals(keys.toSet(), JSONObject(DurableJson.encodeToString(serializer, value)).keySetCompat())
     }
 
+    @Test
+    fun recentSearchPayloadsRoundTripAndGsonRowsStillDecode() {
+        val query = Query(
+            mode = QueryMode.Unified,
+            includeTerms = listOf(SearchTerm("a & b", SearchFacet.ARTIST, "artist")),
+            excludeTerms = listOf(SearchTerm("<c>")),
+            sort = SortMode.NEWEST,
+            dateRange = null,
+            minScore = null,
+        )
+        val sources = listOf(SourceKey.GELBOORU, SourceKey.PIXIV)
+        val encoded = RecentSearchPayloadCodec.encodeJson(query, RecentSearchKind.MULTI_SEARCH, sources)
+        assertEquals(
+            setOf("recentSearchSchemaVersion", "query", "kind", "sources", "sourceTags"),
+            JSONObject(encoded).keySetCompat(),
+        )
+        assertEquals(RecentSearchPayload(query, RecentSearchKind.MULTI_SEARCH, sources), RecentSearchPayloadCodec.decodeJson(encoded))
+        val gsonRow = """{"recentSearchSchemaVersion":1,"query":{"schemaVersion":2,"modeType":"unified",""" +
+            """"includeTags":["x"],"excludeTags":[],"sort":"TOP"},"kind":"FYP","sources":["PIXIV"],""" +
+            """"sourceTags":{"PIXIV":["rock \u0026 roll"]}}"""
+        assertEquals(mapOf(SourceKey.PIXIV to listOf("rock & roll")), RecentSearchPayloadCodec.decodeJson(gsonRow).sourceTags)
+    }
+
     private fun assertVariantWire(wire: JSONObject, expected: VideoVariant) {
-        assertEquals(setOf("url", "height", "original", "mime"), wire.keySetCompat())
+        // Null values are omitted, as Gson omitted them.
+        val present = setOfNotNull("height".takeIf { expected.height != null }, "mime".takeIf { expected.mime != null })
+        assertEquals(setOf("url", "original") + present, wire.keySetCompat())
         assertEquals(expected.url, wire.getString("url"))
         assertEquals(expected.height, if (wire.isNull("height")) null else wire.getInt("height"))
         assertEquals(expected.original, wire.getBoolean("original"))

@@ -1,8 +1,6 @@
 package com.theoriacodex.data.android.room
 
 import androidx.room.withTransaction
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import com.theoriacodex.data.repository.CodexCleaningRequest
 import com.theoriacodex.data.repository.CodexCleaningSnapshot
 import com.theoriacodex.data.repository.CodexBulkImportResult
@@ -49,14 +47,11 @@ class RoomCodexLikesRepository(
     private val database: TheoriaRoomDatabase,
     private val clock: () -> Long = System::currentTimeMillis,
     private val newId: () -> String = { UUID.randomUUID().toString() },
-    gson: Gson = Gson(),
     private val writeGuard: ProfileLibraryWriteGuard = ProfileLibraryWriteGuard(),
 ) : CodexRepository, LikesRepository, CodexLikesTransactions, SourceLibraryPresence {
     private val dao = database.codexLikesDao()
-    private val codec = RoomPayloadCodec(gson)
-    private val postCodec = LocalPostPayloadCodec(gson)
-    private val sharedPostPayloads = SharedPostPayloadWriter(dao, LocalPostPayloadCodec(gson))
-    private val retainedPayloads = RetainedPostPayloadCache(postCodec::decode)
+    private val sharedPostPayloads = SharedPostPayloadWriter(dao)
+    private val retainedPayloads = RetainedPostPayloadCache(LocalPostPayloadCodec::decode)
     private val summaries = RoomCodexSummaryQueries(dao, retainedPayloads)
 
     override suspend fun cleanCodex(request: CodexCleaningRequest): CodexCleaningSnapshot = database.withTransaction {
@@ -67,11 +62,11 @@ class RoomCodexLikesRepository(
         val rows = dao.overlappingItems(request.targetId, request.comparisonIds.sorted())
         val items = rows.map { checkNotNull(it.toDomainOrNull()) }
         val posts = rows.map { row ->
-            codec.decodePost(checkNotNull(dao.post(row.source, row.sourcePostId)))
+            LocalPostPayloadCodec.decode(checkNotNull(dao.post(row.source, row.sourcePostId)))
         }
         val likes = if (request.targetId == ProfileLibraryIds.likes(request.profileId)) {
             rows.mapNotNull { row ->
-                dao.likedPost(request.profileId, row.source, row.sourcePostId)?.let { checkNotNull(codec.decodeLike(it)) }
+                dao.likedPost(request.profileId, row.source, row.sourcePostId)?.let { checkNotNull(it.toLikedPostOrNull()) }
             }
         } else emptyList()
         rows.forEach { row -> dao.deleteCodexItem(request.targetId, row.source, row.sourcePostId) }
@@ -91,7 +86,7 @@ class RoomCodexLikesRepository(
                 check(request.targetId == ProfileLibraryIds.likes(request.profileId) && like.profileId == request.profileId)
                 dao.insertLike(LikedPostEntity(
                     like.profileId, like.postId.source.id, like.postId.sourcePostId,
-                    like.likedAtEpochMs, codec.encodeTags(like.tags),
+                    like.likedAtEpochMs, LikedTagsCodec.encode(like.tags),
                 ))
             }
         }
@@ -220,7 +215,7 @@ class RoomCodexLikesRepository(
             codex = entity.toDomain(dao.automaticTagsForCodex(codexId)),
             position = position,
             items = rows.mapNotNull { it.toDomainOrNull() },
-            posts = rows.mapNotNull { row -> dao.post(row.source, row.sourcePostId)?.let(codec::decodePost) },
+            posts = rows.mapNotNull { row -> dao.post(row.source, row.sourcePostId)?.let(LocalPostPayloadCodec::decode) },
         )
         deleteCodex(codexId)
         snapshot
@@ -270,7 +265,7 @@ class RoomCodexLikesRepository(
         withContext(Dispatchers.IO) { dao.hasPosts(source.id) }
 
     override suspend fun getPost(postId: PostId): Post? = withContext(Dispatchers.IO) {
-        dao.post(postId.source.id, postId.sourcePostId)?.let(codec::decodePost)
+        dao.post(postId.source.id, postId.sourcePostId)?.let(LocalPostPayloadCodec::decode)
     }
 
     override suspend fun addItems(codexId: String, posts: List<Post>): Int {
@@ -340,7 +335,7 @@ class RoomCodexLikesRepository(
 
     override fun observeLikes(profileId: String): Flow<List<LikedPost>> {
         val normalized = CodexLikesPolicy.normalizeProfileId(profileId)
-        return dao.observeLikes(normalized).map { entities -> entities.mapNotNull(codec::decodeLike) }
+        return dao.observeLikes(normalized).map { entities -> entities.mapNotNull(LikedPostEntity::toLikedPostOrNull) }
             .distinctUntilChanged().flowOn(Dispatchers.Default)
     }
 
@@ -485,8 +480,8 @@ class RoomCodexLikesRepository(
             val memberships = dao.itemsForCodex(systemCodexId).filter { (it.source to it.sourcePostId) in likedKeys }
             val undo = ClearedLikesSnapshot(
                 items = memberships.mapNotNull { it.toDomainOrNull() },
-                posts = likedBeforeClear.mapNotNull { dao.post(it.source, it.sourcePostId)?.let(codec::decodePost) },
-                likes = likedBeforeClear.mapNotNull(codec::decodeLike),
+                posts = likedBeforeClear.mapNotNull { dao.post(it.source, it.sourcePostId)?.let(LocalPostPayloadCodec::decode) },
+                likes = likedBeforeClear.mapNotNull(LikedPostEntity::toLikedPostOrNull),
             )
             val clearedLikes = dao.deleteLikes(normalized)
             var removedMemberships = 0
@@ -508,7 +503,7 @@ class RoomCodexLikesRepository(
             snapshot.likes.forEach { like ->
                 dao.insertLike(LikedPostEntity(
                     like.profileId, like.postId.source.id, like.postId.sourcePostId,
-                    like.likedAtEpochMs, codec.encodeTags(like.tags),
+                    like.likedAtEpochMs, LikedTagsCodec.encode(like.tags),
                 ))
             }
         }
@@ -585,39 +580,23 @@ class RoomCodexLikesRepository(
                 postId.source.id,
                 postId.sourcePostId,
                 clock(),
-                codec.encodeTags(CodexLikesPolicy.normalizeLikedTags(tags)),
+                LikedTagsCodec.encode(CodexLikesPolicy.normalizeLikedTags(tags)),
             )
         )
         return true
     }
 }
 
-private class RoomPayloadCodec(
-    private val gson: Gson,
-) {
-    private val tagListType = object : TypeToken<List<String>>() {}.type
-    private val postCodec = LocalPostPayloadCodec(gson)
-
-    fun decodePost(entity: PostEntity): Post = postCodec.decode(entity)
-
-    fun decodePostRow(row: CodexPostRow): Post {
-        return decodePost(PostEntity(row.source, row.sourcePostId, row.payloadJson))
-    }
-
-    fun encodeTags(tags: List<String>): String = gson.toJson(tags, tagListType)
-
-    fun decodeLike(entity: LikedPostEntity): LikedPost? {
-        val postId = entity.toPostIdOrNull() ?: return null
-        val tags = runCatching { gson.fromJson<List<String>>(entity.tagsJson, tagListType) }
-            .getOrNull()
-            .orEmpty()
-        return LikedPost(
-            profileId = entity.profileId,
-            postId = postId,
-            likedAtEpochMs = entity.likedAtEpochMs,
-            tags = CodexLikesPolicy.normalizeLikedTags(tags),
-        )
-    }
+/** Unreadable tags degrade to none rather than hiding the like. */
+private fun LikedPostEntity.toLikedPostOrNull(): LikedPost? {
+    val postId = toPostIdOrNull() ?: return null
+    val tags = runCatching { LikedTagsCodec.decode(tagsJson) }.getOrDefault(emptyList())
+    return LikedPost(
+        profileId = profileId,
+        postId = postId,
+        likedAtEpochMs = likedAtEpochMs,
+        tags = CodexLikesPolicy.normalizeLikedTags(tags),
+    )
 }
 
 private fun CodexEntity.toDomain(automaticTagEntities: List<CodexAutomaticTagEntity> = emptyList()): Codex {

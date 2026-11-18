@@ -1,8 +1,6 @@
 package com.theoriacodex.data.android.room
 
 import androidx.room.withTransaction
-import com.google.gson.Gson
-import com.google.gson.JsonParser
 import com.theoriacodex.data.repository.BackupLibrary
 import com.theoriacodex.data.repository.LikedPost
 import com.theoriacodex.data.repository.ProfileBackupStore
@@ -24,11 +22,9 @@ import com.theoriacodex.domain.tags.sourceTagKey
 /** Logical snapshots and additive imports share the existing Room transaction boundary. */
 class RoomProfileBackupStore(
     private val database: TheoriaRoomDatabase,
-    private val gson: Gson = Gson(),
 ) : ProfileBackupStore {
     private val dao = database.codexLikesDao()
     private val recents = database.recentsDao()
-    private val postCodec = LocalPostPayloadCodec(gson)
 
     override suspend fun snapshot(includeRecents: Boolean): BackupLibrary = database.withTransaction {
         val codices = dao.codices().map { row ->
@@ -43,7 +39,7 @@ class RoomProfileBackupStore(
         }
         val likes = dao.allLikes().map { row ->
             LikedPost(row.profileId, PostId(SourceKey.parseOrThrow(row.source), row.sourcePostId), row.likedAtEpochMs,
-                JsonParser.parseString(row.tagsJson).asJsonArray.map { it.asString })
+                LikedTagsCodec.decode(row.tagsJson))
         }
         val watchedRows = if (includeRecents) recents.watched().filter { it.section != RecentPostSection.FYP.name } else emptyList()
         val referencedIds = items.map { it.postId }.toSet() + likes.map { it.postId } + watchedRows.map {
@@ -51,7 +47,7 @@ class RoomProfileBackupStore(
         }
         val likesById = likes.associateBy { it.postId }
         val posts = referencedIds.map { id ->
-            dao.post(id.source.id, id.sourcePostId)?.let(postCodec::decode)
+            dao.post(id.source.id, id.sourcePostId)?.let(LocalPostPayloadCodec::decode)
                 ?: legacyLikedPost(requireNotNull(likesById[id]) { "Saved post payload is missing" })
         }
         val postsById = posts.associateBy { it.id }
@@ -62,7 +58,7 @@ class RoomProfileBackupStore(
                     RecentPostSection.valueOf(it.section), it.maxViewedMediaNumber)
             },
             if (includeRecents) recents.searches().map { row ->
-                val payload = RecentSearchPayloadCodec.decodeJson(row.queryPayloadJson, gson)
+                val payload = RecentSearchPayloadCodec.decodeJson(row.queryPayloadJson)
                 RecentSearchEntry(payload.query, row.queryHash, row.searchedAtEpochMs,
                     payload.kind, payload.sources, payload.sourceTags)
             } else emptyList(),
@@ -74,7 +70,7 @@ class RoomProfileBackupStore(
             var collectionsAdded = 0
             // Existing shared payloads can contain useful offline bytes and richer resolved media.
             library.posts.forEach { post ->
-                dao.insertPost(PostEntity(post.id.source.id, post.id.sourcePostId, postCodec.encode(post)))
+                dao.insertPost(PostEntity(post.id.source.id, post.id.sourcePostId, LocalPostPayloadCodec.encode(post)))
             }
             var displayOrder = dao.codices().size
             library.codices.forEach { codex ->
@@ -98,7 +94,7 @@ class RoomProfileBackupStore(
                 dao.insertCodexItem(CodexItemEntity(systemCodexId, like.postId.source.id,
                     like.postId.sourcePostId, like.likedAtEpochMs))
                 dao.insertLike(LikedPostEntity(like.profileId, like.postId.source.id, like.postId.sourcePostId,
-                    like.likedAtEpochMs, gson.toJson(like.tags)))
+                    like.likedAtEpochMs, LikedTagsCodec.encode(like.tags)))
             }
             mergeRecents(library)
             collectionsAdded
@@ -119,7 +115,7 @@ class RoomProfileBackupStore(
         library.searches.asReversed().forEach { entry ->
             val existing = recents.search(entry.queryHash)
             if (existing == null || entry.searchedAtEpochMs > existing.searchedAtEpochMs) {
-                recents.upsertSearch(RecentSearchEntity(entry.queryHash, RecentSearchPayloadCodec.encodeJson(entry, gson),
+                recents.upsertSearch(RecentSearchEntity(entry.queryHash, RecentSearchPayloadCodec.encodeJson(entry),
                     entry.searchedAtEpochMs, recents.nextSearchSequence()))
             }
         }
