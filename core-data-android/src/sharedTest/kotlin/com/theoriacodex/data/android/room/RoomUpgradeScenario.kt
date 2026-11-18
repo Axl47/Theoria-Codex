@@ -66,7 +66,10 @@ object RoomUpgradeScenario {
                 recents.recordSearch(query(), "new-search", RecentSearchKind.SOURCE, listOf(SourceKey.PIXIV))
                 RoomMediaDurationRepository(database).put(durationKey, duration)
                 RoomViewerTranslationCacheRepository(database, clock = { 100L }).putAll(mapOf(translationKey to "Blue sky"))
-                assertEquals(10, database.openHelper.readableDatabase.version)
+                assertEquals(11, database.openHelper.readableDatabase.version)
+                database.openHelper.readableDatabase.query(
+                    "SELECT name FROM sqlite_master WHERE name IN ('migration_metadata','recents_migration_metadata')",
+                ).use { assertFalse(it.moveToFirst()) }
                 database.openHelper.readableDatabase.query("PRAGMA foreign_key_check").use { assertFalse(it.moveToFirst()) }
             }
 
@@ -160,6 +163,8 @@ object RoomUpgradeScenario {
             database.execSQL("INSERT INTO codex_items VALUES(?,'PIXIV','shared',15)", arrayOf("likes-$profile"))
             database.execSQL("INSERT INTO liked_posts VALUES(?,'PIXIV','shared',15,'[\"sky\"]')", arrayOf(profile))
         }
+        // Proof rows the retired importers wrote; the v11 migration drops their tables.
+        database.execSQL("INSERT INTO migration_metadata VALUES('codex-likes','s','c','l','d','p',1,1,1,1,1,1,1,1,1)")
         if (version >= 2) {
             val sectionColumn = if (version >= 3) ",section" else ""
             val progressColumn = if (version >= 6) ",max_viewed_media_number" else ""
@@ -171,6 +176,7 @@ object RoomUpgradeScenario {
                     "VALUES('PIXIV',?,${30 + index},${index + 1},?,'search:sky'$sectionValue$progressValue)", arrayOf(id, origin))
             }
             database.execSQL("INSERT INTO recent_searches VALUES('old-search',?,32,1)", arrayOf(LEGACY_QUERY))
+            database.execSQL("INSERT INTO recents_migration_metadata VALUES('recents','s',1,1,0,'d',1,1,'p',1,1)")
         }
         if (version >= 4) {
             for (tag in listOf("sky", "cloud")) {
