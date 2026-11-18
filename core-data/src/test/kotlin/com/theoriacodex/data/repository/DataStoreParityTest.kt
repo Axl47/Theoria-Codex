@@ -1,0 +1,157 @@
+package com.theoriacodex.data.repository
+
+import com.theoriacodex.data.storage.assertGsonParity
+import org.junit.Test
+
+/**
+ * The four DataStore files read and write the same JSON under kotlinx.serialization as under Gson. Samples set every
+ * nullable property; goldens are files Gson wrote (source-identity) or hand-built partial, quoted, and retired-key
+ * inputs (datastore) that both libraries read the same way. Inputs with a null on a non-null field are excluded here:
+ * Gson left those nulls in place, and DataStoreGoldenTest pins how kotlinx repairs them.
+ */
+class DataStoreParityTest {
+    @Test
+    fun `settings file matches Gson`() {
+        val settings = SettingsStoreRecord(
+            followedCreators = listOf(
+                FollowedCreatorRecord(
+                    "PIXIV", "Artist & <co>", "3", "https://www.pixiv.net/users/3", "user:3", "follow-1",
+                    listOf("seen"), listOf("latest"), 9L,
+                ),
+            ),
+            sourceCatalogVersion = 3,
+            enabledSources = listOf("PIXIV", "custom_a_example"),
+            sourceWeights = mapOf("PIXIV" to 0.7, "custom_a_example" to 1.0),
+            sourceWeightsByConfiguration = mapOf("PIXIV" to mapOf("PIXIV" to 1.0)),
+            viewerPlaybackMode = "ONCE",
+            videoQuality = "HIGH",
+            downloadQuality = "BEST",
+            downloadsOverMetered = false,
+            downloadsOverRoaming = true,
+            cacheFullImageOnSave = true,
+            resolveUnknownAnimatedDurations = true,
+            invertMultiImageScrollDirection = true,
+            oldSearchBar = true,
+            codexLibrarySort = "NAME",
+            instantSeek = true,
+            viewerAutoRotateVideos = false,
+            viewerCommentOrder = "NEWEST",
+            viewerAutomaticTextTranslationEnabled = true,
+            viewerEnabledOcrLanguages = listOf("JAPANESE"),
+            scenarioPreset = "EMPTY_RESULTS",
+            recommendationProfiles = listOf(RecommendationProfileRecord("profile-main", "Main = 1")),
+            activeProfileId = "profile-main",
+            activeProfile = "USER_1",
+            forYouBlacklistByProfile = mapOf("profile-main" to listOf(ForYouBlacklistEntryRecord("PIXIV", listOf("x")))),
+            favoriteTagsByProfile = mapOf(
+                "profile-main" to listOf(FavoriteTagEntryRecord("GELBOORU", "cat_ears", listOf("cat_ears", "fox_ears"), "Ears")),
+            ),
+            providerHealth = listOf(ProviderHealthSnapshotRecord("PIXIV", "DEGRADED", 1L, 2L, "timeout", "slow")),
+        )
+        assertGsonParity(
+            samples = listOf(SettingsDataStoreFile(), SettingsDataStoreFile(settings = settings)),
+            goldenJson = listOf(
+                golden("source-identity/settings-default"),
+                golden("source-identity/settings-multi-source"),
+                golden("datastore/settings-missing-values"),
+                golden("datastore/settings-null-primitive"),
+                golden("datastore/settings-null-string"),
+                golden("datastore/settings-quoted-numbers"),
+                golden("datastore/settings-retired-keys"),
+            ),
+        )
+    }
+
+    @Test
+    fun `ui restore file matches Gson`() {
+        val feedFilters = FeedFabRestoreState(
+            excludedSavedSearches = listOf("saved"),
+            followedSources = listOf("PIXIV"),
+            followedAuthors = listOf("author"),
+            animatedOnly = true,
+            hideLiked = true,
+            hideSaved = true,
+            hideWatched = true,
+            durationMinBucket = 2,
+            durationMaxBucket = 20,
+            sortMode = "NEWEST",
+            source = "PIXIV",
+            language = "english",
+            fullColorOnly = true,
+            searchAnimationByScope = mapOf("scope" to SearchAnimationFilterRestoreState(true, 1, 9)),
+        )
+        val state = UiRestoreStoreRecord(
+            lastTab = "codex",
+            searchScrollStates = mapOf("h" to SearchScrollStateRecord(7, 12)),
+            feedFabRestoreStates = mapOf("ctx" to feedFilters),
+            viewerLaunchContext = ViewerLaunchContextRecord("q", 4, "CODEX", 21, "CODEX"),
+        )
+        assertGsonParity(
+            samples = listOf(UiRestoreDataStoreFile(), UiRestoreDataStoreFile(state = state)),
+            goldenJson = listOf(
+                golden("datastore/ui-restore-missing-state"),
+                golden("datastore/ui-restore-quoted-numbers"),
+                golden("datastore/ui-restore-retired-keys"),
+            ),
+        )
+    }
+
+    @Test
+    fun `statistics file matches Gson`() {
+        val statistics = StatisticsStoreRecord(
+            history = mapOf("2026-11-02" to DailyActivity(1L, 2L, 3L, 4L, 5L, 6L, 7L)),
+            codexStatistics = mapOf(
+                "codex" to CodexStatistics(5L, 6L, mapOf("PIXIV:1" to CodexPostStatistics("Label & <x>", 1L, 2L, 3L))),
+            ),
+            appOpenCount = 1L,
+            totalForegroundMs = 2L,
+            browsingMs = 3L,
+            watchingMs = 4L,
+            codexMs = 5L,
+            watchedPostCount = 6L,
+            watchedBySource = mapOf("PIXIV" to 3L),
+            watchedByTag = listOf(StatisticsTagCountRecord("PIXIV", "cat", 2L)),
+            searchCount = 7L,
+            searchesBySource = mapOf("GELBOORU" to 4L),
+            searchesByTag = listOf(StatisticsTagCountRecord("GELBOORU", "dog", 1L)),
+            searchesByTagSeeded = true,
+            searchesByTypedTag = listOf(StatisticsTypedTagCountRecord("PIXIV", "a", "ARTIST", "artist", 1L)),
+            searchesByTypedTagSeeded = true,
+            forYouSearchCount = 8L,
+            forYouSaveCount = 9L,
+            postUrlCopyCount = 10L,
+            codexEntryCounts = mapOf("codex" to 11L),
+            translatedPhraseCount = 12L,
+            translatedSourceCharacterCount = 13L,
+        )
+        assertGsonParity(
+            samples = listOf(StatisticsDataStoreFile(), StatisticsDataStoreFile(statistics = statistics)),
+            goldenJson = listOf(
+                golden("datastore/statistics-missing-statistics"),
+                golden("datastore/statistics-null-primitive"),
+                golden("datastore/statistics-quoted-numbers"),
+                golden("datastore/statistics-retired-keys"),
+            ),
+        )
+    }
+
+    @Test
+    fun `site profile file matches Gson`() {
+        val site = SiteProfileRecord(
+            "custom_a_example", "https://a.example", "A & <b>", "GELBOORU_02", 5, "Agent", "https://a.example/",
+            true, 1L, 2L, "https://a.example/icon.png",
+        )
+        assertGsonParity(
+            samples = listOf(SiteProfileStoreFile(), SiteProfileStoreFile(sites = listOf(site, null))),
+            goldenJson = listOf(
+                golden("datastore/sites-missing-required"),
+                golden("datastore/sites-null-primitive"),
+                golden("datastore/sites-quoted-numbers"),
+                golden("datastore/sites-retired-keys"),
+            ),
+        )
+    }
+
+    private fun golden(name: String): String =
+        checkNotNull(javaClass.classLoader.getResource("golden/$name.json")) { "Missing golden $name" }.readText()
+}

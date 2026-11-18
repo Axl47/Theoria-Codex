@@ -1,16 +1,18 @@
 package com.theoriacodex.data.repository
 
-import com.google.gson.annotations.SerializedName
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 /** The `state` object of `ui_restore_store_v2.json`: last tab, Search scroll positions, feed filters, and Viewer launch. */
+@Serializable
 internal data class UiRestoreStoreRecord(
-    @field:SerializedName("lastTab")
+    @SerialName("lastTab")
     val lastTab: String? = null,
-    @field:SerializedName("searchScrollStates")
+    @SerialName("searchScrollStates")
     val searchScrollStates: Map<String, SearchScrollStateRecord> = emptyMap(),
-    @field:SerializedName("feedFabRestoreStates")
+    @SerialName("feedFabRestoreStates")
     val feedFabRestoreStates: Map<String, FeedFabRestoreState> = emptyMap(),
-    @field:SerializedName("viewerLaunchContext")
+    @SerialName("viewerLaunchContext")
     val viewerLaunchContext: ViewerLaunchContextRecord? = null,
 ) {
     fun toMemoryState(): PersistedUiRestoreState {
@@ -47,10 +49,11 @@ internal data class PersistedUiRestoreState(
     val viewerLaunchContext: ViewerLaunchContext?,
 )
 
+@Serializable
 internal data class SearchScrollStateRecord(
-    @field:SerializedName("firstVisibleItemIndex")
+    @SerialName("firstVisibleItemIndex")
     val firstVisibleItemIndex: Int = 0,
-    @field:SerializedName("firstVisibleItemOffsetPx")
+    @SerialName("firstVisibleItemOffsetPx")
     val firstVisibleItemOffsetPx: Int = 0,
 ) {
     fun toDomain(): SearchScrollState {
@@ -70,16 +73,25 @@ internal data class SearchScrollStateRecord(
     }
 }
 
+@Serializable
 internal data class ViewerLaunchContextRecord(
-    @field:SerializedName("queryHash") val queryHash: String = "",
-    @field:SerializedName("startIndex") val startIndex: Int = 0,
-    @field:SerializedName("streamSource") val streamSource: String = ViewerStreamSource.SEARCH.name,
-    @field:SerializedName("scrollOffsetHint") val scrollOffsetHint: Int = 0,
-    @field:SerializedName("recentsSection") val recentsSection: String? = null,
+    @SerialName("queryHash") val queryHash: String = "",
+    @SerialName("startIndex") val startIndex: Int = 0,
+    @SerialName("streamSource") val streamSource: String = ViewerStreamSource.SEARCH.name,
+    @SerialName("scrollOffsetHint") val scrollOffsetHint: Int = 0,
+    @SerialName("recentsSection") val recentsSection: String? = null,
 ) {
-    fun toDomain(): ViewerLaunchContext = decodeRestoredViewerLaunchContext(
-        queryHash, startIndex, streamSource, scrollOffsetHint, recentsSection,
-    )
+    fun toDomain(): ViewerLaunchContext {
+        val decodedStreamSource = runCatching { ViewerStreamSource.valueOf(streamSource) }
+            .getOrDefault(ViewerStreamSource.SEARCH)
+        return ViewerLaunchContext(
+            queryHash = queryHash,
+            startIndex = startIndex,
+            streamSource = decodedStreamSource,
+            scrollOffsetHint = scrollOffsetHint,
+            recentsSection = decodeRestoredRecentsSection(recentsSection, decodedStreamSource, queryHash),
+        )
+    }
 
     companion object {
         fun fromDomain(context: ViewerLaunchContext): ViewerLaunchContextRecord {
@@ -92,22 +104,4 @@ internal data class ViewerLaunchContextRecord(
             )
         }
     }
-}
-
-internal fun decodeRestoredViewerLaunchContext(
-    queryHash: String,
-    startIndex: Int,
-    streamSource: String,
-    scrollOffsetHint: Int,
-    recentsSection: String?,
-): ViewerLaunchContext {
-    val decodedStreamSource = runCatching { ViewerStreamSource.valueOf(streamSource) }
-        .getOrDefault(ViewerStreamSource.SEARCH)
-    return ViewerLaunchContext(
-        queryHash = queryHash,
-        startIndex = startIndex,
-        streamSource = decodedStreamSource,
-        scrollOffsetHint = scrollOffsetHint,
-        recentsSection = decodeRestoredRecentsSection(recentsSection, decodedStreamSource, queryHash),
-    )
 }

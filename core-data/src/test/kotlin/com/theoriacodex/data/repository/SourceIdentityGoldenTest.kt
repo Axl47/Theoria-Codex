@@ -1,6 +1,7 @@
 package com.theoriacodex.data.repository
 
 import com.google.gson.Gson
+import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CodexItem
@@ -31,12 +32,12 @@ class SourceIdentityGoldenTest {
 
     @Test
     fun `default settings file keeps its persisted bytes`() {
-        assertGolden("settings-default.json", gson.toJson(SettingsDataStoreFile.fromDomain(AppSettings())))
+        assertGolden("settings-default.json", encodeSettingsFile(AppSettings()))
     }
 
     @Test
     fun `multi-source settings file keeps its persisted bytes`() {
-        assertGolden("settings-multi-source.json", gson.toJson(SettingsDataStoreFile.fromDomain(multiSourceSettings())))
+        assertGolden("settings-multi-source.json", encodeSettingsFile(multiSourceSettings()))
     }
 
     @Test
@@ -49,6 +50,9 @@ class SourceIdentityGoldenTest {
         // Version 2 offline manifests were Gson reflection over the domain Post; OfflineMediaStore still reads that shape.
         assertGolden("offline-manifest-post.json", gson.toJson(gelbooruPost))
     }
+
+    private fun encodeSettingsFile(settings: AppSettings): String =
+        DurableJson.encodeToString(SettingsDataStoreFile.serializer(), SettingsDataStoreFile.fromDomain(settings))
 
     private fun assertGolden(name: String, actual: String) {
         val expected = javaClass.classLoader.getResource("golden/source-identity/$name")?.readText()
