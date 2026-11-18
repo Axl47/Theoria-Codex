@@ -3,6 +3,8 @@ name: Verify
 # Runs the parts of scripts/check.sh in parallel jobs, then records the result.
 # - Pull requests run `tests`, `static` and `lint`, unless this exact code already passed them (on a Mac
 #   with `scripts/check.sh --record`, or in an earlier run). They never run R8 and only read caches.
+# - The screenshots part compares against Linux-rendered references, so a Mac never records it. Pull
+#   requests run it unless this exact code already passed it here.
 # - Main and Release call this workflow and choose the parts themselves: Main always runs all of
 #   them, Release only the ones whose result is missing.
 # The final `Verify` job always reports, so it can be the single required status check.
@@ -20,6 +22,10 @@ on:
         description: Run the release part (minified/R8 builds) and record it.
         type: boolean
         default: false
+      screenshots:
+        description: Compare the screenshot tests with their Linux references and record it.
+        type: boolean
+        default: true
     secrets:
       GRADLE_ENCRYPTION_KEY:
         required: false
@@ -54,6 +60,7 @@ jobs:
           IS_PR: ${{ github.event_name == 'pull_request' }}
           RUN_CHECK: ${{ inputs.check }}
           RUN_RELEASE: ${{ inputs.release }}
+          RUN_SCREENSHOTS: ${{ inputs.screenshots }}
         run: |
           if [[ "$IS_PR" == true ]]; then
             RUN_RELEASE=false
@@ -63,10 +70,12 @@ jobs:
             else
               RUN_CHECK=true
             fi
+            if python3 scripts/release_gate.py has screenshots; then RUN_SCREENSHOTS=false; else RUN_SCREENSHOTS=true; fi
           fi
           parts=()
           [[ "$RUN_CHECK" == true ]] && parts+=('"tests"' '"static"' '"lint"')
           [[ "$RUN_RELEASE" == true ]] && parts+=('"release"')
+          [[ "$RUN_SCREENSHOTS" == true ]] && parts+=('"screenshots"')
           echo "check=$RUN_CHECK" >> "$GITHUB_OUTPUT"
           echo "parts=[$(IFS=,; echo "${parts[*]}")]" >> "$GITHUB_OUTPUT"
 
@@ -122,19 +131,42 @@ jobs:
       - name: Run the ${{ matrix.part }} part
         run: bash scripts/check.sh --part "${{ matrix.part }}"
 
+      # The new Linux references for `scripts/screenshots.sh record`, rendered only when a comparison failed.
+      - name: Render screenshot references
+        id: render
+        if: failure() && matrix.part == 'screenshots'
+        run: bash scripts/screenshots.sh capture
+
+      - name: Upload screenshot references
+        if: failure() && steps.render.outcome == 'success'
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: screenshots
+          path: app/src/test/screenshots/*.png
+          retention-days: 14
+
       # Tells the final job, which records results, that this part passed.
       - name: Mark the part passed
         run: touch build/reports/timings/passed
 
-      # Combined into one `ci-timings` artifact by the final job.
+      # Combined into one `ci-timings` artifact by the final job. Each artifact holds a folder named
+      # after its part, so the final job finds `timings/<part>/` however many parts ran.
+      - name: Stage timings
+        if: always()
+        env:
+          PART: ${{ matrix.part }}
+        run: |
+          mkdir -p "build/ci-part/$PART"
+          for file in ci-timings.json passed; do
+            [[ ! -e "build/reports/timings/$file" ]] || cp "build/reports/timings/$file" "build/ci-part/$PART/"
+          done
+
       - name: Upload timings
         if: always()
         uses: actions/upload-artifact@v7.0.2
         with:
           name: ci-timings-${{ matrix.part }}
-          path: |
-            build/reports/timings/ci-timings.json
-            build/reports/timings/passed
+          path: build/ci-part/
           if-no-files-found: warn
           retention-days: 1
 
@@ -166,6 +198,7 @@ jobs:
             build/reports/quality/
             build/reports/jscpd/
             build/reports/kover/
+            app/build/outputs/roborazzi-compare/
           if-no-files-found: warn
           retention-days: 14
 
@@ -186,7 +219,9 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 2
 
-      # Each part's timings, plus a `passed` marker when the part succeeded.
+      # Each part's timings, plus a `passed` marker when the part succeeded, in timings/<part>/.
+      # Merging keeps that layout when only one artifact matches, which is otherwise unpacked
+      # straight into the path.
       - name: Download part results
         if: needs.plan.outputs.parts != '[]'
         continue-on-error: true
@@ -194,6 +229,7 @@ jobs:
         with:
           pattern: ci-timings-*
           path: timings
+          merge-multiple: true
 
       # Each result is recorded on its own, so a failed release part never withholds the check.
       # Best effort outside main: Dependabot and fork runs get a read-only token and skip recording,
@@ -201,16 +237,21 @@ jobs:
       - name: Record the pre-PR check
         if: >-
           needs.plan.outputs.check == 'true'
-          && hashFiles('timings/ci-timings-tests/passed') != ''
-          && hashFiles('timings/ci-timings-static/passed') != ''
-          && hashFiles('timings/ci-timings-lint/passed') != ''
+          && hashFiles('timings/tests/passed') != ''
+          && hashFiles('timings/static/passed') != ''
+          && hashFiles('timings/lint/passed') != ''
         continue-on-error: ${{ github.event_name != 'push' }}
         run: python3 scripts/release_gate.py record check
 
       - name: Record the release part
-        if: hashFiles('timings/ci-timings-release/passed') != ''
+        if: hashFiles('timings/release/passed') != ''
         continue-on-error: ${{ github.event_name != 'push' }}
         run: python3 scripts/release_gate.py record release
+
+      - name: Record the screenshots part
+        if: hashFiles('timings/screenshots/passed') != ''
+        continue-on-error: ${{ github.event_name != 'push' }}
+        run: python3 scripts/release_gate.py record screenshots
 
       - name: Require every part that ran to pass
         if: always()
@@ -227,8 +268,8 @@ jobs:
       - name: Combine timings
         if: always() && hashFiles('timings/*/ci-timings.json') != ''
         run: |
-          for file in timings/ci-timings-*/ci-timings.json; do
-            part="${file#timings/ci-timings-}"
+          for file in timings/*/ci-timings.json; do
+            part="${file#timings/}"
             jq --arg part "${part%%/*}" '.phases |= map(.name = "\($part): \(.name)")' "$file"
           done | jq -s '{version: 1, phases: map(.phases[]), tasks: map(.tasks[])}' > ci-timings.json
 

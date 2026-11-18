@@ -10,7 +10,8 @@ Subcommands share the result refs with check.sh and the workflows:
   input-key [<commit>]          print the key naming every result for that commit's inputs
   record <kind> [<commit>]      push refs/<kind ref>/<key> to origin
   has <kind> [<commit>]         exit 0 when that result exists on origin, 1 otherwise
-where kind is check (scripts/check.sh), release (check.sh --part release) or device (emulator tests).
+where kind is check (scripts/check.sh), release (check.sh --part release), screenshots (check.sh --part
+screenshots, Linux only) or device (emulator tests).
 """
 from __future__ import annotations
 
@@ -31,6 +32,7 @@ RELEASE_PATH_PREFIXES = ("release-notes/", "app/src/release/generated/baselinePr
 RESULT_REFS = {
     "check": "refs/verified",
     "release": "refs/verified-release",
+    "screenshots": "refs/verified-screenshots",
     "device": "refs/verified-device",
 }
 

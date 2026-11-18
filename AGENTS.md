@@ -8,6 +8,8 @@ Keep Detekt's own `parallel` setting disabled: concurrent Kotlin 2.4 FIR/PSI tra
 
 Robolectric tests need Java 21 or newer because the Android SDK 36 sandbox refuses older JVMs, failing at class setup with `UnsupportedOperationException`. Set `JAVA_HOME` to a compatible JDK before running them; on the Mac, the default JDK is 19 and Homebrew's works: `JAVA_HOME=/opt/homebrew/Cellar/openjdk/26.0.2.1/libexec/openjdk.jdk/Contents/Home`.
 
+Screenshot reference images (`app/src/test/screenshots`) are CI's Linux renders; macOS draws text differently, so a Mac can only capture screens to look at (`scripts/screenshots.sh capture`) and never records or compares references. After a UI change fails Verify's screenshots part, `scripts/screenshots.sh record` pulls that run's Linux renders; commit them. Screenshots use fixture posts with solid-color images, never provider media.
+
 Fresh git worktrees lack the gitignored `local.properties`, so Android Gradle tasks fail with "SDK location not found"; copy it from the main checkout or set `ANDROID_HOME` first.
 
 Close any T3 `agent-device` session before `am instrument`: its accessibility helper holds UiAutomation, so Compose journey tests fail with "UiAutomationService already registered" or "UiAutomation not connected".
@@ -77,8 +79,8 @@ Keep `AGENTS.md` limited to durable product intent, safety boundaries, and accep
 
 - Builds, mocks, and host tests do not establish live provider authentication, hardware playback, PiP, or TalkBack behavior. Performance acceptance requires physical-device measurements, simultaneous-autoplay coverage, and retained complete iteration evidence. Calibration requires three complete runs of the same APK under matching conditions.
 - Use `.codex/skills/theoria-release/SKILL.md` for releases. Approving the version and release notes authorizes the agent to commit the release files straight to `main`, run the Release workflow, and publish.
-- Results are recorded per code, not per commit: the pre-PR check (`scripts/check.sh --record`, or Verify on the PR), the R8 release part, and the emulator tests on Android 16 and 17. PRs run only the pre-PR check, skip it when it is already recorded, and only read caches.
-- Every push to `main` runs all three in the Main workflow, even when the pre-PR check is recorded, and is the only run that saves caches. Release only promotes: it requires all three results for the commit, runs any missing one itself rather than failing, and creates the tag only after everything passes.
+- Results are recorded per code, not per commit: the pre-PR check (`scripts/check.sh --record`, or Verify on the PR), the screenshot comparison (Verify only), the R8 release part, and the emulator tests on Android 16 and 17. PRs run only the pre-PR check and the screenshot comparison, skip each one already recorded, and only read caches.
+- Every push to `main` runs all four in the Main workflow, even when the pre-PR check is recorded, and is the only run that saves caches. Release only promotes: it requires all four results for the commit, runs any missing one itself rather than failing, and creates the tag only after everything passes.
 - Emulator tests do not run on PRs. For a risky change, such as a database migration, navigation, or playback, also run `gh workflow run device-validation.yml --ref <branch>`; branch runs never record a result.
 
 Landing: PR, then green checks, then merge; update local `main` and delete the branch and worktree.

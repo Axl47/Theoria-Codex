@@ -5,6 +5,8 @@
 #   static   Detekt with type resolution, duplicate code, configuration cache
 #   lint     Android lint
 #   release  R8 builds: release, releaseAcceptance, and benchmark builds when the change can affect them
+#   screenshots  Compose screenshot tests against their reference images. References are Linux renders, so
+#            this part runs only on Linux (GitHub) and is recorded as its own result. See scripts/screenshots.sh.
 # Without --part it runs all three, the pre-PR check: one Gradle build of what they share, then lint
 # beside the tests and Detekt (see run_check). GitHub runs the three parts as parallel jobs. Release
 # builds and emulator tests run on GitHub after merge to main.
@@ -15,12 +17,12 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-usage() { echo 'Usage: scripts/check.sh [--part tests|static|lint|release] [--record]' >&2; exit 2; }
+usage() { echo 'Usage: scripts/check.sh [--part tests|static|lint|release|screenshots] [--record]' >&2; exit 2; }
 part=''
 record=false
 while (( $# )); do
   case "$1" in
-    --part) [[ "${2:-}" =~ ^(tests|static|lint|release)$ ]] || usage; part="$2"; shift ;;
+    --part) [[ "${2:-}" =~ ^(tests|static|lint|release|screenshots)$ ]] || usage; part="$2"; shift ;;
     --record) record=true ;;
     *) usage ;;
   esac
@@ -128,16 +130,8 @@ fi
 # Install the tracked pre-push hook unless this clone already chose its own hooks.
 [[ -n "$(git config --get core.hooksPath || true)" ]] || git config core.hooksPath scripts/hooks
 
-# Robolectric's Android SDK 36 sandbox refuses JVMs older than 21.
-java_bin="${JAVA_HOME:+$JAVA_HOME/bin/}java"
-java_major="$("$java_bin" -version 2>&1 | sed -nE '1s/.*"([0-9]+).*/\1/p')"
-if (( ${java_major:-0} < 21 )); then
-  homebrew_jdk="$(brew --prefix openjdk 2>/dev/null || true)/libexec/openjdk.jdk/Contents/Home"
-  [[ -x "$homebrew_jdk/bin/java" ]] || { echo 'Set JAVA_HOME to JDK 21 or newer.' >&2; exit 2; }
-  export JAVA_HOME="$homebrew_jdk"
-fi
-
 source scripts/policy_checks.sh
+select_robolectric_jdk
 # Changed-code budgets compare against where this work left main, or the last commit when on main.
 base="$(diff_base)"
 
@@ -312,6 +306,13 @@ run_release() {
   phase 'Gradle: release builds' ./gradlew "${task_timings[@]}" "${tasks[@]}" --warning-mode=all --console=plain
 }
 
+# Reference images are inputs Gradle does not track, so the comparison always reruns.
+run_screenshots() {
+  [[ "$(uname -s)" == Linux ]] || { echo 'Screenshots are compared only on Linux, where their references were rendered.' >&2; exit 2; }
+  phase 'Gradle: screenshots' ./gradlew "${task_timings[@]}" :app:testDebugUnitTest --tests 'com.theoriacodex.app.screenshots.*' \
+    -Proborazzi.test.verify=true --rerun --warning-mode=all --console=plain
+}
+
 phase 'Hotspot check' line_budgets "$base"
 [[ "$part" != static ]] || phase 'Python unittests' python_tests
 
@@ -321,6 +322,7 @@ case "$part" in
   static) run_static ;;
   lint) run_lint ;;
   release) run_release ;;
+  screenshots) run_screenshots ;;
 esac
 
 if [[ "$record" == true ]]; then

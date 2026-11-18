@@ -16,6 +16,7 @@ plugins {
     alias(libs.plugins.androidx.room) apply false
     alias(libs.plugins.androidx.baselineprofile) apply false
     alias(libs.plugins.detekt) apply false
+    alias(libs.plugins.roborazzi) apply false
 }
 
 dependencies {
