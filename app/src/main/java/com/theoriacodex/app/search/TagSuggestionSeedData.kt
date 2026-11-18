@@ -1,8 +1,7 @@
 package com.theoriacodex.app.search
 
 import android.content.Context
-import com.google.gson.Gson
-import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.SourceKey
 
@@ -10,7 +9,7 @@ internal fun loadSeedTagSuggestions(context: Context): Map<SourceKey, List<TagSu
     val body = runCatching {
         context.assets.open("tag_store.json").bufferedReader().use { it.readText() }
     }.getOrNull() ?: return emptyMap()
-    val root = runCatching { Gson().fromJson(body, JsonObject::class.java) }.getOrNull()
+    val root = runCatching { JsonParser.parseString(body).asJsonObject }.getOrNull()
         ?: return emptyMap()
     val sources = root.getAsJsonObject("sources") ?: return emptyMap()
     return sources.entrySet().mapNotNull outer@{ (sourceName, value) ->
