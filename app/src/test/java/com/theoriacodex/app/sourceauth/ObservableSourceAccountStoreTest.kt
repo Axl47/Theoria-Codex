@@ -83,7 +83,6 @@ class ObservableSourceAccountStoreTest {
     @Test
     fun `non-ready credential states cannot leave a gated source exposed`() = runTest {
         val unavailableStates = listOf(
-            CredentialStoreRecoveryState.Migrating,
             CredentialStoreRecoveryState.TemporarilyUnavailable,
             CredentialStoreRecoveryState.UnsupportedVersion(2),
         )

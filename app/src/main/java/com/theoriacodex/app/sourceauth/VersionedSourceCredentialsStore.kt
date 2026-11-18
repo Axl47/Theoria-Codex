@@ -26,8 +26,6 @@ import kotlinx.coroutines.withContext
 sealed interface CredentialStoreRecoveryState {
     data object Loading : CredentialStoreRecoveryState
 
-    data object Migrating : CredentialStoreRecoveryState
-
     data object Ready : CredentialStoreRecoveryState
 
     data object TemporarilyUnavailable : CredentialStoreRecoveryState
@@ -42,7 +40,7 @@ internal class CredentialStoreUnavailableException : IllegalStateException(
 )
 
 /**
- * A deliberately redacted, whole-store snapshot. Equality exists for migration verification;
+ * A deliberately redacted, whole-store snapshot. Equality verifies committed envelope writes;
  * [toString] never exposes tokens, user IDs, or API keys.
  */
 internal class SourceCredentialSnapshot(
@@ -175,28 +173,8 @@ internal interface CredentialEnvelopeStore {
     suspend fun reset(): Boolean
 }
 
-internal sealed interface LegacyCredentialReadResult {
-    data object Missing : LegacyCredentialReadResult
-
-    data class Success(val snapshot: SourceCredentialSnapshot) : LegacyCredentialReadResult
-
-    data object TemporarilyUnavailable : LegacyCredentialReadResult
-
-    data object ReconnectRequired : LegacyCredentialReadResult
-}
-
-internal interface LegacyCredentialStore {
-    suspend fun read(): LegacyCredentialReadResult
-
-    /** Removes legacy values and their key only after the versioned envelope is authoritative. */
-    suspend fun cleanup(): Boolean
-
-    suspend fun reset(): Boolean
-}
-
 internal class VersionedSourceCredentialsStore(
     private val envelopeStore: CredentialEnvelopeStore,
-    private val legacyStore: LegacyCredentialStore,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : RecoverableSourceCredentialsStore, SiteCredentialsStore {
     private val mutex = Mutex()
@@ -205,7 +183,6 @@ internal class VersionedSourceCredentialsStore(
         CredentialStoreRecoveryState.Loading,
     )
     private var loadedSnapshot: SourceCredentialSnapshot? = null
-    private var legacyCleanupPending = false
 
     override val recoveryState: StateFlow<CredentialStoreRecoveryState> =
         mutableRecoveryState.asStateFlow()
@@ -262,15 +239,11 @@ internal class VersionedSourceCredentialsStore(
             if (mutableRecoveryState.value != CredentialStoreRecoveryState.ReconnectRequired) {
                 return@withLock false
             }
-            // A reset may partially succeed or be cancelled between stores. Never keep serving a
-            // cached snapshot after the user has authorized destructive recovery.
+            // A reset may partially succeed or be cancelled. Never keep serving a cached snapshot
+            // after the user has authorized destructive recovery.
             loadedSnapshot = null
-            legacyCleanupPending = false
-            val envelopeReset = envelopeStore.reset()
-            val legacyReset = legacyStore.reset()
-            if (envelopeReset && legacyReset) {
+            if (envelopeStore.reset()) {
                 loadedSnapshot = SourceCredentialSnapshot()
-                legacyCleanupPending = false
                 mutableRecoveryState.value = CredentialStoreRecoveryState.Ready
                 customSiteRevision.update { it + 1 }
                 true
@@ -295,11 +268,7 @@ internal class VersionedSourceCredentialsStore(
             when (envelopeStore.writeVerified(updated)) {
                 CredentialStoreWriteResult.Success -> {
                     loadedSnapshot = updated
-                    mutableRecoveryState.value = if (legacyCleanupPending) {
-                        CredentialStoreRecoveryState.Migrating
-                    } else {
-                        CredentialStoreRecoveryState.Ready
-                    }
+                    mutableRecoveryState.value = CredentialStoreRecoveryState.Ready
                 }
                 CredentialStoreWriteResult.TemporarilyUnavailable -> {
                     loadedSnapshot = null
@@ -316,70 +285,21 @@ internal class VersionedSourceCredentialsStore(
     }
 
     private suspend fun ensureLoadedLocked(): SourceCredentialSnapshot? {
-        loadedSnapshot?.let { current ->
-            if (legacyCleanupPending) {
-                legacyCleanupPending = !legacyStore.cleanup()
-                mutableRecoveryState.value = if (legacyCleanupPending) {
-                    CredentialStoreRecoveryState.Migrating
-                } else {
-                    CredentialStoreRecoveryState.Ready
-                }
-            }
-            return current
-        }
+        loadedSnapshot?.let { current -> return current }
 
-        return when (val envelope = envelopeStore.read()) {
-            is CredentialEnvelopeReadResult.Success -> {
-                loadedSnapshot = envelope.snapshot
-                // A committed envelope always wins. Cleanup can safely resume after a process stop.
-                legacyCleanupPending = true
-                mutableRecoveryState.value = CredentialStoreRecoveryState.Migrating
-                legacyCleanupPending = !legacyStore.cleanup()
-                mutableRecoveryState.value = if (legacyCleanupPending) {
-                    CredentialStoreRecoveryState.Migrating
-                } else {
-                    CredentialStoreRecoveryState.Ready
-                }
-                envelope.snapshot
-            }
-            CredentialEnvelopeReadResult.Missing -> migrateLegacyLocked()
-            CredentialEnvelopeReadResult.TemporarilyUnavailable -> unavailableTemporarily()
-            CredentialEnvelopeReadResult.ReconnectRequired -> reconnectRequired()
+        val snapshot = when (val envelope = envelopeStore.read()) {
+            is CredentialEnvelopeReadResult.Success -> envelope.snapshot
+            CredentialEnvelopeReadResult.Missing -> SourceCredentialSnapshot()
+            CredentialEnvelopeReadResult.TemporarilyUnavailable -> return unavailableTemporarily()
+            CredentialEnvelopeReadResult.ReconnectRequired -> return reconnectRequired()
             is CredentialEnvelopeReadResult.UnsupportedVersion -> {
                 mutableRecoveryState.value = CredentialStoreRecoveryState.UnsupportedVersion(envelope.version)
-                null
+                return null
             }
         }
-    }
-
-    private suspend fun migrateLegacyLocked(): SourceCredentialSnapshot? {
-        return when (val legacy = legacyStore.read()) {
-            LegacyCredentialReadResult.Missing -> {
-                SourceCredentialSnapshot().also { snapshot ->
-                    loadedSnapshot = snapshot
-                    mutableRecoveryState.value = CredentialStoreRecoveryState.Ready
-                }
-            }
-            is LegacyCredentialReadResult.Success -> {
-                mutableRecoveryState.value = CredentialStoreRecoveryState.Migrating
-                when (envelopeStore.writeVerified(legacy.snapshot)) {
-                    CredentialStoreWriteResult.Success -> {
-                        loadedSnapshot = legacy.snapshot
-                        legacyCleanupPending = !legacyStore.cleanup()
-                        mutableRecoveryState.value = if (legacyCleanupPending) {
-                            CredentialStoreRecoveryState.Migrating
-                        } else {
-                            CredentialStoreRecoveryState.Ready
-                        }
-                        legacy.snapshot
-                    }
-                    CredentialStoreWriteResult.TemporarilyUnavailable -> unavailableTemporarily()
-                    CredentialStoreWriteResult.ReconnectRequired -> reconnectRequired()
-                }
-            }
-            LegacyCredentialReadResult.TemporarilyUnavailable -> unavailableTemporarily()
-            LegacyCredentialReadResult.ReconnectRequired -> reconnectRequired()
-        }
+        loadedSnapshot = snapshot
+        mutableRecoveryState.value = CredentialStoreRecoveryState.Ready
+        return snapshot
     }
 
     private fun unavailableTemporarily(): SourceCredentialSnapshot? {

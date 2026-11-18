@@ -13,7 +13,6 @@ import com.google.gson.annotations.SerializedName
 import java.io.File
 import java.io.IOException
 import java.security.InvalidKeyException
-import java.security.KeyStore
 import java.security.UnrecoverableKeyException
 import javax.crypto.AEADBadTagException
 import kotlin.coroutines.cancellation.CancellationException
@@ -161,79 +160,6 @@ internal class AndroidCredentialEnvelopeStore(
         // Always attempt both halves; each operation is idempotent on a later retry.
         val removedKey = crypto.deleteKey()
         return removedEnvelope && removedKey
-    }
-}
-
-internal class AndroidLegacyCredentialStore(
-    context: Context,
-) : LegacyCredentialStore {
-    private val appContext = context.applicationContext
-    private val legacyFile = File(
-        appContext.applicationInfo.dataDir,
-        "shared_prefs/$PREFS_NAME.xml",
-    )
-    private val legacyBackupFile = File(legacyFile.path + ".bak")
-
-    override suspend fun read(): LegacyCredentialReadResult {
-        return try {
-            if (!legacyFile.exists() && !legacyBackupFile.exists()) {
-                return if (legacyMasterKeyExists()) {
-                    // An orphaned alias means a prior cleanup/reset was interrupted. An empty
-                    // verified migration gives the state machine a safe point to finish it.
-                    LegacyCredentialReadResult.Success(SourceCredentialSnapshot())
-                } else {
-                    LegacyCredentialReadResult.Missing
-                }
-            }
-            val preferences = createEncryptedPrefs(appContext)
-            val snapshot = SourceCredentialSnapshot(
-                pixivAccessToken = preferences.getString(KEY_PIXIV_ACCESS_TOKEN, null),
-                pixivRefreshToken = preferences.getString(KEY_PIXIV_REFRESH_TOKEN, null),
-                pixivExpiresAtEpochMs = preferences.getLong(KEY_PIXIV_EXPIRES_AT, -1L)
-                    .takeIf { value -> value > 0L },
-                gelbooruUserId = preferences.getString(KEY_GELBOORU_USER_ID, null),
-                gelbooruApiKey = preferences.getString(KEY_GELBOORU_API_KEY, null),
-                rule34XxxUserId = preferences.getString(KEY_RULE34XXX_USER_ID, null),
-                rule34XxxApiKey = preferences.getString(KEY_RULE34XXX_API_KEY, null),
-            )
-            // Existing-but-empty preferences must still retire their file and deprecated alias.
-            LegacyCredentialReadResult.Success(snapshot)
-        } catch (error: Exception) {
-            if (error.isRecoverableEncryptedPrefsFailure()) {
-                LegacyCredentialReadResult.ReconnectRequired
-            } else {
-                LegacyCredentialReadResult.TemporarilyUnavailable
-            }
-        }
-    }
-
-    override suspend fun cleanup(): Boolean {
-        val preferencesRemoved = removeLegacyPreferences()
-        // Never short-circuit. File and alias deletion can independently fail, and both are
-        // idempotent so an interrupted cleanup remains recoverable.
-        val keyRemoved = deleteLegacyMasterKey()
-        return preferencesRemoved && keyRemoved
-    }
-
-    override suspend fun reset(): Boolean {
-        val preferencesRemoved = removeLegacyPreferences()
-        val keyRemoved = deleteLegacyMasterKey()
-        return preferencesRemoved && keyRemoved
-    }
-
-    private fun removeLegacyPreferences(): Boolean = runCatching {
-        if (legacyFile.exists() || legacyBackupFile.exists()) {
-            appContext.deleteSharedPreferences(PREFS_NAME)
-        }
-        !legacyFile.exists() && !legacyBackupFile.exists()
-    }.getOrDefault(false)
-
-    @Suppress("DEPRECATION") // Migration-only lookup for the retired Security Crypto alias.
-    private fun legacyMasterKeyExists(): Boolean {
-        return KeyStore.getInstance("AndroidKeyStore").run {
-            load(null)
-            containsAlias(androidx.security.crypto.MasterKey.DEFAULT_MASTER_KEY_ALIAS)
-        }
     }
 }
 
