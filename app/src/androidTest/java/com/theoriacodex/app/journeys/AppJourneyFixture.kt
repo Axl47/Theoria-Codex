@@ -5,6 +5,7 @@ import android.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsNodeInteraction
@@ -178,23 +179,26 @@ abstract class AppJourneyFixture {
     }
 
     /**
-     * Drags Search results until [source]'s card at [index] is in the first visible row. The tagged grid wrapper
-     * receives touches; its nested lazy grid owns scroll semantics.
+     * Drags Search results until [source]'s card at [index] is the grid's first visible item and has started to
+     * scroll off the top, so the grid saves a positive pixel offset for it. The tagged grid wrapper receives
+     * touches; its nested lazy grid owns scroll semantics.
      */
     protected fun scrollToFirstVisibleCard(source: SourceKey, index: Int, maxDrags: Int = 24) {
         val grid = compose.onNodeWithTag("Search results", useUnmergedTree = true)
         repeat(maxDrags) {
             val viewport = grid.fetchSemanticsNode().boundsInRoot
-            val target = visibleCardBounds(source, index, viewport)
-            val previous = if (index > 0) visibleCardBounds(source, index - 1, viewport) else null
-            // Fixture cards have equal heights. The even target starts its row once the preceding
-            // card has left the viewport, leaving a real, nonzero persisted offset to restore.
-            if (target != null && previous == null) {
+            // Unclipped, so it goes negative once the card's top has passed the viewport's.
+            val targetTop = visibleCard(source, index, viewport)?.positionInRoot?.y?.minus(viewport.top)
+            val previousVisible = index > 0 && visibleCard(source, index - 1, viewport) != null
+            // The preceding card leaving is not enough: the target can still sit in the 6dp row gap at or
+            // below the top, where it has no offset yet. Capped drags can stop anywhere, including there.
+            if (targetTop != null && targetTop <= -1f && !previousVisible) {
                 compose.onNodeWithTag(searchCardTestTag(posts.getValue(source)[index].id)).assertIsDisplayed()
                 return
             }
-            val distance = if (target == null) viewport.height * 0.45f else {
-                (target.top - viewport.top + viewport.width * 0.08f).coerceAtMost(viewport.height * 0.45f)
+            val overshoot = viewport.width * 0.08f
+            val distance = if (targetTop == null) viewport.height * 0.45f else {
+                (targetTop + overshoot).coerceIn(overshoot, viewport.height * 0.45f)
             }
             grid.performTouchInput {
                 val start = Offset(centerX, height * 0.8f)
@@ -205,10 +209,13 @@ abstract class AppJourneyFixture {
         throw AssertionError("Search card $index did not become the first visible fixture row after $maxDrags drags")
     }
 
-    private fun visibleCardBounds(source: SourceKey, index: Int, viewport: Rect): Rect? {
+    /** The card's node while any of it shows inside [viewport]; its `boundsInRoot` are clipped to the viewport. */
+    private fun visibleCard(source: SourceKey, index: Int, viewport: Rect): SemanticsNode? {
         val tag = searchCardTestTag(posts.getValue(source)[index].id)
-        return compose.onAllNodesWithTag(tag).fetchSemanticsNodes().singleOrNull()?.boundsInRoot
-            ?.takeIf { bounds -> bounds.height > 0f && bounds.bottom > viewport.top && bounds.top < viewport.bottom }
+        return compose.onAllNodesWithTag(tag).fetchSemanticsNodes().singleOrNull()?.takeIf { node ->
+            val bounds = node.boundsInRoot
+            bounds.height > 0f && bounds.bottom > viewport.top && bounds.top < viewport.bottom
+        }
     }
 
     protected fun <T> io(block: suspend () -> T): T = runBlocking(Dispatchers.IO) { block() }

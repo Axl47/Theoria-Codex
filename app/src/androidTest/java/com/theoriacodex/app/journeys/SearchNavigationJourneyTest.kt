@@ -174,7 +174,8 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         compose.onNodeWithTag(cardTag).assertIsDisplayed()
         val offset = cardOffsetInViewport(cardTag)
         val expectedScroll = SearchScrollState(6, -offset.roundToInt())
-        assertTrue("A real drag should retain its nonzero pixel offset", expectedScroll.firstVisibleItemOffsetPx > 0)
+        assertTrue("A real drag should retain its nonzero pixel offset; card top is $offset px from the viewport's",
+            expectedScroll.firstVisibleItemOffsetPx > 0)
         compose.waitUntil(10_000) {
             io { container.data.uiRestoreRepository.getSearchScrollState(queryHash) == expectedScroll }
         }
