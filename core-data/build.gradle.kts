@@ -18,8 +18,6 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     testFixturesImplementation(project(":core-domain"))
     testFixturesImplementation(libs.kotlinx.coroutines.core)
-    // The Gson parity harness takes kotlinx serializers and runs both libraries, so callers need both.
-    testFixturesApi(libs.gson)
     testFixturesApi(libs.kotlinx.serialization.json)
     testFixturesImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

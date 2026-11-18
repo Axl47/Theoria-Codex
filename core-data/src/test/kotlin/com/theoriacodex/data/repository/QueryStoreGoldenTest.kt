@@ -2,8 +2,7 @@ package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
 import com.theoriacodex.data.storage.QueryStorageCodec
-import com.theoriacodex.data.storage.QueryStorageRecord
-import com.theoriacodex.data.storage.assertGsonParity
+import com.theoriacodex.data.storage.assertStoredFormat
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
@@ -28,20 +27,7 @@ internal class QueryStoreGoldenTest : FileBackedRepositoryTestFixture() {
     fun `a Gson-written store loads every saved search`() = runTest {
         val repository = repositoryWith(golden("gson-written.json"))
 
-        val artist = SearchTerm("é☃", SearchFacet.ARTIST, "artist")
-        val escaped = listOf(SearchTerm("tom & jerry's <cut>"), SearchTerm("a=b"))
-        assertEquals(
-            Query(
-                mode = QueryMode.Source(SourceKey.PIXIV),
-                includeTerms = escaped + artist,
-                excludeTerms = listOf(SearchTerm("english", SearchFacet.LANGUAGE, "language")),
-                sort = SortMode.NEWEST,
-                dateRange = DateRange(1_700_000_000_000L, 1_790_000_000_000L),
-                minScore = 10,
-                includeTermGroups = listOf(SearchTermGroup(escaped), SearchTermGroup.single(artist)),
-            ),
-            repository.observeAppliedQuery("search").first(),
-        )
+        assertEquals(gsonWrittenSearch, repository.observeAppliedQuery("search").first())
         assertEquals(emptyQuery(), repository.observeAppliedQuery("feed").first())
     }
 
@@ -68,25 +54,10 @@ internal class QueryStoreGoldenTest : FileBackedRepositoryTestFixture() {
         assertTrue(recoveries.recoveries.value.isEmpty())
     }
 
-    // legacy.json is left out: Gson stores a null "sort" as null, kotlinx repairs it to the default, and the test
-    // above shows both load the same search.
     @Test
-    fun `the kotlinx serializers match Gson`() {
-        val record = QueryStorageCodec.encode(
-            Query(
-                mode = QueryMode.Source(SourceKey.PIXIV),
-                includeTerms = listOf(SearchTerm("a & b", SearchFacet.ARTIST, "artist")),
-                excludeTerms = listOf(SearchTerm("c", SearchFacet.LANGUAGE, "language")),
-                sort = SortMode.NEWEST,
-                dateRange = DateRange(1L, 2L),
-                minScore = 3,
-            ),
-        )
-        assertGsonParity(samples = listOf(QueryStorageRecord(), record))
-        assertGsonParity(
-            samples = listOf(QueryStoreFile(), QueryStoreFile(mapOf("search" to record))),
-            goldenJson = listOf(golden("gson-written.json")),
-        )
+    fun `the Gson-written store holds every stored key`() {
+        val queries = mapOf("search" to gsonWrittenSearch, "feed" to emptyQuery())
+        assertStoredFormat(golden("gson-written.json") to QueryStoreFile(queries.mapValues { QueryStorageCodec.encode(it.value) }))
     }
 
     private fun repositoryWith(json: String, recoveries: LegacyJsonRecoveryRegistry = LegacyJsonRecoveryRegistry()) =
@@ -94,6 +65,20 @@ internal class QueryStoreGoldenTest : FileBackedRepositoryTestFixture() {
             File(dir, "query_store.json").writeText(json)
             FileBackedQueryRepository(dir, recoveryRegistry = recoveries)
         }
+
+    private val gsonWrittenSearch = run {
+        val artist = SearchTerm("é☃", SearchFacet.ARTIST, "artist")
+        val escaped = listOf(SearchTerm("tom & jerry's <cut>"), SearchTerm("a=b"))
+        Query(
+            mode = QueryMode.Source(SourceKey.PIXIV),
+            includeTerms = escaped + artist,
+            excludeTerms = listOf(SearchTerm("english", SearchFacet.LANGUAGE, "language")),
+            sort = SortMode.NEWEST,
+            dateRange = DateRange(1_700_000_000_000L, 1_790_000_000_000L),
+            minScore = 10,
+            includeTermGroups = listOf(SearchTermGroup(escaped), SearchTermGroup.single(artist)),
+        )
+    }
 
     private fun emptyQuery() = Query(
         mode = QueryMode.Unified,

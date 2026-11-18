@@ -172,7 +172,7 @@ internal data class CredentialEnvelopeRecord(
     val ciphertext: String? = null,
 )
 
-/** The decrypted payload. A data class for equality in parity tests; [toString] stays redacted. */
+/** The decrypted payload. A data class for equality in golden tests; [toString] stays redacted. */
 @Serializable
 internal data class CredentialPayloadRecord(
     @SerialName("schemaVersion")

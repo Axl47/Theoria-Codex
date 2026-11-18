@@ -19,48 +19,12 @@ import org.junit.Test
 class RecentSearchPayloadGoldenTest {
     @Test
     fun `a Gson-written Multi-Search row decodes to the same search`() {
-        val escaped = listOf(SearchTerm("tom & jerry's <cut>"), SearchTerm("a=b"))
-        val artist = SearchTerm("é☃ > all", SearchFacet.ARTIST, "artist")
-
-        assertEquals(
-            RecentSearchPayload(
-                query = Query(
-                    mode = QueryMode.Unified,
-                    includeTerms = escaped + artist,
-                    excludeTerms = listOf(SearchTerm("english", SearchFacet.LANGUAGE, "language")),
-                    sort = SortMode.NEWEST,
-                    dateRange = DateRange(1_700_000_000_000L, 1_790_000_000_000L),
-                    minScore = 10,
-                    includeTermGroups = listOf(SearchTermGroup(escaped), SearchTermGroup.single(artist)),
-                ),
-                kind = RecentSearchKind.MULTI_SEARCH,
-                sources = listOf(SourceKey.GELBOORU, SourceKey.PIXIV),
-            ),
-            RecentSearchPayloadCodec.decodeJson(golden("multi-search.json")),
-        )
+        assertEquals(multiSearch, RecentSearchPayloadCodec.decodeJson(golden("multi-search.json")))
     }
 
     @Test
     fun `a Gson-written FYP row keeps its tags by source`() {
-        assertEquals(
-            RecentSearchPayload(
-                query = Query(
-                    mode = QueryMode.Unified,
-                    includeTags = listOf("x"),
-                    excludeTags = emptyList(),
-                    sort = SortMode.TOP,
-                    dateRange = null,
-                    minScore = null,
-                ),
-                kind = RecentSearchKind.FYP,
-                sources = listOf(SourceKey.GELBOORU, SourceKey.PIXIV),
-                sourceTags = mapOf(
-                    SourceKey.GELBOORU to listOf("rock & roll", "<seed>"),
-                    SourceKey.PIXIV to listOf("it's=night"),
-                ),
-            ),
-            RecentSearchPayloadCodec.decodeJson(golden("fyp.json")),
-        )
+        assertEquals(fyp, RecentSearchPayloadCodec.decodeJson(golden("fyp.json")))
     }
 
     @Test
@@ -80,33 +44,70 @@ class RecentSearchPayloadGoldenTest {
         )
     }
 
+    // The Gson rows are all Multi-Search or FYP, so source.json, captured from the kotlinx encoder, adds a source mode.
     @Test
-    fun `the recent-search serializers match Gson`() {
-        val record = RecentSearchPayloadRecord(
-            recentSearchSchemaVersion = 1,
-            query = QueryStorageCodec.encode(
-                Query(
-                    mode = QueryMode.Source(SourceKey.PIXIV),
-                    includeTerms = listOf(SearchTerm("a & b", SearchFacet.ARTIST, "artist")),
-                    excludeTerms = listOf(SearchTerm("c", SearchFacet.LANGUAGE, "language")),
-                    sort = SortMode.NEWEST,
-                    dateRange = DateRange(1L, 2L),
-                    minScore = 3,
-                ),
+    fun `the goldens hold every stored key`() {
+        val source = RecentSearchPayload(
+            query = Query(
+                mode = QueryMode.Source(SourceKey.PIXIV),
+                includeTerms = listOf(SearchTerm("a & b", SearchFacet.ARTIST, "artist")),
+                excludeTerms = emptyList(),
+                sort = SortMode.NEWEST,
+                dateRange = null,
+                minScore = null,
             ),
-            kind = RecentSearchKind.SOURCE.name,
-            sources = listOf(SourceKey.PIXIV.id),
-            sourceTags = mapOf(SourceKey.PIXIV.id to listOf("it's")),
+            kind = RecentSearchKind.SOURCE,
+            sources = listOf(SourceKey.PIXIV),
         )
-        assertGsonParity(
-            samples = listOf(RecentSearchPayloadRecord(), record),
-            goldenJson = listOf(golden("multi-search.json"), golden("fyp.json")),
-        )
-        assertGsonParity(
-            samples = listOf(QueryStorageRecord(), requireNotNull(record.query)),
-            goldenJson = listOf(golden("legacy-query.json")),
+        assertStoredFormat(
+            golden("multi-search.json") to record(multiSearch),
+            golden("fyp.json") to record(fyp),
+            golden("source.json") to record(source),
         )
     }
+
+    private fun record(payload: RecentSearchPayload) = RecentSearchPayloadRecord(
+        recentSearchSchemaVersion = 1,
+        query = QueryStorageCodec.encode(payload.query),
+        kind = payload.kind.name,
+        sources = payload.sources.map { it.id },
+        sourceTags = payload.sourceTags.mapKeys { it.key.id },
+    )
+
+    private val multiSearch = run {
+        val escaped = listOf(SearchTerm("tom & jerry's <cut>"), SearchTerm("a=b"))
+        val artist = SearchTerm("é☃ > all", SearchFacet.ARTIST, "artist")
+        RecentSearchPayload(
+            query = Query(
+                mode = QueryMode.Unified,
+                includeTerms = escaped + artist,
+                excludeTerms = listOf(SearchTerm("english", SearchFacet.LANGUAGE, "language")),
+                sort = SortMode.NEWEST,
+                dateRange = DateRange(1_700_000_000_000L, 1_790_000_000_000L),
+                minScore = 10,
+                includeTermGroups = listOf(SearchTermGroup(escaped), SearchTermGroup.single(artist)),
+            ),
+            kind = RecentSearchKind.MULTI_SEARCH,
+            sources = listOf(SourceKey.GELBOORU, SourceKey.PIXIV),
+        )
+    }
+
+    private val fyp = RecentSearchPayload(
+        query = Query(
+            mode = QueryMode.Unified,
+            includeTags = listOf("x"),
+            excludeTags = emptyList(),
+            sort = SortMode.TOP,
+            dateRange = null,
+            minScore = null,
+        ),
+        kind = RecentSearchKind.FYP,
+        sources = listOf(SourceKey.GELBOORU, SourceKey.PIXIV),
+        sourceTags = mapOf(
+            SourceKey.GELBOORU to listOf("rock & roll", "<seed>"),
+            SourceKey.PIXIV to listOf("it's=night"),
+        ),
+    )
 
     private fun golden(name: String): String =
         checkNotNull(javaClass.getResource("/golden/recent-search/$name")) { "missing golden $name" }.readText()

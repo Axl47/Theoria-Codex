@@ -4,8 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.data.storage.PostStorageCodec
-import com.theoriacodex.data.storage.PostStorageRecord
-import com.theoriacodex.data.storage.assertGsonParity
+import com.theoriacodex.data.storage.assertStoredFormat
 import com.theoriacodex.domain.model.CommentHint
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
@@ -90,15 +89,13 @@ class RoomPayloadGoldenTest {
         assertEquals(goldenFullPost.copy(title = "Renamed & more"), LocalPostPayloadCodec.decode(stored))
     }
 
-    @Test fun `the post record serializers match Gson`() {
-        val full = PostStorageCodec.encode(goldenFullPost)
-        assertGsonParity(
-            samples = listOf(
-                PostStorageRecord(),
-                full,
-                full.copy(fullLocalPath = "/data/full.mp4", media = listOf(null, full.media?.first()?.copy(localPath = "/m"))),
-            ),
-            goldenJson = listOf(golden("post-payload.json"), golden("post-payload-full.json")),
+    // Pins: the goldens hold every key the post record declares. Gson never wrote a local path for the full image
+    // or a gallery entry in these goldens, so post-payload-offline.json is captured from the kotlinx encoder.
+    @Test fun `golden posts payloads hold every stored key`() {
+        val offline = PostStorageCodec.encode(goldenOfflinePost)
+        assertStoredFormat(
+            golden("post-payload-full.json") to PostStorageCodec.encode(goldenFullPost),
+            golden("post-payload-offline.json") to offline,
         )
     }
 
@@ -179,4 +176,10 @@ private val goldenFullPost = Post(
     ),
     creatorProfiles = listOf(goldenCreator, CreatorProfile(SourceKey.DANBOORU, "<other>")),
     contentHash = "0123456789abcdef0123456789abcdef",
+)
+
+/** Source of `golden/post-payload-offline.json`: the full post with its full image and gallery saved offline. */
+private val goldenOfflinePost = goldenFullPost.copy(
+    full = goldenFullPost.full?.copy(localPath = "/data/offline/full.mp4"),
+    media = goldenFullPost.media.mapIndexed { index, media -> media.copy(localPath = "/data/offline/$index") },
 )

@@ -1,17 +1,15 @@
 package com.theoriacodex.data.repository
 
-import com.theoriacodex.data.storage.assertGsonParity
+import com.theoriacodex.data.storage.assertStoredFormat
 import org.junit.Test
 
 /**
- * The four DataStore files read and write the same JSON under kotlinx.serialization as under Gson. Samples set every
- * nullable property; goldens are files Gson wrote (source-identity) or hand-built partial, quoted, and retired-key
- * inputs (datastore) that both libraries read the same way. Inputs with a null on a non-null field are excluded here:
- * Gson left those nulls in place, and DataStoreGoldenTest pins how kotlinx repairs them.
+ * Each DataStore file has a golden, captured from the kotlinx store's output, that sets every property; it must keep
+ * decoding to the same record. DataStoreGoldenTest pins how partial, quoted, retired-key, and damaged files load.
  */
-class DataStoreParityTest {
+class DataStoreFormatTest {
     @Test
-    fun `settings file matches Gson`() {
+    fun `settings file keeps every stored key`() {
         val settings = SettingsStoreRecord(
             followedCreators = listOf(
                 FollowedCreatorRecord(
@@ -48,22 +46,12 @@ class DataStoreParityTest {
             ),
             providerHealth = listOf(ProviderHealthSnapshotRecord("PIXIV", "DEGRADED", 1L, 2L, "timeout", "slow")),
         )
-        assertGsonParity(
-            samples = listOf(SettingsDataStoreFile(), SettingsDataStoreFile(settings = settings)),
-            goldenJson = listOf(
-                golden("source-identity/settings-default"),
-                golden("source-identity/settings-multi-source"),
-                golden("datastore/settings-missing-values"),
-                golden("datastore/settings-null-primitive"),
-                golden("datastore/settings-null-string"),
-                golden("datastore/settings-quoted-numbers"),
-                golden("datastore/settings-retired-keys"),
-            ),
-        )
+        val full = SettingsDataStoreFile(settings = settings)
+        assertStoredFormat(golden("settings-full.json") to full)
     }
 
     @Test
-    fun `ui restore file matches Gson`() {
+    fun `ui restore file keeps every stored key`() {
         val feedFilters = FeedFabRestoreState(
             excludedSavedSearches = listOf("saved"),
             followedSources = listOf("PIXIV"),
@@ -86,18 +74,12 @@ class DataStoreParityTest {
             feedFabRestoreStates = mapOf("ctx" to feedFilters),
             viewerLaunchContext = ViewerLaunchContextRecord("q", 4, "CODEX", 21, "CODEX"),
         )
-        assertGsonParity(
-            samples = listOf(UiRestoreDataStoreFile(), UiRestoreDataStoreFile(state = state)),
-            goldenJson = listOf(
-                golden("datastore/ui-restore-missing-state"),
-                golden("datastore/ui-restore-quoted-numbers"),
-                golden("datastore/ui-restore-retired-keys"),
-            ),
-        )
+        val full = UiRestoreDataStoreFile(state = state)
+        assertStoredFormat(golden("ui-restore-full.json") to full)
     }
 
     @Test
-    fun `statistics file matches Gson`() {
+    fun `statistics file keeps every stored key`() {
         val statistics = StatisticsStoreRecord(
             history = mapOf("2026-11-02" to DailyActivity(1L, 2L, 3L, 4L, 5L, 6L, 7L)),
             codexStatistics = mapOf(
@@ -124,34 +106,20 @@ class DataStoreParityTest {
             translatedPhraseCount = 12L,
             translatedSourceCharacterCount = 13L,
         )
-        assertGsonParity(
-            samples = listOf(StatisticsDataStoreFile(), StatisticsDataStoreFile(statistics = statistics)),
-            goldenJson = listOf(
-                golden("datastore/statistics-missing-statistics"),
-                golden("datastore/statistics-null-primitive"),
-                golden("datastore/statistics-quoted-numbers"),
-                golden("datastore/statistics-retired-keys"),
-            ),
-        )
+        val full = StatisticsDataStoreFile(statistics = statistics)
+        assertStoredFormat(golden("statistics-full.json") to full)
     }
 
     @Test
-    fun `site profile file matches Gson`() {
+    fun `site profile file keeps every stored key`() {
         val site = SiteProfileRecord(
             "custom_a_example", "https://a.example", "A & <b>", "GELBOORU_02", 5, "Agent", "https://a.example/",
             true, 1L, 2L, "https://a.example/icon.png",
         )
-        assertGsonParity(
-            samples = listOf(SiteProfileStoreFile(), SiteProfileStoreFile(sites = listOf(site, null))),
-            goldenJson = listOf(
-                golden("datastore/sites-missing-required"),
-                golden("datastore/sites-null-primitive"),
-                golden("datastore/sites-quoted-numbers"),
-                golden("datastore/sites-retired-keys"),
-            ),
-        )
+        val full = SiteProfileStoreFile(sites = listOf(site, null))
+        assertStoredFormat(golden("sites-full.json") to full)
     }
 
-    private fun golden(name: String): String =
-        checkNotNull(javaClass.classLoader.getResource("golden/$name.json")) { "Missing golden $name" }.readText()
+    private fun golden(name: String) =
+        checkNotNull(javaClass.getResource("/golden/datastore/$name")) { "missing golden $name" }.readText()
 }

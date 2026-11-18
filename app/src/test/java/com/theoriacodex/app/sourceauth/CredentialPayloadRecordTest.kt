@@ -1,7 +1,7 @@
 package com.theoriacodex.app.sourceauth
 
 import com.theoriacodex.data.storage.DurableJson
-import com.theoriacodex.data.storage.assertGsonParity
+import com.theoriacodex.data.storage.assertStoredFormat
 import com.theoriacodex.domain.source.SiteCredentials
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -39,29 +39,24 @@ class CredentialPayloadRecordTest {
         assertEquals("1", decoded.gelbooruUserId)
     }
 
-    // The payload golden is what the Gson store encrypted; the envelope golden is a Gson-written envelope, Base64
-    // padding escaped as =.
+    // The payload golden is the plaintext the Gson store encrypted. The envelope golden needs no entry here:
+    // CredentialEnvelopeGoldenTest decrypts it, which reads every envelope key.
     @Test
-    fun `the kotlinx serializers match Gson on samples and goldens`() {
-        assertGsonParity(
-            samples = listOf(
-                CredentialPayloadRecord(),
-                CredentialPayloadRecord(
-                    pixivAccessToken = "a=b&<c>'",
-                    pixivRefreshToken = "r",
-                    pixivExpiresAtEpochMs = 1L,
-                    gelbooruUserId = "1",
-                    gelbooruApiKey = "g",
-                    rule34XxxUserId = "2",
-                    rule34XxxApiKey = "x",
-                    customSites = mapOf("custom_a_test" to CustomSiteCredentialRecord("u", "k")),
+    fun `the Gson-written payload holds every stored key`() {
+        assertStoredFormat(
+            golden("payload-gson-written.json") to CredentialPayloadRecord(
+                pixivAccessToken = "access=token&<1>'",
+                pixivRefreshToken = "refresh==",
+                pixivExpiresAtEpochMs = 1_800_000_000_000L,
+                gelbooruUserId = "1",
+                gelbooruApiKey = "gel&key",
+                rule34XxxUserId = "2",
+                rule34XxxApiKey = "r34=key",
+                customSites = mapOf(
+                    "custom_safebooru_org" to CustomSiteCredentialRecord("42", "safe<key>"),
+                    "custom_example_com" to CustomSiteCredentialRecord("u", "k"),
                 ),
             ),
-            goldenJson = listOf(golden("payload-gson-written.json")),
-        )
-        assertGsonParity(
-            samples = listOf(CredentialEnvelopeRecord(), CredentialEnvelopeRecord(1, 1, "aXY=", "Y3Q=")),
-            goldenJson = listOf(golden("envelope-gson-written.json")),
         )
     }
 

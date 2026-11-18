@@ -1,7 +1,7 @@
 package com.theoriacodex.app.search
 
 import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
-import com.theoriacodex.data.storage.assertGsonParity
+import com.theoriacodex.data.storage.assertStoredFormat
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.SearchFacet
@@ -48,14 +48,13 @@ class TagSuggestionStoreGoldenTest {
         }
     }
 
+    // The Gson store never wrote a source namespace, so full.json, captured from the kotlinx store, sets every key.
     @Test
-    fun `the kotlinx serializer matches Gson`() {
-        val entry = TagStoreEntry("a & b", "ARTIST", "artist", "artist", 3, "A <b>", listOf("SEEN", "TRENDING"))
-        assertGsonParity(
-            samples = listOf(TagStoreSnapshot(), TagStoreSnapshot(mapOf("GELBOORU" to listOf(entry)))),
-            goldenJson = listOf(golden("gson-written.json"), golden("legacy.json")),
+    fun `the full cache holds every stored key`() {
+        val full = TagStoreSnapshot(
+            mapOf("GELBOORU" to listOf(TagStoreEntry("a & b", "ARTIST", "artist", "artist", 3, "A <b>", listOf("SEEN", "TRENDING")))),
         )
-        assertGsonParity(samples = listOf(TagStoreEntry(), entry))
+        assertStoredFormat(golden("full.json") to full)
     }
 
     private fun golden(name: String) = checkNotNull(javaClass.getResource("/golden/tag-suggestions/$name")).readText()

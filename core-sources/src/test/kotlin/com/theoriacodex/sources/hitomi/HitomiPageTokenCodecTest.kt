@@ -1,7 +1,5 @@
 package com.theoriacodex.sources.hitomi
 
-import com.theoriacodex.data.storage.assertGsonParity
-import java.util.Base64
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -51,20 +49,6 @@ class HitomiPageTokenCodecTest {
         assertEquals(
             DecodedHitomiPageToken("q=1&x<y>'z'", "all", 0L, 7L, null, null, "3"),
             codec.decode(codec.encode(token)),
-        )
-    }
-
-    @Test
-    fun `the kotlinx serializer matches Gson`() {
-        assertGsonParity(
-            samples = listOf(
-                HitomiPageToken(),
-                HitomiPageToken(4, "q=1&x<y>'z'", "all", 1L, 2L, "a".repeat(64), 3, "4"),
-            ),
-            goldenJson = listOf("v4-full.txt", "v2-legacy.txt").map { name ->
-                Base64.getUrlDecoder().decode(golden(name)).toString(Charsets.UTF_8)
-            },
-            json = hitomiPageTokenJson,
         )
     }
 

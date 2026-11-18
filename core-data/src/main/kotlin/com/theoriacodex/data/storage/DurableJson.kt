@@ -6,8 +6,8 @@ import kotlinx.serialization.json.Json
 /**
  * The single kotlinx.serialization configuration for saved data: files, Room payloads, and exports. Each flag
  * keeps data written by Gson, or read by an older build, behaving as it did under the plain `Gson()` it replaces.
- * Parity with Gson is proven per record by `assertGsonParity` (core-data test fixtures). Rationale and the full
- * compatibility contract: .docs/exec/gson-to-kotlinx-serialization.html.
+ * Golden files that older builds wrote pin each stored format (`assertStoredFormat`, core-data test fixtures).
+ * Rationale and the full compatibility contract: .docs/exec/gson-to-kotlinx-serialization.html.
  */
 @OptIn(ExperimentalSerializationApi::class)
 val DurableJson: Json = Json {
