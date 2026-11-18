@@ -2,6 +2,7 @@ package com.theoriacodex.app.network
 
 import android.content.Context
 import com.theoriacodex.app.TheoriaApplication
+import com.theoriacodex.app.diagnostics.NetworkUsage
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.sources.http.await
 import com.theoriacodex.sources.http.unexpectedFailuresAsIoExceptions
@@ -44,10 +45,10 @@ internal class AppHttpClients(
     }
 
     /**
-     * Video playback, and the base of the other media clients. A site's clearance cookie only counts with the browser
-     * agent that earned it. Provider requests choose their own agent, and a browser check must keep the one it is testing.
+     * The media clients' common base. A site's clearance cookie only counts with the browser agent that earned it.
+     * Provider requests choose their own agent, and a browser check must keep the one it is testing.
      */
-    val video: OkHttpClient by lazy {
+    private val media: OkHttpClient by lazy {
         val keyRetry = RefusedMediaKeyRetry(siteAuthorization)
         shared.newBuilder()
             .addInterceptor { chain ->
@@ -60,31 +61,38 @@ internal class AppHttpClients(
             .build()
     }
 
+    /** Video playback. */
+    val video: OkHttpClient by lazy { media.newBuilder().countedAs(NetworkUsage.Stack.VIDEO).build() }
+
     /** Provider APIs and indexes. */
     val sources: OkHttpClient by lazy {
-        shared.newBuilder().dispatcher(unqueuedSourceDispatcher()).build()
+        shared.newBuilder().dispatcher(unqueuedSourceDispatcher()).countedAs(NetworkUsage.Stack.SOURCE).build()
     }
 
     /** Coil. OkHttp's default of five per host lets a few large GIFs stall every thumbnail behind them. */
     val images: OkHttpClient by lazy {
-        video.newBuilder()
+        media.newBuilder()
             .dispatcher(Dispatcher().apply { maxRequestsPerHost = IMAGE_MAX_REQUESTS_PER_HOST })
             .addInterceptor(StalledPageRescue(rescue = { stalledPageRescue }))
+            .countedAs(NetworkUsage.Stack.IMAGE)
             .build()
     }
 
     /** A pool of its own, because a stalled page's connection is the one thing a rescue must not reuse. */
     private val stalledPageRescue: OkHttpClient by lazy {
-        shared.newBuilder().connectionPool(ConnectionPool(1, IDLE_KEEP_ALIVE_MINUTES, TimeUnit.MINUTES)).build()
+        shared.newBuilder().connectionPool(ConnectionPool(1, IDLE_KEEP_ALIVE_MINUTES, TimeUnit.MINUTES))
+            .countedAs(NetworkUsage.Stack.IMAGE)
+            .build()
     }
 
     /** Whole-file downloads: GIFs, Pixiv animations and offline saves. */
     val downloads: OkHttpClient by lazy {
-        video.newBuilder()
+        media.newBuilder()
             .dispatcher(unqueuedSourceDispatcher())
             .connectTimeout(DOWNLOAD_CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
             .readTimeout(DOWNLOAD_READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
             .followSslRedirects(false)
+            .countedAs(NetworkUsage.Stack.DOWNLOAD)
             .build()
     }
 
@@ -109,6 +117,12 @@ internal class AppHttpClients(
             }
         }
     }
+}
+
+/** Debug builds count each client's traffic for the live data-usage session; derived clients copy interceptors, so
+ *  only the final clients count. */
+private fun OkHttpClient.Builder.countedAs(stack: NetworkUsage.Stack) = apply {
+    if (NetworkUsage.enabled) addNetworkInterceptor(NetworkUsage.counting(stack))
 }
 
 /**

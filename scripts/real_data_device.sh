@@ -3,7 +3,8 @@
 #   export-library DEST.json   Save Debug's library as a profile backup (no credentials or media) for
 #                              BENCHMARK_LIBRARY in scripts/verify_performance_device.sh.
 #   data-usage NEW_DIR         Run the fixed live browsing session (DATA_USAGE_RUNS times, default 3) and
-#                              record what each run downloaded, per media stack.
+#                              record what each run downloaded, per media stack. Each run first clears
+#                              Debug's disposable media caches; DATA_USAGE_KEEP_CACHES=1 keeps them.
 # Both update Debug in place like installDebug, keeping its data; they never uninstall or clear it.
 set -euo pipefail
 
@@ -30,15 +31,16 @@ gradle_options=(--console=plain --quiet)
 ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest "${gradle_options[@]}"
 python3 scripts/verify_device_apk.py "$debug_apk" --package com.theoriacodex.debug
 python3 scripts/verify_device_apk.py "$test_apk" --package com.theoriacodex.debug.test
-[[ "$(selected_device)" == "$serial" ]]
+require_connected_device "$serial"
 "${adb_command[@]}" install -r -t "$debug_apk" > /dev/null
 "${adb_command[@]}" install -r -t "$test_apk" > /dev/null
 
 # Runs one opt-in class from app/src/androidTest/.../live and fails unless it passed.
 run_live_class() {
   local class="$1" argument="$2" log="$3"
+  shift 3
   "${adb_command[@]}" shell am instrument -w -r -e class "com.theoriacodex.app.live.$class" -e "$argument" true \
-    "$runner" > "$log" 2>&1 || true
+    "$@" "$runner" > "$log" 2>&1 || true
   grep -q '^OK (1 test)' "$log" || { echo "$class did not pass; see $log" >&2; exit 1; }
 }
 
@@ -64,7 +66,9 @@ mkdir -p "$destination"
 } > "$destination/build.txt"
 for ((index=1; index<=${DATA_USAGE_RUNS:-3}; index++)); do
   printf 'Running live data-usage session %s/%s.\n' "$index" "${DATA_USAGE_RUNS:-3}"
-  run_live_class LiveDataUsageSessionTest theoriaLiveDataUsage "$destination/run-$index.log"
+  keep=()
+  [[ "${DATA_USAGE_KEEP_CACHES:-0}" != 1 ]] || keep=(-e theoriaKeepCaches true)
+  run_live_class LiveDataUsageSessionTest theoriaLiveDataUsage "$destination/run-$index.log" ${keep[@]+"${keep[@]}"}
   sed -n 's/^INSTRUMENTATION_STATUS: theoriaDataUsage=//p' "$destination/run-$index.log" | tr -d '\r' \
     > "$destination/run-$index.json"
 done
@@ -72,20 +76,19 @@ python3 - "$destination" <<'PY'
 import json, pathlib, statistics, sys
 runs = [json.loads(path.read_text()) for path in sorted(pathlib.Path(sys.argv[1]).glob("run-*.json"))]
 mb = lambda value: f"{value / 1_000_000:.1f} MB"
-rows = {
-    "Total (app's whole network use)": [run["totalBytes"] for run in runs],
-    "Images": [run["stacks"]["image"]["bytes"] for run in runs],
-    "Video": [run["stacks"]["video"]["bytes"] for run in runs],
-    "Pixiv animations": [run["stacks"]["ugoira"]["bytes"] for run in runs],
-    "Other (source API, headers, TLS)": [run["otherBytes"] for run in runs],
-    "Video played from cache": [run["videoCachedBytesRead"] for run in runs],
-}
+labels = {"image": "Images", "video": "Video", "download": "GIFs, Pixiv animations, offline saves",
+          "source": "Provider APIs, indexes, length probes"}
+rows = {"Total (app's whole network use)": [run["totalBytes"] for run in runs]}
+rows |= {label: [run["stacks"][stack]["bytes"] for run in runs] for stack, label in labels.items()}
+rows["Uncounted (headers, TLS, other)"] = [run["otherBytes"] for run in runs]
+rows["Video read from cache (incl. prefetch)"] = [run["videoCachedBytesRead"] for run in runs]
 summary = {name: statistics.median(values) for name, values in rows.items()}
 for name, values in rows.items():
-    print(f"{name:34} median {mb(summary[name]):>10}   runs: {', '.join(mb(v) for v in values)}")
+    print(f"{name:38} median {mb(summary[name]):>10}   runs: {', '.join(mb(v) for v in values)}")
 images = [run["imageResultsBySource"] for run in runs]
 print("Images by source (per run): " + "; ".join(", ".join(f"{k} {v}" for k, v in run.items()) for run in images))
 print("Viewer opened: " + ", ".join(str(run["viewerOpened"]) for run in runs)
+      + "   caches cleared: " + ", ".join(str(run["cachesCleared"]) for run in runs)
       + "   metered network: " + ", ".join(str(run["metered"]) for run in runs))
 (pathlib.Path(sys.argv[1]) / "summary.json").write_text(json.dumps({"median_bytes": summary, "runs": len(runs)}, indent=2))
 PY

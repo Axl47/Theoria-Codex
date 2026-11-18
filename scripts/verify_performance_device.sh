@@ -49,7 +49,7 @@ if [[ -n "${BENCHMARK_SCENARIO:-}" ]]; then
   test_class="$(IFS=,; printf '%s' "${selectors[*]}")"
 fi
 test_options+=("-Pandroid.testInstrumentationRunnerArguments.class=$test_class")
-# A library snapshot (a profile backup, e.g. from scripts/export_benchmark_library.sh) makes startup measure a
+# A library snapshot (a profile backup, from scripts/real_data_device.sh export-library) makes startup measure a
 # real library. Its hash joins the contract, so runs seeded with different libraries cannot be compared.
 library_snapshot=""
 if [[ -n "${BENCHMARK_LIBRARY:-}" ]]; then
