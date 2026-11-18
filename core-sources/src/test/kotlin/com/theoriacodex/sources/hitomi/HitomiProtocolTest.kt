@@ -1,5 +1,10 @@
 package com.theoriacodex.sources.hitomi
 
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -49,19 +54,32 @@ class HitomiProtocolTest {
         assertProtocolFailure { HitomiProtocol.parseAutocomplete("[[\"tag\"]]") }
         assertProtocolFailure { HitomiProtocol.parseAutocomplete("[[\"tag\",1,\"unknown\"]]") }
         assertProtocolFailure { HitomiProtocol.parseAutocomplete("not-json") }
+        assertProtocolFailure { HitomiProtocol.parseAutocomplete("[[\"tag\",null,\"tag\"]]") }
+        assertProtocolFailure { HitomiProtocol.parseAutocomplete("[[null,1,\"tag\"]]") }
+    }
+
+    @Test
+    fun `reads autocomplete counts sent as strings and names sent as numbers`() {
+        assertEquals(
+            listOf(
+                HitomiAutocompleteEntry(name = "kio", count = 12, namespace = "artist"),
+                HitomiAutocompleteEntry(name = "7", count = 3, namespace = "tag"),
+            ),
+            HitomiProtocol.parseAutocomplete("[[\" kio \",\"12\",\"Artist\"],[7,3.0,\"tag\",\"extra\"]]"),
+        )
     }
 
     @Test
     fun `decodes captured animated gallery assignment`() {
         val gallery = HitomiProtocol.parseGalleryAssignment(fixture("gallery-4042375.js"))
 
-        assertEquals("4042375", gallery.get("id").asString)
-        assertEquals("artistcg", gallery.get("type").asString)
-        assertEquals(44, gallery.getAsJsonArray("files").size())
-        assertEquals("najar", gallery.getAsJsonArray("artists")[0].asJsonObject.get("artist").asString)
+        assertEquals("4042375", gallery.getValue("id").jsonPrimitive.content)
+        assertEquals("artistcg", gallery.getValue("type").jsonPrimitive.content)
+        assertEquals(44, gallery.getValue("files").jsonArray.size)
+        assertEquals("najar", gallery.getValue("artists").jsonArray[0].jsonObject.getValue("artist").jsonPrimitive.content)
         assertTrue(
-            gallery.getAsJsonArray("tags")
-                .any { it.asJsonObject.get("tag").asString == "animated" },
+            gallery.getValue("tags").jsonArray
+                .any { it.jsonObject.getValue("tag").jsonPrimitive.content == "animated" },
         )
     }
 
@@ -69,14 +87,14 @@ class HitomiProtocolTest {
     fun `decodes captured anime assignment without treating posters as video pages`() {
         val gallery = HitomiProtocol.parseGalleryAssignment(fixture("gallery-7231.js"))
 
-        assertEquals("7231", gallery.get("id").asString)
-        assertEquals("anime", gallery.get("type").asString)
-        assertEquals(2, gallery.getAsJsonArray("files").size())
+        assertEquals("7231", gallery.getValue("id").jsonPrimitive.content)
+        assertEquals("anime", gallery.getValue("type").jsonPrimitive.content)
+        assertEquals(2, gallery.getValue("files").jsonArray.size)
         assertEquals(
             "cheat-item-kanrikyoku-no-oshigoto-ex-1.mp4",
-            gallery.get("videofilename").asString,
+            gallery.getValue("videofilename").jsonPrimitive.content,
         )
-        assertTrue(gallery.get("artists").isJsonNull)
+        assertEquals(JsonNull, gallery.getValue("artists"))
     }
 
     @Test
@@ -85,7 +103,7 @@ class HitomiProtocolTest {
             val gallery = HitomiProtocol.parseGalleryAssignment(
                 "$keyword\n galleryinfo\t=\n{\"id\":4042375};",
             )
-            assertEquals(4_042_375, gallery.get("id").asInt)
+            assertEquals(4_042_375, gallery.getValue("id").jsonPrimitive.int)
         }
     }
 

@@ -1,6 +1,5 @@
 package com.theoriacodex.sources.hitomi
 
-import com.google.gson.JsonObject
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.encoding.decodePercentEncodedUtf8Strict
 import com.theoriacodex.domain.model.CreatorProfile
@@ -9,6 +8,7 @@ import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.canonicalHitomiArtistIdentity
+import com.theoriacodex.sources.common.asStringOrNull
 import java.net.URI
 import java.net.URLEncoder
 import java.time.LocalDate
@@ -16,6 +16,8 @@ import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 
 internal data class ParsedHitomiGallery(
     val id: Int,
@@ -35,8 +37,8 @@ internal data class ParsedHitomiGallery(
 /** Pure metadata boundary. Transport stays in the adapter; URL acquisition and sparse publication belong to HitomiPostMapper. */
 internal fun parseHitomiGallery(json: JsonObject, fallbackGalleryId: Int): ParsedHitomiGallery = with(json) {
     val galleryId = stringValue("id")?.toIntOrNull() ?: fallbackGalleryId
-    val files = arrayValue("files")?.mapIndexed { index, element ->
-        element.asObjectOrNull()?.toHitomiMediaFile() ?: throw HitomiGalleryException(
+    val files = (get("files") as? JsonArray)?.mapIndexed { index, element ->
+        (element as? JsonObject)?.toHitomiMediaFile() ?: throw HitomiGalleryException(
             SourceFailureReason.PARSE, "Hitomi gallery $galleryId had invalid file metadata at index $index")
     }.orEmpty()
     val result = ParsedHitomiGallery(
@@ -51,10 +53,10 @@ internal fun parseHitomiGallery(json: JsonObject, fallbackGalleryId: Int): Parse
 }
 
 private fun JsonObject.parseCreatorProfiles(): List<CreatorProfile> {
-    return arrayValue("artists")
+    return (get("artists") as? JsonArray)
         ?.mapNotNull { element ->
-            val artist = element.asObjectOrNull() ?: return@mapNotNull null
-            val rawDisplayName = artist.untrimmedStringValue("artist") ?: return@mapNotNull null
+            val artist = element as? JsonObject ?: return@mapNotNull null
+            val rawDisplayName = artist["artist"].asStringOrNull() ?: return@mapNotNull null
             val identity = canonicalHitomiArtistIdentity(rawDisplayName) ?: return@mapNotNull null
             CreatorProfile(
                 source = SourceKey.HITOMI,
@@ -98,8 +100,8 @@ private fun String.isSafeHitomiArtistPathFor(artistIdentity: String): Boolean {
 private fun JsonObject.parseTaxonomy(): List<PostTaxonomyTerm> {
     val gallery = this
     return buildList {
-        gallery.arrayValue("tags")?.forEach { element ->
-            val tag = element.asObjectOrNull() ?: return@forEach
+        (gallery["tags"] as? JsonArray)?.forEach { element ->
+            val tag = element as? JsonObject ?: return@forEach
             val value = tag.stringValue("tag") ?: return@forEach
             val namespace = when {
                 tag.truthy("female") -> HITOMI_FEMALE_NAMESPACE
@@ -152,8 +154,8 @@ private fun JsonObject.addObjectTaxonomy(
     namespace: String,
     target: MutableList<PostTaxonomyTerm>,
 ) {
-    arrayValue(field)?.forEach { element ->
-        val value = element.asObjectOrNull()?.stringValue(valueField) ?: return@forEach
+    (get(field) as? JsonArray)?.forEach { element ->
+        val value = (element as? JsonObject)?.stringValue(valueField) ?: return@forEach
         target += PostTaxonomyTerm(value, facet, namespace)
     }
 }

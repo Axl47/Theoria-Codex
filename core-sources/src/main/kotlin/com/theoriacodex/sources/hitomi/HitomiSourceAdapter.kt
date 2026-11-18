@@ -13,6 +13,7 @@ import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
+import com.theoriacodex.sources.common.asIntOrNull
 import com.theoriacodex.sources.common.autocompleteTagCounts
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
@@ -545,7 +546,7 @@ class HitomiSourceAdapter(
     private suspend fun fetchGallery(galleryId: Int, sparse: Boolean): Post? {
         val gallery = galleryManifests.getOrLoad(galleryId) { loadGalleryManifest(galleryId) }
             ?: return null
-        if (gallery.intValue("blocked") == 1) return null
+        if (gallery["blocked"].asIntOrNull() == 1) return null
         return postMapper.toPost(parseHitomiGallery(gallery, galleryId), sparse)
     }
 
@@ -576,7 +577,7 @@ class HitomiSourceAdapter(
                 cause = error,
             )
         }
-        if (gallery.intValue("blocked") == 1) return null
+        if (gallery["blocked"].asIntOrNull() == 1) return null
         return HitomiGalleryManifest(
             gallery = gallery,
             payloadBytes = response.body.hitomiUtf8ByteWeight(),

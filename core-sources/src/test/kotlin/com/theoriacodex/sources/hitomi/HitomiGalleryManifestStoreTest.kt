@@ -1,6 +1,5 @@
 package com.theoriacodex.sources.hitomi
 
-import com.google.gson.JsonObject
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
@@ -16,6 +15,11 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
@@ -67,7 +71,7 @@ class HitomiGalleryManifestStoreTest {
     fun `concurrent consumers single flight one gallery load`() = runTest {
         val gate = CompletableDeferred<Unit>()
         val calls = AtomicInteger()
-        val gallery = JsonObject().apply { addProperty("id", "42") }
+        val gallery = buildJsonObject { put("id", "42") }
         val store = store(scope = this)
 
         val consumers = List(8) {
@@ -95,16 +99,16 @@ class HitomiGalleryManifestStoreTest {
         suspend fun load(): JsonObject? = store.getOrLoad(7) {
             calls += 1
             HitomiGalleryManifest(
-                JsonObject().apply { addProperty("generation", calls) },
+                buildJsonObject { put("generation", calls) },
                 payloadBytes = 128L,
             )
         }
 
-        assertEquals(1, load()?.get("generation")?.asInt)
+        assertEquals(1, load()?.get("generation")?.jsonPrimitive?.int)
         now = 119_999L
-        assertEquals(1, load()?.get("generation")?.asInt)
+        assertEquals(1, load()?.get("generation")?.jsonPrimitive?.int)
         now = 120_001L
-        assertEquals(2, load()?.get("generation")?.asInt)
+        assertEquals(2, load()?.get("generation")?.jsonPrimitive?.int)
         assertEquals(2, calls)
     }
 
@@ -120,12 +124,12 @@ class HitomiGalleryManifestStoreTest {
             store.getOrLoad(2) { throw IOException("temporary") }
         }.exceptionOrNull()
         val recovered = store.getOrLoad(2) {
-            HitomiGalleryManifest(JsonObject().apply { addProperty("id", 2) }, 64L)
+            HitomiGalleryManifest(buildJsonObject { put("id", 2) }, 64L)
         }
 
         assertEquals(2, missingCalls)
         assertTrue(failure is IOException)
-        assertEquals(2, recovered?.get("id")?.asInt)
+        assertEquals(2, recovered?.get("id")?.jsonPrimitive?.int)
     }
 
     @Test
@@ -141,7 +145,7 @@ class HitomiGalleryManifestStoreTest {
         repeat(2) {
             store.getOrLoad(9) {
                 calls += 1
-                HitomiGalleryManifest(JsonObject(), payloadBytes = 512L)
+                HitomiGalleryManifest(JsonObject(emptyMap()), payloadBytes = 512L)
             }
         }
 
