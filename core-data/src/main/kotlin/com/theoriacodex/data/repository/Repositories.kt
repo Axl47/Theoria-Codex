@@ -1,6 +1,5 @@
 package com.theoriacodex.data.repository
 
-import com.google.gson.annotations.SerializedName
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
@@ -13,9 +12,11 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 interface CodexRepository {
     fun observeCodices(): Flow<List<Codex>>
@@ -230,17 +231,19 @@ data class UsageDurationDelta(
     val dailyUsage: List<DailyUsageDuration> = emptyList(),
 )
 
+@Serializable
 data class CodexPostStatistics(
-    @field:com.google.gson.annotations.SerializedName("label") val label: String = "",
-    @field:com.google.gson.annotations.SerializedName("opens") val opens: Long = 0L,
-    @field:com.google.gson.annotations.SerializedName("videoMs") val videoMs: Long = 0L,
-    @field:com.google.gson.annotations.SerializedName("imageMs") val imageMs: Long = 0L,
+    @field:com.google.gson.annotations.SerializedName("label") @SerialName("label") val label: String = "",
+    @field:com.google.gson.annotations.SerializedName("opens") @SerialName("opens") val opens: Long = 0L,
+    @field:com.google.gson.annotations.SerializedName("videoMs") @SerialName("videoMs") val videoMs: Long = 0L,
+    @field:com.google.gson.annotations.SerializedName("imageMs") @SerialName("imageMs") val imageMs: Long = 0L,
 )
 
+@Serializable
 data class CodexStatistics(
-    @field:com.google.gson.annotations.SerializedName("browsingMs") val browsingMs: Long = 0L,
-    @field:com.google.gson.annotations.SerializedName("watchingMs") val watchingMs: Long = 0L,
-    @field:com.google.gson.annotations.SerializedName("posts") val posts: Map<String, CodexPostStatistics> = emptyMap(),
+    @field:com.google.gson.annotations.SerializedName("browsingMs") @SerialName("browsingMs") val browsingMs: Long = 0L,
+    @field:com.google.gson.annotations.SerializedName("watchingMs") @SerialName("watchingMs") val watchingMs: Long = 0L,
+    @field:com.google.gson.annotations.SerializedName("posts") @SerialName("posts") val posts: Map<String, CodexPostStatistics> = emptyMap(),
 )
 
 data class CodexUsageTarget(val codexId: String, val postKey: String? = null, val video: Boolean = false)
@@ -627,28 +630,30 @@ data class SearchScrollState(
     val firstVisibleItemOffsetPx: Int,
 )
 
+@Serializable
 data class FeedFabRestoreState(
-    @field:SerializedName("excludedSavedSearches") val excludedSavedSearches: List<String> = emptyList(),
-    @field:SerializedName("followedSources") val followedSources: List<String> = emptyList(),
-    @field:SerializedName("followedAuthors") val followedAuthors: List<String> = emptyList(),
-    @field:SerializedName("animatedOnly") val animatedOnly: Boolean = false,
-    @field:SerializedName("hideLiked") val hideLiked: Boolean = false,
-    @field:SerializedName("hideSaved") val hideSaved: Boolean = false,
-    @field:SerializedName("hideWatched") val hideWatched: Boolean = false,
-    @field:SerializedName("durationMinBucket") val durationMinBucket: Int = 0,
-    @field:SerializedName("durationMaxBucket") val durationMaxBucket: Int = 25,
-    @field:SerializedName("sortMode") val sortMode: String? = null,
-    @field:SerializedName("source") val source: String? = null,
-    @field:SerializedName("language") val language: String? = null,
-    @field:SerializedName("fullColorOnly") val fullColorOnly: Boolean = false,
-    @field:SerializedName("searchAnimationByScope")
+    @SerialName("excludedSavedSearches") val excludedSavedSearches: List<String> = emptyList(),
+    @SerialName("followedSources") val followedSources: List<String> = emptyList(),
+    @SerialName("followedAuthors") val followedAuthors: List<String> = emptyList(),
+    @SerialName("animatedOnly") val animatedOnly: Boolean = false,
+    @SerialName("hideLiked") val hideLiked: Boolean = false,
+    @SerialName("hideSaved") val hideSaved: Boolean = false,
+    @SerialName("hideWatched") val hideWatched: Boolean = false,
+    @SerialName("durationMinBucket") val durationMinBucket: Int = 0,
+    @SerialName("durationMaxBucket") val durationMaxBucket: Int = 25,
+    @SerialName("sortMode") val sortMode: String? = null,
+    @SerialName("source") val source: String? = null,
+    @SerialName("language") val language: String? = null,
+    @SerialName("fullColorOnly") val fullColorOnly: Boolean = false,
+    @SerialName("searchAnimationByScope")
     val searchAnimationByScope: Map<String, SearchAnimationFilterRestoreState> = emptyMap(),
 )
 
+@Serializable
 data class SearchAnimationFilterRestoreState(
-    @field:SerializedName("animatedOnly") val animatedOnly: Boolean = false,
-    @field:SerializedName("durationMinBucket") val durationMinBucket: Int = 0,
-    @field:SerializedName("durationMaxBucket") val durationMaxBucket: Int = 25,
+    @SerialName("animatedOnly") val animatedOnly: Boolean = false,
+    @SerialName("durationMinBucket") val durationMinBucket: Int = 0,
+    @SerialName("durationMaxBucket") val durationMaxBucket: Int = 25,
 )
 
 interface UiRestoreRepository {

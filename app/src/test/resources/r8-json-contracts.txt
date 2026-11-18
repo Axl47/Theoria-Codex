@@ -5,8 +5,6 @@ com.theoriacodex.data.storage.PostTaxonomyTermStorageRecord|value,facet,sourceNa
 com.theoriacodex.data.storage.CreatorProfileStorageRecord|source,displayName,profileId,profileUrl,uploadsQuery
 com.theoriacodex.data.storage.ImageRefStorageRecord|url,localPath,mime,progressiveUrls,fallbackUrls,isAnimated,videoVariants,thumbnailUrl
 com.theoriacodex.data.repository.SettingsDataStoreFile|schemaVersion,settings
-com.theoriacodex.data.repository.UiRestoreDataStoreFile|schemaVersion,state
-com.theoriacodex.data.repository.StatisticsDataStoreFile|schemaVersion,statistics
 com.theoriacodex.data.repository.StatisticsStoreRecord|history,codexStatistics,appOpenCount,totalForegroundMs,browsingMs,watchingMs,codexMs,watchedPostCount,watchedBySource,watchedByTag,searchCount,searchesBySource,searchesByTag,searchesByTagSeeded,searchesByTypedTag,searchesByTypedTagSeeded,forYouSearchCount,forYouSaveCount,postUrlCopyCount,codexEntryCounts,translatedPhraseCount,translatedSourceCharacterCount
 com.theoriacodex.data.repository.StatisticsTagCountRecord|source,tag,count
 com.theoriacodex.data.repository.StatisticsTypedTagCountRecord|source,tag,facet,sourceNamespace,count
@@ -15,11 +13,6 @@ com.theoriacodex.data.repository.ProviderHealthSnapshotRecord|source,status,chec
 com.theoriacodex.data.repository.FavoriteTagEntryRecord|source,tag,tags,name
 com.theoriacodex.data.repository.ForYouBlacklistEntryRecord|source,tags
 com.theoriacodex.data.repository.RecommendationProfileRecord|profileId,name
-com.theoriacodex.data.repository.UiRestoreStoreRecord|lastTab,searchScrollStates,feedFabRestoreStates,viewerLaunchContext
-com.theoriacodex.data.repository.FeedFabRestoreState|excludedSavedSearches,followedSources,followedAuthors,animatedOnly,hideLiked,hideSaved,hideWatched,durationMinBucket,durationMaxBucket,sortMode,source,language,fullColorOnly,searchAnimationByScope
-com.theoriacodex.data.repository.SearchAnimationFilterRestoreState|animatedOnly,durationMinBucket,durationMaxBucket
-com.theoriacodex.data.repository.SearchScrollStateRecord|firstVisibleItemIndex,firstVisibleItemOffsetPx
-com.theoriacodex.data.repository.ViewerLaunchContextRecord|queryHash,startIndex,streamSource,scrollOffsetHint,recentsSection
 com.theoriacodex.data.storage.QueryStorageRecord|schemaVersion,modeType,modeSource,includeTags,excludeTags,sort,dateFromEpochMs,dateToEpochMs,minScore,includeTerms,excludeTerms,includeTermGroups
 com.theoriacodex.data.storage.SearchTermStorageRecord|value,facet,sourceNamespace
 com.theoriacodex.app.sourceauth.CredentialEnvelopeRecord|formatVersion,keyVersion,iv,ciphertext
@@ -37,4 +30,3 @@ com.theoriacodex.data.repository.CodexStatistics|browsingMs,watchingMs,posts
 com.theoriacodex.data.repository.CodexPostStatistics|label,opens,videoMs,imageMs
 com.theoriacodex.data.repository.DailyActivity|appOpenCount,totalForegroundMs,browsingMs,watchingMs,codexMs,watchedPostCount,searchCount
 com.theoriacodex.data.repository.SiteProfileRecord|sourceId,baseUrl,label,family,searchTermLimit,userAgent,referer,credentialsRequired,addedAt,verifiedAt,iconUrl
-com.theoriacodex.data.repository.SiteProfileStoreFile|schemaVersion,sites
