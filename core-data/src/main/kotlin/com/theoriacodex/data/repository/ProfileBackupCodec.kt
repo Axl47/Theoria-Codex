@@ -32,7 +32,7 @@ class ProfileBackupCodec(private val gson: Gson = Gson()) {
                 addProperty("id", entry.id)
                 addProperty("name", entry.name)
                 addProperty("savedAt", entry.savedAtEpochMs)
-                add("search", backupSearch(entry.search, gson))
+                add("search", backupSearch(entry.search))
             } })
             add("readingPositions", backupArray(backup.readingPositions) { entry -> backupObject {
                 putId(entry.postId)
@@ -62,7 +62,7 @@ class ProfileBackupCodec(private val gson: Gson = Gson()) {
             library = decodeLibrary(requireNotNull(root.getAsJsonObject("library"))),
             savedSearches = root.backupObjects("savedSearches", MAX_SAVED_SEARCHES).map { entry ->
                 SavedSearchEntry(entry.backupString("id"), entry.backupString("name"),
-                    entry.getAsJsonObject("search").readBackupSearch(gson), entry.backupLong("savedAt"))
+                    entry.getAsJsonObject("search").readBackupSearch(), entry.backupLong("savedAt"))
             },
             readingPositions = root.backupObjects("readingPositions", MAX_READING_POSITIONS).map { entry ->
                 ReadingPosition(entry.backupId(), RecentPostSection.valueOf(entry.backupString("section")),
@@ -116,7 +116,7 @@ class ProfileBackupCodec(private val gson: Gson = Gson()) {
             addProperty("section", entry.section.name)
             addProperty("highestMedia", entry.maxViewedMediaNumber)
         } })
-        add("searches", backupArray(library.searches) { backupSearch(it, gson) })
+        add("searches", backupArray(library.searches) { backupSearch(it) })
     }
 
     private fun decodeLibrary(root: JsonObject): BackupLibrary {
@@ -143,7 +143,7 @@ class ProfileBackupCodec(private val gson: Gson = Gson()) {
                     it.get("queryHash")?.takeUnless { value -> value.isJsonNull }?.asString,
                     RecentPostSection.valueOf(it.backupString("section")), it.backupInt("highestMedia"))
             },
-            searches = root.backupObjects("searches", 2_000).map { it.readBackupSearch(gson) },
+            searches = root.backupObjects("searches", 2_000).map { it.readBackupSearch() },
         )
     }
 

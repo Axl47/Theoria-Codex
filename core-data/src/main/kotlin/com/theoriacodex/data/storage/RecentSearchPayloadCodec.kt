@@ -1,8 +1,5 @@
 package com.theoriacodex.data.storage
 
-import com.google.gson.Gson
-import com.google.gson.JsonParser
-import com.google.gson.annotations.SerializedName
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.defaultRecentSearchKind
@@ -10,15 +7,19 @@ import com.theoriacodex.data.repository.defaultRecentSearchSources
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 
 private const val CURRENT_RECENT_SEARCH_PAYLOAD_VERSION = 1
 
-private data class RecentSearchPayloadRecord(
-    @field:SerializedName("recentSearchSchemaVersion") val schemaVersion: Int? = null,
-    @field:SerializedName("query") val query: QueryStorageRecord? = null,
-    @field:SerializedName("kind") val kind: String? = null,
-    @field:SerializedName("sources") val sources: List<String>? = null,
-    @field:SerializedName("sourceTags") val sourceTags: Map<String, List<String>>? = null,
+@Serializable
+internal data class RecentSearchPayloadRecord(
+    @SerialName("recentSearchSchemaVersion") val recentSearchSchemaVersion: Int? = null,
+    @SerialName("query") val query: QueryStorageRecord? = null,
+    @SerialName("kind") val kind: String? = null,
+    @SerialName("sources") val sources: List<String>? = null,
+    @SerialName("sourceTags") val sourceTags: Map<String, List<String>>? = null,
 )
 
 data class RecentSearchPayload(
@@ -30,12 +31,11 @@ data class RecentSearchPayload(
 
 /** Backward-compatible payload stored in the existing Room recent-search query column. */
 object RecentSearchPayloadCodec {
-    fun encodeJson(entry: RecentSearchEntry, gson: Gson = Gson()): String = encodeJson(
+    fun encodeJson(entry: RecentSearchEntry): String = encodeJson(
         query = entry.query,
         kind = entry.kind,
         sources = entry.sources,
         sourceTags = entry.sourceTags,
-        gson = gson,
     )
 
     fun encodeJson(
@@ -43,16 +43,16 @@ object RecentSearchPayloadCodec {
         kind: RecentSearchKind,
         sources: List<SourceKey>,
         sourceTags: Map<SourceKey, List<String>> = emptyMap(),
-        gson: Gson = Gson(),
     ): String {
         val normalizedSources = sources.distinct()
         val normalizedSourceTags = normalizedSources.associateWith { source ->
             sourceTags[source].orEmpty().toList()
         }.filterValues(List<String>::isNotEmpty)
         validate(query, kind, normalizedSources, normalizedSourceTags)
-        return gson.toJson(
+        return DurableJson.encodeToString(
+            RecentSearchPayloadRecord.serializer(),
             RecentSearchPayloadRecord(
-                schemaVersion = CURRENT_RECENT_SEARCH_PAYLOAD_VERSION,
+                recentSearchSchemaVersion = CURRENT_RECENT_SEARCH_PAYLOAD_VERSION,
                 query = QueryStorageCodec.encode(query),
                 kind = kind.name,
                 sources = normalizedSources.map(SourceKey::id),
@@ -61,21 +61,25 @@ object RecentSearchPayloadCodec {
         )
     }
 
-    fun decodeJson(payload: String, gson: Gson = Gson()): RecentSearchPayload {
-        val root = JsonParser.parseString(payload)
-        require(root.isJsonObject) { "Stored recent search root must be an object" }
-        if (!root.asJsonObject.has("recentSearchSchemaVersion")) {
-            val query = QueryStorageCodec.decodeJson(payload, gson)
+    fun decodeJson(payload: String): RecentSearchPayload {
+        val root = DurableJson.parseToJsonElement(payload)
+        require(root is JsonObject) { "Stored recent search root must be an object" }
+        if (!root.containsKey("recentSearchSchemaVersion")) {
+            // Rows written before payloads carried their own version hold a bare stored Query.
+            val bare = DurableJson.decodeFromJsonElement(QueryStorageRecord.serializer(), root)
+            require(bare.schemaVersion != null && bare.schemaVersion in 1..CURRENT_QUERY_STORAGE_SCHEMA_VERSION) {
+                "Room Query payload requires a supported schema version"
+            }
+            val query = QueryStorageCodec.decode(bare)
             return RecentSearchPayload(
                 query = query,
                 kind = query.defaultRecentSearchKind(),
                 sources = query.defaultRecentSearchSources(),
             )
         }
-        val record = gson.fromJson(root, RecentSearchPayloadRecord::class.java)
-            ?: error("Stored recent search decoded to null")
-        require(record.schemaVersion == CURRENT_RECENT_SEARCH_PAYLOAD_VERSION) {
-            "Unsupported stored recent-search version: ${record.schemaVersion}"
+        val record = DurableJson.decodeFromJsonElement(RecentSearchPayloadRecord.serializer(), root)
+        require(record.recentSearchSchemaVersion == CURRENT_RECENT_SEARCH_PAYLOAD_VERSION) {
+            "Unsupported stored recent-search version: ${record.recentSearchSchemaVersion}"
         }
         val query = QueryStorageCodec.decode(requireNotNull(record.query) { "Stored recent search has no query" })
         val kind = record.kind?.let { runCatching { RecentSearchKind.valueOf(it) }.getOrNull() }

@@ -1,9 +1,5 @@
 package com.theoriacodex.data.storage
 
-import com.google.gson.Gson
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
-import com.google.gson.annotations.SerializedName
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
@@ -17,59 +13,41 @@ import kotlinx.serialization.Serializable
 
 const val CURRENT_QUERY_STORAGE_SCHEMA_VERSION = 2
 
-/**
- * One stored Query. query_store.json reads it through kotlinx.serialization; Room recent-search payloads and the
- * legacy Recents importer still use Gson, so each property keeps both names until those move too.
- */
+/** One stored Query, in query_store.json and in Room recent-search payloads. */
 @Serializable
 data class QueryStorageRecord(
-    @field:SerializedName("schemaVersion")
     @SerialName("schemaVersion")
     val schemaVersion: Int? = null,
-    @field:SerializedName("modeType")
     @SerialName("modeType")
     val modeType: String = "unified",
-    @field:SerializedName("modeSource")
     @SerialName("modeSource")
     val modeSource: String? = null,
-    @field:SerializedName("includeTags")
     @SerialName("includeTags")
     val includeTags: List<String> = emptyList(),
-    @field:SerializedName("excludeTags")
     @SerialName("excludeTags")
     val excludeTags: List<String> = emptyList(),
-    @field:SerializedName("sort")
     @SerialName("sort")
     val sort: String = SortMode.TOP.name,
-    @field:SerializedName("dateFromEpochMs")
     @SerialName("dateFromEpochMs")
     val dateFromEpochMs: Long? = null,
-    @field:SerializedName("dateToEpochMs")
     @SerialName("dateToEpochMs")
     val dateToEpochMs: Long? = null,
-    @field:SerializedName("minScore")
     @SerialName("minScore")
     val minScore: Int? = null,
-    @field:SerializedName("includeTerms")
     @SerialName("includeTerms")
     val includeTerms: List<SearchTermStorageRecord?>? = null,
-    @field:SerializedName("excludeTerms")
     @SerialName("excludeTerms")
     val excludeTerms: List<SearchTermStorageRecord?>? = null,
-    @field:SerializedName("includeTermGroups")
     @SerialName("includeTermGroups")
     val includeTermGroups: List<List<SearchTermStorageRecord?>?>? = null,
 )
 
 @Serializable
 data class SearchTermStorageRecord(
-    @field:SerializedName("value")
     @SerialName("value")
     val value: String? = null,
-    @field:SerializedName("facet")
     @SerialName("facet")
     val facet: String? = null,
-    @field:SerializedName("sourceNamespace")
     @SerialName("sourceNamespace")
     val sourceNamespace: String? = null,
 )
@@ -131,19 +109,6 @@ object QueryStorageCodec {
             minScore = record.minScore,
             includeTermGroups = includeGroups,
         )
-    }
-
-    fun encodeJson(query: Query, gson: Gson = Gson()): String = gson.toJson(encode(query))
-
-    fun decodeJson(payload: String, gson: Gson = Gson()): Query {
-        val root = JsonParser.parseString(payload)
-        require(root.isJsonObject) { "Stored Query root must be an object" }
-        val record = gson.fromJson(root, QueryStorageRecord::class.java)
-            ?: error("Stored Query decoded to null")
-        require(record.schemaVersion != null && record.schemaVersion in 1..CURRENT_QUERY_STORAGE_SCHEMA_VERSION) {
-            "Room Query payload requires a supported schema version"
-        }
-        return decode(record)
     }
 
     private fun encodeTerm(term: SearchTerm) = SearchTermStorageRecord(

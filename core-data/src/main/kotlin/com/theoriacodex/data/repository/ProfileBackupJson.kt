@@ -59,14 +59,14 @@ internal fun JsonObject.putId(id: PostId) {
 
 internal fun JsonObject.backupId() = PostId(SourceKey.parseOrThrow(backupString("source")), backupString("postId"))
 
-internal fun backupSearch(entry: RecentSearchEntry, gson: Gson): JsonObject = backupObject {
+internal fun backupSearch(entry: RecentSearchEntry): JsonObject = backupObject {
     addProperty("queryHash", entry.queryHash)
     addProperty("searchedAt", entry.searchedAtEpochMs)
-    add("payload", JsonParser.parseString(RecentSearchPayloadCodec.encodeJson(entry, gson)))
+    add("payload", JsonParser.parseString(RecentSearchPayloadCodec.encodeJson(entry)))
 }
 
-internal fun JsonObject.readBackupSearch(gson: Gson): RecentSearchEntry {
-    val payload = RecentSearchPayloadCodec.decodeJson(requireNotNull(get("payload")).toString(), gson)
+internal fun JsonObject.readBackupSearch(): RecentSearchEntry {
+    val payload = RecentSearchPayloadCodec.decodeJson(requireNotNull(get("payload")).toString())
     return RecentSearchEntry(payload.query, backupString("queryHash"), backupLong("searchedAt"),
         payload.kind, payload.sources, payload.sourceTags)
 }

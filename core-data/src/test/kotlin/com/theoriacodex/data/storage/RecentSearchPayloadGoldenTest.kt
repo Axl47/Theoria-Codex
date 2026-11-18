@@ -80,6 +80,34 @@ class RecentSearchPayloadGoldenTest {
         )
     }
 
+    @Test
+    fun `the recent-search serializers match Gson`() {
+        val record = RecentSearchPayloadRecord(
+            recentSearchSchemaVersion = 1,
+            query = QueryStorageCodec.encode(
+                Query(
+                    mode = QueryMode.Source(SourceKey.PIXIV),
+                    includeTerms = listOf(SearchTerm("a & b", SearchFacet.ARTIST, "artist")),
+                    excludeTerms = listOf(SearchTerm("c", SearchFacet.LANGUAGE, "language")),
+                    sort = SortMode.NEWEST,
+                    dateRange = DateRange(1L, 2L),
+                    minScore = 3,
+                ),
+            ),
+            kind = RecentSearchKind.SOURCE.name,
+            sources = listOf(SourceKey.PIXIV.id),
+            sourceTags = mapOf(SourceKey.PIXIV.id to listOf("it's")),
+        )
+        assertGsonParity(
+            samples = listOf(RecentSearchPayloadRecord(), record),
+            goldenJson = listOf(golden("multi-search.json"), golden("fyp.json")),
+        )
+        assertGsonParity(
+            samples = listOf(QueryStorageRecord(), requireNotNull(record.query)),
+            goldenJson = listOf(golden("legacy-query.json")),
+        )
+    }
+
     private fun golden(name: String): String =
         checkNotNull(javaClass.getResource("/golden/recent-search/$name")) { "missing golden $name" }.readText()
 }

@@ -1,18 +1,23 @@
 package com.theoriacodex.data.repository
 
-import com.google.gson.Gson
-import com.google.gson.JsonArray
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
+import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.PostStorageCodec
 import com.theoriacodex.data.storage.PostStorageRecord
 import com.theoriacodex.domain.model.CommentHint
 import com.theoriacodex.domain.model.Post
-import com.theoriacodex.domain.model.contentHashOrNull
 import java.io.File
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 
 /**
  * The most recent search's first page, so reopening the app can paint it at once while the search refreshes. It holds
@@ -24,22 +29,18 @@ class SearchFirstPageStore(
     private val file: File,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
-    private val gson = Gson()
-
     /** The saved posts for [executionKey], or nothing when the file holds another search. */
     suspend fun load(executionKey: String): List<Post> = withContext(ioDispatcher) {
         runCatching {
             if (!file.exists()) return@runCatching emptyList()
-            val root = JsonParser.parseString(file.readText()).asJsonObject
-            if (root.get(VERSION).asInt != CURRENT_VERSION || root.get(KEY).asString != executionKey) {
+            val root = DurableJson.parseToJsonElement(file.readText()).jsonObject
+            if (root.getValue(VERSION).jsonPrimitive.int != CURRENT_VERSION || root.getValue(KEY).jsonPrimitive.content != executionKey) {
                 return@runCatching emptyList()
             }
-            root.getAsJsonArray(POSTS).mapNotNull { element ->
-                PostStorageCodec.decode(gson.fromJson(element, PostStorageRecord::class.java))
-                    ?.copy(
-                        commentHint = element.asJsonObject.get(COMMENT_HINT)?.asInt?.toCommentHint(),
-                        contentHash = contentHashOrNull(element.asJsonObject.get(CONTENT_HASH)?.asString),
-                    )
+            root.getValue(POSTS).jsonArray.mapNotNull { element ->
+                val stored = element.jsonObject
+                PostStorageCodec.decode(DurableJson.decodeFromJsonElement(PostStorageRecord.serializer(), stored))
+                    ?.copy(commentHint = stored[COMMENT_HINT]?.jsonPrimitive?.int?.toCommentHint())
             }
         }.getOrDefault(emptyList())
     }
@@ -47,22 +48,16 @@ class SearchFirstPageStore(
     suspend fun save(executionKey: String, posts: List<Post>) {
         withContext(ioDispatcher) {
             runCatching {
-                val root = JsonObject().apply {
-                    addProperty(VERSION, CURRENT_VERSION)
-                    addProperty(KEY, executionKey)
-                    add(
-                        POSTS,
-                        JsonArray().apply {
-                            posts.take(MAX_POSTS).forEach { post ->
-                                add(
-                                    gson.toJsonTree(PostStorageCodec.encode(post)).asJsonObject.apply {
-                                        post.commentHint?.let { addProperty(COMMENT_HINT, it.count ?: SOME_COMMENTS) }
-                                        post.contentHash?.let { addProperty(CONTENT_HASH, it) }
-                                    },
-                                )
-                            }
-                        },
-                    )
+                val root = buildJsonObject {
+                    put(VERSION, CURRENT_VERSION)
+                    put(KEY, executionKey)
+                    putJsonArray(POSTS) {
+                        posts.take(MAX_POSTS).forEach { post ->
+                            val stored = DurableJson.encodeToJsonElement(PostStorageRecord.serializer(), PostStorageCodec.encode(post))
+                                .jsonObject
+                            add(post.commentHint?.let { JsonObject(stored + (COMMENT_HINT to JsonPrimitive(it.count ?: SOME_COMMENTS))) } ?: stored)
+                        }
+                    }
                 }
                 val temporary = File(file.parentFile, "${file.name}.tmp")
                 temporary.writeText(root.toString())
@@ -79,7 +74,6 @@ class SearchFirstPageStore(
         private const val MAX_POSTS = 60
         private const val CURRENT_VERSION = 2
         private const val COMMENT_HINT = "commentHint"
-        private const val CONTENT_HASH = "contentHash"
         private const val SOME_COMMENTS = -1
         private const val VERSION = "version"
         private const val KEY = "key"

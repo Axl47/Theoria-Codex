@@ -113,14 +113,6 @@
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
--keepclassmembers class com.theoriacodex.data.storage.QueryStorageRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.storage.SearchTermStorageRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
 -keepclassmembers class com.theoriacodex.data.repository.SettingsStoreFile {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;

@@ -21,6 +21,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.encoding.Decoder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -37,20 +39,13 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
             val directory = object : File(tempDir("catalog-$size").path) {
                 override fun listFiles(): Array<File>? { scans.incrementAndGet(); return super.listFiles() }
             }
-            val gson = com.google.gson.GsonBuilder().registerTypeAdapterFactory(object : com.google.gson.TypeAdapterFactory {
-                override fun <T> create(gson: com.google.gson.Gson, type: com.google.gson.reflect.TypeToken<T>): com.google.gson.TypeAdapter<T>? {
-                    if (type.rawType != PostStorageRecord::class.java) return null
-                    val delegate = gson.getDelegateAdapter(this, type)
-                    return object : com.google.gson.TypeAdapter<T>() {
-                        override fun write(writer: com.google.gson.stream.JsonWriter, value: T) = delegate.write(writer, value)
-                        override fun read(reader: com.google.gson.stream.JsonReader): T {
-                            reads.incrementAndGet()
-                            return delegate.read(reader)
-                        }
-                    }
+            val records = object : KSerializer<PostStorageRecord> by PostStorageRecord.serializer() {
+                override fun deserialize(decoder: Decoder): PostStorageRecord {
+                    reads.incrementAndGet()
+                    return PostStorageRecord.serializer().deserialize(decoder)
                 }
-            }).create()
-            val store = OfflineMediaStore(directory, gson)
+            }
+            val store = OfflineMediaStore(directory, records)
             val posts = (1..size).map { samplePost(it.toString(), null) }
             for (post in posts) {
                 store.save(post, listOf(requireNotNull(post.full)), "all") { _, file -> file.writeText("media") }
