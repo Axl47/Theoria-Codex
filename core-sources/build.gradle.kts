@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kover)
     alias(libs.plugins.detekt)
 }
@@ -13,6 +14,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     api(libs.okhttp)
     implementation(libs.gson)
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.jsoup)
     compileOnly(libs.jspecify)
     testImplementation(libs.junit)
