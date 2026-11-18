@@ -49,12 +49,39 @@ if [[ -n "${BENCHMARK_SCENARIO:-}" ]]; then
   test_class="$(IFS=,; printf '%s' "${selectors[*]}")"
 fi
 test_options+=("-Pandroid.testInstrumentationRunnerArguments.class=$test_class")
+# A library snapshot (a profile backup, from scripts/real_data_device.sh export-library) makes startup measure a
+# real library. Its hash joins the contract, so runs seeded with different libraries cannot be compared.
+library_snapshot=""
+if [[ -n "${BENCHMARK_LIBRARY:-}" ]]; then
+  library_snapshot="$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$BENCHMARK_LIBRARY")"
+  [[ -f "$library_snapshot" ]] || { echo 'BENCHMARK_LIBRARY must name a library snapshot file.' >&2; exit 2; }
+  contract_options+=(--library-sha256 "$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$library_snapshot")")
+fi
 python3 scripts/benchmark_results.py contract "${contract_options[@]}" > "$output/workload-contract.json"
 record_options+=(--contract "$output/workload-contract.json")
 
 readonly target_apk="app/build/outputs/apk/benchmarkRelease/app-benchmarkRelease.apk"
 readonly runner_apk="macrobenchmark/build/outputs/apk/benchmarkRelease/macrobenchmark-benchmarkRelease.apk"
 adb_command=("${ADB:-adb}" -s "$serial")
+
+# Clears only the isolated benchmark app, then restores the snapshot through its benchmark-only seed activity.
+seed_benchmark_library() {
+  local media=/sdcard/Android/media/com.theoriacodex.benchmark status=""
+  "${adb_command[@]}" shell pm clear com.theoriacodex.benchmark > "$output/library-seed.log"
+  "${adb_command[@]}" shell mkdir -p "$media"
+  "${adb_command[@]}" push "$library_snapshot" "$media/library-snapshot.json" >> "$output/library-seed.log"
+  "${adb_command[@]}" shell am start -W \
+    -n com.theoriacodex.benchmark/com.theoriacodex.app.benchmark.BenchmarkLibrarySeedActivity >> "$output/library-seed.log"
+  for _ in $(seq 180); do
+    status="$("${adb_command[@]}" shell cat "$media/library-seed-status.json" 2>/dev/null | tr -d '\r' || true)"
+    [[ -n "$status" ]] && break
+    sleep 1
+  done
+  "${adb_command[@]}" shell rm -f "$media/library-snapshot.json" "$media/library-seed-status.json"
+  "${adb_command[@]}" shell am force-stop com.theoriacodex.benchmark
+  printf '%s\n' "${status:-timed out}" > "$output/library-seed.json"
+  [[ "$status" == *'"state":"complete"'* ]] || { echo "Library seeding failed: ${status:-timed out}" >&2; exit 2; }
+}
 
 # Every device command below uses adb -s, so other connected devices (a shared emulator) are allowed.
 require_selected_phone() {
@@ -79,6 +106,7 @@ require_selected_phone
 "${adb_command[@]}" shell input keyevent KEYCODE_HOME
 "${adb_command[@]}" install -r "$target_apk" > "$output/install.log" 2>&1
 "${adb_command[@]}" install -r "$runner_apk" >> "$output/install.log" 2>&1
+[[ -z "$library_snapshot" ]] || seed_benchmark_library
 expected_tests="$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["scenarios"]))' "$output/workload-contract.json")"
 
 run_records=()

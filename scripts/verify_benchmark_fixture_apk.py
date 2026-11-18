@@ -17,6 +17,8 @@ EXPECTED_ACTION = "com.theoriacodex.action.BENCHMARK_FIXTURE"
 EXPECTED_DURATION_RECEIVER = "com.theoriacodex.app.benchmark.BenchmarkDurationStartReceiver"
 EXPECTED_DURATION_ACTION = "com.theoriacodex.action.BENCHMARK_DURATION_START"
 EXPECTED_PROCESS = ":benchmarkFixture"
+# Restores a library snapshot through the real app container, so it must run in the main process.
+EXPECTED_SEED_ACTIVITY = "com.theoriacodex.app.benchmark.BenchmarkLibrarySeedActivity"
 EXPECTED_LAUNCHER = "com.theoriacodex.app.MainActivity"
 ANDROID = "{http://schemas.android.com/apk/res/android}"
 FORBIDDEN_MANIFEST_SURFACES = (
@@ -74,6 +76,11 @@ def verify_manifest(manifest: str) -> None:
         require(any(item.get(ANDROID + "name") == action for item in node.findall("intent-filter/action")),
                 f"{name} is missing action {action}")
 
+    seed = component("activity", EXPECTED_SEED_ACTIVITY)
+    require(seed.get(ANDROID + "exported") == "true", f"{EXPECTED_SEED_ACTIVITY} is not exported")
+    require(seed.get(ANDROID + "process") is None, f"{EXPECTED_SEED_ACTIVITY} must run in the main app process")
+    require(not seed.findall("intent-filter"), f"{EXPECTED_SEED_ACTIVITY} must only start explicitly")
+
     launcher = component("activity", EXPECTED_LAUNCHER)
     require(any(
         any(item.get(ANDROID + "name") == "android.intent.action.MAIN" for item in intent_filter.findall("action"))
@@ -100,6 +107,7 @@ def main() -> None:
     dex_packages = run(analyzer, "dex", "packages", str(apk))
     require(EXPECTED_ACTIVITY in dex_packages, "benchmark fixture activity was removed from dex")
     require(EXPECTED_DURATION_RECEIVER in dex_packages, "duration signal receiver was removed from dex")
+    require(EXPECTED_SEED_ACTIVITY in dex_packages, "library seed activity was removed from dex")
 
     packaged_video_path = run(
         analyzer,

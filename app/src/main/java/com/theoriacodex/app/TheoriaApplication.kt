@@ -18,6 +18,7 @@ import com.theoriacodex.app.diagnostics.DiagnosticReporter
 import com.theoriacodex.app.diagnostics.installCrashCapture
 import com.theoriacodex.app.diagnostics.installDebugStrictMode
 import com.theoriacodex.app.diagnostics.installOffMainChecker
+import com.theoriacodex.app.diagnostics.NetworkUsage
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.app.media.AnimatedWebPDecoder
 import com.theoriacodex.app.media.UndecodableImageEviction
@@ -133,7 +134,7 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
             // round trip per cached image on origins that send only validators (nginx's default), including
             // every Viewer page a prefetch had already downloaded; no-store responses were never cached.
             .respectCacheHeaders(false)
-            .eventListener(UndecodableImageEviction(diskCache))
+            .eventListener(NetworkUsage.countingImageResults(UndecodableImageEviction(diskCache)))
             .okHttpClient { httpClients.images }
             .build()
     }

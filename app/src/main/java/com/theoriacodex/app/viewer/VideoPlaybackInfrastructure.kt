@@ -26,6 +26,7 @@ import androidx.media3.exoplayer.upstream.DefaultAllocator
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
 import com.theoriacodex.app.TheoriaApplication
+import com.theoriacodex.app.diagnostics.NetworkUsage
 import com.theoriacodex.app.viewer.state.ViewerPrefetchOutcome
 import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -355,6 +356,7 @@ internal fun videoCacheDataSourceFactory(
         CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR or
             (if (blockOnCache) CacheDataSource.FLAG_BLOCK_ON_CACHE else 0),
     )
+    .apply { if (NetworkUsage.enabled) setEventListener(NetworkUsage.videoCacheListener) }
 
 private suspend fun CacheWriter.cacheCancellable() {
     suspendCancellableCoroutine<Unit> { continuation ->

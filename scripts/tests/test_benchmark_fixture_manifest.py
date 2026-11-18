@@ -36,6 +36,7 @@ MANIFEST = """<manifest xmlns:android="http://schemas.android.com/apk/res/androi
               android:exported="true" android:process=":benchmarkFixture">
       <intent-filter><action android:name="com.theoriacodex.action.BENCHMARK_DURATION_START"/></intent-filter>
     </receiver>
+    <activity android:name="com.theoriacodex.app.benchmark.BenchmarkLibrarySeedActivity" android:exported="true"/>
     <receiver android:name="Neighbor" android:exported="true" android:process=":benchmarkFixture"/>
   </application>
 </manifest>"""
@@ -53,7 +54,7 @@ class BenchmarkFixtureManifestTest(unittest.TestCase):
             archive.writestr("res/raw/loop.mp4", self.video.read_bytes())
         self.root = ET.fromstring(MANIFEST)
         self.package = VERIFIER.EXPECTED_APPLICATION_ID
-        self.dex = "\n".join((VERIFIER.EXPECTED_ACTIVITY, VERIFIER.EXPECTED_DURATION_RECEIVER))
+        self.dex = "\n".join((VERIFIER.EXPECTED_ACTIVITY, VERIFIER.EXPECTED_DURATION_RECEIVER, VERIFIER.EXPECTED_SEED_ACTIVITY))
 
     def component(self, name: str) -> ET.Element:
         return next(node for node in self.root.iter() if node.get(ANDROID + "name") == name)
@@ -136,6 +137,16 @@ class BenchmarkFixtureManifestTest(unittest.TestCase):
             with self.subTest(manifest=manifest), self.assertRaises(SystemExit):
                 self.verify(manifest)
 
+    def test_library_seed_runs_in_the_main_process_and_starts_only_explicitly(self) -> None:
+        seed = self.component(VERIFIER.EXPECTED_SEED_ACTIVITY)
+        seed.set(ANDROID + "process", ":benchmarkFixture")
+        with self.assertRaisesRegex(SystemExit, "main app process"):
+            self.verify()
+        del seed.attrib[ANDROID + "process"]
+        ET.SubElement(ET.SubElement(seed, "intent-filter"), "action", {ANDROID + "name": "seed"})
+        with self.assertRaisesRegex(SystemExit, "only start explicitly"):
+            self.verify()
+
     def test_forbidden_surfaces_still_fail_closed(self) -> None:
         for name in VERIFIER.FORBIDDEN_MANIFEST_SURFACES:
             with self.subTest(surface=name):
@@ -153,6 +164,9 @@ class BenchmarkFixtureManifestTest(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "removed from dex"):
             self.verify()
         self.dex += "\n" + VERIFIER.EXPECTED_DURATION_RECEIVER
+        with self.assertRaisesRegex(SystemExit, "seed activity was removed"):
+            self.verify()
+        self.dex += "\n" + VERIFIER.EXPECTED_SEED_ACTIVITY
         self.video.write_bytes(b"different source bytes")
         with self.assertRaisesRegex(SystemExit, "video bytes differ"):
             self.verify()

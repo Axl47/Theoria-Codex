@@ -260,6 +260,33 @@ scripts/media_bench_device.py record --round N build/media-bench/my-change/resul
 Results land in `build/media-bench/<label>/results.json`; rounds are tracked in
 `.docs/exec/media-buffering-metrics.json` (see `.docs/exec/media-buffering-and-paging.html`).
 
+For a quick cold-start loop, measure only that workload on a real library. Export Theoria Debug's library
+once as a profile backup (no credentials or media), then calibrate and compare with it. Each run clears only
+the isolated benchmark app and restores the snapshot before measuring. The snapshot's hash is part of the
+workload contract, so a different snapshot needs a new calibration. The file holds your personal library;
+keep it outside the repository.
+
+```sh
+ANDROID_SERIAL=YOUR_PHONE_SERIAL scripts/real_data_device.sh export-library /path/to/library.json
+export BENCHMARK_SCENARIO=coldStartup BENCHMARK_LIBRARY=/path/to/library.json
+ANDROID_SERIAL=YOUR_PHONE_SERIAL scripts/verify_performance_device.sh calibrate /path/to/cold-start-baseline
+ANDROID_SERIAL=YOUR_PHONE_SERIAL scripts/verify_performance_device.sh compare \
+  /path/to/cold-start-baseline/baseline.json /path/to/new-cold-start-run
+```
+
+Benchmarks serve fixture media from the app, so they cannot show network savings. To measure data use,
+debug builds count what each of the app's HTTP clients downloads, and an opt-in session browses For You,
+Search and the Viewer on Theoria Debug's real accounts. It reports the app's total network use, with image and
+video bytes, whole-file downloads (Viewer GIFs, Pixiv animations, offline saves), provider API traffic
+(including video-length probes), image cache sources, and video read from cache. Each run first clears Debug's
+disposable media caches, as Settings does, so runs start alike; `DATA_USAGE_KEEP_CACHES=1` keeps them. Live
+feeds change between runs, so compare medians of several runs per build on the same network. Both commands
+update Debug in place and keep its data.
+
+```sh
+ANDROID_SERIAL=YOUR_PHONE_SERIAL DATA_USAGE_RUNS=3 scripts/real_data_device.sh data-usage /path/to/new-usage-dir
+```
+
 Opt-in live provider health report:
 
 ```sh

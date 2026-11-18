@@ -465,6 +465,8 @@ def main(argv: list[str] | None = None) -> int:
     contract_parser = sub.add_parser("contract", help="Print the required method/metric/iteration contract")
     contract_parser.add_argument("--scenario", choices=tuple(default_contract()["scenarios"]), action="append",
                                  help="Select complete workloads; repeat to include several without reducing iterations or metrics")
+    contract_parser.add_argument("--library-sha256",
+                                 help="SHA-256 of the library snapshot seeded before measuring; runs on different libraries cannot compare")
     args = parser.parse_args(argv)
     try:
         if args.command == "instrumentation":
@@ -493,6 +495,11 @@ def main(argv: list[str] | None = None) -> int:
                     raise EvidenceError("A workload cannot be selected twice")
                 contract["version"] += "/" + ",".join(args.scenario)
                 contract["scenarios"] = {name: contract["scenarios"][name] for name in args.scenario}
+            if args.library_sha256 is not None:
+                if not re.fullmatch(r"[0-9a-f]{64}", args.library_sha256):
+                    raise EvidenceError("Library snapshot identity must be a lowercase SHA-256")
+                contract["version"] += "+library"
+                contract["library_sha256"] = args.library_sha256
             print(json.dumps(contract, indent=2))
         return 0
     except (EvidenceError, OSError, KeyError, TypeError) as error:
