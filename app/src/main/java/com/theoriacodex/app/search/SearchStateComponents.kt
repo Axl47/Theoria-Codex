@@ -118,6 +118,7 @@ internal fun ErrorBlock(
     actionLabel: String = "Retry",
     /** An account or verification problem, which reconnecting won't fix even when it has an action. */
     accountProblem: Boolean = false,
+    onDismiss: (() -> Unit)? = null,
 ) {
     val online by LocalNetworkOnline.current.collectAsStateWithLifecycle()
     val offline = !online && onRetry != null && !accountProblem
@@ -126,26 +127,33 @@ internal fun ErrorBlock(
         title = if (offline) OFFLINE_FEED_TITLE else title,
         actionLabel = actionLabel,
         onRetry = onRetry,
+        onDismiss = onDismiss,
     )
 }
 
 /** A failed search, whose action verifies the source in the browser when a challenge blocked it, else retries. */
 @Composable
-internal fun SourceFailureBlock(message: String, statuses: List<SourceRunStatus>, onRetry: () -> Unit) {
+internal fun SourceFailureBlock(
+    message: String,
+    statuses: List<SourceRunStatus>,
+    onDismiss: (() -> Unit)? = null,
+    onRetry: () -> Unit,
+) {
     val health = LocalSourceHealth.current
     val challenged = statuses.challengedSource(health.issues)
-    if (challenged == null) return ErrorBlock(message = message, onRetry = onRetry)
+    if (challenged == null) return ErrorBlock(message = message, onRetry = onRetry, onDismiss = onDismiss)
     ErrorBlock(
         message = message,
         onRetry = { health.verify(challenged) },
         actionLabel = VERIFY_IN_BROWSER_LABEL,
         accountProblem = true,
+        onDismiss = onDismiss,
     )
 }
 
 /** Says a source needs an account, with a way straight to the key field when it is an added site. */
 @Composable
-internal fun SourceAccountNotice(message: String, statuses: List<SourceRunStatus>) {
+internal fun SourceAccountNotice(message: String, statuses: List<SourceRunStatus>, onDismiss: (() -> Unit)? = null) {
     val health = LocalSourceHealth.current
     ErrorBlock(
         title = "Source account required",
@@ -153,6 +161,7 @@ internal fun SourceAccountNotice(message: String, statuses: List<SourceRunStatus
         onRetry = statuses.siteNeedingKey()?.let { site -> { health.addKey(site) } },
         actionLabel = ADD_API_KEY_LABEL,
         accountProblem = true,
+        onDismiss = onDismiss,
     )
 }
 
