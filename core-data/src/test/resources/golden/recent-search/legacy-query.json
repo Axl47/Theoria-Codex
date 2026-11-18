@@ -1,0 +1,1 @@
+{"schemaVersion":2,"modeType":"source","modeSource":"PIXIV","includeTags":["a \u0026 b"],"excludeTags":["c"],"sort":"TOP","minScore":5,"includeTerms":[{"value":"a \u0026 b","facet":"TAG"}],"excludeTerms":[{"value":"c","facet":"TAG"}],"includeTermGroups":[[{"value":"a \u0026 b","facet":"TAG"}]]}
