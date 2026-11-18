@@ -166,26 +166,7 @@ class AtomicJsonFileStoreTest {
     }
 
     @Test
-    fun `quarantine failure and ordinary read IO failure propagate without changing live bytes`() = runTest {
-        val quarantineFile = tempFolder.root.resolve("quarantine-failure.json")
-        val malformed = "{broken".toByteArray()
-        quarantineFile.writeBytes(malformed)
-        val quarantineFailure = IOException("quarantine unavailable")
-        val failingQuarantine = AtomicJsonFileStore(
-            ioDispatcher = Dispatchers.Unconfined,
-            fileOperations = object : RecordingAtomicFileOperations() {
-                override fun writeAndSync(file: File, bytes: ByteArray) {
-                    throw quarantineFailure
-                }
-            },
-        )
-
-        assertEquals(
-            quarantineFailure,
-            runCatching { failingQuarantine.read(quarantineFile, Payload("fallback"), Payload.serializer()) }.exceptionOrNull(),
-        )
-        assertArrayEquals(malformed, quarantineFile.readBytes())
-
+    fun `ordinary read IO failure propagates without changing live bytes`() = runTest {
         val readFile = tempFolder.root.resolve("read-failure.json").apply { writeText("{}") }
         val readFailure = IOException("permission denied")
         val failingRead = AtomicJsonFileStore(
@@ -210,7 +191,7 @@ class AtomicJsonFileStoreTest {
         val store = AtomicJsonFileStore(
             ioDispatcher = Dispatchers.Unconfined,
             fileOperations = object : RecordingAtomicFileOperations() {
-                override fun moveWithoutReplace(tempFile: File, target: File) {
+                override fun moveWithoutReplace(source: File, target: File) {
                     throw moveFailure
                 }
             },

@@ -2,6 +2,7 @@ package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.DurableStorePhase
+import com.theoriacodex.data.storage.sha256
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
@@ -14,6 +15,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.job
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -199,6 +201,24 @@ class DataStoreRepositoriesTest {
             setOf("{first broken", "{second broken"),
             directory.setAsideCopiesOf(DATASTORE_SETTINGS_FILE_NAME).map(File::readText).toSet(),
         )
+    }
+
+    @Test
+    fun `settings that cannot be set aside fail to open instead of resetting`() = runTest {
+        val directory = tempFolder.newFolder("settings-set-aside-fails")
+        val storeFile = directory.resolve(DATASTORE_SETTINGS_FILE_NAME)
+        val broken = "{broken".encodeToByteArray()
+        storeFile.writeBytes(broken)
+        // A directory already holds the set-aside name, so the file cannot be moved there.
+        directory.resolve("${storeFile.name}.corrupt-${broken.size}-${broken.sha256()}").mkdir()
+        val scope = newScope()
+        val repository = DataStoreSettingsRepository(directory, scope)
+
+        assertThrows(Exception::class.java) { kotlinx.coroutines.runBlocking { repository.awaitReady() } }
+
+        assertArrayEquals(broken, storeFile.readBytes())
+        assertEquals(DurableStorePhase.FAILED, repository.storageStatus.value.phase)
+        closeScope(scope)
     }
 
     @Test
