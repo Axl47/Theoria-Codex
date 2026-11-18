@@ -233,14 +233,14 @@ Copy this skeleton into a new `.docs/exec/<plan-name>.html` file and then replac
     <h1>ExecPlan: Move Saved Data From Gson Reflection To Compile-Time Serialization</h1>
     <p>When this is complete, saved data no longer depends on R8 keeping field names or on Gson creating objects by reflection. Every durable file, Room payload, and export is read and written by serializers the compiler generates, an offline copy survives any app update, and the hand-maintained R8 contract machinery is deleted. Users see no format loss: every file written by an older build still loads.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: In progress (Phase 3)</span>
+      <span class="pill">Status: In progress (Phases 4 to 9)</span>
       <span class="pill">Owner: Claude</span>
       <span class="pill">Created: 2026-11-08</span>
       <span class="pill">Updated: 2026-11-18</span>
       <span class="pill">Plan file: .docs/exec/gson-to-kotlinx-serialization.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Land Phase 3 (PR, Verify, Device Validation), then start Phase 4: DataStore files.</div>
+      <div class="card"><strong>Next Action</strong>Land Phase 8 (retire the legacy importers) and Phase 7, then Phases 4 and 5, then Phase 6, then Phase 9.</div>
       <div class="card"><strong>Main Risk</strong>A stricter decoder turning a repairable file into "corrupt", which resets settings or re-downloads offline media. Reduced by a Gson parity harness and one shared corrupt-JSON contract.</div>
       <div class="card"><strong>Validation</strong>Gson-vs-kotlinx parity tests on golden files, the full host gates, and the minified release-acceptance run on Android 16 and 17.</div>
       <div class="card"><strong>Affected Areas</strong><code>core-data</code>, <code>core-data-android</code>, <code>app</code> persistence, <code>app/proguard-rules.pro</code>, release verification.</div>
@@ -273,8 +273,8 @@ Copy this skeleton into a new `.docs/exec/<plan-name>.html` file and then replac
     <section id="status">
       <h2>Current Status</h2>
       <table class="status-table"><tbody>
-        <tr><td>State</td><td>In progress. Phase 1 shipped in v1.4.0 (commit <code>5dc5fe72</code>). Phase 2 landed through PR #145.</td></tr>
-        <tr><td>Next action</td><td>Phase 3 lands through its own PR; Phase 4 (DataStore files) follows on a new branch.</td></tr>
+        <tr><td>State</td><td>In progress. Phase 1 shipped in v1.4.0 (commit <code>5dc5fe72</code>). Phase 2 landed through PR #145 and Phase 3 through PR #147; both shipped in v1.9.1.</td></tr>
+        <tr><td>Next action</td><td>The remaining phases run as parallel threads in dependency order (see Phases). Phase 8 and Phase 7 are in progress.</td></tr>
         <tr><td>Blocked by</td><td>Nothing. A local emulator failure on 2026-11-08 means device proof currently comes from CI (see Surprises).</td></tr>
       </tbody></table>
     </section>
@@ -326,7 +326,8 @@ val DurableJson = Json {
 
     <section id="phases">
       <h2>Phases</h2>
-      <p>Each phase is one PR that leaves the app shippable. Phase order runs from lowest to highest data risk, so the harness has proven itself before it guards irreplaceable data.</p>
+      <p>Each phase is one PR that leaves the app shippable. Phases 1 to 3 ran from lowest to highest data risk, so the harness proved itself before it guards irreplaceable data.</p>
+      <p>The remaining phases run in dependency order, in parallel where they do not share records: Phase 8 (now a deletion) and Phase 7 first; then Phase 4 and Phase 5, which no longer have to carry the importers' records; then Phase 6, whose backup leaves are the records Phases 4 and 5 convert; then Phase 9.</p>
 
       <article>
         <h3>Phase 1: Offline manifest schema v3 (no new library)</h3>
@@ -381,18 +382,18 @@ val DurableJson = Json {
       </article>
 
       <article>
-        <h3>Phase 7: Credentials</h3>
+        <h3>Phase 7: Credentials and the statistics share file</h3>
         <table class="status-table"><tbody>
-          <tr><td>Goal</td><td>Envelope and payload records use kotlinx, with failure mapping preserved and no secrets in exception text.</td></tr>
+          <tr><td>Goal</td><td>Envelope and payload records use kotlinx, with failure mapping preserved and no secrets in exception text. The statistics share file (<code>StatsShare.kt</code>), which the original inventory missed, moves with it, so no reflective Gson is left in <code>app</code>.</td></tr>
           <tr><td>Acceptance</td><td>An envelope written by the old code decrypts and decodes on device. A corrupt envelope yields <code>ReconnectRequired</code>. Parse errors are logged without their input.</td></tr>
         </tbody></table>
       </article>
 
       <article>
-        <h3>Phase 8: Legacy importers</h3>
+        <h3>Phase 8: Retire the legacy importers</h3>
         <table class="status-table"><tbody>
-          <tr><td>Goal</td><td>Read-only legacy records move over, with <code>LegacyCodexStoreFile.posts</code> converted to kotlinx <code>JsonObject</code>. Importers never rewrite a source file.</td></tr>
-          <tr><td>Acceptance</td><td><code>RoomLegacyJsonImporterTest</code> and <code>RoomRecentsLegacyImporterTest</code> pass, including exact exception types.</td></tr>
+          <tr><td>Goal</td><td>Delete the one-time legacy JSON import path instead of porting it: the importers, their records and proofs, the recovery wiring, and their keep rules. They shipped in v0.6.4 to v0.9.0, about eighteen releases ago, which meets the retirement rule in <code>AGENTS.md</code>.</td></tr>
+          <tr><td>Acceptance</td><td>An install that still has legacy files on disk starts normally and leaves them untouched. A DataStore file that still carries <code>legacyImports</code> loads with nothing reset.</td></tr>
         </tbody></table>
       </article>
 
@@ -445,7 +446,13 @@ val DurableJson = Json {
         <li>[x] 2026-11-18 - Phase 3 golden files captured from the Gson code and committed before any record changed (commit 4837677c): a Gson-written and a damaged legacy <code>query_store.json</code>, the same pair for <code>tag_suggestions.json</code>, a v4 and a v2 Hitomi page token, and a Codex share export. Each is read back through its production entry point.</li>
         <li>[x] 2026-11-18 - Phase 3 code: <code>AtomicJsonFileStore</code> gains <code>read</code>/<code>write</code> overloads taking a <code>KSerializer</code> (quarantine on <code>SerializationException</code> only; the Gson overloads stay for trees and unmigrated stores). The query store, tag cache, updater state, Hitomi token and Codex share export use kotlinx. 13 records leave <code>app/proguard-rules.pro</code> and <code>r8-json-contracts.txt</code>. The release-acceptance activity and <code>InstalledJsonCompatibilityDeviceTest</code> now go through the kotlinx entry points, and the acceptance run also covers the query store.</li>
         <li>[x] 2026-11-18 - Phase 3 proof: <code>scripts/check.sh --record</code> passed (tests, Detekt, lint, duplicates; changed-line coverage 140/140). Device Validation run 44287737677 passed R8 release acceptance and every connected-test shard on API 36 and 37. The parity harness caught an unexercised <code>excludeTerms[].sourceNamespace</code> in the first query sample.</li>
-        <li>[ ] Phases 4 to 9.</li>
+        <li>[x] 2026-11-18 - Phase 3 landed through PR #147 and shipped in v1.9.1.</li>
+        <li>[ ] Phase 8: retire the legacy importers (in progress).</li>
+        <li>[ ] Phase 7: credentials and the statistics share file (in progress).</li>
+        <li>[ ] Phase 4: DataStore files.</li>
+        <li>[ ] Phase 5: Room payloads.</li>
+        <li>[ ] Phase 6: backups, journal, developer copy, pinned searches.</li>
+        <li>[ ] Phase 9: delete the R8 machinery.</li>
       </ul>
 
       <h3>Surprises And Discoveries</h3>
@@ -483,7 +490,9 @@ val DurableJson = Json {
         <li>Decision: <code>QueryStorageRecord</code> and <code>SearchTermStorageRecord</code> carry both names and keep their keep rules. Rationale: Room recent-search payloads (Phase 5) and the legacy Recents importer (Phase 8) still decode them with Gson. Date/Author: 2026-11-18 / Claude.</li>
         <li>Decision: tag cache lists became <code>List&lt;TagStoreEntry?&gt;?</code>. Rationale: Gson tolerated a null source list; a non-null kotlinx type would quarantine the whole cache instead. Date/Author: 2026-11-18 / Claude.</li>
         <li>Decision: golden tests assert decoded values, repair-or-reset outcomes, and failure types, never Gson's output bytes; the golden files keep the bytes. The Recents destination hash is the exception and is pinned exactly. Rationale: kotlinx legitimately writes different bytes (no HTML escaping). Date/Author: 2026-11-18 / Claude.</li>
-        <li>Decision: do not delete legacy importers. Rationale: it cannot be shown that every install has finished archiving them. Date/Author: 2026-11-08 / Claude.</li>
+        <li>Decision: do not delete legacy importers. Rationale: it cannot be shown that every install has finished archiving them. Date/Author: 2026-11-08 / Claude. Superseded on 2026-11-18 by the next entry.</li>
+        <li>Decision: delete the legacy importers (Phase 8) instead of porting them. Rationale: <code>AGENTS.md</code> now allows retiring a saved-data migration once more than two releases have shipped after the last one that needed it, and both users update daily; the importers shipped in v0.6.4, v0.8.0 and v0.9.0, and v1.9.1 is current. Deleting about 1,500 lines of import code serves this plan's goal better than converting it, and it removes the need to freeze <code>destinationSummary</code> on Gson. Legacy files left on disk are never touched. Date/Author: 2026-11-18 / Claude.</li>
+        <li>Decision: run Phase 8 before Phases 4 and 5, and Phase 6 after them. Rationale: the importers read the DataStore, Recents, and post records, so deleting them first means those phases convert fewer records and no record has to keep Gson names for an importer. Backup leaves are the same records, so Phase 6 only switches entry points once they are converted. Date/Author: 2026-11-18 / Claude.</li>
       </ul>
 
       <h3>Outcomes And Retrospective</h3>
