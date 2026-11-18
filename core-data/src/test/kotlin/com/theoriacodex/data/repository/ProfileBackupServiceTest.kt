@@ -1,6 +1,5 @@
 package com.theoriacodex.data.repository
 
-import com.google.gson.JsonParser
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CodexItem
@@ -16,6 +15,11 @@ import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -30,11 +34,11 @@ class ProfileBackupServiceTest {
 
     @Test fun `backup with retired expansion metadata still decodes and restores`() = runTest {
         val expected = backup()
-        val root = JsonParser.parseString(codec.encode(expected).toString(Charsets.UTF_8)).asJsonObject
-        val retired = JsonParser.parseString("""{"UNIFIED_MODE":false}""")
-        root.add("settingsSectionExpansion", retired)
-        root.getAsJsonObject("settings").add("settingsSectionExpansion", retired)
-        val bytes = root.toString().toByteArray(Charsets.UTF_8)
+        val root = Json.parseToJsonElement(codec.encode(expected).toString(Charsets.UTF_8)).jsonObject
+        val retired = Json.parseToJsonElement("""{"UNIFIED_MODE":false}""")
+        val settings = JsonObject(root.getValue("settings").jsonObject + ("settingsSectionExpansion" to retired))
+        val bytes = JsonObject(root + mapOf("settingsSectionExpansion" to retired, "settings" to settings))
+            .toString().toByteArray(Charsets.UTF_8)
         assertEquals(expected, codec.decode(bytes))
         val harness = harness()
         val result = harness.service.restore(bytes)
@@ -231,12 +235,8 @@ class ProfileBackupServiceTest {
 
     @Test fun `a journal from before identity merges finishes under the IDs it already committed`() = runTest {
         val harness = harness()
-        val journal = com.google.gson.JsonObject().apply {
-            addProperty("operationId", "legacy")
-            addProperty("applyPreferences", false)
-            add("backup", JsonParser.parseString(codec.encode(backup()).toString(Charsets.UTF_8)))
-        }
-        harness.journal.writeText(journal.toString())
+        val backup = codec.encode(backup()).toString(Charsets.UTF_8)
+        harness.journal.writeText("""{"operationId":"legacy","applyPreferences":false,"backup":$backup}""")
 
         assertTrue(harness.service.recoverPendingRestore())
 
@@ -248,8 +248,9 @@ class ProfileBackupServiceTest {
 
     @Test fun `invalid backup and capacity overflow fail before any durable restore mutation`() = runTest {
         val harness = harness()
-        val corrupt = JsonParser.parseString(codec.encode(backup()).toString(Charsets.UTF_8)).asJsonObject
-        corrupt.getAsJsonObject("library").getAsJsonArray("posts").remove(0)
+        val encoded = Json.parseToJsonElement(codec.encode(backup()).toString(Charsets.UTF_8)).jsonObject
+        val library = encoded.getValue("library").jsonObject
+        val corrupt = JsonObject(encoded + ("library" to JsonObject(library + ("posts" to JsonArray(library.getValue("posts").jsonArray.drop(1))))))
         assertTrue(runCatching { harness.service.restore(corrupt.toString().toByteArray()) }.isFailure)
         assertFalse(harness.journal.exists())
         assertEquals(0, harness.store.merges)

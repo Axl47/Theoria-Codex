@@ -1,6 +1,8 @@
 package com.theoriacodex.data.repository
 
-import com.google.gson.Gson
+import com.theoriacodex.data.storage.DurableJson
+import com.theoriacodex.data.storage.PostStorageCodec
+import com.theoriacodex.data.storage.PostStorageRecord
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.first
@@ -43,12 +45,12 @@ class CreatorFollowsRepositoryTest {
     }
 
     @Test fun `follow records round trip and old settings decode empty`() {
-        val gson = Gson()
         val follow = FollowedCreator(creator, "membership", listOf("seen"), listOf("seen", "new"), 42L)
         val record = SettingsStoreRecord.fromDomain(AppSettings(followedCreators = listOf(follow)))
-        val decoded = gson.fromJson(gson.toJson(record), SettingsStoreRecord::class.java).toDomain()
+        val decoded = DurableJson.decodeFromString(SettingsStoreRecord.serializer(),
+            DurableJson.encodeToString(SettingsStoreRecord.serializer(), record)).toDomain()
         assertEquals(follow, decoded.followedCreators.single())
         assertEquals(1, decoded.followedCreators.single().newPostCount)
-        assertTrue(gson.fromJson("{}", SettingsStoreRecord::class.java).toDomain().followedCreators.isEmpty())
+        assertTrue(DurableJson.decodeFromString(SettingsStoreRecord.serializer(), "{}").toDomain().followedCreators.isEmpty())
     }
 }

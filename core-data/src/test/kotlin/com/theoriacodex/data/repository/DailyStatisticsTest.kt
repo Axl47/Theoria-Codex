@@ -1,6 +1,5 @@
 package com.theoriacodex.data.repository
 
-import com.google.gson.JsonParser
 import java.time.Clock
 import java.time.LocalDate
 import java.time.ZoneId
@@ -11,6 +10,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.job
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -46,8 +47,8 @@ class DailyStatisticsTest {
             assertEquals(today.minusDays(399), result.history.keys.min())
             assertEquals(4510L, result.totalForegroundMs)
             assertEquals(4000L, result.history.values.sumOf { it.totalForegroundMs })
-            assertEquals(400, JsonParser.parseString(directory.resolve(DATASTORE_STATISTICS_FILE_NAME).readText())
-                .asJsonObject["statistics"].asJsonObject["history"].asJsonObject.size())
+            assertEquals(400, Json.parseToJsonElement(directory.resolve(DATASTORE_STATISTICS_FILE_NAME).readText())
+                .jsonObject.getValue("statistics").jsonObject.getValue("history").jsonObject.size)
         } finally {
             scope.cancel()
             scope.coroutineContext.job.join()

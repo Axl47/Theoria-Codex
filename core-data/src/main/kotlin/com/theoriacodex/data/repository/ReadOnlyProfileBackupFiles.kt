@@ -1,6 +1,5 @@
 package com.theoriacodex.data.repository
 
-import com.google.gson.JsonParser
 import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.SavedSearchSnapshotSerializer
 import java.io.File
@@ -21,7 +20,7 @@ class ReadOnlyProfileBackupFiles private constructor(
         DurableJson.decodeFromString(SavedSearchSnapshotSerializer, decodeDocumentUtf8(bytes)).entries
     }.orEmpty()
     val readingPositions: List<ReadingPosition> = documents[READING_POSITIONS_FILE_NAME]?.let { bytes ->
-        decodeReadingPositions(JsonParser.parseString(decodeDocumentUtf8(bytes)).asJsonObject)
+        decodeReadingPositions(DurableJson.decodeFromString(ReadingPositionsFile.serializer(), decodeDocumentUtf8(bytes)))
     }.orEmpty()
 
     init {

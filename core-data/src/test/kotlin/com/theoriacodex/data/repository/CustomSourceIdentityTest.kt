@@ -1,7 +1,8 @@
 package com.theoriacodex.data.repository
 
-import com.google.gson.Gson
+import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.PostStorageCodec
+import com.theoriacodex.data.storage.PostStorageRecord
 import com.theoriacodex.data.storage.RecentSearchPayloadCodec
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
@@ -38,9 +39,9 @@ class CustomSourceIdentityTest {
     fun `post payloads and offline manifests keep a custom source`() {
         assertEquals(post, PostStorageCodec.decode(PostStorageCodec.encode(post)))
 
-        val manifest = Gson().toJson(post)
+        val manifest = DurableJson.encodeToString(PostStorageRecord.serializer(), PostStorageCodec.encode(post))
         assertTrue(manifest.contains("\"source\":\"custom_safebooru_org\""))
-        assertEquals(post, Gson().fromJson(manifest, Post::class.java))
+        assertEquals(post, PostStorageCodec.decode(DurableJson.decodeFromString(PostStorageRecord.serializer(), manifest)))
     }
 
     @Test

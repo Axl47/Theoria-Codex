@@ -1,6 +1,5 @@
 package com.theoriacodex.data.storage
 
-import com.google.gson.Gson
 import com.theoriacodex.data.repository.mergeSparsePost
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
@@ -15,14 +14,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PostStorageRecordsTest {
-    private val gson = Gson()
-
     @Test
     fun `versioned storage record round trips every supported Post field`() {
         val post = samplePost()
         val record = PostStorageCodec.encode(post)
-        val json = gson.toJson(record)
-        val reconstructedRecord = gson.fromJson(json, PostStorageRecord::class.java)
+        val json = encodeRecord(record)
+        val reconstructedRecord = decodeRecord(json)
 
         assertTrue(json.contains("\"schemaVersion\":1"))
         assertEquals(CURRENT_POST_STORAGE_SCHEMA_VERSION, record.schemaVersion)
@@ -31,7 +28,7 @@ class PostStorageRecordsTest {
 
     @Test
     fun `nhentai and hitomi records saved before fallback urls keep their copies as fallbacks`() {
-        fun legacyRecord(source: String) = gson.fromJson(
+        fun legacyRecord(source: String) = decodeRecord(
             """
             {
               "source": "$source",
@@ -48,7 +45,6 @@ class PostStorageRecordsTest {
               "schemaVersion": 1
             }
             """.trimIndent(),
-            PostStorageRecord::class.java,
         )
         val copies = listOf("https://example.com/1.webp", "https://example.com/1.jpg")
 
@@ -74,7 +70,7 @@ class PostStorageRecordsTest {
             media = listOf(ImageRef("https://example.com/1.webp", null, "image/webp", progressiveUrls = listOf("https://example.com/small.webp"))),
         )
 
-        val decoded = PostStorageCodec.decode(gson.fromJson(gson.toJson(PostStorageCodec.encode(post)), PostStorageRecord::class.java))
+        val decoded = PostStorageCodec.decode(decodeRecord(encodeRecord(PostStorageCodec.encode(post))))
 
         assertEquals(post.media, decoded?.media)
     }
@@ -117,7 +113,7 @@ class PostStorageRecordsTest {
             }
             """.trimIndent()
 
-        val record = gson.fromJson(legacyJson, PostStorageRecord::class.java)
+        val record = decodeRecord(legacyJson)
         val post = PostStorageCodec.decode(record)
 
         assertEquals(null, record.schemaVersion)
@@ -146,6 +142,10 @@ class PostStorageRecordsTest {
 
         assertNull(PostStorageCodec.decode(future))
     }
+
+    private fun encodeRecord(record: PostStorageRecord) = DurableJson.encodeToString(PostStorageRecord.serializer(), record)
+
+    private fun decodeRecord(json: String) = DurableJson.decodeFromString(PostStorageRecord.serializer(), json)
 
     private fun samplePost(): Post {
         val creator = CreatorProfile(

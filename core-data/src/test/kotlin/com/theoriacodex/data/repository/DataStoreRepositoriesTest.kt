@@ -1,8 +1,8 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.DurableStorePhase
 import com.theoriacodex.domain.model.SourceKey
-import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -287,7 +287,7 @@ class DataStoreRepositoriesTest {
     }
     @Test
     fun `older feed FAB records include all saved searches by default`() {
-        val state = com.google.gson.Gson().fromJson("""{"animatedOnly":true}""", FeedFabRestoreState::class.java)
+        val state = DurableJson.decodeFromString(FeedFabRestoreState.serializer(), """{"animatedOnly":true}""")
         assertTrue(state.animatedOnly)
         assertTrue(state.excludedSavedSearches.isEmpty())
     }
