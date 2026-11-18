@@ -38,7 +38,7 @@ record() {
   run="$(gh run list --workflow verify.yml --commit "$head" --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
   [[ -n "$run" ]] || { echo "No Verify run for $head yet. Open a PR or wait for it to start." >&2; exit 1; }
   gh run watch "$run" > /dev/null || true
-  local downloaded
+  # Global: the exit trap runs after this function returns.
   downloaded="$(mktemp -d)"
   trap 'rm -rf "$downloaded"' EXIT
   if ! gh run download "$run" --name screenshots --dir "$downloaded" 2> /dev/null; then
