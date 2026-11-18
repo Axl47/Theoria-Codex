@@ -53,6 +53,15 @@ object RecentSearchPayloadCodec {
         record(entry.query, entry.kind, entry.sources, entry.sourceTags),
     )
 
+    /**
+     * [entry] as storing and reading it back would return it: sources de-duplicated, source tags kept only for
+     * participating sources, and the whole search validated. For entries that did not come from [decode].
+     */
+    fun normalize(entry: RecentSearchEntry): RecentSearchEntry {
+        val payload = decode(encode(entry))
+        return entry.copy(query = payload.query, kind = payload.kind, sources = payload.sources, sourceTags = payload.sourceTags)
+    }
+
     private fun record(
         query: Query,
         kind: RecentSearchKind,

@@ -21,7 +21,6 @@ interface AsynchronousStore {
 data class CorruptionRecovery(
     val reason: String,
     val backupPath: String?,
-    val quarantinePath: String? = backupPath,
     val logicalStore: String = "",
     val logicalFile: String = "",
     val sha256: String = "",

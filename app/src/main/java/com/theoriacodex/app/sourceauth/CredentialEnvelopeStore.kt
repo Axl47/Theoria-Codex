@@ -246,20 +246,17 @@ internal data class CustomSiteCredentialRecord(
     override fun toString(): String = "CustomSiteCredentialRecord([REDACTED])"
 }
 
+/** A lost key or a corrupt envelope asks to reconnect; any other failure, such as IO or the keystore, may pass. */
 private fun Exception.toCredentialReadFailure(): CredentialEnvelopeReadResult {
-    val causes = generateSequence(this as Throwable?) { error -> error.cause }.toList()
-    return when {
-        causes.any { error ->
-            error is AEADBadTagException ||
-                error is KeyPermanentlyInvalidatedException ||
-                error is UnrecoverableKeyException ||
-                error is InvalidKeyException ||
-                error is CredentialEnvelopeCorruptException
-        } -> CredentialEnvelopeReadResult.ReconnectRequired
-        causes.any { error -> error is IOException || error is java.security.KeyStoreException } ->
-            CredentialEnvelopeReadResult.TemporarilyUnavailable
-        else -> CredentialEnvelopeReadResult.TemporarilyUnavailable
+    val causes = generateSequence(this as Throwable?) { error -> error.cause }
+    val unrecoverable = causes.any { error ->
+        error is AEADBadTagException ||
+            error is KeyPermanentlyInvalidatedException ||
+            error is UnrecoverableKeyException ||
+            error is InvalidKeyException ||
+            error is CredentialEnvelopeCorruptException
     }
+    return if (unrecoverable) CredentialEnvelopeReadResult.ReconnectRequired else CredentialEnvelopeReadResult.TemporarilyUnavailable
 }
 
 private fun ByteArray.encodeBase64(): String = Base64.encodeToString(this, Base64.NO_WRAP)

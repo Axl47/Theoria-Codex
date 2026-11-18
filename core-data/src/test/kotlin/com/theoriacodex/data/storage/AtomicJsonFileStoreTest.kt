@@ -59,7 +59,6 @@ class AtomicJsonFileStoreTest {
         assertArrayEquals(original, quarantine.readBytes())
         assertEquals("Test state", recordedRecovery.logicalStore)
         assertEquals("state.json contains malformed JSON", recordedRecovery.reason)
-        assertEquals(quarantine.absolutePath, recordedRecovery.quarantinePath)
         assertEquals(original.size.toLong(), recordedRecovery.byteCount)
 
         store.write(file, Payload("stable"), Payload.serializer())

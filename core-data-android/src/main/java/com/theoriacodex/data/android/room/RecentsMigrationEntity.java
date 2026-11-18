@@ -5,6 +5,7 @@ import androidx.room.ColumnInfo;
 import androidx.room.Entity;
 import androidx.room.PrimaryKey;
 
+// Proof table of a retired importer; nothing reads it. Kept until the next schema change drops it.
 @Entity(tableName = "recents_migration_metadata")
 public final class RecentsMigrationEntity {
     @PrimaryKey @NonNull @ColumnInfo(name = "migration_key") private final String migrationKey;

@@ -17,23 +17,19 @@ import kotlinx.serialization.json.decodeFromJsonElement
 
 internal data class SavedSearchSnapshot(val entries: List<SavedSearchEntry>) {
     companion object {
-        fun validated(entries: List<SavedSearchEntry>): SavedSearchSnapshot {
+        /** Checks [entries] from outside the file, such as a backup, and puts each search in its stored form. */
+        fun validated(entries: List<SavedSearchEntry>): SavedSearchSnapshot =
+            checked(entries.map { entry -> entry.copy(search = RecentSearchPayloadCodec.normalize(entry.search)) })
+
+        /** Checks entries whose searches are already in stored form, as [RecentSearchPayloadCodec.decode] returns. */
+        fun checked(entries: List<SavedSearchEntry>): SavedSearchSnapshot {
             require(entries.size <= MAX_SAVED_SEARCHES) { "Too many saved searches." }
             require(entries.map(SavedSearchEntry::id).distinct().size == entries.size) { "Duplicate saved-search IDs." }
             return SavedSearchSnapshot(entries.map { entry ->
                 require(entry.id.isNotBlank() && entry.id.length <= 128) { "Invalid saved-search ID." }
                 require(entry.search.queryHash.isNotBlank()) { "Saved search has no query identity." }
                 require(entry.savedAtEpochMs >= 0 && entry.search.searchedAtEpochMs >= 0) { "Invalid saved-search date." }
-                val payload = RecentSearchPayloadCodec.decodeJson(RecentSearchPayloadCodec.encodeJson(entry.search))
-                entry.copy(
-                    name = validateSavedSearchName(entry.name),
-                    search = entry.search.copy(
-                        query = payload.query,
-                        kind = payload.kind,
-                        sources = payload.sources,
-                        sourceTags = payload.sourceTags,
-                    ),
-                )
+                entry.copy(name = validateSavedSearchName(entry.name))
             })
         }
     }
@@ -87,7 +83,7 @@ internal object SavedSearchSnapshotSerializer : KSerializer<SavedSearchSnapshot>
         return try {
             require(file.schemaVersion == SAVED_SEARCH_SCHEMA_VERSION) { "Unsupported saved-search version." }
             require(file.searches.size <= MAX_SAVED_SEARCHES) { "Too many saved searches." }
-            SavedSearchSnapshot.validated(file.searches.map { record ->
+            SavedSearchSnapshot.checked(file.searches.map { record ->
                 val payload = RecentSearchPayloadCodec.decode(record.execution)
                 SavedSearchEntry(
                     id = record.id,
