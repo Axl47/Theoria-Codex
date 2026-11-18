@@ -80,7 +80,7 @@ labels = {"image": "Images", "video": "Video", "download": "GIFs, Pixiv animatio
           "source": "Provider APIs, indexes, length probes"}
 rows = {"Total (app's whole network use)": [run["totalBytes"] for run in runs]}
 rows |= {label: [run["stacks"][stack]["bytes"] for run in runs] for stack, label in labels.items()}
-rows["Uncounted (headers, TLS, other)"] = [run["otherBytes"] for run in runs]
+rows["Unread (headers, TLS, cancelled)"] = [run["otherBytes"] for run in runs]
 rows["Video read from cache (incl. prefetch)"] = [run["videoCachedBytesRead"] for run in runs]
 summary = {name: statistics.median(values) for name, values in rows.items()}
 for name, values in rows.items():

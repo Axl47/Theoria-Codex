@@ -23,7 +23,7 @@ import org.json.JSONObject
  * Counts what the app downloads through each of its HTTP clients, for the opt-in live data-usage session
  * (`scripts/real_data_device.sh data-usage`). Only debug builds count: [enabled] is a build constant, so release
  * builds install no hooks and R8 removes this object. The snapshot also reports the app's total traffic, so
- * whatever no client counts (headers, TLS, connection warm-up) shows as the remainder.
+ * whatever no client reads (headers, TLS, data still in flight when a transfer is cancelled) shows as the remainder.
  */
 internal object NetworkUsage {
     val enabled: Boolean = BuildConfig.DEBUG
@@ -72,8 +72,8 @@ internal object NetworkUsage {
 
     /**
      * A network interceptor counting every request a client sends, redirects and retries included. Bodies count as
-     * they are read and before gzip decoding, so a download cancelled midway (an image scrolled past) counts what
-     * actually crossed the network.
+     * they are read and before gzip decoding, so a download cancelled midway (an image scrolled past) counts what the
+     * app read of it; bytes already in flight at the cancel arrive anyway and land in the remainder.
      */
     fun counting(stack: Stack) = Interceptor { chain ->
         requests.getValue(stack).incrementAndGet()
