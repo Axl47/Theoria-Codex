@@ -135,6 +135,7 @@ internal fun buildStatsShare(
 internal fun encodeStatsShare(file: StatsShareFile): String = DurableJson.encodeToString(StatsShareFile.serializer(), file)
 
 /** Reads a file from someone else: anything malformed is rejected or dropped, and what remains is safe to display. */
+@Suppress("ImplicitDefaultLocale") // Detekt mistakes the file's format id, file.format, for String.format.
 internal fun parseStatsShare(raw: String): StatsShareFile? {
     val file = runCatching {
         require(raw.toByteArray(Charsets.UTF_8).size <= STATS_SHARE_MAX_BYTES)
