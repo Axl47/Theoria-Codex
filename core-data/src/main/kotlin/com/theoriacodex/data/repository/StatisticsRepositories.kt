@@ -17,6 +17,7 @@ import com.theoriacodex.domain.model.SourceKey
 import java.io.File
 import java.time.Clock
 import java.time.LocalDate
+import java.time.format.DateTimeParseException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -89,7 +90,7 @@ internal data class StatisticsStoreRecord(
     fun toDomain(): LifetimeStatistics {
         return StatisticsPolicies.normalize(
             LifetimeStatistics(
-                history = history.mapKeys { LocalDate.parse(it.key) },
+                history = history.mapKeys { (day, _) -> parseHistoryDay(day) },
                 codexStatistics = codexStatistics,
                 appOpenCount = appOpenCount,
                 totalForegroundMs = totalForegroundMs,
@@ -530,6 +531,13 @@ class DataStoreStatisticsRepository(
 internal fun Long.saturatingAdd(delta: Long): Long {
     val normalizedDelta = delta.coerceAtLeast(0L)
     return if (this > Long.MAX_VALUE - normalizedDelta) Long.MAX_VALUE else this + normalizedDelta
+}
+
+/** A history key that is not an ISO date fails validation like any other bad field, so the store resets it. */
+private fun parseHistoryDay(day: String): LocalDate = try {
+    LocalDate.parse(day)
+} catch (invalid: DateTimeParseException) {
+    throw IllegalArgumentException("Statistics history key is not a date", invalid)
 }
 
 private fun Map<String, Long>.decodeSourceCounts(): Map<SourceKey, Long> {

@@ -19,6 +19,7 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -263,6 +264,22 @@ class StatisticsRepositoriesTest {
         assertEquals(4L, statistics.appOpenCount)
         assertEquals(0L, statistics.translatedPhraseCount)
         assertEquals(0L, statistics.translatedSourceCharacterCount)
+        closeScope(scope)
+    }
+
+    @Test
+    fun `a history key that is not a date resets the store and keeps the original aside`() = runTest {
+        val directory = tempFolder.newFolder("statistics-bad-history-key")
+        directory.resolve(DATASTORE_STATISTICS_FILE_NAME).writeText(
+            """{"schemaVersion":2,"statistics":{"appOpenCount":4,"history":{"not-a-day":{"appOpenCount":1}}}}"""
+        )
+        val scope = newScope()
+        val repository = DataStoreStatisticsRepository(directory, scope)
+        val statistics = repository.observeStatistics().first()
+
+        assertEquals(0L, statistics.appOpenCount)
+        assertTrue(directory.resolve("$DATASTORE_STATISTICS_FILE_NAME.corrupt").isFile)
+        assertNotNull(repository.storageStatus.value.corruptionRecovery)
         closeScope(scope)
     }
 
