@@ -92,6 +92,8 @@ private suspend fun verifyData(directory: File, phase: String) {
     val legacyPostFile = File(directory, "legacy-post.json")
     val tagsFile = File(directory, "tags.json")
     val statsFile = File(directory, "stats.json")
+    val dataStores = File(directory, "datastore")
+    val shippedDataStores = File(directory, "datastore-shipped")
     if (phase == "write") {
         check(directory.mkdirs())
         FileBackedUpdateStateStore(updateFile).update { updateState }
@@ -102,6 +104,7 @@ private suspend fun verifyData(directory: File, phase: String) {
         postFile.writeText(gson.toJson(PostStorageCodec.encode(videoPostFixture())))
         legacyPostFile.writeText(LEGACY_VIDEO_POST)
         writeLegacyOfflineManifest(File(directory, "offline"))
+        writeDataStores(dataStores, shippedDataStores)
         tagsFile.writeText("""{"sources":{"GELBOORU":[{"text":"legacy","type":"trending","count":9}]}}""")
         val tags = FileBackedTagSuggestionStore(tagsFile, persistenceDebounceMs = 0L)
         try {
@@ -124,6 +127,7 @@ private suspend fun verifyData(directory: File, phase: String) {
         check(legacyPost.full?.url == "https://example.test/full.mp4" && legacyPost.full?.videoVariants == emptyList<VideoVariant>())
         check(legacyPost.media.single().url == "https://example.test/gallery.webm" && legacyPost.media.single().videoVariants.isEmpty())
         verifyLegacyOfflineManifest(File(directory, "offline"))
+        verifyDataStores(dataStores, shippedDataStores)
         val tags = FileBackedTagSuggestionStore(tagsFile, persistenceDebounceMs = 0L)
         try {
             tags.awaitLoaded()

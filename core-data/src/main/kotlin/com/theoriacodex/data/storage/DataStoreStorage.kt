@@ -2,20 +2,18 @@ package com.theoriacodex.data.storage
 
 import androidx.datastore.core.CorruptionException
 import androidx.datastore.core.Serializer
-import com.google.gson.Gson
-import com.google.gson.JsonParseException
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
-import java.io.OutputStreamWriter
-import java.lang.reflect.Type
-import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 interface AsynchronousStore {
     val storageStatus: StateFlow<DurableStoreStatus>
@@ -50,34 +48,36 @@ class UnsupportedStoreSchemaException(
     supported: Int,
 ) : IOException("$storeName schema $actual is newer than supported schema $supported")
 
-internal class GsonDataStoreSerializer<T : Any>(
+/**
+ * Reads and writes one DataStore JSON file through [DurableJson]. The file's top-level `schemaVersion` (absent means
+ * [schemaVersion]) is checked before the typed decode: a newer one throws [UnsupportedStoreSchemaException], so a
+ * rollback never replaces data a newer build wrote, whatever shape that data has. Malformed JSON, another schema
+ * version, and a failed [validate] surface as [CorruptionException], which the store's corruption handler turns into
+ * a reset with the original bytes kept aside.
+ */
+internal class JsonDataStoreSerializer<T : Any>(
     private val storeName: String,
+    private val schemaVersion: Int,
     override val defaultValue: T,
-    private val type: Type,
-    private val gson: Gson,
-    private val validate: (T) -> Unit,
+    private val serializer: KSerializer<T>,
+    private val validate: (T) -> Unit = {},
 ) : Serializer<T> {
     override suspend fun readFrom(input: InputStream): T {
-        val json = input.reader(StandardCharsets.UTF_8).readText()
+        val json = input.readBytes().decodeToString()
         if (json.isBlank()) {
             throw CorruptionException("$storeName is empty")
         }
-        return try {
-            val value = gson.fromJson<T>(json, type)
-                ?: throw CorruptionException("$storeName did not contain a JSON value")
-            validate(value)
-            value
-        } catch (cancellation: CancellationException) {
-            throw cancellation
-        } catch (unsupported: UnsupportedStoreSchemaException) {
-            // A rollback must never replace data written by a newer app version.
-            throw unsupported
-        } catch (corruption: CorruptionException) {
-            throw corruption
-        } catch (parseFailure: JsonParseException) {
-            throw CorruptionException("$storeName contains malformed JSON", parseFailure)
-        } catch (invalid: NullPointerException) {
-            throw CorruptionException("$storeName contains missing required values", invalid)
+        try {
+            val tree = DurableJson.parseToJsonElement(json)
+            val stored = ((tree as? JsonObject)?.get("schemaVersion") as? JsonPrimitive)?.content?.toIntOrNull()
+                ?: schemaVersion
+            if (stored > schemaVersion) {
+                throw UnsupportedStoreSchemaException(storeName, stored, schemaVersion)
+            }
+            require(stored == schemaVersion) { "Unsupported $storeName schema $stored" }
+            return DurableJson.decodeFromJsonElement(serializer, tree).also(validate)
+        } catch (malformed: SerializationException) {
+            throw CorruptionException("$storeName contains malformed JSON", malformed)
         } catch (invalid: IllegalArgumentException) {
             throw CorruptionException("$storeName failed schema validation", invalid)
         } catch (invalid: IllegalStateException) {
@@ -87,9 +87,7 @@ internal class GsonDataStoreSerializer<T : Any>(
 
     override suspend fun writeTo(t: T, output: OutputStream) {
         validate(t)
-        val writer = OutputStreamWriter(output, StandardCharsets.UTF_8)
-        gson.toJson(t, type, writer)
-        writer.flush()
+        output.write(DurableJson.encodeToString(serializer, t).encodeToByteArray())
     }
 }
 

@@ -3,14 +3,11 @@ package com.theoriacodex.data.repository
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.DataStoreFactory
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import com.theoriacodex.data.storage.AsynchronousStore
 import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.data.storage.DurableStorePhase
 import com.theoriacodex.data.storage.DurableStoreStatus
-import com.theoriacodex.data.storage.GsonDataStoreSerializer
-import com.theoriacodex.data.storage.UnsupportedStoreSchemaException
+import com.theoriacodex.data.storage.JsonDataStoreSerializer
 import com.theoriacodex.data.storage.preserveCorruptFile
 import com.theoriacodex.data.storage.updateDataInBackground
 import com.theoriacodex.domain.model.SourceKey
@@ -34,31 +31,18 @@ import kotlinx.coroutines.flow.update
 class DataStoreSettingsRepository(
     baseDirectory: File,
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
-    gson: Gson = Gson(),
     private val profileWriteGuard: ProfileLibraryWriteGuard = ProfileLibraryWriteGuard(),
 ) : SettingsRepository, AsynchronousStore {
     private val storeFile = baseDirectory.resolve(DATASTORE_SETTINGS_FILE_NAME)
     private val mutableStorageStatus = MutableStateFlow(DurableStoreStatus())
     private val defaultValue = SettingsDataStoreFile()
     private val dataStore: DataStore<SettingsDataStoreFile> = DataStoreFactory.create(
-        serializer = GsonDataStoreSerializer(
+        serializer = JsonDataStoreSerializer(
             storeName = DATASTORE_SETTINGS_FILE_NAME,
+            schemaVersion = SETTINGS_DATASTORE_SCHEMA_VERSION,
             defaultValue = defaultValue,
-            type = object : TypeToken<SettingsDataStoreFile>() {}.type,
-            gson = gson,
-            validate = { stored ->
-                if (stored.schemaVersion > SETTINGS_DATASTORE_SCHEMA_VERSION) {
-                    throw UnsupportedStoreSchemaException(
-                        storeName = DATASTORE_SETTINGS_FILE_NAME,
-                        actual = stored.schemaVersion,
-                        supported = SETTINGS_DATASTORE_SCHEMA_VERSION,
-                    )
-                }
-                require(stored.schemaVersion == SETTINGS_DATASTORE_SCHEMA_VERSION) {
-                    "Unsupported settings schema ${stored.schemaVersion}"
-                }
-                stored.validate()
-            },
+            serializer = SettingsDataStoreFile.serializer(),
+            validate = SettingsDataStoreFile::validate,
         ),
         corruptionHandler = ReplaceFileCorruptionHandler { corruption ->
             mutableStorageStatus.update { current ->
@@ -249,30 +233,17 @@ class DataStoreSettingsRepository(
 class DataStoreUiRestoreRepository(
     baseDirectory: File,
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
-    gson: Gson = Gson(),
 ) : UiRestoreRepository, AsynchronousStore {
     private val storeFile = baseDirectory.resolve(DATASTORE_UI_RESTORE_FILE_NAME)
     private val mutableStorageStatus = MutableStateFlow(DurableStoreStatus())
     private val defaultValue = UiRestoreDataStoreFile()
     private val dataStore: DataStore<UiRestoreDataStoreFile> = DataStoreFactory.create(
-        serializer = GsonDataStoreSerializer(
+        serializer = JsonDataStoreSerializer(
             storeName = DATASTORE_UI_RESTORE_FILE_NAME,
+            schemaVersion = UI_RESTORE_DATASTORE_SCHEMA_VERSION,
             defaultValue = defaultValue,
-            type = object : TypeToken<UiRestoreDataStoreFile>() {}.type,
-            gson = gson,
-            validate = { stored ->
-                if (stored.schemaVersion > UI_RESTORE_DATASTORE_SCHEMA_VERSION) {
-                    throw UnsupportedStoreSchemaException(
-                        storeName = DATASTORE_UI_RESTORE_FILE_NAME,
-                        actual = stored.schemaVersion,
-                        supported = UI_RESTORE_DATASTORE_SCHEMA_VERSION,
-                    )
-                }
-                require(stored.schemaVersion == UI_RESTORE_DATASTORE_SCHEMA_VERSION) {
-                    "Unsupported UI restore schema ${stored.schemaVersion}"
-                }
-                stored.validate()
-            },
+            serializer = UiRestoreDataStoreFile.serializer(),
+            validate = UiRestoreDataStoreFile::validate,
         ),
         corruptionHandler = ReplaceFileCorruptionHandler { corruption ->
             mutableStorageStatus.update { current ->

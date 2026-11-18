@@ -4,18 +4,21 @@ import com.google.gson.annotations.SerializedName
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 const val STATISTICS_HISTORY_DAYS = 400L
 
 /** Independent daily counters; foreground includes uncategorized activity. */
+@Serializable
 data class DailyActivity(
-    @field:SerializedName("appOpenCount") val appOpenCount: Long = 0L,
-    @field:SerializedName("totalForegroundMs") val totalForegroundMs: Long = 0L,
-    @field:SerializedName("browsingMs") val browsingMs: Long = 0L,
-    @field:SerializedName("watchingMs") val watchingMs: Long = 0L,
-    @field:SerializedName("codexMs") val codexMs: Long = 0L,
-    @field:SerializedName("watchedPostCount") val watchedPostCount: Long = 0L,
-    @field:SerializedName("searchCount") val searchCount: Long = 0L,
+    @field:SerializedName("appOpenCount") @SerialName("appOpenCount") val appOpenCount: Long = 0L,
+    @field:SerializedName("totalForegroundMs") @SerialName("totalForegroundMs") val totalForegroundMs: Long = 0L,
+    @field:SerializedName("browsingMs") @SerialName("browsingMs") val browsingMs: Long = 0L,
+    @field:SerializedName("watchingMs") @SerialName("watchingMs") val watchingMs: Long = 0L,
+    @field:SerializedName("codexMs") @SerialName("codexMs") val codexMs: Long = 0L,
+    @field:SerializedName("watchedPostCount") @SerialName("watchedPostCount") val watchedPostCount: Long = 0L,
+    @field:SerializedName("searchCount") @SerialName("searchCount") val searchCount: Long = 0L,
 )
 
 /** A monotonic duration allocated to a local calendar date. */

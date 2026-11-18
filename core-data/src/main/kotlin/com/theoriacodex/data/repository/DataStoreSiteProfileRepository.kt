@@ -3,11 +3,7 @@ package com.theoriacodex.data.repository
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.DataStoreFactory
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
-import com.google.gson.Gson
-import com.google.gson.annotations.SerializedName
-import com.google.gson.reflect.TypeToken
-import com.theoriacodex.data.storage.GsonDataStoreSerializer
-import com.theoriacodex.data.storage.UnsupportedStoreSchemaException
+import com.theoriacodex.data.storage.JsonDataStoreSerializer
 import com.theoriacodex.data.storage.preserveCorruptFile
 import com.theoriacodex.data.storage.updateDataInBackground
 import com.theoriacodex.domain.source.SiteProfile
@@ -18,6 +14,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 const val SITE_PROFILES_FILE_NAME = "custom_sites_v1.json"
 internal const val SITE_PROFILES_SCHEMA_VERSION = 1
@@ -31,16 +29,14 @@ internal const val SITE_PROFILES_SCHEMA_VERSION = 1
 class DataStoreSiteProfileRepository(
     baseDirectory: File,
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
-    gson: Gson = Gson(),
 ) : SiteProfileRepository {
     private val storeFile = baseDirectory.resolve(SITE_PROFILES_FILE_NAME)
     private val dataStore: DataStore<SiteProfileStoreFile> = DataStoreFactory.create(
-        serializer = GsonDataStoreSerializer(
+        serializer = JsonDataStoreSerializer(
             storeName = SITE_PROFILES_FILE_NAME,
+            schemaVersion = SITE_PROFILES_SCHEMA_VERSION,
             defaultValue = SiteProfileStoreFile(),
-            type = object : TypeToken<SiteProfileStoreFile>() {}.type,
-            gson = gson,
-            validate = SiteProfileStoreFile::validate,
+            serializer = SiteProfileStoreFile.serializer(),
         ),
         corruptionHandler = ReplaceFileCorruptionHandler {
             preserveCorruptFile(storeFile)
@@ -78,10 +74,11 @@ class DataStoreSiteProfileRepository(
     }
 }
 
+@Serializable
 internal data class SiteProfileStoreFile(
-    @field:SerializedName("schemaVersion") val schemaVersion: Int = SITE_PROFILES_SCHEMA_VERSION,
-    /** Entries are nullable because Gson writes whatever the file holds, including `null`. */
-    @field:SerializedName("sites") val sites: List<SiteProfileRecord?> = emptyList(),
+    @SerialName("schemaVersion") val schemaVersion: Int = SITE_PROFILES_SCHEMA_VERSION,
+    /** Entries are nullable so one `null` entry is skipped instead of failing the whole file. */
+    @SerialName("sites") val sites: List<SiteProfileRecord?> = emptyList(),
 ) {
     /** Readable profiles in added order; the first record wins for a repeated id. */
     fun profiles(): List<SiteProfile> = sites.mapNotNull { it?.toDomainOrNull() }.distinctBy(SiteProfile::sourceId)
@@ -90,12 +87,5 @@ internal data class SiteProfileStoreFile(
     fun withProfiles(profiles: List<SiteProfile>): SiteProfileStoreFile {
         val unreadable = sites.filterNotNull().filter { it.toDomainOrNull() == null }
         return copy(sites = profiles.map(SiteProfileRecord::fromDomain) + unreadable)
-    }
-
-    fun validate() {
-        if (schemaVersion > SITE_PROFILES_SCHEMA_VERSION) {
-            throw UnsupportedStoreSchemaException(SITE_PROFILES_FILE_NAME, schemaVersion, SITE_PROFILES_SCHEMA_VERSION)
-        }
-        require(schemaVersion == SITE_PROFILES_SCHEMA_VERSION) { "Unsupported site profile schema $schemaVersion" }
     }
 }
