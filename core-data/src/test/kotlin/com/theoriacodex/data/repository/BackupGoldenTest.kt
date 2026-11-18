@@ -67,6 +67,8 @@ class BackupGoldenTest {
         }
         val other = v2.replace("theoria-profile-backup", "other-format").toByteArray()
         assertEquals("This is not a Theoria profile backup", runCatching { codec.decode(other) }.exceptionOrNull()?.message)
+        val noFavorites = v2.replace("\"favoriteTagsByProfile\":{", "\"retired\":{").toByteArray()
+        assertEquals("Backup is missing favoriteTagsByProfile", runCatching { codec.decode(noFavorites) }.exceptionOrNull()?.message)
     }
 
     // pending_profile_restore.json as ProfileBackupService.writeJournal left it after a crash mid-restore.
