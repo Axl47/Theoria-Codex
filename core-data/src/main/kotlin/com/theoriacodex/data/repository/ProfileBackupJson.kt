@@ -75,9 +75,13 @@ internal fun JsonObject.backupStrings(name: String): List<String> {
     }
 }
 
-/** A nested object that must be present; Gson's `getAsJsonObject` followed by `requireNotNull`. */
-internal fun JsonObject.backupObject(name: String): JsonObject = requireNotNull(get(name) as? JsonObject) {
-    "Invalid backup record: $name"
+/**
+ * A nested object that must be present. A value of another type fails as Gson's cast did, outside
+ * [IllegalArgumentException], so the backup screen shows its generic message.
+ */
+internal fun JsonObject.backupObject(name: String): JsonObject {
+    val value = requireNotNull(get(name)) { "Invalid backup record: $name" }
+    return value as? JsonObject ?: throw IllegalStateException("Invalid backup record: $name")
 }
 
 /** Matches Gson's `isNumber`: an unquoted numeric literal, not a string, boolean, or null. */

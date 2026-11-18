@@ -111,7 +111,8 @@ internal class FileBackedSavedSearchRepositoryTest : FileBackedRepositoryTestFix
     fun `semantic corruption is quarantined before recovering an empty library`() = runTest {
         val directory = tempDir("pin-corruption")
         val storage = directory.resolve("pinned_searches.json")
-        storage.writeText("""{"schemaVersion":1,"searches":[{"name":"missing execution"}]}""")
+        // Complete pins that fail validation (duplicate IDs), not just a structural decode failure.
+        storage.writeText(goldenPinnedSearchesFile().replace("\"pin-multi\"", "\"pin-fyp\""))
         val original = storage.readBytes()
         val recovery = LegacyJsonRecoveryRegistry()
 

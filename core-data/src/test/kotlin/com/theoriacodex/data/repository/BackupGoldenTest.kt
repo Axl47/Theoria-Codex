@@ -59,7 +59,9 @@ class BackupGoldenTest {
     // The backup screen shows an IllegalArgumentException's message verbatim; parser errors must reach its generic text.
     @Test fun `malformed JSON fails as before while invalid fields keep their message`() {
         val v2 = golden("backup-v2.json").decodeToString()
-        listOf("{broken", "[]", v2.replace("\"appOpenCount\":0", "\"appOpenCount\":{}")).forEach { raw ->
+        val wrongTypes = listOf("\"appOpenCount\":0" to "\"appOpenCount\":{}", "\"settings\":{" to "\"settings\":[],\"x\":{",
+            "\"favoriteTagsByProfile\":{" to "\"favoriteTagsByProfile\":[],\"x\":{")
+        (listOf("{broken", "[]") + wrongTypes.map { (from, to) -> v2.replace(from, to) }).forEach { raw ->
             val failure = runCatching { codec.decode(raw.toByteArray()) }.exceptionOrNull()
             assertTrue(raw, failure != null && failure !is IllegalArgumentException)
         }
