@@ -39,7 +39,6 @@ class DataStoreFormatTest {
             scenarioPreset = "EMPTY_RESULTS",
             recommendationProfiles = listOf(RecommendationProfileRecord("profile-main", "Main = 1")),
             activeProfileId = "profile-main",
-            activeProfile = "USER_1",
             forYouBlacklistByProfile = mapOf("profile-main" to listOf(ForYouBlacklistEntryRecord("PIXIV", listOf("x")))),
             favoriteTagsByProfile = mapOf(
                 "profile-main" to listOf(FavoriteTagEntryRecord("GELBOORU", "cat_ears", listOf("cat_ears", "fox_ears"), "Ears")),
