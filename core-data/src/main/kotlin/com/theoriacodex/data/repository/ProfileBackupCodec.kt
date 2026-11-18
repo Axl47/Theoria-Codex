@@ -26,7 +26,7 @@ class ProfileBackupCodec(private val gson: Gson = Gson()) {
             addProperty("format", "theoria-profile-backup")
             addProperty("version", PROFILE_BACKUP_VERSION)
             addProperty("createdAt", backup.createdAtEpochMs)
-            add("settings", gson.toJsonTree(LegacySettingsStoreRecord.fromDomain(portableSettings(backup.settings))))
+            add("settings", gson.toJsonTree(SettingsStoreRecord.fromDomain(portableSettings(backup.settings))))
             add("library", encodeLibrary(backup.library))
             add("savedSearches", backupArray(backup.savedSearches) { entry -> backupObject {
                 addProperty("id", entry.id)
@@ -152,7 +152,7 @@ class ProfileBackupCodec(private val gson: Gson = Gson()) {
         require(profiles.isNotEmpty()) { "Backup has no profiles" }
         profiles.forEach { it.backupString("profileId"); it.backupString("name") }
         validateBackupSettings(root, profiles.map { it.backupString("profileId") }.toSet())
-        val settings = gson.fromJson(root, LegacySettingsStoreRecord::class.java).toDomain()
+        val settings = gson.fromJson(root, SettingsStoreRecord::class.java).toDomain()
         require(settings.recommendationProfiles.size == profiles.size) { "Backup contains duplicate profiles" }
         require(root.backupString("activeProfileId") in settings.recommendationProfiles.map { it.profileId })
         require(root.backupObjects("followedCreators", MAX_FOLLOWED_CREATORS).size == settings.followedCreators.size) {
