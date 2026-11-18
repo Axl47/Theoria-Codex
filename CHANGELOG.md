@@ -4,6 +4,7 @@
 
 ### Added
 
+- While you type a tag in Search, tags you've searched before appear first, marked with a history icon, up to three at a time. That includes artists, groups, parodies, characters, languages and Hitomi's female and male tags: each shows where you type that kind of tag, or after a prefix like `artist:`, and is added with its type. Searches still in Recents count from the start.
 - Posts with more than 16 tags get a Filter tags field above their tags in the Viewer's info sheet and in Search. It matches tag names and translations and shows every match, including tags hidden behind "+N more". In landscape, the Viewer keeps the field behind a search button in the Tags header.
 
 ### Changed
