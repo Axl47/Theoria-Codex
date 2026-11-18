@@ -7,6 +7,7 @@
 - If Settings, Statistics, your custom sites or the last-screen state became unreadable a second time, the copy of your original data kept from the first time was replaced by the newer, nearly empty file. Each unreadable file is now kept separately.
 - If an unreadable Settings, Statistics, custom sites or last-screen file could not be set aside, it was overwritten anyway and its data was lost. The app now stops at its startup error instead, leaving the file untouched.
 - When Settings, Statistics, custom sites or the last-screen state had to start over because their file was unreadable, Settings → Recovered storage now lists it, as it already did for other saved data.
+- Removing a collection now also deletes its offline copies that could no longer be opened, such as ones saved by builds before 1.4.0. Before, only Clear removed them.
 
 ## [1.9.1] - 2026-11-18
 

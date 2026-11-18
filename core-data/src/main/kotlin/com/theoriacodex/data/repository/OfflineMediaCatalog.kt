@@ -12,6 +12,10 @@ internal class OfflineMediaCatalog {
     private var mediaCount = 0
     private var bytes = 0L
 
+    /**
+     * Indexes [folder]. [ownerIds] of a folder without a usable copy ([id] null) are kept only for [foldersOwnedBy]:
+     * such a folder holds no available post, so it adds nothing to an owner's post count.
+     */
     fun update(folder: File, id: PostId?, ownerIds: Set<String>, media: Int, size: Long) {
         entries.remove(folder)?.let { adjust(it, -1) }
         if (id != null || size > 0L) {
@@ -34,8 +38,10 @@ internal class OfflineMediaCatalog {
     }
 
     private fun adjust(entry: Entry, direction: Int) {
-        entry.id?.let { ids.adjustCount(it, direction) }
-        entry.owners.forEach { owners.adjustCount(it, direction) }
+        entry.id?.let { id ->
+            ids.adjustCount(id, direction)
+            entry.owners.forEach { owners.adjustCount(it, direction) }
+        }
         mediaCount += entry.media * direction
         bytes += entry.bytes * direction
     }

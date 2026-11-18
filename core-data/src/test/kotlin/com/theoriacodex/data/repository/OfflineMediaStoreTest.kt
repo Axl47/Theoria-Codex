@@ -344,6 +344,40 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
     }
 
     @Test
+    fun `removing the last owner of an undecodable copy deletes it, even after a restart`() = runTest {
+        val directory = tempDir("undecodable-removal")
+        val post = gallery()
+        OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes") }
+        val folder = directory.listFiles().orEmpty().single()
+        editManifest(directory) { root ->
+            root["version"] = JsonPrimitive(2)
+            root["owners"] = JsonArray(listOf(JsonPrimitive("codex:a"), JsonPrimitive("codex:z")))
+        }
+
+        val store = OfflineMediaStore(directory).apply { load() }
+        assertEquals(emptyMap<String, Int>(), store.snapshot.value.postsByOwner)
+        store.removeOwner("codex:a")
+        assertEquals(listOf("codex:z"), ownersOf(manifestOf(directory)))
+        assertEquals(2, manifestOf(directory).getValue("version").jsonPrimitive.int)
+
+        OfflineMediaStore(directory).apply { load() }.removeOwner("codex:z")
+        assertFalse(folder.exists())
+    }
+
+    @Test
+    fun `a copy with no recoverable owner stays when collections are removed`() = runTest {
+        val directory = tempDir("ownerless")
+        val post = gallery()
+        OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes") }
+        val folder = directory.listFiles().orEmpty().single()
+        manifestFile(directory).writeText("{not json")
+
+        OfflineMediaStore(directory).apply { load() }.removeOwner("codex:a")
+
+        assertTrue(folder.resolve("manifest.json").isFile)
+    }
+
+    @Test
     fun `a manifest whose id does not hash to its folder is rejected`() = runTest {
         val directory = tempDir("misplaced")
         val post = gallery()
