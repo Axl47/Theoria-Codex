@@ -1,11 +1,16 @@
 package com.theoriacodex.app.update
 
 import com.google.gson.annotations.SerializedName
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
+@Serializable
 data class ChangelogSection(
     @field:SerializedName("title")
+    @SerialName("title")
     val title: String = "",
     @field:SerializedName("bullets")
+    @SerialName("bullets")
     val bullets: List<String> = emptyList(),
 )
 
