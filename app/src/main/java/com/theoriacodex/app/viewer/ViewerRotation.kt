@@ -142,7 +142,7 @@ internal fun ReportViewerVideoShape(player: Player?, active: Boolean, key: Viewe
         if (player == null || !active) return@DisposableEffect onDispose {}
         fun report(size: VideoSize) {
             if (size.width <= 0 || size.height <= 0) return
-            rotation.measured = MeasuredVideoShape(key, viewerFillOrientation((size.width * size.pixelWidthHeightRatio).toInt(), size.height))
+            rotation.measured = MeasuredVideoShape(key, viewerFillOrientation(size.displayWidth, size.height))
         }
         val listener = object : Player.Listener {
             override fun onVideoSizeChanged(videoSize: VideoSize) = report(videoSize)

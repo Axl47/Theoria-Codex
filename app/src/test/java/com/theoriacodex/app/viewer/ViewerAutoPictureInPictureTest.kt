@@ -29,7 +29,7 @@ class ViewerAutoPictureInPictureTest {
     fun `native auto entry follows playback and keeps buffering video armed`() {
         withController { activity, controller ->
             val player = TestVideoPlayer()
-            val binding = controller.bind(player)
+            val binding = controller.bind(player) { null }
             assertFalse(activity.params!!.isAutoEnterEnabled)
             player.update(playing = true, playbackState = Player.STATE_READY)
             assertTrue(activity.params!!.isAutoEnterEnabled)
@@ -52,9 +52,9 @@ class ViewerAutoPictureInPictureTest {
     fun `old page disposal cannot disarm the current video and route departure clears auto entry`() {
         withController { activity, controller ->
             val firstPlayer = TestVideoPlayer().apply { update(true, Player.STATE_READY) }
-            val first = controller.bind(firstPlayer)
+            val first = controller.bind(firstPlayer) { null }
             val secondPlayer = TestVideoPlayer().apply { update(true, Player.STATE_READY) }
-            val second = controller.bind(secondPlayer)
+            val second = controller.bind(secondPlayer) { null }
             first.close()
             firstPlayer.update(false, Player.STATE_IDLE)
             assertTrue(activity.params!!.isAutoEnterEnabled)
@@ -67,10 +67,26 @@ class ViewerAutoPictureInPictureTest {
     }
 
     @Test
+    fun `window takes the decoded frame's displayed shape over post metadata`() {
+        withController { _, controller ->
+            val player = TestVideoPlayer()
+            val binding = controller.bind(player) { null }
+            // Before the player knows its frame, post metadata is the only shape available.
+            assertEquals(1.0, controller.params(1000, 1000).aspectRatio!!.toDouble(), 0.001)
+            player.update(true, Player.STATE_READY)
+            assertEquals(9.0 / 16, controller.params(1000, 1000).aspectRatio!!.toDouble(), 0.001)
+            // Non-square pixels: 1440x1080 stored at 0.75 pixel aspect displays as a square.
+            player.update(true, Player.STATE_READY, size = VideoSize(1440, 1080, 0.75f))
+            assertEquals(1.0, controller.params(1600, 900).aspectRatio!!.toDouble(), 0.001)
+            binding.close()
+        }
+    }
+
+    @Test
     fun `unsupported devices never arm automatic entry`() {
         withController { activity, controller ->
             shadowOf(activity.packageManager).setSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE, false)
-            val binding = controller.bind(TestVideoPlayer().apply { update(true, Player.STATE_READY) })
+            val binding = controller.bind(TestVideoPlayer().apply { update(true, Player.STATE_READY) }) { null }
             assertEquals(null, activity.params)
             assertFalse(controller.keepPlayingOnPause)
             binding.close()
@@ -92,15 +108,15 @@ class ViewerAutoPictureInPictureTest {
 }
 
 private class TestVideoPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
-    private var snapshot = State.Builder().build()
+    private var snapshot = State.Builder().setVideoSize(VideoSize.UNKNOWN).build()
     override fun getState(): State = snapshot
 
-    fun update(playing: Boolean, playbackState: Int, failed: Boolean = false) {
+    fun update(playing: Boolean, playbackState: Int, failed: Boolean = false, size: VideoSize = VideoSize(900, 1600)) {
         snapshot = State.Builder()
             .setPlaylist(listOf(MediaItemData.Builder("video").setMediaItem(MediaItem.fromUri("file:///video.mp4")).build()))
             .setPlayWhenReady(playing, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
             .setPlaybackState(playbackState)
-            .setVideoSize(VideoSize(900, 1600))
+            .setVideoSize(size)
             .setPlayerError(if (failed) PlaybackException("Failed", null, PlaybackException.ERROR_CODE_IO_UNSPECIFIED) else null)
             .build()
         invalidateState()

@@ -1,12 +1,12 @@
 package com.theoriacodex.app.viewer
 
 import android.app.PictureInPictureParams
-import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.PackageManager
 import android.graphics.Rect
 import android.util.Rational
+import android.view.View
 import com.theoriacodex.app.MainActivity
 
 internal fun Context.viewerActivity(): MainActivity? = when (this) {
@@ -26,17 +26,20 @@ internal fun viewerPictureInPictureRatio(width: Int?, height: Int?): Rational {
 
 internal fun MainActivity.enterViewerPictureInPicture(width: Int?, height: Int?): Boolean {
     if (!supportsViewerPictureInPicture()) return false
-    return requestViewerPictureInPicture(viewerPictureInPictureParams(
-        width, height, autoEnter = viewerAutoPictureInPicture.keepPlayingOnPause,
-    ))
+    return requestViewerPictureInPicture(viewerAutoPictureInPicture.params(width, height))
 }
 
-internal fun Activity.viewerPictureInPictureParams(
+/**
+ * The PiP window takes [width] by [height]'s shape, and the system animates from [video]'s on-screen bounds.
+ * Both must match the video's own frame, or the window letterboxes it with black bars.
+ */
+internal fun viewerPictureInPictureParams(
     width: Int?,
     height: Int?,
-    autoEnter: Boolean = false,
+    video: View?,
+    autoEnter: Boolean,
 ): PictureInPictureParams {
-    val bounds = Rect().also { window.decorView.getGlobalVisibleRect(it) }
+    val bounds = video?.let { view -> Rect().takeIf { view.getGlobalVisibleRect(it) && !it.isEmpty } }
     return PictureInPictureParams.Builder()
         .setAspectRatio(viewerPictureInPictureRatio(width, height))
         .setSourceRectHint(bounds)

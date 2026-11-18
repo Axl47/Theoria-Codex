@@ -177,8 +177,8 @@ private fun ViewerPostPage(
             invertMultiImageScrollDirection = invertMultiImageScrollDirection,
         ),
         modifier = Modifier.fillMaxSize(),
-        contentPadding = if (frame.isLandscape) PaddingValues(0.dp) else PaddingValues(top = 40.dp),
-        pageSpacing = if (frame.isLandscape) 0.dp else 8.dp,
+        contentPadding = if (frame.mediaEdgeToEdge) PaddingValues(0.dp) else PaddingValues(top = 40.dp),
+        pageSpacing = if (frame.mediaEdgeToEdge) 0.dp else 8.dp,
     ) { mediaPage ->
         val media = postMedia[mediaPage]
         val loadGeneration = pageState.media.getOrNull(mediaPage)?.loadGeneration ?: 0L

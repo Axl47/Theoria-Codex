@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Vertical and square videos fill the picture-in-picture window instead of showing black bars on the sides and top.
+
 ## [1.9.0] - 2026-11-17
 
 ### Added

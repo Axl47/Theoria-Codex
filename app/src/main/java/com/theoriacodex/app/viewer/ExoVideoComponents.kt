@@ -8,6 +8,7 @@ import android.os.Trace
 import android.view.LayoutInflater
 import android.widget.FrameLayout
 import androidx.core.net.toUri
+import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.LoadEventInfo
@@ -16,6 +17,9 @@ import androidx.media3.ui.PlayerView
 import com.theoriacodex.app.R
 import com.theoriacodex.domain.model.PostId
 import java.io.File
+
+/** Width of the frame as displayed, after non-square pixels are stretched to their intended shape. */
+internal val VideoSize.displayWidth: Int get() = (width * pixelWidthHeightRatio).toInt()
 
 internal fun createTexturePlayerView(context: Context): PlayerView {
     return LayoutInflater.from(context)
