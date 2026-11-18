@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- The post counts next to a saved nhentai gallery's tags could disappear after the gallery was opened while nhentai was only reachable through its backup copy, or after importing a shared collection that contained it. Saved counts now stay until nhentai reports new ones.
 - If Settings, Statistics, your custom sites or the last-screen state became unreadable a second time, the copy of your original data kept from the first time was replaced by the newer, nearly empty file. Each unreadable file is now kept separately.
 - If an unreadable Settings, Statistics, custom sites or last-screen file could not be set aside, it was overwritten anyway and its data was lost. The file is now left untouched, and the app shows "Saved data could not be opened safely." until it can be set aside; Retry tries again.
 - After going back to an older version, Settings, Statistics, custom sites or last-screen data saved by the newer version could close the app at launch. It now shows "Saved data could not be opened safely." and leaves that data untouched.

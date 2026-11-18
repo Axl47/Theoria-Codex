@@ -96,6 +96,39 @@ class PostStorageRecordsTest {
         assertNull(mergeSparsePost(existing = stored, incoming = replaced).contentHash)
     }
 
+    // nhentai's mirror fallback and Codex share payloads carry tags without counts.
+    @Test
+    fun `merging tags without counts or translations keeps the stored ones`() {
+        val stored = samplePost()
+        val sparse = stored.copy(taxonomy = stored.taxonomy.map { it.copy(count = null, translation = null) })
+
+        assertEquals(stored.taxonomy, mergeSparsePost(existing = stored, incoming = sparse).taxonomy)
+    }
+
+    @Test
+    fun `merging creators without links keeps the stored links`() {
+        val stored = samplePost()
+        val sparse = stored.copy(creatorProfiles = stored.creatorProfiles.map { it.copy(profileUrl = null, uploadsQuery = null) })
+
+        assertEquals(stored.creatorProfiles, mergeSparsePost(existing = stored, incoming = sparse).creatorProfiles)
+    }
+
+    @Test
+    fun `merging present tag and creator values replaces the stored ones`() {
+        val stored = samplePost()
+        val (artist, landscape) = stored.taxonomy
+        val creator = stored.creatorProfiles.single()
+        val incoming = stored.copy(
+            taxonomy = listOf(landscape.copy(translation = "scenery"), artist.copy(count = 43)),
+            creatorProfiles = listOf(creator.copy(profileUrl = "https://example.com/artist-new")),
+        )
+
+        val merged = mergeSparsePost(existing = stored, incoming = incoming)
+
+        assertEquals(incoming.taxonomy, merged.taxonomy)
+        assertEquals(incoming.creatorProfiles, merged.creatorProfiles)
+    }
+
     @Test
     fun `pre-versioned storage record retains safe typed fallbacks`() {
         val legacyJson =
