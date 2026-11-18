@@ -26,7 +26,7 @@ internal class OfflineManifestGoldenTest : FileBackedRepositoryTestFixture() {
         OfflineMediaStore(directory).retain(source.id, "codex:a")
         val folder = directory.listFiles().orEmpty().single()
         val generation = folder.listFiles().orEmpty().single(File::isDirectory)
-        val actual = folder.resolve("manifest.json").readText().replace(generation.absolutePath, GENERATION)
+        val actual = folder.resolve("manifest.json").readText().replace(jsonPath(generation), GENERATION)
         assertEquals(golden(), actual)
     }
 
@@ -36,7 +36,7 @@ internal class OfflineManifestGoldenTest : FileBackedRepositoryTestFixture() {
         val folder = File(directory, FOLDER)
         val generation = File(folder, "8d4c1d1e-5f43-4d0e-9a59-0f0b5e3f6a01").apply { mkdirs() }
         source.media.indices.forEach { File(generation, "$it.png").writeText("bytes") }
-        folder.resolve("manifest.json").writeText(golden().replace(GENERATION, generation.absolutePath))
+        folder.resolve("manifest.json").writeText(golden().replace(GENERATION, jsonPath(generation)))
 
         val store = OfflineMediaStore(directory)
         val loaded = requireNotNull(store.find(source.id))
@@ -45,6 +45,9 @@ internal class OfflineManifestGoldenTest : FileBackedRepositoryTestFixture() {
         assertEquals(source, store.withoutOfflineLocations(loaded))
         assertEquals(mapOf("codex:a" to 1, "codex:b" to 1), store.snapshot.value.postsByOwner)
     }
+
+    // Paths appear JSON-escaped, which matters for Windows separators.
+    private fun jsonPath(file: File) = file.absolutePath.replace("\\", "\\\\")
 
     private fun golden(): String =
         checkNotNull(javaClass.classLoader.getResource("golden/offline-manifest/v3.json")) { "Missing golden" }.readText().trimEnd()

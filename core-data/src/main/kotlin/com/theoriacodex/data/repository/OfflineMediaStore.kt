@@ -28,6 +28,8 @@ import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * Completed offline copies live outside disposable caches. The manifest is the commit point.
@@ -268,7 +270,8 @@ class OfflineMediaStore internal constructor(
 
     /** Every manifest version keeps its owners at the root, so they survive a post that cannot be decoded. */
     private fun salvageOwners(folder: File): Set<String> =
-        runCatching { readManifest(folder, ManifestOwners.serializer())?.owners?.filterNotNull()?.toSet() }.getOrNull().orEmpty()
+        runCatching { readManifest(folder, ManifestOwners.serializer())?.owners }.getOrNull().orEmpty()
+            .mapNotNull { owner -> (owner as? JsonPrimitive)?.takeIf { it.isString }?.content }.toSet()
 
     private fun hasCanonicalSourceSnapshot(offline: Post, source: Post): Boolean {
         if (source.id != offline.id) return false
@@ -368,9 +371,9 @@ internal data class OfflineManifest(
     @SerialName("mediaBytes") val mediaBytes: List<Long>,
 )
 
-/** Reads only the owners, from any manifest version, when the rest cannot be decoded. */
+/** Reads only the owners, from any manifest version, when the rest cannot be decoded; a malformed entry costs only itself. */
 @Serializable
-private class ManifestOwners(@SerialName("owners") val owners: List<String?> = emptyList())
+private class ManifestOwners(@SerialName("owners") val owners: List<JsonElement> = emptyList())
 
 data class OfflineMediaSnapshot(
     val postCount: Int = 0,
