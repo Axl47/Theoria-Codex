@@ -91,7 +91,7 @@ internal fun ViewerVideoPlayer(
         positions.save(mediaKey, it)
         context.videoPlaybackInfrastructure().feedPositionHandoff.publish(mediaKey, it)
     }
-    ViewerVideoSystemBindings(state.player, controls.isActive && controls.systemControlsReady, events)
+    ViewerVideoSystemBindings(state, controls.isActive && controls.systemControlsReady, events)
     ReportViewerVideoShape(state.player, controls.isActive, mediaKey)
     ViewerVideoCommands(state, controls)
     ViewerVideoLifecycle(state, controls)
@@ -124,7 +124,7 @@ private class ViewerVideoState {
         val active = player ?: return
         runCatching {
             active.duration.takeIf { it > 0L }?.let { duration = it }
-            active.videoSize.let { size -> viewerAspectRatio((size.width * size.pixelWidthHeightRatio).toInt(), size.height) }
+            active.videoSize.let { size -> viewerAspectRatio(size.displayWidth, size.height) }
                 ?.let { aspectRatio = it }
             if (!scrubbing) position = active.currentPosition.coerceAtLeast(0L)
                 .let { if (duration > 0L) it.coerceAtMost(duration) else it }
@@ -213,7 +213,8 @@ private fun ViewerVideoBinding(
 
 /** Only the selected page owns system playback controls; a swipe target merely buffers. */
 @Composable
-private fun ViewerVideoSystemBindings(player: ExoPlayer?, active: Boolean, events: ViewerRendererEvents) {
+private fun ViewerVideoSystemBindings(state: ViewerVideoState, active: Boolean, events: ViewerRendererEvents) {
+    val player = state.player
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
     val latestEvents by rememberUpdatedState(events)
@@ -223,7 +224,7 @@ private fun ViewerVideoSystemBindings(player: ExoPlayer?, active: Boolean, event
             java.io.Closeable { session.release() }
         } else null
         val pictureInPicture = if (active && player != null) {
-            context.viewerActivity()?.viewerAutoPictureInPicture?.bind(player)
+            context.viewerActivity()?.viewerAutoPictureInPicture?.bind(player) { state.view }
         } else null
         onDispose {
             pictureInPicture?.close()
@@ -372,9 +373,10 @@ private fun ViewerVideoContent(
     Box(modifier.testTag(viewerVideoTestTag(postId)).then(diagnostics?.let {
         Modifier.semantics { stateDescription = it.stateDescription; contentDescription = it.contentDescription }
     } ?: Modifier), contentAlignment = Alignment.Center) {
-        // A player view with no video size yet fills its parent, so its parent is the media's own shape.
+        // The decoded frame's shape wins over post metadata, which can disagree with the stream and would
+        // letterbox the video inside its own bounds (and inside the PiP window, which takes those bounds).
         AndroidView(
-            modifier = Modifier.viewerFittedMedia(aspectRatio).then(mediaModifier),
+            modifier = Modifier.viewerFittedMedia(state.aspectRatio ?: aspectRatio).then(mediaModifier),
             factory = { context -> createTexturePlayerView(context).apply { useController = false; player = state.player; state.view = this } },
             update = { view ->
                 state.view = view
