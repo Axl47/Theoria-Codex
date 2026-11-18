@@ -7,7 +7,6 @@ import android.util.Log
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
-import com.google.gson.JsonParser
 import com.theoriacodex.app.codex.codexSharePostSnapshot
 import com.theoriacodex.app.codex.encodeCodexShareFile
 import com.theoriacodex.app.codex.parseCodexShareFile
@@ -60,6 +59,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 /** Installed only in the minified acceptance APK; write/read phases straddle a process restart. */
 class ReleaseDataAcceptanceActivity : ComponentActivity() {
@@ -76,6 +80,7 @@ class ReleaseDataAcceptanceActivity : ComponentActivity() {
                     verifyData(File(cacheDir, "release-contract-$token"), phase)
                     verifyCredentials(applicationContext, token, phase)
                     verifyRoomPayloads(applicationContext, "release-contract-$token.db", phase)
+                    verifyRecordFiles(applicationContext, token, phase)
                 }
                 status.text = "Minified data contracts passed: $phase"
                 Log.i(RESULT_TAG, "PASS:$token:$phase")
@@ -139,7 +144,7 @@ private suspend fun verifyData(directory: File, phase: String) {
         try {
             tags.awaitLoaded()
             check(tags.get(SourceKey.GELBOORU, 10).any { it.text == "fresh" })
-            check(JsonParser.parseString(tagsFile.readText()).asJsonObject.getAsJsonObject("sources").has("GELBOORU"))
+            check(Json.parseToJsonElement(tagsFile.readText()).jsonObject.getValue("sources").jsonObject.containsKey("GELBOORU"))
         } finally {
             tags.close()
         }
@@ -150,11 +155,11 @@ private suspend fun verifyData(directory: File, phase: String) {
 /** kotlinx serializers survive R8 with readable keys, and a file the Gson store wrote still loads. */
 private suspend fun verifyUpdateState(updateFile: File, legacyUpdateFile: File) {
     check(FileBackedUpdateStateStore(updateFile).snapshot() == updateState)
-    val wire = JsonParser.parseString(updateFile.readText()).asJsonObject
-    check(wire.keySet() == UPDATE_STATE_KEYS)
-    val changelog = wire.getAsJsonObject("pendingPostInstallChangelog")
-    check(changelog.keySet() == CHANGELOG_KEYS)
-    check(changelog.getAsJsonArray("changelogSections").single().asJsonObject.keySet() == setOf("title", "bullets"))
+    val wire = Json.parseToJsonElement(updateFile.readText()).jsonObject
+    check(wire.keys == UPDATE_STATE_KEYS)
+    val changelog = wire.getValue("pendingPostInstallChangelog").jsonObject
+    check(changelog.keys == CHANGELOG_KEYS)
+    check(changelog.getValue("changelogSections").jsonArray.single().jsonObject.keys == setOf("title", "bullets"))
     val legacy = FileBackedUpdateStateStore(legacyUpdateFile).snapshot()
     check(legacy.ignoredReleaseId == RELEASE_ID && legacy.remindLaterUntilEpochMs == REMIND_UNTIL)
     check(legacy.pendingPostInstallChangelog?.releaseName == "Tom & Jerry's <release>")
@@ -162,16 +167,16 @@ private suspend fun verifyUpdateState(updateFile: File, legacyUpdateFile: File) 
 
 private suspend fun verifyQueryStore(directory: File) {
     check(FileBackedQueryRepository(directory).observeAppliedQuery(QUERY_MODE).first() == acceptanceQuery)
-    val wire = JsonParser.parseString(File(directory, "query_store.json").readText()).asJsonObject
-    val record = wire.getAsJsonObject("queries").getAsJsonObject(QUERY_MODE)
-    check(record.keySet() == QUERY_KEYS)
-    check(record.getAsJsonArray("includeTerms").first().asJsonObject.keySet() == setOf("value", "facet", "sourceNamespace"))
+    val wire = Json.parseToJsonElement(File(directory, "query_store.json").readText()).jsonObject
+    val record = wire.getValue("queries").jsonObject.getValue(QUERY_MODE).jsonObject
+    check(record.keys == QUERY_KEYS)
+    check(record.getValue("includeTerms").jsonArray.first().jsonObject.keys == setOf("value", "facet", "sourceNamespace"))
 }
 
 private fun verifyCodexShare(json: String) {
-    val wire = JsonParser.parseString(json).asJsonObject
-    check(wire.keySet() == setOf("version", "title", "posts"))
-    check(wire.getAsJsonArray("posts").single().asJsonObject.keySet() == setOf("source", "sourcePostId", "snapshot"))
+    val wire = Json.parseToJsonElement(json).jsonObject
+    check(wire.keys == setOf("version", "title", "posts"))
+    check(wire.getValue("posts").jsonArray.single().jsonObject.keys == setOf("source", "sourcePostId", "snapshot"))
     val imported = requireNotNull(parseCodexShareFile(json))
     check(imported.title == "Acceptance & <collection>")
     check(codexSharePostSnapshot(imported.posts.orEmpty().single())?.id == videoPostFixture().id)
@@ -179,12 +184,12 @@ private fun verifyCodexShare(json: String) {
 
 /** Exported stats files keep readable keys, and a file a Gson build exported still imports. */
 private fun verifyStatsShare(json: String) {
-    val wire = JsonParser.parseString(json).asJsonObject
-    check(wire.keySet() == setOf("format", "version", "name", "codices", "overall"))
-    val codex = wire.getAsJsonArray("codices").single().asJsonObject
-    check(codex.keySet() == setOf("name", "entries", "browsingMs", "watchingMs", "postOpens", "posts"))
-    check(codex.getAsJsonArray("posts").single().asJsonObject.keySet() == setOf("key", "label", "opens", "videoMs", "imageMs"))
-    check(wire.getAsJsonObject("overall").keySet() == STATS_OVERALL_KEYS)
+    val wire = Json.parseToJsonElement(json).jsonObject
+    check(wire.keys == setOf("format", "version", "name", "codices", "overall"))
+    val codex = wire.getValue("codices").jsonArray.single().jsonObject
+    check(codex.keys == setOf("name", "entries", "browsingMs", "watchingMs", "postOpens", "posts"))
+    check(codex.getValue("posts").jsonArray.single().jsonObject.keys == setOf("key", "label", "opens", "videoMs", "imageMs"))
+    check(wire.getValue("overall").jsonObject.keys == STATS_OVERALL_KEYS)
     check(parseStatsShare(json) == statsShare)
     check(parseStatsShare(LEGACY_STATS_SHARE) == statsShare)
 }
@@ -219,8 +224,8 @@ private suspend fun verifyCredentials(context: Context, token: String, phase: St
         File(directory, "corrupt-envelope.json").writeText("[]")
     } else {
         check(store("current").read() == CredentialEnvelopeReadResult.Success(credentials))
-        val wire = JsonParser.parseString(File(directory, "current.json").readText()).asJsonObject
-        check(wire.keySet() == setOf("formatVersion", "keyVersion", "iv", "ciphertext"))
+        val wire = Json.parseToJsonElement(File(directory, "current.json").readText()).jsonObject
+        check(wire.keys == setOf("formatVersion", "keyVersion", "iv", "ciphertext"))
         check(store("gson").read() == CredentialEnvelopeReadResult.Success(credentials))
         check(store("corrupt-payload").read() == CredentialEnvelopeReadResult.ReconnectRequired)
         check(store("corrupt-envelope").read() == CredentialEnvelopeReadResult.ReconnectRequired)
@@ -295,8 +300,8 @@ private suspend fun verifyRoomPayloads(context: Context, databaseName: String, p
         }
         check(likes.getPost(videoPostFixture().id) == videoPostFixture())
         check(likes.observeLikes(ACCEPTANCE_PROFILE).first().single().tags == LIKE_TAGS)
-        val payload = JsonParser.parseString(checkNotNull(database.codexLikesDao().post("IWARA", "video-contract")).payloadJson)
-        check(payload.asJsonObject.getAsJsonArray("fullVideoVariants").first().asJsonObject.has("original"))
+        val payload = Json.parseToJsonElement(checkNotNull(database.codexLikesDao().post("IWARA", "video-contract")).payloadJson)
+        check(payload.jsonObject.getValue("fullVideoVariants").jsonArray.first().jsonObject.containsKey("original"))
         val searches = recents.observeSearches().first().associateBy { it.queryHash }
         check(searches.getValue("kotlinx-search").let { it.query == unifiedQuery && it.sources == MULTI_SOURCES })
         val gsonRow = checkNotNull(likes.getPost(gsonRowId))
@@ -347,12 +352,12 @@ private val QUERY_KEYS = setOf(
 
 /** Null values are omitted, as the Gson store omitted them. */
 private fun verifyVideoPost(json: String) {
-    val wire = JsonParser.parseString(json).asJsonObject
-    val fullVariants = wire.getAsJsonArray("fullVideoVariants").map { it.asJsonObject.keySet() }
+    val wire = Json.parseToJsonElement(json).jsonObject
+    val fullVariants = wire.getValue("fullVideoVariants").jsonArray.map { it.jsonObject.keys }
     check(fullVariants == listOf(setOf("url", "original"), setOf("url", "height", "original", "mime")))
-    val galleryMedia = wire.getAsJsonArray("media").single().asJsonObject
-    check(galleryMedia.keySet() == setOf("url", "mime", "progressiveUrls", "fallbackUrls", "videoVariants", "isAnimated"))
-    check(galleryMedia.getAsJsonArray("videoVariants").single().asJsonObject.keySet() == setOf("url", "height", "original", "mime"))
+    val galleryMedia = wire.getValue("media").jsonArray.single().jsonObject
+    check(galleryMedia.keys == setOf("url", "mime", "progressiveUrls", "fallbackUrls", "videoVariants", "isAnimated"))
+    check(galleryMedia.getValue("videoVariants").jsonArray.single().jsonObject.keys == setOf("url", "height", "original", "mime"))
     val restored = requireNotNull(PostStorageCodec.decode(DurableJson.decodeFromString(PostStorageRecord.serializer(), json)))
     check(restored == videoPostFixture())
     check(restored.preview.videoVariants.isEmpty())
@@ -366,9 +371,9 @@ private suspend fun saveOfflineCopy(offline: File) {
 
 private suspend fun verifyOfflineCopy(offline: File) {
     val post = videoPostFixture()
-    val manifest = JsonParser.parseString(File(offline, "${offlineFolderName(post.id)}/manifest.json").readText()).asJsonObject
-    check(manifest.keySet() == setOf("version", "post", "sourcePost", "owners", "mediaBytes"))
-    check(manifest.get("version").asInt == 3 && manifest.getAsJsonObject("sourcePost").has("fullVideoVariants"))
+    val manifest = Json.parseToJsonElement(File(offline, "${offlineFolderName(post.id)}/manifest.json").readText()).jsonObject
+    check(manifest.keys == setOf("version", "post", "sourcePost", "owners", "mediaBytes"))
+    check(manifest.getValue("version").jsonPrimitive.int == 3 && manifest.getValue("sourcePost").jsonObject.containsKey("fullVideoVariants"))
     val store = OfflineMediaStore(offline)
     val found = requireNotNull(store.find(post.id))
     check(found.media.single().localPath?.let(::File)?.readText() == "offline bytes")
