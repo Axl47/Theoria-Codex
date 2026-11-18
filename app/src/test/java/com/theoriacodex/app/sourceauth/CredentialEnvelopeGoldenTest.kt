@@ -26,7 +26,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * Corrupt credential files must read as "reconnect", not "temporarily unavailable", whatever the JSON library.
+ * Corrupt credential files must read as "reconnect", not "temporarily unavailable", whatever the JSON library, and
+ * files from a newer build as an unsupported version.
  * Robolectric has no Android Keystore, so a software one is installed for the duration of each test.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -110,6 +111,19 @@ class CredentialEnvelopeGoldenTest {
         writeEnvelope(envelopeAround(golden("payload-wrong-shape.json")))
 
         assertEquals(CredentialEnvelopeReadResult.ReconnectRequired, newStore().read())
+    }
+
+    // A newer build's envelope can have any shape; it must report its version, not ask to reconnect.
+    @Test fun `envelope from a newer build reports its version`() = runTest {
+        writeEnvelope("""{"formatVersion":2,"keyVersion":1,"iv":{"shape":"unknown"}}""")
+
+        assertEquals(CredentialEnvelopeReadResult.UnsupportedVersion(2), newStore().read())
+    }
+
+    @Test fun `payload from a newer build reports its version`() = runTest {
+        writeEnvelope(envelopeAround("""{"schemaVersion":2,"gelbooruUserId":{"shape":"unknown"}}"""))
+
+        assertEquals(CredentialEnvelopeReadResult.UnsupportedVersion(2), newStore().read())
     }
 
     private fun newStore() = AndroidCredentialEnvelopeStore(context, relativeEnvelopePath = RELATIVE_PATH)

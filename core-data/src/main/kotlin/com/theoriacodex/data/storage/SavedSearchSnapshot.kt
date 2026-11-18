@@ -11,7 +11,9 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.decodeFromJsonElement
 
 internal data class SavedSearchSnapshot(val entries: List<SavedSearchEntry>) {
     companion object {
@@ -55,8 +57,9 @@ private data class SavedSearchRecord(
 )
 
 /**
- * Reads and writes [SavedSearchSnapshot] as [SavedSearchFileRecord]. Any invalid pin fails the whole file as a
- * [SerializationException], so the file store quarantines it rather than failing startup.
+ * Reads and writes [SavedSearchSnapshot] as [SavedSearchFileRecord]. A file from a newer build throws
+ * [UnsupportedStoreSchemaException] before its shape is read, so it is refused and left in place. Any invalid pin
+ * fails the whole file as a [SerializationException], so the file store quarantines it rather than failing startup.
  */
 internal object SavedSearchSnapshotSerializer : KSerializer<SavedSearchSnapshot> {
     override val descriptor: SerialDescriptor = SavedSearchFileRecord.serializer().descriptor
@@ -72,13 +75,17 @@ internal object SavedSearchSnapshotSerializer : KSerializer<SavedSearchSnapshot>
                 execution = RecentSearchPayloadCodec.encode(entry.search),
             )
         }
-        encoder.encodeSerializableValue(SavedSearchFileRecord.serializer(), SavedSearchFileRecord(1, searches))
+        encoder.encodeSerializableValue(SavedSearchFileRecord.serializer(), SavedSearchFileRecord(SAVED_SEARCH_SCHEMA_VERSION, searches))
     }
 
     override fun deserialize(decoder: Decoder): SavedSearchSnapshot {
-        val file = decoder.decodeSerializableValue(SavedSearchFileRecord.serializer())
+        val tree = (decoder as JsonDecoder).decodeJsonElement()
+        tree.storedVersion("schemaVersion")?.takeIf { it > SAVED_SEARCH_SCHEMA_VERSION }?.let { stored ->
+            throw UnsupportedStoreSchemaException("Pinned searches", stored, SAVED_SEARCH_SCHEMA_VERSION)
+        }
+        val file = DurableJson.decodeFromJsonElement<SavedSearchFileRecord>(tree)
         return try {
-            require(file.schemaVersion == 1) { "Unsupported saved-search version." }
+            require(file.schemaVersion == SAVED_SEARCH_SCHEMA_VERSION) { "Unsupported saved-search version." }
             require(file.searches.size <= MAX_SAVED_SEARCHES) { "Too many saved searches." }
             SavedSearchSnapshot.validated(file.searches.map { record ->
                 val payload = RecentSearchPayloadCodec.decode(record.execution)
@@ -101,3 +108,5 @@ internal object SavedSearchSnapshotSerializer : KSerializer<SavedSearchSnapshot>
         }
     }
 }
+
+private const val SAVED_SEARCH_SCHEMA_VERSION = 1

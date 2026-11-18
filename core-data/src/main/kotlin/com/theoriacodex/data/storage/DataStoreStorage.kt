@@ -12,8 +12,6 @@ import java.security.MessageDigest
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 
 interface AsynchronousStore {
     val storageStatus: StateFlow<DurableStoreStatus>
@@ -69,8 +67,7 @@ internal class JsonDataStoreSerializer<T : Any>(
         }
         try {
             val tree = DurableJson.parseToJsonElement(json)
-            val stored = ((tree as? JsonObject)?.get("schemaVersion") as? JsonPrimitive)?.content?.toIntOrNull()
-                ?: schemaVersion
+            val stored = tree.storedVersion("schemaVersion") ?: schemaVersion
             if (stored > schemaVersion) {
                 throw UnsupportedStoreSchemaException(storeName, stored, schemaVersion)
             }

@@ -2,6 +2,7 @@ package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
+import com.theoriacodex.data.storage.UnsupportedStoreSchemaException
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
@@ -17,6 +18,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -121,6 +123,22 @@ internal class FileBackedSavedSearchRepositoryTest : FileBackedRepositoryTestFix
         assertTrue(repository.observeSavedSearches().first().isEmpty())
         assertFalse(storage.exists())
         assertTrue(File(recovery.recoveries.value.single().backupPath!!).readBytes().contentEquals(original))
+    }
+
+    @Test
+    fun `a file from a newer build is refused and left in place`() = runTest {
+        val directory = tempDir("pin-newer")
+        val storage = directory.resolve("pinned_searches.json")
+        val newer = """{"schemaVersion":2,"searches":{"shape":"unknown to this build"}}"""
+        storage.writeText(newer)
+        val recovery = LegacyJsonRecoveryRegistry()
+
+        assertThrows(UnsupportedStoreSchemaException::class.java) {
+            FileBackedSavedSearchRepository(directory, recoveryRegistry = recovery)
+        }
+
+        assertEquals(newer, storage.readText())
+        assertTrue(recovery.recoveries.value.isEmpty())
     }
 
     @Test
