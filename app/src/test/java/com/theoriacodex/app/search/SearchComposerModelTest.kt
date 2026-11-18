@@ -192,6 +192,23 @@ class SearchComposerModelTest {
         assertEquals(emptyList<String>(), rows(FacetedSearchScope(SearchFacet.TAG, "female")))
     }
 
+    @Test fun `a typed scope prefix decides whether saved and searched tags show`() {
+        fun rows(input: String, mode: QueryMode) = composerSuggestions(
+            ComposerAddTarget.Required,
+            SearchUiState(
+                query = SearchQueryUiState(draft = emptySearchQuery(mode)),
+                suggestions = SearchSuggestionsUiState(input = input, searchedTags = listOf("sky")),
+            ),
+            savedTags = listOf(FavoriteTagEntry(SourceKey.HITOMI, "sky_blue")),
+        ).rows.map { it.text }
+
+        for (mode in listOf(QueryMode.Unified, QueryMode.Source(SourceKey.HITOMI))) {
+            assertEquals(listOf("sky_blue", "sky"), rows("tag:sk", mode))
+            assertEquals(emptyList<String>(), rows("artist:sk", mode))
+            assertEquals(emptyList<String>(), rows("female:sk", mode))
+        }
+    }
+
     @Test fun `removal undo stands only until another edit`() {
         val rin = SearchTerm("rin")
         val aoi = SearchTerm("aoi")

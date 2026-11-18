@@ -211,8 +211,14 @@ internal fun composerSuggestions(
     savedTags: List<FavoriteTagEntry>,
 ): ComposerSuggestions {
     val scope = state.query.selectedScope
+    // A typed prefix such as `artist:` overrides the picked scope, as it does for the provider's rows.
+    val typedScope = parseScopedInput(state.suggestions.input).explicitScope
     // Namespaced tag scopes, such as Hitomi's female and male tags, would lose their namespace.
-    val generalTagScope = scope.isAll || (scope.facet == SearchFacet.TAG && scope.sourceNamespace == null)
+    val generalTagScope = if (typedScope != null) {
+        typedScope.facet == SearchFacet.TAG && !typedScope.requiresExactNamespace
+    } else {
+        scope.isAll || (scope.facet == SearchFacet.TAG && scope.sourceNamespace == null)
+    }
     val draft = state.query.draft
     return composerSuggestions(target, state.suggestions.facetedAutocomplete, state.suggestions.autocomplete)
         .withSearchedTags(target, state.suggestions.searchedTags.takeIf { generalTagScope }.orEmpty(), draft)
