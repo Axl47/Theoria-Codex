@@ -16,7 +16,7 @@ internal fun rememberSearchTermCounts(
     terms: List<SearchTerm>,
     supplied: Map<SearchTerm, Int> = emptyMap(),
 ): Map<SearchTerm, Int?> {
-    val typedTerms = remember(terms) { terms.filterNot(SearchTerm::isGeneralPostTag) }
+    val typedTerms = remember(terms) { terms.filterNot(SearchTerm::isGeneralTag) }
     var counts by remember(source, typedTerms, supplied) { mutableStateOf<Map<SearchTerm, Int?>>(supplied) }
     val fetch by rememberUpdatedState(LocalSearchTermCounts.current)
     LaunchedEffect(source, typedTerms, supplied) {

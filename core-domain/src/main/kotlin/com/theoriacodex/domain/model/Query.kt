@@ -26,6 +26,34 @@ data class SearchTerm(
 ) {
     val isPortableGeneralTag: Boolean
         get() = facet == SearchFacet.TAG && sourceNamespace == null
+
+    /** The term's tag type, for matching like with like. */
+    val tagType: SearchTagType
+        get() = SearchTagType.of(facet, sourceNamespace)
+
+    /** A general tag, whether or not its source spells it with the [GENERAL_TAG_NAMESPACE]. */
+    val isGeneralTag: Boolean
+        get() = tagType == SearchTagType.General
+}
+
+/** The namespace nhentai and Hitomi give general tags; such a tag is still a general tag. */
+const val GENERAL_TAG_NAMESPACE = "tag"
+
+/**
+ * A kind of tag: a facet and source namespace, compared without case. General tags are one type
+ * however a source spells their namespace, so a tag searched as `tag:sky` matches a plain `sky`.
+ */
+@ConsistentCopyVisibility
+data class SearchTagType private constructor(val facet: SearchFacet, val sourceNamespace: String?) {
+    companion object {
+        val General = SearchTagType(SearchFacet.TAG, null)
+
+        fun of(facet: SearchFacet, sourceNamespace: String?): SearchTagType {
+            val namespace = sourceNamespace?.trim()?.lowercase()?.takeIf(String::isNotEmpty)
+            val general = facet == SearchFacet.TAG && (namespace == null || namespace == GENERAL_TAG_NAMESPACE)
+            return if (general) General else SearchTagType(facet, namespace)
+        }
+    }
 }
 
 data class SearchTermGroup(

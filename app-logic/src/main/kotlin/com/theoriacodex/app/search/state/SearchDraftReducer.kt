@@ -557,7 +557,7 @@ object SearchDraftReducer {
         if (state.query.draft.mode != QueryMode.Source(SourceKey.GELBOORU)) return true
         val normalized = normalizeGelbooruToken(parsed.value)
         // A tag searched before on Gelbooru is as confirmed as one its autocomplete returned.
-        return (state.suggestions.autocomplete.map(TagSuggestion::text) + state.suggestions.searchedTags).any { tag ->
+        return (state.suggestions.autocomplete.map(TagSuggestion::text) + state.suggestions.searchedTags.map(SearchTerm::value)).any { tag ->
             sourceTagsMatch(SourceKey.GELBOORU, tag, normalized)
         }
     }

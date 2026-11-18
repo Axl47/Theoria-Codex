@@ -9,7 +9,6 @@ import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.tags.TagChipState
 import com.theoriacodex.app.tags.TagTapEffect
 import com.theoriacodex.app.tags.chipState
-import com.theoriacodex.app.tags.isGeneralPostTag
 import com.theoriacodex.app.tags.tagTapEffect
 import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.data.repository.SavedSearchEntry
@@ -73,7 +72,7 @@ internal val FavoriteTagEntry.label: String get() = name ?: alternativesText
 
 /** True when [terms] are exactly this entry's tags, in any order. */
 internal fun FavoriteTagEntry.matches(terms: List<SearchTerm>): Boolean =
-    terms.isNotEmpty() && terms.all(SearchTerm::isGeneralPostTag) &&
+    terms.isNotEmpty() && terms.all(SearchTerm::isGeneralTag) &&
         terms.mapTo(mutableSetOf()) { sourceTagKey(source, it.value) } == tags.mapTo(mutableSetOf()) { sourceTagKey(source, it) }
 
 private fun FavoriteTagEntry.groupIndexIn(draft: Query): Int =
@@ -160,7 +159,7 @@ internal class ComposerSavedTags(
     fun isEditable(entry: FavoriteTagEntry): Boolean = entry in entries
 
     /** Only general tags can be saved, so a typed tag, or a group of them, offers no save. */
-    fun canSave(terms: List<SearchTerm>): Boolean = terms.isNotEmpty() && terms.all(SearchTerm::isGeneralPostTag)
+    fun canSave(terms: List<SearchTerm>): Boolean = terms.isNotEmpty() && terms.all(SearchTerm::isGeneralTag)
 }
 
 /**
@@ -194,7 +193,7 @@ internal fun composerSuggestions(
         ComposerSuggestion(
             tagSuggestionDisplayText(suggestion),
             tagSuggestionMetaLabel(suggestion),
-            target.addGeneralTag(suggestion.text),
+            target.add(SearchTerm(suggestion.text)),
             SearchTerm(suggestion.text),
         )
     }
@@ -202,54 +201,57 @@ internal fun composerSuggestions(
 }
 
 /**
- * Every autocomplete row for the target: saved tags, then searched tags, then the provider's. A narrowed
- * scope asks for one tag type, and saved and searched tags are general tags, so only a general tag scope shows them.
+ * Every autocomplete row for the target: saved tags, then searched tags, then the provider's. Saved and
+ * searched rows are only those of the tag type the input is aimed at (see [typedInputScope]); All shows
+ * every type, and a prefix the source cannot search shows none.
  */
 internal fun composerSuggestions(
     target: ComposerAddTarget,
     state: SearchUiState,
     savedTags: List<FavoriteTagEntry>,
 ): ComposerSuggestions {
-    val scope = state.query.selectedScope
-    // A typed prefix such as `artist:` overrides the picked scope, as it does for the provider's rows.
-    val typedScope = parseScopedInput(state.suggestions.input).explicitScope
-    // Namespaced tag scopes, such as Hitomi's female and male tags, would lose their namespace.
-    val generalTagScope = if (typedScope != null) {
-        typedScope.facet == SearchFacet.TAG && !typedScope.requiresExactNamespace
-    } else {
-        scope.isAll || (scope.facet == SearchFacet.TAG && scope.sourceNamespace == null)
-    }
+    val scope = typedInputScope(parseScopedInput(state.suggestions.input), state.query.selectedScope, state.query.supportedScopes)
+    val inScope = { term: SearchTerm -> scope?.accepts(term) == true }
     val draft = state.query.draft
     return composerSuggestions(target, state.suggestions.facetedAutocomplete, state.suggestions.autocomplete)
-        .withSearchedTags(target, state.suggestions.searchedTags.takeIf { generalTagScope }.orEmpty(), draft)
-        .withSavedTags(target, state.suggestions.input, savedTags.takeIf { generalTagScope }.orEmpty(), draft)
+        .withSearchedTags(target, state.suggestions.searchedTags.filter(inScope), draft)
+        .withSavedTags(target, state.suggestions.input, savedTags.filter { it.terms.all(inScope) }, draft)
 }
 
-/** Adds a general tag to [this] target; an alternative takes its group's tag type. */
-private fun ComposerAddTarget.addGeneralTag(text: String): SearchAction = when (this) {
-    is ComposerAddTarget.Alternative -> SearchAction.AddIncludeAlternative(index, group.terms.first().copy(value = text))
-    ComposerAddTarget.Excluded -> SearchAction.AddExcludeTerm(SearchTerm(text))
-    ComposerAddTarget.Required -> SearchAction.AddIncludeTerm(SearchTerm(text))
+/** Adds [term] to [this] target; an alternative group gives it the group's spelling of their shared type. */
+private fun ComposerAddTarget.add(term: SearchTerm): SearchAction = when (this) {
+    is ComposerAddTarget.Alternative -> SearchAction.AddIncludeAlternative(index, group.terms.first().copy(value = term.value))
+    ComposerAddTarget.Excluded -> SearchAction.AddExcludeTerm(term)
+    ComposerAddTarget.Required -> SearchAction.AddIncludeTerm(term)
 }
+
+/** An alternative group only takes terms of its own tag type; other targets take any term. */
+private fun ComposerAddTarget.takes(term: SearchTerm): Boolean =
+    this !is ComposerAddTarget.Alternative || group.terms.first().tagType == term.tagType
+
+/** The same tag for suggestions: one tag type and values that normalize alike. */
+private fun SearchTerm.isSameTagAs(other: SearchTerm): Boolean =
+    tagType == other.tagType && normalizeMatchToken(value) == normalizeMatchToken(other.value)
 
 /**
- * Puts tags the user searched before ahead of the provider's rows, in the order given. A searched tag
- * the provider also returned keeps that row, so its count stays. Tags already in the draft are left
- * out, and none join a group of another tag type, since searched tags are general tags.
+ * Puts terms the user searched before ahead of the provider's rows, in the order given. A searched term
+ * the provider also returned keeps that row, so its count stays. A typed term shows its type, as the
+ * provider's faceted rows do, and is added with its facet and namespace. Terms already in the draft or
+ * of another type than the target group are left out.
  */
 internal fun ComposerSuggestions.withSearchedTags(
     target: ComposerAddTarget,
-    searchedTags: List<String>,
+    searchedTags: List<SearchTerm>,
     draft: Query,
 ): ComposerSuggestions {
-    val anchor = (target as? ComposerAddTarget.Alternative)?.group?.terms?.first()
-    if (searchedTags.isEmpty() || (anchor != null && !anchor.isPortableGeneralTag)) return this
-    val inDraft = (draft.includeTerms + draft.excludeTerms).mapTo(mutableSetOf()) { normalizeMatchToken(it.value) }
+    val inDraft = draft.includeTerms + draft.excludeTerms
     val merged = searchedTags
-        .filter { tag -> normalizeMatchToken(tag) !in inDraft }
-        .map { tag -> tag to rows.firstOrNull { row -> row.term.isPortableGeneralTag && normalizeMatchToken(row.term.value) == normalizeMatchToken(tag) } }
-    val searchedRows = merged.map { (tag, row) ->
-        row?.copy(searched = true) ?: ComposerSuggestion(tag, "", target.addGeneralTag(tag), SearchTerm(tag), searched = true)
+        .filter { term -> target.takes(term) && inDraft.none(term::isSameTagAs) }
+        .map { term -> term to rows.firstOrNull { row -> row.term.isSameTagAs(term) } }
+    if (merged.isEmpty()) return this
+    val searchedRows = merged.map { (term, row) ->
+        row?.copy(searched = true)
+            ?: ComposerSuggestion(term.value, searchTermTypeLabel(term).orEmpty(), target.add(term), term, searched = true)
     }
     return copy(rows = searchedRows + (rows - merged.mapNotNull { it.second }.toSet()))
 }
@@ -287,7 +289,7 @@ internal fun ComposerSuggestions.withSavedTags(
 }
 
 private fun ComposerSuggestion.isGeneralFormOf(tag: FavoriteTagEntry): Boolean =
-    term.isGeneralPostTag() && sourceTagKey(tag.source, term.value) == sourceTagKey(tag.source, tag.tags.single())
+    term.isGeneralTag && sourceTagKey(tag.source, term.value) == sourceTagKey(tag.source, tag.tags.single())
 
 private fun FavoriteTagEntry.addAction(target: ComposerAddTarget, term: SearchTerm): SearchAction = when (target) {
     is ComposerAddTarget.Alternative -> SearchAction.AddSavedTagAlternative(source, target.index, term)

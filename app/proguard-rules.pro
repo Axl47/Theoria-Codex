@@ -56,6 +56,10 @@
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
+-keepclassmembers class com.theoriacodex.data.repository.StatisticsTypedTagCountRecord {
+    <init>();
+    @com.google.gson.annotations.SerializedName <fields>;
+}
 -keepclassmembers class com.theoriacodex.data.repository.LegacySettingsStoreRecord {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;

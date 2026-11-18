@@ -1,7 +1,7 @@
 package com.theoriacodex.app.search
 
 import com.theoriacodex.app.search.state.SearchSourceScope
-import com.theoriacodex.data.repository.StatisticsTagKey
+import com.theoriacodex.data.repository.SearchedTagKey
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
@@ -11,6 +11,7 @@ import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.sourceAutocompletePrefix
 import com.theoriacodex.domain.tags.normalizeMatchToken
@@ -34,7 +35,7 @@ internal class SearchSuggestionCoordinator(
     private val supportedSearchScopes: (QueryMode) -> List<FacetedSearchScope>,
     private val effectiveEnabledSources: (SearchSourceScope) -> Set<SourceKey>,
     /** Current per-tag search counts from Statistics, read on every keystroke. */
-    private val searchCounts: () -> Map<StatisticsTagKey, Long> = { emptyMap() },
+    private val searchCounts: () -> Map<SearchedTagKey, Long> = { emptyMap() },
 ) {
     private val lastTrendingRefreshAtBySource = java.util.concurrent.ConcurrentHashMap<SourceKey, Long>()
     private val autocompleteRefreshLock = Any()
@@ -54,7 +55,7 @@ internal class SearchSuggestionCoordinator(
             return SearchAutocompleteResult(input, request.scope, message)
         }
         if (request.prefix.isBlank()) return fetchFeaturedAutocomplete(query, request.scope, input)
-        val searched = searchedTags(query.mode, sourceScope, request.prefix)
+        val searched = searchedTags(query.mode, sourceScope, request.scope, request.prefix)
         return when (val mode = query.mode) {
             QueryMode.Unified -> fetchUnifiedAutocomplete(sourceScope, request.scope, input, request.prefix) { update ->
                 onUpdate(update.copy(searchedTags = searched))
@@ -81,15 +82,20 @@ internal class SearchSuggestionCoordinator(
         return when (val mode = query.mode) {
             QueryMode.Unified -> cachedUnifiedAutocomplete(sourceScope, request.scope, input, request.prefix)
             is QueryMode.Source -> cachedSourceAutocomplete(mode, request.scope, input, request.prefix, trending)
-        }.copy(searchedTags = searchedTags(query.mode, sourceScope, request.prefix))
+        }.copy(searchedTags = searchedTags(query.mode, sourceScope, request.scope, request.prefix))
     }
 
-    private fun searchedTags(mode: QueryMode, sourceScope: SearchSourceScope, prefix: String): List<String> {
-        val sources = when (mode) {
-            QueryMode.Unified -> effectiveEnabledSources(sourceScope)
-            is QueryMode.Source -> setOf(mode.source)
-        }
-        return rankSearchedTags(searchCounts(), sources, prefix, SEARCHED_TAG_SUGGESTION_LIMIT)
+    /** History for the input's resolved [scope]; Unified runs only portable general tags, so it offers only those. */
+    private fun searchedTags(
+        mode: QueryMode,
+        sourceScope: SearchSourceScope,
+        scope: FacetedSearchScope,
+        prefix: String,
+    ): List<SearchTerm> = when (mode) {
+        QueryMode.Unified -> rankSearchedTags(searchCounts(), effectiveEnabledSources(sourceScope), prefix,
+            SEARCHED_TAG_SUGGESTION_LIMIT, SearchTerm::isPortableGeneralTag)
+        is QueryMode.Source -> rankSearchedTags(searchCounts(), setOf(mode.source), prefix,
+            SEARCHED_TAG_SUGGESTION_LIMIT, scope::accepts)
     }
 
     private fun resolveAutocompleteRequest(

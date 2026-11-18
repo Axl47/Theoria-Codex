@@ -1,5 +1,6 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,8 +35,8 @@ class InMemoryStatisticsRepository(
             codexOpen?.let { StatisticsPolicies.recordCodexPostOpen(watched, it.codexId, it.postKey, it.label) } ?: watched
         }
 
-    override suspend fun recordSearch(sources: Set<SourceKey>, tags: Set<String>) = mutate { current ->
-        StatisticsPolicies.recordSearch(current, sources, tags)
+    override suspend fun recordSearch(sources: Set<SourceKey>, terms: Set<SearchTerm>) = mutate { current ->
+        StatisticsPolicies.recordSearch(current, sources, terms)
     }
 
     override suspend fun seedSearchedTags(recentSearches: List<RecentSearchEntry>) = mutate { current ->

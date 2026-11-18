@@ -166,7 +166,7 @@ class SearchComposerModelTest {
             ComposerAddTarget.Required, emptyList(),
             listOf(TagSuggestion("blueberry", type = null, count = 5), TagSuggestion("blue_hair", type = null, count = 9)),
         )
-        val searched = listOf("sky", "Blue_Hair", "blue_eyes")
+        val searched = listOf(SearchTerm("sky"), SearchTerm("Blue_Hair"), SearchTerm("blue_eyes"))
         val draft = gelbooruDraft(include = listOf(SearchTerm("SKY")))
 
         val rows = provider.withSearchedTags(ComposerAddTarget.Required, searched, draft).rows
@@ -177,36 +177,106 @@ class SearchComposerModelTest {
         assertTrue(provider.withSearchedTags(ComposerAddTarget.Alternative(0, artist), searched, draft).rows.none { it.searched })
     }
 
-    @Test fun `only general tag scopes show searched tags`() {
-        fun rows(scope: FacetedSearchScope) = composerSuggestions(
-            ComposerAddTarget.Required,
-            SearchUiState(
-                query = SearchQueryUiState(draft = emptySearchQuery(QueryMode.Source(SourceKey.HITOMI)), selectedScope = scope),
-                suggestions = SearchSuggestionsUiState(input = "sk", searchedTags = listOf("sky")),
-            ),
-            savedTags = emptyList(),
-        ).rows.map { it.text }
+    private val nhentaiArtist = SearchTerm("shindol", SearchFacet.ARTIST, "artist")
+    private val hitomiFemale = SearchTerm("sole female", SearchFacet.TAG, "female")
+    private val nhentaiScopes = listOf(
+        FacetedSearchScope(SearchFacet.TAG, "tag"),
+        FacetedSearchScope(SearchFacet.ARTIST, "artist"),
+        FacetedSearchScope(SearchFacet.GROUP, "group"),
+    )
 
-        assertEquals(listOf("sky"), rows(FacetedSearchScope.All))
-        assertEquals(listOf("sky"), rows(FacetedSearchScope(SearchFacet.TAG)))
-        assertEquals(emptyList<String>(), rows(FacetedSearchScope(SearchFacet.TAG, "female")))
+    private fun historyRows(
+        input: String,
+        searched: List<SearchTerm>,
+        scope: FacetedSearchScope = FacetedSearchScope.All,
+        supported: List<FacetedSearchScope> = nhentaiScopes,
+        saved: List<FavoriteTagEntry> = emptyList(),
+        target: ComposerAddTarget = ComposerAddTarget.Required,
+    ) = composerSuggestions(
+        target,
+        SearchUiState(
+            query = SearchQueryUiState(
+                draft = emptySearchQuery(QueryMode.Source(SourceKey.NHENTAI)),
+                selectedScope = scope,
+                supportedScopes = supported,
+            ),
+            suggestions = SearchSuggestionsUiState(input = input, searchedTags = searched),
+        ),
+        saved,
+    ).rows
+
+    @Test fun `searched terms show only in a scope of their type, picked or typed`() {
+        val searched = listOf(nhentaiArtist, SearchTerm("shibari"), hitomiFemale)
+        fun texts(input: String, scope: FacetedSearchScope = FacetedSearchScope.All) =
+            historyRows(input, searched, scope).map { it.text }
+
+        assertEquals(listOf("shindol"), texts("sh", FacetedSearchScope(SearchFacet.ARTIST, "artist")))
+        assertEquals(listOf("shindol"), texts("artist:sh"))
+        assertEquals(listOf("shindol"), texts("artist:sh", FacetedSearchScope(SearchFacet.TAG, "tag")))
+        assertEquals(listOf("shibari"), texts("sh", FacetedSearchScope(SearchFacet.TAG, "tag")))
+        assertEquals(listOf("shibari"), texts("tag:sh", FacetedSearchScope(SearchFacet.ARTIST, "artist")))
+        assertEquals(emptyList<String>(), texts("sh", FacetedSearchScope(SearchFacet.GROUP, "group")))
+        // nhentai has no female tags, so the prefix finds nothing to suggest.
+        assertEquals(emptyList<String>(), texts("female:so"))
+        assertEquals(listOf("shindol", "shibari", "sole female"), texts("s"))
     }
 
-    @Test fun `a typed scope prefix decides whether saved and searched tags show`() {
-        fun rows(input: String, mode: QueryMode) = composerSuggestions(
-            ComposerAddTarget.Required,
-            SearchUiState(
-                query = SearchQueryUiState(draft = emptySearchQuery(mode)),
-                suggestions = SearchSuggestionsUiState(input = input, searchedTags = listOf("sky")),
-            ),
-            savedTags = listOf(FavoriteTagEntry(SourceKey.HITOMI, "sky_blue")),
-        ).rows.map { it.text }
+    @Test fun `a searched typed term shows its type and is added with its facet and namespace`() {
+        val row = historyRows("shin", listOf(nhentaiArtist)).single()
+        assertEquals("Artist", row.meta)
+        assertTrue(row.searched)
+        assertEquals(SearchAction.AddIncludeTerm(nhentaiArtist), row.add)
+        assertEquals(
+            SearchAction.AddExcludeTerm(nhentaiArtist),
+            historyRows("-shin", listOf(nhentaiArtist), target = ComposerAddTarget.Excluded).single().add,
+        )
+        assertEquals("", historyRows("shib", listOf(SearchTerm("shibari"))).single().meta)
+    }
 
-        for (mode in listOf(QueryMode.Unified, QueryMode.Source(SourceKey.HITOMI))) {
-            assertEquals(listOf("sky_blue", "sky"), rows("tag:sk", mode))
-            assertEquals(emptyList<String>(), rows("artist:sk", mode))
-            assertEquals(emptyList<String>(), rows("female:sk", mode))
-        }
+    @Test fun `an alternative group takes searched terms of its own type only`() {
+        val artists = SearchTermGroup.single(SearchTerm("kisaragi", SearchFacet.ARTIST, "artist"))
+        val tags = SearchTermGroup.single(SearchTerm("glasses", SearchFacet.TAG, "tag"))
+        val searched = listOf(nhentaiArtist, SearchTerm("shibari"))
+
+        assertEquals(
+            listOf(SearchAction.AddIncludeAlternative(2, nhentaiArtist)),
+            historyRows("sh", searched, target = ComposerAddTarget.Alternative(2, artists)).map { it.add },
+        )
+        // A plain general tag joins a `tag:` group in the group's spelling.
+        assertEquals(
+            listOf(SearchAction.AddIncludeAlternative(1, SearchTerm("shibari", SearchFacet.TAG, "tag"))),
+            historyRows("sh", searched, target = ComposerAddTarget.Alternative(1, tags)).map { it.add },
+        )
+    }
+
+    @Test fun `a typed draft term hides only its own type from history`() {
+        val provider = ComposerSuggestions(emptyList(), 0)
+        val draft = emptySearchQuery(QueryMode.Source(SourceKey.NHENTAI)).withIncludeTermsAsRequired(listOf(nhentaiArtist))
+        val rows = provider.withSearchedTags(ComposerAddTarget.Required, listOf(nhentaiArtist, SearchTerm("shindol")), draft).rows
+        assertEquals(listOf(SearchTerm("shindol")), rows.map { it.term })
+    }
+
+    @Test fun `general tag scopes show saved tags, typed scopes do not`() {
+        val saved = listOf(FavoriteTagEntry(SourceKey.NHENTAI, "sky_blue"))
+        fun texts(input: String, scope: FacetedSearchScope = FacetedSearchScope.All) =
+            historyRows(input, emptyList(), scope, saved = saved).map { it.text }
+
+        assertEquals(listOf("sky_blue"), texts("sk"))
+        assertEquals(listOf("sky_blue"), texts("sk", FacetedSearchScope(SearchFacet.TAG, "tag")))
+        assertEquals(listOf("sky_blue"), texts("tag:sk", FacetedSearchScope(SearchFacet.ARTIST, "artist")))
+        assertEquals(emptyList<String>(), texts("sk", FacetedSearchScope(SearchFacet.ARTIST, "artist")))
+        assertEquals(emptyList<String>(), texts("artist:sk"))
+    }
+
+    @Test fun `tag prefix means general tags even where the mode cannot search scopes`() {
+        fun rows(input: String) = historyRows(
+            input, listOf(SearchTerm("sky")), supported = emptyList(),
+            saved = listOf(FavoriteTagEntry(SourceKey.NHENTAI, "sky_blue")),
+        ).map { it.text }
+
+        assertEquals(listOf("sky_blue", "sky"), rows("tag:sk"))
+        assertEquals(emptyList<String>(), rows("artist:sk"))
+        assertEquals(emptyList<String>(), rows("female:sk"))
     }
 
     @Test fun `removal undo stands only until another edit`() {

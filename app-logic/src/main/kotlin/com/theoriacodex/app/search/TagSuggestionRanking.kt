@@ -1,8 +1,9 @@
 package com.theoriacodex.app.search
 
-import com.theoriacodex.data.repository.StatisticsTagKey
+import com.theoriacodex.data.repository.SearchedTagKey
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.normalizeMatchToken
 
@@ -102,28 +103,30 @@ fun rankFacetedTagSuggestions(
 }
 
 /**
- * Tags the user searched before on any of [sources] that match [prefix]: closest match first, then
- * most-searched. Spellings that normalize alike are one tag, counted by the source that searched it most.
+ * Terms the user searched before on any of [sources] that match [prefix] and that [accepts] allows:
+ * closest match first, then most-searched. Spellings of one tag type that normalize alike are one tag,
+ * counted by the source that searched it most; the same value as another type stays a separate row.
  */
 fun rankSearchedTags(
-    searchCounts: Map<StatisticsTagKey, Long>,
+    searchCounts: Map<SearchedTagKey, Long>,
     sources: Set<SourceKey>,
     prefix: String,
     limit: Int,
-): List<String> {
+    accepts: (SearchTerm) -> Boolean = { true },
+): List<SearchTerm> {
     val normalizedPrefix = normalizeMatchToken(prefix)
     if (limit <= 0 || normalizedPrefix.isBlank()) return emptyList()
     return searchCounts.entries
-        .filter { (key, _) -> key.source in sources }
+        .filter { (key, _) -> key.source in sources && accepts(key.term) }
         .mapNotNull { (key, count) ->
-            val token = normalizeMatchToken(key.tag)
-            token.matchQuality(normalizedPrefix)?.let { quality -> SearchedTag(key.tag, token, quality, count) }
+            val token = normalizeMatchToken(key.term.value)
+            token.matchQuality(normalizedPrefix)?.let { quality -> SearchedTag(key.term, token, quality, count) }
         }
-        .groupBy(SearchedTag::token)
+        .groupBy { searched -> searched.term.tagType to searched.token }
         .map { (_, spellings) -> spellings.maxBy(SearchedTag::count) }
         .sortedWith(compareBy(SearchedTag::quality).thenByDescending(SearchedTag::count).thenBy(SearchedTag::token))
         .take(limit)
-        .map(SearchedTag::text)
+        .map(SearchedTag::term)
 }
 
 fun tagSuggestionMatches(suggestion: TagSuggestion, prefix: String): Boolean =
@@ -165,7 +168,7 @@ private data class RankedFacetedSuggestion(
 )
 
 private data class SearchedTag(
-    val text: String,
+    val term: SearchTerm,
     val token: String,
     val quality: MatchQuality,
     val count: Long,

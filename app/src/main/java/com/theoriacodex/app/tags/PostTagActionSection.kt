@@ -70,6 +70,7 @@ import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchFacet
+import com.theoriacodex.domain.model.GENERAL_TAG_NAMESPACE
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 
@@ -185,7 +186,7 @@ private fun rememberTagChip(
     val savedTags = LocalPostTagSavedTags.current
     val saved by savedTags.saved.collectAsStateWithLifecycle(initialValue = emptySet())
     return { term, compact ->
-        val isSaved = term.isGeneralPostTag() && (editor.post.id.source to term.value) in saved
+        val isSaved = term.isGeneralTag && (editor.post.id.source to term.value) in saved
         PostTagChip(term, translations[term.value], countOf(term), editor, isSaved, onFavoriteTagLongPress, savedTags.remove, compact)
     }
 }
@@ -210,15 +211,15 @@ private fun rememberPostTagCounts(
 ): (SearchTerm) -> Int? {
     val terms = remember(termGroups) { termGroups.flatMap(PostActionTermGroup::terms) }
     val generalTags = remember(terms) {
-        terms.filter(SearchTerm::isGeneralPostTag).map(SearchTerm::value).distinct()
+        terms.filter(SearchTerm::isGeneralTag).map(SearchTerm::value).distinct()
     }
     val suppliedCounts = remember(post.taxonomy) { postActionSuppliedCounts(post) }
     val generalCounts = remember(suppliedCounts) {
-        suppliedCounts.filterKeys(SearchTerm::isGeneralPostTag).mapKeys { it.key.value }
+        suppliedCounts.filterKeys(SearchTerm::isGeneralTag).mapKeys { it.key.value }
     }
     val tagVideoCounts = rememberTagCounts(post.id.source, generalTags, tagVideoCountProvider, fetchTagVideoCounts, generalCounts)
     val typedCounts = rememberSearchTermCounts(post.id.source, terms, suppliedCounts)
-    return { term -> if (term.isGeneralPostTag()) tagVideoCounts[term.value] else typedCounts[term] }
+    return { term -> if (term.isGeneralTag) tagVideoCounts[term.value] else typedCounts[term] }
 }
 
 /** A typed tag from another source, waiting because adding it would drop terms from the draft. */
@@ -311,7 +312,7 @@ private fun PostTagChip(
     val nativeName = searchTermChipLabel(term, excluded = false)
     val name = translation?.let { "$it ($nativeName)" } ?: nativeName
     val state = editor.selection.chipState(term)
-    val favorite = onFavoriteLongPress?.takeIf { term.isGeneralPostTag() }
+    val favorite = onFavoriteLongPress?.takeIf { term.isGeneralTag }
     val haptics = LocalHapticFeedback.current
     // Holding toggles the saved tag; the bookmark mark appearing or leaving is the feedback.
     val toggleSaved = favorite?.let { save ->
@@ -790,15 +791,9 @@ internal fun postActionTermGroups(post: Post): List<PostActionTermGroup> {
 
 internal fun generalPostActionTags(post: Post): List<String> {
     return postActionTerms(post)
-        .filter(SearchTerm::isGeneralPostTag)
+        .filter(SearchTerm::isGeneralTag)
         .map(SearchTerm::value)
         .distinct()
-}
-
-internal fun SearchTerm.isGeneralPostTag(): Boolean {
-    return facet == SearchFacet.TAG && (
-        sourceNamespace == null || sourceNamespace.equals(GENERAL_TAG_NAMESPACE, ignoreCase = true)
-    )
 }
 
 private data class PostActionGroupKey(
@@ -836,7 +831,6 @@ internal val postTagFacetOrder = listOf(
     SearchFacet.TYPE,
     SearchFacet.LANGUAGE,
 )
-private const val GENERAL_TAG_NAMESPACE = "tag"
 /** The sheet's header, the tags' header and the tag peek come before whatever follows the folded tags. */
 private const val AFTER_FOLDED_TAGS_INDEX = 3
 private const val PEEK_TAG_COUNT = 10

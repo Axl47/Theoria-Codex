@@ -1,7 +1,6 @@
 package com.theoriacodex.app.codex
 
 import com.theoriacodex.app.source.SourcePresentationCatalog
-import com.theoriacodex.app.tags.isGeneralPostTag
 import com.theoriacodex.app.tags.postActionTerms
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SearchTerm
@@ -112,7 +111,7 @@ internal fun codexSearchTerms(posts: List<Post>, source: SourceKey): CodexSearch
 
 private fun codexTermKey(source: SourceKey, term: SearchTerm) = Triple(
     term.facet,
-    term.sourceNamespace?.lowercase()?.takeUnless { term.isGeneralPostTag() },
+    term.sourceNamespace?.lowercase()?.takeUnless { term.isGeneralTag },
     sourceTagKey(source, term.value),
 )
 

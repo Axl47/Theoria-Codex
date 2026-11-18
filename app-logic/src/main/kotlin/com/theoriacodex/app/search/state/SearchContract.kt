@@ -145,8 +145,8 @@ data class SearchSuggestionsUiState(
     val trending: List<TagSuggestion> = emptyList(),
     val autocomplete: List<TagSuggestion> = emptyList(),
     val facetedAutocomplete: List<FacetedTagSuggestion> = emptyList(),
-    /** Tags the user searched before that match [input], shown ahead of [autocomplete]. */
-    val searchedTags: List<String> = emptyList(),
+    /** Terms the user searched before that match [input] and its scope, shown ahead of [autocomplete]. */
+    val searchedTags: List<SearchTerm> = emptyList(),
     val canCommitInput: Boolean = false,
 )
 

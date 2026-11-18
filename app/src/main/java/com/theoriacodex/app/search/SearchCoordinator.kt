@@ -16,7 +16,8 @@ import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.StatisticsRepository
-import com.theoriacodex.data.repository.StatisticsTagKey
+import com.theoriacodex.data.repository.SearchedTagKey
+import com.theoriacodex.data.repository.searchedTerms
 import com.theoriacodex.data.repository.UiRestoreRepository
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.diagnostics.Diagnostics
@@ -94,7 +95,7 @@ class SearchCoordinator(
     private val seenTags = SeenTagRecorder(statisticsRepository, tagSuggestionStore, computationDispatcher, seenTagScope)
 
     /** Kept current so local suggestions can rank searched tags without waiting on storage. */
-    private val searchCounts: StateFlow<Map<StatisticsTagKey, Long>> = statisticsRepository.observeStatistics()
+    private val searchCounts: StateFlow<Map<SearchedTagKey, Long>> = statisticsRepository.observeStatistics()
         .map { statistics -> statistics.searchesByTag }
         .distinctUntilChanged()
         .catch { emit(emptyMap()) }
@@ -557,7 +558,7 @@ class SearchCoordinator(
         if (result.completedSuccessfully) runCatchingPreservingCancellation {
             statisticsRepository.recordSearch(
                 sources = result.statuses.filter { it.state != SourceRunState.EXCLUDED }.mapTo(mutableSetOf()) { it.source },
-                tags = result.query.includeTerms.filter(SearchTerm::isPortableGeneralTag).mapTo(mutableSetOf(), SearchTerm::value),
+                terms = result.query.searchedTerms(),
             )
         }
     }
