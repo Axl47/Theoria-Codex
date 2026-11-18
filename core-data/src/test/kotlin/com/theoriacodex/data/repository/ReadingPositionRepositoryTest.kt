@@ -117,10 +117,11 @@ class ReadingPositionRepositoryTest {
         file.writeText("""{"positions":[{"source":"PIXIV","postId":"a","section":"WATCHED","mediaNumber":2,"lastViewedAt":1}]}""")
         assertEquals(listOf(position("a", 2, 1)), FileBackedReadingPositionRepository(directory).snapshot())
 
-        val newer = """{"schemaVersion":2,"positions":[]}"""
-        file.writeText(newer)
-        assertTrue(runCatching { FileBackedReadingPositionRepository(directory).snapshot() }.isFailure)
-        assertEquals(newer, file.readText())
+        listOf("""{"schemaVersion":2,"positions":[]}""", """{"schemaVersion":2,"positions":{}}""").forEach { newer ->
+            file.writeText(newer)
+            assertTrue(runCatching { FileBackedReadingPositionRepository(directory).snapshot() }.isFailure)
+            assertEquals(newer, file.readText())
+        }
     }
 
     @Test

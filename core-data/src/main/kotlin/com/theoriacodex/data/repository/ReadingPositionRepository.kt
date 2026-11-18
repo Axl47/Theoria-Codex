@@ -15,6 +15,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 
 /** Last visible media, independent of Recents' monotonic highest-media achievement. */
@@ -118,13 +119,16 @@ class FileBackedReadingPositionRepository(
     }
 }
 
-/** reading_positions.json. Entries stay raw JSON so one unreadable entry is skipped instead of failing the file. */
+/**
+ * reading_positions.json. The list stays raw JSON so a newer schema is rejected before its shape is read, and one
+ * unreadable entry is skipped instead of failing the file.
+ */
 @Serializable
 internal data class ReadingPositionsFile(
     @SerialName("schemaVersion")
     val schemaVersion: Int = 1,
     @SerialName("positions")
-    val positions: List<JsonElement> = emptyList(),
+    val positions: JsonElement = JsonArray(emptyList()),
 )
 
 @Serializable
@@ -144,7 +148,8 @@ private data class ReadingPositionRecord(
 /** A newer schema fails rather than being read as, or rewritten to, this one. */
 internal fun decodeReadingPositions(document: ReadingPositionsFile, entryLimit: Int = MAX_READING_POSITIONS): List<ReadingPosition> {
     require(document.schemaVersion == 1) { "Unsupported reading-position schema ${document.schemaVersion}" }
-    val decoded = document.positions.mapNotNull { element ->
+    val entries = requireNotNull(document.positions as? JsonArray) { "Reading positions are not a list" }
+    val decoded = entries.mapNotNull { element ->
         runCatching {
             val record = DurableJson.decodeFromJsonElement(ReadingPositionRecord.serializer(), element)
             ReadingPosition(
@@ -159,7 +164,7 @@ internal fun decodeReadingPositions(document: ReadingPositionsFile, entryLimit: 
 }
 
 private fun encodeReadingPositions(updated: List<ReadingPosition>) = ReadingPositionsFile(
-    positions = updated.map { position ->
+    positions = JsonArray(updated.map { position ->
         DurableJson.encodeToJsonElement(
             ReadingPositionRecord.serializer(),
             ReadingPositionRecord(
@@ -170,7 +175,7 @@ private fun encodeReadingPositions(updated: List<ReadingPosition>) = ReadingPosi
                 lastViewedAt = position.lastViewedAt,
             ),
         )
-    },
+    }),
 )
 
 /** Fixture/default owner; production supplies the file-backed repository. */
