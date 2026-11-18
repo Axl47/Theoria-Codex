@@ -1,29 +1,21 @@
 package com.theoriacodex.data.repository
 
-import androidx.datastore.core.DataStore
 import com.theoriacodex.data.storage.AsynchronousStore
-import com.theoriacodex.data.storage.DurableStorePhase
 import com.theoriacodex.data.storage.DurableStoreStatus
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
+import com.theoriacodex.data.storage.JsonDataStore
 import com.theoriacodex.data.storage.openJsonDataStore
-import com.theoriacodex.data.storage.updateDataInBackground
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
 import java.util.UUID
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.update
 
 class DataStoreSettingsRepository(
     baseDirectory: File,
@@ -32,33 +24,23 @@ class DataStoreSettingsRepository(
     private val profileWriteGuard: ProfileLibraryWriteGuard = ProfileLibraryWriteGuard(),
 ) : SettingsRepository, AsynchronousStore {
     private val storeFile = baseDirectory.resolve(DATASTORE_SETTINGS_FILE_NAME)
-    private val mutableStorageStatus = MutableStateFlow(DurableStoreStatus())
-    private val defaultValue = SettingsDataStoreFile()
-    private val dataStore: DataStore<SettingsDataStoreFile> = openJsonDataStore(
+    private val dataStore: JsonDataStore<SettingsDataStoreFile> = openJsonDataStore(
         file = storeFile,
         logicalStore = "Settings",
         schemaVersion = SETTINGS_DATASTORE_SCHEMA_VERSION,
-        defaultValue = defaultValue,
+        defaultValue = SettingsDataStoreFile(),
         serializer = SettingsDataStoreFile.serializer(),
         scope = scope,
         validate = SettingsDataStoreFile::validate,
         recoveries = recoveryRegistry,
     )
-    private val records = dataStore.data
-        .onEach { mutableStorageStatus.recordReady() }
-        .catch { failure ->
-            recordFailure(failure)
-            throw failure
-        }
 
-    override val storageStatus: StateFlow<DurableStoreStatus> = mutableStorageStatus.asStateFlow()
+    override val storageStatus: StateFlow<DurableStoreStatus> = dataStore.storageStatus
 
-    override suspend fun awaitReady() {
-        records.first()
-    }
+    override suspend fun awaitReady() = dataStore.awaitReady()
 
     override fun observeSettings(): Flow<AppSettings> {
-        return records.map(SettingsDataStoreFile::toDomain).distinctUntilChanged()
+        return dataStore.data.map(SettingsDataStoreFile::toDomain).distinctUntilChanged()
     }
 
     override suspend fun updateSettings(transform: (AppSettings) -> AppSettings) {
@@ -199,7 +181,7 @@ class DataStoreSettingsRepository(
         policy: (AppSettings) -> RepositoryPolicies.Result<AppSettings, T>,
     ): T {
         var result: MutationValue<T>? = null
-        dataStore.updateDataInBackground { stored ->
+        dataStore.update { stored ->
             val current = stored.toDomain()
             val policyResult = policy(current)
             val normalized = RepositoryPolicies.normalizeSettings(policyResult.state).requireSettingsCapacity()
@@ -212,8 +194,6 @@ class DataStoreSettingsRepository(
         }
         return requireNotNull(result).value
     }
-
-    private fun recordFailure(failure: Throwable) = mutableStorageStatus.recordFailure(failure)
 }
 
 class DataStoreUiRestoreRepository(
@@ -222,37 +202,27 @@ class DataStoreUiRestoreRepository(
     recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
 ) : UiRestoreRepository, AsynchronousStore {
     private val storeFile = baseDirectory.resolve(DATASTORE_UI_RESTORE_FILE_NAME)
-    private val mutableStorageStatus = MutableStateFlow(DurableStoreStatus())
-    private val defaultValue = UiRestoreDataStoreFile()
-    private val dataStore: DataStore<UiRestoreDataStoreFile> = openJsonDataStore(
+    private val dataStore: JsonDataStore<UiRestoreDataStoreFile> = openJsonDataStore(
         file = storeFile,
         logicalStore = "Last screen",
         schemaVersion = UI_RESTORE_DATASTORE_SCHEMA_VERSION,
-        defaultValue = defaultValue,
+        defaultValue = UiRestoreDataStoreFile(),
         serializer = UiRestoreDataStoreFile.serializer(),
         scope = scope,
         validate = UiRestoreDataStoreFile::validate,
         recoveries = recoveryRegistry,
     )
-    private val records = dataStore.data
-        .onEach { mutableStorageStatus.recordReady() }
-        .catch { failure ->
-            recordFailure(failure)
-            throw failure
-        }
 
-    override val storageStatus: StateFlow<DurableStoreStatus> = mutableStorageStatus.asStateFlow()
+    override val storageStatus: StateFlow<DurableStoreStatus> = dataStore.storageStatus
 
-    override suspend fun awaitReady() {
-        records.first()
-    }
+    override suspend fun awaitReady() = dataStore.awaitReady()
 
     override suspend fun setLastTab(route: String) {
         mutateState { current -> current.copy(lastTab = route) }
     }
 
     override suspend fun getLastTab(): String? {
-        return records.first().toMemoryState().lastTab
+        return dataStore.data.first().toMemoryState().lastTab
     }
 
     override suspend fun setSearchScrollState(queryHash: String, state: SearchScrollState) {
@@ -267,7 +237,7 @@ class DataStoreUiRestoreRepository(
     }
 
     override suspend fun getSearchScrollState(queryHash: String): SearchScrollState? {
-        return records.first().toMemoryState().scrollStates[queryHash.trim()]
+        return dataStore.data.first().toMemoryState().scrollStates[queryHash.trim()]
     }
 
     override suspend fun setFeedFabRestoreState(contextKey: String, state: FeedFabRestoreState) {
@@ -282,11 +252,11 @@ class DataStoreUiRestoreRepository(
     }
 
     override suspend fun getFeedFabRestoreStates(): Map<String, FeedFabRestoreState> {
-        return records.first().toMemoryState().feedFabRestoreStates
+        return dataStore.data.first().toMemoryState().feedFabRestoreStates
     }
 
     override fun observeViewerLaunchContext(): Flow<ViewerLaunchContext?> {
-        return records
+        return dataStore.data
             .map { stored -> stored.toMemoryState().viewerLaunchContext }
             .distinctUntilChanged()
     }
@@ -298,7 +268,7 @@ class DataStoreUiRestoreRepository(
     private suspend fun mutateState(
         transform: (PersistedUiRestoreState) -> PersistedUiRestoreState,
     ): PersistedUiRestoreState {
-        val updated = dataStore.updateDataInBackground { stored ->
+        val updated = dataStore.update { stored ->
             val current = stored.toMemoryState()
             val next = normalizeUiRestoreState(transform(current))
             if (next == current) {
@@ -308,19 +278,6 @@ class DataStoreUiRestoreRepository(
             }
         }
         return updated.toMemoryState()
-    }
-
-    private fun recordFailure(failure: Throwable) = mutableStorageStatus.recordFailure(failure)
-}
-
-private fun MutableStateFlow<DurableStoreStatus>.recordReady() = update { current ->
-    current.copy(phase = DurableStorePhase.READY, failureReason = null)
-}
-
-private fun MutableStateFlow<DurableStoreStatus>.recordFailure(failure: Throwable) {
-    if (failure is CancellationException) throw failure
-    update { current ->
-        current.copy(phase = DurableStorePhase.FAILED, failureReason = failure.message ?: failure::class.simpleName)
     }
 }
 

@@ -1,12 +1,10 @@
 package com.theoriacodex.data.repository
 
-import androidx.datastore.core.DataStore
 import com.theoriacodex.data.storage.AsynchronousStore
-import com.theoriacodex.data.storage.DurableStorePhase
 import com.theoriacodex.data.storage.DurableStoreStatus
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
+import com.theoriacodex.data.storage.JsonDataStore
 import com.theoriacodex.data.storage.openJsonDataStore
-import com.theoriacodex.data.storage.updateDataInBackground
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
@@ -15,22 +13,13 @@ import java.io.File
 import java.time.Clock
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -414,33 +403,22 @@ class DataStoreStatisticsRepository(
     private val clock: Clock = Clock.systemDefaultZone(),
 ) : StatisticsRepository, AsynchronousStore {
     private val storeFile = baseDirectory.resolve(DATASTORE_STATISTICS_FILE_NAME)
-    private val mutableStorageStatus = MutableStateFlow(DurableStoreStatus())
-    private val defaultValue = StatisticsDataStoreFile()
-    private val dataStore: DataStore<StatisticsDataStoreFile> = openJsonDataStore(
+    private val dataStore: JsonDataStore<StatisticsDataStoreFile> = openJsonDataStore(
         file = storeFile,
         logicalStore = "Statistics",
         schemaVersion = STATISTICS_DATASTORE_SCHEMA_VERSION,
-        defaultValue = defaultValue,
+        defaultValue = StatisticsDataStoreFile(),
         serializer = StatisticsDataStoreFile.serializer(),
         scope = scope,
         validate = StatisticsDataStoreFile::validate,
         recoveries = recoveryRegistry,
     )
-    private val records = dataStore.data
-        .onEach { recordReady() }
-        .catch { failure ->
-            recordFailure(failure)
-            throw failure
-        }
+    override val storageStatus: StateFlow<DurableStoreStatus> = dataStore.storageStatus
 
-    override val storageStatus: StateFlow<DurableStoreStatus> = mutableStorageStatus.asStateFlow()
-
-    override suspend fun awaitReady() {
-        records.first()
-    }
+    override suspend fun awaitReady() = dataStore.awaitReady()
 
     override fun observeStatistics(): Flow<LifetimeStatistics> {
-        return records.map(StatisticsDataStoreFile::toDomain).distinctUntilChanged()
+        return dataStore.data.map(StatisticsDataStoreFile::toDomain).distinctUntilChanged()
     }
 
     override suspend fun addCodexUsage(target: CodexUsageTarget, durationMs: Long) = mutate {
@@ -491,25 +469,9 @@ class DataStoreStatisticsRepository(
     }
 
     private suspend fun mutate(transform: (LifetimeStatistics) -> LifetimeStatistics) {
-        dataStore.updateDataInBackground { stored ->
+        dataStore.update { stored ->
             val next = transform(stored.toDomain())
             StatisticsDataStoreFile.fromDomain(next.copy(history = next.history.retainedHistory(LocalDate.now(clock))))
-        }
-    }
-
-    private fun recordReady() {
-        mutableStorageStatus.update { current ->
-            current.copy(phase = DurableStorePhase.READY, failureReason = null)
-        }
-    }
-
-    private fun recordFailure(failure: Throwable) {
-        if (failure is CancellationException) throw failure
-        mutableStorageStatus.update { current ->
-            current.copy(
-                phase = DurableStorePhase.FAILED,
-                failureReason = failure.message ?: failure::class.simpleName,
-            )
         }
     }
 }

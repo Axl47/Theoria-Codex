@@ -58,14 +58,15 @@ internal suspend fun writeDataStores(current: File, shipped: File) {
 
 internal suspend fun verifyDataStores(current: File, shipped: File) {
     withStoreScope { scope ->
-        val settings = DataStoreSettingsRepository(current, scope).observeSettings().first()
+        val settings = DataStoreSettingsRepository(current, scope).apply { awaitReady() }.observeSettings().first()
         check(settings.oldSearchBar && settings.favoriteTagsByProfile.getValue(PROFILE).single().name == FAVORITE_NAME)
         DataStoreUiRestoreRepository(current, scope).apply {
+            awaitReady()
             check(getLastTab() == "codex" && getSearchScrollState("h") == SearchScrollState(7, 12))
             check(getFeedFabRestoreStates() == mapOf("ctx" to feedFilters))
             check(observeViewerLaunchContext().first() == launchContext)
         }
-        val statistics = DataStoreStatisticsRepository(current, scope).observeStatistics().first()
+        val statistics = DataStoreStatisticsRepository(current, scope).apply { awaitReady() }.observeStatistics().first()
         check(statistics.appOpenCount == 1L && statistics.watchedPostCount == 1L)
         check(statistics.codexStatistics.getValue("codex").posts.getValue("PIXIV:1").label == "Label & <x>")
     }
@@ -95,18 +96,19 @@ private fun verifyCurrentKeys(current: File) {
 }
 
 private suspend fun verifyShipped(shipped: File, scope: CoroutineScope) {
-    val settings = DataStoreSettingsRepository(shipped, scope).observeSettings().first()
+    val settings = DataStoreSettingsRepository(shipped, scope).apply { awaitReady() }.observeSettings().first()
     check(settings.oldSearchBar && settings.followedCreators.single().membershipId == "follow-1")
     check(settings.providerHealth.getValue(SourceKey.PIXIV).status == ProviderHealthSnapshotStatus.DEGRADED)
     DataStoreUiRestoreRepository(shipped, scope).apply {
+        awaitReady()
         check(getLastTab() == "codex" && getSearchScrollState("h") == SearchScrollState(7, 12))
         check(getFeedFabRestoreStates().getValue("ctx") == feedFilters)
         check(observeViewerLaunchContext().first() == launchContext)
     }
-    val statistics = DataStoreStatisticsRepository(shipped, scope).observeStatistics().first()
+    val statistics = DataStoreStatisticsRepository(shipped, scope).apply { awaitReady() }.observeStatistics().first()
     check(statistics.appOpenCount == 3L && statistics.history.getValue(LocalDate.of(2026, 11, 2)).watchedPostCount == 2L)
     check(statistics.codexStatistics.getValue("c").posts.getValue("PIXIV:1").opens == 2L)
-    val sites = DataStoreSiteProfileRepository(shipped, scope)
+    val sites = DataStoreSiteProfileRepository(shipped, scope).apply { awaitReady() }
     check(sites.observeProfiles().first().single().label == "Safe")
     check(sites.update(SITE_ID) { it.copy(label = "Renamed") })
     val site = shipped.json(SITE_PROFILES_FILE_NAME).getValue("sites").jsonArray.single().jsonObject

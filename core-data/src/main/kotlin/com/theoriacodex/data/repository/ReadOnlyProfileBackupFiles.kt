@@ -10,12 +10,15 @@ class ReadOnlyProfileBackupFiles private constructor(
     private val documents: Map<String, ByteArray?>,
 ) {
 
-    val settings: AppSettings = requireNotNull(documents[DATASTORE_SETTINGS_FILE_NAME]).let { bytes ->
-        val record = DurableJson.decodeFromString(SettingsDataStoreFile.serializer(), decodeDocumentUtf8(bytes))
-        require(record.schemaVersion == SETTINGS_DATASTORE_SCHEMA_VERSION)
-        record.validate()
-        record.toDomain()
-    }
+    /** No file means the live store shows its defaults: a fresh install, or a reset before any setting changed. */
+    val settings: AppSettings = (
+        documents[DATASTORE_SETTINGS_FILE_NAME]?.let { bytes ->
+            DurableJson.decodeFromString(SettingsDataStoreFile.serializer(), decodeDocumentUtf8(bytes)).also { record ->
+                require(record.schemaVersion == SETTINGS_DATASTORE_SCHEMA_VERSION)
+                record.validate()
+            }
+        } ?: SettingsDataStoreFile()
+    ).toDomain()
     val savedSearches: List<SavedSearchEntry> = documents["pinned_searches.json"]?.let { bytes ->
         DurableJson.decodeFromString(SavedSearchSnapshotSerializer, decodeDocumentUtf8(bytes)).entries
     }.orEmpty()

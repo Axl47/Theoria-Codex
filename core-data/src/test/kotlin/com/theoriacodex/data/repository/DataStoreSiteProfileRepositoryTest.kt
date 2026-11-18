@@ -104,7 +104,7 @@ class DataStoreSiteProfileRepositoryTest {
         directory.resolve(SITE_PROFILES_FILE_NAME).writeText(newer)
 
         withRepository(directory) { repository ->
-            assertTrue(runCatching { repository.observeProfiles().first() }.isFailure)
+            assertTrue(runCatching { repository.awaitReady() }.isFailure)
             assertTrue(runCatching { repository.add(profile("booru.example")) }.isFailure)
         }
 

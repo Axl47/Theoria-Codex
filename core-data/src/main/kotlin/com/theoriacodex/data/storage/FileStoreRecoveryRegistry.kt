@@ -1,6 +1,8 @@
 package com.theoriacodex.data.storage
 
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import java.io.File
+import java.io.IOException
 import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,7 +19,12 @@ class FileStoreRecoveryRegistry {
 
     val recoveries: StateFlow<List<CorruptionRecovery>> = mutableRecoveries.asStateFlow()
 
-    /** Re-discovers verified quarantines when a process restarts after the live name was removed. */
+    /**
+     * Re-lists files [setAsideCorruptFile] left beside [liveFile] in an earlier process. A file whose bytes no longer
+     * match its name is left out of the list but never blocks the store: it is a copy of data that was already
+     * unreadable, and the live file decides on its own whether the store opens. Only files whose size matches their
+     * name are read to check the checksum.
+     */
     fun registerStore(logicalStore: String, liveFile: File) {
         val prefix = "${liveFile.name}.corrupt-"
         val parent = liveFile.parentFile ?: return
@@ -37,9 +44,9 @@ class FileStoreRecoveryRegistry {
                 if (sha256.length != 64 || sha256.any { character -> character !in '0'..'9' && character !in 'a'..'f' }) {
                     return@forEach
                 }
-                val bytes = candidate.readBytes()
-                check(bytes.size.toLong() == byteCount && bytes.sha256() == sha256) {
-                    "Quarantine verification failed for ${candidate.absolutePath}"
+                if (candidate.length() != byteCount || !candidate.hasSha256(sha256)) {
+                    Diagnostics.report("storage", "${candidate.name} no longer matches its name; not listed")
+                    return@forEach
                 }
                 record(
                     CorruptionRecovery(
@@ -63,6 +70,13 @@ class FileStoreRecoveryRegistry {
             }
         }
     }
+}
+
+/** False when the file changed since it was named after [sha256] or can no longer be read. */
+private fun File.hasSha256(sha256: String): Boolean = try {
+    readBytes().sha256() == sha256
+} catch (_: IOException) {
+    false
 }
 
 /**

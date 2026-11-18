@@ -50,10 +50,20 @@ class ReadOnlyProfileBackupFilesTest {
         assertEquals(golden("reading-positions/gson-written.json"), positions.readText())
     }
 
-    @Test fun `missing corrupt future and pending stores fail without quarantine or recovery writes`() = runTest {
-        listOf<String?>(null, "{broken", "{\"schemaVersion\":99}").forEach { document ->
+    @Test fun `a missing settings file reads as the defaults the live store shows`() = runTest {
+        val directory = temporary.newFolder()
+
+        val snapshot = ReadOnlyProfileBackupFiles.capture(directory)
+
+        assertEquals(SettingsDataStoreFile().toDomain(), snapshot.settings)
+        snapshot.requireUnchanged()
+        assertTrue(directory.listFiles()!!.isEmpty())
+    }
+
+    @Test fun `corrupt future and pending stores fail without quarantine or recovery writes`() = runTest {
+        listOf("{broken", "{\"schemaVersion\":99}").forEach { document ->
             val directory = temporary.newFolder()
-            if (document != null) File(directory, DATASTORE_SETTINGS_FILE_NAME).writeText(document)
+            File(directory, DATASTORE_SETTINGS_FILE_NAME).writeText(document)
             val names = directory.listFiles()!!.map { it.name }
             assertTrue(runCatching { ReadOnlyProfileBackupFiles.capture(directory) }.isFailure)
             assertEquals(names, directory.listFiles()!!.map { it.name })
