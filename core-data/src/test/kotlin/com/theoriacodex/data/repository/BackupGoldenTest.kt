@@ -71,6 +71,14 @@ class BackupGoldenTest {
         assertEquals("Backup is missing favoriteTagsByProfile", runCatching { codec.decode(noFavorites) }.exceptionOrNull()?.message)
     }
 
+    // Backups have always required activeProfileId, so one carrying only the retired `activeProfile` key is refused.
+    @Test fun `a backup with only the retired profile key is refused`() {
+        val v2 = golden("backup-v2.json").decodeToString()
+        val retired = v2.replace("\"activeProfileId\":\"profile-main\"", "\"activeProfile\":\"USER_2\"")
+        assertTrue(retired != v2)
+        assertEquals("Invalid backup field: activeProfileId", runCatching { codec.decode(retired.toByteArray()) }.exceptionOrNull()?.message)
+    }
+
     // pending_profile_restore.json as ProfileBackupService.writeJournal left it after a crash mid-restore.
     @Test fun `journal written mid-restore still matches its backup and finishes the restore`() = runTest {
         val harness = harness()

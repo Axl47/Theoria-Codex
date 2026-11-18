@@ -54,8 +54,6 @@ internal data class SettingsStoreRecord(
     val recommendationProfiles: List<RecommendationProfileRecord>? = null,
     @SerialName("activeProfileId")
     val activeProfileId: String? = null,
-    @SerialName("activeProfile")
-    val activeProfile: String? = null,
     @SerialName("forYouBlacklistByProfile")
     val forYouBlacklistByProfile: Map<String, List<ForYouBlacklistEntryRecord>>? = null,
     @SerialName("favoriteTagsByProfile")
@@ -84,10 +82,6 @@ internal data class SettingsStoreRecord(
         val resolvedActiveProfileId = activeProfileId
             ?.trim()
             ?.takeIf { value -> profiles.any { profile -> profile.profileId == value } }
-            ?: parseLegacyProfileId(
-                profileId = activeProfile,
-                legacyProfile = activeProfile,
-            ).takeIf { value -> profiles.any { profile -> profile.profileId == value } }
             ?: profiles.first().profileId
         return RepositoryPolicies.normalizeSettings(
             AppSettings(
@@ -185,7 +179,6 @@ internal data class SettingsStoreRecord(
                 scenarioPreset = settings.scenarioPreset.name,
                 recommendationProfiles = settings.recommendationProfiles.map(RecommendationProfileRecord::fromDomain),
                 activeProfileId = settings.activeProfileId,
-                activeProfile = null,
                 forYouBlacklistByProfile = settings.forYouBlacklistByProfile.mapValues { (_, entries) ->
                     entries.map(ForYouBlacklistEntryRecord::fromDomain)
                 },
@@ -334,26 +327,6 @@ internal data class RecommendationProfileRecord(
         fun fromDomain(profile: RecommendationProfile): RecommendationProfileRecord {
             return RecommendationProfileRecord(profileId = profile.profileId, name = profile.name)
         }
-    }
-}
-
-internal fun parseLegacyProfileId(
-    profileId: String?,
-    legacyProfile: String?,
-): String {
-    val normalizedProfileId = profileId?.trim().orEmpty()
-    if (normalizedProfileId.isNotBlank()) {
-        return when (normalizedProfileId) {
-            "USER_1" -> "profile-main"
-            "USER_2" -> "profile-alt"
-            else -> normalizedProfileId
-        }
-    }
-
-    return when (legacyProfile?.trim()) {
-        "USER_1" -> "profile-main"
-        "USER_2" -> "profile-alt"
-        else -> "profile-main"
     }
 }
 
