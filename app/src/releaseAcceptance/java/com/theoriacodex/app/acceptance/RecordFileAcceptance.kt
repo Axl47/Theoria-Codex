@@ -67,7 +67,13 @@ private suspend fun writeRecordFiles(directory: File, settings: DataStoreSetting
         override suspend fun removeProfileLibrary(profileId: String) = throw IOException("Process stopped mid-removal")
     }
     val removal = ProfileDeletionService(settings, interrupted, directory.resolve(CURRENT_JOURNAL), ProfileLibraryWriteGuard())
-    check(runCatching { removal.removeProfile(current.profileId) }.exceptionOrNull() is ProfileDeletionPendingException)
+    val pending = try {
+        removal.removeProfile(current.profileId)
+        false
+    } catch (_: ProfileDeletionPendingException) {
+        true
+    }
+    check(pending)
     check(directory.resolve(CURRENT_JOURNAL).isFile)
     directory.resolve(SHIPPED_JOURNAL).writeText("""{"version":1,"profileId":"${shipped.profileId}"}""")
 }
