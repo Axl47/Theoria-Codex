@@ -1,9 +1,7 @@
 package com.theoriacodex.app.media
 
-import com.google.gson.JsonArray
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
 import com.theoriacodex.data.storage.AtomicJsonFileStore
+import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -11,51 +9,30 @@ import com.theoriacodex.domain.model.SourceKey
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 internal interface PostDownloadJobStore {
     suspend fun load(): List<PostDownloadBatch>
     suspend fun save(batches: List<PostDownloadBatch>)
 }
 
-/** Operational identities only: no media URLs, credentials, paths or complete Post graphs. */
+/**
+ * Operational identities only: no media URLs, credentials, paths or complete Post graphs. Versions 1 to 3 share one
+ * record: version 2 added untrackedPreparation and version 3 added origin. An unreadable queue fails instead of
+ * dropping jobs.
+ */
 internal class FileBackedPostDownloadJobStore(private val file: File,
     private val store: AtomicJsonFileStore = AtomicJsonFileStore()) : PostDownloadJobStore {
     override suspend fun load(): List<PostDownloadBatch> = withContext(Dispatchers.IO) {
         if (!file.exists()) return@withContext emptyList()
         require(file.length() <= 8L * 1024 * 1024) { "Download queue is too large" }
-        val root = JsonParser.parseString(file.readText(Charsets.UTF_8)).asJsonObject
-        val version = root.get("version").asInt
-        require(version in 1..3) { "Unsupported download queue version" }
-        val batches = root.getAsJsonArray("batches")
-        require(batches.size() <= 200) { "Too many download batches" }
-        var itemCount = 0
-        batches.map { element ->
-            val batch = element.asJsonObject
-            val items = batch.getAsJsonArray("items").map { value ->
-                require(++itemCount <= 20_000) { "Too many queued downloads" }
-                val row = value.asJsonObject
-                val source = SourceKey.parseOrThrow(row.get("source").asString)
-                val id = row.get("postId").asString.also { require(it.isNotBlank() && it.length <= 500) }
-                val title = row.get("title")?.asString
-                val post = Post(PostId(source, id), ImageRef(null, null, null), null,
-                    pageUrl = null, width = null, height = null, canonicalTags = emptyList(), rawTags = emptyList(),
-                    authorName = null, createdAtEpochMs = null, title = title)
-                val selected = row.get("page")?.asInt?.let { page ->
-                    val total = row.get("totalPages").asInt
-                    require(page >= 0 && total > page)
-                    SelectedDownloadMedia(ImageRef(null, null, null), page, total)
-                }
-                val status = PostDownloadStatus.valueOf(row.get("status").asString)
-                val restoredStatus = if (status in setOf(PostDownloadStatus.PREPARING, PostDownloadStatus.DOWNLOADING,
-                        PostDownloadStatus.WAITING)) PostDownloadStatus.QUEUED else status
-                PostDownloadItem(row.get("id").asLong,
-                    PostDownloadRequest(post, selected, row.get("marker").asString, restored = true,
-                        untrackedPreparation = row.get("untrackedPreparation")?.asBoolean == true ||
-                            version == 1 && status in setOf(PostDownloadStatus.PREPARING, PostDownloadStatus.FAILED),
-                        originLabel = row.get("origin")?.asString?.take(200) ?: "Downloads"),
-                    restoredStatus, row.get("downloadId")?.asLong, enqueuePending = row.get("enqueuePending")?.asBoolean ?: false)
-            }
-            PostDownloadBatch(batch.get("id").asLong, batch.get("title").asString, items)
+        val root = DurableJson.decodeFromString(DownloadQueueFile.serializer(), file.readText(Charsets.UTF_8))
+        require(root.version in 1..3) { "Unsupported download queue version" }
+        require(root.batches.size <= 200) { "Too many download batches" }
+        require(root.batches.sumOf { it.items.size } <= 20_000) { "Too many queued downloads" }
+        root.batches.map { batch ->
+            PostDownloadBatch(batch.id, batch.title, batch.items.map { row -> row.toItem(root.version) })
         }.also { result ->
             val ids = result.flatMap { listOf(it.id) + it.items.map(PostDownloadItem::id) }
             require(ids.all { it > 0 } && ids.distinct().size == ids.size) { "Invalid download identities" }
@@ -64,26 +41,94 @@ internal class FileBackedPostDownloadJobStore(private val file: File,
 
     override suspend fun save(batches: List<PostDownloadBatch>) {
         require(batches.size <= 200 && batches.sumOf { it.items.size } <= 20_000) { "The download queue is full" }
-        val root = JsonObject().apply {
-            addProperty("version", 3)
-            add("batches", JsonArray().apply { batches.forEach { batch -> add(JsonObject().apply {
-                addProperty("id", batch.id)
-                addProperty("title", batch.title.take(200))
-                add("items", JsonArray().apply { batch.items.forEach { item -> add(JsonObject().apply {
-                    addProperty("id", item.id)
-                    addProperty("source", item.request.post.id.source.id)
-                    addProperty("postId", item.request.post.id.sourcePostId)
-                    item.request.post.title?.let { addProperty("title", it.take(240)) }
-                    addProperty("marker", item.request.marker)
-                    addProperty("origin", item.request.originLabel.take(200))
-                    if (item.request.untrackedPreparation) addProperty("untrackedPreparation", true)
-                    addProperty("status", item.status.name)
-                    item.downloadId?.let { addProperty("downloadId", it) }
-                    addProperty("enqueuePending", item.enqueuePending)
-                    item.request.selectedMedia?.let { addProperty("page", it.pageIndex); addProperty("totalPages", it.totalPages) }
-                }) } })
-            }) } })
+        val root = DownloadQueueFile(3, batches.map { batch ->
+            DownloadBatchRecord(batch.id, batch.title.take(200), batch.items.map(DownloadItemRecord::of))
+        })
+        store.writeIntent(file, root, DownloadQueueFile.serializer(), maxBytes = 8 * 1024 * 1024)
+    }
+}
+
+@Serializable
+private data class DownloadQueueFile(
+    @SerialName("version")
+    val version: Int,
+    @SerialName("batches")
+    val batches: List<DownloadBatchRecord>,
+)
+
+@Serializable
+private data class DownloadBatchRecord(
+    @SerialName("id")
+    val id: Long,
+    @SerialName("title")
+    val title: String,
+    @SerialName("items")
+    val items: List<DownloadItemRecord>,
+)
+
+/** Optional keys are omitted rather than written as null or false, as every earlier version wrote them. */
+@Serializable
+private data class DownloadItemRecord(
+    @SerialName("id")
+    val id: Long,
+    @SerialName("source")
+    val source: String,
+    @SerialName("postId")
+    val postId: String,
+    @SerialName("title")
+    val title: String? = null,
+    @SerialName("marker")
+    val marker: String,
+    @SerialName("origin")
+    val origin: String? = null,
+    @SerialName("untrackedPreparation")
+    val untrackedPreparation: Boolean? = null,
+    @SerialName("status")
+    val status: String,
+    @SerialName("downloadId")
+    val downloadId: Long? = null,
+    @SerialName("enqueuePending")
+    val enqueuePending: Boolean? = null,
+    @SerialName("page")
+    val page: Int? = null,
+    @SerialName("totalPages")
+    val totalPages: Int? = null,
+) {
+    fun toItem(version: Int): PostDownloadItem {
+        val id = postId.also { require(it.isNotBlank() && it.length <= 500) }
+        val post = Post(PostId(SourceKey.parseOrThrow(source), id), ImageRef(null, null, null), null,
+            pageUrl = null, width = null, height = null, canonicalTags = emptyList(), rawTags = emptyList(),
+            authorName = null, createdAtEpochMs = null, title = title)
+        val selected = page?.let { page ->
+            val total = requireNotNull(totalPages)
+            require(page >= 0 && total > page)
+            SelectedDownloadMedia(ImageRef(null, null, null), page, total)
         }
-        store.writeIntent(file, root, maxBytes = 8 * 1024 * 1024)
+        val status = PostDownloadStatus.valueOf(status)
+        val restoredStatus = if (status in setOf(PostDownloadStatus.PREPARING, PostDownloadStatus.DOWNLOADING,
+                PostDownloadStatus.WAITING)) PostDownloadStatus.QUEUED else status
+        return PostDownloadItem(this.id,
+            PostDownloadRequest(post, selected, marker, restored = true,
+                untrackedPreparation = untrackedPreparation == true ||
+                    version == 1 && status in setOf(PostDownloadStatus.PREPARING, PostDownloadStatus.FAILED),
+                originLabel = origin?.take(200) ?: "Downloads"),
+            restoredStatus, downloadId, enqueuePending = enqueuePending ?: false)
+    }
+
+    companion object {
+        fun of(item: PostDownloadItem) = DownloadItemRecord(
+            id = item.id,
+            source = item.request.post.id.source.id,
+            postId = item.request.post.id.sourcePostId,
+            title = item.request.post.title?.take(240),
+            marker = item.request.marker,
+            origin = item.request.originLabel.take(200),
+            untrackedPreparation = true.takeIf { item.request.untrackedPreparation },
+            status = item.status.name,
+            downloadId = item.downloadId,
+            enqueuePending = item.enqueuePending,
+            page = item.request.selectedMedia?.pageIndex,
+            totalPages = item.request.selectedMedia?.totalPages,
+        )
     }
 }

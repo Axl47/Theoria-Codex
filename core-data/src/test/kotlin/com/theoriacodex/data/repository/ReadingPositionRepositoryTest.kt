@@ -94,7 +94,47 @@ class ReadingPositionRepositoryTest {
         assertEquals(1_000L + READING_POSITION_COALESCE_MS, repository.snapshot().single().lastViewedAt)
     }
 
+    @Test
+    fun `a file the Gson store wrote loads the same positions`() = runTest {
+        val directory = temporary.newFolder()
+        directory.resolve(READING_POSITIONS_FILE_NAME).writeText(golden("gson-written.json"))
+
+        assertEquals(
+            listOf(
+                ReadingPosition(PostId(SourceKey.parseOrThrow("custom_safebooru_org"), "tom & jerry's <cut>=1"),
+                    RecentPostSection.CODEX, 12, 1_700_000_100_000L),
+                ReadingPosition(PostId(SourceKey.PIXIV, "12345"), RecentPostSection.WATCHED, 3, 1_700_000_000_000L),
+                ReadingPosition(PostId(SourceKey.GELBOORU, "é☃"), RecentPostSection.WATCHED, 1, 0L),
+            ),
+            FileBackedReadingPositionRepository(directory).snapshot(),
+        )
+    }
+
+    @Test
+    fun `a missing schema reads as version 1 and a newer schema fails without touching the file`() = runTest {
+        val directory = temporary.newFolder()
+        val file = directory.resolve(READING_POSITIONS_FILE_NAME)
+        file.writeText("""{"positions":[{"source":"PIXIV","postId":"a","section":"WATCHED","mediaNumber":2,"lastViewedAt":1}]}""")
+        assertEquals(listOf(position("a", 2, 1)), FileBackedReadingPositionRepository(directory).snapshot())
+
+        listOf("""{"schemaVersion":2,"positions":[]}""", """{"schemaVersion":2,"positions":{}}""").forEach { newer ->
+            file.writeText(newer)
+            assertTrue(runCatching { FileBackedReadingPositionRepository(directory).snapshot() }.isFailure)
+            assertEquals(newer, file.readText())
+        }
+    }
+
+    @Test
+    fun `an unreadable file is set aside and positions start empty`() = runTest {
+        val directory = temporary.newFolder()
+        directory.resolve(READING_POSITIONS_FILE_NAME).writeText("""{"schemaVersion":1,"positions":[""")
+        assertEquals(emptyList<ReadingPosition>(), FileBackedReadingPositionRepository(directory).snapshot())
+        assertEquals(1, directory.listFiles().orEmpty().count { it.name.startsWith("$READING_POSITIONS_FILE_NAME.corrupt-") })
+    }
+
     private fun id(value: String) = PostId(SourceKey.PIXIV, value)
     private fun position(value: String, page: Int, time: Long, section: RecentPostSection = RecentPostSection.WATCHED) =
         ReadingPosition(id(value), section, page, time)
+    private fun golden(name: String) =
+        checkNotNull(javaClass.getResource("/golden/reading-positions/$name")) { "missing golden $name" }.readText()
 }

@@ -1,0 +1,66 @@
+package com.theoriacodex.app.media
+
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.TemporaryFolder
+
+/** Download queues older builds wrote must restore the same jobs; gson-written.json is the Gson store's own v3 output. */
+class PostDownloadJobStoreGoldenTest {
+    @get:Rule val temporary = TemporaryFolder()
+
+    @Test
+    fun `a v3 queue the Gson store wrote restores the same jobs`() = runTest {
+        val file = temporary.newFile("queue.json")
+        file.writeText(checkNotNull(javaClass.getResource("/golden/download-queue/gson-written.json")).readText())
+
+        val batches = FileBackedPostDownloadJobStore(file).load()
+
+        assertEquals(listOf(1L to "Codex & <friends>", 4L to "Done"), batches.map { it.id to it.title })
+        assertEquals(
+            listOf(
+                // An interrupted transfer comes back queued with its native download id.
+                "2|PIXIV|100|Tom & Jerry's <cut>|m-1|Codex · A=B|false|QUEUED|77|true|2/5",
+                "3|custom_safebooru_org|a'b|null|m-2|Downloads|true|FAILED|null|false|null",
+                "5|GELBOORU|9|é☃|m-3|Downloads|false|SAVED|null|false|null",
+            ),
+            batches.flatMap { it.items }.map(::summary),
+        )
+        assertTrue(batches.flatMap { it.items }.all { it.request.restored })
+    }
+
+    @Test
+    fun `a v1 queue infers untracked preparation and a neutral origin`() = runTest {
+        val file = temporary.newFile("queue.json")
+        file.writeText(
+            """{"version":1,"batches":[{"id":1,"title":"Old","items":[""" +
+                """{"id":2,"source":"PIXIV","postId":"5","marker":"m","status":"PREPARING","enqueuePending":false},""" +
+                """{"id":3,"source":"PIXIV","postId":"6","marker":"n","status":"SAVED","enqueuePending":false}]}]}""",
+        )
+
+        assertEquals(
+            listOf("2|PIXIV|5|null|m|Downloads|true|QUEUED|null|false|null", "3|PIXIV|6|null|n|Downloads|false|SAVED|null|false|null"),
+            FileBackedPostDownloadJobStore(file).load().single().items.map(::summary),
+        )
+    }
+
+    @Test
+    fun `an unreadable queue fails instead of dropping jobs`() = runTest {
+        val file = temporary.newFile("queue.json")
+        val store = FileBackedPostDownloadJobStore(file)
+        for (text in listOf("""{"version":4,"batches":[]}""", """{"version":3,"batches":[{"id":0,"title":"x","items":[]}]}""",
+                """{"version":3,"batches":[{"id":1,"title":"x","items":[{"id":2,"source":"PIXIV","postId":"1","marker":"m","status":"LOST"}]}]}""",
+                "{")) {
+            file.writeText(text)
+            assertTrue(text, runCatching { store.load() }.isFailure)
+        }
+    }
+
+    private fun summary(item: PostDownloadItem): String = with(item.request) {
+        listOf(item.id, post.id.source.id, post.id.sourcePostId, post.title, marker, originLabel, untrackedPreparation,
+            item.status, item.downloadId, item.enqueuePending, selectedMedia?.let { "${it.pageIndex}/${it.totalPages}" },
+        ).joinToString("|")
+    }
+}

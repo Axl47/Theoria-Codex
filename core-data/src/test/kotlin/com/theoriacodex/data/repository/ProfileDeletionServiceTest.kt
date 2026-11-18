@@ -83,4 +83,45 @@ class ProfileDeletionServiceTest {
             assertTrue(library.codices.observeCodex(keep.codexId).first() != null)
         } finally { directory.deleteRecursively() }
     }
+
+    @Test fun `a journal the Gson store wrote resumes the same removal`() = runTest {
+        val directory = Files.createTempDirectory("profile-deletion").toFile()
+        try {
+            val profileId = "p&<a>='b'"
+            val settings = InMemorySettingsRepository()
+            settings.updateSettings { it.copy(recommendationProfiles = it.recommendationProfiles + RecommendationProfile(profileId, "Removed")) }
+            val removed = mutableListOf<String>()
+            val library = object : CodexLikesTransactions by InMemoryCodexLikesTransactions() {
+                override suspend fun removeProfileLibrary(profileId: String) { removed += profileId }
+            }
+            val journal = directory.resolve("intent.json")
+            journal.writeText(golden("gson-written.json"))
+            val owner = ProfileDeletionService(settings, library, journal, ProfileLibraryWriteGuard())
+
+            assertTrue(owner.recoverPendingDeletion())
+            org.junit.Assert.assertEquals(listOf(profileId), removed)
+            assertTrue(settings.observeSettings().first().recommendationProfiles.none { it.profileId == profileId })
+            assertFalse(journal.exists())
+        } finally { directory.deleteRecursively() }
+    }
+
+    @Test fun `a journal from a newer or damaged writer is kept and never acted on`() = runTest {
+        val directory = Files.createTempDirectory("profile-deletion").toFile()
+        try {
+            val library = InMemoryCodexLikesTransactions()
+            val keep = library.codices.ensureCodex(ProfileLibraryIds.codex("profile-main", "keep"), "Keep")
+            val journal = directory.resolve("intent.json")
+            val owner = ProfileDeletionService(InMemorySettingsRepository(), library, journal, ProfileLibraryWriteGuard())
+            for (text in listOf("""{"version":2,"profileId":"profile-main"}""", """{"profileId":"profile-main"}""",
+                    """{"version":1,"profileId":" "}""", """[1]""", "null")) {
+                journal.writeText(text)
+                assertTrue(text, runCatching { owner.recoverPendingDeletion() }.isFailure)
+                org.junit.Assert.assertEquals(text, journal.readText())
+            }
+            assertTrue(library.codices.observeCodex(keep.codexId).first() != null)
+        } finally { directory.deleteRecursively() }
+    }
+
+    private fun golden(name: String) =
+        checkNotNull(javaClass.getResource("/golden/profile-deletion/$name")) { "missing golden $name" }.readText()
 }

@@ -4,8 +4,6 @@ import android.app.Activity
 import android.os.Bundle
 import android.util.AtomicFile
 import android.widget.TextView
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.R
 import com.theoriacodex.app.sourceauth.AndroidCredentialEnvelopeStore
@@ -17,6 +15,7 @@ import com.theoriacodex.data.repository.DataStoreSettingsRepository
 import com.theoriacodex.data.repository.FileBackedReadingPositionRepository
 import com.theoriacodex.data.repository.FileBackedSavedSearchRepository
 import com.theoriacodex.data.repository.ProfileBackupService
+import com.theoriacodex.data.storage.DurableJson
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
@@ -27,6 +26,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import androidx.core.net.toUri
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 /** ADB launches this only after placing a one-shot request in Debug's private storage using run-as. */
 class DeveloperCopyActivity : Activity() {
@@ -75,11 +76,10 @@ class DeveloperCopyActivity : Activity() {
     private fun consumeRequest(job: String): String? = runCatching {
         val file = File(noBackupFilesDir, "$COPY_DIRECTORY/request.json")
         require(file.length() in 1..4096)
-        val request = JsonParser.parseString(file.readText()).asJsonObject
-        require(request.get("job").asString == job)
-        val issuedAt = request.get("issuedAtEpochMs").asLong
-        require(System.currentTimeMillis() - issuedAt in 0..60_000)
-        val signer = request.get("productionCertificateSha256").asString
+        val request = DurableJson.decodeFromString(DeveloperCopyRequest.serializer(), file.readText())
+        require(request.job == job)
+        require(System.currentTimeMillis() - request.issuedAtEpochMs in 0..60_000)
+        val signer = request.productionCertificateSha256
         require(signer.matches(Regex("[0-9a-f]{64}")))
         check(file.delete())
         signer
@@ -111,10 +111,8 @@ class DeveloperCopyActivity : Activity() {
         val status = AtomicFile(File(noBackupFilesDir, "$COPY_DIRECTORY/status.json"))
         val output = status.startWrite()
         try {
-            val bytes = JsonObject().apply {
-                addProperty("job", job)
-                addProperty("state", state)
-            }.toString().toByteArray(Charsets.UTF_8)
+            val bytes = DurableJson.encodeToString(DeveloperCopyStatus.serializer(), DeveloperCopyStatus(job, state))
+                .toByteArray(Charsets.UTF_8)
             output.write(bytes)
             status.finishWrite(output)
         } catch (failure: Exception) {
@@ -128,3 +126,23 @@ class DeveloperCopyActivity : Activity() {
         super.onDestroy()
     }
 }
+
+/** request.json, written by scripts/copy_production_to_debug.py and consumed once. */
+@Serializable
+private class DeveloperCopyRequest(
+    @SerialName("job")
+    val job: String,
+    @SerialName("issuedAtEpochMs")
+    val issuedAtEpochMs: Long,
+    @SerialName("productionCertificateSha256")
+    val productionCertificateSha256: String,
+)
+
+/** status.json, polled by scripts/copy_production_to_debug.py. */
+@Serializable
+private class DeveloperCopyStatus(
+    @SerialName("job")
+    val job: String,
+    @SerialName("state")
+    val state: String,
+)

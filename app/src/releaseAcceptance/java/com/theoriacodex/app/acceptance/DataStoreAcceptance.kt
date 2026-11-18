@@ -1,7 +1,5 @@
 package com.theoriacodex.app.acceptance
 
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
 import com.theoriacodex.data.repository.CodexPostOpen
 import com.theoriacodex.data.repository.DATASTORE_SETTINGS_FILE_NAME
 import com.theoriacodex.data.repository.DATASTORE_STATISTICS_FILE_NAME
@@ -25,6 +23,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * The four DataStore files under R8: values this build writes survive a process restart with readable keys, and
@@ -72,23 +75,23 @@ internal suspend fun verifyDataStores(current: File, shipped: File) {
 
 private fun verifyCurrentKeys(current: File) {
     val settings = current.json(DATASTORE_SETTINGS_FILE_NAME)
-    check(settings.keySet() == setOf("schemaVersion", "settings"))
-    val favorite = settings.getAsJsonObject("settings").getAsJsonObject("favoriteTagsByProfile")
-        .getAsJsonArray(PROFILE).single().asJsonObject
-    check(favorite.keySet() == setOf("source", "tag", "tags", "name"))
+    check(settings.keys == setOf("schemaVersion", "settings"))
+    val favorite = settings.getValue("settings").jsonObject.getValue("favoriteTagsByProfile").jsonObject
+        .getValue(PROFILE).jsonArray.single().jsonObject
+    check(favorite.keys == setOf("source", "tag", "tags", "name"))
     val restore = current.json(DATASTORE_UI_RESTORE_FILE_NAME)
-    check(restore.keySet() == setOf("schemaVersion", "state"))
-    val state = restore.getAsJsonObject("state")
-    check(state.keySet() == setOf("lastTab", "searchScrollStates", "feedFabRestoreStates", "viewerLaunchContext"))
-    check(state.getAsJsonObject("searchScrollStates").getAsJsonObject("h").keySet() ==
+    check(restore.keys == setOf("schemaVersion", "state"))
+    val state = restore.getValue("state").jsonObject
+    check(state.keys == setOf("lastTab", "searchScrollStates", "feedFabRestoreStates", "viewerLaunchContext"))
+    check(state.getValue("searchScrollStates").jsonObject.getValue("h").jsonObject.keys ==
         setOf("firstVisibleItemIndex", "firstVisibleItemOffsetPx"))
-    check(state.getAsJsonObject("viewerLaunchContext").keySet() ==
+    check(state.getValue("viewerLaunchContext").jsonObject.keys ==
         setOf("queryHash", "startIndex", "streamSource", "scrollOffsetHint"))
     val statistics = current.json(DATASTORE_STATISTICS_FILE_NAME)
-    check(statistics.keySet() == setOf("schemaVersion", "statistics"))
-    val post = statistics.getAsJsonObject("statistics").getAsJsonObject("codexStatistics").getAsJsonObject("codex")
-        .getAsJsonObject("posts").getAsJsonObject("PIXIV:1")
-    check(post.keySet() == setOf("label", "opens", "videoMs", "imageMs"))
+    check(statistics.keys == setOf("schemaVersion", "statistics"))
+    val post = statistics.getValue("statistics").jsonObject.getValue("codexStatistics").jsonObject.getValue("codex").jsonObject
+        .getValue("posts").jsonObject.getValue("PIXIV:1").jsonObject
+    check(post.keys == setOf("label", "opens", "videoMs", "imageMs"))
 }
 
 private suspend fun verifyShipped(shipped: File, scope: CoroutineScope) {
@@ -106,12 +109,12 @@ private suspend fun verifyShipped(shipped: File, scope: CoroutineScope) {
     val sites = DataStoreSiteProfileRepository(shipped, scope)
     check(sites.observeProfiles().first().single().label == "Safe")
     check(sites.update(SITE_ID) { it.copy(label = "Renamed") })
-    val site = shipped.json(SITE_PROFILES_FILE_NAME).getAsJsonArray("sites").single().asJsonObject
-    check(site.get("label").asString == "Renamed")
-    check(site.keySet() == setOf("sourceId", "baseUrl", "label", "family", "credentialsRequired", "addedAt"))
+    val site = shipped.json(SITE_PROFILES_FILE_NAME).getValue("sites").jsonArray.single().jsonObject
+    check(site.getValue("label").jsonPrimitive.content == "Renamed")
+    check(site.keys == setOf("sourceId", "baseUrl", "label", "family", "credentialsRequired", "addedAt"))
 }
 
-private suspend fun withStoreScope(block: suspend (CoroutineScope) -> Unit) {
+internal suspend fun withStoreScope(block: suspend (CoroutineScope) -> Unit) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     try {
         block(scope)
@@ -120,7 +123,7 @@ private suspend fun withStoreScope(block: suspend (CoroutineScope) -> Unit) {
     }
 }
 
-private fun File.json(name: String): JsonObject = JsonParser.parseString(resolve(name).readText()).asJsonObject
+private fun File.json(name: String): JsonObject = Json.parseToJsonElement(resolve(name).readText()).jsonObject
 
 private const val PROFILE = "profile-main"
 private const val FAVORITE_NAME = "Ears & <co>"

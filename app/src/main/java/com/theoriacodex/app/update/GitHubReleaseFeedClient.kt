@@ -1,8 +1,6 @@
 package com.theoriacodex.app.update
 
-import com.google.gson.JsonArray
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
+import com.theoriacodex.data.storage.DurableJson
 import java.io.IOException
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
@@ -15,6 +13,9 @@ import com.theoriacodex.data.repository.checkDocumentDepth
 import com.theoriacodex.data.repository.decodeDocumentUtf8
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.DefaultSourceHttpClient
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 
 class GitHubReleaseFeedClient(
     private val owner: String,
@@ -65,42 +66,32 @@ class GitHubReleaseFeedClient(
             channel: String,
             assetName: String,
         ): List<RemoteUpdate> {
-            val root = runCatching { JsonParser.parseString(jsonBody) }.getOrNull() ?: return emptyList()
-            val releases = root.takeIf { it.isJsonArray }?.asJsonArray ?: JsonArray()
+            val releases = try {
+                DurableJson.decodeFromString<List<GitHubRelease>>(jsonBody)
+            } catch (_: SerializationException) {
+                return emptyList()
+            }
 
-            return releases.mapNotNull { element ->
-                val release = element.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
-                val draft = release.get("draft")?.asBoolean ?: true
-                val prerelease = release.get("prerelease")?.asBoolean ?: false
-                if (draft || !prerelease) return@mapNotNull null
+            return releases.mapNotNull { release ->
+                if (release.draft || !release.prerelease) return@mapNotNull null
 
-                val tagName = release.get("tag_name")?.asString?.trim().orEmpty()
-                val targetCommitish = release.get("target_commitish")?.asString?.trim().orEmpty()
+                val tagName = release.tagName.trim()
                 val parsedTag = MainReleaseTagParser.parse(
                     channel = channel,
                     tagName = tagName,
-                    fallbackCommitSha = targetCommitish,
+                    fallbackCommitSha = release.targetCommitish.trim(),
                 )
                     ?: return@mapNotNull null
 
-                val publishedAt = release.get("published_at")?.asString?.trim().orEmpty()
-                val publishedEpoch = runCatching { Instant.parse(publishedAt).toEpochMilli() }.getOrElse { 0L }
+                val publishedEpoch = runCatching { Instant.parse(release.publishedAt.trim()).toEpochMilli() }.getOrElse { 0L }
 
-                val assets = release.getAsJsonArray("assets") ?: JsonArray()
-                val asset = assets.firstAssetByName(assetName) ?: return@mapNotNull null
-                val downloadUrl = asset.get("browser_download_url")?.asString?.trim().orEmpty()
+                val asset = release.assets.firstOrNull { it.name?.trim() == assetName } ?: return@mapNotNull null
+                val downloadUrl = asset.browserDownloadUrl.trim()
                 if (downloadUrl.isBlank()) return@mapNotNull null
 
-                val releaseId = release.get("id")?.asLong ?: return@mapNotNull null
-                val releaseName = release.get("name")
-                    ?.takeUnless { it.isJsonNull }
-                    ?.asString
-                    ?.trim()
-                    ?.takeIf { it.isNotBlank() }
-                val changelogMarkdown = release.get("body")
-                    ?.takeUnless { it.isJsonNull }
-                    ?.asString
-                    .orEmpty()
+                val releaseId = release.id ?: return@mapNotNull null
+                val releaseName = release.name?.trim()?.takeIf { it.isNotBlank() }
+                val changelogMarkdown = release.body.orEmpty()
                 val changelogSections = ReleaseChangelogParser.parse(changelogMarkdown)
                 RemoteUpdate(
                     releaseId = releaseId,
@@ -108,7 +99,7 @@ class GitHubReleaseFeedClient(
                     versionCode = parsedTag.versionCode,
                     commitShaShort = parsedTag.commitShaShort,
                     assetDownloadUrl = downloadUrl,
-                    assetSizeBytes = asset.get("size")?.asLong,
+                    assetSizeBytes = asset.size,
                     releaseName = releaseName,
                     publishedAtEpochMs = publishedEpoch.takeIf { it > 0L },
                     changelogMarkdown = changelogMarkdown,
@@ -131,13 +122,38 @@ class GitHubReleaseFeedClient(
                 assetName = assetName,
             ).firstOrNull()
         }
-
-        private fun JsonArray.firstAssetByName(assetName: String): JsonObject? {
-            return mapNotNull { element ->
-                element.takeIf { it.isJsonObject }?.asJsonObject
-            }.firstOrNull { asset ->
-                asset.get("name")?.asString?.trim() == assetName
-            }
-        }
     }
 }
+
+/** One entry of GitHub's list-releases response; only the fields the updater reads. */
+@Serializable
+private class GitHubRelease(
+    @SerialName("id")
+    val id: Long? = null,
+    @SerialName("draft")
+    val draft: Boolean = true,
+    @SerialName("prerelease")
+    val prerelease: Boolean = false,
+    @SerialName("tag_name")
+    val tagName: String = "",
+    @SerialName("target_commitish")
+    val targetCommitish: String = "",
+    @SerialName("published_at")
+    val publishedAt: String = "",
+    @SerialName("name")
+    val name: String? = null,
+    @SerialName("body")
+    val body: String? = null,
+    @SerialName("assets")
+    val assets: List<GitHubReleaseAsset> = emptyList(),
+)
+
+@Serializable
+private class GitHubReleaseAsset(
+    @SerialName("name")
+    val name: String? = null,
+    @SerialName("browser_download_url")
+    val browserDownloadUrl: String = "",
+    @SerialName("size")
+    val size: Long? = null,
+)

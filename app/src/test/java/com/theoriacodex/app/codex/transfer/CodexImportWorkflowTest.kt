@@ -1,6 +1,5 @@
 package com.theoriacodex.app.codex.transfer
 
-import com.google.gson.Gson
 import com.theoriacodex.app.codex.CodexShareFile
 import com.theoriacodex.app.codex.CodexSharePost
 import com.theoriacodex.app.codex.buildCodexShareFile
@@ -9,6 +8,7 @@ import com.theoriacodex.app.testing.InMemoryCodexLikesTransactions
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.InMemoryCacheRepository
 import com.theoriacodex.data.repository.InMemoryCodexRepository
+import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.model.Post
@@ -119,7 +119,7 @@ class CodexImportWorkflowTest {
         assertNull(repository.observeCodex("cancelled").first())
     }
 
-    private fun legacy(count: Int) = Gson().toJson(CodexShareFile(1, "Legacy", (1..count).map { CodexSharePost("PIXIV", "$it") }))
+    private fun legacy(count: Int) = DurableJson.encodeToString(CodexShareFile.serializer(), CodexShareFile(1, "Legacy", (1..count).map { CodexSharePost("PIXIV", "$it") }))
 
     private fun service(
         repository: InMemoryCodexRepository,

@@ -1,6 +1,5 @@
 package com.theoriacodex.app.acceptance
 
-import com.google.gson.JsonParser
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.BackupLibrary
 import com.theoriacodex.data.repository.FileBackedSavedSearchRepository
@@ -25,6 +24,7 @@ import com.theoriacodex.domain.source.SiteAddressParse
 import com.theoriacodex.domain.source.SiteProfile
 import java.io.File
 import kotlinx.coroutines.flow.first
+import kotlinx.serialization.json.Json
 
 /**
  * Backups and pinned searches under R8: what this build writes survives a process restart as the same document a
@@ -41,14 +41,14 @@ internal suspend fun writeBackups(directory: File, post: Post) {
 internal suspend fun verifyBackups(directory: File, post: Post) {
     val codec = ProfileBackupCodec()
     val written = directory.resolve("backup.json").readText()
-    check(JsonParser.parseString(written) == JsonParser.parseString(SHIPPED_BACKUP))
+    check(Json.parseToJsonElement(written) == Json.parseToJsonElement(SHIPPED_BACKUP))
     val expected = codec.decode(codec.encode(acceptanceBackup(post)))
     check(codec.decode(written.toByteArray()) == expected && codec.decode(SHIPPED_BACKUP.toByteArray()) == expected)
     check(expected.library.posts.single() == post && expected.customSources.single().label == "Safe & 'sound'")
 
     val pins = listOf(SavedSearchEntry(PIN_ID, PIN_NAME, acceptanceSearch(), PIN_SAVED_AT))
     check(FileBackedSavedSearchRepository(directory.resolve("pins")).observeSavedSearches().first() == pins)
-    check(JsonParser.parseString(directory.resolve("pins").resolve(PINS_FILE).readText()) == JsonParser.parseString(SHIPPED_PINS))
+    check(Json.parseToJsonElement(directory.resolve("pins").resolve(PINS_FILE).readText()) == Json.parseToJsonElement(SHIPPED_PINS))
     check(FileBackedSavedSearchRepository(directory.resolve("shipped-pins")).observeSavedSearches().first() == pins)
 }
 

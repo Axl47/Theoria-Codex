@@ -1,40 +1,42 @@
 package com.theoriacodex.app.search
 
 import android.content.Context
-import com.google.gson.JsonParser
+import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
+/** Starter suggestions from the bundled `tag_store.json`; an unreadable asset yields none rather than failing. */
 internal fun loadSeedTagSuggestions(context: Context): Map<SourceKey, List<TagSuggestion>> {
-    val body = runCatching {
-        context.assets.open("tag_store.json").bufferedReader().use { it.readText() }
+    val seed = runCatching {
+        val body = context.assets.open("tag_store.json").bufferedReader().use { it.readText() }
+        DurableJson.decodeFromString(TagSeedFile.serializer(), body)
     }.getOrNull() ?: return emptyMap()
-    val root = runCatching { JsonParser.parseString(body).asJsonObject }.getOrNull()
-        ?: return emptyMap()
-    val sources = root.getAsJsonObject("sources") ?: return emptyMap()
-    return sources.entrySet().mapNotNull outer@{ (sourceName, value) ->
-        val source = SourceKey.parse(sourceName) ?: return@outer null
-        val tags = value.takeIf { it.isJsonArray }?.asJsonArray
-            ?.mapNotNull inner@{ element ->
-                val obj = element.takeIf { it.isJsonObject }?.asJsonObject ?: return@inner null
-                val text = obj.get("text")
-                    ?.takeUnless { it.isJsonNull }
-                    ?.asString
-                    ?.trim()
-                    .orEmpty()
-                if (text.isBlank()) return@inner null
-                val postCount = obj.get("postCount")?.takeIf { it.isJsonPrimitive }?.asLong
-                TagSuggestion(
-                    text = text,
-                    type = obj.get("type")
-                        ?.takeUnless { it.isJsonNull }
-                        ?.asString,
-                    count = obj.get("count")
-                        ?.takeUnless { it.isJsonNull }
-                        ?.asInt ?: postCount?.toInt(),
-                )
-            }
-            .orEmpty()
+    return seed.sources.mapNotNull { (sourceName, entries) ->
+        val source = SourceKey.parse(sourceName) ?: return@mapNotNull null
+        val tags = entries.mapNotNull { entry ->
+            val text = entry.text?.trim().orEmpty()
+            if (text.isBlank()) null else TagSuggestion(text = text, type = entry.type, count = entry.count ?: entry.postCount?.toInt())
+        }
         if (tags.isEmpty()) null else source to tags
     }.toMap()
 }
+
+@Serializable
+private class TagSeedFile(
+    @SerialName("sources")
+    val sources: Map<String, List<TagSeedEntry>> = emptyMap(),
+)
+
+@Serializable
+private class TagSeedEntry(
+    @SerialName("text")
+    val text: String? = null,
+    @SerialName("type")
+    val type: String? = null,
+    @SerialName("count")
+    val count: Int? = null,
+    @SerialName("postCount")
+    val postCount: Long? = null,
+)

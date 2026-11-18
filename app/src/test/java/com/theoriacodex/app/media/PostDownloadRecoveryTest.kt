@@ -90,10 +90,9 @@ class PostDownloadRecoveryTest {
             store.save(listOf(PostDownloadBatch(1, "Save", listOf(PostDownloadItem(2,
                 PostDownloadRequest(testPost(), originLabel = "Codex · Favorites"), PostDownloadStatus.SAVED)))))
             assertEquals("Codex · Favorites", store.load().single().items.single().request.originLabel)
-            val legacy = com.google.gson.JsonParser.parseString(file.readText()).asJsonObject
-            legacy.addProperty("version", 2)
-            legacy.getAsJsonArray("batches")[0].asJsonObject.getAsJsonArray("items")[0].asJsonObject.remove("origin")
-            file.writeText(legacy.toString())
+            file.writeText(file.readText().replace("\"version\":3", "\"version\":2")
+                .replace(",\"origin\":\"Codex · Favorites\"", ""))
+            assertFalse(file.readText().contains("origin"))
             assertEquals("Downloads", store.load().single().items.single().request.originLabel)
         } finally { directory.deleteRecursively() }
     }
@@ -139,9 +138,7 @@ class PostDownloadRecoveryTest {
                 PostDownloadStatus.PREPARING)))
             store.save(listOf(batch))
             assertFalse(store.load().single().items.single().request.untrackedPreparation)
-            val legacy = com.google.gson.JsonParser.parseString(file.readText()).asJsonObject
-            legacy.addProperty("version", 1)
-            file.writeText(legacy.toString())
+            file.writeText(file.readText().replace("\"version\":3", "\"version\":1"))
             val restored = store.load()
             assertTrue(restored.single().items.single().request.untrackedPreparation)
             store.save(restored)

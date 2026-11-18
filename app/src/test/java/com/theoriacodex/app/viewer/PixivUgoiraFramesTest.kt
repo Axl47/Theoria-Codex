@@ -71,4 +71,19 @@ class PixivUgoiraFramesTest {
         ugoiraMetadataFile(archive).writeText("broken")
         assertNull(readUgoiraFrameMetadata(archive))
     }
+
+    @Test
+    fun `disk metadata the Gson writer stored still matches its archive`() {
+        val archive = temporaryFolder.newFile("ugoira-123.zip").apply {
+            writeBytes(ByteArray(64) { it.toByte() })
+            setLastModified(1_700_000_000_000L)
+        }
+        ugoiraMetadataFile(archive).writeText(
+            checkNotNull(javaClass.getResource("/golden/ugoira-cache/gson-written.json")).readText(),
+        )
+        assertEquals(
+            listOf(UgoiraFrameSpec("000000.jpg", 80), UgoiraFrameSpec("000001 & <b>.jpg", 16)),
+            readUgoiraFrameMetadata(archive),
+        )
+    }
 }
