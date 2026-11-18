@@ -62,6 +62,7 @@ import com.theoriacodex.app.search.rememberSearchDurationFilterPresentation
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.tags.PostBoundTagSection
 import com.theoriacodex.app.ui.components.FeedEmptyTile
+import com.theoriacodex.app.ui.components.DismissibleFailure
 import com.theoriacodex.app.ui.components.FeedErrorTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
@@ -441,8 +442,10 @@ private fun CreatorFeedBody(
     onAction: (CreatorAction) -> Unit,
     onLongPress: (Post) -> Unit,
 ) {
-    if (state.errorMessage != null && state.canLoadMore) {
-        FeedErrorTile(message = state.errorMessage.orEmpty(), onRetry = { onAction(CreatorAction.RetryPage) })
+    state.errorMessage?.takeIf { state.canLoadMore }?.let { message ->
+        DismissibleFailure(message) { dismiss ->
+            FeedErrorTile(message = message, onRetry = { onAction(CreatorAction.RetryPage) }, onDismiss = dismiss)
+        }
     }
     FeedContinueLoading(pageDemand)
     when {

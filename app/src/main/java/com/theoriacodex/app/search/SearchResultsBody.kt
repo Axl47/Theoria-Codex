@@ -31,6 +31,7 @@ import com.theoriacodex.app.source.LocalSourceHealth
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.search.state.SearchUiState
+import com.theoriacodex.app.ui.components.DismissibleFailure
 import com.theoriacodex.app.ui.components.FeedContinueLoading
 import com.theoriacodex.app.ui.components.FeedLoadingState
 import com.theoriacodex.app.ui.components.FeedPageDemandControl
@@ -67,7 +68,11 @@ internal fun ColumnScope.SearchResultsBody(
         if (scope is SearchSourceScope.Single) emptyList() else sourceOutageNotices(state.content.statuses, issues)
     }
     SourceOutageNotices(outageNotices)
-    state.pageFailure?.let { SearchFailureSurface(it, state.content.statuses, retrySearch) }
+    state.pageFailure?.let { failure ->
+        DismissibleFailure(failure) { dismiss ->
+            SearchFailureSurface(failure, state.content.statuses, retrySearch, onDismiss = dismiss)
+        }
+    }
     // Results show the pull indicator instead; this keeps refreshes of an emptied feed visible.
     if (state.retainsResultsWhileRefreshing && feed.related.projection.entries.isEmpty()) SearchRefreshProgress()
     when {
@@ -79,7 +84,9 @@ internal fun ColumnScope.SearchResultsBody(
             SearchEmptyResults(state, feed, pageDemand, sourceAuthErrorMessage, outageNotices, retrySearch)
         }
         else -> Column(modifier = tapToClearFocus, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            sourceAuthErrorMessage?.let { SourceAccountNotice(it, state.content.statuses) }
+            sourceAuthErrorMessage?.let { message ->
+                DismissibleFailure(message) { dismiss -> SourceAccountNotice(message, state.content.statuses, dismiss) }
+            }
             PullToRefreshBox(
                 isRefreshing = state.retainsResultsWhileRefreshing && !state.execution.showingPartialResults,
                 onRefresh = retrySearch,
@@ -109,7 +116,7 @@ private fun SearchEmptyResults(
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         FeedContinueLoading(pageDemand)
         sourceAuthErrorMessage?.let { SourceAccountNotice(it, state.content.statuses) }
-        sourceFailureMessage?.let { failureMessage -> SourceFailureBlock(failureMessage, unannounced, onRetry) }
+        sourceFailureMessage?.let { failureMessage -> SourceFailureBlock(failureMessage, unannounced, onRetry = onRetry) }
         if (feed.durationMetadata.readiness.isResolving) {
             EmptyBlock(hasPendingChanges = false, messageOverride = "Resolving durations…")
         } else if (!state.content.hasExecutedSearch && !feed.animatedFilterActive) {

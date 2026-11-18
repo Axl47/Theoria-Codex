@@ -1,5 +1,6 @@
 package com.theoriacodex.app.codex
 
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
@@ -12,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.feed.FeedPageDemandInput
 import com.theoriacodex.app.search.SearchVisibilityFilters
+import com.theoriacodex.app.ui.components.DismissibleFailure
 import com.theoriacodex.app.ui.components.FeedContinueLoading
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.app.ui.components.rememberFeedPageDemand
@@ -56,9 +58,14 @@ internal fun LiveCodexHeader(
         onLoadNextPage = owner::loadMore,
     )
     if (state.errors.isNotEmpty()) {
-        Text(state.errors.entries.take(2).joinToString("\n") { (id, error) -> "${labels[id] ?: title}: $error" } +
-            if (state.errors.size > 2) "\n${state.errors.size - 2} more could not load" else "")
-        TextButton(enabled = !state.loading, onClick = owner::retry) { Text("Retry failed ${manageLabel.lowercase()}") }
+        DismissibleFailure(state.errors) { dismiss ->
+            Text(state.errors.entries.take(2).joinToString("\n") { (id, error) -> "${labels[id] ?: title}: $error" } +
+                if (state.errors.size > 2) "\n${state.errors.size - 2} more could not load" else "")
+            Row {
+                TextButton(onClick = dismiss) { Text("Dismiss") }
+                TextButton(enabled = !state.loading, onClick = owner::retry) { Text("Retry failed ${manageLabel.lowercase()}") }
+            }
+        }
     }
     FeedContinueLoading(demand)
 }
