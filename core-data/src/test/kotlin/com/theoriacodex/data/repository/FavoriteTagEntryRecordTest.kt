@@ -8,7 +8,7 @@ import org.junit.Test
 class FavoriteTagEntryRecordTest {
     @Test
     fun `a record written before or groups reads as one saved tag`() {
-        val record = LegacyFavoriteTagEntryRecord(source = "GELBOORU", tag = "Blue Hair")
+        val record = FavoriteTagEntryRecord(source = "GELBOORU", tag = "Blue Hair")
 
         assertEquals(FavoriteTagEntry(SourceKey.GELBOORU, "blue_hair"), record.toDomainOrNull())
     }
@@ -17,10 +17,10 @@ class FavoriteTagEntryRecordTest {
     fun `a saved group keeps its first tag readable by older builds and round trips`() {
         val group = FavoriteTagEntry(SourceKey.GELBOORU, listOf("blue_hair", "red_hair"), "Hair colors")
 
-        val record = LegacyFavoriteTagEntryRecord.fromDomain(group)
+        val record = FavoriteTagEntryRecord.fromDomain(group)
 
         assertEquals("blue_hair", record.tag)
         assertEquals(group, record.toDomainOrNull())
-        assertNull(LegacyFavoriteTagEntryRecord.fromDomain(FavoriteTagEntry(SourceKey.PIXIV, "cat")).tags)
+        assertNull(FavoriteTagEntryRecord.fromDomain(FavoriteTagEntry(SourceKey.PIXIV, "cat")).tags)
     }
 }

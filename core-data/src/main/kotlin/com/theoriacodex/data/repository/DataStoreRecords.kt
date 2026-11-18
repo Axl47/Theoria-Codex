@@ -19,7 +19,7 @@ internal data class SettingsDataStoreFile(
     @field:SerializedName("schemaVersion")
     val schemaVersion: Int = SETTINGS_DATASTORE_SCHEMA_VERSION,
     @field:SerializedName("settings")
-    val settings: LegacySettingsStoreRecord = LegacySettingsStoreRecord.fromDomain(AppSettings()),
+    val settings: SettingsStoreRecord = SettingsStoreRecord.fromDomain(AppSettings()),
 ) {
     fun toDomain(): AppSettings = normalizeDataStoreSettings(settings.toDomain())
 
@@ -33,7 +33,7 @@ internal data class SettingsDataStoreFile(
     companion object {
         fun fromDomain(settings: AppSettings): SettingsDataStoreFile {
             return SettingsDataStoreFile(
-                settings = LegacySettingsStoreRecord.fromDomain(normalizeDataStoreSettings(settings)),
+                settings = SettingsStoreRecord.fromDomain(normalizeDataStoreSettings(settings)),
             )
         }
     }
@@ -76,7 +76,7 @@ internal data class UiRestoreDataStoreFile(
     @field:SerializedName("schemaVersion")
     val schemaVersion: Int = UI_RESTORE_DATASTORE_SCHEMA_VERSION,
     @field:SerializedName("state")
-    val state: LegacyUiRestoreStoreRecord = LegacyUiRestoreStoreRecord(),
+    val state: UiRestoreStoreRecord = UiRestoreStoreRecord(),
 ) {
     fun toMemoryState(): PersistedUiRestoreState = normalizeUiRestoreState(state.toMemoryState())
 
@@ -91,7 +91,7 @@ internal data class UiRestoreDataStoreFile(
         fun fromMemoryState(state: PersistedUiRestoreState): UiRestoreDataStoreFile {
             val normalized = normalizeUiRestoreState(state)
             return UiRestoreDataStoreFile(
-                state = LegacyUiRestoreStoreRecord.fromMemoryState(normalized),
+                state = UiRestoreStoreRecord.fromMemoryState(normalized),
             )
         }
     }
