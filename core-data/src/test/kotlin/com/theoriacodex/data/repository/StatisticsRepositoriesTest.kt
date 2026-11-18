@@ -255,7 +255,7 @@ class StatisticsRepositoriesTest {
     fun `existing statistics files default translation usage to zero`() = runTest {
         val directory = tempFolder.newFolder("statistics-before-translation-usage")
         directory.resolve(DATASTORE_STATISTICS_FILE_NAME).writeText(
-            """{"schemaVersion":1,"statistics":{"appOpenCount":4}}"""
+            """{"schemaVersion":2,"statistics":{"appOpenCount":4}}"""
         )
         val scope = newScope()
         val statistics = DataStoreStatisticsRepository(directory, scope).observeStatistics().first()
