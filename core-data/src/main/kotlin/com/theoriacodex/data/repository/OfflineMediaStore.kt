@@ -271,7 +271,7 @@ class OfflineMediaStore internal constructor(
     /** Every manifest version keeps its owners at the root, so they survive a post that cannot be decoded. */
     private fun salvageOwners(folder: File): Set<String> =
         runCatching { readManifest(folder, ManifestOwners.serializer())?.owners }.getOrNull().orEmpty()
-            .mapNotNull { owner -> (owner as? JsonPrimitive)?.takeIf { it.isString }?.content }.toSet()
+            .filterIsInstance<JsonPrimitive>().filter { it.isString }.map { it.content }.toSet()
 
     private fun hasCanonicalSourceSnapshot(offline: Post, source: Post): Boolean {
         if (source.id != offline.id) return false
