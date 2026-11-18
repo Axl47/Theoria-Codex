@@ -1,7 +1,10 @@
 package com.theoriacodex.data.storage
 
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.decodeFromJsonElement
 
 /**
  * The single kotlinx.serialization configuration for saved data (files, Room payloads, exports) and for the app's
@@ -23,3 +26,16 @@ val DurableJson: Json = Json {
     // Gson accepted quoted primitives such as "5" for an Int and "true" for a Boolean.
     isLenient = true
 }
+
+/**
+ * Decodes each element of a JSON list as [T] and drops the ones that do not decode, so one malformed entry in a
+ * network response or bundled asset never hides its well-formed neighbours.
+ */
+inline fun <reified T> List<JsonElement>.decodeEachOrSkip(): List<T> = mapNotNull { element ->
+    try {
+        DurableJson.decodeFromJsonElement<T>(element)
+    } catch (_: SerializationException) {
+        null
+    }
+}
+

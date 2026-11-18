@@ -149,6 +149,33 @@ class GitHubReleaseFeedClientTest {
         assertEquals("https://example.com/main.apk", remote.assetDownloadUrl)
     }
 
+    // The updater is how installs receive fixes, so one malformed entry must not hide a good release.
+    @Test
+    fun `release parser skips a malformed release or asset and keeps the good release`() {
+        val json = """
+            [
+              "not a release",
+              {"id": {"bad": true}, "tag_name": "main-vc1010-ccccccc", "draft": false, "prerelease": true},
+              {
+                "id": 11,
+                "tag_name": "main-vc1009-bbbbbbb",
+                "draft": false,
+                "prerelease": true,
+                "assets": [
+                  7,
+                  {"name": "theoria-codex-main.apk", "size": "not a size"},
+                  {"name": "theoria-codex-main.apk", "browser_download_url": "https://example.com/11.apk", "size": 101}
+                ]
+              }
+            ]
+        """.trimIndent()
+
+        val history = GitHubReleaseFeedClient.parseMainPrereleaseHistory(json, "main", "theoria-codex-main.apk")
+
+        assertEquals(listOf(11L), history.map { it.releaseId })
+        assertEquals("https://example.com/11.apk", history.single().assetDownloadUrl)
+    }
+
     @Test
     fun `changelog parser falls back to generic section when headings missing`() {
         val sections = ReleaseChangelogParser.parse(
