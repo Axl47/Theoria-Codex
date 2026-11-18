@@ -1,6 +1,7 @@
 package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.storage.AtomicJsonFileStore
+import com.theoriacodex.data.storage.assertStoredFormat
 import java.nio.file.Files
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -103,6 +104,11 @@ class ProfileDeletionServiceTest {
             assertTrue(settings.observeSettings().first().recommendationProfiles.none { it.profileId == profileId })
             assertFalse(journal.exists())
         } finally { directory.deleteRecursively() }
+    }
+
+    // The golden is the Gson store's own output.
+    @Test fun `the profile removal journal golden pins every stored key`() {
+        assertStoredFormat(golden("gson-written.json") to ProfileDeletionJournal(1, "p&<a>='b'"))
     }
 
     @Test fun `a journal from a newer or damaged writer is kept and never acted on`() = runTest {

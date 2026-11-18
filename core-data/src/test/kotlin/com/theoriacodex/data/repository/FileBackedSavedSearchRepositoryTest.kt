@@ -2,7 +2,10 @@ package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
+import com.theoriacodex.data.storage.SavedSearchSnapshot
+import com.theoriacodex.data.storage.SavedSearchSnapshotSerializer
 import com.theoriacodex.data.storage.UnsupportedStoreSchemaException
+import com.theoriacodex.data.storage.assertStoredFormat
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
@@ -152,6 +155,12 @@ internal class FileBackedSavedSearchRepositoryTest : FileBackedRepositoryTestFix
         assertEquals(goldenPins(), repository.observeSavedSearches().first())
         repository.rename("pin-fyp", goldenPins().first().name)
         assertEquals(DurableJson.parseToJsonElement(golden), DurableJson.parseToJsonElement(storage.readText()))
+    }
+
+    // The golden is the Gson store's own output.
+    @Test
+    fun `the pinned searches golden pins every stored key`() {
+        assertStoredFormat(SavedSearchSnapshotSerializer, goldenPinnedSearchesFile() to SavedSearchSnapshot(goldenPins()))
     }
 
     @Test

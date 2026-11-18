@@ -132,7 +132,7 @@ internal data class ReadingPositionsFile(
 )
 
 @Serializable
-private data class ReadingPositionRecord(
+internal data class ReadingPositionRecord(
     @SerialName("source")
     val source: String,
     @SerialName("postId")

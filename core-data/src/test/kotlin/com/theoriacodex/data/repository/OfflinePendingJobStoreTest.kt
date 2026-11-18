@@ -1,5 +1,6 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.data.storage.assertStoredFormat
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.test.runTest
@@ -26,6 +27,20 @@ class OfflinePendingJobStoreTest {
                 "automatic" to emptyList(),
             ),
             OfflinePendingJobStore(file).load(),
+        )
+    }
+
+    // The golden is the Gson store's own output.
+    @Test
+    fun `the offline queue golden pins every stored key`() {
+        assertStoredFormat(
+            checkNotNull(javaClass.getResource("/golden/offline-queue/gson-written.json")).readText() to OfflineQueueFile(
+                1,
+                listOf(
+                    OfflineQueueOwner("codex:a&b", listOf(OfflineQueuePost("PIXIV", "1"), OfflineQueuePost("custom_safebooru_org", "x<y>'z'="))),
+                    OfflineQueueOwner("automatic", emptyList()),
+                ),
+            ),
         )
     }
 

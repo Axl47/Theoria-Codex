@@ -1,5 +1,6 @@
 package com.theoriacodex.app.media
 
+import com.theoriacodex.data.storage.assertStoredFormat
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -29,6 +30,32 @@ class PostDownloadJobStoreGoldenTest {
             batches.flatMap { it.items }.map(::summary),
         )
         assertTrue(batches.flatMap { it.items }.all { it.request.restored })
+    }
+
+    // The golden is the Gson store's own output.
+    @Test
+    fun `the v3 download queue golden pins every stored key`() {
+        assertStoredFormat(
+            checkNotNull(javaClass.getResource("/golden/download-queue/gson-written.json")).readText() to DownloadQueueFile(
+                3,
+                listOf(
+                    DownloadBatchRecord(
+                        1, "Codex & <friends>",
+                        listOf(
+                            DownloadItemRecord(
+                                2, "PIXIV", "100", "Tom & Jerry's <cut>", "m-1", "Codex · A=B", null, "DOWNLOADING", 77, true, 2, 5,
+                            ),
+                            DownloadItemRecord(
+                                3, "custom_safebooru_org", "a'b", null, "m-2", "Downloads", true, "FAILED", null, false, null, null,
+                            ),
+                        ),
+                    ),
+                    DownloadBatchRecord(
+                        4, "Done", listOf(DownloadItemRecord(5, "GELBOORU", "9", "é☃", "m-3", "Downloads", null, "SAVED", null, false, null, null)),
+                    ),
+                ),
+            ),
+        )
     }
 
     @Test

@@ -1,5 +1,7 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.data.storage.PostStorageCodec
+import com.theoriacodex.data.storage.assertStoredFormat
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -46,11 +48,44 @@ internal class OfflineManifestGoldenTest : FileBackedRepositoryTestFixture() {
         assertEquals(mapOf("codex:a" to 1, "codex:b" to 1), store.snapshot.value.postsByOwner)
     }
 
+    // v3.json is what Gson and kotlinx both write; kotlinx-full.json is captured from current kotlinx output and also
+    // sets video variants, a duration, a content hash and local paths on the source post, which v3.json never holds.
+    @Test
+    fun `the version 3 manifest goldens pin every stored key`() {
+        val generation = "/offline/8d4c1d1e"
+        val offlineMedia = source.media.mapIndexed { index, ref -> ref.copy(localPath = "$generation/$index.png") }
+        val offline = source.copy(preview = offlineMedia[0], full = offlineMedia[0], media = offlineMedia)
+        assertStoredFormat(
+            golden("kotlinx-full.json") to fullManifest(),
+            golden("v3.json").replace(GENERATION, generation) to OfflineManifest(
+                3, PostStorageCodec.encode(offline), PostStorageCodec.encode(source), listOf("codex:a", "codex:b"), listOf(5L, 5L),
+            ),
+        )
+    }
+
+    private fun fullManifest(): OfflineManifest {
+        val variant = VideoVariant("https://example.test/42-720.mp4", height = 720, original = true, mime = "video/mp4")
+        val full = source.copy(
+            preview = source.preview.copy(localPath = "/offline/thumb.jpg"),
+            full = source.full?.copy(localPath = "/offline/full.mp4"),
+            media = source.media.map { it.copy(localPath = "/offline/${it.url?.substringAfterLast('/')}", videoVariants = listOf(variant)) },
+            durationMs = 4_500L,
+            contentHash = "0123456789abcdef0123456789abcdef",
+        )
+        return OfflineManifest(
+            3,
+            PostStorageCodec.encode(full.copy(preview = full.media[0], full = full.media[0])),
+            PostStorageCodec.encode(full),
+            listOf("codex:a"),
+            listOf(5L, 5L),
+        )
+    }
+
     // Paths appear JSON-escaped, which matters for Windows separators.
     private fun jsonPath(file: File) = file.absolutePath.replace("\\", "\\\\")
 
-    private fun golden(): String =
-        checkNotNull(javaClass.classLoader.getResource("golden/offline-manifest/v3.json")) { "Missing golden" }.readText().trimEnd()
+    private fun golden(name: String = "v3.json"): String =
+        checkNotNull(javaClass.classLoader.getResource("golden/offline-manifest/$name")) { "Missing golden" }.readText().trimEnd()
 
     private companion object {
         const val GENERATION = "\$GENERATION"
