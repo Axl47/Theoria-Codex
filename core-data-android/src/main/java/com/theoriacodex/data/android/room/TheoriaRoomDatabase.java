@@ -15,14 +15,12 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
                 PostEntity.class,
                 CodexItemEntity.class,
                 LikedPostEntity.class,
-                MigrationMetadataEntity.class,
                 RecentWatchedEntity.class,
                 RecentSearchEntity.class,
-                RecentsMigrationEntity.class,
                 MediaDurationEntity.class,
                 ViewerTranslationCacheEntity.class
         },
-        version = 10,
+        version = 11,
         exportSchema = true
 )
 public abstract class TheoriaRoomDatabase extends RoomDatabase {
@@ -90,6 +88,13 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             database.execSQL("CREATE INDEX IF NOT EXISTS `index_codex_items_codex_id_saved_at_epoch_ms` ON `codex_items` (`codex_id`, `saved_at_epoch_ms`)");
         }
     };
+    // Drops the proof tables of the retired JSON importers; nothing has read them since.
+    public static final Migration MIGRATION_10_11 = new Migration(10, 11) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("DROP TABLE IF EXISTS `migration_metadata`");
+            database.execSQL("DROP TABLE IF EXISTS `recents_migration_metadata`");
+        }
+    };
     public static final Migration[] MIGRATIONS = new Migration[] {
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -99,7 +104,8 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             MIGRATION_6_7,
             MIGRATION_7_8,
             MIGRATION_8_9,
-            MIGRATION_9_10
+            MIGRATION_9_10,
+            MIGRATION_10_11
     };
 
     public abstract CodexLikesDao codexLikesDao();

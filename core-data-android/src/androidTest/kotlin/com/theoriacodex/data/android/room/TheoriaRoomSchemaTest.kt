@@ -18,32 +18,6 @@ class TheoriaRoomSchemaTest {
     )
 
     @Test
-    fun versionOneSchemaContainsTheCompleteMigrationProof() {
-        val database = migrationHelper.createDatabase(TEST_DATABASE_NAME, 1)
-        val columns = buildSet {
-            database.query("PRAGMA table_info(`migration_metadata`)").use { cursor ->
-                val nameColumn = cursor.getColumnIndexOrThrow("name")
-                while (cursor.moveToNext()) add(cursor.getString(nameColumn))
-            }
-        }
-        database.close()
-
-        assertTrue(
-            columns.containsAll(
-                setOf(
-                    "source_fingerprint_sha256",
-                    "destination_fingerprint_sha256",
-                    "proof_sha256",
-                    "codex_source_present",
-                    "likes_source_present",
-                    "codex_archived",
-                    "likes_archived",
-                )
-            )
-        )
-    }
-
-    @Test
     fun migrationOneToTwoPreservesContentAndCreatesRecentsOwnership() {
         migrationHelper.createDatabase(TEST_DATABASE_NAME, 1).apply {
             execSQL("INSERT INTO codices(codex_id,name,created_at_epoch_ms,display_order) VALUES('saved','Saved',1,0)")
