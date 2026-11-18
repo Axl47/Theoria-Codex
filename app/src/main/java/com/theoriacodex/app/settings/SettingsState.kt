@@ -77,7 +77,7 @@ data class SettingsUiState(
     val profileDeleteTargetId: String? = null,
     val showClearCacheOptions: Boolean = false,
     val changelogLoading: Boolean = false,
-    val legacyJsonRecoveries: List<CorruptionRecovery> = emptyList(),
+    val recoveredStores: List<CorruptionRecovery> = emptyList(),
     /** Someone else's stats file while it is being compared; deliberately never written to storage. */
     val statsComparison: StatsShareFile? = null,
 )

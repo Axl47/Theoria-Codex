@@ -20,7 +20,7 @@ internal fun kotlinx.coroutines.test.TestScope.settingsOwner(
     settingsRepository: com.theoriacodex.data.repository.SettingsRepository = InMemorySettingsRepository(),
     uiRestoreRepository: com.theoriacodex.data.repository.UiRestoreRepository = InMemoryUiRestoreRepository(),
     accounts: FakeSettingsAccountGateway = FakeSettingsAccountGateway(),
-    legacyJsonRecoveries: StateFlow<List<CorruptionRecovery>> = MutableStateFlow(emptyList()),
+    recoveredStores: StateFlow<List<CorruptionRecovery>> = MutableStateFlow(emptyList()),
     availableSources: StateFlow<Set<SourceKey>> = MutableStateFlow(setOf(SourceKey.PIXIV)),
     likesRepository: com.theoriacodex.data.repository.LikesRepository = InMemoryLikesRepository(),
     codexRepository: com.theoriacodex.data.repository.CodexRepository = InMemoryCodexRepository(),
@@ -46,7 +46,7 @@ internal fun kotlinx.coroutines.test.TestScope.settingsOwner(
             },
             accounts = accounts,
             availableSources = availableSources,
-            legacyJsonRecoveries = legacyJsonRecoveries,
+            recoveredStores = recoveredStores,
         ),
         coroutineScope = backgroundScope,
     )

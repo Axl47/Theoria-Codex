@@ -7,8 +7,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
-/** Application-scoped evidence for verified recovery of legacy whole-file JSON stores. */
-class LegacyJsonRecoveryRegistry {
+/** Application-scoped record of whole-file JSON stores that set an unreadable file aside and started empty. */
+class FileStoreRecoveryRegistry {
     private val mutableRecoveries = MutableStateFlow<List<CorruptionRecovery>>(emptyList())
 
     val recoveries: StateFlow<List<CorruptionRecovery>> = mutableRecoveries.asStateFlow()
@@ -35,7 +35,7 @@ class LegacyJsonRecoveryRegistry {
                 }
                 val bytes = candidate.readBytes()
                 check(bytes.size.toLong() == byteCount && bytes.sha256() == sha256) {
-                    "Legacy JSON quarantine verification failed for ${candidate.absolutePath}"
+                    "Quarantine verification failed for ${candidate.absolutePath}"
                 }
                 record(
                     CorruptionRecovery(

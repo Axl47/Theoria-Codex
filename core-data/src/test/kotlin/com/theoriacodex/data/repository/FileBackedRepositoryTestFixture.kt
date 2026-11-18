@@ -2,7 +2,7 @@ package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.testing.RecordingIoDispatcher
 import com.theoriacodex.data.testing.ControllableIoDispatcher
-import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
+import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.ImageRef

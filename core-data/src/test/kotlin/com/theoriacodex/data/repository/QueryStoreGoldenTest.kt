@@ -1,6 +1,6 @@
 package com.theoriacodex.data.repository
 
-import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
+import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.storage.QueryStorageCodec
 import com.theoriacodex.data.storage.assertStoredFormat
 import com.theoriacodex.domain.model.DateRange
@@ -33,7 +33,7 @@ internal class QueryStoreGoldenTest : FileBackedRepositoryTestFixture() {
 
     @Test
     fun `legacy and damaged entries repair the way Gson read them`() = runTest {
-        val recoveries = LegacyJsonRecoveryRegistry()
+        val recoveries = FileStoreRecoveryRegistry()
         val repository = repositoryWith(golden("legacy.json"), recoveries)
 
         assertEquals(
@@ -60,7 +60,7 @@ internal class QueryStoreGoldenTest : FileBackedRepositoryTestFixture() {
         assertStoredFormat(golden("gson-written.json") to QueryStoreFile(queries.mapValues { QueryStorageCodec.encode(it.value) }))
     }
 
-    private fun repositoryWith(json: String, recoveries: LegacyJsonRecoveryRegistry = LegacyJsonRecoveryRegistry()) =
+    private fun repositoryWith(json: String, recoveries: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry()) =
         tempDir("query-golden-").let { dir ->
             File(dir, "query_store.json").writeText(json)
             FileBackedQueryRepository(dir, recoveryRegistry = recoveries)

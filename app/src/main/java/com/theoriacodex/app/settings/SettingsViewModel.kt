@@ -153,7 +153,7 @@ internal data class SettingsOwnerDependencies(
     val profileMutations: SettingsProfileMutations,
     val accounts: SettingsAccountGateway,
     val availableSources: StateFlow<Set<SourceKey>>,
-    val legacyJsonRecoveries: StateFlow<List<CorruptionRecovery>> = MutableStateFlow(emptyList()),
+    val recoveredStores: StateFlow<List<CorruptionRecovery>> = MutableStateFlow(emptyList()),
     val showDeveloperScenarios: Boolean = false,
 )
 
@@ -222,8 +222,8 @@ internal class SettingsViewModel(
             }
         }
         ownerScope.launch {
-            dependencies.legacyJsonRecoveries.collect { recoveries ->
-                updateState { copy(legacyJsonRecoveries = recoveries) }
+            dependencies.recoveredStores.collect { recoveries ->
+                updateState { copy(recoveredStores = recoveries) }
             }
         }
         ownerScope.launch {
@@ -675,7 +675,7 @@ internal class SettingsViewModel(
                             pixivAuthController = container.sources.pixivAuthController,
                         ),
                         availableSources = container.sources.availableSources,
-                        legacyJsonRecoveries = container.data.legacyJsonRecoveries,
+                        recoveredStores = container.data.recoveredStores,
                     )
                 )
             }

@@ -74,7 +74,7 @@ import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.data.repository.UiRestoreRepository
 import com.theoriacodex.data.storage.CorruptionRecovery
-import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
+import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.android.room.RoomCodexLikesRepository
 import com.theoriacodex.data.android.room.RoomMediaDurationRepository
 import com.theoriacodex.data.android.room.RoomRecentsRepository
@@ -126,7 +126,7 @@ data class DataDependencies(
     val cacheRepository: CacheRepository,
     val uiRestoreRepository: UiRestoreRepository,
     val mediaDurationRepository: MediaDurationRepository,
-    val legacyJsonRecoveries: StateFlow<List<CorruptionRecovery>>,
+    val recoveredStores: StateFlow<List<CorruptionRecovery>>,
     val readingPositions: ReadingPositionRepository = InMemoryReadingPositionRepository(),
     val savedSearches: SavedSearchRepository = InMemorySavedSearchRepository(),
     /** This session's copies of one file across sites; feeds teach it what they list. */
@@ -209,11 +209,11 @@ internal class DefaultTheoriaAppContainer(
     private val storageDirectory = File(appContext.filesDir, "theoria_codex")
     private val durableStoreScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val offlineStore = OfflineMediaStore(File(storageDirectory, "offline_media"))
-    private val legacyJsonRecoveryRegistry = LegacyJsonRecoveryRegistry()
+    private val fileStoreRecoveryRegistry = FileStoreRecoveryRegistry()
     private val tagSuggestionStore = FileBackedTagSuggestionStore(
         storeFile = File(storageDirectory, "tag_suggestions.json"),
         seedData = loadSeedTagSuggestions(appContext),
-        recoveryRegistry = legacyJsonRecoveryRegistry,
+        recoveryRegistry = fileStoreRecoveryRegistry,
     )
     private val networkOnline = NetworkMonitor(appContext).online
     private val hostOutages = HostOutageTracker(isOnline = { networkOnline.value })
@@ -301,7 +301,7 @@ internal class DefaultTheoriaAppContainer(
     private val codexLikesTransactions: CodexLikesTransactions = contentRepository
     private val queryRepository = FileBackedQueryRepository(
         storageDirectory,
-        recoveryRegistry = legacyJsonRecoveryRegistry,
+        recoveryRegistry = fileStoreRecoveryRegistry,
     )
     private val recentsRepository = RoomRecentsRepository(contentDatabase)
     private val settingsRepository = DataStoreSettingsRepository(
@@ -336,7 +336,7 @@ internal class DefaultTheoriaAppContainer(
     )
     private val cacheRepository = OfflineAwareCacheRepository(FileBackedCacheRepository(storageDirectory), offlineMedia)
     private val readingPositions = FileBackedReadingPositionRepository(storageDirectory)
-    private val savedSearches = FileBackedSavedSearchRepository(storageDirectory, recoveryRegistry = legacyJsonRecoveryRegistry)
+    private val savedSearches = FileBackedSavedSearchRepository(storageDirectory, recoveryRegistry = fileStoreRecoveryRegistry)
     private val profileBackup = ProfileBackupService(
         settings = settingsRepository,
         store = RoomProfileBackupStore(contentDatabase),
@@ -363,7 +363,7 @@ internal class DefaultTheoriaAppContainer(
     )
     private val updateStateStore = FileBackedUpdateStateStore(
         file = File(storageDirectory, "update_state.json"),
-        recoveryRegistry = legacyJsonRecoveryRegistry,
+        recoveryRegistry = fileStoreRecoveryRegistry,
     )
     private val updateFeedClient = GitHubReleaseFeedClient(
         owner = BuildConfig.UPDATE_REPO_OWNER,
@@ -396,7 +396,7 @@ internal class DefaultTheoriaAppContainer(
         cacheRepository = cacheRepository,
         uiRestoreRepository = uiRestoreRepository,
         mediaDurationRepository = mediaDurationRepository,
-        legacyJsonRecoveries = legacyJsonRecoveryRegistry.recoveries,
+        recoveredStores = fileStoreRecoveryRegistry.recoveries,
         readingPositions = readingPositions,
         savedSearches = savedSearches,
     )

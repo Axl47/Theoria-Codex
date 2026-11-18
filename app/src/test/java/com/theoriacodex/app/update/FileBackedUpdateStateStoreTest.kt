@@ -1,6 +1,6 @@
 package com.theoriacodex.app.update
 
-import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
+import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
@@ -88,7 +88,7 @@ class FileBackedUpdateStateStoreTest {
         val file = File(tempDir("update-store-tolerant-test-"), "update_state.json")
         val corruptBytes = "{broken".toByteArray()
         file.writeBytes(corruptBytes)
-        val registry = LegacyJsonRecoveryRegistry()
+        val registry = FileStoreRecoveryRegistry()
 
         assertEquals(
             UpdateStateSnapshot(),

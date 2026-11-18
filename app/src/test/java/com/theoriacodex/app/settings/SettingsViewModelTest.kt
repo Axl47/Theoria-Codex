@@ -106,7 +106,7 @@ class SettingsViewModelTest {
     @Test
     fun `verified legacy recovery is presented by the Settings owner`() = runTest {
         val recoveries = MutableStateFlow<List<CorruptionRecovery>>(emptyList())
-        val owner = settingsOwner(legacyJsonRecoveries = recoveries)
+        val owner = settingsOwner(recoveredStores = recoveries)
         runCurrent()
 
         val recovery = CorruptionRecovery(
@@ -120,7 +120,7 @@ class SettingsViewModelTest {
         recoveries.value = listOf(recovery)
         runCurrent()
 
-        assertEquals(listOf(recovery), owner.state.value.legacyJsonRecoveries)
+        assertEquals(listOf(recovery), owner.state.value.recoveredStores)
     }
 
     @Test

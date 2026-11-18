@@ -1,7 +1,7 @@
 package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.storage.DurableJson
-import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
+import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.storage.SavedSearchSnapshot
 import com.theoriacodex.data.storage.SavedSearchSnapshotSerializer
 import com.theoriacodex.data.storage.UnsupportedStoreSchemaException
@@ -119,7 +119,7 @@ internal class FileBackedSavedSearchRepositoryTest : FileBackedRepositoryTestFix
         // Complete pins that fail validation (duplicate IDs), not just a structural decode failure.
         storage.writeText(goldenPinnedSearchesFile().replace("\"pin-multi\"", "\"pin-fyp\""))
         val original = storage.readBytes()
-        val recovery = LegacyJsonRecoveryRegistry()
+        val recovery = FileStoreRecoveryRegistry()
 
         val repository = FileBackedSavedSearchRepository(directory, recoveryRegistry = recovery)
 
@@ -134,7 +134,7 @@ internal class FileBackedSavedSearchRepositoryTest : FileBackedRepositoryTestFix
         val storage = directory.resolve("pinned_searches.json")
         val newer = """{"schemaVersion":2,"searches":{"shape":"unknown to this build"}}"""
         storage.writeText(newer)
-        val recovery = LegacyJsonRecoveryRegistry()
+        val recovery = FileStoreRecoveryRegistry()
 
         assertThrows(UnsupportedStoreSchemaException::class.java) {
             FileBackedSavedSearchRepository(directory, recoveryRegistry = recovery)

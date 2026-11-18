@@ -1,7 +1,7 @@
 package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.storage.AtomicJsonFileStore
-import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
+import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.storage.QueryStorageCodec
 import com.theoriacodex.data.storage.QueryStorageRecord
 import com.theoriacodex.data.storage.mutateAndPersistWithRollback
@@ -21,7 +21,7 @@ import kotlinx.serialization.Serializable
 class FileBackedQueryRepository(
     baseDirectory: File,
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    recoveryRegistry: LegacyJsonRecoveryRegistry = LegacyJsonRecoveryRegistry(),
+    recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
 ) : QueryRepository {
     private val mutex = Mutex()
     private val storageFile = baseDirectory.resolve("query_store.json")
