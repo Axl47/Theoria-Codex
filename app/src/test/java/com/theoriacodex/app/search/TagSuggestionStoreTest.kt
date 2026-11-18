@@ -1,6 +1,5 @@
 package com.theoriacodex.app.search
 
-import com.google.gson.GsonBuilder
 import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
 import com.theoriacodex.domain.adapter.FacetedSearchScope
@@ -343,14 +342,12 @@ class TagSuggestionStoreTest {
     @Test
     fun `burst mutations coalesce into one debounced atomic write`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
-        val gson = GsonBuilder().setPrettyPrinting().create()
         var writeCount = 0
         val store = FileBackedTagSuggestionStore(
             storeFile = tempDir("tag-store-debounce-test").resolve("tag_suggestions.json"),
             persistenceDebounceMs = 500L,
             workDispatcher = dispatcher,
-            gson = gson,
-            fileStore = AtomicJsonFileStore(ioDispatcher = dispatcher, gson = gson),
+            fileStore = AtomicJsonFileStore(ioDispatcher = dispatcher),
             onWriteCompleted = { writeCount += 1 },
         )
         store.awaitLoaded()
@@ -445,12 +442,10 @@ class TagSuggestionStoreTest {
     @Test
     fun `close rejects mutations before flushing its final snapshot`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
-        val gson = GsonBuilder().setPrettyPrinting().create()
         val store = FileBackedTagSuggestionStore(
             storeFile = tempDir("tag-store-close-test").resolve("tag_suggestions.json"),
             workDispatcher = dispatcher,
-            gson = gson,
-            fileStore = AtomicJsonFileStore(ioDispatcher = dispatcher, gson = gson),
+            fileStore = AtomicJsonFileStore(ioDispatcher = dispatcher),
         )
         store.put(
             source = SourceKey.PIXIV,

@@ -25,7 +25,7 @@ class FileBackedUpdateStateStore(
     override suspend fun update(transform: (UpdateStateSnapshot) -> UpdateStateSnapshot) {
         mutex.withLock {
             val replacement = transform(readLocked())
-            fileStore.write(file, replacement)
+            fileStore.write(file, replacement, UpdateStateSnapshot.serializer())
             cachedSnapshot = replacement
         }
     }
@@ -35,6 +35,7 @@ class FileBackedUpdateStateStore(
         return fileStore.read(
             file = file,
             fallback = UpdateStateSnapshot(),
+            serializer = UpdateStateSnapshot.serializer(),
             logicalStore = "Updater state",
             onRecovery = recoveryRegistry::record,
         ).also { snapshot ->

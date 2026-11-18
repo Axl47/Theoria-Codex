@@ -10,27 +10,35 @@ import com.google.gson.GsonBuilder
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
-import com.theoriacodex.app.codex.CodexShareFile
-import com.theoriacodex.app.codex.CodexSharePost
+import com.theoriacodex.app.codex.codexSharePostSnapshot
+import com.theoriacodex.app.codex.encodeCodexShareFile
+import com.theoriacodex.app.codex.parseCodexShareFile
 import com.theoriacodex.app.search.FileBackedTagSuggestionStore
 import com.theoriacodex.app.update.ChangelogSection
 import com.theoriacodex.app.update.FileBackedUpdateStateStore
 import com.theoriacodex.app.update.PendingPostInstallChangelog
 import com.theoriacodex.app.update.UpdateStateSnapshot
+import com.theoriacodex.data.repository.FileBackedQueryRepository
 import com.theoriacodex.data.repository.OfflineMediaStore
-import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.PostStorageCodec
 import com.theoriacodex.data.storage.PostStorageRecord
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchFacet
+import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.VideoVariant
 import java.io.File
 import java.security.MessageDigest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -61,22 +69,17 @@ class ReleaseDataAcceptanceActivity : ComponentActivity() {
 private suspend fun verifyData(directory: File, phase: String) {
     val gson = GsonBuilder().serializeNulls().create()
     val updateFile = File(directory, "update.json")
-    val kotlinxUpdateFile = File(directory, "update-kotlinx.json")
+    val legacyUpdateFile = File(directory, "update-legacy.json")
     val shareFile = File(directory, "collection.json")
     val postFile = File(directory, "post.json")
     val legacyPostFile = File(directory, "legacy-post.json")
     val tagsFile = File(directory, "tags.json")
     if (phase == "write") {
         check(directory.mkdirs())
-        FileBackedUpdateStateStore(updateFile).apply {
-            setIgnoredRelease(RELEASE_ID)
-            setRemindLater(RELEASE_ID, REMIND_UNTIL)
-        }
-        kotlinxUpdateFile.writeText(DurableJson.encodeToString(UpdateStateSnapshot.serializer(), kotlinxUpdateState))
-        shareFile.writeText(gson.toJson(CodexShareFile(
-            title = "Acceptance collection",
-            posts = listOf(CodexSharePost(source = "PIXIV", sourcePostId = "42")),
-        )))
+        FileBackedUpdateStateStore(updateFile).update { updateState }
+        legacyUpdateFile.writeText(LEGACY_UPDATE_STATE)
+        FileBackedQueryRepository(directory).upsertAppliedQuery(QUERY_MODE, acceptanceQuery)
+        shareFile.writeText(encodeCodexShareFile("Acceptance & <collection>", listOf(videoPostFixture())))
         postFile.writeText(gson.toJson(PostStorageCodec.encode(videoPostFixture())))
         legacyPostFile.writeText(LEGACY_VIDEO_POST)
         writeLegacyOfflineManifest(File(directory, "offline"))
@@ -91,14 +94,9 @@ private suspend fun verifyData(directory: File, phase: String) {
             tags.close()
         }
     } else {
-        val snapshot = FileBackedUpdateStateStore(updateFile).snapshot()
-        check(snapshot.ignoredReleaseId == RELEASE_ID)
-        check(snapshot.remindLaterReleaseId == RELEASE_ID && snapshot.remindLaterUntilEpochMs == REMIND_UNTIL)
-        verifyKotlinxUpdateState(updateFile, kotlinxUpdateFile)
-        val wire = JsonParser.parseString(shareFile.readText()).asJsonObject
-        check(wire.keySet() == setOf("version", "title", "posts"))
-        val share = gson.fromJson(shareFile.readText(), CodexShareFile::class.java)
-        check(share.title == "Acceptance collection" && share.posts?.single()?.sourcePostId == "42")
+        verifyUpdateState(updateFile, legacyUpdateFile)
+        verifyQueryStore(directory)
+        verifyCodexShare(shareFile.readText())
         verifyVideoPost(postFile.readText())
         val legacyPost = requireNotNull(PostStorageCodec.decode(gson.fromJson(legacyPostFile.readText(), PostStorageRecord::class.java)))
         check(legacyPost.id == PostId(SourceKey.IWARA, "legacy-video"))
@@ -110,6 +108,7 @@ private suspend fun verifyData(directory: File, phase: String) {
         try {
             tags.awaitLoaded()
             check(tags.get(SourceKey.GELBOORU, 10).any { it.text == "fresh" })
+            check(JsonParser.parseString(tagsFile.readText()).asJsonObject.getAsJsonObject("sources").has("GELBOORU"))
         } finally {
             tags.close()
         }
@@ -117,20 +116,37 @@ private suspend fun verifyData(directory: File, phase: String) {
     }
 }
 
-/** The prototype kotlinx serializer survives R8 with readable keys and agrees with the Gson store both ways. */
-private suspend fun verifyKotlinxUpdateState(gsonFile: File, kotlinxFile: File) {
-    val written = kotlinxFile.readText()
-    check(DurableJson.decodeFromString(UpdateStateSnapshot.serializer(), written) == kotlinxUpdateState)
-    val wire = JsonParser.parseString(written).asJsonObject
+/** kotlinx serializers survive R8 with readable keys, and a file the Gson store wrote still loads. */
+private suspend fun verifyUpdateState(updateFile: File, legacyUpdateFile: File) {
+    check(FileBackedUpdateStateStore(updateFile).snapshot() == updateState)
+    val wire = JsonParser.parseString(updateFile.readText()).asJsonObject
     check(wire.keySet() == UPDATE_STATE_KEYS)
     val changelog = wire.getAsJsonObject("pendingPostInstallChangelog")
     check(changelog.keySet() == CHANGELOG_KEYS)
     check(changelog.getAsJsonArray("changelogSections").single().asJsonObject.keySet() == setOf("title", "bullets"))
-    check(FileBackedUpdateStateStore(kotlinxFile).snapshot() == kotlinxUpdateState)
-    check(DurableJson.decodeFromString(UpdateStateSnapshot.serializer(), gsonFile.readText()) == FileBackedUpdateStateStore(gsonFile).snapshot())
+    val legacy = FileBackedUpdateStateStore(legacyUpdateFile).snapshot()
+    check(legacy.ignoredReleaseId == RELEASE_ID && legacy.remindLaterUntilEpochMs == REMIND_UNTIL)
+    check(legacy.pendingPostInstallChangelog?.releaseName == "Tom & Jerry's <release>")
 }
 
-private val kotlinxUpdateState = PendingPostInstallChangelog(
+private suspend fun verifyQueryStore(directory: File) {
+    check(FileBackedQueryRepository(directory).observeAppliedQuery(QUERY_MODE).first() == acceptanceQuery)
+    val wire = JsonParser.parseString(File(directory, "query_store.json").readText()).asJsonObject
+    val record = wire.getAsJsonObject("queries").getAsJsonObject(QUERY_MODE)
+    check(record.keySet() == QUERY_KEYS)
+    check(record.getAsJsonArray("includeTerms").first().asJsonObject.keySet() == setOf("value", "facet", "sourceNamespace"))
+}
+
+private fun verifyCodexShare(json: String) {
+    val wire = JsonParser.parseString(json).asJsonObject
+    check(wire.keySet() == setOf("version", "title", "posts"))
+    check(wire.getAsJsonArray("posts").single().asJsonObject.keySet() == setOf("source", "sourcePostId", "snapshot"))
+    val imported = requireNotNull(parseCodexShareFile(json))
+    check(imported.title == "Acceptance & <collection>")
+    check(codexSharePostSnapshot(imported.posts.orEmpty().single())?.id == videoPostFixture().id)
+}
+
+private val updateState = PendingPostInstallChangelog(
     releaseId = RELEASE_ID,
     fromVersionCode = 1,
     versionCode = 2,
@@ -152,6 +168,15 @@ private val kotlinxUpdateState = PendingPostInstallChangelog(
     )
 }
 
+private val acceptanceQuery = Query(
+    mode = QueryMode.Source(SourceKey.PIXIV),
+    includeTerms = listOf(SearchTerm("a & b", SearchFacet.ARTIST, "artist")),
+    excludeTerms = listOf(SearchTerm("c")),
+    sort = SortMode.NEWEST,
+    dateRange = DateRange(1L, 2L),
+    minScore = 3,
+)
+
 private val UPDATE_STATE_KEYS = setOf(
     "lastSeenReleaseId", "pendingInstallReleaseId", "pendingInstallVersionCode", "ignoredReleaseId",
     "remindLaterReleaseId", "remindLaterUntilEpochMs", "pendingPostInstallChangelog", "lastInstalledChangelog",
@@ -160,6 +185,11 @@ private val UPDATE_STATE_KEYS = setOf(
 private val CHANGELOG_KEYS = setOf(
     "releaseId", "fromVersionCode", "versionCode", "tagName", "commitShaShort", "releaseName", "changelogMarkdown",
     "changelogSections",
+)
+
+private val QUERY_KEYS = setOf(
+    "schemaVersion", "modeType", "modeSource", "includeTags", "excludeTags", "sort", "dateFromEpochMs", "dateToEpochMs",
+    "minScore", "includeTerms", "excludeTerms", "includeTermGroups",
 )
 
 private fun verifyVideoPost(json: String) {
@@ -232,6 +262,12 @@ private const val LEGACY_VIDEO_POST = """{
     "media":[{"url":"https://example.test/gallery.webm","mime":"video/webm"}]
 }"""
 
+// What the Gson store wrote, HTML escapes included.
+private const val LEGACY_UPDATE_STATE = """{"ignoredReleaseId":42,"remindLaterReleaseId":42,"remindLaterUntilEpochMs":123456,""" +
+    """"pendingPostInstallChangelog":{"releaseId":42,"versionCode":2,"tagName":"v0.0.2","commitShaShort":"abc1234",""" +
+    """"releaseName":"Tom \u0026 Jerry\u0027s \u003crelease\u003e","changelogMarkdown":"","changelogSections":[]}}"""
+
+private const val QUERY_MODE = "acceptance"
 private const val RESULT_TAG = "TheoriaReleaseData"
 private const val RELEASE_ID = 42L
 private const val REMIND_UNTIL = 123_456L

@@ -22,10 +22,14 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.SerializationException
 
 /**
  * Verified recovery for legacy JSON reads and atomic whole-file replacement on an injected IO lane.
  * Store-specific schemas remain owned by callers. Writes compact JSON; older pretty-printed files still read.
+ * Stores pass a kotlinx [KSerializer] (encoded with [DurableJson]); the Gson overloads remain for JSON trees and for
+ * stores the serialization migration has not reached (.docs/exec/gson-to-kotlinx-serialization.html).
  */
 class AtomicJsonFileStore private constructor(
     private val ioDispatcher: CoroutineDispatcher,
@@ -52,12 +56,40 @@ class AtomicJsonFileStore private constructor(
         fileOperations = fileOperations,
     )
 
+    /** Gson reflective read, kept for stores that have not moved to kotlinx.serialization yet, and for JSON trees. */
     suspend fun <T> read(
         file: File,
         fallback: T,
         clazz: Class<T>,
         logicalStore: String = file.name,
         onRecovery: (CorruptionRecovery) -> Unit = {},
+    ): T = readDecoded(file, fallback, logicalStore, onRecovery, isMalformed = { it is JsonParseException }) { text ->
+        gson.fromJson(text, clazz)
+    }
+
+    /** kotlinx.serialization read under [DurableJson]; only a [SerializationException] counts as malformed. */
+    suspend fun <T : Any> read(
+        file: File,
+        fallback: T,
+        serializer: KSerializer<T>,
+        logicalStore: String = file.name,
+        onRecovery: (CorruptionRecovery) -> Unit = {},
+    ): T = readDecoded(file, fallback, logicalStore, onRecovery, isMalformed = { it is SerializationException }) { text ->
+        if (text.trim() == "null") null else DurableJson.decodeFromString(serializer, text)
+    }
+
+    /**
+     * Reads [file], or returns [fallback] when it is missing. Bytes that are not UTF-8, blank, a JSON null, or that
+     * [decode] rejects with an [isMalformed] failure are quarantined beside the file and reported through
+     * [onRecovery]; any other failure propagates.
+     */
+    private suspend fun <T> readDecoded(
+        file: File,
+        fallback: T,
+        logicalStore: String,
+        onRecovery: (CorruptionRecovery) -> Unit,
+        isMalformed: (RuntimeException) -> Boolean,
+        decode: (String) -> T?,
     ): T {
         return withContext(ioDispatcher) {
             val path = file.toPath()
@@ -67,6 +99,7 @@ class AtomicJsonFileStore private constructor(
                 throw IOException("Could not determine whether ${file.absolutePath} is readable")
             } else {
                 val bytes = fileOperations.readBytes(file)
+                fun quarantine(reason: String) = recover(file, bytes, fallback, logicalStore, reason, onRecovery)
                 val text = try {
                     StandardCharsets.UTF_8.newDecoder()
                         .onMalformedInput(CodingErrorAction.REPORT)
@@ -74,45 +107,17 @@ class AtomicJsonFileStore private constructor(
                         .decode(ByteBuffer.wrap(bytes))
                         .toString()
                 } catch (_: java.nio.charset.CharacterCodingException) {
-                    return@withContext recover(
-                        file = file,
-                        bytes = bytes,
-                        fallback = fallback,
-                        logicalStore = logicalStore,
-                        reason = "${file.name} is not valid UTF-8 JSON",
-                        onRecovery = onRecovery,
-                    )
+                    return@withContext quarantine("${file.name} is not valid UTF-8 JSON")
                 }
-                if (text.isBlank()) {
-                    return@withContext recover(
-                        file = file,
-                        bytes = bytes,
-                        fallback = fallback,
-                        logicalStore = logicalStore,
-                        reason = "${file.name} is empty",
-                        onRecovery = onRecovery,
-                    )
-                }
-                try {
-                    gson.fromJson(text, clazz) ?: recover(
-                        file = file,
-                        bytes = bytes,
-                        fallback = fallback,
-                        logicalStore = logicalStore,
-                        reason = "${file.name} contains a null JSON value",
-                        onRecovery = onRecovery,
-                    )
-                } catch (error: JsonParseException) {
+                if (text.isBlank()) return@withContext quarantine("${file.name} is empty")
+                val decoded = try {
+                    decode(text)
+                } catch (error: RuntimeException) {
+                    if (!isMalformed(error)) throw error
                     error.cancellationCause()?.let { cancellation -> throw cancellation }
-                    recover(
-                        file = file,
-                        bytes = bytes,
-                        fallback = fallback,
-                        logicalStore = logicalStore,
-                        reason = "${file.name} contains malformed JSON",
-                        onRecovery = onRecovery,
-                    )
+                    return@withContext quarantine("${file.name} contains malformed JSON")
                 }
+                decoded ?: quarantine("${file.name} contains a null JSON value")
             }
         }
     }
@@ -192,17 +197,23 @@ class AtomicJsonFileStore private constructor(
         }
     }
 
+    /** Gson reflective write, kept for stores that have not moved to kotlinx.serialization yet, and for JSON trees. */
     suspend fun <T> write(file: File, payload: T) {
-        writePayload(file, payload, maxBytes = null)
+        writePayload(file, maxBytes = null) { gson.toJson(payload) }
+    }
+
+    /** kotlinx.serialization write under [DurableJson]. */
+    suspend fun <T> write(file: File, payload: T, serializer: KSerializer<T>) {
+        writePayload(file, maxBytes = null) { DurableJson.encodeToString(serializer, payload) }
     }
 
     /** Flush a bounded operational intent before its caller starts irreversible work. */
     suspend fun <T> writeIntent(file: File, payload: T, maxBytes: Int) {
         require(maxBytes > 0)
-        writePayload(file, payload, maxBytes)
+        writePayload(file, maxBytes) { gson.toJson(payload) }
     }
 
-    private suspend fun <T> writePayload(file: File, payload: T, maxBytes: Int?) {
+    private suspend fun writePayload(file: File, maxBytes: Int?, encode: () -> String) {
         currentCoroutineContext().ensureActive()
         withContext(NonCancellable) {
             withContext(ioDispatcher) {
@@ -212,7 +223,7 @@ class AtomicJsonFileStore private constructor(
                 parent.mkdirs()
                 val tempFile = fileOperations.createTempFile(file)
                 try {
-                    writeTempPayload(tempFile, payload, maxBytes)
+                    writeTempPayload(tempFile, encode(), maxBytes)
                     try {
                         fileOperations.moveAtomically(tempFile, file)
                     } catch (_: AtomicMoveNotSupportedException) {
@@ -233,8 +244,7 @@ class AtomicJsonFileStore private constructor(
         newParents.forEach { fileOperations.syncDirectory(it.parentFile ?: File(".")) }
     }
 
-    private fun <T> writeTempPayload(file: File, payload: T, maxBytes: Int?) {
-        val text = gson.toJson(payload)
+    private fun writeTempPayload(file: File, text: String, maxBytes: Int?) {
         if (maxBytes == null) file.writeText(text)
         else {
             val bytes = text.toByteArray(Charsets.UTF_8)

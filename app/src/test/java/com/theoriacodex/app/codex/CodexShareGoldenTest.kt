@@ -1,7 +1,8 @@
 package com.theoriacodex.app.codex
 
-import com.google.gson.Gson
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.data.storage.DurableJson
+import com.theoriacodex.data.storage.assertGsonParity
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.PostTaxonomyTerm
@@ -15,12 +16,50 @@ class CodexShareGoldenTest {
     @Test
     fun `an export imports exactly like the file older builds exported`() {
         val golden = checkNotNull(javaClass.getResource("/golden/codex-share/gson-export.json")).readText()
-        val current = Gson().toJson(buildCodexShareFile(TITLE, posts()))
+        val current = encodeCodexShareFile(TITLE, posts())
 
         val imported = imported(current)
         assertEquals(imported(golden), imported)
         assertEquals(TITLE, imported.first)
         assertEquals(listOf("42", "7"), imported.second.map { it?.id?.sourcePostId })
+    }
+
+    @Test
+    fun `the kotlinx serializer matches Gson`() {
+        val image = CodexShareImageRef("https://e.test/a?x=1&y=2", null, "image/png", listOf("p"), listOf("f"), true)
+        val profile = CodexShareCreatorProfile("PIXIV", "A & B", "1", "https://e.test/u/1", "user:1")
+        val snapshot = CodexSharePostSnapshot(
+            preview = image,
+            full = image,
+            media = listOf(image),
+            pageUrl = "https://e.test/p",
+            width = 1,
+            height = 2,
+            canonicalTags = listOf("c"),
+            rawTags = listOf("r"),
+            taxonomy = listOf(CodexShareTaxonomyTerm("v", "ARTIST", "artist", "t")),
+            authorName = "<author>",
+            createdAtEpochMs = 3L,
+            title = "It's",
+            creatorProfile = profile,
+            creatorProfiles = listOf(profile),
+            durationMs = 4L,
+            mediaCount = 5,
+        )
+        assertGsonParity(
+            samples = listOf(
+                CodexShareFile(),
+                CodexShareFile(2, TITLE, listOf(CodexSharePost("PIXIV", "42", snapshot))),
+            ),
+            goldenJson = listOf(checkNotNull(javaClass.getResource("/golden/codex-share/gson-export.json")).readText()),
+        )
+    }
+
+    @Test
+    fun `local media paths are never exported`() {
+        val image = CodexShareImageRef(url = "https://e.test/a", localPath = "/data/user/0/x")
+        val encoded = DurableJson.encodeToString(CodexShareImageRef.serializer(), image)
+        assertEquals("""{"url":"https://e.test/a"}""", encoded)
     }
 
     private fun imported(json: String) = checkNotNull(parseCodexShareFile(json)).let { file ->

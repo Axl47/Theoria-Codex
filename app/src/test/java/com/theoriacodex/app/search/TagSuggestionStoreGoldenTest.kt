@@ -1,6 +1,7 @@
 package com.theoriacodex.app.search
 
 import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
+import com.theoriacodex.data.storage.assertGsonParity
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.SearchFacet
@@ -47,9 +48,21 @@ class TagSuggestionStoreGoldenTest {
         }
     }
 
+    @Test
+    fun `the kotlinx serializer matches Gson`() {
+        val entry = TagStoreEntry("a & b", "ARTIST", "artist", "artist", 3, "A <b>", listOf("SEEN", "TRENDING"))
+        assertGsonParity(
+            samples = listOf(TagStoreSnapshot(), TagStoreSnapshot(mapOf("GELBOORU" to listOf(entry)))),
+            goldenJson = listOf(golden("gson-written.json"), golden("legacy.json")),
+        )
+        assertGsonParity(samples = listOf(TagStoreEntry(), entry))
+    }
+
+    private fun golden(name: String) = checkNotNull(javaClass.getResource("/golden/tag-suggestions/$name")).readText()
+
     private suspend fun withStore(golden: String, block: (FileBackedTagSuggestionStore) -> Unit) {
         val file = tempFolder.newFolder().resolve("tag_suggestions.json")
-        file.writeText(checkNotNull(javaClass.getResource("/golden/tag-suggestions/$golden")).readText())
+        file.writeText(golden(golden))
         val recoveries = LegacyJsonRecoveryRegistry()
         val store = FileBackedTagSuggestionStore(file, persistenceDebounceMs = 0L, recoveryRegistry = recoveries)
         try {

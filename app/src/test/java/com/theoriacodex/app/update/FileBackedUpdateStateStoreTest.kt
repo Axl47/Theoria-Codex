@@ -1,12 +1,12 @@
 package com.theoriacodex.app.update
 
-import com.google.gson.GsonBuilder
-import com.google.gson.JsonSerializer
-import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
 import java.io.File
+import java.io.IOException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -118,20 +118,17 @@ class FileBackedUpdateStateStoreTest {
         val file = File(tempDir("update-store-failed-write-test-"), "update_state.json")
         FileBackedUpdateStateStore(file).setLastSeenReleaseId(800L)
         val priorBody = file.readText()
-        val failingGson = GsonBuilder()
-            .registerTypeAdapter(
-                UpdateStateSnapshot::class.java,
-                JsonSerializer<UpdateStateSnapshot> { _, _, _ -> error("serialization failed") },
-            )
-            .create()
-        val store = FileBackedUpdateStateStore(
-            file = file,
-            fileStore = AtomicJsonFileStore(gson = failingGson),
-        )
+        val store = FileBackedUpdateStateStore(file)
+        store.snapshot()
+        // The replacement's temp file cannot be created beside a read-only target.
+        check(file.parentFile.setWritable(false))
+        val failure = try {
+            runCatching { store.setIgnoredRelease(801L) }.exceptionOrNull()
+        } finally {
+            file.parentFile.setWritable(true)
+        }
 
-        val failure = runCatching { store.setIgnoredRelease(801L) }.exceptionOrNull()
-
-        assertTrue(failure is IllegalStateException)
+        assertTrue(failure is IOException)
         assertEquals(priorBody, file.readText())
         assertEquals(800L, store.snapshot().lastSeenReleaseId)
         assertNull(store.snapshot().ignoredReleaseId)
@@ -149,24 +146,20 @@ class FileBackedUpdateStateStoreTest {
             )
         }
         val priorBody = file.readText()
-        val cancellingGson = GsonBuilder()
-            .registerTypeAdapter(
-                UpdateStateSnapshot::class.java,
-                JsonSerializer<UpdateStateSnapshot> { _, _, _ -> throw CancellationException("cancelled") },
-            )
-            .create()
-        val store = FileBackedUpdateStateStore(
-            file = file,
-            fileStore = AtomicJsonFileStore(gson = cancellingGson),
-        )
+        val store = FileBackedUpdateStateStore(file)
+        // Cancelled after the transform, so the write itself observes the cancellation.
+        val caller = Job()
 
         val failure = runCatching {
-            store.update { current ->
-                current.copy(
-                    ignoredReleaseId = null,
-                    remindLaterReleaseId = null,
-                    remindLaterUntilEpochMs = null,
-                )
+            withContext(caller) {
+                store.update { current ->
+                    caller.cancel()
+                    current.copy(
+                        ignoredReleaseId = null,
+                        remindLaterReleaseId = null,
+                        remindLaterUntilEpochMs = null,
+                    )
+                }
             }
         }.exceptionOrNull()
 

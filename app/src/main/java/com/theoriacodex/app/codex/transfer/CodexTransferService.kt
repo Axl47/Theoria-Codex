@@ -1,7 +1,6 @@
 package com.theoriacodex.app.codex.transfer
 
-import com.google.gson.Gson
-import com.theoriacodex.app.codex.buildCodexShareFile
+import com.theoriacodex.app.codex.encodeCodexShareFile
 import com.theoriacodex.app.codex.parseCodexShareFile
 import com.theoriacodex.domain.source.CustomSourceIds
 import com.theoriacodex.app.codex.resolveCodexShareImportPost
@@ -66,7 +65,6 @@ class CodexTransferService internal constructor(
     private val transactions: CodexLikesTransactions,
     private val cacheRepository: CacheRepository,
     private val sourceRegistry: SourceAdapterRegistry,
-    private val gson: Gson = Gson(),
     private val workerDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val canonicalizePost: (Post) -> Post = { it },
 ) {
@@ -83,7 +81,7 @@ class CodexTransferService internal constructor(
             ExportDocument(
                 title = codex.name,
                 fileName = "${sanitizeCodexExportName(codex.name)}.json",
-                text = gson.toJson(buildCodexShareFile(title = codex.name, posts = posts)),
+                text = encodeCodexShareFile(title = codex.name, posts = posts),
             )
         )
     }

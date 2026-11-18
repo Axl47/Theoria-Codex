@@ -1,6 +1,9 @@
 package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
+import com.theoriacodex.data.storage.QueryStorageCodec
+import com.theoriacodex.data.storage.QueryStorageRecord
+import com.theoriacodex.data.storage.assertGsonParity
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
@@ -63,6 +66,27 @@ internal class QueryStoreGoldenTest : FileBackedRepositoryTestFixture() {
             repository.observeAppliedQuery("grouped").first(),
         )
         assertTrue(recoveries.recoveries.value.isEmpty())
+    }
+
+    // legacy.json is left out: Gson stores a null "sort" as null, kotlinx repairs it to the default, and the test
+    // above shows both load the same search.
+    @Test
+    fun `the kotlinx serializers match Gson`() {
+        val record = QueryStorageCodec.encode(
+            Query(
+                mode = QueryMode.Source(SourceKey.PIXIV),
+                includeTerms = listOf(SearchTerm("a & b", SearchFacet.ARTIST, "artist")),
+                excludeTerms = listOf(SearchTerm("c", SearchFacet.LANGUAGE, "language")),
+                sort = SortMode.NEWEST,
+                dateRange = DateRange(1L, 2L),
+                minScore = 3,
+            ),
+        )
+        assertGsonParity(samples = listOf(QueryStorageRecord(), record))
+        assertGsonParity(
+            samples = listOf(QueryStoreFile(), QueryStoreFile(mapOf("search" to record))),
+            goldenJson = listOf(golden("gson-written.json")),
+        )
     }
 
     private fun repositoryWith(json: String, recoveries: LegacyJsonRecoveryRegistry = LegacyJsonRecoveryRegistry()) =

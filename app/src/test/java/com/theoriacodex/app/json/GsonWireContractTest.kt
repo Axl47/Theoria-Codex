@@ -122,12 +122,6 @@ private fun storageFixtures() = listOf(
         2,
     ),
     LegacyFixture(
-        "com.theoriacodex.data.repository.QueryStoreFile",
-        """{"queries":{},"scrollOffsets":{"legacy-query":7}}""",
-        "queries",
-        emptyMap<String, Any>(),
-    ),
-    LegacyFixture(
         "com.theoriacodex.data.storage.LegacyRecentsStoreFile",
         """{"watchedPosts":[],"searches":[]}""",
         "watchedPosts",
@@ -139,49 +133,13 @@ private fun storageFixtures() = listOf(
         "items",
         emptyMap<String, Any>(),
     ),
-    LegacyFixture(
-        "com.theoriacodex.app.update.UpdateStateSnapshot",
-        """{"lastSeenReleaseId":701,"ignoredReleaseId":702}""",
-        "ignoredReleaseId",
-        702L,
-    ),
 )
 
 private fun appAndProviderFixtures() = listOf(
-    LegacyFixture(
-        "com.theoriacodex.app.search.TagStoreSnapshot",
-        """{"sources":{"GELBOORU":[{"text":"legacy","type":"trending","count":9}]}}""",
-        "sources",
-        mapOf(
-            "GELBOORU" to listOf(
-                mapOf(
-                    "text" to "legacy",
-                    "facet" to null,
-                    "sourceNamespace" to null,
-                    "type" to "trending",
-                    "count" to 9,
-                    "alternateText" to null,
-                    "origins" to null,
-                )
-            )
-        ),
-    ),
-    LegacyFixture(
-        "com.theoriacodex.app.codex.CodexShareFile",
-        """{"version":1,"title":"Legacy","posts":[{"source":"PIXIV","sourcePostId":"42"}]}""",
-        "version",
-        1,
-    ),
     LegacyFixture(
         "com.theoriacodex.app.sourceauth.CredentialEnvelopeRecord",
         """{"formatVersion":1,"keyVersion":1,"iv":"aXY=","ciphertext":"Y3Q="}""",
         "formatVersion",
         1,
-    ),
-    LegacyFixture(
-        "com.theoriacodex.sources.hitomi.HitomiPageToken",
-        """{"version":2,"queryHash":"legacy-query","primaryKey":"all","primaryOffset":12}""",
-        "primaryOffset",
-        12L,
     ),
 )
