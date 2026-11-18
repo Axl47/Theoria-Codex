@@ -1,15 +1,17 @@
 package com.theoriacodex.data.repository
 
-import androidx.datastore.core.DataStore
+import com.theoriacodex.data.storage.AsynchronousStore
+import com.theoriacodex.data.storage.DurableStoreStatus
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
+import com.theoriacodex.data.storage.JsonDataStore
 import com.theoriacodex.data.storage.openJsonDataStore
-import com.theoriacodex.data.storage.updateDataInBackground
 import com.theoriacodex.domain.source.SiteProfile
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.SerialName
@@ -28,9 +30,9 @@ class DataStoreSiteProfileRepository(
     baseDirectory: File,
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
-) : SiteProfileRepository {
+) : SiteProfileRepository, AsynchronousStore {
     private val storeFile = baseDirectory.resolve(SITE_PROFILES_FILE_NAME)
-    private val dataStore: DataStore<SiteProfileStoreFile> = openJsonDataStore(
+    private val dataStore: JsonDataStore<SiteProfileStoreFile> = openJsonDataStore(
         file = storeFile,
         logicalStore = "Custom sites",
         schemaVersion = SITE_PROFILES_SCHEMA_VERSION,
@@ -39,6 +41,10 @@ class DataStoreSiteProfileRepository(
         scope = scope,
         recoveries = recoveryRegistry,
     )
+
+    override val storageStatus: StateFlow<DurableStoreStatus> = dataStore.storageStatus
+
+    override suspend fun awaitReady() = dataStore.awaitReady()
 
     override fun observeProfiles(): Flow<List<SiteProfile>> =
         dataStore.data.map(SiteProfileStoreFile::profiles).distinctUntilChanged()
@@ -59,7 +65,7 @@ class DataStoreSiteProfileRepository(
     /** Applies [change] to the readable profiles in one transaction and returns its result. */
     private suspend fun <R> mutate(change: (List<SiteProfile>) -> Pair<List<SiteProfile>, R>): R {
         var result: Result<R>? = null
-        dataStore.updateDataInBackground { stored ->
+        dataStore.update { stored ->
             val (next, outcome) = change(stored.profiles())
             result = Result.success(outcome)
             if (next == stored.profiles()) stored else stored.withProfiles(next)

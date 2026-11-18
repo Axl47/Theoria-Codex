@@ -519,11 +519,16 @@ internal class DefaultTheoriaAppContainer(
         }
     }
 
-    /** Complete typed-store migration before any route can observe default placeholder state. */
+    /**
+     * Complete typed-store migration before any route can observe default placeholder state. Every DataStore must be
+     * awaited here: one that cannot open throws, which shows the startup failure screen, while collectors started
+     * during construction wait for it instead of crashing. Retry calls this again on the same container.
+     */
     suspend fun awaitDurableStores() = coroutineScope {
         // The old stored host list; allowed hosts now come from the saved sites.
         appContext.deleteSharedPreferences("browser_verified_sites")
         // Before the app is ready: a request racing an empty list would be challenged and trip a 10-minute outage.
+        siteProfiles.awaitReady()
         cookieBridge.updateSiteHosts(siteHosts(siteProfiles.observeProfiles().first()))
         cookieBridge.updateBuiltInAgents(builtInAgents.read())
         val settingsReady = async { settingsRepository.awaitReady() }
