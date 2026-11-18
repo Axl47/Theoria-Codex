@@ -3,6 +3,8 @@ name: Verify
 # Runs the parts of scripts/check.sh in parallel jobs, then records the result.
 # - Pull requests run `tests`, `static` and `lint`, unless this exact code already passed them (on a Mac
 #   with `scripts/check.sh --record`, or in an earlier run). They never run R8 and only read caches.
+# - The screenshots part compares against Linux-rendered references, so a Mac never records it. Pull
+#   requests run it unless this exact code already passed it here.
 # - Main and Release call this workflow and choose the parts themselves: Main always runs all of
 #   them, Release only the ones whose result is missing.
 # The final `Verify` job always reports, so it can be the single required status check.
@@ -20,6 +22,10 @@ on:
         description: Run the release part (minified/R8 builds) and record it.
         type: boolean
         default: false
+      screenshots:
+        description: Compare the screenshot tests with their Linux references and record it.
+        type: boolean
+        default: true
     secrets:
       GRADLE_ENCRYPTION_KEY:
         required: false
@@ -54,6 +60,7 @@ jobs:
           IS_PR: ${{ github.event_name == 'pull_request' }}
           RUN_CHECK: ${{ inputs.check }}
           RUN_RELEASE: ${{ inputs.release }}
+          RUN_SCREENSHOTS: ${{ inputs.screenshots }}
         run: |
           if [[ "$IS_PR" == true ]]; then
             RUN_RELEASE=false
@@ -63,10 +70,12 @@ jobs:
             else
               RUN_CHECK=true
             fi
+            if python3 scripts/release_gate.py has screenshots; then RUN_SCREENSHOTS=false; else RUN_SCREENSHOTS=true; fi
           fi
           parts=()
           [[ "$RUN_CHECK" == true ]] && parts+=('"tests"' '"static"' '"lint"')
           [[ "$RUN_RELEASE" == true ]] && parts+=('"release"')
+          [[ "$RUN_SCREENSHOTS" == true ]] && parts+=('"screenshots"')
           echo "check=$RUN_CHECK" >> "$GITHUB_OUTPUT"
           echo "parts=[$(IFS=,; echo "${parts[*]}")]" >> "$GITHUB_OUTPUT"
 
@@ -122,6 +131,20 @@ jobs:
       - name: Run the ${{ matrix.part }} part
         run: bash scripts/check.sh --part "${{ matrix.part }}"
 
+      # The new Linux references for `scripts/screenshots.sh record`, rendered only when a comparison failed.
+      - name: Render screenshot references
+        id: render
+        if: failure() && matrix.part == 'screenshots'
+        run: bash scripts/screenshots.sh capture
+
+      - name: Upload screenshot references
+        if: failure() && steps.render.outcome == 'success'
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: screenshots
+          path: app/src/test/screenshots/*.png
+          retention-days: 14
+
       # Tells the final job, which records results, that this part passed.
       - name: Mark the part passed
         run: touch build/reports/timings/passed
@@ -166,6 +189,7 @@ jobs:
             build/reports/quality/
             build/reports/jscpd/
             build/reports/kover/
+            app/build/outputs/roborazzi-compare/
           if-no-files-found: warn
           retention-days: 14
 
@@ -211,6 +235,11 @@ jobs:
         if: hashFiles('timings/ci-timings-release/passed') != ''
         continue-on-error: ${{ github.event_name != 'push' }}
         run: python3 scripts/release_gate.py record release
+
+      - name: Record the screenshots part
+        if: hashFiles('timings/ci-timings-screenshots/passed') != ''
+        continue-on-error: ${{ github.event_name != 'push' }}
+        run: python3 scripts/release_gate.py record screenshots
 
       - name: Require every part that ran to pass
         if: always()
