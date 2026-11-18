@@ -14,7 +14,14 @@ import com.theoriacodex.app.statistics.StatsSharePost
 import com.theoriacodex.app.update.ChangelogSection
 import com.theoriacodex.app.update.PendingPostInstallChangelog
 import com.theoriacodex.app.update.UpdateStateSnapshot
+import com.theoriacodex.data.repository.DATASTORE_SETTINGS_FILE_NAME
+import com.theoriacodex.data.repository.DATASTORE_STATISTICS_FILE_NAME
+import com.theoriacodex.data.repository.DATASTORE_UI_RESTORE_FILE_NAME
+import com.theoriacodex.data.repository.DataStoreSettingsRepository
+import com.theoriacodex.data.repository.DataStoreStatisticsRepository
+import com.theoriacodex.data.repository.DataStoreUiRestoreRepository
 import com.theoriacodex.data.repository.RecentSearchKind
+import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.ImageRefStorageRecord
 import com.theoriacodex.data.storage.PostStorageCodec
@@ -35,6 +42,10 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.VideoVariant
 import com.theoriacodex.domain.source.SiteCredentials
 import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.KSerializer
 import org.json.JSONObject
@@ -139,6 +150,33 @@ class InstalledJsonCompatibilityDeviceTest {
             "codices",
             "overall",
         )
+    }
+
+    @Test
+    fun dataStoreFilesKeepStableKeysInTheInstalledApk() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val directory = File(context.cacheDir, "release-json-test/datastore").apply {
+            deleteRecursively()
+            mkdirs()
+        }
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        try {
+            DataStoreSettingsRepository(directory, scope).updateSettings { it.copy(oldSearchBar = true) }
+            DataStoreUiRestoreRepository(directory, scope).setSearchScrollState("h", SearchScrollState(7, 12))
+            DataStoreStatisticsRepository(directory, scope).recordAppOpen()
+            fun keys(name: String) = JSONObject(directory.resolve(name).readText())
+            assertEquals(setOf("schemaVersion", "settings"), keys(DATASTORE_SETTINGS_FILE_NAME).keySetCompat())
+            assertEquals(true, keys(DATASTORE_SETTINGS_FILE_NAME).getJSONObject("settings").getBoolean("oldSearchBar"))
+            val state = keys(DATASTORE_UI_RESTORE_FILE_NAME).getJSONObject("state")
+            assertEquals(
+                setOf("firstVisibleItemIndex", "firstVisibleItemOffsetPx"),
+                state.getJSONObject("searchScrollStates").getJSONObject("h").keySetCompat(),
+            )
+            assertEquals(1L, keys(DATASTORE_STATISTICS_FILE_NAME).getJSONObject("statistics").getLong("appOpenCount"))
+        } finally {
+            scope.cancel()
+            directory.deleteRecursively()
+        }
     }
 
     @Test

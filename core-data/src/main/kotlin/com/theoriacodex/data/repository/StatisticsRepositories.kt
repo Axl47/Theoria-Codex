@@ -1,20 +1,14 @@
 package com.theoriacodex.data.repository
 
 import androidx.datastore.core.DataStore
-import androidx.datastore.core.DataMigration
-import java.time.Clock
-import java.time.LocalDate
 import androidx.datastore.core.DataStoreFactory
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
-import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
-import com.google.gson.reflect.TypeToken
 import com.theoriacodex.data.storage.AsynchronousStore
 import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.data.storage.DurableStorePhase
 import com.theoriacodex.data.storage.DurableStoreStatus
-import com.theoriacodex.data.storage.GsonDataStoreSerializer
-import com.theoriacodex.data.storage.UnsupportedStoreSchemaException
+import com.theoriacodex.data.storage.JsonDataStoreSerializer
 import com.theoriacodex.data.storage.preserveCorruptFile
 import com.theoriacodex.data.storage.updateDataInBackground
 import com.theoriacodex.domain.model.Query
@@ -22,6 +16,8 @@ import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
+import java.time.Clock
+import java.time.LocalDate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -38,51 +34,58 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 const val DATASTORE_STATISTICS_FILE_NAME = "statistics_store_v1.json"
 internal const val STATISTICS_DATASTORE_SCHEMA_VERSION = 2
 
+@Serializable
 internal data class StatisticsTagCountRecord(
-    @field:SerializedName("source") val source: String = "",
-    @field:SerializedName("tag") val tag: String = "",
-    @field:SerializedName("count") val count: Long = 0L,
+    @field:SerializedName("source") @SerialName("source") val source: String = "",
+    @field:SerializedName("tag") @SerialName("tag") val tag: String = "",
+    @field:SerializedName("count") @SerialName("count") val count: Long = 0L,
 )
 
 /**
  * A searched term other than a portable general tag. These live apart from [StatisticsTagCountRecord]s
  * so a build that predates typed counting skips them instead of reading an artist as a general tag.
  */
+@Serializable
 internal data class StatisticsTypedTagCountRecord(
-    @field:SerializedName("source") val source: String = "",
-    @field:SerializedName("tag") val tag: String = "",
-    @field:SerializedName("facet") val facet: String = "",
-    @field:SerializedName("sourceNamespace") val sourceNamespace: String? = null,
-    @field:SerializedName("count") val count: Long = 0L,
+    @field:SerializedName("source") @SerialName("source") val source: String = "",
+    @field:SerializedName("tag") @SerialName("tag") val tag: String = "",
+    @field:SerializedName("facet") @SerialName("facet") val facet: String = "",
+    @field:SerializedName("sourceNamespace") @SerialName("sourceNamespace") val sourceNamespace: String? = null,
+    @field:SerializedName("count") @SerialName("count") val count: Long = 0L,
 )
 
+/** Lifetime statistics in `statistics_store_v1.json` and backups. Backups still use Gson, so it keeps both names. */
+@Serializable
 internal data class StatisticsStoreRecord(
-    @field:SerializedName("history") val history: Map<String, DailyActivity> = emptyMap(),
-    @field:SerializedName("codexStatistics") val codexStatistics: Map<String, CodexStatistics> = emptyMap(),
-    @field:SerializedName("appOpenCount") val appOpenCount: Long = 0L,
-    @field:SerializedName("totalForegroundMs") val totalForegroundMs: Long = 0L,
-    @field:SerializedName("browsingMs") val browsingMs: Long = 0L,
-    @field:SerializedName("watchingMs") val watchingMs: Long = 0L,
-    @field:SerializedName("codexMs") val codexMs: Long = 0L,
-    @field:SerializedName("watchedPostCount") val watchedPostCount: Long = 0L,
-    @field:SerializedName("watchedBySource") val watchedBySource: Map<String, Long> = emptyMap(),
-    @field:SerializedName("watchedByTag") val watchedByTag: List<StatisticsTagCountRecord> = emptyList(),
-    @field:SerializedName("searchCount") val searchCount: Long = 0L,
-    @field:SerializedName("searchesBySource") val searchesBySource: Map<String, Long> = emptyMap(),
-    @field:SerializedName("searchesByTag") val searchesByTag: List<StatisticsTagCountRecord> = emptyList(),
-    @field:SerializedName("searchesByTagSeeded") val searchesByTagSeeded: Boolean = false,
-    @field:SerializedName("searchesByTypedTag") val searchesByTypedTag: List<StatisticsTypedTagCountRecord> = emptyList(),
-    @field:SerializedName("searchesByTypedTagSeeded") val searchesByTypedTagSeeded: Boolean = false,
-    @field:SerializedName("forYouSearchCount") val forYouSearchCount: Long = 0L,
-    @field:SerializedName("forYouSaveCount") val forYouSaveCount: Long = 0L,
-    @field:SerializedName("postUrlCopyCount") val postUrlCopyCount: Long = 0L,
-    @field:SerializedName("codexEntryCounts") val codexEntryCounts: Map<String, Long> = emptyMap(),
-    @field:SerializedName("translatedPhraseCount") val translatedPhraseCount: Long = 0L,
+    @field:SerializedName("history") @SerialName("history") val history: Map<String, DailyActivity> = emptyMap(),
+    @field:SerializedName("codexStatistics") @SerialName("codexStatistics") val codexStatistics: Map<String, CodexStatistics> = emptyMap(),
+    @field:SerializedName("appOpenCount") @SerialName("appOpenCount") val appOpenCount: Long = 0L,
+    @field:SerializedName("totalForegroundMs") @SerialName("totalForegroundMs") val totalForegroundMs: Long = 0L,
+    @field:SerializedName("browsingMs") @SerialName("browsingMs") val browsingMs: Long = 0L,
+    @field:SerializedName("watchingMs") @SerialName("watchingMs") val watchingMs: Long = 0L,
+    @field:SerializedName("codexMs") @SerialName("codexMs") val codexMs: Long = 0L,
+    @field:SerializedName("watchedPostCount") @SerialName("watchedPostCount") val watchedPostCount: Long = 0L,
+    @field:SerializedName("watchedBySource") @SerialName("watchedBySource") val watchedBySource: Map<String, Long> = emptyMap(),
+    @field:SerializedName("watchedByTag") @SerialName("watchedByTag") val watchedByTag: List<StatisticsTagCountRecord> = emptyList(),
+    @field:SerializedName("searchCount") @SerialName("searchCount") val searchCount: Long = 0L,
+    @field:SerializedName("searchesBySource") @SerialName("searchesBySource") val searchesBySource: Map<String, Long> = emptyMap(),
+    @field:SerializedName("searchesByTag") @SerialName("searchesByTag") val searchesByTag: List<StatisticsTagCountRecord> = emptyList(),
+    @field:SerializedName("searchesByTagSeeded") @SerialName("searchesByTagSeeded") val searchesByTagSeeded: Boolean = false,
+    @field:SerializedName("searchesByTypedTag") @SerialName("searchesByTypedTag") val searchesByTypedTag: List<StatisticsTypedTagCountRecord> = emptyList(),
+    @field:SerializedName("searchesByTypedTagSeeded") @SerialName("searchesByTypedTagSeeded") val searchesByTypedTagSeeded: Boolean = false,
+    @field:SerializedName("forYouSearchCount") @SerialName("forYouSearchCount") val forYouSearchCount: Long = 0L,
+    @field:SerializedName("forYouSaveCount") @SerialName("forYouSaveCount") val forYouSaveCount: Long = 0L,
+    @field:SerializedName("postUrlCopyCount") @SerialName("postUrlCopyCount") val postUrlCopyCount: Long = 0L,
+    @field:SerializedName("codexEntryCounts") @SerialName("codexEntryCounts") val codexEntryCounts: Map<String, Long> = emptyMap(),
+    @field:SerializedName("translatedPhraseCount") @SerialName("translatedPhraseCount") val translatedPhraseCount: Long = 0L,
     @field:SerializedName("translatedSourceCharacterCount")
+    @SerialName("translatedSourceCharacterCount")
     val translatedSourceCharacterCount: Long = 0L,
 ) {
     fun toDomain(): LifetimeStatistics {
@@ -180,16 +183,16 @@ internal data class StatisticsStoreRecord(
     }
 }
 
+@Serializable
 internal data class StatisticsDataStoreFile(
-    @field:SerializedName("schemaVersion")
+    @SerialName("schemaVersion")
     val schemaVersion: Int = STATISTICS_DATASTORE_SCHEMA_VERSION,
-    @field:SerializedName("statistics")
+    @SerialName("statistics")
     val statistics: StatisticsStoreRecord = StatisticsStoreRecord(),
 ) {
     fun toDomain(): LifetimeStatistics = statistics.toDomain()
 
     fun validate() {
-        require(schemaVersion > 0) { "Statistics schema version must be positive" }
         statistics.validate()
     }
 
@@ -411,38 +414,19 @@ internal object StatisticsPolicies {
 class DataStoreStatisticsRepository(
     baseDirectory: File,
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
-    gson: Gson = Gson(),
     private val clock: Clock = Clock.systemDefaultZone(),
 ) : StatisticsRepository, AsynchronousStore {
     private val storeFile = baseDirectory.resolve(DATASTORE_STATISTICS_FILE_NAME)
     private val mutableStorageStatus = MutableStateFlow(DurableStoreStatus())
     private val defaultValue = StatisticsDataStoreFile()
     private val dataStore: DataStore<StatisticsDataStoreFile> = DataStoreFactory.create(
-        serializer = GsonDataStoreSerializer(
+        serializer = JsonDataStoreSerializer(
             storeName = DATASTORE_STATISTICS_FILE_NAME,
+            schemaVersion = STATISTICS_DATASTORE_SCHEMA_VERSION,
             defaultValue = defaultValue,
-            type = object : TypeToken<StatisticsDataStoreFile>() {}.type,
-            gson = gson,
-            validate = { stored ->
-                if (stored.schemaVersion > STATISTICS_DATASTORE_SCHEMA_VERSION) {
-                    throw UnsupportedStoreSchemaException(
-                        storeName = DATASTORE_STATISTICS_FILE_NAME,
-                        actual = stored.schemaVersion,
-                        supported = STATISTICS_DATASTORE_SCHEMA_VERSION,
-                    )
-                }
-                require(stored.schemaVersion in 1..STATISTICS_DATASTORE_SCHEMA_VERSION) {
-                    "Unsupported statistics schema ${stored.schemaVersion}"
-                }
-                stored.validate()
-            },
+            serializer = StatisticsDataStoreFile.serializer(),
+            validate = StatisticsDataStoreFile::validate,
         ),
-        migrations = listOf(object : DataMigration<StatisticsDataStoreFile> {
-            override suspend fun shouldMigrate(currentData: StatisticsDataStoreFile) = currentData.schemaVersion == 1
-            override suspend fun migrate(currentData: StatisticsDataStoreFile) =
-                currentData.copy(schemaVersion = STATISTICS_DATASTORE_SCHEMA_VERSION)
-            override suspend fun cleanUp() = Unit
-        }),
         corruptionHandler = ReplaceFileCorruptionHandler { corruption ->
             mutableStorageStatus.update { current ->
                 current.copy(

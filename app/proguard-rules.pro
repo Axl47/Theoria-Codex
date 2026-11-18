@@ -24,14 +24,6 @@
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
--keepclassmembers class com.theoriacodex.data.repository.UiRestoreDataStoreFile {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.repository.StatisticsDataStoreFile {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
 -keepclassmembers class com.theoriacodex.data.repository.StatisticsStoreRecord {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
@@ -56,64 +48,7 @@
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
--keepclassmembers class com.theoriacodex.data.repository.LegacySettingsStoreRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.repository.LegacyProviderHealthSnapshotRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.repository.LegacyFavoriteTagEntryRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.repository.LegacyForYouBlacklistEntryRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.repository.LegacyRecommendationProfileRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.repository.LegacyUiRestoreStoreRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.repository.FeedFabRestoreState {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.repository.SearchAnimationFilterRestoreState {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.repository.LegacySearchScrollStateRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.repository.LegacyViewerLaunchContextRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
-
--keepclassmembers class com.theoriacodex.data.repository.CodexStoreFile {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.repository.CodexRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.repository.CodexAutomaticTagRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.repository.CodexItemRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.repository.SettingsStoreFile {
+-keepclassmembers class com.theoriacodex.data.repository.SettingsStoreRecord {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
@@ -133,18 +68,6 @@
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
--keepclassmembers class com.theoriacodex.data.repository.UiRestoreStoreFile {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.repository.SearchScrollStateRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.data.repository.ViewerLaunchContextRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
 
 -keepclassmembers class com.theoriacodex.data.storage.VideoVariantRecord {
     <init>();
@@ -157,11 +80,6 @@
 }
 
 -keepclassmembers class com.theoriacodex.data.repository.SiteProfileRecord {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
-
--keepclassmembers class com.theoriacodex.data.repository.SiteProfileStoreFile {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }

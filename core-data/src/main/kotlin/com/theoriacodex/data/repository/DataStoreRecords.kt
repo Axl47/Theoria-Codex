@@ -1,9 +1,10 @@
 package com.theoriacodex.data.repository
 
+import com.google.gson.annotations.SerializedName
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.SiteProfile
-
-import com.google.gson.annotations.SerializedName
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 const val DATASTORE_SETTINGS_FILE_NAME = "settings_store_v3.json"
 const val DATASTORE_UI_RESTORE_FILE_NAME = "ui_restore_store_v2.json"
@@ -15,16 +16,19 @@ const val MAX_PERSISTED_BLACKLIST_ENTRIES_PER_PROFILE = 250
 internal const val SETTINGS_DATASTORE_SCHEMA_VERSION = 3
 internal const val UI_RESTORE_DATASTORE_SCHEMA_VERSION = 2
 
+/** `settings_store_v3.json`. Developer profile copies still read it with Gson, so it keeps both names until they move. */
+@Serializable
 internal data class SettingsDataStoreFile(
     @field:SerializedName("schemaVersion")
+    @SerialName("schemaVersion")
     val schemaVersion: Int = SETTINGS_DATASTORE_SCHEMA_VERSION,
     @field:SerializedName("settings")
-    val settings: LegacySettingsStoreRecord = LegacySettingsStoreRecord.fromDomain(AppSettings()),
+    @SerialName("settings")
+    val settings: SettingsStoreRecord = SettingsStoreRecord.fromDomain(AppSettings()),
 ) {
     fun toDomain(): AppSettings = normalizeDataStoreSettings(settings.toDomain())
 
     fun validate() {
-        require(schemaVersion > 0) { "Settings schema version must be positive" }
         runCatching { settings.toDomain() }.getOrElse { failure ->
             throw IllegalArgumentException("Settings payload is invalid", failure)
         }
@@ -33,7 +37,7 @@ internal data class SettingsDataStoreFile(
     companion object {
         fun fromDomain(settings: AppSettings): SettingsDataStoreFile {
             return SettingsDataStoreFile(
-                settings = LegacySettingsStoreRecord.fromDomain(normalizeDataStoreSettings(settings)),
+                settings = SettingsStoreRecord.fromDomain(normalizeDataStoreSettings(settings)),
             )
         }
     }
@@ -72,16 +76,16 @@ internal fun normalizeDataStoreSettings(settings: AppSettings): AppSettings {
     )
 }
 
+@Serializable
 internal data class UiRestoreDataStoreFile(
-    @field:SerializedName("schemaVersion")
+    @SerialName("schemaVersion")
     val schemaVersion: Int = UI_RESTORE_DATASTORE_SCHEMA_VERSION,
-    @field:SerializedName("state")
-    val state: LegacyUiRestoreStoreRecord = LegacyUiRestoreStoreRecord(),
+    @SerialName("state")
+    val state: UiRestoreStoreRecord = UiRestoreStoreRecord(),
 ) {
     fun toMemoryState(): PersistedUiRestoreState = normalizeUiRestoreState(state.toMemoryState())
 
     fun validate() {
-        require(schemaVersion > 0) { "UI restore schema version must be positive" }
         runCatching { state.toMemoryState() }.getOrElse { failure ->
             throw IllegalArgumentException("UI restore payload is invalid", failure)
         }
@@ -91,7 +95,7 @@ internal data class UiRestoreDataStoreFile(
         fun fromMemoryState(state: PersistedUiRestoreState): UiRestoreDataStoreFile {
             val normalized = normalizeUiRestoreState(state)
             return UiRestoreDataStoreFile(
-                state = LegacyUiRestoreStoreRecord.fromMemoryState(normalized),
+                state = UiRestoreStoreRecord.fromMemoryState(normalized),
             )
         }
     }

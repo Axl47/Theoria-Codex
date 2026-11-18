@@ -2,6 +2,8 @@ package com.theoriacodex.data.repository
 
 import com.google.gson.annotations.SerializedName
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 internal const val SHARED_SOURCE_CATALOG_VERSION = 3
 
@@ -12,57 +14,73 @@ private val SOURCES_ADDED_BY_CATALOG_VERSION = mapOf(
 )
 
 /**
- * The legacy settings JSON schema shared by the atomic-file repository and the one-time
- * DataStore importer. Keeping this conversion in one place prevents migration behavior from
- * drifting away from the repository that originally wrote the file.
+ * The `settings` object of `settings_store_v3.json`, also the settings section of profile backups. Enum-like
+ * values stay strings so a value this build does not know falls back instead of failing the whole file. Backups
+ * still use Gson, so this record and the ones it nests keep both names until they move.
  */
-internal data class LegacySettingsStoreRecord(
+@Serializable
+internal data class SettingsStoreRecord(
     @field:SerializedName("followedCreators")
+    @SerialName("followedCreators")
     val followedCreators: List<FollowedCreatorRecord>? = null,
     @field:SerializedName("sourceCatalogVersion")
+    @SerialName("sourceCatalogVersion")
     val sourceCatalogVersion: Int? = null,
     @field:SerializedName("enabledSources")
+    @SerialName("enabledSources")
     val enabledSources: List<String> = SourceKey.builtIns.map { it.id },
     @field:SerializedName("sourceWeights")
+    @SerialName("sourceWeights")
     val sourceWeights: Map<String, Double> = SourceRuntimeSettings().sourceWeights.mapKeys { it.key.id },
     @field:SerializedName("sourceWeightsByConfiguration")
+    @SerialName("sourceWeightsByConfiguration")
     val sourceWeightsByConfiguration: Map<String, Map<String, Double>>? = null,
-    @field:SerializedName("viewerPlaybackMode") val viewerPlaybackMode: String? = null,
-    @field:SerializedName("videoQuality") val videoQuality: String? = null,
-    @field:SerializedName("downloadQuality") val downloadQuality: String? = null,
-    @field:SerializedName("downloadsOverMetered") val downloadsOverMetered: Boolean? = null,
-    @field:SerializedName("downloadsOverRoaming") val downloadsOverRoaming: Boolean? = null,
+    @field:SerializedName("viewerPlaybackMode") @SerialName("viewerPlaybackMode") val viewerPlaybackMode: String? = null,
+    @field:SerializedName("videoQuality") @SerialName("videoQuality") val videoQuality: String? = null,
+    @field:SerializedName("downloadQuality") @SerialName("downloadQuality") val downloadQuality: String? = null,
+    @field:SerializedName("downloadsOverMetered") @SerialName("downloadsOverMetered") val downloadsOverMetered: Boolean? = null,
+    @field:SerializedName("downloadsOverRoaming") @SerialName("downloadsOverRoaming") val downloadsOverRoaming: Boolean? = null,
     @field:SerializedName("cacheFullImageOnSave")
+    @SerialName("cacheFullImageOnSave")
     val cacheFullImageOnSave: Boolean = false,
     @field:SerializedName("resolveUnknownAnimatedDurations")
+    @SerialName("resolveUnknownAnimatedDurations")
     val resolveUnknownAnimatedDurations: Boolean = false,
     @field:SerializedName("invertMultiImageScrollDirection")
+    @SerialName("invertMultiImageScrollDirection")
     val invertMultiImageScrollDirection: Boolean = false,
-    @field:SerializedName("oldSearchBar") val oldSearchBar: Boolean = false,
-    @field:SerializedName("codexLibrarySort") val codexLibrarySort: String? = null,
-    @field:SerializedName("instantSeek") val instantSeek: Boolean = false,
-    @field:SerializedName("viewerAutoRotateVideos") val viewerAutoRotateVideos: Boolean? = null,
-    @field:SerializedName("viewerCommentOrder") val viewerCommentOrder: String? = null,
+    @field:SerializedName("oldSearchBar") @SerialName("oldSearchBar") val oldSearchBar: Boolean = false,
+    @field:SerializedName("codexLibrarySort") @SerialName("codexLibrarySort") val codexLibrarySort: String? = null,
+    @field:SerializedName("instantSeek") @SerialName("instantSeek") val instantSeek: Boolean = false,
+    @field:SerializedName("viewerAutoRotateVideos") @SerialName("viewerAutoRotateVideos") val viewerAutoRotateVideos: Boolean? = null,
+    @field:SerializedName("viewerCommentOrder") @SerialName("viewerCommentOrder") val viewerCommentOrder: String? = null,
     @field:SerializedName("viewerAutomaticTextTranslationEnabled")
+    @SerialName("viewerAutomaticTextTranslationEnabled")
     val viewerAutomaticTextTranslationEnabled: Boolean = false,
     @field:SerializedName("viewerEnabledOcrLanguages")
+    @SerialName("viewerEnabledOcrLanguages")
     val viewerEnabledOcrLanguages: List<String> = emptyList(),
     @field:SerializedName("scenarioPreset")
+    @SerialName("scenarioPreset")
     val scenarioPreset: String = ScenarioPreset.NORMAL.name,
-    @field:SerializedName("lastSelectedTabRoute")
-    val lastSelectedTabRoute: String = "search",
     @field:SerializedName("recommendationProfiles")
-    val recommendationProfiles: List<LegacyRecommendationProfileRecord>? = null,
+    @SerialName("recommendationProfiles")
+    val recommendationProfiles: List<RecommendationProfileRecord>? = null,
     @field:SerializedName("activeProfileId")
+    @SerialName("activeProfileId")
     val activeProfileId: String? = null,
     @field:SerializedName("activeProfile")
+    @SerialName("activeProfile")
     val activeProfile: String? = null,
     @field:SerializedName("forYouBlacklistByProfile")
-    val forYouBlacklistByProfile: Map<String, List<LegacyForYouBlacklistEntryRecord>>? = null,
+    @SerialName("forYouBlacklistByProfile")
+    val forYouBlacklistByProfile: Map<String, List<ForYouBlacklistEntryRecord>>? = null,
     @field:SerializedName("favoriteTagsByProfile")
-    val favoriteTagsByProfile: Map<String, List<LegacyFavoriteTagEntryRecord>>? = null,
+    @SerialName("favoriteTagsByProfile")
+    val favoriteTagsByProfile: Map<String, List<FavoriteTagEntryRecord>>? = null,
     @field:SerializedName("providerHealth")
-    val providerHealth: List<LegacyProviderHealthSnapshotRecord>? = null,
+    @SerialName("providerHealth")
+    val providerHealth: List<ProviderHealthSnapshotRecord>? = null,
 ) {
     fun toDomain(): AppSettings {
         val storedEnabledSources = enabledSources
@@ -104,7 +122,6 @@ internal data class LegacySettingsStoreRecord(
                 viewer = toViewerSettings(),
                 scenarioPreset = runCatching { ScenarioPreset.valueOf(scenarioPreset) }
                     .getOrDefault(ScenarioPreset.NORMAL),
-                lastSelectedTabRoute = lastSelectedTabRoute,
                 recommendationProfiles = profiles,
                 activeProfileId = resolvedActiveProfileId,
                 forYouBlacklistByProfile = forYouBlacklistByProfile
@@ -158,8 +175,8 @@ internal data class LegacySettingsStoreRecord(
     fun sourceSchemaVersion(): Int = sourceCatalogVersion ?: 1
 
     companion object {
-        fun fromDomain(settings: AppSettings): LegacySettingsStoreRecord {
-            return LegacySettingsStoreRecord(
+        fun fromDomain(settings: AppSettings): SettingsStoreRecord {
+            return SettingsStoreRecord(
                 followedCreators = settings.followedCreators.map(FollowedCreatorRecord::fromDomain),
                 sourceCatalogVersion = SHARED_SOURCE_CATALOG_VERSION,
                 oldSearchBar = settings.oldSearchBar,
@@ -185,36 +202,42 @@ internal data class LegacySettingsStoreRecord(
                     .sortedBy(ViewerOcrLanguage::ordinal)
                     .map(ViewerOcrLanguage::name),
                 scenarioPreset = settings.scenarioPreset.name,
-                lastSelectedTabRoute = settings.lastSelectedTabRoute,
-                recommendationProfiles = settings.recommendationProfiles.map(LegacyRecommendationProfileRecord::fromDomain),
+                recommendationProfiles = settings.recommendationProfiles.map(RecommendationProfileRecord::fromDomain),
                 activeProfileId = settings.activeProfileId,
                 activeProfile = null,
                 forYouBlacklistByProfile = settings.forYouBlacklistByProfile.mapValues { (_, entries) ->
-                    entries.map(LegacyForYouBlacklistEntryRecord::fromDomain)
+                    entries.map(ForYouBlacklistEntryRecord::fromDomain)
                 },
                 favoriteTagsByProfile = settings.favoriteTagsByProfile.mapValues { (_, entries) ->
-                    entries.map(LegacyFavoriteTagEntryRecord::fromDomain)
+                    entries.map(FavoriteTagEntryRecord::fromDomain)
                 },
                 providerHealth = settings.providerHealth.values
                     .sortedBy { snapshot -> snapshot.source.id }
-                    .map(LegacyProviderHealthSnapshotRecord::fromDomain),
+                    .map(ProviderHealthSnapshotRecord::fromDomain),
             )
         }
     }
 }
 
-internal data class LegacyProviderHealthSnapshotRecord(
+@Serializable
+internal data class ProviderHealthSnapshotRecord(
     @field:SerializedName("source")
+    @SerialName("source")
     val source: String? = null,
     @field:SerializedName("status")
+    @SerialName("status")
     val status: String? = null,
     @field:SerializedName("checkedAtEpochMs")
+    @SerialName("checkedAtEpochMs")
     val checkedAtEpochMs: Long? = null,
     @field:SerializedName("latencyMs")
+    @SerialName("latencyMs")
     val latencyMs: Long? = null,
     @field:SerializedName("failureReason")
+    @SerialName("failureReason")
     val failureReason: String? = null,
     @field:SerializedName("message")
+    @SerialName("message")
     val message: String? = null,
 ) {
     fun toDomainOrNull(): ProviderHealthSnapshot? {
@@ -239,8 +262,8 @@ internal data class LegacyProviderHealthSnapshotRecord(
     }
 
     companion object {
-        fun fromDomain(snapshot: ProviderHealthSnapshot): LegacyProviderHealthSnapshotRecord {
-            return LegacyProviderHealthSnapshotRecord(
+        fun fromDomain(snapshot: ProviderHealthSnapshot): ProviderHealthSnapshotRecord {
+            return ProviderHealthSnapshotRecord(
                 source = snapshot.source.id,
                 status = snapshot.status.name,
                 checkedAtEpochMs = snapshot.checkedAtEpochMs,
@@ -257,14 +280,19 @@ internal data class LegacyProviderHealthSnapshotRecord(
  * [tags] is written only for a group and, when present, holds every alternative; [name] is a
  * group's optional label.
  */
-internal data class LegacyFavoriteTagEntryRecord(
+@Serializable
+internal data class FavoriteTagEntryRecord(
     @field:SerializedName("source")
+    @SerialName("source")
     val source: String? = null,
     @field:SerializedName("tag")
+    @SerialName("tag")
     val tag: String? = null,
     @field:SerializedName("tags")
+    @SerialName("tags")
     val tags: List<String>? = null,
     @field:SerializedName("name")
+    @SerialName("name")
     val name: String? = null,
 ) {
     fun toDomainOrNull(): FavoriteTagEntry? {
@@ -277,9 +305,9 @@ internal data class LegacyFavoriteTagEntryRecord(
     }
 
     companion object {
-        fun fromDomain(entry: FavoriteTagEntry): LegacyFavoriteTagEntryRecord {
+        fun fromDomain(entry: FavoriteTagEntry): FavoriteTagEntryRecord {
             val normalized = entry.tags.map { tag -> RepositoryPolicies.normalizeFavoriteTag(entry.source, tag) }
-            return LegacyFavoriteTagEntryRecord(
+            return FavoriteTagEntryRecord(
                 source = entry.source.id,
                 tag = normalized.first(),
                 tags = normalized.takeIf { it.size > 1 },
@@ -289,10 +317,13 @@ internal data class LegacyFavoriteTagEntryRecord(
     }
 }
 
-internal data class LegacyForYouBlacklistEntryRecord(
+@Serializable
+internal data class ForYouBlacklistEntryRecord(
     @field:SerializedName("source")
+    @SerialName("source")
     val source: String? = null,
     @field:SerializedName("tags")
+    @SerialName("tags")
     val tags: List<String>? = null,
 ) {
     fun toDomainOrNull(): ForYouBlacklistEntry? {
@@ -307,8 +338,8 @@ internal data class LegacyForYouBlacklistEntryRecord(
     }
 
     companion object {
-        fun fromDomain(entry: ForYouBlacklistEntry): LegacyForYouBlacklistEntryRecord {
-            return LegacyForYouBlacklistEntryRecord(
+        fun fromDomain(entry: ForYouBlacklistEntry): ForYouBlacklistEntryRecord {
+            return ForYouBlacklistEntryRecord(
                 source = entry.source.id,
                 tags = RepositoryPolicies.normalizeBlacklistTags(entry.tags),
             )
@@ -316,10 +347,13 @@ internal data class LegacyForYouBlacklistEntryRecord(
     }
 }
 
-internal data class LegacyRecommendationProfileRecord(
+@Serializable
+internal data class RecommendationProfileRecord(
     @field:SerializedName("profileId")
+    @SerialName("profileId")
     val profileId: String? = null,
     @field:SerializedName("name")
+    @SerialName("name")
     val name: String? = null,
 ) {
     fun toDomainOrNull(): RecommendationProfile? {
@@ -330,119 +364,10 @@ internal data class LegacyRecommendationProfileRecord(
     }
 
     companion object {
-        fun fromDomain(profile: RecommendationProfile): LegacyRecommendationProfileRecord {
-            return LegacyRecommendationProfileRecord(profileId = profile.profileId, name = profile.name)
+        fun fromDomain(profile: RecommendationProfile): RecommendationProfileRecord {
+            return RecommendationProfileRecord(profileId = profile.profileId, name = profile.name)
         }
     }
-}
-
-internal data class LegacyUiRestoreStoreRecord(
-    @field:SerializedName("lastTab")
-    val lastTab: String? = null,
-    @field:SerializedName("searchScrollStates")
-    val searchScrollStates: Map<String, LegacySearchScrollStateRecord> = emptyMap(),
-    @field:SerializedName("feedFabRestoreStates")
-    val feedFabRestoreStates: Map<String, FeedFabRestoreState> = emptyMap(),
-    @field:SerializedName("viewerLaunchContext")
-    val viewerLaunchContext: LegacyViewerLaunchContextRecord? = null,
-) {
-    fun toMemoryState(): PersistedUiRestoreState {
-        return PersistedUiRestoreState(
-            lastTab = lastTab?.trim()?.takeIf(String::isNotEmpty),
-            scrollStates = searchScrollStates.mapNotNull { (queryHash, record) ->
-                queryHash.trim().takeIf(String::isNotEmpty)?.let { normalizedHash ->
-                    normalizedHash to record.toDomain()
-                }
-            }.toMap(),
-            feedFabRestoreStates = feedFabRestoreStates,
-            viewerLaunchContext = viewerLaunchContext?.toDomain(),
-        )
-    }
-
-    companion object {
-        fun fromMemoryState(state: PersistedUiRestoreState): LegacyUiRestoreStoreRecord {
-            return LegacyUiRestoreStoreRecord(
-                lastTab = state.lastTab,
-                searchScrollStates = state.scrollStates.mapValues { (_, value) ->
-                    LegacySearchScrollStateRecord.fromDomain(value)
-                },
-                feedFabRestoreStates = state.feedFabRestoreStates,
-                viewerLaunchContext = state.viewerLaunchContext?.let(LegacyViewerLaunchContextRecord::fromDomain),
-            )
-        }
-    }
-}
-
-internal data class PersistedUiRestoreState(
-    val lastTab: String?,
-    val scrollStates: Map<String, SearchScrollState>,
-    val feedFabRestoreStates: Map<String, FeedFabRestoreState>,
-    val viewerLaunchContext: ViewerLaunchContext?,
-)
-
-internal data class LegacySearchScrollStateRecord(
-    @field:SerializedName("firstVisibleItemIndex")
-    val firstVisibleItemIndex: Int = 0,
-    @field:SerializedName("firstVisibleItemOffsetPx")
-    val firstVisibleItemOffsetPx: Int = 0,
-) {
-    fun toDomain(): SearchScrollState {
-        return SearchScrollState(
-            firstVisibleItemIndex = firstVisibleItemIndex.coerceAtLeast(0),
-            firstVisibleItemOffsetPx = firstVisibleItemOffsetPx.coerceAtLeast(0),
-        )
-    }
-
-    companion object {
-        fun fromDomain(state: SearchScrollState): LegacySearchScrollStateRecord {
-            return LegacySearchScrollStateRecord(
-                firstVisibleItemIndex = state.firstVisibleItemIndex.coerceAtLeast(0),
-                firstVisibleItemOffsetPx = state.firstVisibleItemOffsetPx.coerceAtLeast(0),
-            )
-        }
-    }
-}
-
-internal data class LegacyViewerLaunchContextRecord(
-    @field:SerializedName("queryHash") val queryHash: String = "",
-    @field:SerializedName("startIndex") val startIndex: Int = 0,
-    @field:SerializedName("streamSource") val streamSource: String = ViewerStreamSource.SEARCH.name,
-    @field:SerializedName("scrollOffsetHint") val scrollOffsetHint: Int = 0,
-    @field:SerializedName("recentsSection") val recentsSection: String? = null,
-) {
-    fun toDomain(): ViewerLaunchContext = decodeRestoredViewerLaunchContext(
-        queryHash, startIndex, streamSource, scrollOffsetHint, recentsSection,
-    )
-
-    companion object {
-        fun fromDomain(context: ViewerLaunchContext): LegacyViewerLaunchContextRecord {
-            return LegacyViewerLaunchContextRecord(
-                queryHash = context.queryHash,
-                startIndex = context.startIndex,
-                streamSource = context.streamSource.name,
-                scrollOffsetHint = context.scrollOffsetHint,
-                recentsSection = context.recentsSection?.name,
-            )
-        }
-    }
-}
-
-internal fun decodeRestoredViewerLaunchContext(
-    queryHash: String,
-    startIndex: Int,
-    streamSource: String,
-    scrollOffsetHint: Int,
-    recentsSection: String?,
-): ViewerLaunchContext {
-    val decodedStreamSource = runCatching { ViewerStreamSource.valueOf(streamSource) }
-        .getOrDefault(ViewerStreamSource.SEARCH)
-    return ViewerLaunchContext(
-        queryHash = queryHash,
-        startIndex = startIndex,
-        streamSource = decodedStreamSource,
-        scrollOffsetHint = scrollOffsetHint,
-        recentsSection = decodeRestoredRecentsSection(recentsSection, decodedStreamSource, queryHash),
-    )
 }
 
 internal fun parseLegacyProfileId(

@@ -45,10 +45,10 @@ class CreatorFollowsRepositoryTest {
     @Test fun `follow records round trip and old settings decode empty`() {
         val gson = Gson()
         val follow = FollowedCreator(creator, "membership", listOf("seen"), listOf("seen", "new"), 42L)
-        val record = LegacySettingsStoreRecord.fromDomain(AppSettings(followedCreators = listOf(follow)))
-        val decoded = gson.fromJson(gson.toJson(record), LegacySettingsStoreRecord::class.java).toDomain()
+        val record = SettingsStoreRecord.fromDomain(AppSettings(followedCreators = listOf(follow)))
+        val decoded = gson.fromJson(gson.toJson(record), SettingsStoreRecord::class.java).toDomain()
         assertEquals(follow, decoded.followedCreators.single())
         assertEquals(1, decoded.followedCreators.single().newPostCount)
-        assertTrue(gson.fromJson("{}", LegacySettingsStoreRecord::class.java).toDomain().followedCreators.isEmpty())
+        assertTrue(gson.fromJson("{}", SettingsStoreRecord::class.java).toDomain().followedCreators.isEmpty())
     }
 }
