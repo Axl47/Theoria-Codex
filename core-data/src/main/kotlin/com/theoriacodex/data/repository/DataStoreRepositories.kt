@@ -151,11 +151,6 @@ class DataStoreSettingsRepository(
         updateSettings { current -> current.copy(scenarioPreset = preset) }
     }
 
-    @Deprecated("Last-tab state is owned by UiRestoreRepository; retain this writer only for compatibility.")
-    override suspend fun setLastTab(route: String) {
-        updateSettings { current -> current.copy(lastSelectedTabRoute = route) }
-    }
-
     override suspend fun setActiveProfile(profileId: String) {
         updateSettings { current ->
             profileWriteGuard.requireProfileWritable(profileId)
@@ -312,15 +307,6 @@ class DataStoreUiRestoreRepository(
 
     override suspend fun getLastTab(): String? {
         return records.first().toMemoryState().lastTab
-    }
-
-    override suspend fun migrateLegacyLastTab(legacyRoute: String?): String? {
-        return mutateState { current ->
-            if (current.lastTab != null) return@mutateState current
-            val migrated = legacyRoute?.trim()?.takeIf(String::isNotBlank)
-                ?: return@mutateState current
-            current.copy(lastTab = migrated)
-        }.lastTab
     }
 
     override suspend fun setSearchScrollState(queryHash: String, state: SearchScrollState) {

@@ -165,7 +165,6 @@ class ProfileBackupCodec(private val gson: Gson = Gson()) {
         followedCreators = settings.followedCreators.map { it.copy(creator = portableBackupCreator(it.creator)) },
         providerHealth = emptyMap(),
         scenarioPreset = ScenarioPreset.NORMAL,
-        lastSelectedTabRoute = "search",
         viewer = settings.viewer.copy(automaticTextTranslationEnabled = false, enabledOcrLanguages = emptySet()),
     )
 }

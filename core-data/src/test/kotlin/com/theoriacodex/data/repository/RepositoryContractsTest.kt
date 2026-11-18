@@ -483,31 +483,11 @@ class RepositoryContractTest(
     }
 
     @Test
-    fun `ui restore starts empty and imports the default legacy tab`() = runTest {
+    fun `ui restore starts without a tab and keeps the last one set`() = runTest {
         val repository = createUiRestoreRepository()
 
         assertEquals(null, repository.getLastTab())
-        assertEquals(null, repository.migrateLegacyLastTab("  "))
-        assertEquals("search", repository.migrateLegacyLastTab(AppSettings().lastSelectedTabRoute))
-        assertEquals("search", repository.getLastTab())
-    }
-
-    @Test
-    fun `ui restore imports a nonblank legacy tab only once`() = runTest {
-        val repository = createUiRestoreRepository()
-
-        assertEquals("codex", repository.migrateLegacyLastTab(" codex "))
-        assertEquals("codex", repository.migrateLegacyLastTab("search"))
-        assertEquals("codex", repository.getLastTab())
-    }
-
-    @Test
-    fun `later ui restore state wins over legacy settings`() = runTest {
-        val repository = createUiRestoreRepository()
-
         repository.setLastTab("settings")
-
-        assertEquals("settings", repository.migrateLegacyLastTab("for-you"))
         assertEquals("settings", repository.getLastTab())
     }
 
