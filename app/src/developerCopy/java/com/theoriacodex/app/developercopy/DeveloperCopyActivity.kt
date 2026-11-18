@@ -12,7 +12,7 @@ import com.theoriacodex.app.sourceauth.AndroidCredentialEnvelopeStore
 import com.theoriacodex.app.sourceauth.CredentialStoreWriteResult
 import com.theoriacodex.data.android.room.RoomProfileBackupStore
 import com.theoriacodex.data.android.room.TheoriaRoomDatabase
-import com.theoriacodex.data.android.room.awaitProfileLibraryStores
+import com.theoriacodex.data.android.room.openProfileLibrary
 import com.theoriacodex.data.repository.DataStoreSettingsRepository
 import com.theoriacodex.data.repository.FileBackedReadingPositionRepository
 import com.theoriacodex.data.repository.FileBackedSavedSearchRepository
@@ -92,7 +92,7 @@ class DeveloperCopyActivity : Activity() {
         try {
             val settings = DataStoreSettingsRepository(storage, storesScope)
             settings.awaitReady()
-            awaitProfileLibraryStores(database, storage)
+            openProfileLibrary(database)
             val backup = ProfileBackupService(
                 settings, RoomProfileBackupStore(database), FileBackedSavedSearchRepository(storage),
                 FileBackedReadingPositionRepository(storage), File(storage, "pending_profile_restore.json"),

@@ -4,7 +4,6 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.SiteProfile
 
 import com.google.gson.annotations.SerializedName
-import com.theoriacodex.data.storage.LegacyImportProof
 
 const val DATASTORE_SETTINGS_FILE_NAME = "settings_store_v3.json"
 const val DATASTORE_UI_RESTORE_FILE_NAME = "ui_restore_store_v2.json"
@@ -21,29 +20,20 @@ internal data class SettingsDataStoreFile(
     val schemaVersion: Int = SETTINGS_DATASTORE_SCHEMA_VERSION,
     @field:SerializedName("settings")
     val settings: LegacySettingsStoreRecord = LegacySettingsStoreRecord.fromDomain(AppSettings()),
-    @field:SerializedName("legacyImports")
-    val legacyImports: List<LegacyImportProof> = emptyList(),
 ) {
     fun toDomain(): AppSettings = normalizeDataStoreSettings(settings.toDomain())
 
     fun validate() {
         require(schemaVersion > 0) { "Settings schema version must be positive" }
-        legacyImports.forEach { proof ->
-            require(proof.isValidFor(schemaVersion)) { "Settings import proof is invalid" }
-        }
         runCatching { settings.toDomain() }.getOrElse { failure ->
             throw IllegalArgumentException("Settings payload is invalid", failure)
         }
     }
 
     companion object {
-        fun fromDomain(
-            settings: AppSettings,
-            legacyImports: List<LegacyImportProof> = emptyList(),
-        ): SettingsDataStoreFile {
+        fun fromDomain(settings: AppSettings): SettingsDataStoreFile {
             return SettingsDataStoreFile(
                 settings = LegacySettingsStoreRecord.fromDomain(normalizeDataStoreSettings(settings)),
-                legacyImports = legacyImports,
             )
         }
     }
@@ -87,30 +77,21 @@ internal data class UiRestoreDataStoreFile(
     val schemaVersion: Int = UI_RESTORE_DATASTORE_SCHEMA_VERSION,
     @field:SerializedName("state")
     val state: LegacyUiRestoreStoreRecord = LegacyUiRestoreStoreRecord(),
-    @field:SerializedName("legacyImports")
-    val legacyImports: List<LegacyImportProof> = emptyList(),
 ) {
     fun toMemoryState(): PersistedUiRestoreState = normalizeUiRestoreState(state.toMemoryState())
 
     fun validate() {
         require(schemaVersion > 0) { "UI restore schema version must be positive" }
-        legacyImports.forEach { proof ->
-            require(proof.isValidFor(schemaVersion)) { "UI restore import proof is invalid" }
-        }
         runCatching { state.toMemoryState() }.getOrElse { failure ->
             throw IllegalArgumentException("UI restore payload is invalid", failure)
         }
     }
 
     companion object {
-        fun fromMemoryState(
-            state: PersistedUiRestoreState,
-            legacyImports: List<LegacyImportProof> = emptyList(),
-        ): UiRestoreDataStoreFile {
+        fun fromMemoryState(state: PersistedUiRestoreState): UiRestoreDataStoreFile {
             val normalized = normalizeUiRestoreState(state)
             return UiRestoreDataStoreFile(
                 state = LegacyUiRestoreStoreRecord.fromMemoryState(normalized),
-                legacyImports = legacyImports,
             )
         }
     }

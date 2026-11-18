@@ -121,18 +121,6 @@ private fun storageFixtures() = listOf(
         "schemaVersion",
         2,
     ),
-    LegacyFixture(
-        "com.theoriacodex.data.storage.LegacyRecentsStoreFile",
-        """{"watchedPosts":[],"searches":[]}""",
-        "watchedPosts",
-        emptyList<Any>(),
-    ),
-    LegacyFixture(
-        "com.theoriacodex.data.android.room.LegacyCodexStoreFile",
-        """{"codices":[],"items":{},"posts":[]}""",
-        "items",
-        emptyMap<String, Any>(),
-    ),
 )
 
 private fun appAndProviderFixtures() = listOf(

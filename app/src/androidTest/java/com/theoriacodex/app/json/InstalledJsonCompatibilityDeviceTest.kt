@@ -10,7 +10,6 @@ import com.theoriacodex.app.update.PendingPostInstallChangelog
 import com.theoriacodex.app.update.UpdateStateSnapshot
 import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.ImageRefStorageRecord
-import com.theoriacodex.data.storage.LegacyImportProof
 import com.theoriacodex.data.storage.PostStorageCodec
 import com.theoriacodex.data.storage.PostStorageRecord
 import com.theoriacodex.data.storage.VideoVariantRecord
@@ -34,15 +33,6 @@ class InstalledJsonCompatibilityDeviceTest {
 
     @Test
     fun stableWireKeysSurviveTheInstalledTargetApk() {
-        assertJsonKeys(
-            LegacyImportProof(),
-            "sourceFileName",
-            "sourceSchemaVersion",
-            "destinationSchemaVersion",
-            "sourceSha256",
-            "sourceByteCount",
-            "importedCounts",
-        )
         assertJsonKeys(
             PostStorageRecord(),
             "source",

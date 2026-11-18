@@ -4,9 +4,6 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.google.gson.annotations.SerializedName
-import com.theoriacodex.data.repository.RecentPostEntry
-import com.theoriacodex.data.repository.RecentSearchEntry
-import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
@@ -165,40 +162,4 @@ private fun SearchTermStorageRecord.toDomainOrNull(): SearchTerm? {
         runCatching { SearchFacet.valueOf(normalizedFacet) }.getOrNull() ?: return null
     }
     return SearchTerm(normalized, resolvedFacet, sourceNamespace?.trim()?.takeIf(String::isNotBlank))
-}
-
-data class LegacyRecentsStoreFile(
-    @field:SerializedName("watchedPosts") val watchedPosts: List<LegacyRecentPostRecord?>? = null,
-    @field:SerializedName("searches") val searches: List<LegacyRecentSearchRecord?>? = null,
-)
-
-data class LegacyRecentPostRecord(
-    @field:SerializedName("post") val post: PostStorageRecord? = null,
-    @field:SerializedName("viewedAtEpochMs") val viewedAtEpochMs: Long? = null,
-    @field:SerializedName("origin") val origin: String? = null,
-    @field:SerializedName("originQueryHash") val originQueryHash: String? = null,
-) {
-    fun toDomainOrNull(): RecentPostEntry? {
-        val decoded = post?.let(PostStorageCodec::decode) ?: return null
-        val decodedOrigin = origin?.let { runCatching { ViewerStreamSource.valueOf(it) }.getOrNull() }
-            ?: ViewerStreamSource.SEARCH
-        return RecentPostEntry(
-            post = decoded,
-            viewedAtEpochMs = viewedAtEpochMs ?: 0L,
-            origin = decodedOrigin,
-            originQueryHash = originQueryHash?.takeIf(String::isNotBlank),
-        )
-    }
-}
-
-data class LegacyRecentSearchRecord(
-    @field:SerializedName("query") val query: QueryStorageRecord? = null,
-    @field:SerializedName("queryHash") val queryHash: String? = null,
-    @field:SerializedName("searchedAtEpochMs") val searchedAtEpochMs: Long? = null,
-) {
-    fun toDomainOrNull(): RecentSearchEntry? {
-        val normalizedHash = queryHash?.trim()?.takeIf(String::isNotBlank) ?: return null
-        val decoded = query?.let { runCatching { QueryStorageCodec.decode(it) }.getOrNull() } ?: return null
-        return RecentSearchEntry(decoded, normalizedHash, searchedAtEpochMs ?: 0L)
-    }
 }

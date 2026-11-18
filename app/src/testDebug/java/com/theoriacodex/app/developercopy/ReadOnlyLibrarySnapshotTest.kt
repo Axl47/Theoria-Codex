@@ -4,7 +4,7 @@ import android.app.Application
 import android.database.sqlite.SQLiteDatabase
 import com.theoriacodex.data.android.room.RoomProfileBackupStore
 import com.theoriacodex.data.android.room.TheoriaRoomDatabase
-import com.theoriacodex.data.android.room.awaitProfileLibraryStores
+import com.theoriacodex.data.android.room.openProfileLibrary
 import com.theoriacodex.data.repository.BackupLibrary
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexItem
@@ -35,8 +35,7 @@ class ReadOnlyLibrarySnapshotTest {
         val stageFile = File(temporary.newFolder(), "snapshot.db")
         val source = TheoriaRoomDatabase.create(context, sourceFile.path)
         try {
-            val storage = temporary.newFolder()
-            awaitProfileLibraryStores(source, storage)
+            openProfileLibrary(source)
             val post = Post(id = PostId(SourceKey.PIXIV, "42"), preview = ImageRef(null, null, null), full = null,
                 pageUrl = "https://www.pixiv.net/artworks/42", width = null, height = null,
                 canonicalTags = listOf("tag"), rawTags = listOf("tag"), authorName = null, createdAtEpochMs = null)
@@ -44,8 +43,6 @@ class ReadOnlyLibrarySnapshotTest {
             store.merge(BackupLibrary(listOf(Codex("sample", "Sample", 0)),
                 listOf(CodexItem("sample", post.id, 0)), listOf(post), emptyList()))
             val expected = store.snapshot(true)
-            // A fresh Debug import must remain admissible to ordinary startup after copying.
-            awaitProfileLibraryStores(source, storage)
             val before = sourceFile.readBytes()
             stageReadOnlyLibrary(sourceFile, stageFile)
             assertTrue(before.contentEquals(sourceFile.readBytes()))
