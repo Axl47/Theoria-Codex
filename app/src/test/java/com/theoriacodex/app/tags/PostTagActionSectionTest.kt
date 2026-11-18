@@ -48,11 +48,11 @@ class PostTagActionSectionTest {
         )
 
         assertEquals(listOf("portable", "source tag"), generalPostActionTags(post))
-        assertTrue(portableTag.isGeneralPostTag())
-        assertTrue(sourceTag.isGeneralPostTag())
-        assertFalse(female.isGeneralPostTag())
-        assertFalse(male.isGeneralPostTag())
-        assertFalse(artist.isGeneralPostTag())
+        assertTrue(portableTag.isGeneralTag)
+        assertTrue(sourceTag.isGeneralTag)
+        assertFalse(female.isGeneralTag)
+        assertFalse(male.isGeneralTag)
+        assertFalse(artist.isGeneralTag)
     }
 
     @Test

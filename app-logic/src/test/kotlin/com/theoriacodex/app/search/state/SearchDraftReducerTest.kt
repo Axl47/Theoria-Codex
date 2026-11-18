@@ -221,7 +221,7 @@ class SearchDraftReducerTest {
         val initial = state(query).copy(
             suggestions = SearchSuggestionsUiState(
                 autocomplete = listOf(TagSuggestion("blue_hair", "tag", 10)),
-                searchedTags = listOf("night_sky"),
+                searchedTags = listOf(SearchTerm("night_sky")),
             ),
         )
 
@@ -242,7 +242,7 @@ class SearchDraftReducerTest {
         val result = SearchAutocompleteResult(
             input = "night_sky",
             selectedScope = FacetedSearchScope.All,
-            searchedTags = listOf("night_sky"),
+            searchedTags = listOf(SearchTerm("night_sky")),
         )
 
         assertTrue(state(query(QueryMode.Source(SourceKey.GELBOORU))).withAutocompleteResult(result).suggestions.canCommitInput)

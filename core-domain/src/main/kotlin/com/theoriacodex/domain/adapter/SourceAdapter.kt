@@ -10,6 +10,7 @@ import com.theoriacodex.domain.model.PostComment
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SearchFacet
+import com.theoriacodex.domain.model.SearchTagType
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.query.SearchTermLimit
@@ -132,6 +133,13 @@ data class FacetedSearchScope(
 
     val isAll: Boolean
         get() = facet == null
+
+    /** The tag type this scope asks for; null for [All], which takes every type. */
+    val tagType: SearchTagType?
+        get() = facet?.let { SearchTagType.of(it, sourceNamespace) }
+
+    /** Whether [term] belongs in this scope: All takes every term, any other scope terms of its tag type. */
+    fun accepts(term: SearchTerm): Boolean = isAll || tagType == term.tagType
 
     companion object {
         val All = FacetedSearchScope()

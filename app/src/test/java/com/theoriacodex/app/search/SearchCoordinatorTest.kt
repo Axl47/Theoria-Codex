@@ -598,7 +598,7 @@ internal class TestAdapter(
     }
 }
 
-private class FacetedAdapter(
+internal class FacetedAdapter(
     source: SourceKey,
     override val supportedSearchScopes: Set<FacetedSearchScope>,
     private val autocomplete: List<FacetedTagSuggestion>,

@@ -17,6 +17,8 @@ import com.theoriacodex.data.storage.GsonDataStoreSerializer
 import com.theoriacodex.data.storage.UnsupportedStoreSchemaException
 import com.theoriacodex.data.storage.preserveCorruptFile
 import com.theoriacodex.data.storage.updateDataInBackground
+import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
@@ -46,6 +48,18 @@ internal data class StatisticsTagCountRecord(
     @field:SerializedName("count") val count: Long = 0L,
 )
 
+/**
+ * A searched term other than a portable general tag. These live apart from [StatisticsTagCountRecord]s
+ * so a build that predates typed counting skips them instead of reading an artist as a general tag.
+ */
+internal data class StatisticsTypedTagCountRecord(
+    @field:SerializedName("source") val source: String = "",
+    @field:SerializedName("tag") val tag: String = "",
+    @field:SerializedName("facet") val facet: String = "",
+    @field:SerializedName("sourceNamespace") val sourceNamespace: String? = null,
+    @field:SerializedName("count") val count: Long = 0L,
+)
+
 internal data class StatisticsStoreRecord(
     @field:SerializedName("history") val history: Map<String, DailyActivity> = emptyMap(),
     @field:SerializedName("codexStatistics") val codexStatistics: Map<String, CodexStatistics> = emptyMap(),
@@ -61,6 +75,8 @@ internal data class StatisticsStoreRecord(
     @field:SerializedName("searchesBySource") val searchesBySource: Map<String, Long> = emptyMap(),
     @field:SerializedName("searchesByTag") val searchesByTag: List<StatisticsTagCountRecord> = emptyList(),
     @field:SerializedName("searchesByTagSeeded") val searchesByTagSeeded: Boolean = false,
+    @field:SerializedName("searchesByTypedTag") val searchesByTypedTag: List<StatisticsTypedTagCountRecord> = emptyList(),
+    @field:SerializedName("searchesByTypedTagSeeded") val searchesByTypedTagSeeded: Boolean = false,
     @field:SerializedName("forYouSearchCount") val forYouSearchCount: Long = 0L,
     @field:SerializedName("forYouSaveCount") val forYouSaveCount: Long = 0L,
     @field:SerializedName("postUrlCopyCount") val postUrlCopyCount: Long = 0L,
@@ -84,8 +100,9 @@ internal data class StatisticsStoreRecord(
                 watchedByTag = watchedByTag.decodeTagCounts(),
                 searchCount = searchCount,
                 searchesBySource = searchesBySource.decodeSourceCounts(),
-                searchesByTag = searchesByTag.decodeTagCounts(),
+                searchesByTag = decodeSearchedTagCounts(searchesByTag, searchesByTypedTag),
                 searchesByTagSeeded = searchesByTagSeeded,
+                searchesByTypedTagSeeded = searchesByTypedTagSeeded,
                 forYouSearchCount = forYouSearchCount,
                 forYouSaveCount = forYouSaveCount,
                 postUrlCopyCount = postUrlCopyCount,
@@ -122,7 +139,7 @@ internal data class StatisticsStoreRecord(
         require(watchedByTag.all { record -> record.count >= 0L }) {
             "Watched tag counts must be non-negative"
         }
-        require(searchesByTag.all { record -> record.count >= 0L }) {
+        require(searchesByTag.all { record -> record.count >= 0L } && searchesByTypedTag.all { record -> record.count >= 0L }) {
             "Search tag counts must be non-negative"
         }
         require(codexEntryCounts.values.all { value -> value >= 0L }) {
@@ -147,8 +164,11 @@ internal data class StatisticsStoreRecord(
                 watchedByTag = normalized.watchedByTag.encodeTagCounts(),
                 searchCount = normalized.searchCount,
                 searchesBySource = normalized.searchesBySource.encodeSourceCounts(),
-                searchesByTag = normalized.searchesByTag.encodeTagCounts(),
+                searchesByTag = normalized.searchesByTag.filterKeys { it.term.isPortableGeneralTag }
+                    .mapKeys { (key, _) -> StatisticsTagKey(key.source, key.term.value) }.encodeTagCounts(),
                 searchesByTagSeeded = normalized.searchesByTagSeeded,
+                searchesByTypedTag = normalized.searchesByTag.filterKeys { !it.term.isPortableGeneralTag }.encodeTypedTagCounts(),
+                searchesByTypedTagSeeded = normalized.searchesByTypedTagSeeded,
                 forYouSearchCount = normalized.forYouSearchCount,
                 forYouSaveCount = normalized.forYouSaveCount,
                 postUrlCopyCount = normalized.postUrlCopyCount,
@@ -219,6 +239,7 @@ internal object StatisticsPolicies {
         searchesBySource = current.searchesBySource.mergeWith(imported.searchesBySource, ::maxOf),
         searchesByTag = current.searchesByTag.mergeWith(imported.searchesByTag, ::maxOf),
         searchesByTagSeeded = current.searchesByTagSeeded || imported.searchesByTagSeeded,
+        searchesByTypedTagSeeded = current.searchesByTypedTagSeeded || imported.searchesByTypedTagSeeded,
         forYouSearchCount = maxOf(current.forYouSearchCount, imported.forYouSearchCount),
         forYouSaveCount = maxOf(current.forYouSaveCount, imported.forYouSaveCount),
         postUrlCopyCount = maxOf(current.postUrlCopyCount, imported.postUrlCopyCount),
@@ -246,7 +267,7 @@ internal object StatisticsPolicies {
             watchedByTag = statistics.watchedByTag.normalizeTagCounts(),
             searchCount = statistics.searchCount.coerceAtLeast(0L),
             searchesBySource = statistics.searchesBySource.normalizeCounts(),
-            searchesByTag = statistics.searchesByTag.normalizeTagCounts(),
+            searchesByTag = statistics.searchesByTag.normalizeSearchedTagCounts(),
             forYouSearchCount = statistics.forYouSearchCount.coerceAtLeast(0L),
             forYouSaveCount = statistics.forYouSaveCount.coerceAtLeast(0L),
             postUrlCopyCount = statistics.postUrlCopyCount.coerceAtLeast(0L),
@@ -320,7 +341,7 @@ internal object StatisticsPolicies {
     fun recordSearch(
         current: LifetimeStatistics,
         sources: Set<SourceKey>,
-        tags: Set<String> = emptySet(),
+        terms: Set<SearchTerm> = emptySet(),
         date: LocalDate = LocalDate.now(),
     ): LifetimeStatistics {
         var sourceCounts = current.searchesBySource
@@ -329,25 +350,30 @@ internal object StatisticsPolicies {
             history = current.history.updateDay(date) { it.copy(searchCount = it.searchCount.saturatingAdd(1L)) },
             searchCount = current.searchCount.saturatingAdd(1L),
             searchesBySource = sourceCounts,
-            searchesByTag = current.searchesByTag.incrementTags(sources, tags),
+            searchesByTag = current.searchesByTag.incrementTerms(sources, terms),
         )
     }
 
     /**
-     * Counts each manual search in [recentSearches] once per tag and source. A key already counted keeps
-     * the larger value, since searches made after counting began are also still in Recents.
+     * Counts each manual search in [recentSearches] once per term and source. Portable general tags were
+     * counted from one release and every other term from a later one, so each kind is seeded once, on its
+     * own flag. A key already counted keeps the larger value, since searches made after counting began
+     * are also still in Recents.
      */
     fun seedSearchedTags(current: LifetimeStatistics, recentSearches: List<RecentSearchEntry>): LifetimeStatistics {
-        if (current.searchesByTagSeeded) return current
+        if (current.searchesByTagSeeded && current.searchesByTypedTagSeeded) return current
+        val unseeded = { term: SearchTerm ->
+            if (term.isPortableGeneralTag) !current.searchesByTagSeeded else !current.searchesByTypedTagSeeded
+        }
         val seeded = recentSearches
             .filter { entry -> entry.kind != RecentSearchKind.FYP }
-            .fold(emptyMap<StatisticsTagKey, Long>()) { counts, entry ->
-                val tags = entry.query.includeTerms.filter(SearchTerm::isPortableGeneralTag).mapTo(mutableSetOf(), SearchTerm::value)
-                counts.incrementTags(entry.sources.toSet(), tags)
+            .fold(emptyMap<SearchedTagKey, Long>()) { counts, entry ->
+                counts.incrementTerms(entry.sources.toSet(), entry.query.searchedTerms().filterTo(mutableSetOf(), unseeded))
             }
         return current.copy(
             searchesByTag = current.searchesByTag.mergeWith(seeded, ::maxOf),
             searchesByTagSeeded = true,
+            searchesByTypedTagSeeded = true,
         )
     }
 
@@ -468,8 +494,8 @@ class DataStoreStatisticsRepository(
             codexOpen?.let { StatisticsPolicies.recordCodexPostOpen(watched, it.codexId, it.postKey, it.label) } ?: watched
         }
 
-    override suspend fun recordSearch(sources: Set<SourceKey>, tags: Set<String>) = mutate { current ->
-        StatisticsPolicies.recordSearch(current, sources, tags, LocalDate.now(clock))
+    override suspend fun recordSearch(sources: Set<SourceKey>, terms: Set<SearchTerm>) = mutate { current ->
+        StatisticsPolicies.recordSearch(current, sources, terms, LocalDate.now(clock))
     }
 
     override suspend fun seedSearchedTags(recentSearches: List<RecentSearchEntry>) = mutate { current ->
@@ -557,6 +583,61 @@ private fun Map<StatisticsTagKey, Long>.incrementTags(sources: Set<SourceKey>, t
         }
     }
 }
+
+/** The terms a completed search counts: those it required and actually ran, so Unified skips source-owned terms. */
+fun Query.searchedTerms(): Set<SearchTerm> = portableTermsForUnified().includeTerms.toSet()
+
+/**
+ * Counts each term once under every source in [sources]. Values are trimmed and namespaces lowercased,
+ * so one tag searched twice is one key.
+ */
+private fun Map<SearchedTagKey, Long>.incrementTerms(sources: Set<SourceKey>, terms: Set<SearchTerm>): Map<SearchedTagKey, Long> {
+    val normalizedTerms = terms.mapNotNullTo(linkedSetOf(), SearchTerm::normalizedForCountOrNull)
+    if (normalizedTerms.isEmpty() || sources.isEmpty()) return this
+    return toMutableMap().apply {
+        sources.forEach { source ->
+            normalizedTerms.forEach { term ->
+                val key = SearchedTagKey(source, term)
+                this[key] = (this[key] ?: 0L).saturatingAdd(1L)
+            }
+        }
+    }
+}
+
+private fun SearchTerm.normalizedForCountOrNull(): SearchTerm? {
+    val normalizedValue = value.trim().takeIf(String::isNotBlank) ?: return null
+    return copy(value = normalizedValue, sourceNamespace = sourceNamespace?.trim()?.lowercase()?.takeIf(String::isNotBlank))
+}
+
+private fun decodeSearchedTagCounts(
+    general: List<StatisticsTagCountRecord>,
+    typed: List<StatisticsTypedTagCountRecord>,
+): Map<SearchedTagKey, Long> {
+    val counts = general.decodeTagCounts().mapKeysTo(linkedMapOf()) { (key, _) -> SearchedTagKey(key.source, SearchTerm(key.tag)) }
+    typed.forEach { record ->
+        val source = SourceKey.parse(record.source) ?: return@forEach
+        // A facet added by a later build cannot be searched here, so its counts are skipped.
+        val facet = SearchFacet.entries.firstOrNull { it.name == record.facet } ?: return@forEach
+        val term = SearchTerm(record.tag, facet, record.sourceNamespace).normalizedForCountOrNull() ?: return@forEach
+        if (record.count <= 0L) return@forEach
+        val key = SearchedTagKey(source, term)
+        counts[key] = (counts[key] ?: 0L).saturatingAdd(record.count)
+    }
+    return counts
+}
+
+private fun Map<SearchedTagKey, Long>.encodeTypedTagCounts(): List<StatisticsTypedTagCountRecord> =
+    entries.sortedWith(compareBy({ it.key.source.id }, { it.key.term.facet }, { it.key.term.sourceNamespace }, { it.key.term.value }))
+        .map { (key, count) ->
+            StatisticsTypedTagCountRecord(key.source.id, key.term.value, key.term.facet.name, key.term.sourceNamespace, count)
+        }
+
+private fun Map<SearchedTagKey, Long>.normalizeSearchedTagCounts(): Map<SearchedTagKey, Long> =
+    entries.mapNotNull { (key, count) ->
+        val term = key.term.normalizedForCountOrNull() ?: return@mapNotNull null
+        val normalizedCount = count.coerceAtLeast(0L).takeIf { it > 0L } ?: return@mapNotNull null
+        SearchedTagKey(key.source, term) to normalizedCount
+    }.toMap()
 
 private fun List<StatisticsTagCountRecord>.decodeTagCounts(): Map<StatisticsTagKey, Long> {
     val tags = linkedMapOf<StatisticsTagKey, Long>()

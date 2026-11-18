@@ -1,9 +1,11 @@
 package com.theoriacodex.app.search
 
-import com.theoriacodex.data.repository.StatisticsTagKey
+import com.theoriacodex.data.repository.SearchedTagKey
+import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.SearchFacet
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -35,21 +37,40 @@ class TagSuggestionRankingTest {
     @Test
     fun `searched tags rank by closeness, then search count, merging spellings within the sources in scope`() {
         val counts = mapOf(
-            StatisticsTagKey(SourceKey.PIXIV, "Animation") to 2L,
-            StatisticsTagKey(SourceKey.GELBOORU, "animation") to 5L,
-            StatisticsTagKey(SourceKey.GELBOORU, "animal_ears") to 3L,
-            StatisticsTagKey(SourceKey.GELBOORU, "fan_art") to 9L,
-            StatisticsTagKey(SourceKey.GELBOORU, "an") to 1L,
-            StatisticsTagKey(SourceKey.DANBOORU, "anime") to 99L,
+            SearchedTagKey(SourceKey.PIXIV, SearchTerm("Animation")) to 2L,
+            SearchedTagKey(SourceKey.GELBOORU, SearchTerm("animation")) to 5L,
+            SearchedTagKey(SourceKey.GELBOORU, SearchTerm("animal_ears")) to 3L,
+            SearchedTagKey(SourceKey.GELBOORU, SearchTerm("fan_art")) to 9L,
+            SearchedTagKey(SourceKey.GELBOORU, SearchTerm("an")) to 1L,
+            SearchedTagKey(SourceKey.DANBOORU, SearchTerm("anime")) to 99L,
         )
         val sources = setOf(SourceKey.PIXIV, SourceKey.GELBOORU)
 
         assertEquals(
             listOf("an", "animation", "animal_ears", "fan_art"),
-            rankSearchedTags(counts, sources, "an", limit = 10),
+            rankSearchedTags(counts, sources, "an", limit = 10).map(SearchTerm::value),
         )
-        assertEquals(listOf("Animation"), rankSearchedTags(counts, setOf(SourceKey.PIXIV), "AN", limit = 10))
-        assertEquals(emptyList<String>(), rankSearchedTags(counts, sources, " ", limit = 10))
+        assertEquals(listOf(SearchTerm("Animation")), rankSearchedTags(counts, setOf(SourceKey.PIXIV), "AN", limit = 10))
+        assertEquals(emptyList<SearchTerm>(), rankSearchedTags(counts, sources, " ", limit = 10))
+    }
+
+    @Test
+    fun `searched terms keep their type, rank per type and follow the scope`() {
+        val artist = SearchTerm("mika", SearchFacet.ARTIST, "artist")
+        val female = SearchTerm("milf", SearchFacet.TAG, "female")
+        val counts = mapOf(
+            SearchedTagKey(SourceKey.HITOMI, artist) to 4L,
+            SearchedTagKey(SourceKey.HITOMI, SearchTerm("mika")) to 1L,
+            SearchedTagKey(SourceKey.HITOMI, SearchTerm("Mika", sourceNamespace = "tag")) to 2L,
+            SearchedTagKey(SourceKey.HITOMI, female) to 3L,
+        )
+        fun rank(scope: FacetedSearchScope) = rankSearchedTags(counts, setOf(SourceKey.HITOMI), "mi", 10, scope::accepts)
+
+        // The same value as an artist and as a general tag are two rows; general spellings merge.
+        assertEquals(listOf(artist, female, SearchTerm("Mika", sourceNamespace = "tag")), rank(FacetedSearchScope.All))
+        assertEquals(listOf(artist), rank(FacetedSearchScope(SearchFacet.ARTIST, "artist")))
+        assertEquals(listOf(female), rank(FacetedSearchScope(SearchFacet.TAG, "female")))
+        assertEquals(listOf(SearchTerm("Mika", sourceNamespace = "tag")), rank(FacetedSearchScope(SearchFacet.TAG, "tag")))
     }
 
     @Test

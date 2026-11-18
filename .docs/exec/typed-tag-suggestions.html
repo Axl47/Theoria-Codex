@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Typed Tag Suggestions</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f7f4;
+      --surface: #ffffff;
+      --text: #202124;
+      --muted: #5f6368;
+      --border: #d7d7d0;
+      --accent: #0f766e;
+      --accent-soft: #dff3ef;
+      --risk: #9a3412;
+      --risk-soft: #ffedd5;
+      --code: #111827;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #151716;
+        --surface: #202321;
+        --text: #f0f2ef;
+        --muted: #b8beb7;
+        --border: #3a403c;
+        --accent: #5eead4;
+        --accent-soft: #123b37;
+        --risk: #fdba74;
+        --risk-soft: #43230f;
+        --code: #0b0f0d;
+      }
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header, main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    header {
+      padding-top: 36px;
+    }
+    h1, h2, h3 {
+      line-height: 1.15;
+      margin: 0 0 12px;
+    }
+    h1 { font-size: clamp(2rem, 4vw, 3.25rem); }
+    h2 { margin-top: 36px; font-size: 1.55rem; }
+    h3 { margin-top: 24px; font-size: 1.1rem; }
+    p { margin: 0 0 14px; }
+    a { color: var(--accent); }
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-block: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+      backdrop-filter: blur(10px);
+    }
+    nav ul {
+      display: flex;
+      gap: 6px;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 8px 24px;
+      list-style: none;
+      overflow-x: auto;
+    }
+    nav a {
+      display: block;
+      padding: 6px 10px;
+      border-radius: 6px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    nav a:hover { background: var(--accent-soft); }
+    section {
+      padding: 22px;
+      margin: 18px 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 0.95rem;
+    }
+    th, td {
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+    th { color: var(--muted); font-weight: 650; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    pre {
+      overflow-x: auto;
+      padding: 14px;
+      border-radius: 8px;
+      background: var(--code);
+      color: #f8fafc;
+    }
+    details {
+      margin: 12px 0;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--surface) 88%, var(--bg));
+    }
+    summary {
+      cursor: pointer;
+      font-weight: 700;
+    }
+    figure { margin: 16px 0; }
+    img {
+      max-width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    figcaption {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 16px 0;
+      color: var(--muted);
+    }
+    .pill {
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface);
+    }
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 12px;
+      margin: 18px 0 0;
+    }
+    .card {
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+    .card strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    .callout {
+      margin: 14px 0;
+      padding: 12px 14px;
+      border-left: 4px solid var(--accent);
+      background: var(--accent-soft);
+      border-radius: 6px;
+    }
+    .risk {
+      border-left-color: var(--risk);
+      background: var(--risk-soft);
+    }
+    .status-table td:first-child {
+      width: 180px;
+      color: var(--muted);
+      font-weight: 650;
+    }
+
+    @media print {
+      nav { position: static; }
+      section, .card { break-inside: avoid; }
+      body { background: #fff; color: #000; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Typed searched-tag suggestions</h1>
+  <p class="meta"><span class="pill">Status: in progress</span> Owner: implementation agent · Started 2026-11-17 · Branch <code>feat/typed-tag-suggestions</code></p>
+  <p>Search's tag composer leads with tags the user searched before (up to three) and saved tags. Until now only plain general tags were remembered, so nhentai or Hitomi artists, groups, parodies, characters, languages and Hitomi <code>female:</code>/<code>male:</code> tags never came back as suggestions. After this change every searched term is remembered with its type, suggestions follow the effective scope, and tapping one adds the term with its type intact.</p>
+</header>
+<nav><ul>
+  <li><a href="#dashboard">Dashboard</a></li><li><a href="#context">Context</a></li><li><a href="#decisions">Decisions</a></li>
+  <li><a href="#work">Work plan</a></li><li><a href="#validation">Validation</a></li><li><a href="#log">Living log</a></li><li><a href="#recovery">Recovery</a></li>
+</ul></nav>
+<main>
+<section id="dashboard">
+  <h2>Dashboard</h2>
+  <div class="dashboard">
+    <div class="card"><strong>Next action</strong>See the living log.</div>
+    <div class="card"><strong>Main risk</strong>Statistics store and backup format: typed counts must not be misread by older builds or lost on restore.</div>
+    <div class="card"><strong>Validation</strong>Unit tests (core-data, app-logic, app), <code>scripts/check.sh --record</code>, device-validation workflow, emulator check on <code>com.theoriacodex.acceptance</code>.</div>
+    <div class="card"><strong>Affected areas</strong><code>core-domain</code> Query/SourceAdapter, <code>core-data</code> statistics, <code>app-logic</code> ranking and scope policy, <code>app</code> SearchCoordinator, SearchSuggestionCoordinator, SearchComposerModel.</div>
+  </div>
+</section>
+
+<section id="context">
+  <h2>Context</h2>
+  <p><strong>Terms.</strong> A <em>search term</em> (<code>SearchTerm</code>) is a value plus a <em>facet</em> (TAG, ARTIST, CHARACTER, SERIES, GROUP, TYPE, LANGUAGE) and an optional <em>source namespace</em> (for example nhentai's <code>artist</code>, Hitomi's <code>female</code>). A <em>scope</em> (<code>FacetedSearchScope</code>) is the tag type the composer is aimed at; <code>All</code> has no facet. The <em>effective scope</em> is the picked scope unless the typed input starts with a prefix such as <code>artist:</code>, which overrides it. A <em>general tag</em> is a TAG term with no namespace or the <code>tag</code> namespace (nhentai and Hitomi spell their Tag scope that way).</p>
+  <p><strong>Before.</strong> <code>SearchCoordinator</code> called <code>statisticsRepository.recordSearch(sources, tags)</code> with only portable general tags (TAG, no namespace). Counts live in <code>LifetimeStatistics.searchesByTag</code> (core-data <code>Repositories.kt</code>), persisted in the statistics DataStore JSON (<code>StatisticsStoreRecord</code>, file <code>statistics_store_v1.json</code>) and in profile backups, which serialize the same record. <code>rankSearchedTags</code> (app-logic <code>TagSuggestionRanking.kt</code>) returned strings. The composer (<code>app/.../search/SearchComposerModel.kt</code>) showed saved and searched rows only in general scopes and added them as plain tags.</p>
+  <p><strong>Unified mode.</strong> Unified searches run only portable general terms (<code>Query.normalizedForMode</code> drops the rest), has no faceted scopes (<code>SearchCoordinator.supportedSearchScopes</code> returns none), and blocks typed prefixes. So Unified suggests only portable general history; typed history would be dropped on run.</p>
+</section>
+
+<section id="decisions">
+  <h2>Decisions</h2>
+  <table class="status-table">
+    <tr><th>Decision</th><th>Why</th></tr>
+    <tr><td>In memory, search counts become <code>Map&lt;SearchedTagKey, Long&gt;</code> where <code>SearchedTagKey(source, term: SearchTerm)</code>. Watched-tag counts keep <code>StatisticsTagKey</code>.</td><td>The term already carries facet and namespace; a dedicated key keeps watched post tags (always plain strings) unchanged.</td></tr>
+    <tr><td>On disk, portable general counts stay in <code>searchesByTag</code> records exactly as before; every other term goes to a new <code>searchesByTypedTag</code> list with <code>facet</code> and <code>sourceNamespace</code>. No schema version bump.</td><td>Old stores and old backups read unchanged. An older build reading a newer store or backup ignores the unknown list instead of misreading artists as general tags. Records with an unknown facet are skipped, so a future facet cannot break decoding.</td></tr>
+    <tr><td>Recorded terms are the query's required terms that actually ran: <code>query.portableTermsForUnified().includeTerms</code>. Excluded terms are not counted (unchanged).</td><td>A typed term in a Unified draft never runs, so it should not be remembered.</td></tr>
+    <tr><td>The Recents seed runs once more for terms the first seed skipped (everything but portable general tags), tracked by a new <code>searchesByTypedTagSeeded</code> flag.</td><td>Recents store full queries, so recent artist searches become suggestions right after upgrade. Before this change typed terms were never counted, so seeding cannot double count; merging with max keeps the step idempotent, like the original seed.</td></tr>
+    <tr><td>Saved tags stay general-only.</td><td>No typed tag can be saved today: the composer's tag menu offers Save only for general tags (<code>ComposerSavedTags.canSave</code>), and post info saves plain strings. There is no typed saved data to suggest. Adding typed saving is a new feature across the saved-chip UI (how a typed chip reads), repository API, normalization and backup validation, and needs its own design pass. The composer filters saved entries through the same scope check as history, so typed saved tags would work there without further change.</td></tr>
+    <tr><td>General tags form one type whether spelled with no namespace or <code>tag</code>; every other facet/namespace pair is its own type (<code>SearchTagType</code> in core-domain). A scope accepts a term when it is All or has the same type.</td><td>Matches PR #138, where <code>tag:</code> counts as general, and the post-info notion of a general tag. It now also applies to the picked Tag scope of nhentai and Hitomi.</td></tr>
+    <tr><td>In the All scope, typed history shows beside general history with its type in the row meta (for example "Artist"), the label provider faceted rows use. General history rows keep an empty meta.</td><td>Same look as the provider's faceted rows; the history icon still marks the row.</td></tr>
+    <tr><td>Tapping a history row adds its stored term (facet and namespace intact): Required adds it, Excluded excludes it, an Alternative group takes it only when the type matches (general joins general, taking the group's spelling).</td><td>Same rules as provider faceted rows and the draft reducer's group invariant.</td></tr>
+  </table>
+</section>
+
+<section id="work">
+  <h2>Work plan</h2>
+  <ol>
+    <li><strong>core-domain</strong> <code>Query.kt</code>: add <code>GENERAL_TAG_NAMESPACE</code>, <code>SearchTagType</code>, <code>SearchTerm.tagType</code>, <code>SearchTerm.isGeneralTag</code>; <code>SourceAdapter.kt</code>: <code>FacetedSearchScope.tagType</code> and <code>accepts(term)</code>. Replace the app's <code>isGeneralPostTag()</code> with <code>isGeneralTag</code>.</li>
+    <li><strong>core-data</strong> <code>Repositories.kt</code>, <code>StatisticsRepositories.kt</code>: <code>SearchedTagKey</code>, typed record list, seed flag, <code>recordSearch(sources, terms)</code>, restore merge; test fixture <code>InMemoryStatisticsRepository</code>.</li>
+    <li><strong>app-logic</strong>: <code>rankSearchedTags</code> returns <code>List&lt;SearchTerm&gt;</code>, takes an <code>accepts</code> filter, and groups by type and token; <code>typedInputScope</code> in <code>SearchScopedInputPolicy.kt</code>; <code>searchedTags</code> state becomes <code>List&lt;SearchTerm&gt;</code>.</li>
+    <li><strong>app</strong>: <code>SearchCoordinator</code> records typed terms; <code>SearchSuggestionCoordinator</code> ranks history for the resolved scope (portable only in Unified); <code>SearchComposerModel</code> filters saved and searched rows by the effective scope and adds typed terms intact.</li>
+  </ol>
+</section>
+
+<section id="validation">
+  <h2>Validation</h2>
+  <ul>
+    <li>Unit: <code>./gradlew :core-data:test --tests '*StatisticsRepositoriesTest*'</code>, <code>:app-logic:test --tests '*TagSuggestionRankingTest*'</code>, <code>:app:testDebugUnitTest --tests '*SearchComposerModelTest*'</code> (JAVA_HOME = JDK 21+).</li>
+    <li>Pre-PR: <code>scripts/check.sh --record</code>. Device: <code>gh workflow run device-validation.yml --ref feat/typed-tag-suggestions</code> (store format change).</li>
+    <li>Emulator (<code>theoria-search-test</code>, <code>com.theoriacodex.acceptance</code>): install the previous acceptance build, search a general tag and an nhentai artist, upgrade to this build; check the general tag still suggests, the artist suggests (history icon) in nhentai's Artist scope and after <code>artist:</code>, and tapping adds an "Artist · …" chip. Use accessibility snapshots only where provider media is on screen.</li>
+  </ul>
+</section>
+
+<section id="log">
+  <h2>Living log</h2>
+  <ul>
+    <li>2026-11-17: Context read, decisions recorded above. Implementation started.</li>
+    <li>2026-11-17: Implemented all four work-plan steps in one pass. The app's <code>isGeneralPostTag()</code> moved to the domain as <code>SearchTerm.isGeneralTag</code> so app-logic ranking can share it. Unit tests added: <code>StatisticsRepositoriesTest</code> (typed counting, Unified skips source-owned terms, typed seed after general seed, separate typed record list with unknown-facet skip, restore merge), <code>TagSuggestionRankingTest</code> (per-type ranking and scope filter), <code>SearchComposerModelTest</code> (picked and typed scopes, type label, tap actions, alternative groups, draft dedupe by type, saved tags in general scopes, <code>tag:</code> without scopes), <code>SearchedTermHistoryTest</code> (search to statistics to autocomplete, Unified portable-only).</li>
+    <li>Surprise: the test-file line budget (700) in <code>scripts/check_hotspots.py</code> rejected growing <code>SearchCoordinatorTest.kt</code>; the coordinator-level test lives in <code>SearchedTermHistoryTest.kt</code> and reuses <code>FacetedAdapter</code> (now internal).</li>
+  </ul>
+</section>
+
+<section id="recovery">
+  <h2>Recovery</h2>
+  <p>All code changes are additive to the store format, so reverting the branch leaves stores readable: the old code ignores <code>searchesByTypedTag</code> and <code>searchesByTypedTagSeeded</code>. Emulator work uses only the isolated acceptance package; reinstalling it is safe.</p>
+</section>
+</main>
+</body>
+</html>

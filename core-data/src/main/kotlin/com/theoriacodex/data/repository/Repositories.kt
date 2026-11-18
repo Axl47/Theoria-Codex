@@ -9,6 +9,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -215,6 +216,12 @@ data class StatisticsTagKey(
     val tag: String,
 )
 
+/** A term counted as searched on [source], with its facet and namespace, so an artist stays an artist. */
+data class SearchedTagKey(
+    val source: SourceKey,
+    val term: SearchTerm,
+)
+
 data class UsageDurationDelta(
     val totalMs: Long = 0L,
     val browsingMs: Long = 0L,
@@ -253,10 +260,12 @@ data class LifetimeStatistics(
     val watchedByTag: Map<StatisticsTagKey, Long> = emptyMap(),
     val searchCount: Long = 0L,
     val searchesBySource: Map<SourceKey, Long> = emptyMap(),
-    /** How many searches included each general tag, counted under every source the search ran on. */
-    val searchesByTag: Map<StatisticsTagKey, Long> = emptyMap(),
-    /** Whether [searchesByTag] has taken in the searches Recents held when tag counting began. */
+    /** How many searches required each term, counted under every source the search ran on. */
+    val searchesByTag: Map<SearchedTagKey, Long> = emptyMap(),
+    /** Whether [searchesByTag] has taken in the portable general tags Recents held when tag counting began. */
     val searchesByTagSeeded: Boolean = false,
+    /** Whether [searchesByTag] has taken in the other terms Recents held when typed terms began to count. */
+    val searchesByTypedTagSeeded: Boolean = false,
     val forYouSearchCount: Long = 0L,
     val forYouSaveCount: Long = 0L,
     val postUrlCopyCount: Long = 0L,
@@ -279,9 +288,9 @@ interface StatisticsRepository {
     suspend fun addUsageDuration(delta: UsageDurationDelta)
     /** Records a viewed post; [codexOpen] also counts it as opened from that Codex in the same write. */
     suspend fun recordWatchedPost(source: SourceKey, tags: Set<String>, codexOpen: CodexPostOpen? = null)
-    /** Records one completed search over [sources]; [tags] are the general tags it included. */
-    suspend fun recordSearch(sources: Set<SourceKey>, tags: Set<String> = emptySet())
-    /** Once ever, counts the tags of [recentSearches] into [LifetimeStatistics.searchesByTag]; later calls do nothing. */
+    /** Records one completed search over [sources]; [terms] are the terms it ran, see [Query.searchedTerms]. */
+    suspend fun recordSearch(sources: Set<SourceKey>, terms: Set<SearchTerm> = emptySet())
+    /** Once per kind of term, counts the terms of [recentSearches] into [LifetimeStatistics.searchesByTag]. */
     suspend fun seedSearchedTags(recentSearches: List<RecentSearchEntry>)
     suspend fun recordForYouSearch()
     suspend fun recordForYouSave()

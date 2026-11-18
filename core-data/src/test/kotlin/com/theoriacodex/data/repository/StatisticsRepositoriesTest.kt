@@ -2,6 +2,8 @@ package com.theoriacodex.data.repository
 
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchFacet
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
@@ -36,7 +38,7 @@ class StatisticsRepositoriesTest {
             UsageDurationDelta(totalMs = 4_000L, browsingMs = 1_500L, watchingMs = 2_000L)
         )
         repository.recordWatchedPost(SourceKey.PIXIV, setOf(" blue_hair ", "blue_hair", ""))
-        repository.recordSearch(setOf(SourceKey.PIXIV, SourceKey.GELBOORU), setOf(" animation ", "animation", ""))
+        repository.recordSearch(setOf(SourceKey.PIXIV, SourceKey.GELBOORU), setOf(SearchTerm(" animation "), SearchTerm("animation"), SearchTerm("")))
         repository.recordForYouSearch()
         repository.recordForYouSave()
         repository.recordPostUrlCopy()
@@ -56,7 +58,7 @@ class StatisticsRepositoriesTest {
         assertEquals(1L, statistics.searchesBySource.getValue(SourceKey.PIXIV))
         assertEquals(1L, statistics.searchesBySource.getValue(SourceKey.GELBOORU))
         assertEquals(
-            mapOf(StatisticsTagKey(SourceKey.PIXIV, "animation") to 1L, StatisticsTagKey(SourceKey.GELBOORU, "animation") to 1L),
+            mapOf(searched(SourceKey.PIXIV, "animation") to 1L, searched(SourceKey.GELBOORU, "animation") to 1L),
             statistics.searchesByTag,
         )
         assertEquals(1L, statistics.forYouSearchCount)
@@ -70,7 +72,7 @@ class StatisticsRepositoriesTest {
     @Test
     fun `searched tags seed once from manual recent searches without double counting`() = runTest {
         val repository = InMemoryStatisticsRepository()
-        repository.recordSearch(setOf(SourceKey.PIXIV), setOf("animation"))
+        repository.recordSearch(setOf(SourceKey.PIXIV), setOf(SearchTerm("animation")))
         fun entry(tags: List<String>, kind: RecentSearchKind, sources: List<SourceKey>) = RecentSearchEntry(
             query = Query(QueryMode.Unified, includeTags = tags, excludeTags = emptyList(), sort = SortMode.NEWEST,
                 dateRange = null, minScore = null),
@@ -91,14 +93,80 @@ class StatisticsRepositoriesTest {
         val statistics = repository.observeStatistics().first()
         assertEquals(
             mapOf(
-                StatisticsTagKey(SourceKey.PIXIV, "animation") to 1L,
-                StatisticsTagKey(SourceKey.GELBOORU, "animation") to 1L,
-                StatisticsTagKey(SourceKey.PIXIV, "sky") to 1L,
-                StatisticsTagKey(SourceKey.GELBOORU, "sky") to 2L,
+                searched(SourceKey.PIXIV, "animation") to 1L,
+                searched(SourceKey.GELBOORU, "animation") to 1L,
+                searched(SourceKey.PIXIV, "sky") to 1L,
+                searched(SourceKey.GELBOORU, "sky") to 2L,
             ),
             statistics.searchesByTag,
         )
         assertTrue(statistics.searchesByTagSeeded)
+    }
+
+    @Test
+    fun `searches count typed terms with their type and only what ran`() {
+        val artist = SearchTerm(" Shindol ", SearchFacet.ARTIST, " Artist ")
+        val sourceQuery = query(QueryMode.Source(SourceKey.NHENTAI), SearchTerm("sky"), artist)
+        val counted = StatisticsPolicies.recordSearch(LifetimeStatistics(), setOf(SourceKey.NHENTAI), sourceQuery.searchedTerms())
+
+        assertEquals(
+            mapOf(searched(SourceKey.NHENTAI, "sky") to 1L, searched(SourceKey.NHENTAI, "Shindol", SearchFacet.ARTIST, "artist") to 1L),
+            counted.searchesByTag,
+        )
+        // Unified runs only portable general tags, so a typed term left in its draft is not counted.
+        assertEquals(setOf(SearchTerm("sky")), query(QueryMode.Unified, SearchTerm("sky"), artist).searchedTerms())
+    }
+
+    @Test
+    fun `typed terms seed once from Recents after general tags were seeded`() {
+        val artist = SearchTerm("shindol", SearchFacet.ARTIST, "artist")
+        val alreadySeeded = LifetimeStatistics(searchesByTag = mapOf(searched(SourceKey.NHENTAI, "sky") to 3L), searchesByTagSeeded = true)
+        val recents = listOf(
+            RecentSearchEntry(query(QueryMode.Source(SourceKey.NHENTAI), SearchTerm("sky"), artist), "a", 0L,
+                RecentSearchKind.SOURCE, listOf(SourceKey.NHENTAI)),
+            RecentSearchEntry(query(QueryMode.Source(SourceKey.NHENTAI), artist), "b", 0L,
+                RecentSearchKind.SOURCE, listOf(SourceKey.NHENTAI)),
+        )
+
+        val seeded = StatisticsPolicies.seedSearchedTags(alreadySeeded, recents)
+
+        assertEquals(
+            mapOf(searched(SourceKey.NHENTAI, "sky") to 3L, SearchedTagKey(SourceKey.NHENTAI, artist) to 2L),
+            seeded.searchesByTag,
+        )
+        assertTrue(seeded.searchesByTypedTagSeeded)
+        assertEquals(seeded, StatisticsPolicies.seedSearchedTags(seeded, recents + recents))
+    }
+
+    @Test
+    fun `typed counts keep their own list so older records and builds read general counts unchanged`() {
+        val female = SearchedTagKey(SourceKey.HITOMI, SearchTerm("mika", SearchFacet.TAG, "female"))
+        val statistics = LifetimeStatistics(
+            searchesByTag = mapOf(searched(SourceKey.HITOMI, "sky") to 2L, female to 5L),
+            searchesByTypedTagSeeded = true,
+        )
+
+        val record = StatisticsStoreRecord.fromDomain(statistics)
+
+        assertEquals(listOf(StatisticsTagCountRecord("HITOMI", "sky", 2L)), record.searchesByTag)
+        assertEquals(listOf(StatisticsTypedTagCountRecord("HITOMI", "mika", "TAG", "female", 5L)), record.searchesByTypedTag)
+        assertEquals(statistics, record.toDomain())
+        // A facet from a later build is skipped rather than failing the whole store.
+        val future = record.copy(searchesByTypedTag = record.searchesByTypedTag + StatisticsTypedTagCountRecord("HITOMI", "x", "STUDIO", null, 1L))
+        assertEquals(statistics, future.toDomain())
+    }
+
+    @Test
+    fun `restoring a backup keeps the larger count of each typed term and both seed flags`() {
+        val artist = SearchedTagKey(SourceKey.NHENTAI, SearchTerm("shindol", SearchFacet.ARTIST, "artist"))
+        val current = LifetimeStatistics(searchesByTag = mapOf(artist to 2L, searched(SourceKey.NHENTAI, "sky") to 4L))
+        val backup = LifetimeStatistics(searchesByTag = mapOf(artist to 5L), searchesByTagSeeded = true, searchesByTypedTagSeeded = true)
+
+        val merged = StatisticsPolicies.mergeRestored(current, backup)
+
+        assertEquals(mapOf(artist to 5L, searched(SourceKey.NHENTAI, "sky") to 4L), merged.searchesByTag)
+        assertTrue(merged.searchesByTagSeeded && merged.searchesByTypedTagSeeded)
+        assertEquals(merged, StatisticsPolicies.mergeRestored(merged, backup))
     }
 
     @Test
@@ -108,7 +176,7 @@ class StatisticsRepositoriesTest {
         val first = DataStoreStatisticsRepository(directory, firstScope)
         first.recordWatchedPost(SourceKey.PIXIV, setOf("landscape"), CodexPostOpen("first", "PIXIV:1", "A post"))
         first.recordWatchedPost(SourceKey.GELBOORU, setOf("landscape"))
-        first.recordSearch(setOf(SourceKey.PIXIV), setOf("animation"))
+        first.recordSearch(setOf(SourceKey.PIXIV), setOf(SearchTerm("animation"), SearchTerm("mika", SearchFacet.ARTIST)))
         first.addUsageDuration(UsageDurationDelta(totalMs = 12_345L, codexMs = 2_345L))
         first.recordTranslationUsage(phraseCount = 3L, sourceCharacterCount = 18L)
         first.recordCodexPostOpen("first", "PIXIV:1", "A post")
@@ -130,7 +198,10 @@ class StatisticsRepositoriesTest {
         assertEquals(2L, restored.watchedPostCount)
         assertEquals(1L, restored.watchedByTag.getValue(StatisticsTagKey(SourceKey.PIXIV, "landscape")))
         assertEquals(1L, restored.watchedByTag.getValue(StatisticsTagKey(SourceKey.GELBOORU, "landscape")))
-        assertEquals(mapOf(StatisticsTagKey(SourceKey.PIXIV, "animation") to 1L), restored.searchesByTag)
+        assertEquals(
+            mapOf(searched(SourceKey.PIXIV, "animation") to 1L, searched(SourceKey.PIXIV, "mika", SearchFacet.ARTIST) to 1L),
+            restored.searchesByTag,
+        )
         assertEquals(12_345L, restored.totalForegroundMs)
         assertEquals(2_345L, restored.codexMs)
         assertEquals(3L, restored.translatedPhraseCount)
@@ -212,6 +283,12 @@ class StatisticsRepositoriesTest {
         assertFalse(directory.resolve("$DATASTORE_STATISTICS_FILE_NAME.corrupt").exists())
         closeScope(scope)
     }
+
+    private fun searched(source: SourceKey, value: String, facet: SearchFacet = SearchFacet.TAG, namespace: String? = null) =
+        SearchedTagKey(source, SearchTerm(value, facet, namespace))
+
+    private fun query(mode: QueryMode, vararg include: SearchTerm) =
+        Query(mode, include.toList(), emptyList(), SortMode.NEWEST, dateRange = null, minScore = null)
 
     private fun newScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 

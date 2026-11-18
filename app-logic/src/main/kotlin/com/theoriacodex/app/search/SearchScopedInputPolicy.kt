@@ -37,6 +37,21 @@ fun resolveSupportedScope(
         ?: scopes.firstOrNull { it.facet == prefix.facet }
 }
 
+/**
+ * The tag type typed input is aimed at: a prefix such as `artist:` resolves against [supported] and
+ * overrides the picked [selected] scope. A prefix this mode cannot search gives null, except `tag:`,
+ * which always means general tags.
+ */
+fun typedInputScope(
+    input: ParsedScopedInput,
+    selected: FacetedSearchScope,
+    supported: List<FacetedSearchScope>,
+): FacetedSearchScope? {
+    val prefix = input.explicitScope ?: return selected
+    return resolveSupportedScope(prefix, supported)
+        ?: FacetedSearchScope(SearchFacet.TAG).takeIf { prefix.facet == SearchFacet.TAG && !prefix.requiresExactNamespace }
+}
+
 const val UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE =
     "Artists, series, characters, groups, types, and languages require a specific source."
 const val UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE =

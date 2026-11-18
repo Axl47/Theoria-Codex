@@ -51,6 +51,8 @@ class DailyStatisticsTest {
             assertEquals(0, actual["statistics"].asJsonObject.remove("history").asJsonObject.size())
             assertEquals(0, actual["statistics"].asJsonObject.remove("searchesByTag").asJsonArray.size())
             assertEquals(false, actual["statistics"].asJsonObject.remove("searchesByTagSeeded").asBoolean)
+            assertEquals(0, actual["statistics"].asJsonObject.remove("searchesByTypedTag").asJsonArray.size())
+            assertEquals(false, actual["statistics"].asJsonObject.remove("searchesByTypedTagSeeded").asBoolean)
             assertEquals(JsonParser.parseString(v1).asJsonObject["statistics"], actual["statistics"])
             repository.recordAppOpen()
             repository.recordWatchedPost(SourceKey.PIXIV, emptySet())

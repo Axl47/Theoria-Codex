@@ -2,6 +2,7 @@ package com.theoriacodex.app.search
 
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 import com.theoriacodex.domain.orchestration.SourceRunState
@@ -59,8 +60,8 @@ data class SearchAutocompleteResult(
     val validationMessage: String? = null,
     val autocomplete: List<TagSuggestion> = emptyList(),
     val facetedAutocomplete: List<FacetedTagSuggestion> = emptyList(),
-    /** Previously searched tags matching the input, most-searched first; see [rankSearchedTags]. */
-    val searchedTags: List<String> = emptyList(),
+    /** Previously searched terms matching the input and its scope, most-searched first; see [rankSearchedTags]. */
+    val searchedTags: List<SearchTerm> = emptyList(),
 )
 
 data class SearchEnvironmentChange(
