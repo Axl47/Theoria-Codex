@@ -1,8 +1,7 @@
 package com.theoriacodex.app.search
 
-import com.google.gson.Gson
-import com.google.gson.annotations.SerializedName
 import com.theoriacodex.data.storage.AtomicJsonFileStore
+import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
@@ -28,6 +27,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 enum class TagSuggestionOrigin {
     SEED,
@@ -151,9 +152,7 @@ internal class FileBackedTagSuggestionStore(
     private val maxTotalUtf8Bytes: Int = DEFAULT_MAX_TOTAL_UTF8_BYTES,
     private val persistenceDebounceMs: Long = DEFAULT_PERSISTENCE_DEBOUNCE_MS,
     private val workDispatcher: CoroutineDispatcher = Dispatchers.Default,
-    // Compact: the snapshot can reach several MB and is rewritten on every debounced mutation burst.
-    private val gson: Gson = Gson(),
-    private val fileStore: AtomicJsonFileStore = AtomicJsonFileStore(gson = gson),
+    private val fileStore: AtomicJsonFileStore = AtomicJsonFileStore(),
     private val recoveryRegistry: LegacyJsonRecoveryRegistry = LegacyJsonRecoveryRegistry(),
     private val onWriteCompleted: () -> Unit = {},
 ) : TagSuggestionStore {
@@ -418,6 +417,7 @@ internal class FileBackedTagSuggestionStore(
         val snapshot = fileStore.read(
             file = storeFile,
             fallback = TagStoreSnapshot(),
+            serializer = TagStoreSnapshot.serializer(),
             logicalStore = "Search suggestions",
             onRecovery = recoveryRegistry::record,
         )
@@ -425,7 +425,7 @@ internal class FileBackedTagSuggestionStore(
         synchronized(lock) {
             snapshot.sources.orEmpty().forEach { (sourceName, entries) ->
                 val source = SourceKey.parse(sourceName) ?: return@forEach
-                val parsed = entries.orEmpty().mapNotNull(CachedSuggestion::fromStoreEntry)
+                val parsed = entries.orEmpty().filterNotNull().mapNotNull(CachedSuggestion::fromStoreEntry)
                     .take(maxEntriesPerSource)
                 val current = inMemory[source].orEmpty()
                 replaceSourceLocked(
@@ -468,7 +468,7 @@ internal class FileBackedTagSuggestionStore(
                 if (persistedVersion >= mutationVersion) return
                 snapshotLocked() to mutationVersion
             }
-            fileStore.write(storeFile, pending.first)
+            fileStore.write(storeFile, pending.first, TagStoreSnapshot.serializer())
             synchronized(lock) {
                 persistedVersion = maxOf(persistedVersion, pending.second)
             }
@@ -559,7 +559,7 @@ internal class FileBackedTagSuggestionStore(
     }
 
     private fun estimatedEntryBytes(suggestion: CachedSuggestion): Int {
-        return gson.toJson(suggestion.toStoreEntry()).toByteArray(Charsets.UTF_8).size +
+        return DurableJson.encodeToString(TagStoreEntry.serializer(), suggestion.toStoreEntry()).toByteArray().size +
             ENTRY_ESTIMATED_FORMATTING_OVERHEAD_BYTES
     }
 
@@ -568,25 +568,28 @@ internal class FileBackedTagSuggestionStore(
     }
 }
 
-private data class TagStoreSnapshot(
-    @field:SerializedName("sources")
-    val sources: Map<String, List<TagStoreEntry>>? = emptyMap(),
+/** tag_suggestions.json. Nullable lists keep a damaged source list or entry from discarding the whole cache. */
+@Serializable
+internal data class TagStoreSnapshot(
+    @SerialName("sources")
+    val sources: Map<String, List<TagStoreEntry?>?>? = emptyMap(),
 )
 
-private data class TagStoreEntry(
-    @field:SerializedName("text")
+@Serializable
+internal data class TagStoreEntry(
+    @SerialName("text")
     val text: String? = null,
-    @field:SerializedName("facet")
+    @SerialName("facet")
     val facet: String? = null,
-    @field:SerializedName("sourceNamespace")
+    @SerialName("sourceNamespace")
     val sourceNamespace: String? = null,
-    @field:SerializedName("type")
+    @SerialName("type")
     val type: String? = null,
-    @field:SerializedName("count")
+    @SerialName("count")
     val count: Int? = null,
-    @field:SerializedName("alternateText")
+    @SerialName("alternateText")
     val alternateText: String? = null,
-    @field:SerializedName("origins")
+    @SerialName("origins")
     val origins: List<String>? = null,
 )
 

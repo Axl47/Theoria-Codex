@@ -117,10 +117,6 @@
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
--keepclassmembers class com.theoriacodex.data.repository.QueryStoreFile {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
 -keepclassmembers class com.theoriacodex.data.storage.QueryStorageRecord {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
@@ -215,26 +211,6 @@
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
--keepclassmembers class com.theoriacodex.app.update.UpdateStateSnapshot {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.app.update.PendingPostInstallChangelog {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.app.update.ChangelogSection {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.app.search.TagStoreSnapshot {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.app.search.TagStoreEntry {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
 -keepclassmembers class com.theoriacodex.app.statistics.StatsShareFile {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
@@ -248,34 +224,6 @@
     @com.google.gson.annotations.SerializedName <fields>;
 }
 -keepclassmembers class com.theoriacodex.app.statistics.StatsShareOverall {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.app.codex.CodexShareFile {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.app.codex.CodexSharePost {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.app.codex.CodexSharePostSnapshot {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.app.codex.CodexShareImageRef {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.app.codex.CodexShareTaxonomyTerm {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.app.codex.CodexShareCreatorProfile {
-    <init>();
-    @com.google.gson.annotations.SerializedName <fields>;
-}
--keepclassmembers class com.theoriacodex.sources.hitomi.HitomiPageToken {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }

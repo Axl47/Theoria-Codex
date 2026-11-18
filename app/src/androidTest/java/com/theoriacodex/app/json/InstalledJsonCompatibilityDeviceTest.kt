@@ -3,12 +3,12 @@ package com.theoriacodex.app.json
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.gson.GsonBuilder
-import com.theoriacodex.app.codex.CodexShareFile
-import com.theoriacodex.app.codex.CodexSharePost
+import com.theoriacodex.app.codex.encodeCodexShareFile
 import com.theoriacodex.app.search.FileBackedTagSuggestionStore
 import com.theoriacodex.app.update.ChangelogSection
 import com.theoriacodex.app.update.PendingPostInstallChangelog
 import com.theoriacodex.app.update.UpdateStateSnapshot
+import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.ImageRefStorageRecord
 import com.theoriacodex.data.storage.LegacyImportProof
 import com.theoriacodex.data.storage.PostStorageCodec
@@ -22,6 +22,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.VideoVariant
 import java.io.File
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.KSerializer
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -81,16 +82,18 @@ class InstalledJsonCompatibilityDeviceTest {
             "url", "localPath", "mime", "progressiveUrls", "fallbackUrls", "videoVariants", "isAnimated", "thumbnailUrl",
         )
         assertJsonKeys(VideoVariantRecord(), "url", "height", "original", "mime")
-        assertJsonKeys(
-            UpdateStateSnapshot(
-                pendingPostInstallChangelog = PendingPostInstallChangelog(
-                    releaseId = 7L,
-                    versionCode = 8,
-                    tagName = "v0.0.8",
-                    commitShaShort = "abcdef0",
-                    changelogSections = listOf(ChangelogSection("Fixes", listOf("Stable JSON"))),
-                ),
-            ),
+        val changelog = PendingPostInstallChangelog(
+            releaseId = 7L,
+            fromVersionCode = 6,
+            versionCode = 8,
+            tagName = "v0.0.8",
+            commitShaShort = "abcdef0",
+            releaseName = "Stable",
+            changelogSections = listOf(ChangelogSection("Fixes", listOf("Stable JSON"))),
+        )
+        assertKotlinxJsonKeys(
+            UpdateStateSnapshot.serializer(),
+            UpdateStateSnapshot(1L, 2L, 3, 4L, 5L, 6L, changelog, changelog),
             "lastSeenReleaseId",
             "pendingInstallReleaseId",
             "pendingInstallVersionCode",
@@ -100,11 +103,9 @@ class InstalledJsonCompatibilityDeviceTest {
             "pendingPostInstallChangelog",
             "lastInstalledChangelog",
         )
-        assertJsonKeys(
-            CodexShareFile(posts = listOf(CodexSharePost(source = "PIXIV", sourcePostId = "42"))),
-            "version",
-            "title",
-            "posts",
+        assertEquals(
+            setOf("version", "title", "posts"),
+            JSONObject(encodeCodexShareFile("Shared", emptyList())).keySetCompat(),
         )
     }
 
@@ -193,6 +194,10 @@ class InstalledJsonCompatibilityDeviceTest {
 
     private fun assertJsonKeys(value: Any, vararg keys: String) {
         assertEquals(keys.toSet(), JSONObject(gson.toJson(value)).keySetCompat())
+    }
+
+    private fun <T> assertKotlinxJsonKeys(serializer: KSerializer<T>, value: T, vararg keys: String) {
+        assertEquals(keys.toSet(), JSONObject(DurableJson.encodeToString(serializer, value)).keySetCompat())
     }
 
     private fun assertVariantWire(wire: JSONObject, expected: VideoVariant) {

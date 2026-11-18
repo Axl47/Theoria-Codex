@@ -1,6 +1,5 @@
 package com.theoriacodex.app.codex
 
-import com.google.gson.Gson
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -27,7 +26,7 @@ class CodexShareModelsTest {
             full = ImageRef("https://example.test/full.jpg?token=secret", "/private/full.jpg", "image/jpeg"),
             pageUrl = "https://name:secret@example.test/post/42",
         )
-        val encoded = Gson().toJson(buildCodexShareFile("Portable", listOf(source)))
+        val encoded = encodeCodexShareFile("Portable", listOf(source))
         assertFalse(encoded.contains("secret"))
         assertFalse(encoded.contains("/private"))
         val restored = codexSharePostSnapshot(parseCodexShareFile(encoded)!!.posts!!.single())!!
@@ -86,7 +85,7 @@ class CodexShareModelsTest {
     @Test
     fun `v2 share JSON round trips complete ordered post snapshots`() {
         val original = detailedPost()
-        val encoded = Gson().toJson(buildCodexShareFile(title = "Offline", posts = listOf(original)))
+        val encoded = encodeCodexShareFile(title = "Offline", posts = listOf(original))
         val parsed = parseCodexShareFile(encoded)!!
 
         val restored = codexSharePostSnapshot(parsed.posts.orEmpty().single())

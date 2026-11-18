@@ -1,6 +1,5 @@
 package com.theoriacodex.data.repository
 
-import com.google.gson.annotations.SerializedName
 import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
 import com.theoriacodex.data.storage.QueryStorageCodec
@@ -16,6 +15,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 class FileBackedQueryRepository(
     baseDirectory: File,
@@ -33,6 +34,7 @@ class FileBackedQueryRepository(
             fileStore.read(
                 file = storageFile,
                 fallback = QueryStoreFile(),
+                serializer = QueryStoreFile.serializer(),
                 logicalStore = "Saved searches",
                 onRecovery = recoveryRegistry::record,
             )
@@ -65,11 +67,12 @@ class FileBackedQueryRepository(
         val payload = QueryStoreFile(
             queries = queriesFlow.value.mapValues { (_, query) -> QueryStorageCodec.encode(query) },
         )
-        fileStore.write(storageFile, payload)
+        fileStore.write(storageFile, payload, QueryStoreFile.serializer())
     }
 }
 
-private data class QueryStoreFile(
-    @field:SerializedName("queries")
+@Serializable
+internal data class QueryStoreFile(
+    @SerialName("queries")
     val queries: Map<String, QueryStorageRecord> = emptyMap(),
 )

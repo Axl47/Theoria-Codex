@@ -15,29 +15,66 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 const val CURRENT_QUERY_STORAGE_SCHEMA_VERSION = 2
 
+/**
+ * One stored Query. query_store.json reads it through kotlinx.serialization; Room recent-search payloads and the
+ * legacy Recents importer still use Gson, so each property keeps both names until those move too.
+ */
+@Serializable
 data class QueryStorageRecord(
-    @field:SerializedName("schemaVersion") val schemaVersion: Int? = null,
-    @field:SerializedName("modeType") val modeType: String = "unified",
-    @field:SerializedName("modeSource") val modeSource: String? = null,
-    @field:SerializedName("includeTags") val includeTags: List<String> = emptyList(),
-    @field:SerializedName("excludeTags") val excludeTags: List<String> = emptyList(),
-    @field:SerializedName("sort") val sort: String = SortMode.TOP.name,
-    @field:SerializedName("dateFromEpochMs") val dateFromEpochMs: Long? = null,
-    @field:SerializedName("dateToEpochMs") val dateToEpochMs: Long? = null,
-    @field:SerializedName("minScore") val minScore: Int? = null,
-    @field:SerializedName("includeTerms") val includeTerms: List<SearchTermStorageRecord?>? = null,
-    @field:SerializedName("excludeTerms") val excludeTerms: List<SearchTermStorageRecord?>? = null,
+    @field:SerializedName("schemaVersion")
+    @SerialName("schemaVersion")
+    val schemaVersion: Int? = null,
+    @field:SerializedName("modeType")
+    @SerialName("modeType")
+    val modeType: String = "unified",
+    @field:SerializedName("modeSource")
+    @SerialName("modeSource")
+    val modeSource: String? = null,
+    @field:SerializedName("includeTags")
+    @SerialName("includeTags")
+    val includeTags: List<String> = emptyList(),
+    @field:SerializedName("excludeTags")
+    @SerialName("excludeTags")
+    val excludeTags: List<String> = emptyList(),
+    @field:SerializedName("sort")
+    @SerialName("sort")
+    val sort: String = SortMode.TOP.name,
+    @field:SerializedName("dateFromEpochMs")
+    @SerialName("dateFromEpochMs")
+    val dateFromEpochMs: Long? = null,
+    @field:SerializedName("dateToEpochMs")
+    @SerialName("dateToEpochMs")
+    val dateToEpochMs: Long? = null,
+    @field:SerializedName("minScore")
+    @SerialName("minScore")
+    val minScore: Int? = null,
+    @field:SerializedName("includeTerms")
+    @SerialName("includeTerms")
+    val includeTerms: List<SearchTermStorageRecord?>? = null,
+    @field:SerializedName("excludeTerms")
+    @SerialName("excludeTerms")
+    val excludeTerms: List<SearchTermStorageRecord?>? = null,
     @field:SerializedName("includeTermGroups")
+    @SerialName("includeTermGroups")
     val includeTermGroups: List<List<SearchTermStorageRecord?>?>? = null,
 )
 
+@Serializable
 data class SearchTermStorageRecord(
-    @field:SerializedName("value") val value: String? = null,
-    @field:SerializedName("facet") val facet: String? = null,
-    @field:SerializedName("sourceNamespace") val sourceNamespace: String? = null,
+    @field:SerializedName("value")
+    @SerialName("value")
+    val value: String? = null,
+    @field:SerializedName("facet")
+    @SerialName("facet")
+    val facet: String? = null,
+    @field:SerializedName("sourceNamespace")
+    @SerialName("sourceNamespace")
+    val sourceNamespace: String? = null,
 )
 
 object QueryStorageCodec {

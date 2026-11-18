@@ -1,0 +1,1 @@
+{"queries":{"old":{"modeType":"source","modeSource":"PIXIV","includeTags":["a & b"],"excludeTags":["c"],"sort":"BOGUS","minScore":"5"},"grouped":{"schemaVersion":"2","sort":null,"includeTerms":[{"value":"x"},null,{"value":"  "}],"includeTermGroups":[null,[{"value":"y","facet":"NOPE"},{"value":" z ","facet":"ARTIST","sourceNamespace":" "}]]}},"scrollOffsets":{"legacy-query":7}}

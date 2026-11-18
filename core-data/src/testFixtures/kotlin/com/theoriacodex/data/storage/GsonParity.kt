@@ -8,12 +8,14 @@ import java.lang.reflect.Type
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.descriptors.StructureKind
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.serializer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 
 /**
- * Asserts that [T]'s kotlinx serializer under [DurableJson] matches the production `Gson()` it replaces.
+ * Asserts that [T]'s kotlinx serializer under [json] (normally [DurableJson]) matches the production `Gson()` it
+ * replaces.
  *
  * For each sample: both libraries emit the same key paths, Gson's output decodes through kotlinx to the sample,
  * and kotlinx's output decodes through Gson to the sample. Together the samples must emit every property, at any
@@ -24,16 +26,23 @@ inline fun <reified T : Any> assertGsonParity(
     samples: List<T>,
     goldenJson: List<String> = emptyList(),
     serializer: KSerializer<T> = serializer(),
-) = assertGsonParity(serializer, object : TypeToken<T>() {}.type, samples, goldenJson)
+    json: Json = DurableJson,
+) = assertGsonParity(serializer, object : TypeToken<T>() {}.type, samples, goldenJson, json)
 
-fun <T : Any> assertGsonParity(serializer: KSerializer<T>, gsonType: Type, samples: List<T>, goldenJson: List<String>) {
+fun <T : Any> assertGsonParity(
+    serializer: KSerializer<T>,
+    gsonType: Type,
+    samples: List<T>,
+    goldenJson: List<String>,
+    json: Json = DurableJson,
+) {
     require(samples.isNotEmpty()) { "Parity needs at least one sample" }
     val gson = Gson()
     val type = serializer.descriptor.serialName
     val emitted = mutableSetOf<String>()
     samples.forEachIndexed { index, sample ->
         val gsonJson = gson.toJson(sample, gsonType)
-        val kotlinxJson = DurableJson.encodeToString(serializer, sample)
+        val kotlinxJson = json.encodeToString(serializer, sample)
         val gsonKeys = keyPaths(JsonParser.parseString(gsonJson))
         val kotlinxKeys = keyPaths(JsonParser.parseString(kotlinxJson))
         assertEquals(
@@ -41,7 +50,7 @@ fun <T : Any> assertGsonParity(serializer: KSerializer<T>, gsonType: Type, sampl
             gsonKeys,
             kotlinxKeys,
         )
-        assertEquals("$type sample $index: Gson output decoded by kotlinx", sample, DurableJson.decodeFromString(serializer, gsonJson))
+        assertEquals("$type sample $index: Gson output decoded by kotlinx", sample, json.decodeFromString(serializer, gsonJson))
         assertEquals("$type sample $index: kotlinx output decoded by Gson", sample, gson.fromJson<T>(kotlinxJson, gsonType))
         emitted += kotlinxKeys
     }
@@ -51,7 +60,7 @@ fun <T : Any> assertGsonParity(serializer: KSerializer<T>, gsonType: Type, sampl
         assertEquals(
             "$type golden $index decodes differently",
             gson.fromJson<T>(golden, gsonType),
-            DurableJson.decodeFromString(serializer, golden),
+            json.decodeFromString(serializer, golden),
         )
     }
 }

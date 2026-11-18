@@ -1,15 +1,14 @@
 package com.theoriacodex.sources.hitomi
 
-import com.google.gson.Gson
-import com.google.gson.annotations.SerializedName
 import com.theoriacodex.domain.diagnostics.OffMainWork
 import java.util.Base64
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 
-internal class HitomiPageTokenCodec(
-    private val gson: Gson = Gson(),
-) {
+internal class HitomiPageTokenCodec {
     fun encode(token: HitomiPageToken): String {
-        val json = gson.toJson(token).toByteArray(Charsets.UTF_8)
+        val json = hitomiPageTokenJson.encodeToString(token).toByteArray(Charsets.UTF_8)
         return Base64.getUrlEncoder().withoutPadding().encodeToString(json)
     }
 
@@ -17,8 +16,7 @@ internal class HitomiPageTokenCodec(
         OffMainWork.note(OffMainWork.SOURCE_PARSE)
         val token = try {
             val json = Base64.getUrlDecoder().decode(raw).toString(Charsets.UTF_8)
-            gson.fromJson(json, HitomiPageToken::class.java)
-                ?: throw IllegalArgumentException("null token")
+            hitomiPageTokenJson.decodeFromString<HitomiPageToken>(json)
         } catch (error: RuntimeException) {
             throw HitomiPageTokenException("Hitomi page token was malformed", error)
         }
@@ -63,15 +61,16 @@ internal class HitomiPageTokenCodec(
     }
 }
 
+@Serializable
 internal data class HitomiPageToken(
-    @field:SerializedName("version") val version: Int? = null,
-    @field:SerializedName("queryHash") val queryHash: String? = null,
-    @field:SerializedName("primaryKey") val primaryKey: String? = null,
-    @field:SerializedName("primaryOffset") val primaryOffset: Long? = null,
-    @field:SerializedName("randomSeed") val randomSeed: Long? = null,
-    @field:SerializedName("randomSnapshotFingerprint") val randomSnapshotFingerprint: String? = null,
-    @field:SerializedName("randomPermutationVersion") val randomPermutationVersion: Int? = null,
-    @field:SerializedName("globalIndexVersion") val globalIndexVersion: String? = null,
+    @SerialName("version") val version: Int? = null,
+    @SerialName("queryHash") val queryHash: String? = null,
+    @SerialName("primaryKey") val primaryKey: String? = null,
+    @SerialName("primaryOffset") val primaryOffset: Long? = null,
+    @SerialName("randomSeed") val randomSeed: Long? = null,
+    @SerialName("randomSnapshotFingerprint") val randomSnapshotFingerprint: String? = null,
+    @SerialName("randomPermutationVersion") val randomPermutationVersion: Int? = null,
+    @SerialName("globalIndexVersion") val globalIndexVersion: String? = null,
 )
 
 internal data class DecodedHitomiPageToken(
@@ -88,6 +87,15 @@ internal class HitomiPageTokenException(
     message: String,
     cause: Throwable? = null,
 ) : IllegalArgumentException(message, cause)
+
+/**
+ * core-sources cannot see core-data's DurableJson, and a page token needs less: only this codec writes tokens, so
+ * the reader just tolerates keys a newer build added and omits nulls the way the Gson encoder did.
+ */
+internal val hitomiPageTokenJson = Json {
+    ignoreUnknownKeys = true
+    explicitNulls = false
+}
 
 internal const val HITOMI_PAGE_TOKEN_VERSION = 4
 private const val LEGACY_PAGE_TOKEN_VERSION = 2

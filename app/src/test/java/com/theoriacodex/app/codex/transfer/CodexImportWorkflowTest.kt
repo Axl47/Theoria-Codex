@@ -4,6 +4,7 @@ import com.google.gson.Gson
 import com.theoriacodex.app.codex.CodexShareFile
 import com.theoriacodex.app.codex.CodexSharePost
 import com.theoriacodex.app.codex.buildCodexShareFile
+import com.theoriacodex.app.codex.encodeCodexShareFile
 import com.theoriacodex.app.testing.InMemoryCodexLikesTransactions
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.InMemoryCacheRepository
@@ -37,7 +38,7 @@ class CodexImportWorkflowTest {
         val repository = InMemoryCodexRepository()
         var calls = 0
         val service = service(repository, StandardTestDispatcher(testScheduler)) { calls++; awaitCancellation() }
-        val raw = Gson().toJson(buildCodexShareFile("Saved", listOf(testPost())))
+        val raw = encodeCodexShareFile("Saved", listOf(testPost()))
         assertTrue(service.import(raw, "saved") is CodexImportResult.Success)
         assertEquals(0, calls)
         for (invalid in listOf(raw.replace("\"version\":2", "\"version\":3"), "[".repeat(65) + "]".repeat(65))) {
