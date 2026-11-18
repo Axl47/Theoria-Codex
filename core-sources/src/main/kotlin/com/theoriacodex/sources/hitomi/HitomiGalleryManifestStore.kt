@@ -1,6 +1,5 @@
 package com.theoriacodex.sources.hitomi
 
-import com.google.gson.JsonObject
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -13,7 +12,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.JsonObject
 
+/** A parsed gallery record held in memory only; nothing here is written to disk. */
 internal data class HitomiGalleryManifest(
     val gallery: JsonObject,
     val payloadBytes: Long,

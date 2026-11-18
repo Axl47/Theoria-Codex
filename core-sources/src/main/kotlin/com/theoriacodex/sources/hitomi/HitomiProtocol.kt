@@ -1,10 +1,13 @@
 package com.theoriacodex.sources.hitomi
 
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
 import com.theoriacodex.domain.diagnostics.OffMainWork
+import com.theoriacodex.sources.common.asIntOrNull
+import com.theoriacodex.sources.common.asStringOrNull
 import java.net.URLEncoder
 import java.util.Locale
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 
 data class HitomiAutocompleteEntry(
     val name: String,
@@ -83,23 +86,19 @@ object HitomiProtocol {
         if (body.length > MAX_AUTOCOMPLETE_RESPONSE_CHARS) {
             throw HitomiProtocolException("Hitomi autocomplete response exceeded the size limit")
         }
-        val rows = parseJson(body, "autocomplete response")
-            .takeIf { it.isJsonArray }
-            ?.asJsonArray
+        val rows = parseJson(body, "autocomplete response") as? JsonArray
             ?: throw HitomiProtocolException("Hitomi autocomplete response was not an array")
 
         return rows.take(maxResults).mapIndexed { index, element ->
-            val row = element.takeIf { it.isJsonArray }?.asJsonArray
+            val row = element as? JsonArray
                 ?: throw HitomiProtocolException("Hitomi autocomplete row $index was not an array")
-            if (row.size() < 3) {
+            if (row.size < 3) {
                 throw HitomiProtocolException("Hitomi autocomplete row $index was truncated")
             }
-            val name = runCatching { row[0].asString.trim() }.getOrNull().orEmpty()
-            val count = runCatching { row[1].asInt }.getOrNull()
+            val name = row[0].asStringOrNull()?.trim().orEmpty()
+            val count = row[1].asIntOrNull()
                 ?: throw HitomiProtocolException("Hitomi autocomplete row $index had an invalid count")
-            val namespace = runCatching { row[2].asString.trim().lowercase(Locale.ROOT) }
-                .getOrNull()
-                .orEmpty()
+            val namespace = row[2].asStringOrNull()?.trim()?.lowercase(Locale.ROOT).orEmpty()
             if (name.isBlank()) {
                 throw HitomiProtocolException("Hitomi autocomplete row $index had a blank name")
             }
@@ -127,9 +126,7 @@ object HitomiProtocol {
         }
         val assignmentBody = galleryAssignmentBody(script)
             ?: throw HitomiProtocolException("Hitomi gallery response was not a galleryinfo assignment")
-        return parseJson(assignmentBody, "gallery assignment")
-            .takeIf { it.isJsonObject }
-            ?.asJsonObject
+        return parseJson(assignmentBody, "gallery assignment") as? JsonObject
             ?: throw HitomiProtocolException("Hitomi gallery assignment did not contain an object")
     }
 
@@ -142,7 +139,7 @@ object HitomiProtocol {
 
     private fun parseJson(body: String, label: String) = try {
         OffMainWork.note(OffMainWork.SOURCE_PARSE)
-        JsonParser.parseString(body)
+        Json.parseToJsonElement(body)
     } catch (error: RuntimeException) {
         throw HitomiProtocolException("Hitomi $label was malformed JSON: ${error.message}", error)
     }

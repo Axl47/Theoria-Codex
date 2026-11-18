@@ -1,7 +1,5 @@
 package com.theoriacodex.sources.hitomi
 
-import com.google.gson.Gson
-import com.google.gson.JsonParser
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
@@ -35,6 +33,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -85,16 +84,15 @@ internal class HitomiCreatorFailureSourceAdapterTest : HitomiSourceAdapterTestFi
         val maximumIdentity = supplementaryCharacter.repeat(256)
         val overLimitIdentity = supplementaryCharacter.repeat(257)
         val replacementIdentity = "replacement \uFFFD"
-        val gson = Gson()
         val http = RoutingHitomiHttpClient().apply {
             galleryBodies[56] = galleryWithArtists(
                 id = 56,
                 artists = """[
-                    {"artist":${gson.toJson(maximumIdentity)}},
-                    {"artist":${gson.toJson(overLimitIdentity)}},
+                    {"artist":${JsonPrimitive(maximumIdentity)}},
+                    {"artist":${JsonPrimitive(overLimitIdentity)}},
                     {"artist":"\uD800"},
                     {"artist":"\u000Acontrol"},
-                    {"artist":${gson.toJson(replacementIdentity)},"url":"/artist/replacement%20%FF-all.html"}
+                    {"artist":${JsonPrimitive(replacementIdentity)},"url":"/artist/replacement%20%FF-all.html"}
                 ]""".trimIndent(),
             )
         }

@@ -1,7 +1,5 @@
 package com.theoriacodex.sources.hitomi
 
-import com.google.gson.Gson
-import com.google.gson.JsonParser
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason

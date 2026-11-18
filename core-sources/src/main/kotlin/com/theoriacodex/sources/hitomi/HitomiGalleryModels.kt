@@ -1,10 +1,13 @@
 package com.theoriacodex.sources.hitomi
 
-import com.google.gson.JsonArray
-import com.google.gson.JsonElement
-import com.google.gson.JsonObject
 import com.theoriacodex.domain.adapter.SourceFailureReason
+import com.theoriacodex.sources.common.asIntOrNull
+import com.theoriacodex.sources.common.asStringOrNull
 import java.util.Locale
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 
 internal data class ParsedHitomiFile(
     val hash: String,
@@ -14,38 +17,17 @@ internal data class ParsedHitomiFile(
     val height: Int?,
 )
 
-internal fun JsonObject.stringValue(name: String): String? {
-    val element = get(name)?.takeUnless(JsonElement::isJsonNull) ?: return null
-    return runCatching { element.asString.trim() }.getOrNull()?.takeIf(String::isNotBlank)
-}
+/** The field's text, trimmed; null when absent, blank, JSON null, or an array or object. */
+internal fun JsonObject.stringValue(name: String): String? = get(name).asStringOrNull()?.trim()?.takeIf(String::isNotBlank)
 
-internal fun JsonObject.untrimmedStringValue(name: String): String? {
-    val element = get(name)?.takeUnless(JsonElement::isJsonNull) ?: return null
-    return runCatching { element.asString }.getOrNull()
-}
-
-internal fun JsonObject.intValue(name: String): Int? {
-    val element = get(name)?.takeUnless(JsonElement::isJsonNull) ?: return null
-    return runCatching { element.asInt }.getOrNull()
-}
-
-internal fun JsonObject.arrayValue(name: String): JsonArray? {
-    return get(name)?.takeIf(JsonElement::isJsonArray)?.asJsonArray
-}
-
-internal fun JsonElement.asObjectOrNull(): JsonObject? {
-    return takeIf(JsonElement::isJsonObject)?.asJsonObject
-}
-
+/** Hitomi flags arrive as "1"/"", 1/0, or booleans: any non-blank string, true, or non-zero number counts. */
 internal fun JsonObject.truthy(name: String): Boolean {
-    val element = get(name)?.takeUnless(JsonElement::isJsonNull) ?: return false
-    return runCatching {
-        when {
-            element.asJsonPrimitive.isBoolean -> element.asBoolean
-            element.asJsonPrimitive.isNumber -> element.asInt != 0
-            else -> element.asString.isNotBlank()
-        }
-    }.getOrDefault(false)
+    val primitive = get(name) as? JsonPrimitive ?: return false
+    return when {
+        primitive is JsonNull -> false
+        primitive.isString -> primitive.content.isNotBlank()
+        else -> primitive.booleanOrNull ?: (primitive.asIntOrNull() != 0)
+    }
 }
 
 internal fun JsonObject.toHitomiMediaFile(): ParsedHitomiFile? {
@@ -58,9 +40,9 @@ internal fun JsonObject.toHitomiMediaFile(): ParsedHitomiFile? {
     return ParsedHitomiFile(
         hash = hash,
         name = name,
-        hasAvif = intValue("hasavif") == 1,
-        width = intValue("width")?.takeIf { value -> value > 0 },
-        height = intValue("height")?.takeIf { value -> value > 0 },
+        hasAvif = get("hasavif").asIntOrNull() == 1,
+        width = get("width").asIntOrNull()?.takeIf { value -> value > 0 },
+        height = get("height").asIntOrNull()?.takeIf { value -> value > 0 },
     )
 }
 
