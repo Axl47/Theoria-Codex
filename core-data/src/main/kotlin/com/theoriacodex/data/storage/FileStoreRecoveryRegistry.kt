@@ -1,13 +1,17 @@
 package com.theoriacodex.data.storage
 
 import java.io.File
+import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
-/** Application-scoped record of whole-file JSON stores that set an unreadable file aside and started empty. */
+/**
+ * Application-scoped record of stores, file stores and DataStores alike, that set an unreadable file aside with
+ * [setAsideCorruptFile] and started empty. Settings lists them under Recovered storage.
+ */
 class FileStoreRecoveryRegistry {
     private val mutableRecoveries = MutableStateFlow<List<CorruptionRecovery>>(emptyList())
 
@@ -59,4 +63,42 @@ class FileStoreRecoveryRegistry {
             }
         }
     }
+}
+
+/**
+ * Sets [file], whose current contents are [bytes], aside as `<name>.corrupt-<size>-<sha256>` and returns the recovery
+ * to report. Every store that resets an unreadable file goes through here. The file is renamed, which needs no free
+ * space and leaves either the live name or the set-aside name on disk if the process dies. The name is
+ * content-addressed, so a later failure never replaces an earlier set-aside file, and
+ * [FileStoreRecoveryRegistry.registerStore] finds it again after a restart. Throws when the file cannot be set aside;
+ * the live file then keeps its bytes, and callers must not reset it.
+ */
+internal fun setAsideCorruptFile(
+    file: File,
+    bytes: ByteArray,
+    logicalStore: String,
+    reason: String,
+    operations: AtomicFileOperations = DefaultAtomicFileOperations,
+): CorruptionRecovery {
+    val sha256 = bytes.sha256()
+    val setAside = file.resolveSibling("${file.name}.corrupt-${bytes.size}-$sha256")
+    try {
+        operations.moveWithoutReplace(file, setAside)
+    } catch (_: FileAlreadyExistsException) {
+        // The same bytes were set aside before, by a recovery interrupted before its reset was written.
+        check(operations.readBytes(setAside).contentEquals(bytes)) {
+            "Refusing to replace a different quarantine at ${setAside.absolutePath}"
+        }
+        check(operations.delete(file) || !operations.exists(file)) {
+            "Could not remove quarantined file ${file.absolutePath}"
+        }
+    }
+    return CorruptionRecovery(
+        reason = reason,
+        backupPath = setAside.absolutePath,
+        logicalStore = logicalStore,
+        logicalFile = file.name,
+        sha256 = sha256,
+        byteCount = bytes.size.toLong(),
+    )
 }

@@ -1,14 +1,11 @@
 package com.theoriacodex.data.repository
 
 import androidx.datastore.core.DataStore
-import androidx.datastore.core.DataStoreFactory
-import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import com.theoriacodex.data.storage.AsynchronousStore
-import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.data.storage.DurableStorePhase
 import com.theoriacodex.data.storage.DurableStoreStatus
-import com.theoriacodex.data.storage.JsonDataStoreSerializer
-import com.theoriacodex.data.storage.preserveCorruptFile
+import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
+import com.theoriacodex.data.storage.openJsonDataStore
 import com.theoriacodex.data.storage.updateDataInBackground
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SearchFacet
@@ -413,32 +410,21 @@ internal object StatisticsPolicies {
 class DataStoreStatisticsRepository(
     baseDirectory: File,
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
     private val clock: Clock = Clock.systemDefaultZone(),
 ) : StatisticsRepository, AsynchronousStore {
     private val storeFile = baseDirectory.resolve(DATASTORE_STATISTICS_FILE_NAME)
     private val mutableStorageStatus = MutableStateFlow(DurableStoreStatus())
     private val defaultValue = StatisticsDataStoreFile()
-    private val dataStore: DataStore<StatisticsDataStoreFile> = DataStoreFactory.create(
-        serializer = JsonDataStoreSerializer(
-            storeName = DATASTORE_STATISTICS_FILE_NAME,
-            schemaVersion = STATISTICS_DATASTORE_SCHEMA_VERSION,
-            defaultValue = defaultValue,
-            serializer = StatisticsDataStoreFile.serializer(),
-            validate = StatisticsDataStoreFile::validate,
-        ),
-        corruptionHandler = ReplaceFileCorruptionHandler { corruption ->
-            mutableStorageStatus.update { current ->
-                current.copy(
-                    corruptionRecovery = CorruptionRecovery(
-                        reason = corruption.message ?: "Statistics store was corrupt",
-                        backupPath = preserveCorruptFile(storeFile),
-                    ),
-                )
-            }
-            defaultValue
-        },
+    private val dataStore: DataStore<StatisticsDataStoreFile> = openJsonDataStore(
+        file = storeFile,
+        logicalStore = "Statistics",
+        schemaVersion = STATISTICS_DATASTORE_SCHEMA_VERSION,
+        defaultValue = defaultValue,
+        serializer = StatisticsDataStoreFile.serializer(),
         scope = scope,
-        produceFile = { storeFile },
+        validate = StatisticsDataStoreFile::validate,
+        recoveries = recoveryRegistry,
     )
     private val records = dataStore.data
         .onEach { recordReady() }

@@ -17,4 +17,13 @@ class TagSuggestionSeedDataTest {
 
         assertEquals("1boy", seeds.getValue(SourceKey.PIXIV).first().text)
     }
+
+    @Test
+    fun `a malformed seed entry skips only itself`() {
+        val seeds = parseSeedTagSuggestions(
+            """{"sources":{"PIXIV":[{"text":"before"},{"text":["not","text"]},{"text":"after","count":3}]}}""",
+        )
+
+        assertEquals(listOf("before", "after"), seeds.getValue(SourceKey.PIXIV).map { it.text })
+    }
 }

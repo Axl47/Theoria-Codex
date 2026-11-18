@@ -1,10 +1,8 @@
 package com.theoriacodex.data.repository
 
 import androidx.datastore.core.DataStore
-import androidx.datastore.core.DataStoreFactory
-import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
-import com.theoriacodex.data.storage.JsonDataStoreSerializer
-import com.theoriacodex.data.storage.preserveCorruptFile
+import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
+import com.theoriacodex.data.storage.openJsonDataStore
 import com.theoriacodex.data.storage.updateDataInBackground
 import com.theoriacodex.domain.source.SiteProfile
 import java.io.File
@@ -23,27 +21,23 @@ internal const val SITE_PROFILES_SCHEMA_VERSION = 1
 /**
  * User-added sites in `custom_sites_v1.json` (plan C2), following [SiteProfileListPolicy]. Records
  * this version cannot read are skipped, not fatal, and are written back untouched so a newer app
- * version keeps them. A newer schema is refused rather than overwritten; a corrupt file is copied
+ * version keeps them. A newer schema is refused rather than overwritten; a corrupt file is set
  * aside and the store starts empty (library data is unaffected, and re-adding a site reconnects it).
  */
 class DataStoreSiteProfileRepository(
     baseDirectory: File,
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
 ) : SiteProfileRepository {
     private val storeFile = baseDirectory.resolve(SITE_PROFILES_FILE_NAME)
-    private val dataStore: DataStore<SiteProfileStoreFile> = DataStoreFactory.create(
-        serializer = JsonDataStoreSerializer(
-            storeName = SITE_PROFILES_FILE_NAME,
-            schemaVersion = SITE_PROFILES_SCHEMA_VERSION,
-            defaultValue = SiteProfileStoreFile(),
-            serializer = SiteProfileStoreFile.serializer(),
-        ),
-        corruptionHandler = ReplaceFileCorruptionHandler {
-            preserveCorruptFile(storeFile)
-            SiteProfileStoreFile()
-        },
+    private val dataStore: DataStore<SiteProfileStoreFile> = openJsonDataStore(
+        file = storeFile,
+        logicalStore = "Custom sites",
+        schemaVersion = SITE_PROFILES_SCHEMA_VERSION,
+        defaultValue = SiteProfileStoreFile(),
+        serializer = SiteProfileStoreFile.serializer(),
         scope = scope,
-        produceFile = { storeFile },
+        recoveries = recoveryRegistry,
     )
 
     override fun observeProfiles(): Flow<List<SiteProfile>> =

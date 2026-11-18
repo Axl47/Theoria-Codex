@@ -1,14 +1,11 @@
 package com.theoriacodex.data.repository
 
 import androidx.datastore.core.DataStore
-import androidx.datastore.core.DataStoreFactory
-import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import com.theoriacodex.data.storage.AsynchronousStore
-import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.data.storage.DurableStorePhase
 import com.theoriacodex.data.storage.DurableStoreStatus
-import com.theoriacodex.data.storage.JsonDataStoreSerializer
-import com.theoriacodex.data.storage.preserveCorruptFile
+import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
+import com.theoriacodex.data.storage.openJsonDataStore
 import com.theoriacodex.data.storage.updateDataInBackground
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
@@ -31,32 +28,21 @@ import kotlinx.coroutines.flow.update
 class DataStoreSettingsRepository(
     baseDirectory: File,
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
     private val profileWriteGuard: ProfileLibraryWriteGuard = ProfileLibraryWriteGuard(),
 ) : SettingsRepository, AsynchronousStore {
     private val storeFile = baseDirectory.resolve(DATASTORE_SETTINGS_FILE_NAME)
     private val mutableStorageStatus = MutableStateFlow(DurableStoreStatus())
     private val defaultValue = SettingsDataStoreFile()
-    private val dataStore: DataStore<SettingsDataStoreFile> = DataStoreFactory.create(
-        serializer = JsonDataStoreSerializer(
-            storeName = DATASTORE_SETTINGS_FILE_NAME,
-            schemaVersion = SETTINGS_DATASTORE_SCHEMA_VERSION,
-            defaultValue = defaultValue,
-            serializer = SettingsDataStoreFile.serializer(),
-            validate = SettingsDataStoreFile::validate,
-        ),
-        corruptionHandler = ReplaceFileCorruptionHandler { corruption ->
-            mutableStorageStatus.update { current ->
-                current.copy(
-                    corruptionRecovery = CorruptionRecovery(
-                        reason = corruption.message ?: "Settings store was corrupt",
-                        backupPath = preserveCorruptFile(storeFile),
-                    ),
-                )
-            }
-            defaultValue
-        },
+    private val dataStore: DataStore<SettingsDataStoreFile> = openJsonDataStore(
+        file = storeFile,
+        logicalStore = "Settings",
+        schemaVersion = SETTINGS_DATASTORE_SCHEMA_VERSION,
+        defaultValue = defaultValue,
+        serializer = SettingsDataStoreFile.serializer(),
         scope = scope,
-        produceFile = { storeFile },
+        validate = SettingsDataStoreFile::validate,
+        recoveries = recoveryRegistry,
     )
     private val records = dataStore.data
         .onEach { mutableStorageStatus.recordReady() }
@@ -233,31 +219,20 @@ class DataStoreSettingsRepository(
 class DataStoreUiRestoreRepository(
     baseDirectory: File,
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
 ) : UiRestoreRepository, AsynchronousStore {
     private val storeFile = baseDirectory.resolve(DATASTORE_UI_RESTORE_FILE_NAME)
     private val mutableStorageStatus = MutableStateFlow(DurableStoreStatus())
     private val defaultValue = UiRestoreDataStoreFile()
-    private val dataStore: DataStore<UiRestoreDataStoreFile> = DataStoreFactory.create(
-        serializer = JsonDataStoreSerializer(
-            storeName = DATASTORE_UI_RESTORE_FILE_NAME,
-            schemaVersion = UI_RESTORE_DATASTORE_SCHEMA_VERSION,
-            defaultValue = defaultValue,
-            serializer = UiRestoreDataStoreFile.serializer(),
-            validate = UiRestoreDataStoreFile::validate,
-        ),
-        corruptionHandler = ReplaceFileCorruptionHandler { corruption ->
-            mutableStorageStatus.update { current ->
-                current.copy(
-                    corruptionRecovery = CorruptionRecovery(
-                        reason = corruption.message ?: "UI restore store was corrupt",
-                        backupPath = preserveCorruptFile(storeFile),
-                    ),
-                )
-            }
-            defaultValue
-        },
+    private val dataStore: DataStore<UiRestoreDataStoreFile> = openJsonDataStore(
+        file = storeFile,
+        logicalStore = "Last screen",
+        schemaVersion = UI_RESTORE_DATASTORE_SCHEMA_VERSION,
+        defaultValue = defaultValue,
+        serializer = UiRestoreDataStoreFile.serializer(),
         scope = scope,
-        produceFile = { storeFile },
+        validate = UiRestoreDataStoreFile::validate,
+        recoveries = recoveryRegistry,
     )
     private val records = dataStore.data
         .onEach { mutableStorageStatus.recordReady() }

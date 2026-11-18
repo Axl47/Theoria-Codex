@@ -9,7 +9,6 @@ import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.nio.file.AtomicMoveNotSupportedException
-import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption.ATOMIC_MOVE
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
@@ -37,7 +36,7 @@ class AtomicJsonFileStore internal constructor(
 
     /**
      * Reads [file], or returns [fallback] when it is missing. Bytes that are not UTF-8, blank, a JSON null, or that
-     * [serializer] rejects with a [SerializationException] are quarantined beside the file and reported through
+     * [serializer] rejects with a [SerializationException] are set aside by [setAsideCorruptFile] and reported through
      * [onRecovery]; any other failure, such as an [IllegalArgumentException] from a record's own checks, propagates.
      */
     suspend fun <T : Any> read(
@@ -74,56 +73,8 @@ class AtomicJsonFileStore internal constructor(
         reason: String,
         onRecovery: (CorruptionRecovery) -> Unit,
     ): T {
-        val sha256 = bytes.sha256()
-        val quarantine = file.resolveSibling(
-            "${file.name}.corrupt-${bytes.size}-$sha256",
-        )
-        preserveVerified(file, quarantine, bytes)
-        onRecovery(
-            CorruptionRecovery(
-                reason = reason,
-                backupPath = quarantine.absolutePath,
-                logicalStore = logicalStore,
-                logicalFile = file.name,
-                sha256 = sha256,
-                byteCount = bytes.size.toLong(),
-            )
-        )
+        onRecovery(setAsideCorruptFile(file, bytes, logicalStore, reason, fileOperations))
         return fallback
-    }
-
-    private fun preserveVerified(liveFile: File, quarantineFile: File, bytes: ByteArray) {
-        if (fileOperations.exists(quarantineFile)) {
-            check(fileOperations.readBytes(quarantineFile).contentEquals(bytes)) {
-                "Refusing to replace a different quarantine at ${quarantineFile.absolutePath}"
-            }
-        } else {
-            quarantineFile.parentFile?.mkdirs()
-            val tempFile = fileOperations.createTempFile(quarantineFile)
-            try {
-                fileOperations.writeAndSync(tempFile, bytes)
-                check(fileOperations.readBytes(tempFile).contentEquals(bytes)) {
-                    "Quarantine verification failed for ${liveFile.absolutePath}"
-                }
-                try {
-                    fileOperations.moveWithoutReplace(tempFile, quarantineFile)
-                } catch (_: FileAlreadyExistsException) {
-                    check(fileOperations.readBytes(quarantineFile).contentEquals(bytes)) {
-                        "Refusing to replace a different quarantine at ${quarantineFile.absolutePath}"
-                    }
-                }
-            } finally {
-                if (fileOperations.exists(tempFile)) {
-                    fileOperations.delete(tempFile)
-                }
-            }
-        }
-        check(fileOperations.readBytes(quarantineFile).contentEquals(bytes)) {
-            "Quarantine verification failed for ${quarantineFile.absolutePath}"
-        }
-        check(fileOperations.delete(liveFile) || !fileOperations.exists(liveFile)) {
-            "Could not remove quarantined file ${liveFile.absolutePath}"
-        }
     }
 
     /** Atomically replaces [file] with [payload] encoded under [DurableJson]. */
@@ -192,14 +143,14 @@ internal interface AtomicFileOperations {
     fun syncDirectory(directory: File) {
         FileChannel.open(directory.toPath(), READ).use { it.force(true) }
     }
-    fun moveWithoutReplace(tempFile: File, target: File) {
-        Files.move(tempFile.toPath(), target.toPath())
+    fun moveWithoutReplace(source: File, target: File) {
+        Files.move(source.toPath(), target.toPath())
     }
     fun exists(file: File): Boolean = file.exists()
     fun delete(file: File): Boolean = Files.deleteIfExists(file.toPath())
 }
 
-private object DefaultAtomicFileOperations : AtomicFileOperations {
+internal object DefaultAtomicFileOperations : AtomicFileOperations {
     override fun createTempFile(target: File): File {
         return File.createTempFile(
             "${target.name}.",

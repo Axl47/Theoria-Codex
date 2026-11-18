@@ -40,7 +40,7 @@ internal fun ugoiraMetadataFile(archive: File): File = File(archive.parentFile, 
 
 /** The `<archive>.zip.json` sidecar; it only counts while its archive's size and timestamp still match. */
 @Serializable
-private data class UgoiraCacheIndex(
+internal data class UgoiraCacheIndex(
     @SerialName("version")
     val version: Int,
     @SerialName("archiveBytes")
@@ -52,7 +52,7 @@ private data class UgoiraCacheIndex(
 )
 
 @Serializable
-private data class UgoiraCacheFrame(
+internal data class UgoiraCacheFrame(
     @SerialName("file")
     val file: String,
     @SerialName("delay")

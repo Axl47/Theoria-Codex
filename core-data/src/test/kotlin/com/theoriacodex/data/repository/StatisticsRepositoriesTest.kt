@@ -1,5 +1,6 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
@@ -19,7 +20,6 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -274,12 +274,12 @@ class StatisticsRepositoriesTest {
             """{"schemaVersion":2,"statistics":{"appOpenCount":4,"history":{"not-a-day":{"appOpenCount":1}}}}"""
         )
         val scope = newScope()
-        val repository = DataStoreStatisticsRepository(directory, scope)
+        val recoveries = FileStoreRecoveryRegistry()
+        val repository = DataStoreStatisticsRepository(directory, scope, recoveryRegistry = recoveries)
         val statistics = repository.observeStatistics().first()
 
         assertEquals(0L, statistics.appOpenCount)
-        assertTrue(directory.resolve("$DATASTORE_STATISTICS_FILE_NAME.corrupt").isFile)
-        assertNotNull(repository.storageStatus.value.corruptionRecovery)
+        assertRecorded(recoveries, "Statistics", directory.setAsideCopiesOf(DATASTORE_STATISTICS_FILE_NAME).single())
         closeScope(scope)
     }
 
@@ -297,7 +297,7 @@ class StatisticsRepositoriesTest {
         }
 
         assertEquals(future, destination.readText())
-        assertFalse(directory.resolve("$DATASTORE_STATISTICS_FILE_NAME.corrupt").exists())
+        assertFalse(directory.setAsideCopiesOf(DATASTORE_STATISTICS_FILE_NAME).isNotEmpty())
         closeScope(scope)
     }
 

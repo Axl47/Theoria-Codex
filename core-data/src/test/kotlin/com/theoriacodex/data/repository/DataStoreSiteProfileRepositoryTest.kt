@@ -1,5 +1,6 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.domain.source.SiteAddress
 import com.theoriacodex.domain.source.SiteAddressParse
 import com.theoriacodex.domain.source.SiteHeaders
@@ -110,10 +111,32 @@ class DataStoreSiteProfileRepositoryTest {
         assertEquals(newer, directory.resolve(SITE_PROFILES_FILE_NAME).readText())
     }
 
-    private suspend fun withRepository(directory: File, block: suspend (DataStoreSiteProfileRepository) -> Unit) {
+    @Test
+    fun `an unreadable file is set aside and reported, also after a restart`() = runBlocking {
+        val directory = temporary.newFolder()
+        directory.resolve(SITE_PROFILES_FILE_NAME).writeText("{broken")
+        val firstProcess = FileStoreRecoveryRegistry()
+
+        withRepository(directory, firstProcess) { repository ->
+            assertEquals(emptyList<SiteProfile>(), repository.observeProfiles().first())
+        }
+        val setAside = directory.setAsideCopiesOf(SITE_PROFILES_FILE_NAME).single()
+        assertEquals("{broken", setAside.readText())
+        assertRecorded(firstProcess, "Custom sites", setAside)
+
+        val restarted = FileStoreRecoveryRegistry()
+        withRepository(directory, restarted) { repository -> repository.observeProfiles().first() }
+        assertRecorded(restarted, "Custom sites", setAside)
+    }
+
+    private suspend fun withRepository(
+        directory: File,
+        recoveries: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
+        block: suspend (DataStoreSiteProfileRepository) -> Unit,
+    ) {
         val job = SupervisorJob()
         try {
-            block(DataStoreSiteProfileRepository(directory, CoroutineScope(job + Dispatchers.IO)))
+            block(DataStoreSiteProfileRepository(directory, CoroutineScope(job + Dispatchers.IO), recoveries))
         } finally {
             job.cancelAndJoin()
         }

@@ -28,8 +28,11 @@ import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 
 /**
  * Completed offline copies live outside disposable caches. The manifest is the commit point.
@@ -218,10 +221,16 @@ class OfflineMediaStore internal constructor(
             ensureCatalogLoaded()
             catalog.foldersOwnedBy(owner).forEach { folder ->
                 val record = readRecord(folder)
-                if (record == null) { updateCatalog(folder, null); return@forEach }
-                val retained = record.owners - owner
-                if (retained.isEmpty()) folder.deleteRecursively() else writeManifest(folder, record.post, record.sourcePost, retained)
-                updateCatalog(folder, if (retained.isEmpty()) readRecord(folder) else record.copy(owners = retained))
+                val owners = record?.owners ?: salvageOwners(folder)
+                // Ownership is confirmed on disk, so a manifest that cannot be read now never deletes the folder.
+                if (owner !in owners) { updateCatalog(folder, record); return@forEach }
+                val retained = owners - owner
+                when {
+                    retained.isEmpty() -> folder.deleteRecursively()
+                    record != null -> writeManifest(folder, record.post, record.sourcePost, retained)
+                    else -> writeSalvagedOwners(folder, retained)
+                }
+                updateCatalog(folder, record?.takeIf { retained.isNotEmpty() }?.copy(owners = retained))
             }
         }
     }
@@ -268,7 +277,11 @@ class OfflineMediaStore internal constructor(
         return mediaBytes == files.map { it.length() }
     }
 
-    /** Every manifest version keeps its owners at the root, so they survive a post that cannot be decoded. */
+    /**
+     * Every manifest version keeps its owners at the root, so they survive a post that cannot be decoded. Only JSON
+     * strings count: decodeEachOrSkip<String> would read a number as an owner under lenient [DurableJson], and such an
+     * owner would keep the folder from ever being deleted.
+     */
     private fun salvageOwners(folder: File): Set<String> =
         runCatching { readManifest(folder, ManifestOwners.serializer())?.owners }.getOrNull().orEmpty()
             .filterIsInstance<JsonPrimitive>().filter { it.isString }.map { it.content }.toSet()
@@ -286,9 +299,20 @@ class OfflineMediaStore internal constructor(
             owners = owners.sorted(),
             mediaBytes = post.media.map { File(checkNotNull(it.localPath) { "Offline media is missing its local path" }).length() },
         )
+        replaceManifest(folder, DurableJson.encodeToString(manifests, manifest))
+    }
+
+    /** Replaces only the owners of a manifest whose post cannot be decoded; the rest stays as it was parsed. */
+    private fun writeSalvagedOwners(folder: File, owners: Set<String>) {
+        val manifest = DurableJson.parseToJsonElement(File(folder, MANIFEST_NAME).readText()).jsonObject
+        val ownerList = JsonArray(owners.sorted().map(::JsonPrimitive))
+        replaceManifest(folder, JsonObject(manifest + ("owners" to ownerList)).toString())
+    }
+
+    private fun replaceManifest(folder: File, text: String) {
         val temporary = File(folder, "manifest.pending")
         try {
-            temporary.writeText(DurableJson.encodeToString(manifests, manifest))
+            temporary.writeText(text)
             if (temporary.length() > MAX_MANIFEST_BYTES) throw IOException("Offline gallery metadata is too large")
             Files.move(temporary.toPath(), File(folder, MANIFEST_NAME).toPath(), ATOMIC_MOVE, REPLACE_EXISTING)
         } finally {
@@ -314,8 +338,9 @@ class OfflineMediaStore internal constructor(
         mutableSnapshot.value = catalog.snapshot()
     }
 
+    /** A folder without a usable copy keeps its salvaged owners, so removing the last of them deletes it. */
     private fun indexFolder(folder: File, record: OfflineRecord?) {
-        catalog.update(folder, record?.post?.id, record?.owners.orEmpty(), record?.post?.media?.size ?: 0,
+        catalog.update(folder, record?.post?.id, record?.owners ?: salvageOwners(folder), record?.post?.media?.size ?: 0,
             folder.walkTopDown().filter(File::isFile).sumOf(File::length))
     }
 
@@ -379,6 +404,7 @@ data class OfflineMediaSnapshot(
     val postCount: Int = 0,
     val mediaCount: Int = 0,
     val bytes: Long = 0L,
+    /** Every owner with a folder on disk, and how many of its posts are available; 0 when none of its copies open. */
     val postsByOwner: Map<String, Int> = emptyMap(),
     val availablePostIds: Set<PostId> = emptySet(),
 )

@@ -184,7 +184,7 @@ class DataStoreGoldenTest {
         assertTrue(written.contains("No added time"))
         assertTrue(written.contains("No address"))
         assertTrue(written.contains("Renamed"))
-        assertFalse(directory.resolve("$SITE_PROFILES_FILE_NAME.corrupt").exists())
+        assertFalse(directory.setAsideCopiesOf(SITE_PROFILES_FILE_NAME).isNotEmpty())
     }
 
     @Test fun `site unknown and retired keys are ignored`() = runTest {
@@ -231,25 +231,25 @@ class DataStoreGoldenTest {
     private suspend fun loadSettings(name: String): AppSettings {
         val directory = directoryWith(DATASTORE_SETTINGS_FILE_NAME, name)
         return withScope { DataStoreSettingsRepository(directory, it).observeSettings().first() }
-            .also { assertFalse(name, directory.resolve("$DATASTORE_SETTINGS_FILE_NAME.corrupt").exists()) }
+            .also { assertFalse(name, directory.setAsideCopiesOf(DATASTORE_SETTINGS_FILE_NAME).isNotEmpty()) }
     }
 
     private suspend fun loadStatistics(name: String): LifetimeStatistics {
         val directory = directoryWith(DATASTORE_STATISTICS_FILE_NAME, name)
         return withScope { DataStoreStatisticsRepository(directory, it).observeStatistics().first() }
-            .also { assertFalse(name, directory.resolve("$DATASTORE_STATISTICS_FILE_NAME.corrupt").exists()) }
+            .also { assertFalse(name, directory.setAsideCopiesOf(DATASTORE_STATISTICS_FILE_NAME).isNotEmpty()) }
     }
 
     private suspend fun loadSites(name: String): List<SiteProfile> {
         val directory = directoryWith(SITE_PROFILES_FILE_NAME, name)
         return withScope { DataStoreSiteProfileRepository(directory, it).observeProfiles().first() }
-            .also { assertFalse(name, directory.resolve("$SITE_PROFILES_FILE_NAME.corrupt").exists()) }
+            .also { assertFalse(name, directory.setAsideCopiesOf(SITE_PROFILES_FILE_NAME).isNotEmpty()) }
     }
 
     private suspend fun withUiRestore(name: String, block: suspend (DataStoreUiRestoreRepository) -> Unit) {
         val directory = directoryWith(DATASTORE_UI_RESTORE_FILE_NAME, name)
         withScope { block(DataStoreUiRestoreRepository(directory, it)) }
-        assertFalse(name, directory.resolve("$DATASTORE_UI_RESTORE_FILE_NAME.corrupt").exists())
+        assertFalse(name, directory.setAsideCopiesOf(DATASTORE_UI_RESTORE_FILE_NAME).isNotEmpty())
     }
 
     private fun directoryWith(storeFileName: String, golden: String): File =
