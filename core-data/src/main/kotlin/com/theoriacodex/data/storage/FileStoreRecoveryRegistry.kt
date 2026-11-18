@@ -64,9 +64,11 @@ class FileStoreRecoveryRegistry {
 
 /**
  * Sets [file], whose current contents are [bytes], aside as `<name>.corrupt-<size>-<sha256>` and returns the recovery
- * to report. Every store that resets an unreadable file goes through here. The name is content-addressed, so a later
- * failure never replaces an earlier set-aside file, and [FileStoreRecoveryRegistry.registerStore] finds it again after
- * a restart. Throws when the file cannot be set aside; the live file then keeps its bytes.
+ * to report. Every store that resets an unreadable file goes through here. The file is renamed, which needs no free
+ * space and leaves either the live name or the set-aside name on disk if the process dies. The name is
+ * content-addressed, so a later failure never replaces an earlier set-aside file, and
+ * [FileStoreRecoveryRegistry.registerStore] finds it again after a restart. Throws when the file cannot be set aside;
+ * the live file then keeps its bytes, and callers must not reset it.
  */
 internal fun setAsideCorruptFile(
     file: File,
@@ -76,48 +78,24 @@ internal fun setAsideCorruptFile(
     operations: AtomicFileOperations = DefaultAtomicFileOperations,
 ): CorruptionRecovery {
     val sha256 = bytes.sha256()
-    val quarantine = file.resolveSibling("${file.name}.corrupt-${bytes.size}-$sha256")
-    preserveVerified(file, quarantine, bytes, operations)
+    val setAside = file.resolveSibling("${file.name}.corrupt-${bytes.size}-$sha256")
+    try {
+        operations.moveWithoutReplace(file, setAside)
+    } catch (_: FileAlreadyExistsException) {
+        // The same bytes were set aside before, by a recovery interrupted before its reset was written.
+        check(operations.readBytes(setAside).contentEquals(bytes)) {
+            "Refusing to replace a different quarantine at ${setAside.absolutePath}"
+        }
+        check(operations.delete(file) || !operations.exists(file)) {
+            "Could not remove quarantined file ${file.absolutePath}"
+        }
+    }
     return CorruptionRecovery(
         reason = reason,
-        backupPath = quarantine.absolutePath,
+        backupPath = setAside.absolutePath,
         logicalStore = logicalStore,
         logicalFile = file.name,
         sha256 = sha256,
         byteCount = bytes.size.toLong(),
     )
-}
-
-private fun preserveVerified(liveFile: File, quarantineFile: File, bytes: ByteArray, operations: AtomicFileOperations) {
-    if (operations.exists(quarantineFile)) {
-        check(operations.readBytes(quarantineFile).contentEquals(bytes)) {
-            "Refusing to replace a different quarantine at ${quarantineFile.absolutePath}"
-        }
-    } else {
-        quarantineFile.parentFile?.mkdirs()
-        val tempFile = operations.createTempFile(quarantineFile)
-        try {
-            operations.writeAndSync(tempFile, bytes)
-            check(operations.readBytes(tempFile).contentEquals(bytes)) {
-                "Quarantine verification failed for ${liveFile.absolutePath}"
-            }
-            try {
-                operations.moveWithoutReplace(tempFile, quarantineFile)
-            } catch (_: FileAlreadyExistsException) {
-                check(operations.readBytes(quarantineFile).contentEquals(bytes)) {
-                    "Refusing to replace a different quarantine at ${quarantineFile.absolutePath}"
-                }
-            }
-        } finally {
-            if (operations.exists(tempFile)) {
-                operations.delete(tempFile)
-            }
-        }
-    }
-    check(operations.readBytes(quarantineFile).contentEquals(bytes)) {
-        "Quarantine verification failed for ${quarantineFile.absolutePath}"
-    }
-    check(operations.delete(liveFile) || !operations.exists(liveFile)) {
-        "Could not remove quarantined file ${liveFile.absolutePath}"
-    }
 }

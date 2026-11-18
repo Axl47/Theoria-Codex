@@ -36,7 +36,7 @@ class AtomicJsonFileStore internal constructor(
 
     /**
      * Reads [file], or returns [fallback] when it is missing. Bytes that are not UTF-8, blank, a JSON null, or that
-     * [serializer] rejects with a [SerializationException] are quarantined beside the file and reported through
+     * [serializer] rejects with a [SerializationException] are set aside by [setAsideCorruptFile] and reported through
      * [onRecovery]; any other failure, such as an [IllegalArgumentException] from a record's own checks, propagates.
      */
     suspend fun <T : Any> read(
@@ -143,8 +143,8 @@ internal interface AtomicFileOperations {
     fun syncDirectory(directory: File) {
         FileChannel.open(directory.toPath(), READ).use { it.force(true) }
     }
-    fun moveWithoutReplace(tempFile: File, target: File) {
-        Files.move(tempFile.toPath(), target.toPath())
+    fun moveWithoutReplace(source: File, target: File) {
+        Files.move(source.toPath(), target.toPath())
     }
     fun exists(file: File): Boolean = file.exists()
     fun delete(file: File): Boolean = Files.deleteIfExists(file.toPath())

@@ -109,6 +109,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -502,10 +503,13 @@ internal class DefaultTheoriaAppContainer(
         },
     )
 
-    /** Keeps the bridge's allowed hosts equal to the saved sites; [awaitDurableStores] seeds them first. */
+    /**
+     * Keeps the bridge's allowed hosts equal to the saved sites; [awaitDurableStores] seeds them first and also reports
+     * a sites file that cannot be opened, so that failure ends this collector instead of crashing the process.
+     */
     init {
         durableStoreScope.launch {
-            siteProfiles.observeProfiles().map(::siteHosts).collect(cookieBridge::updateSiteHosts)
+            siteProfiles.observeProfiles().map(::siteHosts).catch { }.collect(cookieBridge::updateSiteHosts)
         }
     }
 

@@ -1,12 +1,16 @@
 package com.theoriacodex.data.storage
 
 import androidx.datastore.core.CorruptionException
+import androidx.datastore.core.DataStore
+import androidx.datastore.core.DataStoreFactory
 import androidx.datastore.core.Serializer
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.security.MessageDigest
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
@@ -85,14 +89,30 @@ internal class JsonDataStoreSerializer<T : Any>(
     }
 }
 
-/** Sets an unreadable DataStore file aside through [setAsideCorruptFile]; null when that fails. */
-internal fun preserveCorruptFile(storeFile: File): String? {
-    if (!storeFile.isFile) return null
-    return runCatching {
-        setAsideCorruptFile(storeFile, storeFile.readBytes(), storeFile.name, "${storeFile.name} was unreadable")
-            .backupPath
-    }.getOrNull()
-}
+/**
+ * Opens [file] as a DataStore read and written by [JsonDataStoreSerializer]. An unreadable file is set aside by
+ * [setAsideCorruptFile], reported to [onRecovery], and replaced by [defaultValue]. When it cannot be set aside, the
+ * error propagates and the store fails to open rather than overwrite the only copy of the user's data.
+ */
+internal fun <T : Any> openJsonDataStore(
+    file: File,
+    logicalStore: String,
+    schemaVersion: Int,
+    defaultValue: T,
+    serializer: KSerializer<T>,
+    scope: CoroutineScope,
+    validate: (T) -> Unit = {},
+    onRecovery: (CorruptionRecovery) -> Unit,
+): DataStore<T> = DataStoreFactory.create(
+    serializer = JsonDataStoreSerializer(file.name, schemaVersion, defaultValue, serializer, validate),
+    corruptionHandler = ReplaceFileCorruptionHandler { corruption ->
+        val reason = corruption.message ?: "${file.name} was unreadable"
+        onRecovery(setAsideCorruptFile(file, file.readBytes(), logicalStore, reason))
+        defaultValue
+    },
+    scope = scope,
+    produceFile = { file },
+)
 
 internal fun ByteArray.sha256(): String {
     return MessageDigest.getInstance("SHA-256")
