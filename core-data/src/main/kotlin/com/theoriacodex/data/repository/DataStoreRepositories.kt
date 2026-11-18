@@ -4,6 +4,7 @@ import androidx.datastore.core.DataStore
 import com.theoriacodex.data.storage.AsynchronousStore
 import com.theoriacodex.data.storage.DurableStorePhase
 import com.theoriacodex.data.storage.DurableStoreStatus
+import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.storage.openJsonDataStore
 import com.theoriacodex.data.storage.updateDataInBackground
 import com.theoriacodex.domain.model.SourceKey
@@ -27,6 +28,7 @@ import kotlinx.coroutines.flow.update
 class DataStoreSettingsRepository(
     baseDirectory: File,
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
     private val profileWriteGuard: ProfileLibraryWriteGuard = ProfileLibraryWriteGuard(),
 ) : SettingsRepository, AsynchronousStore {
     private val storeFile = baseDirectory.resolve(DATASTORE_SETTINGS_FILE_NAME)
@@ -40,7 +42,7 @@ class DataStoreSettingsRepository(
         serializer = SettingsDataStoreFile.serializer(),
         scope = scope,
         validate = SettingsDataStoreFile::validate,
-        onRecovery = { recovery -> mutableStorageStatus.update { it.copy(corruptionRecovery = recovery) } },
+        recoveries = recoveryRegistry,
     )
     private val records = dataStore.data
         .onEach { mutableStorageStatus.recordReady() }
@@ -217,19 +219,20 @@ class DataStoreSettingsRepository(
 class DataStoreUiRestoreRepository(
     baseDirectory: File,
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
 ) : UiRestoreRepository, AsynchronousStore {
     private val storeFile = baseDirectory.resolve(DATASTORE_UI_RESTORE_FILE_NAME)
     private val mutableStorageStatus = MutableStateFlow(DurableStoreStatus())
     private val defaultValue = UiRestoreDataStoreFile()
     private val dataStore: DataStore<UiRestoreDataStoreFile> = openJsonDataStore(
         file = storeFile,
-        logicalStore = "Tab and scroll positions",
+        logicalStore = "Last screen",
         schemaVersion = UI_RESTORE_DATASTORE_SCHEMA_VERSION,
         defaultValue = defaultValue,
         serializer = UiRestoreDataStoreFile.serializer(),
         scope = scope,
         validate = UiRestoreDataStoreFile::validate,
-        onRecovery = { recovery -> mutableStorageStatus.update { it.copy(corruptionRecovery = recovery) } },
+        recoveries = recoveryRegistry,
     )
     private val records = dataStore.data
         .onEach { mutableStorageStatus.recordReady() }

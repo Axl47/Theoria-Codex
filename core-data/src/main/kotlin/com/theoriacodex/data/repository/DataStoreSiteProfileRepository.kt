@@ -1,6 +1,7 @@
 package com.theoriacodex.data.repository
 
 import androidx.datastore.core.DataStore
+import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.storage.openJsonDataStore
 import com.theoriacodex.data.storage.updateDataInBackground
 import com.theoriacodex.domain.source.SiteProfile
@@ -26,6 +27,7 @@ internal const val SITE_PROFILES_SCHEMA_VERSION = 1
 class DataStoreSiteProfileRepository(
     baseDirectory: File,
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
 ) : SiteProfileRepository {
     private val storeFile = baseDirectory.resolve(SITE_PROFILES_FILE_NAME)
     private val dataStore: DataStore<SiteProfileStoreFile> = openJsonDataStore(
@@ -35,7 +37,7 @@ class DataStoreSiteProfileRepository(
         defaultValue = SiteProfileStoreFile(),
         serializer = SiteProfileStoreFile.serializer(),
         scope = scope,
-        onRecovery = {},
+        recoveries = recoveryRegistry,
     )
 
     override fun observeProfiles(): Flow<List<SiteProfile>> =

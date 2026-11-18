@@ -4,6 +4,7 @@ import androidx.datastore.core.DataStore
 import com.theoriacodex.data.storage.AsynchronousStore
 import com.theoriacodex.data.storage.DurableStorePhase
 import com.theoriacodex.data.storage.DurableStoreStatus
+import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.storage.openJsonDataStore
 import com.theoriacodex.data.storage.updateDataInBackground
 import com.theoriacodex.domain.model.Query
@@ -409,6 +410,7 @@ internal object StatisticsPolicies {
 class DataStoreStatisticsRepository(
     baseDirectory: File,
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
     private val clock: Clock = Clock.systemDefaultZone(),
 ) : StatisticsRepository, AsynchronousStore {
     private val storeFile = baseDirectory.resolve(DATASTORE_STATISTICS_FILE_NAME)
@@ -422,7 +424,7 @@ class DataStoreStatisticsRepository(
         serializer = StatisticsDataStoreFile.serializer(),
         scope = scope,
         validate = StatisticsDataStoreFile::validate,
-        onRecovery = { recovery -> mutableStorageStatus.update { it.copy(corruptionRecovery = recovery) } },
+        recoveries = recoveryRegistry,
     )
     private val records = dataStore.data
         .onEach { recordReady() }
