@@ -5,6 +5,12 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.google.gson.GsonBuilder
 import com.theoriacodex.app.codex.encodeCodexShareFile
 import com.theoriacodex.app.search.FileBackedTagSuggestionStore
+import com.theoriacodex.app.sourceauth.CredentialPayloadRecord
+import com.theoriacodex.app.sourceauth.SourceCredentialSnapshot
+import com.theoriacodex.app.statistics.StatsShareCodex
+import com.theoriacodex.app.statistics.StatsShareFile
+import com.theoriacodex.app.statistics.StatsShareOverall
+import com.theoriacodex.app.statistics.StatsSharePost
 import com.theoriacodex.app.update.ChangelogSection
 import com.theoriacodex.app.update.PendingPostInstallChangelog
 import com.theoriacodex.app.update.UpdateStateSnapshot
@@ -19,6 +25,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.VideoVariant
+import com.theoriacodex.domain.source.SiteCredentials
 import java.io.File
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.KSerializer
@@ -96,6 +103,32 @@ class InstalledJsonCompatibilityDeviceTest {
         assertEquals(
             setOf("version", "title", "posts"),
             JSONObject(encodeCodexShareFile("Shared", emptyList())).keySetCompat(),
+        )
+        assertKotlinxJsonKeys(
+            CredentialPayloadRecord.serializer(),
+            CredentialPayloadRecord(
+                SourceCredentialSnapshot("a", "r", 1L, "1", "g", "2", "x", mapOf("custom_a_test" to SiteCredentials("u", "k"))),
+            ),
+            "schemaVersion",
+            "pixivAccessToken",
+            "pixivRefreshToken",
+            "pixivExpiresAtEpochMs",
+            "gelbooruUserId",
+            "gelbooruApiKey",
+            "rule34XxxUserId",
+            "rule34XxxApiKey",
+            "customSites",
+        )
+        assertKotlinxJsonKeys(
+            StatsShareFile.serializer(),
+            StatsShareFile(
+                "theoria-codex-stats", 1, "n", listOf(StatsShareCodex("c", posts = listOf(StatsSharePost("k")))), StatsShareOverall(),
+            ),
+            "format",
+            "version",
+            "name",
+            "codices",
+            "overall",
         )
     }
 
