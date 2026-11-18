@@ -1,6 +1,6 @@
 package com.theoriacodex.app.statistics
 
-import com.theoriacodex.data.storage.assertGsonParity
+import com.theoriacodex.data.storage.assertStoredFormat
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -15,11 +15,8 @@ class StatsShareGoldenTest {
     }
 
     @Test
-    fun `the kotlinx serializer matches Gson`() {
-        assertGsonParity(
-            samples = listOf(StatsShareFile(), shared),
-            goldenJson = listOf(golden("gson-export.json"), golden("gson-export-no-overall.json")),
-        )
+    fun `the Gson exports hold every stored key`() {
+        assertStoredFormat(golden("gson-export.json") to shared)
     }
 
     private val shared = StatsShareFile(

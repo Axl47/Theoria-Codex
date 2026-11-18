@@ -1,6 +1,6 @@
 package com.theoriacodex.data.repository
 
-import com.google.gson.Gson
+import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.domain.source.SiteAddress
 import com.theoriacodex.domain.source.SiteAddressParse
 import com.theoriacodex.domain.source.SiteHeaders
@@ -14,8 +14,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SiteProfileRecordsTest {
-    private val gson = Gson()
-
     @Test
     fun `records round trip every profile field through JSON without credentials`() {
         val original = profile("https://booru.example:8443/board", familyId = "DANBOORU").copy(
@@ -25,8 +23,8 @@ class SiteProfileRecordsTest {
             verifiedAtEpochMs = 20L,
         )
 
-        val json = gson.toJson(SiteProfileRecord.fromDomain(original))
-        val decoded = gson.fromJson(json, SiteProfileRecord::class.java).toDomainOrNull()
+        val json = DurableJson.encodeToString(SiteProfileRecord.fromDomain(original))
+        val decoded = DurableJson.decodeFromString<SiteProfileRecord>(json).toDomainOrNull()
 
         assertEquals(original, decoded)
         assertFalse(json.contains("apiKey", ignoreCase = true))
@@ -54,7 +52,7 @@ class SiteProfileRecordsTest {
             valid.copy(family = null),
             valid.copy(addedAt = null),
             valid.copy(userAgent = "bad\nheader"),
-            gson.fromJson("{}", SiteProfileRecord::class.java),
+            DurableJson.decodeFromString<SiteProfileRecord>("{}"),
         ).forEach { record -> assertNull(record.toString(), record.toDomainOrNull()) }
     }
 

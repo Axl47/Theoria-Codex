@@ -2,7 +2,7 @@ package com.theoriacodex.app.codex
 
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.storage.DurableJson
-import com.theoriacodex.data.storage.assertGsonParity
+import com.theoriacodex.data.storage.assertStoredFormat
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.PostTaxonomyTerm
@@ -15,7 +15,7 @@ class CodexShareGoldenTest {
     // gson-export.json is what the Gson exporter wrote for these posts, HTML-escaped strings included.
     @Test
     fun `an export imports exactly like the file older builds exported`() {
-        val golden = checkNotNull(javaClass.getResource("/golden/codex-share/gson-export.json")).readText()
+        val golden = golden("gson-export.json")
         val current = encodeCodexShareFile(TITLE, posts())
 
         val imported = imported(current)
@@ -24,8 +24,9 @@ class CodexShareGoldenTest {
         assertEquals(listOf("42", "7"), imported.second.map { it?.id?.sourcePostId })
     }
 
+    // The Gson export holds no URL for a gallery entry, so full.json, captured from the kotlinx exporter, sets every key.
     @Test
-    fun `the kotlinx serializer matches Gson`() {
+    fun `the full export holds every stored key`() {
         val image = CodexShareImageRef("https://e.test/a?x=1&y=2", null, "image/png", listOf("p"), listOf("f"), true)
         val profile = CodexShareCreatorProfile("PIXIV", "A & B", "1", "https://e.test/u/1", "user:1")
         val snapshot = CodexSharePostSnapshot(
@@ -46,13 +47,8 @@ class CodexShareGoldenTest {
             durationMs = 4L,
             mediaCount = 5,
         )
-        assertGsonParity(
-            samples = listOf(
-                CodexShareFile(),
-                CodexShareFile(2, TITLE, listOf(CodexSharePost("PIXIV", "42", snapshot))),
-            ),
-            goldenJson = listOf(checkNotNull(javaClass.getResource("/golden/codex-share/gson-export.json")).readText()),
-        )
+        val full = CodexShareFile(2, TITLE, listOf(CodexSharePost("PIXIV", "42", snapshot)))
+        assertStoredFormat(golden("full.json") to full)
     }
 
     @Test
@@ -61,6 +57,9 @@ class CodexShareGoldenTest {
         val encoded = DurableJson.encodeToString(CodexShareImageRef.serializer(), image)
         assertEquals("""{"url":"https://e.test/a"}""", encoded)
     }
+
+    private fun golden(name: String) =
+        checkNotNull(javaClass.getResource("/golden/codex-share/$name")) { "missing golden $name" }.readText()
 
     private fun imported(json: String) = checkNotNull(parseCodexShareFile(json)).let { file ->
         file.title to file.posts.orEmpty().map(::codexSharePostSnapshot)

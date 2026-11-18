@@ -18,8 +18,6 @@ dependencies {
     implementation(libs.jsoup)
     compileOnly(libs.jspecify)
     testImplementation(libs.junit)
-    // The Gson parity harness for the page token.
-    testImplementation(testFixtures(project(":core-data")))
     testImplementation(libs.kotlinx.coroutines.test)
 }
 

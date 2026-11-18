@@ -1,8 +1,5 @@
 package com.theoriacodex.data.repository
 
-import com.google.gson.JsonArray
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.PostTaxonomyTerm
@@ -20,6 +17,15 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -248,11 +254,10 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         val store = OfflineMediaStore(directory)
         val source = gallery()
         val offline = store.save(source, source.media, "codex:a") { _, file -> file.writeText("bytes") }
-        val manifest = directory.listFiles().orEmpty().single().resolve("manifest.json")
-        val json = com.google.gson.JsonParser.parseString(manifest.readText()).asJsonObject
-        json.addProperty("version", 1)
-        json.remove("sourcePost")
-        manifest.writeText(json.toString())
+        editManifest(directory) { root ->
+            root["version"] = JsonPrimitive(1)
+            root.remove("sourcePost")
+        }
         val reopened = OfflineMediaStore(directory)
         reopened.refresh()
         assertNull(reopened.find(source.id))
@@ -271,10 +276,10 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         )
         val saved = OfflineMediaStore(directory).save(source, source.media, "codex:a") { _, file -> file.writeText("bytes") }
         val manifest = manifestOf(directory)
-        assertEquals(3, manifest.get("version").asInt)
-        val wire = manifest.getAsJsonObject("post")
-        assertTrue(wire.has("sourcePostId") && wire.has("previewUrl"))
-        assertTrue(manifest.getAsJsonObject("sourcePost").has("fullVideoVariants"))
+        assertEquals(3, manifest.getValue("version").jsonPrimitive.int)
+        val wire = manifest.getValue("post").jsonObject
+        assertTrue("sourcePostId" in wire && "previewUrl" in wire)
+        assertTrue("fullVideoVariants" in manifest.getValue("sourcePost").jsonObject)
         assertTrue(saved.media.all { it.localPath != null })
         val reopened = OfflineMediaStore(directory)
         val restored = requireNotNull(reopened.find(source.id))
@@ -293,8 +298,8 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         val oldGeneration = folder.listFiles().orEmpty().single(File::isDirectory)
         // Only the version changes, so the version check alone must reject an otherwise readable copy.
         editManifest(directory) { root ->
-            root.addProperty("version", 2)
-            root.add("owners", JsonArray().apply { add("codex:a"); add("codex:z") })
+            root["version"] = JsonPrimitive(2)
+            root["owners"] = JsonArray(listOf(JsonPrimitive("codex:a"), JsonPrimitive("codex:z")))
         }
 
         val store = OfflineMediaStore(directory)
@@ -302,8 +307,8 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         assertEquals(0, store.snapshot.value.postCount)
         store.save(post, post.media, "codex:b") { _, media -> media.writeText("again") }
         val manifest = manifestOf(directory)
-        assertEquals(3, manifest.get("version").asInt)
-        assertEquals(listOf("codex:a", "codex:b", "codex:z"), manifest.getAsJsonArray("owners").map { it.asString })
+        assertEquals(3, manifest.getValue("version").jsonPrimitive.int)
+        assertEquals(listOf("codex:a", "codex:b", "codex:z"), ownersOf(manifest))
         assertFalse(oldGeneration.exists())
         assertNotNull(OfflineMediaStore(directory).find(post.id))
     }
@@ -314,14 +319,14 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         val post = gallery()
         OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes") }
         editManifest(directory) { root ->
-            root.addProperty("post", "not a post")
-            root.add("owners", JsonArray().apply { add("codex:a"); add(JsonObject()); add("codex:z") })
+            root["post"] = JsonPrimitive("not a post")
+            root["owners"] = JsonArray(listOf(JsonPrimitive("codex:a"), JsonObject(emptyMap()), JsonPrimitive("codex:z")))
         }
 
         val store = OfflineMediaStore(directory)
         assertNull(store.find(post.id))
         store.save(post, post.media, "codex:b") { _, media -> media.writeText("again") }
-        assertEquals(listOf("codex:a", "codex:b", "codex:z"), manifestOf(directory).getAsJsonArray("owners").map { it.asString })
+        assertEquals(listOf("codex:a", "codex:b", "codex:z"), ownersOf(manifestOf(directory)))
     }
 
     @Test
@@ -329,10 +334,13 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         val directory = tempDir("no-owners")
         val post = gallery()
         OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes") }
-        editManifest(directory) { root -> root.addProperty("version", 2); root.addProperty("owners", "codex:a") }
+        editManifest(directory) { root ->
+            root["version"] = JsonPrimitive(2)
+            root["owners"] = JsonPrimitive("codex:a")
+        }
 
         OfflineMediaStore(directory).save(post, post.media, "codex:b") { _, media -> media.writeText("again") }
-        assertEquals(listOf("codex:b"), manifestOf(directory).getAsJsonArray("owners").map { it.asString })
+        assertEquals(listOf("codex:b"), ownersOf(manifestOf(directory)))
     }
 
     @Test
@@ -341,19 +349,24 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         val post = gallery()
         OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes") }
         editManifest(directory) { root ->
-            for (name in listOf("post", "sourcePost")) root.getAsJsonObject(name).addProperty("sourcePostId", "other")
+            for (name in listOf("post", "sourcePost")) {
+                root[name] = JsonObject(root.getValue(name).jsonObject + ("sourcePostId" to JsonPrimitive("other")))
+            }
         }
         val store = OfflineMediaStore(directory)
         store.refresh()
         assertEquals(0, store.snapshot.value.postCount)
     }
 
-    private fun manifestOf(directory: File): JsonObject =
-        JsonParser.parseString(directory.listFiles().orEmpty().single().resolve("manifest.json").readText()).asJsonObject
+    private fun manifestFile(directory: File) = directory.listFiles().orEmpty().single().resolve("manifest.json")
 
-    private fun editManifest(directory: File, edit: (JsonObject) -> Unit) {
-        val file = directory.listFiles().orEmpty().single().resolve("manifest.json")
-        file.writeText(JsonParser.parseString(file.readText()).asJsonObject.also(edit).toString())
+    private fun manifestOf(directory: File): JsonObject = Json.parseToJsonElement(manifestFile(directory).readText()).jsonObject
+
+    private fun ownersOf(manifest: JsonObject) = manifest.getValue("owners").jsonArray.map { it.jsonPrimitive.content }
+
+    private fun editManifest(directory: File, edit: (MutableMap<String, JsonElement>) -> Unit) {
+        val file = manifestFile(directory)
+        file.writeText(JsonObject(manifestOf(directory).toMutableMap().also(edit)).toString())
     }
 
     private fun gallery(): Post {

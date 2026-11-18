@@ -1,6 +1,6 @@
 package com.theoriacodex.data.repository
 
-import com.google.gson.Gson
+import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.ImageRefStorageRecord
 import com.theoriacodex.data.storage.PostStorageCodec
 import com.theoriacodex.data.storage.PostStorageRecord
@@ -12,8 +12,7 @@ import org.junit.Test
 
 class MediaPreferencesStorageTest {
     @Test fun `old settings retain safe defaults and new settings round trip`() {
-        val gson = Gson()
-        val old = gson.fromJson("{}", SettingsStoreRecord::class.java).toDomain()
+        val old = DurableJson.decodeFromString<SettingsStoreRecord>("{}").toDomain()
         assertEquals(com.theoriacodex.domain.model.ViewerPlaybackMode.LOOP, old.viewer.playbackMode)
         assertEquals(VideoQuality.AUTO, old.viewer.videoQuality)
         assertEquals(VideoQuality.BEST, old.cache.downloadQuality)
@@ -21,8 +20,9 @@ class MediaPreferencesStorageTest {
         val expected = AppSettings(viewer = ViewerSettings(videoQuality = VideoQuality.DATA_SAVER,
             playbackMode = com.theoriacodex.domain.model.ViewerPlaybackMode.NEXT),
             cache = CacheSettings(downloadQuality = VideoQuality.AUTO, downloadsOverMetered = false))
-        val stored = gson.fromJson(gson.toJson(SettingsStoreRecord.fromDomain(expected)),
-            SettingsStoreRecord::class.java).toDomain()
+        val stored = DurableJson.decodeFromString<SettingsStoreRecord>(
+            DurableJson.encodeToString(SettingsStoreRecord.fromDomain(expected)),
+        ).toDomain()
         assertEquals(expected.viewer, stored.viewer)
         assertEquals(expected.cache, stored.cache)
     }

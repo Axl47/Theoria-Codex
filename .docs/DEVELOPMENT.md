@@ -53,7 +53,7 @@ Release builds enable the startup updater. The updater reads GitHub prereleases 
 
 One retained startup owner manages update choices and downloads. Release history shares a short-lived fetch cache; APK transfers are cancellable, bounded by size and time, and use separate staging files before atomic publication.
 
-Shipping releases enable R8 and resource shrinking. Durable field names are explicit: saved records use kotlinx.serialization, whose `@SerialName` keys live in generated code and need no keep rules. The contract manifest every release assembly checks against the optimizer mapping is now empty. Checked-in baseline/startup profiles cover cold start and all five top-level destinations. The separate `releaseAcceptance` variant keeps the same optimizer behavior but uses a debug key and updater-disabled package identity for non-debuggable device acceptance.
+Shipping releases enable R8 and resource shrinking. Saved records use kotlinx.serialization with an explicit `@SerialName` on every property; the keys live in generated code, so R8 cannot rename them and the app needs no keep rules. Three things guard stored formats: golden files that older builds wrote, which tests decode to pinned values (each surface's goldens together hold every key its serializer declares, checked by `assertStoredFormat`); those explicit names; and the minified `releaseAcceptance` run (`ReleaseDataAcceptanceActivity`), which proves the serializers survive R8. Checked-in baseline/startup profiles cover cold start and all five top-level destinations. The separate `releaseAcceptance` variant keeps the same optimizer behavior but uses a debug key and updater-disabled package identity for non-debuggable device acceptance.
 
 Main-channel releases are deliberate, not made for every push to `main`. A release commit updates `versionName`, its matching SemVer-derived `versionCode`, and `release-notes/v<major>.<minor>.<patch>.md`. Dispatching `.github/workflows/release.yml` on `main` verifies those three pieces agree, runs emulator acceptance, signs the APK, and only then creates the `v<major>.<minor>.<patch>` tag and publishes the checked-in user-facing notes. A failed run creates no tag, so the same version can be retried. The Android code uses `1_500_000_000 + major * 10_000 + minor * 100 + patch`, preserving the updater’s existing ordering contract.
 
@@ -135,8 +135,7 @@ restore. A credential-write failure can leave the profile imported while reporti
 finishes the account copy. A normal later public release update removes the personal bridge.
 
 Public release assembly automatically runs `:app:verifyPublicDeveloperCopyAbsent`, checking both
-the merged manifest and R8 mapping. Personal release assembly also runs the usual JSON wire-contract
-verification. Personal connected/install/uninstall tasks are deliberately blocked, and the Baseline
+the merged manifest and R8 mapping. Personal connected/install/uninstall tasks are deliberately blocked, and the Baseline
 Profile plugin's two derived personal variants are disabled. Production signing and installation
 remain separate from automated device-test lanes.
 
