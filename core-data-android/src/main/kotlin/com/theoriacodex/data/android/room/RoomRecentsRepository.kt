@@ -1,7 +1,6 @@
 package com.theoriacodex.data.android.room
 
 import androidx.room.withTransaction
-import com.google.gson.Gson
 import com.theoriacodex.data.repository.RecentActivityEntry
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
@@ -31,16 +30,13 @@ class RoomRecentsRepository(
     private val watchedLimit: Int = DEFAULT_RECENT_WATCHED_LIMIT,
     private val searchLimit: Int = DEFAULT_RECENT_SEARCH_LIMIT,
     private val clock: () -> Long = System::currentTimeMillis,
-    gson: Gson = Gson(),
 ) : RecentsRepository {
     private val dao = database.recentsDao()
     private val contentDao = database.codexLikesDao()
-    private val postCodec = LocalPostPayloadCodec(gson)
-    private val sharedPostPayloads = SharedPostPayloadWriter(contentDao, postCodec)
+    private val sharedPostPayloads = SharedPostPayloadWriter(contentDao)
 
     /** Every watched collector projects the same bounded query, so one retained decode serves them all. */
-    private val watchedPayloads = RetainedPostPayloads(postCodec::decode)
-    private val queryGson = gson
+    private val watchedPayloads = RetainedPostPayloads(LocalPostPayloadCodec::decode)
 
     init {
         require(watchedLimit >= 0 && searchLimit >= 0)
@@ -72,7 +68,7 @@ class RoomRecentsRepository(
         .map { rows -> rows.map(::decodeSearch) }.flowOn(Dispatchers.Default)
 
     private fun decodeSearch(row: RecentSearchEntity): RecentSearchEntry {
-        val payload = RecentSearchPayloadCodec.decodeJson(row.queryPayloadJson, queryGson)
+        val payload = RecentSearchPayloadCodec.decodeJson(row.queryPayloadJson)
         return RecentSearchEntry(payload.query, row.queryHash, row.searchedAtEpochMs,
             payload.kind, payload.sources, payload.sourceTags)
     }
@@ -158,7 +154,7 @@ class RoomRecentsRepository(
             dao.upsertSearch(
                 RecentSearchEntity(
                     normalized,
-                    RecentSearchPayloadCodec.encodeJson(query, kind, sources, sourceTags, queryGson),
+                    RecentSearchPayloadCodec.encodeJson(query, kind, sources, sourceTags),
                     clock(),
                     dao.nextSearchSequence(),
                 )
@@ -201,7 +197,7 @@ class RoomRecentsRepository(
                     dao.upsertSearch(
                         RecentSearchEntity(
                             queryHash,
-                            RecentSearchPayloadCodec.encodeJson(entry, queryGson),
+                            RecentSearchPayloadCodec.encodeJson(entry),
                             entry.searchedAtEpochMs,
                             dao.nextSearchSequence(),
                         )

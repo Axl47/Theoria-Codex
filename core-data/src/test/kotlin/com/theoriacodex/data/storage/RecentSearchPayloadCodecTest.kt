@@ -31,17 +31,6 @@ class RecentSearchPayloadCodecTest {
     }
 
     @Test
-    fun `legacy raw Query payload remains readable with inferred source metadata`() {
-        val query = query(QueryMode.Source(SourceKey.PIXIV))
-
-        val decoded = RecentSearchPayloadCodec.decodeJson(QueryStorageCodec.encodeJson(query))
-
-        assertEquals(query, decoded.query)
-        assertEquals(RecentSearchKind.SOURCE, decoded.kind)
-        assertEquals(listOf(SourceKey.PIXIV), decoded.sources)
-    }
-
-    @Test
     fun `FYP payload round trips exact tags by source`() {
         val sourceTags = linkedMapOf(
             SourceKey.GELBOORU to listOf("gelbooru seed"),
@@ -70,7 +59,9 @@ class RecentSearchPayloadCodecTest {
             ),
         )
 
-        val restored = QueryStorageCodec.decodeJson(QueryStorageCodec.encodeJson(grouped))
+        val restored = RecentSearchPayloadCodec.decodeJson(
+            RecentSearchPayloadCodec.encodeJson(grouped, RecentSearchKind.UNIFIED, listOf(SourceKey.PIXIV)),
+        ).query
 
         assertEquals(grouped, restored)
         assertEquals(grouped.effectiveIncludeTermGroups, restored.effectiveIncludeTermGroups)

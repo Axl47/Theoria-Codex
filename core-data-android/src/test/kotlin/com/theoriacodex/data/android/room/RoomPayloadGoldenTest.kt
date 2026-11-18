@@ -3,7 +3,10 @@ package com.theoriacodex.data.android.room
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
-import com.google.gson.Gson
+import com.theoriacodex.data.storage.PostStorageCodec
+import com.theoriacodex.data.storage.PostStorageRecord
+import com.theoriacodex.data.storage.assertGsonParity
+import com.theoriacodex.domain.model.CommentHint
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -44,14 +47,14 @@ class RoomPayloadGoldenTest {
     @Test fun `golden posts payload decodes to the original post`() {
         val entity = PostEntity("PIXIV", "gold-1", golden("post-payload.json"))
 
-        assertEquals(goldenPost, LocalPostPayloadCodec(Gson()).decode(entity))
+        assertEquals(goldenPost, LocalPostPayloadCodec.decode(entity))
     }
 
     // Pins: every stored field, nested record, and escape the post encoder writes decodes back to the same Post.
     @Test fun `golden full posts payload decodes every field`() {
         val entity = PostEntity("GELBOORU", "gold-full", golden("post-payload-full.json"))
 
-        assertEquals(goldenFullPost, LocalPostPayloadCodec(Gson()).decode(entity))
+        assertEquals(goldenFullPost, LocalPostPayloadCodec.decode(entity))
     }
 
     // Pins: liked_posts.tags_json as production wrote it decodes to the same tag list through the Likes read path.
@@ -63,6 +66,40 @@ class RoomPayloadGoldenTest {
         val liked = RoomCodexLikesRepository(database).observeLikes("profile-main").first().single()
 
         assertEquals(listOf("a&b", "c=d", "<x>", "it's", "q>r"), liked.tags)
+    }
+
+    // Pins: an upsert that changes no stored value leaves a Gson-written row's bytes alone, though kotlinx would
+    // encode the same post without Gson's escapes. The comment hint is live listing data and is never stored.
+    @Test fun `upserting an unchanged post keeps the Gson-written row`() {
+        val dao = database.codexLikesDao()
+        val golden = golden("post-payload-full.json")
+        dao.insertPost(PostEntity("GELBOORU", "gold-full", golden))
+
+        SharedPostPayloadWriter(dao).upsert(goldenFullPost.copy(commentHint = CommentHint(3)))
+
+        assertEquals(golden, dao.post("GELBOORU", "gold-full")?.payloadJson)
+    }
+
+    @Test fun `upserting a changed post rewrites the row`() {
+        val dao = database.codexLikesDao()
+        dao.insertPost(PostEntity("GELBOORU", "gold-full", golden("post-payload-full.json")))
+
+        SharedPostPayloadWriter(dao).upsert(goldenFullPost.copy(title = "Renamed & more"))
+
+        val stored = checkNotNull(dao.post("GELBOORU", "gold-full"))
+        assertEquals(goldenFullPost.copy(title = "Renamed & more"), LocalPostPayloadCodec.decode(stored))
+    }
+
+    @Test fun `the post record serializers match Gson`() {
+        val full = PostStorageCodec.encode(goldenFullPost)
+        assertGsonParity(
+            samples = listOf(
+                PostStorageRecord(),
+                full,
+                full.copy(fullLocalPath = "/data/full.mp4", media = listOf(null, full.media?.first()?.copy(localPath = "/m"))),
+            ),
+            goldenJson = listOf(golden("post-payload.json"), golden("post-payload-full.json")),
+        )
     }
 
     private fun golden(name: String): String =

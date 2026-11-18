@@ -1,5 +1,6 @@
 package com.theoriacodex.app.acceptance
 
+import android.content.Context
 import android.os.Bundle
 import android.util.Log
 import android.widget.TextView
@@ -18,8 +19,16 @@ import com.theoriacodex.app.update.ChangelogSection
 import com.theoriacodex.app.update.FileBackedUpdateStateStore
 import com.theoriacodex.app.update.PendingPostInstallChangelog
 import com.theoriacodex.app.update.UpdateStateSnapshot
+import com.theoriacodex.data.android.room.LikedPostEntity
+import com.theoriacodex.data.android.room.PostEntity
+import com.theoriacodex.data.android.room.RecentSearchEntity
+import com.theoriacodex.data.android.room.RoomCodexLikesRepository
+import com.theoriacodex.data.android.room.RoomRecentsRepository
+import com.theoriacodex.data.android.room.TheoriaRoomDatabase
 import com.theoriacodex.data.repository.FileBackedQueryRepository
 import com.theoriacodex.data.repository.OfflineMediaStore
+import com.theoriacodex.data.repository.ProfileLibraryIds
+import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.storage.PostStorageCodec
 import com.theoriacodex.data.storage.PostStorageRecord
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -53,7 +62,10 @@ class ReleaseDataAcceptanceActivity : ComponentActivity() {
         status.text = "Checking minified data contracts"
         lifecycleScope.launch {
             try {
-                withContext(Dispatchers.IO) { verifyData(File(cacheDir, "release-contract-$token"), phase) }
+                withContext(Dispatchers.IO) {
+                    verifyData(File(cacheDir, "release-contract-$token"), phase)
+                    verifyRoomPayloads(applicationContext, "release-contract-$token.db", phase)
+                }
                 status.text = "Minified data contracts passed: $phase"
                 Log.i(RESULT_TAG, "PASS:$token:$phase")
             } catch (cancelled: CancellationException) {
@@ -168,6 +180,54 @@ private val updateState = PendingPostInstallChangelog(
     )
 }
 
+/**
+ * Room payloads written through kotlinx in one process read back after a restart, beside rows exactly as the Gson
+ * encoders wrote them (HTML escapes included).
+ */
+private suspend fun verifyRoomPayloads(context: Context, databaseName: String, phase: String) {
+    val database = TheoriaRoomDatabase.create(context, databaseName)
+    try {
+        val likes = RoomCodexLikesRepository(database)
+        val recents = RoomRecentsRepository(database)
+        val gsonRowId = PostId(SourceKey.IWARA, "gson-row")
+        if (phase == "write") {
+            likes.toggleLikeAndSyncSystemCodex(
+                ACCEPTANCE_PROFILE, ProfileLibraryIds.likes(ACCEPTANCE_PROFILE), "Likes", videoPostFixture(), LIKE_TAGS, emptySet(),
+            )
+            recents.recordSearch(unifiedQuery, "kotlinx-search", RecentSearchKind.MULTI_SEARCH, MULTI_SOURCES, emptyMap())
+            database.codexLikesDao().insertPost(PostEntity(gsonRowId.source.id, gsonRowId.sourcePostId, GSON_ROOM_POST))
+            database.codexLikesDao().insertLike(LikedPostEntity(GSON_PROFILE, gsonRowId.source.id, gsonRowId.sourcePostId, 1L, GSON_LIKED_TAGS))
+            database.recentsDao().upsertSearch(RecentSearchEntity("gson-search", GSON_RECENT_SEARCH, 1L, database.recentsDao().nextSearchSequence()))
+            return
+        }
+        check(likes.getPost(videoPostFixture().id) == videoPostFixture())
+        check(likes.observeLikes(ACCEPTANCE_PROFILE).first().single().tags == LIKE_TAGS)
+        val payload = JsonParser.parseString(checkNotNull(database.codexLikesDao().post("IWARA", "video-contract")).payloadJson)
+        check(payload.asJsonObject.getAsJsonArray("fullVideoVariants").first().asJsonObject.has("original"))
+        val searches = recents.observeSearches().first().associateBy { it.queryHash }
+        check(searches.getValue("kotlinx-search").let { it.query == unifiedQuery && it.sources == MULTI_SOURCES })
+        val gsonRow = checkNotNull(likes.getPost(gsonRowId))
+        check(gsonRow.title == "Tom & Jerry's <post>" && gsonRow.canonicalTags == listOf("a&b", "c=d"))
+        check(likes.observeLikes(GSON_PROFILE).first().single().tags == listOf("a&b", "it's"))
+        check(searches.getValue("gson-search").sourceTags == mapOf(SourceKey.GELBOORU to listOf("rock & roll", "<seed>")))
+    } finally {
+        database.close()
+        if (phase == "read") context.deleteDatabase(databaseName)
+    }
+}
+
+private val LIKE_TAGS = listOf("tom & jerry", "<x>", "a=b", "it's")
+private val MULTI_SOURCES = listOf(SourceKey.GELBOORU, SourceKey.PIXIV)
+
+private val unifiedQuery = Query(
+    mode = QueryMode.Unified,
+    includeTerms = listOf(SearchTerm("a & b", SearchFacet.ARTIST, "artist")),
+    excludeTerms = listOf(SearchTerm("<c>")),
+    sort = SortMode.NEWEST,
+    dateRange = null,
+    minScore = null,
+)
+
 private val acceptanceQuery = Query(
     mode = QueryMode.Source(SourceKey.PIXIV),
     includeTerms = listOf(SearchTerm("a & b", SearchFacet.ARTIST, "artist")),
@@ -231,6 +291,7 @@ private suspend fun verifyLegacyOfflineManifest(offline: File) {
     check(found.id == post.id && found.media.single().url == post.media.single().url)
     val manifest = JsonParser.parseString(File(offline, "${offlineFolderName(post.id)}/manifest.json").readText()).asJsonObject
     check(manifest.get("version").asInt == 3 && manifest.getAsJsonObject("post").has("sourcePostId"))
+    check(OfflineMediaStore(offline).find(post.id) == found)
 }
 
 private fun offlineFolderName(id: PostId) = MessageDigest.getInstance("SHA-256")
@@ -267,6 +328,18 @@ private const val LEGACY_UPDATE_STATE = """{"ignoredReleaseId":42,"remindLaterRe
     """"pendingPostInstallChangelog":{"releaseId":42,"versionCode":2,"tagName":"v0.0.2","commitShaShort":"abc1234",""" +
     """"releaseName":"Tom \u0026 Jerry\u0027s \u003crelease\u003e","changelogMarkdown":"","changelogSections":[]}}"""
 
+private const val GSON_ROOM_POST = """{"source":"IWARA","sourcePostId":"gson-row",""" +
+    """"previewUrl":"https://example.test/p.jpg?a\u003d1\u0026b\u003d2","previewProgressiveUrls":[],"previewFallbackUrls":[],""" +
+    """"previewIsAnimated":false,"canonicalTags":["a\u0026b","c\u003dd"],"rawTags":["\u003craw\u003e"],"media":[],""" +
+    """"title":"Tom \u0026 Jerry\u0027s \u003cpost\u003e","taxonomy":[{"value":"a\u0026b","facet":"TAG"}],""" +
+    """"creatorProfiles":[],"schemaVersion":1}"""
+private const val GSON_LIKED_TAGS = """["a\u0026b","it\u0027s"]"""
+private const val GSON_RECENT_SEARCH = """{"recentSearchSchemaVersion":1,"query":{"schemaVersion":2,"modeType":"unified",""" +
+    """"includeTags":["x"],"excludeTags":[],"sort":"TOP","includeTerms":[{"value":"x","facet":"TAG"}],"excludeTerms":[],""" +
+    """"includeTermGroups":[[{"value":"x","facet":"TAG"}]]},"kind":"FYP","sources":["GELBOORU","PIXIV"],""" +
+    """"sourceTags":{"GELBOORU":["rock \u0026 roll","\u003cseed\u003e"]}}"""
+private const val ACCEPTANCE_PROFILE = "profile-main"
+private const val GSON_PROFILE = "gson-profile"
 private const val QUERY_MODE = "acceptance"
 private const val RESULT_TAG = "TheoriaReleaseData"
 private const val RELEASE_ID = 42L
