@@ -180,10 +180,27 @@ class DataStoreRepositoriesTest {
         val settings = recovered.observeSettings().first()
 
         assertEquals(AppSettings().scenarioPreset, settings.scenarioPreset)
-        assertTrue(directory.resolve("$DATASTORE_SETTINGS_FILE_NAME.corrupt").isFile)
+        assertTrue(directory.setAsideCopiesOf(DATASTORE_SETTINGS_FILE_NAME).isNotEmpty())
         assertNotNull(recovered.storageStatus.value.corruptionRecovery)
         closeScope(scope)
     }
+    @Test
+    fun `a second corruption keeps the first set-aside file`() = runTest {
+        val directory = tempFolder.newFolder("settings-corrupted-twice")
+        val storeFile = directory.resolve(DATASTORE_SETTINGS_FILE_NAME)
+        listOf("{first broken", "{second broken").forEach { broken ->
+            storeFile.writeText(broken)
+            val scope = newScope()
+            DataStoreSettingsRepository(directory, scope).awaitReady()
+            closeScope(scope)
+        }
+
+        assertEquals(
+            setOf("{first broken", "{second broken"),
+            directory.setAsideCopiesOf(DATASTORE_SETTINGS_FILE_NAME).map(File::readText).toSet(),
+        )
+    }
+
     @Test
     fun `newer settings schema fails closed without corruption replacement`() = runTest {
         val directory = tempFolder.newFolder("settings-future-schema")
@@ -196,7 +213,7 @@ class DataStoreRepositoriesTest {
         assertThrows(Exception::class.java) { kotlinx.coroutines.runBlocking { repository.awaitReady() } }
 
         assertEquals(future, destination.readText())
-        assertFalse(directory.resolve("$DATASTORE_SETTINGS_FILE_NAME.corrupt").exists())
+        assertFalse(directory.setAsideCopiesOf(DATASTORE_SETTINGS_FILE_NAME).isNotEmpty())
         assertEquals(DurableStorePhase.FAILED, repository.storageStatus.value.phase)
         closeScope(scope)
     }
@@ -327,7 +344,7 @@ class DataStoreRepositoriesTest {
         assertThrows(Exception::class.java) { kotlinx.coroutines.runBlocking { repository.awaitReady() } }
 
         assertEquals(future, destination.readText())
-        assertFalse(directory.resolve("$DATASTORE_UI_RESTORE_FILE_NAME.corrupt").exists())
+        assertFalse(directory.setAsideCopiesOf(DATASTORE_UI_RESTORE_FILE_NAME).isNotEmpty())
         assertEquals(DurableStorePhase.FAILED, repository.storageStatus.value.phase)
         closeScope(scope)
     }
@@ -400,7 +417,7 @@ class DataStoreRepositoriesTest {
         assertNull(repository.getLastTab())
         assertNull(repository.observeViewerLaunchContext().first())
         assertNotNull(repository.storageStatus.value.corruptionRecovery)
-        assertTrue(directory.resolve("$DATASTORE_UI_RESTORE_FILE_NAME.corrupt").isFile)
+        assertTrue(directory.setAsideCopiesOf(DATASTORE_UI_RESTORE_FILE_NAME).isNotEmpty())
         closeScope(scope)
     }
 
@@ -437,3 +454,7 @@ class DataStoreRepositoriesTest {
         scope.coroutineContext.job.join()
     }
 }
+
+/** Files a store set aside beside [storeFileName] in this directory, oldest name first. */
+internal fun File.setAsideCopiesOf(storeFileName: String): List<File> =
+    listFiles().orEmpty().filter { it.name.startsWith("$storeFileName.corrupt") }.sortedBy(File::getName)

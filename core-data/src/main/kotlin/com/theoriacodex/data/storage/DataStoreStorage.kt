@@ -6,8 +6,6 @@ import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.KSerializer
@@ -87,12 +85,12 @@ internal class JsonDataStoreSerializer<T : Any>(
     }
 }
 
+/** Sets an unreadable DataStore file aside through [setAsideCorruptFile]; null when that fails. */
 internal fun preserveCorruptFile(storeFile: File): String? {
     if (!storeFile.isFile) return null
     return runCatching {
-        val backup = storeFile.resolveSibling("${storeFile.name}.corrupt")
-        Files.copy(storeFile.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING)
-        backup.absolutePath
+        setAsideCorruptFile(storeFile, storeFile.readBytes(), storeFile.name, "${storeFile.name} was unreadable")
+            .backupPath
     }.getOrNull()
 }
 
