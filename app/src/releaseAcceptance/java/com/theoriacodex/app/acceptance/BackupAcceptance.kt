@@ -2,11 +2,16 @@ package com.theoriacodex.app.acceptance
 
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.BackupLibrary
+import com.theoriacodex.data.repository.DataStoreSettingsRepository
+import com.theoriacodex.data.repository.FileBackedReadingPositionRepository
 import com.theoriacodex.data.repository.FileBackedSavedSearchRepository
 import com.theoriacodex.data.repository.LifetimeStatistics
 import com.theoriacodex.data.repository.LikedPost
 import com.theoriacodex.data.repository.ProfileBackup
 import com.theoriacodex.data.repository.ProfileBackupCodec
+import com.theoriacodex.data.repository.ProfileBackupService
+import com.theoriacodex.data.repository.ProfileBackupStore
+import com.theoriacodex.data.repository.ProfileRestorePendingException
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.SavedSearchEntry
@@ -23,12 +28,15 @@ import com.theoriacodex.domain.source.SiteAddress
 import com.theoriacodex.domain.source.SiteAddressParse
 import com.theoriacodex.domain.source.SiteProfile
 import java.io.File
+import java.io.IOException
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
 
 /**
- * Backups and pinned searches under R8: what this build writes survives a process restart as the same document a
- * Gson build wrote, and the files a Gson build wrote still load. [post] is the acceptance video post.
+ * Backups, pinned searches, and the restore journal under R8: what this build writes survives a process restart as
+ * the same document a Gson build wrote, and the files a Gson build wrote still load. The write phase leaves a restore
+ * pending, as a crash during the library import would; a fresh service in the read phase must decode the journal
+ * and finish it. [post] is the acceptance video post.
  */
 internal suspend fun writeBackups(directory: File, post: Post) {
     check(directory.mkdirs())
@@ -36,6 +44,17 @@ internal suspend fun writeBackups(directory: File, post: Post) {
     FileBackedSavedSearchRepository(directory.resolve("pins"), now = { PIN_SAVED_AT }, newId = { PIN_ID })
         .save(PIN_NAME, acceptanceSearch())
     directory.resolve("shipped-pins").apply { check(mkdirs()) }.resolve(PINS_FILE).writeText(SHIPPED_PINS)
+    val interrupted = object : ProfileBackupStore {
+        override suspend fun snapshot(includeRecents: Boolean): BackupLibrary = error("Restore never snapshots")
+        override suspend fun merge(library: BackupLibrary): Int = throw IOException("Process stopped mid-restore")
+    }
+    val pending = try {
+        withRestoreService(directory.resolve("restore"), interrupted) { it.restore(ProfileBackupCodec().encode(acceptanceBackup(post))) }
+        false
+    } catch (_: ProfileRestorePendingException) {
+        true
+    }
+    check(pending && directory.resolve("restore").resolve(RESTORE_JOURNAL).isFile)
 }
 
 internal suspend fun verifyBackups(directory: File, post: Post) {
@@ -50,7 +69,34 @@ internal suspend fun verifyBackups(directory: File, post: Post) {
     check(FileBackedSavedSearchRepository(directory.resolve("pins")).observeSavedSearches().first() == pins)
     check(Json.parseToJsonElement(directory.resolve("pins").resolve(PINS_FILE).readText()) == Json.parseToJsonElement(SHIPPED_PINS))
     check(FileBackedSavedSearchRepository(directory.resolve("shipped-pins")).observeSavedSearches().first() == pins)
+
+    val restore = directory.resolve("restore")
+    val imported = mutableListOf<BackupLibrary>()
+    val store = object : ProfileBackupStore {
+        override suspend fun snapshot(includeRecents: Boolean): BackupLibrary = error("Restore never snapshots")
+        override suspend fun merge(library: BackupLibrary): Int {
+            imported += library
+            return 1
+        }
+    }
+    check(withRestoreService(restore, store) { it.recoverPendingRestore() })
+    check(!restore.resolve(RESTORE_JOURNAL).exists() && imported.single() == expected.library)
+    check(FileBackedSavedSearchRepository(restore.resolve("pins")).observeSavedSearches().first() == pins)
 }
+
+/** A restore service over durable stores in [directory], as the app builds one, with [store] for the library. */
+private suspend fun <T> withRestoreService(directory: File, store: ProfileBackupStore, block: suspend (ProfileBackupService) -> T): T =
+    withStoreScope { scope ->
+        block(
+            ProfileBackupService(
+                settings = DataStoreSettingsRepository(directory.resolve("settings"), scope).apply { awaitReady() },
+                store = store,
+                savedSearches = FileBackedSavedSearchRepository(directory.resolve("pins")),
+                readingPositions = FileBackedReadingPositionRepository(directory),
+                journalFile = directory.resolve(RESTORE_JOURNAL),
+            ),
+        )
+    }
 
 private fun acceptanceSearch() = RecentSearchEntry(
     Query(QueryMode.Unified, listOf(SearchTerm("a & b", SearchFacet.ARTIST, "artist")), emptyList(), SortMode.NEWEST, null, null),
@@ -79,6 +125,7 @@ private const val PIN_ID = "pin"
 private const val PIN_NAME = "Pin & <x>"
 private const val PIN_SAVED_AT = 5L
 private const val PINS_FILE = "pinned_searches.json"
+private const val RESTORE_JOURNAL = "pending_profile_restore.json"
 
 // What the Gson codec wrote for acceptanceBackup(videoPostFixture()).
 private const val SHIPPED_BACKUP =
