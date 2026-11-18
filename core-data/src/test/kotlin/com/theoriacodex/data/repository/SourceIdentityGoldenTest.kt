@@ -1,6 +1,5 @@
 package com.theoriacodex.data.repository
 
-import com.google.gson.Gson
 import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
@@ -28,8 +27,6 @@ import org.junit.Test
  * build/golden-actual/ for review; never regenerate these files to make a refactor pass.
  */
 class SourceIdentityGoldenTest {
-    private val gson = Gson()
-
     @Test
     fun `default settings file keeps its persisted bytes`() {
         assertGolden("settings-default.json", encodeSettingsFile(AppSettings()))
@@ -43,12 +40,6 @@ class SourceIdentityGoldenTest {
     @Test
     fun `multi-source backup keeps its encoded bytes`() {
         assertGolden("backup-multi-source.json", ProfileBackupCodec().encode(multiSourceBackup()).toString(Charsets.UTF_8))
-    }
-
-    @Test
-    fun `offline manifest reflection keeps the post's source fields`() {
-        // Version 2 offline manifests were Gson reflection over the domain Post; OfflineMediaStore still reads that shape.
-        assertGolden("offline-manifest-post.json", gson.toJson(gelbooruPost))
     }
 
     private fun encodeSettingsFile(settings: AppSettings): String =
