@@ -13,8 +13,12 @@ import com.google.gson.JsonParser
 import com.theoriacodex.app.codex.CodexShareFile
 import com.theoriacodex.app.codex.CodexSharePost
 import com.theoriacodex.app.search.FileBackedTagSuggestionStore
+import com.theoriacodex.app.update.ChangelogSection
 import com.theoriacodex.app.update.FileBackedUpdateStateStore
+import com.theoriacodex.app.update.PendingPostInstallChangelog
+import com.theoriacodex.app.update.UpdateStateSnapshot
 import com.theoriacodex.data.repository.OfflineMediaStore
+import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.PostStorageCodec
 import com.theoriacodex.data.storage.PostStorageRecord
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -57,6 +61,7 @@ class ReleaseDataAcceptanceActivity : ComponentActivity() {
 private suspend fun verifyData(directory: File, phase: String) {
     val gson = GsonBuilder().serializeNulls().create()
     val updateFile = File(directory, "update.json")
+    val kotlinxUpdateFile = File(directory, "update-kotlinx.json")
     val shareFile = File(directory, "collection.json")
     val postFile = File(directory, "post.json")
     val legacyPostFile = File(directory, "legacy-post.json")
@@ -67,6 +72,7 @@ private suspend fun verifyData(directory: File, phase: String) {
             setIgnoredRelease(RELEASE_ID)
             setRemindLater(RELEASE_ID, REMIND_UNTIL)
         }
+        kotlinxUpdateFile.writeText(DurableJson.encodeToString(UpdateStateSnapshot.serializer(), kotlinxUpdateState))
         shareFile.writeText(gson.toJson(CodexShareFile(
             title = "Acceptance collection",
             posts = listOf(CodexSharePost(source = "PIXIV", sourcePostId = "42")),
@@ -88,6 +94,7 @@ private suspend fun verifyData(directory: File, phase: String) {
         val snapshot = FileBackedUpdateStateStore(updateFile).snapshot()
         check(snapshot.ignoredReleaseId == RELEASE_ID)
         check(snapshot.remindLaterReleaseId == RELEASE_ID && snapshot.remindLaterUntilEpochMs == REMIND_UNTIL)
+        verifyKotlinxUpdateState(updateFile, kotlinxUpdateFile)
         val wire = JsonParser.parseString(shareFile.readText()).asJsonObject
         check(wire.keySet() == setOf("version", "title", "posts"))
         val share = gson.fromJson(shareFile.readText(), CodexShareFile::class.java)
@@ -109,6 +116,51 @@ private suspend fun verifyData(directory: File, phase: String) {
         check(directory.deleteRecursively())
     }
 }
+
+/** The prototype kotlinx serializer survives R8 with readable keys and agrees with the Gson store both ways. */
+private suspend fun verifyKotlinxUpdateState(gsonFile: File, kotlinxFile: File) {
+    val written = kotlinxFile.readText()
+    check(DurableJson.decodeFromString(UpdateStateSnapshot.serializer(), written) == kotlinxUpdateState)
+    val wire = JsonParser.parseString(written).asJsonObject
+    check(wire.keySet() == UPDATE_STATE_KEYS)
+    val changelog = wire.getAsJsonObject("pendingPostInstallChangelog")
+    check(changelog.keySet() == CHANGELOG_KEYS)
+    check(changelog.getAsJsonArray("changelogSections").single().asJsonObject.keySet() == setOf("title", "bullets"))
+    check(FileBackedUpdateStateStore(kotlinxFile).snapshot() == kotlinxUpdateState)
+    check(DurableJson.decodeFromString(UpdateStateSnapshot.serializer(), gsonFile.readText()) == FileBackedUpdateStateStore(gsonFile).snapshot())
+}
+
+private val kotlinxUpdateState = PendingPostInstallChangelog(
+    releaseId = RELEASE_ID,
+    fromVersionCode = 1,
+    versionCode = 2,
+    tagName = "v0.0.2",
+    commitShaShort = "abc1234",
+    releaseName = "Acceptance & <release>",
+    changelogMarkdown = "- fixed",
+    changelogSections = listOf(ChangelogSection("Fixed", listOf("one"))),
+).let { changelog ->
+    UpdateStateSnapshot(
+        lastSeenReleaseId = RELEASE_ID,
+        pendingInstallReleaseId = RELEASE_ID,
+        pendingInstallVersionCode = 2,
+        ignoredReleaseId = RELEASE_ID,
+        remindLaterReleaseId = RELEASE_ID,
+        remindLaterUntilEpochMs = REMIND_UNTIL,
+        pendingPostInstallChangelog = changelog,
+        lastInstalledChangelog = changelog,
+    )
+}
+
+private val UPDATE_STATE_KEYS = setOf(
+    "lastSeenReleaseId", "pendingInstallReleaseId", "pendingInstallVersionCode", "ignoredReleaseId",
+    "remindLaterReleaseId", "remindLaterUntilEpochMs", "pendingPostInstallChangelog", "lastInstalledChangelog",
+)
+
+private val CHANGELOG_KEYS = setOf(
+    "releaseId", "fromVersionCode", "versionCode", "tagName", "commitShaShort", "releaseName", "changelogMarkdown",
+    "changelogSections",
+)
 
 private fun verifyVideoPost(json: String) {
     val gson = GsonBuilder().serializeNulls().create()
