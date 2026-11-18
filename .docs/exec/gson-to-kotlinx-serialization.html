@@ -233,14 +233,14 @@ Copy this skeleton into a new `.docs/exec/<plan-name>.html` file and then replac
     <h1>ExecPlan: Move Saved Data From Gson Reflection To Compile-Time Serialization</h1>
     <p>When this is complete, saved data no longer depends on R8 keeping field names or on Gson creating objects by reflection. Every durable file, Room payload, and export is read and written by serializers the compiler generates, an offline copy survives any app update, and the hand-maintained R8 contract machinery is deleted. Users see no format loss: every file written by an older build still loads.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: In progress (Phases 4 to 9)</span>
+      <span class="pill">Status: In progress (Phases 9 and 10)</span>
       <span class="pill">Owner: Claude</span>
       <span class="pill">Created: 2026-11-08</span>
       <span class="pill">Updated: 2026-11-18</span>
       <span class="pill">Plan file: .docs/exec/gson-to-kotlinx-serialization.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Land Phase 4 and the v2 manifest reader retirement, then Phase 6, then the rest of Phase 9.</div>
+      <div class="card"><strong>Next Action</strong>Land Phase 9 (delete the R8 machinery and the parity harness) and Phase 10 (remove Gson from <code>core-data</code> and <code>app</code>), then review the finished state against this plan.</div>
       <div class="card"><strong>Main Risk</strong>A stricter decoder turning a repairable file into "corrupt", which resets settings or re-downloads offline media. Reduced by a Gson parity harness and one shared corrupt-JSON contract.</div>
       <div class="card"><strong>Validation</strong>Gson-vs-kotlinx parity tests on golden files, the full host gates, and the minified release-acceptance run on Android 16 and 17.</div>
       <div class="card"><strong>Affected Areas</strong><code>core-data</code>, <code>core-data-android</code>, <code>app</code> persistence, <code>app/proguard-rules.pro</code>, release verification.</div>
@@ -273,8 +273,8 @@ Copy this skeleton into a new `.docs/exec/<plan-name>.html` file and then replac
     <section id="status">
       <h2>Current Status</h2>
       <table class="status-table"><tbody>
-        <tr><td>State</td><td>In progress. Phase 1 shipped in v1.4.0 (commit <code>5dc5fe72</code>). Phase 2 landed through PR #145 and Phase 3 through PR #147; both shipped in v1.9.1. Phases 8, 7 and 5 landed on 2026-11-18 through PRs #150, #151 and #152 and are not yet released.</td></tr>
-        <tr><td>Next action</td><td>Phase 4 and the v2 manifest reader retirement (part of Phase 9) are in progress. Phase 6 starts when Phase 4 lands, and the rest of Phase 9 follows.</td></tr>
+        <tr><td>State</td><td>In progress. Phase 1 shipped in v1.4.0 (commit <code>5dc5fe72</code>). Phase 2 landed through PR #145 and Phase 3 through PR #147; both shipped in v1.9.1. Phases 8, 7, 5, 4 and 6 and the v2 manifest reader retirement landed on 2026-11-18 through PRs #150 to #156 and are not yet released. No shipped code reads or writes a record through Gson reflection.</td></tr>
+        <tr><td>Next action</td><td>Phases 9 and 10 are in progress in parallel.</td></tr>
         <tr><td>Blocked by</td><td>Nothing. A local emulator failure on 2026-11-08 means device proof currently comes from CI (see Surprises).</td></tr>
       </tbody></table>
     </section>
@@ -296,7 +296,7 @@ Copy this skeleton into a new `.docs/exec/<plan-name>.html` file and then replac
           <tr><td>Statistics share file (missed by the first inventory)</td><td><code>app/.../statistics/StatsShare.kt</code></td><td>User-exported</td><td>7</td></tr>
         </tbody>
       </table>
-      <p><strong>Out of scope:</strong> Gson's tree API (provider parsing in <code>core-sources</code>, backup framing, share-file import) has no reflection and no R8 risk. <code>core-stubs</code> and the provider health CLI are not shipped and are not minified. Gson stays as a tree parser after this plan. Replacing it there is a separate decision.</p>
+      <p><strong>Out of scope:</strong> Gson's tree API (provider parsing in <code>core-sources</code>, backup framing, share-file import) has no reflection and no R8 risk. <code>core-stubs</code> and the provider health CLI are not shipped and are not minified. Gson stays as the provider-parsing library in <code>core-sources</code>. The plan first left every tree use alone; Phase 10 (added 2026-11-18) removes Gson from <code>core-data</code> and <code>app</code>, tree uses included.</p>
     </section>
 
     <section id="contract">
@@ -376,7 +376,7 @@ val DurableJson = Json {
       <article>
         <h3>Phase 6: Backups, journal, developer copy, pinned searches</h3>
         <table class="status-table"><tbody>
-          <tr><td>Goal</td><td>Reflective leaves become kotlinx, while Gson tree framing stays. Leaves bridge through strings at the tree boundary, so old backups and a mixed-version developer copy keep working.</td></tr>
+          <tr><td>Goal</td><td>The backup path moves wholly onto kotlinx, so old backups and a mixed-version developer copy keep working. As first planned, Gson tree framing would have stayed with leaves bridged through strings; the phase read and built the backup document as a kotlinx tree instead (see the Decision Log).</td></tr>
           <tr><td>Acceptance</td><td>A Gson-written backup (v1 and v2) and restore journal restore correctly, and a pending restore still matches the same backup.</td></tr>
         </tbody></table>
       </article>
@@ -398,11 +398,20 @@ val DurableJson = Json {
       </article>
 
       <article>
-        <h3>Phase 9: Delete the R8 machinery</h3>
+        <h3>Phase 9: Delete the R8 machinery and the migration scaffolding</h3>
         <table class="status-table"><tbody>
-          <tr><td>Goal</td><td>Remove durable keep rules, <code>r8-json-contracts.txt</code>, <code>verify_r8_json_contract.py</code> and its test, <code>VerifyR8JsonContractsTask</code>, and the reflective half of <code>GsonWireContractTest</code>. Drop the five dead records. Retire the v2 manifest reader only after a release has carried the v3 upgrade.</td></tr>
+          <tr><td>Goal</td><td>Remove durable keep rules, <code>r8-json-contracts.txt</code>, <code>verify_r8_json_contract.py</code> and its test, <code>VerifyR8JsonContractsTask</code>, and <code>GsonWireContractTest</code>. Drop the five dead records. Retire the v2 manifest reader (done ahead, PR #155). Remove the Gson comparison from the parity harness, keeping golden files and a kotlinx round trip as the lasting guard on every stored surface.</td></tr>
           <tr><td>Keep</td><td><code>ReleaseDataAcceptanceActivity</code> and <code>InstalledJsonCompatibilityDeviceTest</code>, retargeted. They are the proof that serializers survive R8.</td></tr>
           <tr><td>Acceptance</td><td>No shipped class is decoded by Gson reflection (<code>git grep</code> for <code>fromJson(.*::class.java)</code> finds only tree types). Release acceptance passes.</td></tr>
+        </tbody></table>
+      </article>
+
+      <article>
+        <h3>Phase 10: One JSON library for saved data</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Port the remaining Gson tree users in <code>core-data</code> and <code>app</code> to kotlinx (reading positions, the profile-removal journal, the two job queues, the ugoira cache index, the share payload, and the network and seed parsers in <code>app</code>), delete the Gson overloads of <code>AtomicJsonFileStore</code>, and remove the Gson dependency from both modules.</td></tr>
+          <tr><td>Why</td><td>With the R8 verifier deleted, nothing else stops a later change from decoding a record with Gson reflection again. Without Gson on the classpath, that cannot compile. The storage engine also drops to one read path and one write path.</td></tr>
+          <tr><td>Acceptance</td><td><code>app</code>, <code>core-data</code> and <code>core-data-android</code> have no Gson dependency, tests included. Files written by shipped builds load to the same values. Release acceptance passes.</td></tr>
         </tbody></table>
       </article>
     </section>
@@ -450,10 +459,11 @@ val DurableJson = Json {
         <li>[x] 2026-11-18 - Phase 8 landed through PR #150 (merge <code>b1e5d8c5</code>): the legacy JSON import path is deleted, about 3,400 lines across 32 files. Gone are <code>RoomLegacyJsonImporter</code>, <code>RoomRecentsLegacyImporter</code>, <code>LegacyDataPreparer</code>, <code>LegacyMigrationProofs</code>, <code>LegacyJsonRecords</code>, <code>DataStoreMigrations</code>, the <code>legacyImports</code> proofs, the query scroll-offset migration, their tests and goldens (including the Recents destination hash), and 11 keep rules. Proof: <code>scripts/check.sh --record</code> and Device Validation run 44298895614 on API 36 and 37. A host test pins that leftover legacy files keep their exact bytes and that a DataStore file still carrying <code>legacyImports</code> loads with nothing reset; no install with leftover files was launched on a device.</li>
         <li>[x] 2026-11-18 - Phase 7 landed through PR #151 (merge <code>386f9699</code>): the credential envelope, payload and per-site records and the statistics share file use kotlinx with <code>DurableJson</code>; 7 keep rules and contract lines are gone and no reflective Gson is left in <code>app</code>. Proof: goldens captured from the Gson code first (a real encrypted envelope, a payload, two stats exports), <code>assertGsonParity</code>, a mutation check (rethrowing the parse failure fails 4 of 6 corrupt-envelope tests), <code>scripts/check.sh --record</code>, and Device Validation run 44300115160, where the minified APK reads back new, Gson-format and corrupt envelopes across a process restart.</li>
         <li>[x] 2026-11-18 - Phase 5 landed through PR #152 (merge <code>c04e61c5</code>): <code>posts.payload_json</code>, <code>recent_searches.query_payload_json</code>, <code>liked_posts.tags_json</code> (one shared <code>LikedTagsCodec</code>), offline manifest v3 posts and the search first-page cache use kotlinx with <code>DurableJson</code>. The query records lost their Gson names and keep rules, and <code>core-data-android</code> no longer depends on Gson in production. Proof: goldens first (a full post and three kinds of recent-search rows with escaped characters), <code>assertGsonParity</code>, a test that an unchanged Gson-written row keeps its bytes (it fails when the byte comparison is restored), <code>scripts/check.sh --record</code>, and Device Validation run 44306487272.</li>
-        <li>[ ] Phase 4: DataStore files (in progress).</li>
-        <li>[ ] Phase 9, part 1: retire the v2 offline manifest reader (in progress).</li>
-        <li>[ ] Phase 6: backups, journal, developer copy, pinned searches.</li>
-        <li>[ ] Phase 9, part 2: delete the R8 machinery.</li>
+        <li>[x] 2026-11-18 - Phase 4 landed through PR #153 (merge <code>b6717c5f</code>): settings, UI restore, statistics and site profiles go through one <code>JsonDataStoreSerializer</code> on <code>DurableJson</code>. The live records named <code>Legacy*</code> were renamed, and two old steps were retired under the <code>AGENTS.md</code> rule: the statistics v1 to v2 step (v1.0.0) and the last-tab handoff (v0.6.4). Proof: <code>DataStoreParityTest</code>, <code>DataStoreGoldenTest</code>, settings output byte-identical to the Gson goldens, <code>scripts/check.sh --record</code>, and Device Validation run 44309896791, where the minified APK reads back its own files and literal Gson-format files after a restart.</li>
+        <li>[x] 2026-11-18 - Phase 9, part 1 landed through PR #155 (merge <code>60235e07</code>): the v2 offline manifest reader is deleted and the manifest is one <code>@Serializable</code> record, so <code>OfflineMediaStore</code> no longer uses Gson. A v3 golden was committed first; Gson and kotlinx write identical v3 bytes. Proof: mutation checks on the version guard and owner salvage, <code>scripts/check.sh --record</code>, Device Validation run 44314213965.</li>
+        <li>[x] 2026-11-18 - Phase 6 landed through PR #156 (merge <code>440179c2</code>): backups, the pending-restore journal, the read-only developer copy and <code>pinned_searches.json</code> run on kotlinx. Every record lost <code>@SerializedName</code>, <code>app/proguard-rules.pro</code> is down to a comment, and the contract list is empty. New backups match the Gson golden apart from the retired <code>lastSelectedTabRoute</code> key. Proof: v1 and v2 backup goldens restore the same, tests that fail when the error mapping is removed, <code>scripts/check.sh --record</code>, and Device Validation run 44319788840, where the minified APK writes a backup and pins and checks them against literal Gson outputs after a restart.</li>
+        <li>[ ] Phase 9, part 2: delete the R8 machinery and the Gson parity harness (in progress).</li>
+        <li>[ ] Phase 10: remove Gson from <code>core-data</code> and <code>app</code> (in progress).</li>
       </ul>
 
       <h3>Surprises And Discoveries</h3>
@@ -483,11 +493,16 @@ val DurableJson = Json {
         <li>Observation: the pending Pixiv PKCE session never used JSON. Evidence: <code>AndroidPixivPkceSessionStore</code> uses <code>DataOutputStream</code>.</li>
         <li>Observation: comparing re-encoded records still rewrote unchanged rows when the incoming post carried a value the decoder normalizes away, such as a video variant with height 0. Evidence: found in the Phase 5 review; <code>SharedPostPayloadWriter</code> now compares decoded posts.</li>
         <li>Observation: once a record drops <code>@SerializedName</code>, <code>assertGsonParity</code> compares against Gson's field names, so a property whose name differs from its key cannot be parity-tested. Evidence: <code>RecentSearchPayloadRecord.schemaVersion</code> was renamed to match its key.</li>
+        <li>Observation: the Gson DataStore serializer decoded the whole file before checking its schema version, so a file from a newer build could have been reset. Evidence: <code>{"schemaVersion":4,"settings":[]}</code> now throws <code>UnsupportedStoreSchemaException</code> before any decode.</li>
+        <li>Observation: a rebase can silently drop a keep rule that is still needed, and the host checks do not notice. Evidence: Phase 4's first rebase lost the two query-record rules; <code>scripts/check.sh</code> and <code>GsonWireContractTest</code> passed, and only the minified acceptance build in Device Validation failed.</li>
+        <li>Observation: Gson and kotlinx write byte-identical v3 manifests, and kotlinx writes the settings file byte-identical to the Gson goldens. Evidence: <code>cmp</code> of captured manifests; <code>SourceIdentityGoldenTest</code>.</li>
+        <li>Observation: the backup screen chooses what to show by exception type. kotlinx reports bad JSON as an <code>IllegalArgumentException</code>, which that screen shows word for word, while Gson's parse errors and its <code>ClassCastException</code> on a wrong-typed section reached the generic message. Evidence: the Phase 6 failure-type tests, which fail when the mapping back to the generic error is removed.</li>
+        <li>Observation: a folder whose manifest cannot be read, a leftover v2 one included, is not in the catalog's owner index, so removing a collection never deletes it; only Clear or saving the post again does. Evidence: <code>OfflineMediaStore.rebuildCatalog</code>.</li>
       </ul>
 
       <h3>Decision Log</h3>
       <ul>
-        <li>Decision: migrate reflective surfaces only and keep Gson's tree API. Rationale: the tree API has no reflection or R8 exposure, and rewriting about 190 provider parsing sites adds risk with no safety gain. Date/Author: 2026-11-08 / Claude.</li>
+        <li>Decision: migrate reflective surfaces only and keep Gson's tree API (narrowed on 2026-11-18 to <code>core-sources</code>; see Phase 10). Rationale: the tree API has no reflection or R8 exposure, and rewriting about 190 provider parsing sites adds risk with no safety gain. Date/Author: 2026-11-08 / Claude.</li>
         <li>Decision: use <code>PostStorageRecord</code> for manifest v3 instead of annotating domain classes. Rationale: it is already the stable, tested mirror of <code>Post</code>, and no new library is needed. Date/Author: 2026-11-08 / Claude.</li>
         <li>Decision: read v2 manifests by hand from the JSON tree with a frozen table of shipped key names. Rationale: the first approach, reusing the reflective reader, failed the minified acceptance run because R8 strips generic signatures from <code>Post</code>. The tree reader needs no reflection and no longer constrains changes to the domain classes. Date/Author: 2026-11-08 / Claude.</li>
         <li>Decision: use kotlinx.serialization rather than Moshi. Rationale: code generation is built into the Kotlin compiler toolchain, and its JSON tree is available if Gson's tree use is ever replaced. Date/Author: 2026-11-08 / Claude.</li>
@@ -505,6 +520,11 @@ val DurableJson = Json {
         <li>Decision: a credential parse failure becomes a corrupt-envelope error with no message or cause, rather than adding <code>SerializationException</code> to <code>toCredentialReadFailure</code>. Rationale: it reaches <code>ReconnectRequired</code> the same way, and the decrypted payload cannot travel on in a cause chain. Date/Author: 2026-11-18 / Claude.</li>
         <li>Decision: <code>SharedPostPayloadWriter</code> writes only when the merged post decodes differently from the stored one. Rationale: one comparison that ignores escaping, live-only fields and decoder normalization, with no hashing or migration state. Date/Author: 2026-11-18 / Claude.</li>
         <li>Decision: retire the v2 offline manifest reader as its own PR ahead of the rest of Phase 9. Rationale: v1.4.0 carried the v3 upgrade and six releases have shipped since; with it gone, manifests are read by kotlinx directly instead of through a Gson tree. Date/Author: 2026-11-18 / Claude.</li>
+        <li>Decision: a leftover v2 manifest counts as no usable copy, and its owners are still read so the next save keeps them. Rationale: offline media can be downloaded again, and Phase 1's protection against forgetting other collections' ownership stays. Date/Author: 2026-11-18 / Claude.</li>
+        <li>Decision: DataStore files check the schema version on the raw JSON before decoding, and a null on a required field repairs to its default instead of resetting the store. Rationale: a newer file can never be replaced, and the three latent null bugs become repairs. An older-schema file now resets, which follows from retiring the statistics v1 to v2 step. Date/Author: 2026-11-18 / Claude.</li>
+        <li>Decision: move the backup path wholly onto kotlinx instead of bridging Gson trees and kotlinx leaves through strings. Rationale: two JSON libraries passing values through strings inside one codec is machinery this plan exists to remove. The document stays a tree, with each strictness check ported one to one, because <code>DurableJson</code>'s leniency in frame records would have loosened what a backup may contain. Date/Author: 2026-11-18 / Claude.</li>
+        <li>Decision: add Phase 10 and remove Gson from <code>core-data</code> and <code>app</code>, tree uses included. Rationale: once the R8 verifier is gone, the missing dependency is what keeps reflective Gson out of saved data, and <code>AtomicJsonFileStore</code> drops its second API. <code>core-sources</code> keeps Gson for provider parsing, where the original reasoning still holds. Date/Author: 2026-11-18 / Claude.</li>
+        <li>Decision: retire the Gson comparison in the parity harness with Phase 9. Rationale: it proved the migration; with no Gson codec in production it proves nothing and forces property names to equal stored keys. Golden files written by shipped builds are the lasting guard. Date/Author: 2026-11-18 / Claude.</li>
       </ul>
 
       <h3>Outcomes And Retrospective</h3>
@@ -514,6 +534,9 @@ val DurableJson = Json {
       <p>Phase 8: the legacy import path is deleted rather than ported, which removed about 3,400 lines and let Phases 4 to 6 skip the importers' records. Lesson: before migrating code, check whether the rule that kept it alive still holds.</p>
       <p>Phase 7: credentials and the statistics share file moved with old files decoding identically and corrupt envelopes still asking for reconnection. Lesson: capture goldens from real production output, not hand-written fixtures; the real envelope showed escaping a hand-written one would have missed.</p>
       <p>Phase 5: the Room payloads moved with no rewrite of existing rows and no schema change. Lesson: when a codec's output bytes change, decide whether a value changed by comparing decoded values, never stored strings.</p>
+      <p>Phase 4: the four DataStore files moved onto one serializer with shipped files loading to the same values, and three latent crashes became repairs. Lesson: check the schema on the raw JSON before any typed decode, and after resolving conflicts in a list of rules, diff the result against main instead of trusting the conflict view.</p>
+      <p>Phase 9, part 1: the v2 manifest reader and its frozen key table are gone and manifests are a single record. Lesson: when a test exists to pin one guard, change only what that guard checks; a mutation run showed a mixed test passing for the wrong reason.</p>
+      <p>Phase 6: backups, the restore journal, the developer copy and pinned searches moved, and with them the last reflective Gson in shipped code. Lesson: when porting error paths, pin the exception type the user-facing code branches on, not only the message.</p>
     </section>
 
     <section id="recovery">
