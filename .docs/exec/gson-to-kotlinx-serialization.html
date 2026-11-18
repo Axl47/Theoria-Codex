@@ -240,7 +240,7 @@ Copy this skeleton into a new `.docs/exec/<plan-name>.html` file and then replac
       <span class="pill">Plan file: .docs/exec/gson-to-kotlinx-serialization.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Merge Phase 2 once its minified acceptance run passes, then start Phase 3.</div>
+      <div class="card"><strong>Next Action</strong>Start Phase 3: move <code>AtomicJsonFileStore</code> and the low-risk stores to <code>DurableJson</code>.</div>
       <div class="card"><strong>Main Risk</strong>A stricter decoder turning a repairable file into "corrupt", which resets settings or re-downloads offline media. Reduced by a Gson parity harness and one shared corrupt-JSON contract.</div>
       <div class="card"><strong>Validation</strong>Gson-vs-kotlinx parity tests on golden files, the full host gates, and the minified release-acceptance run on Android 16 and 17.</div>
       <div class="card"><strong>Affected Areas</strong><code>core-data</code>, <code>core-data-android</code>, <code>app</code> persistence, <code>app/proguard-rules.pro</code>, release verification.</div>
@@ -273,8 +273,8 @@ Copy this skeleton into a new `.docs/exec/<plan-name>.html` file and then replac
     <section id="status">
       <h2>Current Status</h2>
       <table class="status-table"><tbody>
-        <tr><td>State</td><td>In progress. Phase 1 shipped in v1.4.0 (commit <code>5dc5fe72</code>). Phase 2 is on branch <code>feat/serialization-phase-2</code>.</td></tr>
-        <tr><td>Next action</td><td>Pass the minified acceptance run on the Phase 2 branch, merge, then start Phase 3.</td></tr>
+        <tr><td>State</td><td>In progress. Phase 1 shipped in v1.4.0 (commit <code>5dc5fe72</code>). Phase 2 landed through PR #145.</td></tr>
+        <tr><td>Next action</td><td>Phase 3 on its own branch and PR. Phase 2 merged through PR #145.</td></tr>
         <tr><td>Blocked by</td><td>Nothing. A local emulator failure on 2026-11-08 means device proof currently comes from CI (see Surprises).</td></tr>
       </tbody></table>
     </section>
@@ -441,7 +441,7 @@ val DurableJson = Json {
         <li>[x] Phase 1 proof: the minified acceptance job passed and Phase 1 shipped in v1.4.0 (<code>git tag --contains 5dc5fe72</code> lists v1.4.0 through v1.9.0).</li>
         <li>[x] 2026-11-18 - Phase 2 golden files captured from the Gson code and committed before any record changed (commit <code>3852d21c</code>): Room payload and like tags, the Recents destination hash, v1/v2 backups and a mid-restore journal, 21 DataStore repair-or-reset inputs, corrupt credential envelopes and payloads, and the updater state file. Manifest goldens already existed from Phase 1 (<code>OfflineMediaStoreTest</code>: shipped obfuscated keys, a v2 post without <code>taxonomy</code>, <code>golden/source-identity/offline-manifest-post.json</code>).</li>
         <li>[x] 2026-11-18 - Phase 2 foundation: kotlinx-serialization-json 1.13.0 and the serialization plugin in the catalog and in <code>core-data</code>, <code>core-data-android</code>, <code>app</code>, <code>core-sources</code>; <code>DurableJson</code> in <code>core-data/.../storage/DurableJson.kt</code>; <code>assertGsonParity</code> in core-data test fixtures (<code>GsonParity.kt</code>) with its own test; <code>UpdateStateSnapshot</code>, <code>PendingPostInstallChangelog</code>, and <code>ChangelogSection</code> carry kotlinx serializers beside their Gson names; the minified acceptance activity round-trips them through both libraries.</li>
-        <li>[ ] Phase 2 proof: minified acceptance run on API 36 and 37, then merge.</li>
+        <li>[x] 2026-11-18 - Phase 2 proof: <code>scripts/check.sh --record</code> passed (tests, Detekt, lint, duplicates; changed-line coverage 9/9). Device Validation run 44276298855 passed <code>R8 release acceptance</code> on API 36 and 37, and every connected-test shard (one API 36 shard first failed on a corrupt system-image download before any test ran and passed on rerun). The parity test failed, naming both keys, when one <code>@SerialName</code> on <code>UpdateStateSnapshot</code> was renamed on purpose, and passed once it was restored.</li>
         <li>[ ] Phases 3 to 9.</li>
       </ul>
 
@@ -478,7 +478,8 @@ val DurableJson = Json {
       </ul>
 
       <h3>Outcomes And Retrospective</h3>
-      <p>Not started. Update at the end of each phase.</p>
+      <p>Phase 1: offline manifests write v3 with stable keys and upgrade readable v2 copies; shipped in v1.4.0.</p>
+      <p>Phase 2: promoted. kotlinx-serialization-json 1.13.0 runs beside Gson with no store changes. The prototype serializer survives R8 on API 36 and 37 and agrees with Gson in both directions. The parity harness catches renamed keys and unexercised properties. Golden files for every remaining surface are committed. Lesson for later phases: write samples that set every nullable property, because the harness rejects anything less, and that rule caught a gap in the first prototype test.</p>
     </section>
 
     <section id="recovery">
