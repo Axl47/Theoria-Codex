@@ -278,7 +278,7 @@ class StatisticsRepositoriesTest {
         val statistics = repository.observeStatistics().first()
 
         assertEquals(0L, statistics.appOpenCount)
-        assertTrue(directory.resolve("$DATASTORE_STATISTICS_FILE_NAME.corrupt").isFile)
+        assertTrue(directory.setAsideCopiesOf(DATASTORE_STATISTICS_FILE_NAME).isNotEmpty())
         assertNotNull(repository.storageStatus.value.corruptionRecovery)
         closeScope(scope)
     }
@@ -297,7 +297,7 @@ class StatisticsRepositoriesTest {
         }
 
         assertEquals(future, destination.readText())
-        assertFalse(directory.resolve("$DATASTORE_STATISTICS_FILE_NAME.corrupt").exists())
+        assertFalse(directory.setAsideCopiesOf(DATASTORE_STATISTICS_FILE_NAME).isNotEmpty())
         closeScope(scope)
     }
 

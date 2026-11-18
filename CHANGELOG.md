@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- If Settings, Statistics, your custom sites or the last-screen state became unreadable a second time, the copy of your original data kept from the first time was replaced by the newer, nearly empty file. Each unreadable file is now kept separately.
+
 ## [1.9.1] - 2026-11-18
 
 ### Changed
