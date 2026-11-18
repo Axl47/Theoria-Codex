@@ -39,10 +39,11 @@ class CredentialPayloadRecordTest {
         assertEquals("1", decoded.gelbooruUserId)
     }
 
-    // The payload golden is the plaintext the Gson store encrypted. The envelope golden needs no entry here:
-    // CredentialEnvelopeGoldenTest decrypts it, which reads every envelope key.
+    // The payload golden is the plaintext the Gson store encrypted; the envelope golden is a Gson-written envelope,
+    // Base64 padding escaped as \u003d. CredentialEnvelopeGoldenTest decrypts the envelope.
     @Test
-    fun `the Gson-written payload holds every stored key`() {
+    fun `the Gson-written envelope and payload hold every stored key`() {
+        assertStoredFormat(golden("envelope-gson-written.json") to CredentialEnvelopeRecord(1, 1, GOLDEN_IV, GOLDEN_CIPHERTEXT))
         assertStoredFormat(
             golden("payload-gson-written.json") to CredentialPayloadRecord(
                 pixivAccessToken = "access=token&<1>'",
@@ -67,3 +68,12 @@ class CredentialPayloadRecordTest {
     private fun golden(name: String) =
         checkNotNull(javaClass.getResource("/golden/sourceauth/$name")) { "missing golden $name" }.readText()
 }
+
+private const val GOLDEN_IV = "cB4cicljE40kkqqh"
+private const val GOLDEN_CIPHERTEXT =
+    "7Wy17fhB2eS67qKpEbYH03dqr4rRjmglOV8xu9UkrNGzlDZYYOsC/BxtRgf3Nw+C+XDhDP9ZogtNAiy5K1rPSe312U18nvfAzWLM" +
+    "f252LbSdVdbiAE0cWJTfjO8DmFH1Kbly757UUh4CfDPGQBG4eB9GVcE8LuuJu757dMj0R6OxbQXHqQ35joEvtCYYfKcmaTeqeZW0" +
+    "5iAhxjpV/mc18t76xeaE7wIYdubppiKFw3P0DF+1mN8ag1RIyqVb0N20ffNsvhk8yG2E0PWnPr/gjx2WxCVA7Ic5y2KfYZaF7k34" +
+    "eHmYPAl/2RBiO8AcWkOfBJQDK9Tt8R6+a8gH+QhZUJM24hDkO7rPMN5xQlazdf+x+SndfJSZUVpi/WP1Ao5QjngDOUf+O2faim5K" +
+    "b2RelcvfHlVg3qs6NBfVsbMJiaVq0xAY6hb642KukGNdDu4g/8Gbq/AQgcvGwZKObZBVw9E/bqDJ6nbLnNCyzZRGd4vHePqVxxAa" +
+    "uECePvzCESZG+RYgtvyHK2j9tbzVCb3NlU2qzz6kxje0+embnY3PAXm9iw=="

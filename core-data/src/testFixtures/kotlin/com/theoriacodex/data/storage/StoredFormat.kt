@@ -43,23 +43,26 @@ fun <T> assertStoredFormat(serializer: KSerializer<T>, vararg goldens: Pair<Stri
 }
 
 /**
- * Property paths a descriptor declares, dotted, with `[]` for list items and `{}` for map values. A type already on
- * the current path (recursion) stops the walk.
+ * Property paths a descriptor declares, dotted, with `[]` for list items and `{}` for map values. A record already
+ * on the current path (recursion) stops the walk; lists and maps share serial names, so only records are tracked.
  */
-private fun SerialDescriptor.declaredPaths(prefix: String = "", visiting: Set<String> = emptySet()): Set<String> {
-    val type = serialName.removeSuffix("?")
-    if (type in visiting) return emptySet()
-    val inside = visiting + type
-    return when (kind) {
-        StructureKind.CLASS -> (0 until elementsCount).flatMapTo(mutableSetOf()) { index ->
-            val path = child(prefix, getElementName(index))
-            getElementDescriptor(index).declaredPaths(path, inside) + path
+private fun SerialDescriptor.declaredPaths(prefix: String = "", visiting: Set<String> = emptySet()): Set<String> =
+    when (kind) {
+        StructureKind.CLASS -> {
+            val type = serialName.removeSuffix("?")
+            if (type in visiting) {
+                emptySet()
+            } else {
+                (0 until elementsCount).flatMapTo(mutableSetOf()) { index ->
+                    val path = child(prefix, getElementName(index))
+                    getElementDescriptor(index).declaredPaths(path, visiting + type) + path
+                }
+            }
         }
-        StructureKind.LIST -> getElementDescriptor(0).declaredPaths("$prefix[]", inside)
-        StructureKind.MAP -> getElementDescriptor(1).declaredPaths("$prefix{}", inside)
+        StructureKind.LIST -> getElementDescriptor(0).declaredPaths("$prefix[]", visiting)
+        StructureKind.MAP -> getElementDescriptor(1).declaredPaths("$prefix{}", visiting)
         else -> emptySet()
     }
-}
 
 /** The [declaredPaths] that [element] holds a non-null value for. */
 private fun SerialDescriptor.heldPaths(element: JsonElement, prefix: String = ""): Set<String> = when {

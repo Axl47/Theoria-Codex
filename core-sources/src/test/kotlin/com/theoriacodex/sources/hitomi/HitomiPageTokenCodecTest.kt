@@ -44,10 +44,12 @@ class HitomiPageTokenCodecTest {
             primaryKey = "all",
             primaryOffset = 0L,
             randomSeed = 7L,
+            randomSnapshotFingerprint = "b".repeat(64),
+            randomPermutationVersion = 2,
             globalIndexVersion = "3",
         )
         assertEquals(
-            DecodedHitomiPageToken("q=1&x<y>'z'", "all", 0L, 7L, null, null, "3"),
+            DecodedHitomiPageToken("q=1&x<y>'z'", "all", 0L, 7L, "b".repeat(64), 2, "3"),
             codec.decode(codec.encode(token)),
         )
     }
