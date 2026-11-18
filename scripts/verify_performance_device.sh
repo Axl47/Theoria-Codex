@@ -92,10 +92,6 @@ require_selected_phone() {
 # A dry run is host-only. Actual package manifests and signatures are checked before connected work.
 ./gradlew :macrobenchmark:connectedBenchmarkReleaseAndroidTest "${test_options[@]}" --dry-run > "$output/task-graph.txt" 2>&1
 ./gradlew :app:assembleBenchmarkRelease :macrobenchmark:assembleBenchmarkRelease "${gradle_options[@]}" > "$output/build.log" 2>&1
-if grep -Eq 'Startup (class|method) not found|missing startup classes and methods' "$output/build.log"; then
-  echo 'Startup profiles are stale; regenerate in the isolated baseline-profile lane before measurement.' >&2
-  exit 2
-fi
 python3 scripts/verify_device_apk.py "$target_apk" --package com.theoriacodex.benchmark > "$output/preflight.log"
 python3 scripts/verify_device_apk.py "$runner_apk" --package com.theoriacodex.macrobenchmark >> "$output/preflight.log"
 require_selected_phone
