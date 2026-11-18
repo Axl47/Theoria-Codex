@@ -9,8 +9,7 @@ import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.net.Uri
 import androidx.core.graphics.scale
-import com.google.gson.Gson
-import com.google.gson.JsonObject
+import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.diagnostics.OffMainWork
 import com.theoriacodex.sources.credentials.PixivAuthTokens
@@ -44,6 +43,9 @@ import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import kotlin.math.max
 import kotlin.math.roundToInt
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import okhttp3.OkHttpClient
 
 @Suppress("LargeClass") // One lifecycle owner keeps archive, decoded-frame, export, and cancellation state coherent.
@@ -59,7 +61,6 @@ class PixivUgoiraClient internal constructor(
         System.getProperty("java.io.tmpdir").orEmpty(),
         "theoria_codex/pixiv/ugoira",
     ),
-    private val gson: Gson = Gson(),
     private val metadataFetcher: ((String, String) -> TextResponse)? = null,
     private val zipDownloader: ((String, String, File) -> BinaryResponse)? = null,
     private val decode: UgoiraFrameDecoder = ::decodeUgoiraFrames,
@@ -659,27 +660,18 @@ class PixivUgoiraClient internal constructor(
 
     private fun parseMetadata(body: String): ParsedMetadata {
         OffMainWork.note(OffMainWork.SOURCE_PARSE)
-        val root = runCatching { gson.fromJson(body, JsonObject::class.java) }.getOrNull()
-            ?: throw IOException("Pixiv ugoira metadata was not valid JSON")
-        val metadata = root.getAsJsonObject("ugoira_metadata")
-            ?: throw IOException("Pixiv ugoira metadata payload missing")
-        val zipUrls = metadata.getAsJsonObject("zip_urls")
-            ?: throw IOException("Pixiv ugoira zip_urls missing")
-        val zipUrl = zipUrls.get("medium")?.asString
-            ?: zipUrls.entrySet().firstOrNull()?.value?.asString
-            ?: throw IOException("Pixiv ugoira zip URL missing")
-        val frameSpecs = metadata.getAsJsonArray("frames")
-            ?.mapNotNull { element ->
-                val obj = element.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
-                val file = obj.get("file")?.asString?.trim().orEmpty()
-                if (file.isBlank()) return@mapNotNull null
-                val delayMs = obj.get("delay")?.asInt ?: 50
-                UgoiraFrameSpec(
-                    fileName = file,
-                    delayMs = delayMs.coerceAtLeast(16),
-                )
-            }
-            .orEmpty()
+        val root = try {
+            DurableJson.decodeFromString(UgoiraMetadataResponse.serializer(), body)
+        } catch (_: SerializationException) {
+            throw IOException("Pixiv ugoira metadata was not valid JSON")
+        }
+        val metadata = root.metadata ?: throw IOException("Pixiv ugoira metadata payload missing")
+        val zipUrls = metadata.zipUrls ?: throw IOException("Pixiv ugoira zip_urls missing")
+        val zipUrl = zipUrls["medium"] ?: zipUrls.values.firstOrNull() ?: throw IOException("Pixiv ugoira zip URL missing")
+        val frameSpecs = metadata.frames.mapNotNull { frame ->
+            val file = frame.file.trim()
+            if (file.isBlank()) null else UgoiraFrameSpec(fileName = file, delayMs = frame.delay.coerceAtLeast(16))
+        }
         if (frameSpecs.isEmpty()) {
             throw IOException("Pixiv ugoira frames are empty")
         }
@@ -764,6 +756,29 @@ data class UgoiraFrame(
 private data class ParsedMetadata(
     val zipUrl: String,
     val frames: List<UgoiraFrameSpec>,
+)
+
+/** The app API's `/v1/ugoira/metadata` response; only the fields playback needs. */
+@Serializable
+private class UgoiraMetadataResponse(
+    @SerialName("ugoira_metadata")
+    val metadata: UgoiraMetadataBody? = null,
+)
+
+@Serializable
+private class UgoiraMetadataBody(
+    @SerialName("zip_urls")
+    val zipUrls: Map<String, String>? = null,
+    @SerialName("frames")
+    val frames: List<UgoiraMetadataFrame> = emptyList(),
+)
+
+@Serializable
+private class UgoiraMetadataFrame(
+    @SerialName("file")
+    val file: String = "",
+    @SerialName("delay")
+    val delay: Int = 50,
 )
 
 internal data class TextResponse(

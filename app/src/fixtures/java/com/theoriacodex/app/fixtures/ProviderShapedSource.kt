@@ -1,7 +1,5 @@
 package com.theoriacodex.app.fixtures
 
-import com.google.gson.JsonArray
-import com.google.gson.JsonObject
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
@@ -14,6 +12,9 @@ import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
  * A provider served from memory to the real Danbooru adapter, so a journey parses provider-shaped JSON instead of
@@ -50,7 +51,7 @@ class ProviderShapedSource(posts: List<Post>, private val fallback: SourceHttpCl
         } else {
             newestFirst.drop((page.toInt() - 1) * limit).take(limit)
         }
-        return SourceHttpResponse(200, JsonArray().apply { selected.forEach { add(it.toDanbooruJson()) } }.toString())
+        return SourceHttpResponse(200, JsonArray(selected.map { it.toDanbooruJson() }).toString())
     }
 
     override suspend fun postForm(url: String, form: Map<String, String>, headers: Map<String, String>) =
@@ -76,16 +77,16 @@ fun providerShapedPosts(source: SourceKey, count: Int, media: ImageRef): List<Po
     )
 }
 
-private fun Post.toDanbooruJson() = JsonObject().apply {
+private fun Post.toDanbooruJson() = buildJsonObject {
     val location = (full ?: preview).let { it.localPath ?: it.url }
-    addProperty("id", id.sourcePostId.toLong())
-    addProperty("file_url", location)
-    addProperty("preview_file_url", preview.localPath ?: preview.url)
-    addProperty("file_ext", location?.substringAfterLast('.'))
-    addProperty("image_width", width)
-    addProperty("image_height", height)
-    addProperty("tag_string", canonicalTags.joinToString(" "))
-    addProperty("tag_string_artist", creatorProfile?.profileId)
-    addProperty("created_at", createdAtEpochMs?.let { Instant.ofEpochMilli(it).toString() })
-    addProperty("source", originUrl)
+    put("id", id.sourcePostId.toLong())
+    put("file_url", location)
+    put("preview_file_url", preview.localPath ?: preview.url)
+    put("file_ext", location?.substringAfterLast('.'))
+    put("image_width", width)
+    put("image_height", height)
+    put("tag_string", canonicalTags.joinToString(" "))
+    put("tag_string_artist", creatorProfile?.profileId)
+    put("created_at", createdAtEpochMs?.let { Instant.ofEpochMilli(it).toString() })
+    put("source", originUrl)
 }

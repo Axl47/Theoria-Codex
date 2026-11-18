@@ -1,8 +1,5 @@
 package com.theoriacodex.app.codex
 
-import com.google.gson.JsonElement
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
 import com.theoriacodex.data.repository.checkDocumentDepth
 import com.theoriacodex.data.repository.portableMediaUrl
 import com.theoriacodex.data.repository.portablePostSnapshot
@@ -19,8 +16,17 @@ import com.theoriacodex.domain.tags.withRecoveredPixivTranslations
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 
-/** The Codex share export, written with kotlinx.serialization; imports read the JSON tree in [parseCodexShareFile]. */
+/**
+ * The Codex share export, written with kotlinx.serialization. Imports walk the JSON tree in [parseCodexShareFile]
+ * instead, so a wrong-typed optional value is dropped while the rest of the file still imports.
+ */
 @Serializable
 internal data class CodexShareFile(
     @SerialName("version")
@@ -142,18 +148,14 @@ internal fun parseCodexShareFile(raw: String): CodexShareFile? {
     val root = runCatching {
         require(raw.length <= CODEX_SHARE_MAX_BYTES && raw.toByteArray(Charsets.UTF_8).size <= CODEX_SHARE_MAX_BYTES)
         checkDocumentDepth(raw)
-        JsonParser.parseString(raw)
+        DurableJson.parseToJsonElement(raw)
     }
-        .getOrNull()
-        ?.takeIf(JsonElement::isJsonObject)
-        ?.asJsonObject
+        .getOrNull() as? JsonObject
         ?: return null
-    val version = if (root.has("version")) {
-        root.get("version").takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asString?.toIntOrNull()
-    } else 1
+    val version = if ("version" in root) root.numberOrNull("version")?.toIntOrNull() else 1
     if (version !in 1..CODEX_SHARE_VERSION) return null
-    val posts = root.get("posts")?.takeIf { it.isJsonArray }?.asJsonArray ?: return null
-    if (posts.size() > CODEX_SHARE_MAX_POSTS || !boundedShareValue(root, root = true)) return null
+    val posts = root["posts"] as? JsonArray ?: return null
+    if (posts.size > CODEX_SHARE_MAX_POSTS || !boundedShareValue(root, root = true)) return null
     return CodexShareFile(
         version = version,
         title = root.stringOrNull("title"),
@@ -359,14 +361,8 @@ private fun String?.normalizedOptionalString(): String? {
     return this?.trim()?.takeIf(String::isNotBlank)
 }
 
-private fun JsonObject.postListOrNull(name: String): List<CodexSharePost>? {
-    if (!has(name) || get(name).isJsonNull) return null
-    val value = get(name)
-    if (!value.isJsonArray) return emptyList()
-    return value.asJsonArray.mapNotNull { element ->
-        element.objectOrNull()?.toCodexSharePost()
-    }
-}
+private fun JsonObject.postListOrNull(name: String): List<CodexSharePost>? =
+    listOrNull(name) { element -> (element as? JsonObject)?.toCodexSharePost() }?.filterNotNull()
 
 private fun JsonObject.toCodexSharePost(): CodexSharePost {
     return CodexSharePost(
@@ -429,62 +425,42 @@ private fun JsonObject.toCodexShareCreatorProfile(): CodexShareCreatorProfile {
     )
 }
 
-private fun JsonObject.objectOrNull(name: String): JsonObject? {
-    return get(name)?.objectOrNull()
-}
+private fun JsonObject.objectOrNull(name: String): JsonObject? = get(name) as? JsonObject
 
-private fun JsonElement.objectOrNull(): JsonObject? {
-    return takeIf(JsonElement::isJsonObject)?.asJsonObject
-}
+/** The content of a JSON string; numbers, booleans, and nulls do not count. */
+private fun JsonObject.stringOrNull(name: String): String? = (get(name) as? JsonPrimitive)?.stringOrNull()
 
-private fun JsonObject.stringOrNull(name: String): String? {
-    val value = get(name) ?: return null
-    if (!value.isJsonPrimitive || !value.asJsonPrimitive.isString) return null
-    return value.asString
-}
+private fun JsonPrimitive.stringOrNull(): String? = content.takeIf { isString }
 
-private fun JsonObject.intOrNull(name: String): Int? {
-    val value = get(name) ?: return null
-    if (!value.isJsonPrimitive || !value.asJsonPrimitive.isNumber) return null
-    return runCatching { value.asInt }.getOrNull()
-}
+/** The literal text of a JSON number, for the typed readers below. */
+private fun JsonObject.numberOrNull(name: String): String? =
+    (get(name) as? JsonPrimitive)?.takeIf { !it.isString && it !is JsonNull && it.booleanOrNull == null }?.content
 
-private fun JsonObject.longOrNull(name: String): Long? {
-    val value = get(name) ?: return null
-    if (!value.isJsonPrimitive || !value.asJsonPrimitive.isNumber) return null
-    return runCatching { value.asLong }.getOrNull()
-}
+private fun JsonObject.intOrNull(name: String): Int? = numberOrNull(name)?.toIntOrNull()
 
-private fun JsonObject.booleanOrNull(name: String): Boolean? {
-    val value = get(name) ?: return null
-    if (!value.isJsonPrimitive || !value.asJsonPrimitive.isBoolean) return null
-    return value.asBoolean
-}
+private fun JsonObject.longOrNull(name: String): Long? = numberOrNull(name)?.toLongOrNull()
 
-private fun JsonObject.stringListOrNull(name: String): List<String?>? {
-    return listOrNull(name) { value ->
-        value.takeIf(JsonElement::isJsonPrimitive)
-            ?.asJsonPrimitive
-            ?.takeIf { primitive -> primitive.isString }
-            ?.asString
-    }
-}
+private fun JsonObject.booleanOrNull(name: String): Boolean? =
+    (get(name) as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
+
+private fun JsonObject.stringListOrNull(name: String): List<String?>? =
+    listOrNull(name) { value -> (value as? JsonPrimitive)?.stringOrNull() }
 
 private fun <T> JsonObject.objectListOrNull(
     name: String,
     transform: (JsonObject) -> T,
 ): List<T?>? {
-    return listOrNull(name) { value -> value.objectOrNull()?.let(transform) }
+    return listOrNull(name) { value -> (value as? JsonObject)?.let(transform) }
 }
 
+/** Absent or null is null; any other non-array is an empty list, so a damaged list never fails the post. */
 private fun <T> JsonObject.listOrNull(
     name: String,
     transform: (JsonElement) -> T?,
 ): List<T?>? {
-    if (!has(name) || get(name).isJsonNull) return null
     val value = get(name)
-    if (!value.isJsonArray) return emptyList()
-    return value.asJsonArray.map(transform)
+    if (value == null || value is JsonNull) return null
+    return (value as? JsonArray)?.map(transform).orEmpty()
 }
 
 private const val CODEX_SHARE_VERSION = 2
@@ -493,13 +469,12 @@ internal const val CODEX_SHARE_MAX_BYTES = 32 * 1024 * 1024
 internal const val CODEX_SHARE_MAX_POSTS = 100_000
 
 /** Byte/depth checks precede parsing; per-value bounds cap work inside otherwise valid documents. */
-private fun boundedShareValue(value: JsonElement, root: Boolean = false): Boolean = when {
-    value.isJsonObject -> value.asJsonObject.entrySet().all { (key, child) ->
-        key.length <= 256 && if (root && key == "posts" && child.isJsonArray) {
-            child.asJsonArray.all { boundedShareValue(it) }
+private fun boundedShareValue(value: JsonElement, root: Boolean = false): Boolean = when (value) {
+    is JsonObject -> value.entries.all { (key, child) ->
+        key.length <= 256 && if (root && key == "posts" && child is JsonArray) {
+            child.all { boundedShareValue(it) }
         } else boundedShareValue(child)
     }
-    value.isJsonArray -> value.asJsonArray.size() <= 10_000 && value.asJsonArray.all { boundedShareValue(it) }
-    value.isJsonPrimitive && value.asJsonPrimitive.isString -> value.asString.length <= 32_768
-    else -> true
+    is JsonArray -> value.size <= 10_000 && value.all { boundedShareValue(it) }
+    is JsonPrimitive -> !value.isString || value.content.length <= 32_768
 }

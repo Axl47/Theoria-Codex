@@ -486,7 +486,6 @@ dependencies {
     implementation(libs.androidx.media3.effect)
     implementation(libs.androidx.media3.session)
     implementation(libs.androidx.profileinstaller)
-    implementation(libs.gson)
     implementation(libs.kotlinx.serialization.json)
 
     baselineProfile(project(":baseline-profile"))
@@ -499,6 +498,8 @@ dependencies {
     testImplementation(libs.androidx.compose.ui.test.junit4)
     testImplementation(project(":core-stubs"))
     testImplementation(testFixtures(project(":core-data")))
+    // HitomiProtocolDeviceTest reads core-sources' Gson gallery tree; app code has no Gson.
+    androidTestImplementation(libs.gson)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.test.uiautomator)
