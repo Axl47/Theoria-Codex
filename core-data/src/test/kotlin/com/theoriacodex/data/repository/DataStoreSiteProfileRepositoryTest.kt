@@ -1,6 +1,5 @@
 package com.theoriacodex.data.repository
 
-import com.google.gson.JsonParser
 import com.theoriacodex.domain.source.SiteAddress
 import com.theoriacodex.domain.source.SiteAddressParse
 import com.theoriacodex.domain.source.SiteHeaders
@@ -12,6 +11,12 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -34,13 +39,13 @@ class DataStoreSiteProfileRepositoryTest {
             assertEquals(SiteProfileAddResult.Added, repository.add(booru))
         }
 
-        val json = JsonParser.parseString(directory.resolve(SITE_PROFILES_FILE_NAME).readText()).asJsonObject
-        assertEquals(1, json.get("schemaVersion").asInt)
-        val first = json.getAsJsonArray("sites")[0].asJsonObject
-        assertEquals("custom_safebooru_org", first.get("sourceId").asString)
-        assertEquals("https://safebooru.org", first.get("baseUrl").asString)
-        assertEquals("GELBOORU_02", first.get("family").asString)
-        assertEquals(1_762_500_000_000, first.get("addedAt").asLong)
+        val json = Json.parseToJsonElement(directory.resolve(SITE_PROFILES_FILE_NAME).readText()).jsonObject
+        assertEquals(1, json.getValue("schemaVersion").jsonPrimitive.int)
+        val first = json.getValue("sites").jsonArray[0].jsonObject
+        assertEquals("custom_safebooru_org", first.getValue("sourceId").jsonPrimitive.content)
+        assertEquals("https://safebooru.org", first.getValue("baseUrl").jsonPrimitive.content)
+        assertEquals("GELBOORU_02", first.getValue("family").jsonPrimitive.content)
+        assertEquals(1_762_500_000_000, first.getValue("addedAt").jsonPrimitive.long)
         withRepository(directory) { repository -> assertEquals(listOf(safebooru, booru), repository.observeProfiles().first()) }
     }
 
@@ -84,8 +89,11 @@ class DataStoreSiteProfileRepositoryTest {
             repository.add(profile("booru.example"))
         }
 
-        val sites = JsonParser.parseString(directory.resolve(SITE_PROFILES_FILE_NAME).readText()).asJsonObject.getAsJsonArray("sites")
-        assertEquals(listOf("custom_booru_example", "custom_future_example"), sites.map { it.asJsonObject.get("sourceId").asString })
+        val sites = Json.parseToJsonElement(directory.resolve(SITE_PROFILES_FILE_NAME).readText()).jsonObject.getValue("sites").jsonArray
+        assertEquals(
+            listOf("custom_booru_example", "custom_future_example"),
+            sites.map { it.jsonObject.getValue("sourceId").jsonPrimitive.content },
+        )
     }
 
     @Test

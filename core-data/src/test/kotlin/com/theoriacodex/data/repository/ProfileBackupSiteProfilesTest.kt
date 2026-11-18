@@ -1,12 +1,16 @@
 package com.theoriacodex.data.repository
 
-import com.google.gson.JsonParser
 import com.theoriacodex.domain.source.SiteAddress
 import com.theoriacodex.domain.source.SiteAddressParse
 import com.theoriacodex.domain.source.SiteProfile
 import java.io.File
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -28,9 +32,12 @@ class ProfileBackupSiteProfilesTest {
         val target = service(InMemorySiteProfileRepository())
         target.service.restore(bytes)
 
-        val root = JsonParser.parseString(json).asJsonObject
-        assertEquals(2, root.get("version").asInt)
-        assertEquals("custom_safebooru_org", root.getAsJsonArray("customSources").single().asJsonObject.get("sourceId").asString)
+        val root = Json.parseToJsonElement(json).jsonObject
+        assertEquals(2, root.getValue("version").jsonPrimitive.int)
+        assertEquals(
+            "custom_safebooru_org",
+            root.getValue("customSources").jsonArray.single().jsonObject.getValue("sourceId").jsonPrimitive.content,
+        )
         assertFalse(json.contains("apiKey", ignoreCase = true))
         assertEquals(listOf(safebooru), target.sites.observeProfiles().first())
     }
@@ -48,7 +55,7 @@ class ProfileBackupSiteProfilesTest {
         val json = codec.encode(emptyBackup().copy(customSources = listOf(site("safebooru.org")))).toString(Charsets.UTF_8)
 
         val insecure = json.replace("\"baseUrl\":\"https://safebooru.org\"", "\"baseUrl\":\"http://safebooru.org\"")
-        val record = JsonParser.parseString(json).asJsonObject.getAsJsonArray("customSources").single().toString()
+        val record = Json.parseToJsonElement(json).jsonObject.getValue("customSources").jsonArray.single().toString()
         val duplicated = json.replace("\"customSources\":[$record]", "\"customSources\":[$record,$record]")
 
         assertTrue(runCatching { codec.decode(insecure.toByteArray()) }.isFailure)
