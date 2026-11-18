@@ -196,7 +196,7 @@
 <body>
 <header>
   <h1>Typed searched-tag suggestions</h1>
-  <p class="meta"><span class="pill">Status: in progress</span> Owner: implementation agent · Started 2026-11-17 · Branch <code>feat/typed-tag-suggestions</code></p>
+  <p class="meta"><span class="pill">Status: implemented, in review</span> Owner: implementation agent · Started 2026-11-17 · Branch <code>feat/typed-tag-suggestions</code></p>
   <p>Search's tag composer leads with tags the user searched before (up to three) and saved tags. Until now only plain general tags were remembered, so nhentai or Hitomi artists, groups, parodies, characters, languages and Hitomi <code>female:</code>/<code>male:</code> tags never came back as suggestions. After this change every searched term is remembered with its type, suggestions follow the effective scope, and tapping one adds the term with its type intact.</p>
 </header>
 <nav><ul>
@@ -207,7 +207,7 @@
 <section id="dashboard">
   <h2>Dashboard</h2>
   <div class="dashboard">
-    <div class="card"><strong>Next action</strong>See the living log.</div>
+    <div class="card"><strong>Next action</strong>PR review, device-validation workflow, merge.</div>
     <div class="card"><strong>Main risk</strong>Statistics store and backup format: typed counts must not be misread by older builds or lost on restore.</div>
     <div class="card"><strong>Validation</strong>Unit tests (core-data, app-logic, app), <code>scripts/check.sh --record</code>, device-validation workflow, emulator check on <code>com.theoriacodex.acceptance</code>.</div>
     <div class="card"><strong>Affected areas</strong><code>core-domain</code> Query/SourceAdapter, <code>core-data</code> statistics, <code>app-logic</code> ranking and scope policy, <code>app</code> SearchCoordinator, SearchSuggestionCoordinator, SearchComposerModel.</div>
@@ -260,6 +260,9 @@
   <ul>
     <li>2026-11-17: Context read, decisions recorded above. Implementation started.</li>
     <li>2026-11-17: Implemented all four work-plan steps in one pass. The app's <code>isGeneralPostTag()</code> moved to the domain as <code>SearchTerm.isGeneralTag</code> so app-logic ranking can share it. Unit tests added: <code>StatisticsRepositoriesTest</code> (typed counting, Unified skips source-owned terms, typed seed after general seed, separate typed record list with unknown-facet skip, restore merge), <code>TagSuggestionRankingTest</code> (per-type ranking and scope filter), <code>SearchComposerModelTest</code> (picked and typed scopes, type label, tap actions, alternative groups, draft dedupe by type, saved tags in general scopes, <code>tag:</code> without scopes), <code>SearchedTermHistoryTest</code> (search to statistics to autocomplete, Unified portable-only).</li>
+    <li>Surprise: R8 keep rules and the wire-contract manifest guard every durable Gson class. The new <code>StatisticsTypedTagCountRecord</code> needed a <code>-keepclassmembers</code> rule in <code>app/proguard-rules.pro</code> and an entry in <code>app/src/test/resources/r8-json-contracts.txt</code>; the backup golden <code>backup-multi-source.json</code> gained the two new empty fields. The acceptance build's R8 verifier then reported 354 retained fields (347 on main).</li>
+    <li>2026-11-17: <code>scripts/check.sh --record</code> passed. Emulator (<code>theoria-search-test</code>, API 36, isolated <code>com.theoriacodex.acceptance</code>, both APKs verified with <code>scripts/verify_device_apk.py</code>): installed the <code>main</code> build, searched Danbooru <code>blue_sky</code> and nhentai <code>artist:shindol</code> (existing saved tag <code>long_hair</code> present), upgraded in place to this branch. After upgrade: nhentai <code>artist:shin</code>, the picked Artists scope and All each led with "Searched before, shindol, Artist • 40" (from the typed Recents seed); Tags scope did not show it; tapping added the chip "Artist shindol". Danbooru showed "Searched before, blue_sky" and "Saved tag, long_hair". Hitomi, searched in the new build: <code>female:so</code> led with "Searched before, sole female, Female tag", <code>artist:shin</code> and the picked Artists scope led with "Searched before, shindou, Artist"; tap added "Artist shindou"; nhentai history did not appear on Hitomi; both survived an app restart. Only accessibility snapshots were used.</li>
+    <li>Surprise: the restored draft holds the last search's terms, and history rows skip terms already in the draft, so a just-searched term shows as a plain provider row until removed from the draft. This is the existing dedupe rule, now applied per type.</li>
     <li>Surprise: the test-file line budget (700) in <code>scripts/check_hotspots.py</code> rejected growing <code>SearchCoordinatorTest.kt</code>; the coordinator-level test lives in <code>SearchedTermHistoryTest.kt</code> and reuses <code>FacetedAdapter</code> (now internal).</li>
   </ul>
 </section>
