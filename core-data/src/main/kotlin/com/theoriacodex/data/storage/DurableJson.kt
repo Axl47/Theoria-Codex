@@ -31,7 +31,7 @@ val DurableJson: Json = Json {
 
 /**
  * Decodes each element of a JSON list as [T] and drops the ones that do not decode, so one malformed entry in a
- * network response or bundled asset never hides its well-formed neighbours.
+ * network response, bundled asset, or saved list never hides its well-formed neighbours.
  */
 inline fun <reified T> List<JsonElement>.decodeEachOrSkip(): List<T> = mapNotNull { element ->
     try {
