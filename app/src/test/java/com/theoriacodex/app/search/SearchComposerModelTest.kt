@@ -154,6 +154,13 @@ class SearchComposerModelTest {
         assertTrue(none.withSavedTags(ComposerAddTarget.Alternative(0, artist), "blue", listOf(blueHair), gelbooruDraft(include = listOf(artist.terms.single()))).rows.isEmpty())
     }
 
+    @Test fun `saved suggestions ignore an exclude sign and a tag scope prefix`() {
+        val none = ComposerSuggestions(emptyList(), 0)
+        for (input in listOf("tag:blu", " tag: blu", "-tag:blu", "- blu")) {
+            assertEquals(input, listOf("blue_hair"), none.withSavedTags(ComposerAddTarget.Required, input, listOf(blueHair), gelbooruDraft()).rows.map { it.text })
+        }
+    }
+
     @Test fun `searched tags lead in their given order, merging provider rows and skipping draft tags`() {
         val provider = composerSuggestions(
             ComposerAddTarget.Required, emptyList(),
@@ -183,6 +190,23 @@ class SearchComposerModelTest {
         assertEquals(listOf("sky"), rows(FacetedSearchScope.All))
         assertEquals(listOf("sky"), rows(FacetedSearchScope(SearchFacet.TAG)))
         assertEquals(emptyList<String>(), rows(FacetedSearchScope(SearchFacet.TAG, "female")))
+    }
+
+    @Test fun `a typed scope prefix decides whether saved and searched tags show`() {
+        fun rows(input: String, mode: QueryMode) = composerSuggestions(
+            ComposerAddTarget.Required,
+            SearchUiState(
+                query = SearchQueryUiState(draft = emptySearchQuery(mode)),
+                suggestions = SearchSuggestionsUiState(input = input, searchedTags = listOf("sky")),
+            ),
+            savedTags = listOf(FavoriteTagEntry(SourceKey.HITOMI, "sky_blue")),
+        ).rows.map { it.text }
+
+        for (mode in listOf(QueryMode.Unified, QueryMode.Source(SourceKey.HITOMI))) {
+            assertEquals(listOf("sky_blue", "sky"), rows("tag:sk", mode))
+            assertEquals(emptyList<String>(), rows("artist:sk", mode))
+            assertEquals(emptyList<String>(), rows("female:sk", mode))
+        }
     }
 
     @Test fun `removal undo stands only until another edit`() {

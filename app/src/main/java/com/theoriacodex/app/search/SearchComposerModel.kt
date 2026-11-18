@@ -211,8 +211,14 @@ internal fun composerSuggestions(
     savedTags: List<FavoriteTagEntry>,
 ): ComposerSuggestions {
     val scope = state.query.selectedScope
+    // A typed prefix such as `artist:` overrides the picked scope, as it does for the provider's rows.
+    val typedScope = parseScopedInput(state.suggestions.input).explicitScope
     // Namespaced tag scopes, such as Hitomi's female and male tags, would lose their namespace.
-    val generalTagScope = scope.isAll || (scope.facet == SearchFacet.TAG && scope.sourceNamespace == null)
+    val generalTagScope = if (typedScope != null) {
+        typedScope.facet == SearchFacet.TAG && !typedScope.requiresExactNamespace
+    } else {
+        scope.isAll || (scope.facet == SearchFacet.TAG && scope.sourceNamespace == null)
+    }
     val draft = state.query.draft
     return composerSuggestions(target, state.suggestions.facetedAutocomplete, state.suggestions.autocomplete)
         .withSearchedTags(target, state.suggestions.searchedTags.takeIf { generalTagScope }.orEmpty(), draft)
@@ -249,7 +255,8 @@ internal fun ComposerSuggestions.withSearchedTags(
 }
 
 /**
- * Puts saved tags matching the typed text ahead of the provider's rows. A saved tag the provider also
+ * Puts saved tags matching the typed text ahead of the provider's rows. The text is normalized like the
+ * searched-tag prefix, so a leading `-` or scope prefix such as `tag:` is ignored. A saved tag the provider also
  * returned keeps that row, so its count stays. Tags already in the draft or unable to join the target
  * group are left out, and at most [MAX_SAVED_SUGGESTIONS] appear so provider results stay in view.
  */
@@ -259,7 +266,7 @@ internal fun ComposerSuggestions.withSavedTags(
     savedTags: List<FavoriteTagEntry>,
     draft: Query,
 ): ComposerSuggestions {
-    val typed = input.trim().removePrefix("-")
+    val typed = parseScopedInput(input).value
     if (typed.isBlank()) return this
     val targetIndex = (target as? ComposerAddTarget.Alternative)?.index ?: -1
     // Suggestions complete one tag, so saved groups stay in the saved row.
