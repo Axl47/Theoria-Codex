@@ -149,15 +149,24 @@ jobs:
       - name: Mark the part passed
         run: touch build/reports/timings/passed
 
-      # Combined into one `ci-timings` artifact by the final job.
+      # Combined into one `ci-timings` artifact by the final job. Each artifact holds a folder named
+      # after its part, so the final job finds `timings/<part>/` however many parts ran.
+      - name: Stage timings
+        if: always()
+        env:
+          PART: ${{ matrix.part }}
+        run: |
+          mkdir -p "build/ci-part/$PART"
+          for file in ci-timings.json passed; do
+            [[ ! -e "build/reports/timings/$file" ]] || cp "build/reports/timings/$file" "build/ci-part/$PART/"
+          done
+
       - name: Upload timings
         if: always()
         uses: actions/upload-artifact@v7.0.2
         with:
           name: ci-timings-${{ matrix.part }}
-          path: |
-            build/reports/timings/ci-timings.json
-            build/reports/timings/passed
+          path: build/ci-part/
           if-no-files-found: warn
           retention-days: 1
 
@@ -210,7 +219,9 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 2
 
-      # Each part's timings, plus a `passed` marker when the part succeeded.
+      # Each part's timings, plus a `passed` marker when the part succeeded, in timings/<part>/.
+      # Merging keeps that layout when only one artifact matches, which is otherwise unpacked
+      # straight into the path.
       - name: Download part results
         if: needs.plan.outputs.parts != '[]'
         continue-on-error: true
@@ -218,6 +229,7 @@ jobs:
         with:
           pattern: ci-timings-*
           path: timings
+          merge-multiple: true
 
       # Each result is recorded on its own, so a failed release part never withholds the check.
       # Best effort outside main: Dependabot and fork runs get a read-only token and skip recording,
@@ -225,19 +237,19 @@ jobs:
       - name: Record the pre-PR check
         if: >-
           needs.plan.outputs.check == 'true'
-          && hashFiles('timings/ci-timings-tests/passed') != ''
-          && hashFiles('timings/ci-timings-static/passed') != ''
-          && hashFiles('timings/ci-timings-lint/passed') != ''
+          && hashFiles('timings/tests/passed') != ''
+          && hashFiles('timings/static/passed') != ''
+          && hashFiles('timings/lint/passed') != ''
         continue-on-error: ${{ github.event_name != 'push' }}
         run: python3 scripts/release_gate.py record check
 
       - name: Record the release part
-        if: hashFiles('timings/ci-timings-release/passed') != ''
+        if: hashFiles('timings/release/passed') != ''
         continue-on-error: ${{ github.event_name != 'push' }}
         run: python3 scripts/release_gate.py record release
 
       - name: Record the screenshots part
-        if: hashFiles('timings/ci-timings-screenshots/passed') != ''
+        if: hashFiles('timings/screenshots/passed') != ''
         continue-on-error: ${{ github.event_name != 'push' }}
         run: python3 scripts/release_gate.py record screenshots
 
@@ -256,8 +268,8 @@ jobs:
       - name: Combine timings
         if: always() && hashFiles('timings/*/ci-timings.json') != ''
         run: |
-          for file in timings/ci-timings-*/ci-timings.json; do
-            part="${file#timings/ci-timings-}"
+          for file in timings/*/ci-timings.json; do
+            part="${file#timings/}"
             jq --arg part "${part%%/*}" '.phases |= map(.name = "\($part): \(.name)")' "$file"
           done | jq -s '{version: 1, phases: map(.phases[]), tasks: map(.tasks[])}' > ci-timings.json
 
