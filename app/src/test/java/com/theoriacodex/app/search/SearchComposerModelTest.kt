@@ -154,6 +154,13 @@ class SearchComposerModelTest {
         assertTrue(none.withSavedTags(ComposerAddTarget.Alternative(0, artist), "blue", listOf(blueHair), gelbooruDraft(include = listOf(artist.terms.single()))).rows.isEmpty())
     }
 
+    @Test fun `saved suggestions ignore an exclude sign and a tag scope prefix`() {
+        val none = ComposerSuggestions(emptyList(), 0)
+        for (input in listOf("tag:blu", " tag: blu", "-tag:blu", "- blu")) {
+            assertEquals(input, listOf("blue_hair"), none.withSavedTags(ComposerAddTarget.Required, input, listOf(blueHair), gelbooruDraft()).rows.map { it.text })
+        }
+    }
+
     @Test fun `searched tags lead in their given order, merging provider rows and skipping draft tags`() {
         val provider = composerSuggestions(
             ComposerAddTarget.Required, emptyList(),
