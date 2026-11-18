@@ -39,7 +39,7 @@ internal fun validateBackupSettings(root: JsonObject, profileIds: Set<String>) {
 }
 
 private fun validateProfileTags(root: JsonObject, key: String, profileIds: Set<String>, grouped: Boolean) {
-    val values = requireNotNull(root[key] as? JsonObject) { "Backup is missing $key" }
+    val values = root.backupObject(key)
     values.forEach { (profileId, entries) ->
         require(profileId in profileIds && entries is JsonArray && entries.size <= 10_000)
         entries.forEach { entry ->
