@@ -86,6 +86,17 @@ class PostStorageRecordsTest {
     }
 
     @Test
+    fun `merging a snapshot without a hash keeps the stored hash only for the same file`() {
+        val stored = samplePost()
+        val sparse = stored.copy(contentHash = null)
+        val replaced = sparse.copy(full = stored.full?.copy(url = "https://example.com/replaced.webp"))
+
+        assertEquals(stored.contentHash, mergeSparsePost(existing = stored, incoming = sparse).contentHash)
+        assertEquals(stored.contentHash, mergeSparsePost(existing = stored, incoming = sparse.copy(full = null)).contentHash)
+        assertNull(mergeSparsePost(existing = stored, incoming = replaced).contentHash)
+    }
+
+    @Test
     fun `pre-versioned storage record retains safe typed fallbacks`() {
         val legacyJson =
             """

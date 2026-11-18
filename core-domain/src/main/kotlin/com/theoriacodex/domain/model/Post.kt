@@ -76,7 +76,8 @@ data class Post(
     val commentHint: CommentHint? = null,
     /**
      * MD5 of the original file as its site reports it, lowercase. Sites that host the same file report the same
-     * value, which is how [distinctByFile] recognises one post listed by several sites. Live listing data only.
+     * value, which is how [distinctByFile] recognises one post listed by several sites. Saved with the post; null when
+     * the site reports none or the post was saved before the hash was stored.
      */
     val contentHash: String? = null,
     /**
@@ -122,7 +123,7 @@ private val MD5_IN_PATH = Regex("(?<![0-9a-fA-F])[0-9a-fA-F]{32}(?![0-9a-fA-F])"
 
 /**
  * A resolved or stored post replaces a listed one, keeping what only the listing said: detail responses seldom repeat
- * the comment hint, and stored posts carry neither it, the file hash nor the origin page.
+ * the comment hint, stored posts carry neither it nor the origin page, and older stored posts lack the file hash.
  */
 fun Post.keepingListingDataOf(listed: Post): Post {
     val hint = commentHint ?: listed.commentHint
