@@ -18,12 +18,13 @@ internal fun SearchFailureSurface(
     statuses: List<SourceRunStatus>,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
+    onDismiss: (() -> Unit)? = null,
 ) {
     Box(modifier) {
         if (statuses.siteNeedingKey() != null) {
-            SourceAccountNotice(siteKeyFailureMessage(error.message, statuses), statuses)
+            SourceAccountNotice(siteKeyFailureMessage(error.message, statuses), statuses, onDismiss)
         } else {
-            SourceFailureBlock(error.message, statuses, onRetry)
+            SourceFailureBlock(error.message, statuses, onDismiss, onRetry)
         }
     }
 }

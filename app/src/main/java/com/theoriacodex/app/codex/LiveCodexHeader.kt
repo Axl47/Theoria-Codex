@@ -1,5 +1,6 @@
 package com.theoriacodex.app.codex
 
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
@@ -12,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.feed.FeedPageDemandInput
 import com.theoriacodex.app.search.SearchVisibilityFilters
+import com.theoriacodex.app.ui.components.DismissibleFailure
 import com.theoriacodex.app.ui.components.FeedContinueLoading
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.app.ui.components.rememberFeedPageDemand
@@ -55,10 +57,27 @@ internal fun LiveCodexHeader(
         canonicalIndexForVisibleItems = { indices -> indices.mapNotNull(canonicalIndices::getOrNull).maxOrNull() },
         onLoadNextPage = owner::loadMore,
     )
-    if (state.errors.isNotEmpty()) {
-        Text(state.errors.entries.take(2).joinToString("\n") { (id, error) -> "${labels[id] ?: title}: $error" } +
-            if (state.errors.size > 2) "\n${state.errors.size - 2} more could not load" else "")
-        TextButton(enabled = !state.loading, onClick = owner::retry) { Text("Retry failed ${manageLabel.lowercase()}") }
-    }
+    LiveCodexFailures(state.errors, labels, title, manageLabel, retryEnabled = !state.loading, onRetry = owner::retry)
     FeedContinueLoading(demand)
+}
+
+/** Which followed or saved branches failed, beside the posts that did load; Dismiss hides them until they change. */
+@Composable
+internal fun LiveCodexFailures(
+    errors: Map<String, String>,
+    labels: Map<String, String>,
+    title: String,
+    manageLabel: String,
+    retryEnabled: Boolean,
+    onRetry: () -> Unit,
+) {
+    if (errors.isEmpty()) return
+    DismissibleFailure(errors) { dismiss ->
+        Text(errors.entries.take(2).joinToString("\n") { (id, error) -> "${labels[id] ?: title}: $error" } +
+            if (errors.size > 2) "\n${errors.size - 2} more could not load" else "")
+        Row {
+            TextButton(onClick = dismiss) { Text("Dismiss") }
+            TextButton(enabled = retryEnabled, onClick = onRetry) { Text("Retry failed ${manageLabel.lowercase()}") }
+        }
+    }
 }

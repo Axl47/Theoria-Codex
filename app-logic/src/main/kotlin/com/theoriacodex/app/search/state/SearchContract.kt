@@ -241,7 +241,6 @@ sealed interface SearchAction {
     data object Retry : SearchAction
     data object LoadNextPage : SearchAction
     data object CancelActiveRequest : SearchAction
-    data object DismissError : SearchAction
     data object DismissValidation : SearchAction
     data object Restore : SearchAction
     data object Resume : SearchAction

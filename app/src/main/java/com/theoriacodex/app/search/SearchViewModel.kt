@@ -171,7 +171,6 @@ internal class SearchViewModel(
 
             SearchAction.CancelActiveRequest -> cancelActiveRequest()
 
-            SearchAction.DismissError -> dismissError()
 
             SearchAction.DismissValidation -> dismissValidation()
 
@@ -221,12 +220,6 @@ internal class SearchViewModel(
             mutableState.value = reduction.state
             suggestionRefresh.refreshAutocomplete(mutableState.value.suggestions.input)
         }
-    }
-
-    private fun dismissError() {
-        mutableState.value = mutableState.value.copy(
-            content = mutableState.value.content.copy(error = null),
-        )
     }
 
     private fun dismissValidation() {
