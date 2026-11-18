@@ -52,7 +52,7 @@ Keep `AGENTS.md` limited to durable product intent, safety boundaries, and accep
 ## Android Support
 
 - Support only the latest stable Android major release and its immediate predecessor; previews do not move the support window. Currently: Android 17 (API 37) and Android 16 (API 36). Keep the minimum SDK, documentation, and test matrix aligned as this window advances.
-- Prefer platform APIs available throughout that window and remove obsolete OS compatibility branches when touched. Preserve saved-data and credential migrations for existing users.
+- Prefer platform APIs available throughout that window and remove obsolete OS compatibility branches when touched. Saved-data and credential migrations may be removed once more than two releases have shipped after the last release that needed them. The app has two users, both updating daily.
 
 ## Non-obvious Constraints
 
