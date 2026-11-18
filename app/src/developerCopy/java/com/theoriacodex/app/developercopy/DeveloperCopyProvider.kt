@@ -9,7 +9,6 @@ import android.os.ParcelFileDescriptor
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.sourceauth.AndroidCredentialEnvelopeStore
 import com.theoriacodex.app.sourceauth.CredentialEnvelopeReadResult
-import com.theoriacodex.app.sourceauth.PREFS_NAME
 import com.theoriacodex.app.sourceauth.SourceCredentialSnapshot
 import com.theoriacodex.data.android.room.RoomProfileBackupStore
 import com.theoriacodex.data.android.room.TheoriaRoomDatabase
@@ -96,10 +95,7 @@ class DeveloperCopyProvider : ContentProvider() {
         val app = requireNotNull(context)
         return when (val read = AndroidCredentialEnvelopeStore(app, allowAtomicRecovery = false).read()) {
             is CredentialEnvelopeReadResult.Success -> read.snapshot
-            CredentialEnvelopeReadResult.Missing -> {
-                require(!File(app.applicationInfo.dataDir, "shared_prefs/$PREFS_NAME.xml").exists())
-                SourceCredentialSnapshot()
-            }
+            CredentialEnvelopeReadResult.Missing -> SourceCredentialSnapshot()
             else -> error("Open production normally to finish credential recovery before copying")
         }
     }

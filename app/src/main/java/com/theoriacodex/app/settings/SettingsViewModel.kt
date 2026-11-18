@@ -685,7 +685,6 @@ internal class SettingsViewModel(
 
 internal fun recoveryMessage(state: CredentialStoreRecoveryState): String = when (state) {
     CredentialStoreRecoveryState.Loading -> "Loading source credentials…"
-    CredentialStoreRecoveryState.Migrating -> "Finishing secure credential upgrade…"
     CredentialStoreRecoveryState.Ready -> "Source credentials are ready"
     CredentialStoreRecoveryState.TemporarilyUnavailable ->
         "Source credentials are temporarily unavailable — try again"

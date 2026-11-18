@@ -1,15 +1,11 @@
 package com.theoriacodex.app.sourceauth
 
 import android.content.Context
-import android.content.SharedPreferences
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import com.theoriacodex.domain.source.SiteCredentials
 import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.credentials.PixivAuthTokens
 import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
-import java.security.KeyStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,7 +18,6 @@ class AndroidSecureSourceCredentialsStore private constructor(
     constructor(context: Context) : this(
         VersionedSourceCredentialsStore(
             envelopeStore = AndroidCredentialEnvelopeStore(context.applicationContext),
-            legacyStore = AndroidLegacyCredentialStore(context.applicationContext),
         ),
     )
 
@@ -55,42 +50,6 @@ class AndroidSecureSourceCredentialsStore private constructor(
      */
     override suspend fun resetAfterReconnectRequired(): Boolean =
         delegate.resetAfterReconnectRequired()
-}
-
-@Suppress("DEPRECATION") // Read-only migration seam for installs created before the Keystore envelope.
-internal fun createEncryptedPrefs(context: Context): SharedPreferences {
-    return EncryptedSharedPreferences.create(
-        context,
-        PREFS_NAME,
-        MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build(),
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-    )
-}
-
-internal fun Exception.isRecoverableEncryptedPrefsFailure(): Boolean {
-    return generateSequence(this as Throwable?) { error -> error.cause }
-        .any { error ->
-            val name = error::class.java.name
-            name == "javax.crypto.AEADBadTagException" ||
-                name == "android.security.KeyStoreException" ||
-                name == "com.google.crypto.tink.shaded.protobuf.InvalidProtocolBufferException"
-        }
-}
-
-@Suppress("DEPRECATION") // Removes the retired Security Crypto alias after verified migration.
-internal fun deleteLegacyMasterKey(): Boolean {
-    return runCatching {
-        KeyStore.getInstance("AndroidKeyStore").apply {
-            load(null)
-            if (containsAlias(MasterKey.DEFAULT_MASTER_KEY_ALIAS)) {
-                deleteEntry(MasterKey.DEFAULT_MASTER_KEY_ALIAS)
-            }
-        }
-        true
-    }.getOrDefault(false)
 }
 
 class InMemorySourceCredentialsStore : SourceCredentialsProvider {
@@ -159,12 +118,3 @@ class InMemorySiteCredentialsStore : SiteCredentialsStore {
 
     override val changes: Flow<Unit> = stored.map { }
 }
-
-internal const val PREFS_NAME = "theoria_source_credentials"
-internal const val KEY_PIXIV_ACCESS_TOKEN = "pixiv_access_token"
-internal const val KEY_PIXIV_REFRESH_TOKEN = "pixiv_refresh_token"
-internal const val KEY_PIXIV_EXPIRES_AT = "pixiv_expires_at"
-internal const val KEY_GELBOORU_USER_ID = "gelbooru_user_id"
-internal const val KEY_GELBOORU_API_KEY = "gelbooru_api_key"
-internal const val KEY_RULE34XXX_USER_ID = "rule34xxx_user_id"
-internal const val KEY_RULE34XXX_API_KEY = "rule34xxx_api_key"
