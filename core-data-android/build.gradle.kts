@@ -2,6 +2,7 @@ import com.android.build.api.dsl.LibraryExtension
 
 plugins {
     alias(libs.plugins.android.library)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.androidx.room)
     alias(libs.plugins.kover)
     alias(libs.plugins.detekt)
@@ -48,6 +49,7 @@ dependencies {
     implementation(project(":core-domain"))
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.gson)
+    implementation(libs.kotlinx.serialization.json)
     // The public database factory extends RoomDatabase, so consumers need this superclass.
     api(libs.androidx.room.runtime)
     annotationProcessor(libs.androidx.room.compiler)

@@ -178,6 +178,7 @@ abstract class RejectPersonalReleaseInstallTask : DefaultTask() {
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.androidx.baselineprofile)
     alias(libs.plugins.kover)
     alias(libs.plugins.detekt)
@@ -486,6 +487,7 @@ dependencies {
     implementation(libs.androidx.media3.session)
     implementation(libs.androidx.profileinstaller)
     implementation(libs.gson)
+    implementation(libs.kotlinx.serialization.json)
 
     baselineProfile(project(":baseline-profile"))
 

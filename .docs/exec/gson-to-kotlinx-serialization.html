@@ -233,14 +233,14 @@ Copy this skeleton into a new `.docs/exec/<plan-name>.html` file and then replac
     <h1>ExecPlan: Move Saved Data From Gson Reflection To Compile-Time Serialization</h1>
     <p>When this is complete, saved data no longer depends on R8 keeping field names or on Gson creating objects by reflection. Every durable file, Room payload, and export is read and written by serializers the compiler generates, an offline copy survives any app update, and the hand-maintained R8 contract machinery is deleted. Users see no format loss: every file written by an older build still loads.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: In progress (Phase 1)</span>
+      <span class="pill">Status: In progress (Phase 2)</span>
       <span class="pill">Owner: Claude</span>
       <span class="pill">Created: 2026-11-08</span>
-      <span class="pill">Updated: 2026-11-08</span>
+      <span class="pill">Updated: 2026-11-18</span>
       <span class="pill">Plan file: .docs/exec/gson-to-kotlinx-serialization.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Pass the minified acceptance job on PR #52, merge, and ship Phase 1 in a release before Phase 2 merges.</div>
+      <div class="card"><strong>Next Action</strong>Start Phase 3: move <code>AtomicJsonFileStore</code> and the low-risk stores to <code>DurableJson</code>.</div>
       <div class="card"><strong>Main Risk</strong>A stricter decoder turning a repairable file into "corrupt", which resets settings or re-downloads offline media. Reduced by a Gson parity harness and one shared corrupt-JSON contract.</div>
       <div class="card"><strong>Validation</strong>Gson-vs-kotlinx parity tests on golden files, the full host gates, and the minified release-acceptance run on Android 16 and 17.</div>
       <div class="card"><strong>Affected Areas</strong><code>core-data</code>, <code>core-data-android</code>, <code>app</code> persistence, <code>app/proguard-rules.pro</code>, release verification.</div>
@@ -273,8 +273,8 @@ Copy this skeleton into a new `.docs/exec/<plan-name>.html` file and then replac
     <section id="status">
       <h2>Current Status</h2>
       <table class="status-table"><tbody>
-        <tr><td>State</td><td>In progress. Investigation complete, Phase 1 underway on branch <code>fix/offline-manifest-stable-keys</code>.</td></tr>
-        <tr><td>Next action</td><td>Pass the minified acceptance job on PR #52, merge, then release it before Phase 2 merges.</td></tr>
+        <tr><td>State</td><td>In progress. Phase 1 shipped in v1.4.0 (commit <code>5dc5fe72</code>). Phase 2 landed through PR #145.</td></tr>
+        <tr><td>Next action</td><td>Phase 3 on its own branch and PR. Phase 2 merged through PR #145.</td></tr>
         <tr><td>Blocked by</td><td>Nothing. A local emulator failure on 2026-11-08 means device proof currently comes from CI (see Surprises).</td></tr>
       </tbody></table>
     </section>
@@ -342,7 +342,7 @@ val DurableJson = Json {
         <h3>Phase 2: Foundation and parity harness</h3>
         <table class="status-table"><tbody>
           <tr><td>Goal</td><td>The library, the shared configuration, and a test harness that proves each migrated type matches Gson. No store changes yet.</td></tr>
-          <tr><td>Edits</td><td>Add <code>kotlinx-serialization-json</code> 1.12.0 and the Kotlin serialization plugin to the catalog and to <code>core-data</code>, <code>core-data-android</code>, <code>app</code>, <code>core-sources</code>. Define <code>DurableJson</code> and a test fixture <code>assertGsonParity(serializer, samples, goldenJson)</code>. Add the missing golden files listed in the appendix, captured from the current Gson code <em>before</em> any record changes. Prototype on <code>UpdateStateSnapshot</code>.</td></tr>
+          <tr><td>Edits</td><td>Add <code>kotlinx-serialization-json</code> 1.13.0 and the Kotlin serialization plugin to the catalog and to <code>core-data</code>, <code>core-data-android</code>, <code>app</code>, <code>core-sources</code>. Define <code>DurableJson</code> and a test fixture <code>assertGsonParity(serializer, samples, goldenJson)</code>. Add the missing golden files listed in the appendix, captured from the current Gson code <em>before</em> any record changes. Prototype on <code>UpdateStateSnapshot</code>.</td></tr>
           <tr><td>Parity checks</td><td>For each sample: Gson output decodes via kotlinx to an equal value; kotlinx output decodes via Gson to an equal value; both produce the same key set. For each golden file: both decoders agree.</td></tr>
           <tr><td>Promote or discard</td><td>Continue only if the minified acceptance run proves the prototype serializer survives R8 and the harness catches a deliberately broken record.</td></tr>
         </tbody></table>
@@ -438,8 +438,11 @@ val DurableJson = Json {
         <li>[x] 2026-11-08 - Inventoried 24 surfaces and 61 shipped record types, and mapped byte and failure dependencies.</li>
         <li>[x] 2026-11-08 - Proved v1.3.0 and current <code>main</code> assign the same obfuscated field names to the <code>Post</code> graph.</li>
         <li>[x] 2026-11-08 - Phase 1 code and host validation: manifests write v3, readable v2 manifests upgrade at catalog build, and unreadable manifests keep their owners.</li>
-        <li>[ ] Phase 1 proof: run the minified <code>R8 release acceptance</code> job, then ship in a release before Phase 2 merges.</li>
-        <li>[ ] Phases 2 to 9.</li>
+        <li>[x] Phase 1 proof: the minified acceptance job passed and Phase 1 shipped in v1.4.0 (<code>git tag --contains 5dc5fe72</code> lists v1.4.0 through v1.9.0).</li>
+        <li>[x] 2026-11-18 - Phase 2 golden files captured from the Gson code and committed before any record changed (commit <code>3852d21c</code>): Room payload and like tags, the Recents destination hash, v1/v2 backups and a mid-restore journal, 21 DataStore repair-or-reset inputs, corrupt credential envelopes and payloads, and the updater state file. Manifest goldens already existed from Phase 1 (<code>OfflineMediaStoreTest</code>: shipped obfuscated keys, a v2 post without <code>taxonomy</code>, <code>golden/source-identity/offline-manifest-post.json</code>).</li>
+        <li>[x] 2026-11-18 - Phase 2 foundation: kotlinx-serialization-json 1.13.0 and the serialization plugin in the catalog and in <code>core-data</code>, <code>core-data-android</code>, <code>app</code>, <code>core-sources</code>; <code>DurableJson</code> in <code>core-data/.../storage/DurableJson.kt</code>; <code>assertGsonParity</code> in core-data test fixtures (<code>GsonParity.kt</code>) with its own test; <code>UpdateStateSnapshot</code>, <code>PendingPostInstallChangelog</code>, and <code>ChangelogSection</code> carry kotlinx serializers beside their Gson names; the minified acceptance activity round-trips them through both libraries.</li>
+        <li>[x] 2026-11-18 - Phase 2 proof: <code>scripts/check.sh --record</code> passed (tests, Detekt, lint, duplicates; changed-line coverage 9/9). Device Validation run 44276298855 passed <code>R8 release acceptance</code> on API 36 and 37, and every connected-test shard (one API 36 shard first failed on a corrupt system-image download before any test ran and passed on rerun). The parity test failed, naming both keys, when one <code>@SerialName</code> on <code>UpdateStateSnapshot</code> was renamed on purpose, and passed once it was restored.</li>
+        <li>[ ] Phases 3 to 9.</li>
       </ul>
 
       <h3>Surprises And Discoveries</h3>
@@ -453,6 +456,12 @@ val DurableJson = Json {
         <li>Observation: reflective v2 reads cannot work on any release build. Evidence: the minified acceptance run returned no record for a valid v2 manifest, and <code>dexdump -a</code> shows no <code>Signature</code> annotation on <code>Post</code> in the acceptance APK or the shipped v1.3.0 APK, so Gson decodes <code>media</code> as raw maps and the first <code>ImageRef</code> access throws inside <code>runCatching</code>. Offline copies therefore could not be read back in release builds until this phase.</li>
         <li>Observation: the acceptance fixture writes whichever names R8 assigns in the current build, while the reader table is frozen. Evidence: <code>ReleaseDataAcceptanceActivity.writeLegacyOfflineManifest</code>. If <code>Post</code> fields change before Phase 9 removes v2 support, replace that fixture with literal shipped keys.</li>
         <li>Observation: a v2 rewrite that throws inside <code>readRecord</code> must not hide a readable copy. Evidence: found in review and pinned by <code>a version 2 manifest that cannot be rewritten stays available and upgrades later</code>.</li>
+        <li>Observation: backups are not HTML-escaped. <code>ProfileBackupCodec</code> builds a Gson <code>JsonObject</code> and writes it with <code>toString()</code>, so <code>&amp; = &lt; &gt; '</code> stay raw, while files written by <code>gson.toJson</code> escape them. Evidence: <code>core-data/src/test/resources/golden/backup/backup-v2.json</code>. Phase 6 must not assume escaped input.</li>
+        <li>Observation: a null nested inside a DataStore record passes <code>validate()</code>, so every read throws <code>NullPointerException</code> and the file is never quarantined or reset. Top-level nulls on non-null fields do reset, because <code>validate()</code> builds the domain object. Evidence: three "latent bug" tests in <code>DataStoreGoldenTest</code> (UI restore <code>feedFabRestoreStates[].followedSources</code>, statistics <code>codexStatistics[].posts</code>, site profiles <code>sites</code>). Gson never writes nulls, so only hand-edited or damaged files hit this. Phase 4 changes these outcomes deliberately (to a repair or a reset) and updates the tests with it.</li>
+        <li>Observation: every record in the four DataStore stores has all-default constructors, so Gson uses the no-arg constructor there and Kotlin defaults run; a JSON null on a primitive keeps its default, a null on a non-null list, map, or string resets the store with <code>CorruptionException</code>. Evidence: <code>DataStoreGoldenTest</code>.</li>
+        <li>Observation: both corrupt credential cases already reach <code>ReconnectRequired</code> through Gson's <code>JsonSyntaxException</code>. Evidence: <code>CredentialEnvelopeGoldenTest</code>, which installs an in-memory <code>AndroidKeyStore</code> provider because Robolectric has none. Phase 7 must add <code>SerializationException</code> to the same mapping.</li>
+        <li>Observation: <code>core-sources</code> does not depend on <code>core-data</code>, so it cannot use <code>DurableJson</code>. Evidence: <code>core-sources/build.gradle.kts</code>. Phase 3 decides how <code>HitomiPageTokenCodec</code> gets its configuration.</li>
+        <li>Observation: kotlinx-serialization-json 1.13.0 is built against Kotlin 2.4.10 and compiles and runs under the repo's Kotlin 2.4.21 with the matching serialization plugin. <code>explicitNulls</code> still needs <code>@OptIn(ExperimentalSerializationApi::class)</code>. A quoted <code>"5"</code> decodes into an <code>Int</code> under <code>DurableJson</code>, as Gson allowed. Evidence: <code>GsonParityTest</code>, <code>UpdateStateParityTest</code>.</li>
       </ul>
 
       <h3>Decision Log</h3>
@@ -461,11 +470,16 @@ val DurableJson = Json {
         <li>Decision: use <code>PostStorageRecord</code> for manifest v3 instead of annotating domain classes. Rationale: it is already the stable, tested mirror of <code>Post</code>, and no new library is needed. Date/Author: 2026-11-08 / Claude.</li>
         <li>Decision: read v2 manifests by hand from the JSON tree with a frozen table of shipped key names. Rationale: the first approach, reusing the reflective reader, failed the minified acceptance run because R8 strips generic signatures from <code>Post</code>. The tree reader needs no reflection and no longer constrains changes to the domain classes. Date/Author: 2026-11-08 / Claude.</li>
         <li>Decision: use kotlinx.serialization rather than Moshi. Rationale: code generation is built into the Kotlin compiler toolchain, and its JSON tree is available if Gson's tree use is ever replaced. Date/Author: 2026-11-08 / Claude.</li>
+        <li>Decision: use kotlinx-serialization-json 1.13.0 instead of the planned 1.12.0. Rationale: it is current and works with Kotlin 2.4.21. Date/Author: 2026-11-18 / Claude.</li>
+        <li>Decision: until a phase switches a store to kotlinx, its records keep <code>@field:SerializedName</code> beside the new <code>@SerialName</code>. Rationale: production Gson still reads and writes them, and the R8 keep rules match on <code>@SerializedName</code>; removing it early would let R8 rename stored keys. The phase that switches the store drops the Gson names and the keep rules together. Date/Author: 2026-11-18 / Claude.</li>
+        <li>Decision: <code>assertGsonParity</code> also requires the samples, together, to emit every property path the descriptor declares (map contents and recursive types excepted). Rationale: a renamed key on a property that is always null in the samples would otherwise pass. It caught exactly that in the first draft of <code>UpdateStateParityTest</code>. Date/Author: 2026-11-18 / Claude.</li>
+        <li>Decision: golden tests assert decoded values, repair-or-reset outcomes, and failure types, never Gson's output bytes; the golden files keep the bytes. The Recents destination hash is the exception and is pinned exactly. Rationale: kotlinx legitimately writes different bytes (no HTML escaping). Date/Author: 2026-11-18 / Claude.</li>
         <li>Decision: do not delete legacy importers. Rationale: it cannot be shown that every install has finished archiving them. Date/Author: 2026-11-08 / Claude.</li>
       </ul>
 
       <h3>Outcomes And Retrospective</h3>
-      <p>Not started. Update at the end of each phase.</p>
+      <p>Phase 1: offline manifests write v3 with stable keys and upgrade readable v2 copies; shipped in v1.4.0.</p>
+      <p>Phase 2: promoted. kotlinx-serialization-json 1.13.0 runs beside Gson with no store changes. The prototype serializer survives R8 on API 36 and 37 and agrees with Gson in both directions. The parity harness catches renamed keys and unexercised properties. Golden files for every remaining surface are committed. Lesson for later phases: write samples that set every nullable property, because the harness rejects anything less, and that rule caught a gap in the first prototype test.</p>
     </section>
 
     <section id="recovery">
@@ -477,7 +491,8 @@ val DurableJson = Json {
     <section id="appendix">
       <h2>Appendix: Evidence And Notes</h2>
       <details>
-        <summary>Golden files to capture in Phase 2 (none exist today)</summary>
+        <summary>Golden files captured in Phase 2</summary>
+        <p>Inputs live under each module's <code>src/test/resources/golden/</code> and are pinned by <code>BackupGoldenTest</code>, <code>DataStoreGoldenTest</code> (core-data), <code>RoomPayloadGoldenTest</code>, <code>RecentsDestinationGoldenTest</code> (core-data-android), <code>CredentialEnvelopeGoldenTest</code>, and <code>UpdateStateParityTest</code> (app). The Recents destination SHA-256 is <code>dc0c861137855a9586b60cbcd695c3152b26f588b7d3cca73156fcc5ca4db125</code>. Never regenerate a golden to make a migration pass.</p>
         <ul>
           <li>A <code>posts.payload_json</code> row and <code>liked_posts.tags_json</code> exactly as Gson wrote them, including escaped characters.</li>
           <li>A stored Recents <code>destinationSha256</code> computed by current code over rows containing <code>&amp; = &lt; &gt; '</code> and a null <code>originQueryHash</code>.</li>
