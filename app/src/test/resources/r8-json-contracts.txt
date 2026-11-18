@@ -33,13 +33,6 @@ com.theoriacodex.data.android.room.LegacyCodexRecord|codexId,name,createdAtEpoch
 com.theoriacodex.data.android.room.LegacyCodexItemRecord|codexId,source,sourcePostId,savedAtEpochMs
 com.theoriacodex.data.android.room.LegacyLikesStoreFile|likes
 com.theoriacodex.data.android.room.LegacyLikedPostRecord|profileId,profile,source,sourcePostId,likedAtEpochMs,tags
-com.theoriacodex.app.sourceauth.CredentialEnvelopeRecord|formatVersion,keyVersion,iv,ciphertext
-com.theoriacodex.app.sourceauth.CredentialPayloadRecord|schemaVersion,pixivAccessToken,pixivRefreshToken,pixivExpiresAtEpochMs,gelbooruUserId,gelbooruApiKey,rule34XxxUserId,rule34XxxApiKey,customSites
-com.theoriacodex.app.sourceauth.CustomSiteCredentialRecord|user,apiKey
-com.theoriacodex.app.statistics.StatsShareFile|format,version,name,codices,overall
-com.theoriacodex.app.statistics.StatsShareCodex|name,entries,browsingMs,watchingMs,postOpens,posts
-com.theoriacodex.app.statistics.StatsSharePost|key,label,opens,videoMs,imageMs
-com.theoriacodex.app.statistics.StatsShareOverall|timeInAppMs,browsingMs,watchingMs,codexMs,appOpens,postsWatched,postsSaved,searches
 
 com.theoriacodex.data.storage.VideoVariantRecord|url,height,original,mime
 com.theoriacodex.data.repository.FollowedCreatorRecord|source,name,profileId,profileUrl,uploadsQuery,membershipId,seenPostIds,latestPostIds,checkedAtEpochMs

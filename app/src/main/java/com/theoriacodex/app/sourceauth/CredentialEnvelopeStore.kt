@@ -5,21 +5,22 @@ import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.util.AtomicFile
 import android.util.Base64
 import com.theoriacodex.data.repository.readBoundedDocument
+import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.domain.source.CustomSourceIds
 import com.theoriacodex.domain.source.SiteCredentials
-import com.google.gson.Gson
-import com.google.gson.JsonParseException
-import com.google.gson.annotations.SerializedName
 import java.io.File
 import java.io.IOException
 import java.security.InvalidKeyException
 import java.security.UnrecoverableKeyException
 import javax.crypto.AEADBadTagException
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 
 internal class AndroidCredentialEnvelopeStore(
     context: Context,
-    private val gson: Gson = Gson(),
     private val relativeEnvelopePath: String = CREDENTIAL_ENVELOPE_RELATIVE_PATH,
     keyAlias: String = CREDENTIAL_KEY_ALIAS,
     private val allowAtomicRecovery: Boolean = true,
@@ -42,10 +43,7 @@ internal class AndroidCredentialEnvelopeStore(
     override suspend fun read(): CredentialEnvelopeReadResult {
         return try {
             val raw = readEnvelopeBytes() ?: return CredentialEnvelopeReadResult.Missing
-            val envelope = gson.fromJson(
-                raw.toString(Charsets.UTF_8),
-                CredentialEnvelopeRecord::class.java,
-            ) ?: return CredentialEnvelopeReadResult.ReconnectRequired
+            val envelope = CredentialEnvelopeRecord.serializer().decodeCredential(raw)
             if (envelope.formatVersion <= 0) {
                 return CredentialEnvelopeReadResult.ReconnectRequired
             }
@@ -70,10 +68,7 @@ internal class AndroidCredentialEnvelopeStore(
                 iv = iv,
                 ciphertext = ciphertext,
             )
-            val payload = gson.fromJson(
-                plaintext.toString(Charsets.UTF_8),
-                CredentialPayloadRecord::class.java,
-            ) ?: return CredentialEnvelopeReadResult.ReconnectRequired
+            val payload = CredentialPayloadRecord.serializer().decodeCredential(plaintext)
             if (payload.schemaVersion <= 0) {
                 return CredentialEnvelopeReadResult.ReconnectRequired
             }
@@ -111,7 +106,8 @@ internal class AndroidCredentialEnvelopeStore(
         snapshot: SourceCredentialSnapshot,
     ): CredentialStoreWriteResult {
         return try {
-            val plaintext = gson.toJson(CredentialPayloadRecord(snapshot)).toByteArray(Charsets.UTF_8)
+            val plaintext = DurableJson.encodeToString(CredentialPayloadRecord.serializer(), CredentialPayloadRecord(snapshot))
+                .toByteArray(Charsets.UTF_8)
             val encrypted = crypto.encrypt(plaintext)
             val envelope = CredentialEnvelopeRecord(
                 formatVersion = CREDENTIAL_FORMAT_VERSION,
@@ -119,7 +115,7 @@ internal class AndroidCredentialEnvelopeStore(
                 iv = encrypted.iv.encodeBase64(),
                 ciphertext = encrypted.ciphertext.encodeBase64(),
             )
-            val encoded = gson.toJson(envelope).toByteArray(Charsets.UTF_8)
+            val encoded = DurableJson.encodeToString(CredentialEnvelopeRecord.serializer(), envelope).toByteArray(Charsets.UTF_8)
             if (encoded.size > MAX_CREDENTIAL_ENVELOPE_BYTES) {
                 return CredentialStoreWriteResult.TemporarilyUnavailable
             }
@@ -163,36 +159,40 @@ internal class AndroidCredentialEnvelopeStore(
     }
 }
 
-private class CredentialEnvelopeRecord(
-    @field:SerializedName("formatVersion")
+/** The on-disk envelope around the encrypted payload. Old Gson-written envelopes decode unchanged. */
+@Serializable
+internal data class CredentialEnvelopeRecord(
+    @SerialName("formatVersion")
     val formatVersion: Int = 0,
-    @field:SerializedName("keyVersion")
+    @SerialName("keyVersion")
     val keyVersion: Int = 0,
-    @field:SerializedName("iv")
+    @SerialName("iv")
     val iv: String? = null,
-    @field:SerializedName("ciphertext")
+    @SerialName("ciphertext")
     val ciphertext: String? = null,
 )
 
-internal class CredentialPayloadRecord(
-    @field:SerializedName("schemaVersion")
+/** The decrypted payload. A data class for equality in parity tests; [toString] stays redacted. */
+@Serializable
+internal data class CredentialPayloadRecord(
+    @SerialName("schemaVersion")
     val schemaVersion: Int = CREDENTIAL_PAYLOAD_SCHEMA_VERSION,
-    @field:SerializedName("pixivAccessToken")
+    @SerialName("pixivAccessToken")
     val pixivAccessToken: String? = null,
-    @field:SerializedName("pixivRefreshToken")
+    @SerialName("pixivRefreshToken")
     val pixivRefreshToken: String? = null,
-    @field:SerializedName("pixivExpiresAtEpochMs")
+    @SerialName("pixivExpiresAtEpochMs")
     val pixivExpiresAtEpochMs: Long? = null,
-    @field:SerializedName("gelbooruUserId")
+    @SerialName("gelbooruUserId")
     val gelbooruUserId: String? = null,
-    @field:SerializedName("gelbooruApiKey")
+    @SerialName("gelbooruApiKey")
     val gelbooruApiKey: String? = null,
-    @field:SerializedName("rule34XxxUserId")
+    @SerialName("rule34XxxUserId")
     val rule34XxxUserId: String? = null,
-    @field:SerializedName("rule34XxxApiKey")
+    @SerialName("rule34XxxApiKey")
     val rule34XxxApiKey: String? = null,
     /** Additive in payload schema 1 (plan D7); absent when no custom site has keys. */
-    @field:SerializedName("customSites")
+    @SerialName("customSites")
     val customSites: Map<String, CustomSiteCredentialRecord?>? = null,
 ) {
     constructor(snapshot: SourceCredentialSnapshot) : this(
@@ -226,10 +226,11 @@ internal class CredentialPayloadRecord(
     override fun toString(): String = "CredentialPayloadRecord([REDACTED])"
 }
 
-internal class CustomSiteCredentialRecord(
-    @field:SerializedName("user")
+@Serializable
+internal data class CustomSiteCredentialRecord(
+    @SerialName("user")
     val user: String? = null,
-    @field:SerializedName("apiKey")
+    @SerialName("apiKey")
     val apiKey: String? = null,
 ) {
     override fun toString(): String = "CustomSiteCredentialRecord([REDACTED])"
@@ -243,7 +244,6 @@ private fun Exception.toCredentialReadFailure(): CredentialEnvelopeReadResult {
                 error is KeyPermanentlyInvalidatedException ||
                 error is UnrecoverableKeyException ||
                 error is InvalidKeyException ||
-                error is JsonParseException ||
                 error is CredentialEnvelopeCorruptException
         } -> CredentialEnvelopeReadResult.ReconnectRequired
         causes.any { error -> error is IOException || error is java.security.KeyStoreException } ->
@@ -260,7 +260,19 @@ private fun String.decodeCredentialBase64(): ByteArray = try {
     throw CredentialEnvelopeCorruptException(error)
 }
 
-private class CredentialEnvelopeCorruptException(cause: Throwable) : Exception(cause)
+/**
+ * Decodes stored credential JSON. kotlinx quotes part of its input in parse errors, and here the input can be a
+ * decrypted payload, so a parse failure is replaced by a corrupt-envelope error that carries neither its message
+ * nor its cause. A corrupt envelope or payload therefore asks for reconnection.
+ */
+private fun <T> KSerializer<T>.decodeCredential(bytes: ByteArray): T = try {
+    DurableJson.decodeFromString(this, bytes.toString(Charsets.UTF_8))
+} catch (_: SerializationException) {
+    throw CredentialEnvelopeCorruptException()
+}
+
+/** A stored envelope that can never decode. Its message and cause stay empty when they could quote secrets. */
+private class CredentialEnvelopeCorruptException(cause: Throwable? = null) : Exception(cause)
 
 private const val CREDENTIAL_FORMAT_VERSION = 1
 private const val CREDENTIAL_KEY_VERSION = 1
