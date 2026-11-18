@@ -5,7 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
 
-class LegacyRecoveryPresentationTest {
+class RecoveredStorePresentationTest {
     @Test
     fun `summary keeps diagnostic identity out of the Settings card`() {
         val fullPath = "/private/app/query_store.json.corrupt-7-${"a".repeat(64)}"
@@ -18,7 +18,7 @@ class LegacyRecoveryPresentationTest {
             byteCount = 7L,
         )
 
-        val summary = legacyRecoverySummary(recovery)
+        val summary = recoveredStoreSummary(recovery)
 
         assertEquals(
             "Saved searches was reset after unreadable local data was preserved (7 bytes, checksum aaaaaaaa).",

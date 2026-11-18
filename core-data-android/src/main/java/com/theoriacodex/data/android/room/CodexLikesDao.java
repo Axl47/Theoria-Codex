@@ -204,18 +204,4 @@ public interface CodexLikesDao {
 
     @Query("DELETE FROM liked_posts WHERE profile_id = :profileId")
     int deleteLikes(String profileId);
-
-    @Query("SELECT * FROM migration_metadata WHERE migration_key = :migrationKey LIMIT 1")
-    MigrationMetadataEntity migrationMetadata(String migrationKey);
-
-    @Insert(onConflict = OnConflictStrategy.ABORT)
-    void insertMigrationMetadata(MigrationMetadataEntity entity);
-
-    @Query("UPDATE migration_metadata SET codex_archived = :codexArchived, "
-            + "likes_archived = :likesArchived WHERE migration_key = :migrationKey")
-    int updateMigrationArchiveState(
-            String migrationKey,
-            boolean codexArchived,
-            boolean likesArchived
-    );
 }

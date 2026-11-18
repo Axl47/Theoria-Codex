@@ -2,7 +2,7 @@ package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.testing.RecordingIoDispatcher
 import com.theoriacodex.data.testing.ControllableIoDispatcher
-import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
+import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.ImageRef
@@ -77,7 +77,7 @@ internal class FileBackedQueryRepositoryTest : FileBackedRepositoryTestFixture()
         val dir = tempDir("legacy-json-recovery-registry-")
         val queryBytes = "{broken-query".toByteArray()
         dir.resolve("query_store.json").writeBytes(queryBytes)
-        val registry = LegacyJsonRecoveryRegistry()
+        val registry = FileStoreRecoveryRegistry()
 
         FileBackedQueryRepository(dir, recoveryRegistry = registry)
 
@@ -94,11 +94,11 @@ internal class FileBackedQueryRepositoryTest : FileBackedRepositoryTestFixture()
         val dir = tempDir("legacy-json-recovery-restart-")
         val original = "{broken-query".toByteArray()
         dir.resolve("query_store.json").writeBytes(original)
-        val firstProcess = LegacyJsonRecoveryRegistry()
+        val firstProcess = FileStoreRecoveryRegistry()
         FileBackedQueryRepository(dir, recoveryRegistry = firstProcess)
         val quarantine = File(firstProcess.recoveries.value.single().backupPath!!)
 
-        val restartedProcess = LegacyJsonRecoveryRegistry()
+        val restartedProcess = FileStoreRecoveryRegistry()
         FileBackedQueryRepository(dir, recoveryRegistry = restartedProcess)
 
         val rediscovered = restartedProcess.recoveries.value.single()

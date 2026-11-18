@@ -2,7 +2,7 @@ package com.theoriacodex.app.search
 
 import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.data.storage.DurableJson
-import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
+import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -153,7 +153,7 @@ internal class FileBackedTagSuggestionStore(
     private val persistenceDebounceMs: Long = DEFAULT_PERSISTENCE_DEBOUNCE_MS,
     private val workDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val fileStore: AtomicJsonFileStore = AtomicJsonFileStore(),
-    private val recoveryRegistry: LegacyJsonRecoveryRegistry = LegacyJsonRecoveryRegistry(),
+    private val recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
     private val onWriteCompleted: () -> Unit = {},
 ) : TagSuggestionStore {
     private val lock = Any()

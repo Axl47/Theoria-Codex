@@ -1,7 +1,7 @@
 package com.theoriacodex.app.update
 
 import com.theoriacodex.data.storage.AtomicJsonFileStore
-import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
+import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import java.io.File
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -9,7 +9,7 @@ import kotlinx.coroutines.sync.withLock
 class FileBackedUpdateStateStore(
     private val file: File,
     private val fileStore: AtomicJsonFileStore = AtomicJsonFileStore(),
-    private val recoveryRegistry: LegacyJsonRecoveryRegistry = LegacyJsonRecoveryRegistry(),
+    private val recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
 ) : UpdateStateStore {
     private val mutex = Mutex()
     private var cachedSnapshot: UpdateStateSnapshot? = null

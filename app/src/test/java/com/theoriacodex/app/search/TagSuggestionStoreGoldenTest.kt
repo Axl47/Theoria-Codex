@@ -1,6 +1,6 @@
 package com.theoriacodex.app.search
 
-import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
+import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.storage.assertStoredFormat
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -62,7 +62,7 @@ class TagSuggestionStoreGoldenTest {
     private suspend fun withStore(golden: String, block: (FileBackedTagSuggestionStore) -> Unit) {
         val file = tempFolder.newFolder().resolve("tag_suggestions.json")
         file.writeText(golden(golden))
-        val recoveries = LegacyJsonRecoveryRegistry()
+        val recoveries = FileStoreRecoveryRegistry()
         val store = FileBackedTagSuggestionStore(file, persistenceDebounceMs = 0L, recoveryRegistry = recoveries)
         try {
             store.awaitLoaded()

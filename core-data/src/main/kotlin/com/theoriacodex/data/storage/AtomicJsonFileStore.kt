@@ -122,7 +122,7 @@ class AtomicJsonFileStore internal constructor(
             "Quarantine verification failed for ${quarantineFile.absolutePath}"
         }
         check(fileOperations.delete(liveFile) || !fileOperations.exists(liveFile)) {
-            "Could not remove quarantined legacy file ${liveFile.absolutePath}"
+            "Could not remove quarantined file ${liveFile.absolutePath}"
         }
     }
 

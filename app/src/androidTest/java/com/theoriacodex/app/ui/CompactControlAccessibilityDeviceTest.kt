@@ -138,7 +138,7 @@ class CompactControlAccessibilityDeviceTest {
                 SettingsScreen(
                     state = SettingsUiState(
                         page = SettingsPage.STORAGE,
-                        legacyJsonRecoveries = listOf(
+                        recoveredStores = listOf(
                             CorruptionRecovery(
                                 reason = "query_store.json contains malformed JSON",
                                 backupPath = fullPath,
@@ -158,6 +158,7 @@ class CompactControlAccessibilityDeviceTest {
             .performScrollTo()
             .assert(hasText("unreadable local data was preserved", substring = true))
             .assert(hasText("checksum aaaaaaaa", substring = true))
+        composeRule.onAllNodesWithText("Recovered storage (1)").assertCountEquals(1)
         composeRule.onAllNodesWithText(fullPath).assertCountEquals(0)
         composeRule.onAllNodesWithText("Reset recovered storage").assertCountEquals(0)
     }

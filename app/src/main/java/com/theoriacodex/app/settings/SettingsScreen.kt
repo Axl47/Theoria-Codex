@@ -385,11 +385,11 @@ private fun StoragePage(
                 }
             }
         }
-        if (state.legacyJsonRecoveries.isNotEmpty()) {
-            SettingsGroup("Recovered legacy storage (${state.legacyJsonRecoveries.size})") {
+        if (state.recoveredStores.isNotEmpty()) {
+            SettingsGroup("Recovered storage (${state.recoveredStores.size})") {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    state.legacyJsonRecoveries.forEach { recovery ->
-                        Text(legacyRecoverySummary(recovery), style = MaterialTheme.typography.bodySmall)
+                    state.recoveredStores.forEach { recovery ->
+                        Text(recoveredStoreSummary(recovery), style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -454,7 +454,7 @@ private fun ProfileDeleteDialog(state: SettingsUiState, onAction: (SettingsActio
     )
 }
 
-internal fun legacyRecoverySummary(
+internal fun recoveredStoreSummary(
     recovery: CorruptionRecovery,
 ): String = buildString {
     append(recovery.logicalStore.ifBlank { recovery.logicalFile.ifBlank { "Local storage" } })

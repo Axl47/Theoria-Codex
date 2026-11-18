@@ -114,10 +114,10 @@ private suspend fun verifyShipped(shipped: File, scope: CoroutineScope) {
     check(site.keys == setOf("sourceId", "baseUrl", "label", "family", "credentialsRequired", "addedAt"))
 }
 
-internal suspend fun withStoreScope(block: suspend (CoroutineScope) -> Unit) {
+internal suspend fun <T> withStoreScope(block: suspend (CoroutineScope) -> T): T {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     try {
-        block(scope)
+        return block(scope)
     } finally {
         scope.cancel()
     }

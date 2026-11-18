@@ -1,7 +1,11 @@
 package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.storage.DurableJson
-import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
+import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
+import com.theoriacodex.data.storage.SavedSearchSnapshot
+import com.theoriacodex.data.storage.SavedSearchSnapshotSerializer
+import com.theoriacodex.data.storage.UnsupportedStoreSchemaException
+import com.theoriacodex.data.storage.assertStoredFormat
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
@@ -17,6 +21,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -114,13 +119,29 @@ internal class FileBackedSavedSearchRepositoryTest : FileBackedRepositoryTestFix
         // Complete pins that fail validation (duplicate IDs), not just a structural decode failure.
         storage.writeText(goldenPinnedSearchesFile().replace("\"pin-multi\"", "\"pin-fyp\""))
         val original = storage.readBytes()
-        val recovery = LegacyJsonRecoveryRegistry()
+        val recovery = FileStoreRecoveryRegistry()
 
         val repository = FileBackedSavedSearchRepository(directory, recoveryRegistry = recovery)
 
         assertTrue(repository.observeSavedSearches().first().isEmpty())
         assertFalse(storage.exists())
         assertTrue(File(recovery.recoveries.value.single().backupPath!!).readBytes().contentEquals(original))
+    }
+
+    @Test
+    fun `a file from a newer build is refused and left in place`() = runTest {
+        val directory = tempDir("pin-newer")
+        val storage = directory.resolve("pinned_searches.json")
+        val newer = """{"schemaVersion":2,"searches":{"shape":"unknown to this build"}}"""
+        storage.writeText(newer)
+        val recovery = FileStoreRecoveryRegistry()
+
+        assertThrows(UnsupportedStoreSchemaException::class.java) {
+            FileBackedSavedSearchRepository(directory, recoveryRegistry = recovery)
+        }
+
+        assertEquals(newer, storage.readText())
+        assertTrue(recovery.recoveries.value.isEmpty())
     }
 
     @Test
@@ -134,6 +155,12 @@ internal class FileBackedSavedSearchRepositoryTest : FileBackedRepositoryTestFix
         assertEquals(goldenPins(), repository.observeSavedSearches().first())
         repository.rename("pin-fyp", goldenPins().first().name)
         assertEquals(DurableJson.parseToJsonElement(golden), DurableJson.parseToJsonElement(storage.readText()))
+    }
+
+    // The golden is the Gson store's own output.
+    @Test
+    fun `the pinned searches golden pins every stored key`() {
+        assertStoredFormat(SavedSearchSnapshotSerializer, goldenPinnedSearchesFile() to SavedSearchSnapshot(goldenPins()))
     }
 
     @Test

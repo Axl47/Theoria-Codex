@@ -6,6 +6,7 @@ import android.util.AtomicFile
 import android.util.Base64
 import com.theoriacodex.data.repository.readBoundedDocument
 import com.theoriacodex.data.storage.DurableJson
+import com.theoriacodex.data.storage.storedVersion
 import com.theoriacodex.domain.source.CustomSourceIds
 import com.theoriacodex.domain.source.SiteCredentials
 import java.io.File
@@ -14,10 +15,11 @@ import java.security.InvalidKeyException
 import java.security.UnrecoverableKeyException
 import javax.crypto.AEADBadTagException
 import kotlin.coroutines.cancellation.CancellationException
-import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.decodeFromJsonElement
 
 internal class AndroidCredentialEnvelopeStore(
     context: Context,
@@ -43,7 +45,12 @@ internal class AndroidCredentialEnvelopeStore(
     override suspend fun read(): CredentialEnvelopeReadResult {
         return try {
             val raw = readEnvelopeBytes() ?: return CredentialEnvelopeReadResult.Missing
-            val envelope = CredentialEnvelopeRecord.serializer().decodeCredential(raw)
+            val envelopeTree = raw.parseCredential()
+            newerCredentialVersion(
+                envelopeTree.storedVersion("formatVersion") to CREDENTIAL_FORMAT_VERSION,
+                envelopeTree.storedVersion("keyVersion") to CREDENTIAL_KEY_VERSION,
+            )?.let { return CredentialEnvelopeReadResult.UnsupportedVersion(it) }
+            val envelope = envelopeTree.decodeCredential<CredentialEnvelopeRecord>()
             if (envelope.formatVersion <= 0) {
                 return CredentialEnvelopeReadResult.ReconnectRequired
             }
@@ -68,7 +75,10 @@ internal class AndroidCredentialEnvelopeStore(
                 iv = iv,
                 ciphertext = ciphertext,
             )
-            val payload = CredentialPayloadRecord.serializer().decodeCredential(plaintext)
+            val payloadTree = plaintext.parseCredential()
+            newerCredentialVersion(payloadTree.storedVersion("schemaVersion") to CREDENTIAL_PAYLOAD_SCHEMA_VERSION)
+                ?.let { return CredentialEnvelopeReadResult.UnsupportedVersion(it) }
+            val payload = payloadTree.decodeCredential<CredentialPayloadRecord>()
             if (payload.schemaVersion <= 0) {
                 return CredentialEnvelopeReadResult.ReconnectRequired
             }
@@ -236,20 +246,17 @@ internal data class CustomSiteCredentialRecord(
     override fun toString(): String = "CustomSiteCredentialRecord([REDACTED])"
 }
 
+/** A lost key or a corrupt envelope asks to reconnect; any other failure, such as IO or the keystore, may pass. */
 private fun Exception.toCredentialReadFailure(): CredentialEnvelopeReadResult {
-    val causes = generateSequence(this as Throwable?) { error -> error.cause }.toList()
-    return when {
-        causes.any { error ->
-            error is AEADBadTagException ||
-                error is KeyPermanentlyInvalidatedException ||
-                error is UnrecoverableKeyException ||
-                error is InvalidKeyException ||
-                error is CredentialEnvelopeCorruptException
-        } -> CredentialEnvelopeReadResult.ReconnectRequired
-        causes.any { error -> error is IOException || error is java.security.KeyStoreException } ->
-            CredentialEnvelopeReadResult.TemporarilyUnavailable
-        else -> CredentialEnvelopeReadResult.TemporarilyUnavailable
+    val causes = generateSequence(this as Throwable?) { error -> error.cause }
+    val unrecoverable = causes.any { error ->
+        error is AEADBadTagException ||
+            error is KeyPermanentlyInvalidatedException ||
+            error is UnrecoverableKeyException ||
+            error is InvalidKeyException ||
+            error is CredentialEnvelopeCorruptException
     }
+    return if (unrecoverable) CredentialEnvelopeReadResult.ReconnectRequired else CredentialEnvelopeReadResult.TemporarilyUnavailable
 }
 
 private fun ByteArray.encodeBase64(): String = Base64.encodeToString(this, Base64.NO_WRAP)
@@ -261,14 +268,33 @@ private fun String.decodeCredentialBase64(): ByteArray = try {
 }
 
 /**
- * Decodes stored credential JSON. kotlinx quotes part of its input in parse errors, and here the input can be a
- * decrypted payload, so a parse failure is replaced by a corrupt-envelope error that carries neither its message
- * nor its cause. A corrupt envelope or payload therefore asks for reconnection.
+ * Parses and decodes stored credential JSON. kotlinx quotes part of its input in parse errors, and here the input can
+ * be a decrypted payload, so a failure is replaced by a corrupt-envelope error that carries neither its message nor
+ * its cause. A corrupt envelope or payload therefore asks for reconnection.
  */
-private fun <T> KSerializer<T>.decodeCredential(bytes: ByteArray): T = try {
-    DurableJson.decodeFromString(this, bytes.toString(Charsets.UTF_8))
+private fun ByteArray.parseCredential(): JsonElement = try {
+    DurableJson.parseToJsonElement(toString(Charsets.UTF_8))
 } catch (_: SerializationException) {
     throw CredentialEnvelopeCorruptException()
+}
+
+private inline fun <reified T> JsonElement.decodeCredential(): T = try {
+    DurableJson.decodeFromJsonElement<T>(this)
+} catch (_: SerializationException) {
+    throw CredentialEnvelopeCorruptException()
+}
+
+/**
+ * The first stored version that is newer than this build supports, read before the typed decode so a newer build's
+ * format reports [CredentialEnvelopeReadResult.UnsupportedVersion] whatever its shape. Checked in order, and a later
+ * version only counts once every earlier one matches, as the typed checks do.
+ */
+private fun newerCredentialVersion(vararg versions: Pair<Int?, Int>): Int? {
+    for ((stored, supported) in versions) {
+        if (stored != null && stored > supported) return stored
+        if (stored != supported) return null
+    }
+    return null
 }
 
 /** A stored envelope that can never decode. Its message and cause stay empty when they could quote secrets. */

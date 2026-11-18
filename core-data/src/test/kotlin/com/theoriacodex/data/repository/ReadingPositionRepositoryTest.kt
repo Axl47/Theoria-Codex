@@ -1,8 +1,12 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.data.storage.DurableJson
+import com.theoriacodex.data.storage.assertStoredFormat
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.first
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -107,6 +111,19 @@ class ReadingPositionRepositoryTest {
                 ReadingPosition(PostId(SourceKey.GELBOORU, "é☃"), RecentPostSection.WATCHED, 1, 0L),
             ),
             FileBackedReadingPositionRepository(directory).snapshot(),
+        )
+    }
+
+    // The golden is the Gson store's own output. Its list stays raw JSON, so each entry is pinned as its own record.
+    @Test
+    fun `the reading positions golden pins every stored key`() {
+        val golden = golden("gson-written.json")
+        val entries = (DurableJson.parseToJsonElement(golden) as JsonObject).getValue("positions") as JsonArray
+        assertStoredFormat(golden to ReadingPositionsFile(1, entries))
+        assertStoredFormat(
+            entries[0].toString() to ReadingPositionRecord("custom_safebooru_org", "tom & jerry's <cut>=1", "CODEX", 12, 1_700_000_100_000L),
+            entries[1].toString() to ReadingPositionRecord("PIXIV", "12345", "WATCHED", 3, 1_700_000_000_000L),
+            entries[2].toString() to ReadingPositionRecord("GELBOORU", "é☃", "WATCHED", 1, 0L),
         )
     }
 

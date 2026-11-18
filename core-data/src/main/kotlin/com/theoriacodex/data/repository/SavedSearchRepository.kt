@@ -1,7 +1,7 @@
 package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.storage.AtomicJsonFileStore
-import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
+import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.storage.RecentSearchPayloadCodec
 import com.theoriacodex.data.storage.SavedSearchSnapshot
 import com.theoriacodex.data.storage.SavedSearchSnapshotSerializer
@@ -45,7 +45,7 @@ class FileBackedSavedSearchRepository private constructor(repository: SavedSearc
     constructor(
         baseDirectory: File,
         ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-        recoveryRegistry: LegacyJsonRecoveryRegistry = LegacyJsonRecoveryRegistry(),
+        recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
         now: () -> Long = System::currentTimeMillis,
         newId: () -> String = { UUID.randomUUID().toString() },
     ) : this(fileBackedSavedSearches(baseDirectory, ioDispatcher, recoveryRegistry, now, newId))
@@ -60,7 +60,7 @@ class InMemorySavedSearchRepository(
 private fun fileBackedSavedSearches(
     baseDirectory: File,
     ioDispatcher: CoroutineDispatcher,
-    recoveryRegistry: LegacyJsonRecoveryRegistry,
+    recoveryRegistry: FileStoreRecoveryRegistry,
     now: () -> Long,
     newId: () -> String,
 ): SavedSearchRepository {

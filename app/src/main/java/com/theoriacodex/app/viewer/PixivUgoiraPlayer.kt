@@ -10,6 +10,7 @@ import android.media.MediaMuxer
 import android.net.Uri
 import androidx.core.graphics.scale
 import com.theoriacodex.data.storage.DurableJson
+import com.theoriacodex.data.storage.decodeEachOrSkip
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.diagnostics.OffMainWork
 import com.theoriacodex.sources.credentials.PixivAuthTokens
@@ -46,6 +47,7 @@ import kotlin.math.roundToInt
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.JsonElement
 import okhttp3.OkHttpClient
 
 @Suppress("LargeClass") // One lifecycle owner keeps archive, decoded-frame, export, and cancellation state coherent.
@@ -668,7 +670,7 @@ class PixivUgoiraClient internal constructor(
         val metadata = root.metadata ?: throw IOException("Pixiv ugoira metadata payload missing")
         val zipUrls = metadata.zipUrls ?: throw IOException("Pixiv ugoira zip_urls missing")
         val zipUrl = zipUrls["medium"] ?: zipUrls.values.firstOrNull() ?: throw IOException("Pixiv ugoira zip URL missing")
-        val frameSpecs = metadata.frames.mapNotNull { frame ->
+        val frameSpecs = metadata.frames.decodeEachOrSkip<UgoiraMetadataFrame>().mapNotNull { frame ->
             val file = frame.file.trim()
             if (file.isBlank()) null else UgoiraFrameSpec(fileName = file, delayMs = frame.delay.coerceAtLeast(16))
         }
@@ -769,8 +771,9 @@ private class UgoiraMetadataResponse(
 private class UgoiraMetadataBody(
     @SerialName("zip_urls")
     val zipUrls: Map<String, String>? = null,
+    /** Decoded one at a time, so a malformed frame is skipped instead of failing playback. */
     @SerialName("frames")
-    val frames: List<UgoiraMetadataFrame> = emptyList(),
+    val frames: List<JsonElement> = emptyList(),
 )
 
 @Serializable

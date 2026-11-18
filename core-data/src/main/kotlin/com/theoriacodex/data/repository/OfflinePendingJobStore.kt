@@ -37,7 +37,7 @@ class OfflinePendingJobStore(private val file: File, private val store: AtomicJs
 }
 
 @Serializable
-private data class OfflineQueueFile(
+internal data class OfflineQueueFile(
     @SerialName("version")
     val version: Int,
     @SerialName("owners")
@@ -45,7 +45,7 @@ private data class OfflineQueueFile(
 )
 
 @Serializable
-private data class OfflineQueueOwner(
+internal data class OfflineQueueOwner(
     @SerialName("owner")
     val owner: String,
     @SerialName("posts")
@@ -53,7 +53,7 @@ private data class OfflineQueueOwner(
 )
 
 @Serializable
-private data class OfflineQueuePost(
+internal data class OfflineQueuePost(
     @SerialName("source")
     val source: String,
     @SerialName("id")

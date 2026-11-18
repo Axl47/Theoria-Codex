@@ -1,7 +1,12 @@
 package com.theoriacodex.data.storage
 
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.decodeFromJsonElement
 
 /**
  * The single kotlinx.serialization configuration for saved data (files, Room payloads, exports) and for the app's
@@ -23,3 +28,23 @@ val DurableJson: Json = Json {
     // Gson accepted quoted primitives such as "5" for an Int and "true" for a Boolean.
     isLenient = true
 }
+
+/**
+ * Decodes each element of a JSON list as [T] and drops the ones that do not decode, so one malformed entry in a
+ * network response or bundled asset never hides its well-formed neighbours.
+ */
+inline fun <reified T> List<JsonElement>.decodeEachOrSkip(): List<T> = mapNotNull { element ->
+    try {
+        DurableJson.decodeFromJsonElement<T>(element)
+    } catch (_: SerializationException) {
+        null
+    }
+}
+
+/**
+ * Reads the integer version stored under [key] at the top of a JSON document without decoding the rest; null when the
+ * document is not an object or the value is absent or not an integer. Stores check it before their typed decode, so
+ * a file a newer build wrote is refused, and left in place, whatever shape the rest of it has.
+ */
+fun JsonElement.storedVersion(key: String): Int? =
+    ((this as? JsonObject)?.get(key) as? JsonPrimitive)?.content?.toIntOrNull()

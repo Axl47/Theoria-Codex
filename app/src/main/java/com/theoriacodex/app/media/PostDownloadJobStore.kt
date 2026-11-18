@@ -49,7 +49,7 @@ internal class FileBackedPostDownloadJobStore(private val file: File,
 }
 
 @Serializable
-private data class DownloadQueueFile(
+internal data class DownloadQueueFile(
     @SerialName("version")
     val version: Int,
     @SerialName("batches")
@@ -57,7 +57,7 @@ private data class DownloadQueueFile(
 )
 
 @Serializable
-private data class DownloadBatchRecord(
+internal data class DownloadBatchRecord(
     @SerialName("id")
     val id: Long,
     @SerialName("title")
@@ -68,7 +68,7 @@ private data class DownloadBatchRecord(
 
 /** Optional keys are omitted rather than written as null or false, as every earlier version wrote them. */
 @Serializable
-private data class DownloadItemRecord(
+internal data class DownloadItemRecord(
     @SerialName("id")
     val id: Long,
     @SerialName("source")

@@ -529,7 +529,6 @@ data class AppSettings(
     val contentFilters: ContentFilterSettings = ContentFilterSettings(),
     val viewer: ViewerSettings = ViewerSettings(),
     val scenarioPreset: ScenarioPreset = ScenarioPreset.NORMAL,
-    /** Legacy migration input. New last-tab state is owned by [UiRestoreRepository]. */
     val recommendationProfiles: List<RecommendationProfile> = defaultRecommendationProfiles(),
     val activeProfileId: String = defaultRecommendationProfiles().first().profileId,
     val forYouBlacklistByProfile: Map<String, List<ForYouBlacklistEntry>> = emptyMap(),

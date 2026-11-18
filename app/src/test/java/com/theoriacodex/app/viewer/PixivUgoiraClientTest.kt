@@ -249,6 +249,15 @@ class PixivUgoiraClientTest {
     }
 
     @Test
+    fun `a malformed frame entry is skipped and the rest still play`() = runTest {
+        val client = fixtureClient(
+            frames = """["junk",{"file":{"bad":true}},{"file":"0001.png","delay":50}]""",
+        )
+
+        assertTrue(client.load("skip", UgoiraSizeBucket.CARD).isSuccess)
+    }
+
+    @Test
     fun `transient metadata failures stop after three attempts`() = runTest {
         val calls = AtomicInteger()
         val client = PixivUgoiraClient(
@@ -284,6 +293,7 @@ class PixivUgoiraClientTest {
         directory: File = temporaryFolder.newFolder(),
         timeoutMs: Long = 30_000L,
         decode: UgoiraFrameDecoder = ::decodeUgoiraFrames,
+        frames: String = """[{"file":"0001.png","delay":50}]""",
         download: (String, String, File) -> BinaryResponse = { _, _, file ->
             writeFrameZip(file)
             BinaryResponse(200)
@@ -293,7 +303,7 @@ class PixivUgoiraClientTest {
         httpClient = UnusedHttpClient,
         archiveDirectory = directory,
         metadataFetcher = { _, _ -> TextResponse(200,
-            """{"ugoira_metadata":{"zip_urls":{"medium":"https://example.test/a.zip"},"frames":[{"file":"0001.png","delay":50}]}}""",
+            """{"ugoira_metadata":{"zip_urls":{"medium":"https://example.test/a.zip"},"frames":$frames}}""",
         ) },
         zipDownloader = download,
         decode = decode,

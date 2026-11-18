@@ -1,7 +1,7 @@
 package com.theoriacodex.app.search
 
 import com.theoriacodex.data.storage.AtomicJsonFileStore
-import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
+import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -44,7 +44,7 @@ class TagSuggestionStoreTest {
         val storeFile = tempDir("tag-store-recovery-test").resolve("tag_suggestions.json")
         val original = "{broken".toByteArray()
         storeFile.writeBytes(original)
-        val registry = LegacyJsonRecoveryRegistry()
+        val registry = FileStoreRecoveryRegistry()
         val store = FileBackedTagSuggestionStore(
             storeFile = storeFile,
             recoveryRegistry = registry,

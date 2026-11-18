@@ -44,10 +44,4 @@ public interface RecentsDao {
     @Query("DELETE FROM recent_searches") int deleteSearches();
     @Query("DELETE FROM recent_searches WHERE query_hash IN (:hashes)") int deleteSearchesByHashes(List<String> hashes);
     @Query("DELETE FROM recent_searches WHERE query_hash LIKE :prefix || '%'") int deleteSearchesWithPrefix(String prefix);
-
-    @Query("SELECT * FROM recents_migration_metadata WHERE migration_key = :key LIMIT 1")
-    RecentsMigrationEntity migration(String key);
-    @Insert(onConflict = OnConflictStrategy.ABORT) void insertMigration(RecentsMigrationEntity entity);
-    @Query("UPDATE recents_migration_metadata SET source_archived = 1 WHERE migration_key = :key")
-    int markArchived(String key);
 }

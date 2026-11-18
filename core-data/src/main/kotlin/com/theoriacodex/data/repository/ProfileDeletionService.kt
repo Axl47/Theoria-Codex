@@ -97,7 +97,7 @@ class ProfileDeletionService(
 
 /** pending_profile_deletion.json: both keys are required, so a damaged journal fails instead of guessing. */
 @Serializable
-private data class ProfileDeletionJournal(
+internal data class ProfileDeletionJournal(
     @SerialName("version")
     val version: Int,
     @SerialName("profileId")

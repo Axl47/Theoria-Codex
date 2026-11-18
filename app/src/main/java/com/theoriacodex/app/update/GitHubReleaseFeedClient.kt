@@ -1,6 +1,7 @@
 package com.theoriacodex.app.update
 
 import com.theoriacodex.data.storage.DurableJson
+import com.theoriacodex.data.storage.decodeEachOrSkip
 import java.io.IOException
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
@@ -16,6 +17,8 @@ import com.theoriacodex.sources.http.DefaultSourceHttpClient
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 
 class GitHubReleaseFeedClient(
     private val owner: String,
@@ -66,13 +69,13 @@ class GitHubReleaseFeedClient(
             channel: String,
             assetName: String,
         ): List<RemoteUpdate> {
-            val releases = try {
-                DurableJson.decodeFromString<List<GitHubRelease>>(jsonBody)
+            val entries = try {
+                DurableJson.parseToJsonElement(jsonBody) as? JsonArray
             } catch (_: SerializationException) {
-                return emptyList()
-            }
+                null
+            } ?: return emptyList()
 
-            return releases.mapNotNull { release ->
+            return entries.decodeEachOrSkip<GitHubRelease>().mapNotNull { release ->
                 if (release.draft || !release.prerelease) return@mapNotNull null
 
                 val tagName = release.tagName.trim()
@@ -85,7 +88,7 @@ class GitHubReleaseFeedClient(
 
                 val publishedEpoch = runCatching { Instant.parse(release.publishedAt.trim()).toEpochMilli() }.getOrElse { 0L }
 
-                val asset = release.assets.firstOrNull { it.name?.trim() == assetName } ?: return@mapNotNull null
+                val asset = release.assets.decodeEachOrSkip<GitHubReleaseAsset>().firstOrNull { it.name?.trim() == assetName } ?: return@mapNotNull null
                 val downloadUrl = asset.browserDownloadUrl.trim()
                 if (downloadUrl.isBlank()) return@mapNotNull null
 
@@ -125,7 +128,7 @@ class GitHubReleaseFeedClient(
     }
 }
 
-/** One entry of GitHub's list-releases response; only the fields the updater reads. */
+/** One entry of GitHub's list-releases response; only the fields the updater reads. Entries decode one at a time. */
 @Serializable
 private class GitHubRelease(
     @SerialName("id")
@@ -144,8 +147,9 @@ private class GitHubRelease(
     val name: String? = null,
     @SerialName("body")
     val body: String? = null,
+    /** Decoded one at a time, so a malformed asset is skipped instead of hiding the release. */
     @SerialName("assets")
-    val assets: List<GitHubReleaseAsset> = emptyList(),
+    val assets: List<JsonElement> = emptyList(),
 )
 
 @Serializable
