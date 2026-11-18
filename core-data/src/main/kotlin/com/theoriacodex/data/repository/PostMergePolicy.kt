@@ -28,7 +28,7 @@ fun mergeSparsePost(existing: Post, incoming: Post): Post {
         authorName = incoming.authorName.presentOr(existing.authorName),
         createdAtEpochMs = incoming.createdAtEpochMs ?: existing.createdAtEpochMs,
         title = incoming.title.presentOr(existing.title),
-        creatorProfile = mergeCreatorProfile(existing.creatorProfile, incoming.creatorProfile),
+        creatorProfile = mergeOptionalCreatorProfile(existing.creatorProfile, incoming.creatorProfile),
         durationMs = incoming.durationMs ?: existing.durationMs,
         mediaCount = incoming.mediaCount ?: existing.mediaCount,
         taxonomy = mergeTaxonomy(existing.taxonomy, incoming.taxonomy),
@@ -68,23 +68,41 @@ private fun mergeMedia(existing: List<ImageRef>, incoming: List<ImageRef>): List
 private fun mergeTaxonomy(
     existing: List<PostTaxonomyTerm>,
     incoming: List<PostTaxonomyTerm>,
-): List<PostTaxonomyTerm> = mergeStableBy(existing, incoming) { term ->
-    Triple(term.value, term.facet, term.sourceNamespace)
-}
+): List<PostTaxonomyTerm> = mergeStableBy(
+    existing,
+    incoming,
+    key = { term -> Triple(term.value, term.facet, term.sourceNamespace) },
+    merge = ::mergeTaxonomyTerm,
+)
 
 private fun mergeCreatorProfiles(
     existing: List<CreatorProfile>,
     incoming: List<CreatorProfile>,
-): List<CreatorProfile> = mergeStableBy(existing, incoming) { profile ->
-    Triple(profile.source, profile.profileId, profile.displayName)
-}
+): List<CreatorProfile> = mergeStableBy(
+    existing,
+    incoming,
+    key = { profile -> Triple(profile.source, profile.profileId, profile.displayName) },
+    merge = ::mergeCreatorProfile,
+)
 
-private fun mergeCreatorProfile(
+/** A count the snapshot omits is unknown rather than zero, so the stored one stays. */
+private fun mergeTaxonomyTerm(existing: PostTaxonomyTerm, incoming: PostTaxonomyTerm): PostTaxonomyTerm =
+    incoming.copy(
+        count = incoming.count ?: existing.count,
+        translation = incoming.translation.presentOr(existing.translation),
+    )
+
+private fun mergeOptionalCreatorProfile(
     existing: CreatorProfile?,
     incoming: CreatorProfile?,
-): CreatorProfile? {
-    if (incoming == null) return existing
-    if (existing == null || existing.source != incoming.source) return incoming
+): CreatorProfile? = when {
+    existing == null || incoming == null -> incoming ?: existing
+    else -> mergeCreatorProfile(existing, incoming)
+}
+
+/** A profile from another source replaces the stored one whole; the same source merges field by field. */
+private fun mergeCreatorProfile(existing: CreatorProfile, incoming: CreatorProfile): CreatorProfile {
+    if (existing.source != incoming.source) return incoming
     return incoming.copy(
         displayName = incoming.displayName.ifBlank { existing.displayName },
         profileId = incoming.profileId.presentOr(existing.profileId),
@@ -93,18 +111,24 @@ private fun mergeCreatorProfile(
     )
 }
 
-private fun <T> mergeStableValues(existing: List<T>, incoming: List<T>): List<T> =
-    mergeStableBy(existing, incoming) { it }
+private fun <T : Any> mergeStableValues(existing: List<T>, incoming: List<T>): List<T> =
+    mergeStableBy(existing, incoming, key = { it })
 
-private inline fun <T, K> mergeStableBy(
+/**
+ * Incoming entries first, in their order, then stored entries whose key the snapshot lacks. An incoming entry
+ * whose key is stored goes through [merge] with the first stored entry under that key.
+ */
+private inline fun <T : Any, K> mergeStableBy(
     existing: List<T>,
     incoming: List<T>,
     key: (T) -> K,
+    merge: (existing: T, incoming: T) -> T = { _, entry -> entry },
 ): List<T> {
     if (incoming.isEmpty()) return existing
     val incomingKeys = incoming.mapTo(mutableSetOf(), key)
+    val storedByKey = buildMap<K, T> { existing.forEach { entry -> getOrPut(key(entry)) { entry } } }
     return buildList(incoming.size + existing.size) {
-        addAll(incoming)
+        incoming.mapTo(this) { entry -> storedByKey[key(entry)]?.let { stored -> merge(stored, entry) } ?: entry }
         existing.filterTo(this) { key(it) !in incomingKeys }
     }
 }

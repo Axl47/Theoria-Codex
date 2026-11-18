@@ -79,6 +79,21 @@ class RoomPayloadGoldenTest {
         assertEquals(golden, dao.post("GELBOORU", "gold-full")?.payloadJson)
     }
 
+    // Pins: tag counts, translations, and creator links a snapshot omits are kept, so the row is left alone.
+    @Test fun `upserting a post with sparser tags and creators keeps the row`() {
+        val dao = database.codexLikesDao()
+        val golden = golden("post-payload-full.json")
+        dao.insertPost(PostEntity("GELBOORU", "gold-full", golden))
+        val sparse = goldenFullPost.copy(
+            taxonomy = goldenFullPost.taxonomy.map { it.copy(count = null, translation = null) },
+            creatorProfiles = goldenFullPost.creatorProfiles.map { it.copy(profileUrl = null, uploadsQuery = null) },
+        )
+
+        SharedPostPayloadWriter(dao).upsert(sparse)
+
+        assertEquals(golden, dao.post("GELBOORU", "gold-full")?.payloadJson)
+    }
+
     @Test fun `upserting a changed post rewrites the row`() {
         val dao = database.codexLikesDao()
         dao.insertPost(PostEntity("GELBOORU", "gold-full", golden("post-payload-full.json")))
