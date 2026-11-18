@@ -632,7 +632,7 @@ internal class TheoriaShell(
         val currentSettings = data.currentSettingsSnapshot()
         workflows.likesCodexSync.ensureProfileCodex(currentSettings.activeRecommendationProfile())
         owners.settings.onAction(SettingsAction.RefreshAccounts)
-        navigation.homeTabRoute = data.uiRestoreRepository.migrateLegacyLastTab(currentSettings.lastSelectedTabRoute)
+        navigation.homeTabRoute = data.uiRestoreRepository.getLastTab()
             ?.takeIf { route -> TopLevelDestination.entries.any { destination -> destination.route == route } }
             ?: TopLevelDestination.Search.route
         appShellOwner.onAction(AppShellAction.MarkAppReady)

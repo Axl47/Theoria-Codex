@@ -48,8 +48,6 @@ internal data class SettingsStoreRecord(
     val viewerEnabledOcrLanguages: List<String> = emptyList(),
     @field:SerializedName("scenarioPreset")
     val scenarioPreset: String = ScenarioPreset.NORMAL.name,
-    @field:SerializedName("lastSelectedTabRoute")
-    val lastSelectedTabRoute: String = "search",
     @field:SerializedName("recommendationProfiles")
     val recommendationProfiles: List<RecommendationProfileRecord>? = null,
     @field:SerializedName("activeProfileId")
@@ -103,7 +101,6 @@ internal data class SettingsStoreRecord(
                 viewer = toViewerSettings(),
                 scenarioPreset = runCatching { ScenarioPreset.valueOf(scenarioPreset) }
                     .getOrDefault(ScenarioPreset.NORMAL),
-                lastSelectedTabRoute = lastSelectedTabRoute,
                 recommendationProfiles = profiles,
                 activeProfileId = resolvedActiveProfileId,
                 forYouBlacklistByProfile = forYouBlacklistByProfile
@@ -184,7 +181,6 @@ internal data class SettingsStoreRecord(
                     .sortedBy(ViewerOcrLanguage::ordinal)
                     .map(ViewerOcrLanguage::name),
                 scenarioPreset = settings.scenarioPreset.name,
-                lastSelectedTabRoute = settings.lastSelectedTabRoute,
                 recommendationProfiles = settings.recommendationProfiles.map(RecommendationProfileRecord::fromDomain),
                 activeProfileId = settings.activeProfileId,
                 activeProfile = null,

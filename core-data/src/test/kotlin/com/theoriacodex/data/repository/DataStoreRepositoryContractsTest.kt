@@ -90,7 +90,7 @@ class DataStoreRepositoryContractsTest(
     }
 
     @Test
-    fun `ui restore preserves one-time tab scroll and launch context semantics`() = runTest {
+    fun `ui restore preserves tab scroll and launch context`() = runTest {
         val repository = createUiRestoreRepository()
         val launch = ViewerLaunchContext(
             queryHash = "query",
@@ -100,8 +100,7 @@ class DataStoreRepositoryContractsTest(
             recentsSection = RecentPostSection.CODEX,
         )
 
-        assertEquals("codex", repository.migrateLegacyLastTab(" codex "))
-        assertEquals("codex", repository.migrateLegacyLastTab("search"))
+        repository.setLastTab("codex")
         repository.setSearchScrollState(
             "query",
             SearchScrollState(firstVisibleItemIndex = 5, firstVisibleItemOffsetPx = 17),

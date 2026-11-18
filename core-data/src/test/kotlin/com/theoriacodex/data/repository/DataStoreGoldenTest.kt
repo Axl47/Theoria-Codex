@@ -43,15 +43,18 @@ class DataStoreGoldenTest {
     }
 
     // Gson writes null into non-null reference fields; validate() builds the domain and throws, so the store resets.
-    @Test fun `settings null on a non-null list or string resets the whole store`() = runTest {
-        listOf("settings-null-list", "settings-null-string").forEach { name ->
-            val directory = directoryWith(DATASTORE_SETTINGS_FILE_NAME, name)
-            val settings = withScope { DataStoreSettingsRepository(directory, it).observeSettings().first() }
+    @Test fun `settings null on a non-null list resets the whole store`() = runTest {
+        val directory = directoryWith(DATASTORE_SETTINGS_FILE_NAME, "settings-null-list")
+        val settings = withScope { DataStoreSettingsRepository(directory, it).observeSettings().first() }
 
-            assertEquals(SettingsDataStoreFile().toDomain(), settings)
-            assertFalse(name, settings.oldSearchBar)
-            assertEquals(golden(name), directory.resolve("$DATASTORE_SETTINGS_FILE_NAME.corrupt").readText())
-        }
+        assertEquals(SettingsDataStoreFile().toDomain(), settings)
+        assertFalse(settings.oldSearchBar)
+        assertEquals(golden("settings-null-list"), directory.resolve("$DATASTORE_SETTINGS_FILE_NAME.corrupt").readText())
+    }
+
+    // The null string is the retired lastSelectedTabRoute, so it is ignored like any retired key.
+    @Test fun `settings null on a retired string loads`() = runTest {
+        assertTrue(loadSettings("settings-null-string").oldSearchBar)
     }
 
     @Test fun `settings missing schema version and fields load with defaults`() = runTest {
@@ -245,7 +248,7 @@ class DataStoreGoldenTest {
         val statistics = GsonDataStoreSerializer("statistics", StatisticsDataStoreFile(), object : TypeToken<StatisticsDataStoreFile>() {}.type, gson) { it.validate() }
 
         listOf(
-            settings to "settings-null-list", settings to "settings-null-string",
+            settings to "settings-null-list",
             ui to "ui-restore-null-map", ui to "ui-restore-null-string",
             statistics to "statistics-null-map",
         ).forEach { (serializer, name) ->
