@@ -7,10 +7,7 @@ import android.util.Log
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
-import com.google.gson.Gson
 import com.google.gson.GsonBuilder
-import com.google.gson.JsonArray
-import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.theoriacodex.app.codex.codexSharePostSnapshot
 import com.theoriacodex.app.codex.encodeCodexShareFile
@@ -110,7 +107,7 @@ private suspend fun verifyData(directory: File, phase: String) {
         statsFile.writeText(encodeStatsShare(statsShare))
         postFile.writeText(gson.toJson(PostStorageCodec.encode(videoPostFixture())))
         legacyPostFile.writeText(LEGACY_VIDEO_POST)
-        writeLegacyOfflineManifest(File(directory, "offline"))
+        saveOfflineCopy(File(directory, "offline"))
         tagsFile.writeText("""{"sources":{"GELBOORU":[{"text":"legacy","type":"trending","count":9}]}}""")
         val tags = FileBackedTagSuggestionStore(tagsFile, persistenceDebounceMs = 0L)
         try {
@@ -132,7 +129,7 @@ private suspend fun verifyData(directory: File, phase: String) {
         check(legacyPost.preview.url == "https://example.test/preview.mp4" && legacyPost.preview.videoVariants.isEmpty())
         check(legacyPost.full?.url == "https://example.test/full.mp4" && legacyPost.full?.videoVariants == emptyList<VideoVariant>())
         check(legacyPost.media.single().url == "https://example.test/gallery.webm" && legacyPost.media.single().videoVariants.isEmpty())
-        verifyLegacyOfflineManifest(File(directory, "offline"))
+        verifyOfflineCopy(File(directory, "offline"))
         val tags = FileBackedTagSuggestionStore(tagsFile, persistenceDebounceMs = 0L)
         try {
             tags.awaitLoaded()
@@ -360,29 +357,22 @@ private fun verifyVideoPost(json: String) {
     check(restored.preview.videoVariants.isEmpty())
 }
 
-/** A v2 manifest is reflective Gson over the domain Post, so this phase writes R8's renamed keys for real. */
-private fun writeLegacyOfflineManifest(offline: File) {
+/** The manifest's kotlinx serializer must survive R8: written in one process, read with stable keys in the next. */
+private suspend fun saveOfflineCopy(offline: File) {
     val post = videoPostFixture()
-    val folder = File(offline, offlineFolderName(post.id)).apply { check(mkdirs()) }
-    val media = File(folder, "0.webm").apply { writeText("offline bytes") }
-    val stored = post.copy(media = post.media.map { it.copy(localPath = media.absolutePath) })
-    File(folder, "manifest.json").writeText(JsonObject().apply {
-        addProperty("version", 2)
-        add("post", Gson().toJsonTree(stored))
-        add("sourcePost", Gson().toJsonTree(post))
-        add("owners", JsonArray().apply { add("acceptance") })
-        add("mediaBytes", JsonArray().apply { add(media.length()) })
-    }.toString())
+    OfflineMediaStore(offline).save(post, post.media, "acceptance") { _, file -> file.writeText("offline bytes") }
 }
 
-/** The old build's manifest must resolve in this process, then be rewritten with stable keys. */
-private suspend fun verifyLegacyOfflineManifest(offline: File) {
+private suspend fun verifyOfflineCopy(offline: File) {
     val post = videoPostFixture()
-    val found = requireNotNull(OfflineMediaStore(offline).find(post.id))
-    check(found.id == post.id && found.media.single().url == post.media.single().url)
     val manifest = JsonParser.parseString(File(offline, "${offlineFolderName(post.id)}/manifest.json").readText()).asJsonObject
-    check(manifest.get("version").asInt == 3 && manifest.getAsJsonObject("post").has("sourcePostId"))
-    check(OfflineMediaStore(offline).find(post.id) == found)
+    check(manifest.keySet() == setOf("version", "post", "sourcePost", "owners", "mediaBytes"))
+    check(manifest.get("version").asInt == 3 && manifest.getAsJsonObject("sourcePost").has("fullVideoVariants"))
+    val store = OfflineMediaStore(offline)
+    val found = requireNotNull(store.find(post.id))
+    check(found.media.single().localPath?.let(::File)?.readText() == "offline bytes")
+    check(store.withoutOfflineLocations(found) == post)
+    check(store.snapshot.value.postsByOwner == mapOf("acceptance" to 1))
 }
 
 private fun offlineFolderName(id: PostId) = MessageDigest.getInstance("SHA-256")

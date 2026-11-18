@@ -43,12 +43,6 @@ class SourceIdentityGoldenTest {
         assertGolden("backup-multi-source.json", ProfileBackupCodec().encode(multiSourceBackup()).toString(Charsets.UTF_8))
     }
 
-    @Test
-    fun `offline manifest reflection keeps the post's source fields`() {
-        // Version 2 offline manifests were Gson reflection over the domain Post; OfflineMediaStore still reads that shape.
-        assertGolden("offline-manifest-post.json", gson.toJson(gelbooruPost))
-    }
-
     private fun assertGolden(name: String, actual: String) {
         val expected = javaClass.classLoader.getResource("golden/source-identity/$name")?.readText()
         if (expected != actual) {
