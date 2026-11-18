@@ -26,6 +26,18 @@ class ReadOnlyProfileBackupFilesTest {
         assertTrue(runCatching { snapshot.requireUnchanged() }.isFailure)
     }
 
+    @Test fun `files a Gson build wrote decode without being rewritten`() = runTest {
+        val directory = temporary.newFolder()
+        File(directory, DATASTORE_SETTINGS_FILE_NAME).writeText(Gson().toJson(SettingsDataStoreFile.fromDomain(AppSettings(oldSearchBar = true))))
+        val pins = File(directory, "pinned_searches.json").apply { writeText(goldenPinnedSearchesFile()) }
+
+        val snapshot = ReadOnlyProfileBackupFiles.capture(directory)
+
+        assertEquals(RepositoryPolicies.normalizeSettings(AppSettings(oldSearchBar = true)), snapshot.settings)
+        assertEquals(goldenPins(), snapshot.savedSearches)
+        assertEquals(goldenPinnedSearchesFile(), pins.readText())
+    }
+
     @Test fun `missing corrupt future and pending stores fail without quarantine or recovery writes`() = runTest {
         listOf<String?>(null, "{broken", "{\"schemaVersion\":99}").forEach { document ->
             val directory = temporary.newFolder()

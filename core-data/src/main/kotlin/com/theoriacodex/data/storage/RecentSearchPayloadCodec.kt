@@ -9,6 +9,7 @@ import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
 private const val CURRENT_RECENT_SEARCH_PAYLOAD_VERSION = 1
@@ -43,26 +44,38 @@ object RecentSearchPayloadCodec {
         kind: RecentSearchKind,
         sources: List<SourceKey>,
         sourceTags: Map<SourceKey, List<String>> = emptyMap(),
-    ): String {
+    ): String =
+        DurableJson.encodeToString(RecentSearchPayloadRecord.serializer(), record(query, kind, sources, sourceTags))
+
+    /** The same payload as a JSON tree, for documents that embed it: backups and pinned searches. */
+    fun encode(entry: RecentSearchEntry): JsonElement = DurableJson.encodeToJsonElement(
+        RecentSearchPayloadRecord.serializer(),
+        record(entry.query, entry.kind, entry.sources, entry.sourceTags),
+    )
+
+    private fun record(
+        query: Query,
+        kind: RecentSearchKind,
+        sources: List<SourceKey>,
+        sourceTags: Map<SourceKey, List<String>>,
+    ): RecentSearchPayloadRecord {
         val normalizedSources = sources.distinct()
         val normalizedSourceTags = normalizedSources.associateWith { source ->
             sourceTags[source].orEmpty().toList()
         }.filterValues(List<String>::isNotEmpty)
         validate(query, kind, normalizedSources, normalizedSourceTags)
-        return DurableJson.encodeToString(
-            RecentSearchPayloadRecord.serializer(),
-            RecentSearchPayloadRecord(
-                recentSearchSchemaVersion = CURRENT_RECENT_SEARCH_PAYLOAD_VERSION,
-                query = QueryStorageCodec.encode(query),
-                kind = kind.name,
-                sources = normalizedSources.map(SourceKey::id),
-                sourceTags = normalizedSourceTags.mapKeys { (source, _) -> source.id },
-            )
+        return RecentSearchPayloadRecord(
+            recentSearchSchemaVersion = CURRENT_RECENT_SEARCH_PAYLOAD_VERSION,
+            query = QueryStorageCodec.encode(query),
+            kind = kind.name,
+            sources = normalizedSources.map(SourceKey::id),
+            sourceTags = normalizedSourceTags.mapKeys { (source, _) -> source.id },
         )
     }
 
-    fun decodeJson(payload: String): RecentSearchPayload {
-        val root = DurableJson.parseToJsonElement(payload)
+    fun decodeJson(payload: String): RecentSearchPayload = decode(DurableJson.parseToJsonElement(payload))
+
+    fun decode(root: JsonElement): RecentSearchPayload {
         require(root is JsonObject) { "Stored recent search root must be an object" }
         if (!root.containsKey("recentSearchSchemaVersion")) {
             // Rows written before payloads carried their own version hold a bare stored Query.

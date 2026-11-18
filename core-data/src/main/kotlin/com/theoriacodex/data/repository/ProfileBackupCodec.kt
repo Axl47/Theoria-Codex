@@ -1,14 +1,17 @@
 package com.theoriacodex.data.repository
 
-import com.google.gson.Gson
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
-import com.google.gson.JsonPrimitive
+import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.SiteProfile
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 
 const val PROFILE_BACKUP_MAX_BYTES = 32 * 1024 * 1024
 
@@ -18,34 +21,50 @@ private const val PROFILE_BACKUP_VERSION = 2
 /** A sanity bound; a device allows [SiteProfile.MAX_CUSTOM_SITES] plus any added during a restore. */
 private const val MAX_BACKUP_SITE_PROFILES = 256
 
-/** Versioned, bounded metadata document; no reflected backup-specific models or device files. */
-class ProfileBackupCodec(private val gson: Gson = Gson()) {
-    fun encode(backup: ProfileBackup): ByteArray {
-        validate(backup)
-        return backupObject {
-            addProperty("format", "theoria-profile-backup")
-            addProperty("version", PROFILE_BACKUP_VERSION)
-            addProperty("createdAt", backup.createdAtEpochMs)
-            add("settings", gson.toJsonTree(SettingsStoreRecord.fromDomain(portableSettings(backup.settings))))
-            add("library", encodeLibrary(backup.library))
-            add("savedSearches", backupArray(backup.savedSearches) { entry -> backupObject {
-                addProperty("id", entry.id)
-                addProperty("name", entry.name)
-                addProperty("savedAt", entry.savedAtEpochMs)
-                add("search", backupSearch(entry.search))
-            } })
-            add("readingPositions", backupArray(backup.readingPositions) { entry -> backupObject {
-                putId(entry.postId)
-                addProperty("section", entry.section.name)
-                addProperty("mediaNumber", entry.mediaNumber)
-                addProperty("lastViewedAt", entry.lastViewedAt)
-            } })
-            backup.statistics?.let { add("statistics", gson.toJsonTree(StatisticsStoreRecord.fromDomain(it))) }
-            if (backup.customSources.isNotEmpty()) {
-                add("customSources", backupArray(backup.customSources) { gson.toJsonTree(SiteProfileRecord.fromDomain(it)) })
-            }
-        }.toString().toByteArray(Charsets.UTF_8).also {
+/**
+ * Versioned, bounded metadata document; no reflected backup-specific models or device files. The frame is a JSON
+ * tree checked field by field; settings, statistics, posts, and sites are their storage records through [DurableJson],
+ * which writes the keys, omitted nulls, and present defaults that older builds read.
+ */
+class ProfileBackupCodec {
+    fun encode(backup: ProfileBackup): ByteArray =
+        encodeDocument(backup).toString().toByteArray(Charsets.UTF_8).also {
             require(it.size <= PROFILE_BACKUP_MAX_BYTES) { "Backup exceeds the 32 MiB metadata limit" }
+        }
+
+    /** The validated document [encode] writes, for the restore journal to embed. */
+    internal fun encodeDocument(backup: ProfileBackup): JsonObject {
+        validate(backup)
+        return buildJsonObject {
+            put("format", "theoria-profile-backup")
+            put("version", PROFILE_BACKUP_VERSION)
+            put("createdAt", backup.createdAtEpochMs)
+            put("settings", DurableJson.encodeToJsonElement(
+                SettingsStoreRecord.serializer(), SettingsStoreRecord.fromDomain(portableSettings(backup.settings)),
+            ))
+            put("library", encodeLibrary(backup.library))
+            put("savedSearches", backupArray(backup.savedSearches) { entry -> buildJsonObject {
+                put("id", entry.id)
+                put("name", entry.name)
+                put("savedAt", entry.savedAtEpochMs)
+                put("search", backupSearch(entry.search))
+            } })
+            put("readingPositions", backupArray(backup.readingPositions) { entry -> buildJsonObject {
+                putId(entry.postId)
+                put("section", entry.section.name)
+                put("mediaNumber", entry.mediaNumber)
+                put("lastViewedAt", entry.lastViewedAt)
+            } })
+            backup.statistics?.let {
+                put("statistics", DurableJson.encodeToJsonElement(
+                    StatisticsStoreRecord.serializer(), StatisticsStoreRecord.fromDomain(it),
+                ))
+            }
+            if (backup.customSources.isNotEmpty()) {
+                put("customSources", backupArray(backup.customSources) {
+                    DurableJson.encodeToJsonElement(SiteProfileRecord.serializer(), SiteProfileRecord.fromDomain(it))
+                })
+            }
         }
     }
 
@@ -53,74 +72,79 @@ class ProfileBackupCodec(private val gson: Gson = Gson()) {
         require(bytes.isNotEmpty() && bytes.size <= PROFILE_BACKUP_MAX_BYTES) { "Backup must be at most 32 MiB" }
         val raw = decodeDocumentUtf8(bytes)
         checkDocumentDepth(raw)
-        val root = JsonParser.parseString(raw).asJsonObject
+        return decodeDocument(parseBackupObject(raw))
+    }
+
+    /** Decodes a parsed backup document; the restore journal embeds one. */
+    internal fun decodeDocument(root: JsonObject): ProfileBackup = rejectMalformedBackup {
         require(root.backupString("format") == "theoria-profile-backup") { "This is not a Theoria profile backup" }
         require(root.backupInt("version") in 1..PROFILE_BACKUP_VERSION) { "This backup needs a newer version of Theoria" }
-        return ProfileBackup(
+        ProfileBackup(
             createdAtEpochMs = root.backupLong("createdAt"),
-            settings = decodeSettings(requireNotNull(root.getAsJsonObject("settings"))),
-            library = decodeLibrary(requireNotNull(root.getAsJsonObject("library"))),
+            settings = decodeSettings(root.backupObject("settings")),
+            library = decodeLibrary(root.backupObject("library")),
             savedSearches = root.backupObjects("savedSearches", MAX_SAVED_SEARCHES).map { entry ->
                 SavedSearchEntry(entry.backupString("id"), entry.backupString("name"),
-                    entry.getAsJsonObject("search").readBackupSearch(), entry.backupLong("savedAt"))
+                    entry.backupObject("search").readBackupSearch(), entry.backupLong("savedAt"))
             },
             readingPositions = root.backupObjects("readingPositions", MAX_READING_POSITIONS).map { entry ->
                 ReadingPosition(entry.backupId(), RecentPostSection.valueOf(entry.backupString("section")),
                     entry.backupInt("mediaNumber"), entry.backupLong("lastViewedAt"))
             },
-            statistics = root.getAsJsonObject("statistics")?.let { record ->
-                gson.fromJson(record, StatisticsStoreRecord::class.java).also(StatisticsStoreRecord::validate).toDomain()
-            },
+            statistics = if ("statistics" !in root) null else DurableJson.decodeFromJsonElement(
+                StatisticsStoreRecord.serializer(), root.backupObject("statistics"),
+            ).also(StatisticsStoreRecord::validate).toDomain(),
             customSources = decodeCustomSources(root),
         ).also(::validate)
     }
 
     /** Strict, like the rest of the codec: one invalid profile rejects the backup before anything is written. */
     private fun decodeCustomSources(root: JsonObject): List<SiteProfile> {
-        if (!root.has("customSources")) return emptyList()
+        if (!root.containsKey("customSources")) return emptyList()
         return root.backupObjects("customSources", MAX_BACKUP_SITE_PROFILES).map { record ->
-            requireNotNull(gson.fromJson(record, SiteProfileRecord::class.java).toDomainOrNull()) {
+            requireNotNull(DurableJson.decodeFromJsonElement(SiteProfileRecord.serializer(), record).toDomainOrNull()) {
                 "Backup contains an invalid site"
             }
         }
     }
 
-    private fun encodeLibrary(library: BackupLibrary): JsonObject = backupObject {
-        add("codices", backupArray(library.codices) { codex -> backupObject {
-            addProperty("id", codex.codexId)
-            addProperty("name", codex.name)
-            addProperty("createdAt", codex.createdAtEpochMs)
-            add("automaticTags", backupArray(codex.automaticTags) { tag -> backupObject {
-                addProperty("source", tag.source.id)
-                addProperty("tag", tag.tag)
-                addProperty("group", tag.groupIndex)
+    private fun encodeLibrary(library: BackupLibrary): JsonObject = buildJsonObject {
+        put("codices", backupArray(library.codices) { codex -> buildJsonObject {
+            put("id", codex.codexId)
+            put("name", codex.name)
+            put("createdAt", codex.createdAtEpochMs)
+            put("automaticTags", backupArray(codex.automaticTags) { tag -> buildJsonObject {
+                put("source", tag.source.id)
+                put("tag", tag.tag)
+                put("group", tag.groupIndex)
             } })
         } })
-        add("items", backupArray(library.items) { item -> backupObject {
-            addProperty("codexId", item.codexId)
+        put("items", backupArray(library.items) { item -> buildJsonObject {
+            put("codexId", item.codexId)
             putId(item.postId)
-            addProperty("savedAt", item.savedAtEpochMs)
+            put("savedAt", item.savedAtEpochMs)
         } })
-        add("posts", backupArray(library.posts) { encodeBackupPost(it, gson) })
-        add("likes", backupArray(library.likes) { like -> backupObject {
-            addProperty("profileId", like.profileId)
+        put("posts", backupArray(library.posts, ::encodeBackupPost))
+        put("likes", backupArray(library.likes) { like -> buildJsonObject {
+            put("profileId", like.profileId)
             putId(like.postId)
-            addProperty("likedAt", like.likedAtEpochMs)
-            add("tags", backupArray(like.tags, ::JsonPrimitive))
+            put("likedAt", like.likedAtEpochMs)
+            put("tags", backupArray(like.tags) { JsonPrimitive(it) })
         } })
-        add("watched", backupArray(library.watched) { entry -> backupObject {
+        put("watched", backupArray(library.watched) { entry -> buildJsonObject {
             putId(entry.post.id)
-            addProperty("viewedAt", entry.viewedAtEpochMs)
-            addProperty("origin", entry.origin.name)
-            addProperty("queryHash", entry.originQueryHash)
-            addProperty("section", entry.section.name)
-            addProperty("highestMedia", entry.maxViewedMediaNumber)
+            put("viewedAt", entry.viewedAtEpochMs)
+            put("origin", entry.origin.name)
+            // Written as an explicit null when absent, as the Gson tree did.
+            put("queryHash", entry.originQueryHash)
+            put("section", entry.section.name)
+            put("highestMedia", entry.maxViewedMediaNumber)
         } })
-        add("searches", backupArray(library.searches) { backupSearch(it) })
+        put("searches", backupArray(library.searches, ::backupSearch))
     }
 
     private fun decodeLibrary(root: JsonObject): BackupLibrary {
-        val posts = root.backupObjects("posts").map { decodeBackupPost(it, gson) }
+        val posts = root.backupObjects("posts").map(::decodeBackupPost)
         val postsById = posts.associateBy { it.id }
         return BackupLibrary(
             codices = root.backupObjects("codices", 10_000).map { codex ->
@@ -140,7 +164,7 @@ class ProfileBackupCodec(private val gson: Gson = Gson()) {
             watched = root.backupObjects("watched", 2_000).map {
                 RecentPostEntry(requireNotNull(postsById[it.backupId()]) { "Recent post missing from backup" },
                     it.backupLong("viewedAt"), ViewerStreamSource.valueOf(it.backupString("origin")),
-                    it.get("queryHash")?.takeUnless { value -> value.isJsonNull }?.asString,
+                    it["queryHash"]?.takeUnless { value -> value is JsonNull }?.jsonPrimitive?.content,
                     RecentPostSection.valueOf(it.backupString("section")), it.backupInt("highestMedia"))
             },
             searches = root.backupObjects("searches", 2_000).map { it.readBackupSearch() },
@@ -152,7 +176,7 @@ class ProfileBackupCodec(private val gson: Gson = Gson()) {
         require(profiles.isNotEmpty()) { "Backup has no profiles" }
         profiles.forEach { it.backupString("profileId"); it.backupString("name") }
         validateBackupSettings(root, profiles.map { it.backupString("profileId") }.toSet())
-        val settings = gson.fromJson(root, SettingsStoreRecord::class.java).toDomain()
+        val settings = DurableJson.decodeFromJsonElement(SettingsStoreRecord.serializer(), root).toDomain()
         require(settings.recommendationProfiles.size == profiles.size) { "Backup contains duplicate profiles" }
         require(root.backupString("activeProfileId") in settings.recommendationProfiles.map { it.profileId })
         require(root.backupObjects("followedCreators", MAX_FOLLOWED_CREATORS).size == settings.followedCreators.size) {

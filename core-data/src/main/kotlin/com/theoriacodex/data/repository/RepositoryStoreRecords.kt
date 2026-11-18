@@ -1,6 +1,5 @@
 package com.theoriacodex.data.repository
 
-import com.google.gson.annotations.SerializedName
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -15,70 +14,52 @@ private val SOURCES_ADDED_BY_CATALOG_VERSION = mapOf(
 
 /**
  * The `settings` object of `settings_store_v3.json`, also the settings section of profile backups. Enum-like
- * values stay strings so a value this build does not know falls back instead of failing the whole file. Backups
- * still use Gson, so this record and the ones it nests keep both names until they move.
+ * values stay strings so a value this build does not know falls back instead of failing the whole file.
  */
 @Serializable
 internal data class SettingsStoreRecord(
-    @field:SerializedName("followedCreators")
     @SerialName("followedCreators")
     val followedCreators: List<FollowedCreatorRecord>? = null,
-    @field:SerializedName("sourceCatalogVersion")
     @SerialName("sourceCatalogVersion")
     val sourceCatalogVersion: Int? = null,
-    @field:SerializedName("enabledSources")
     @SerialName("enabledSources")
     val enabledSources: List<String> = SourceKey.builtIns.map { it.id },
-    @field:SerializedName("sourceWeights")
     @SerialName("sourceWeights")
     val sourceWeights: Map<String, Double> = SourceRuntimeSettings().sourceWeights.mapKeys { it.key.id },
-    @field:SerializedName("sourceWeightsByConfiguration")
     @SerialName("sourceWeightsByConfiguration")
     val sourceWeightsByConfiguration: Map<String, Map<String, Double>>? = null,
-    @field:SerializedName("viewerPlaybackMode") @SerialName("viewerPlaybackMode") val viewerPlaybackMode: String? = null,
-    @field:SerializedName("videoQuality") @SerialName("videoQuality") val videoQuality: String? = null,
-    @field:SerializedName("downloadQuality") @SerialName("downloadQuality") val downloadQuality: String? = null,
-    @field:SerializedName("downloadsOverMetered") @SerialName("downloadsOverMetered") val downloadsOverMetered: Boolean? = null,
-    @field:SerializedName("downloadsOverRoaming") @SerialName("downloadsOverRoaming") val downloadsOverRoaming: Boolean? = null,
-    @field:SerializedName("cacheFullImageOnSave")
+    @SerialName("viewerPlaybackMode") val viewerPlaybackMode: String? = null,
+    @SerialName("videoQuality") val videoQuality: String? = null,
+    @SerialName("downloadQuality") val downloadQuality: String? = null,
+    @SerialName("downloadsOverMetered") val downloadsOverMetered: Boolean? = null,
+    @SerialName("downloadsOverRoaming") val downloadsOverRoaming: Boolean? = null,
     @SerialName("cacheFullImageOnSave")
     val cacheFullImageOnSave: Boolean = false,
-    @field:SerializedName("resolveUnknownAnimatedDurations")
     @SerialName("resolveUnknownAnimatedDurations")
     val resolveUnknownAnimatedDurations: Boolean = false,
-    @field:SerializedName("invertMultiImageScrollDirection")
     @SerialName("invertMultiImageScrollDirection")
     val invertMultiImageScrollDirection: Boolean = false,
-    @field:SerializedName("oldSearchBar") @SerialName("oldSearchBar") val oldSearchBar: Boolean = false,
-    @field:SerializedName("codexLibrarySort") @SerialName("codexLibrarySort") val codexLibrarySort: String? = null,
-    @field:SerializedName("instantSeek") @SerialName("instantSeek") val instantSeek: Boolean = false,
-    @field:SerializedName("viewerAutoRotateVideos") @SerialName("viewerAutoRotateVideos") val viewerAutoRotateVideos: Boolean? = null,
-    @field:SerializedName("viewerCommentOrder") @SerialName("viewerCommentOrder") val viewerCommentOrder: String? = null,
-    @field:SerializedName("viewerAutomaticTextTranslationEnabled")
+    @SerialName("oldSearchBar") val oldSearchBar: Boolean = false,
+    @SerialName("codexLibrarySort") val codexLibrarySort: String? = null,
+    @SerialName("instantSeek") val instantSeek: Boolean = false,
+    @SerialName("viewerAutoRotateVideos") val viewerAutoRotateVideos: Boolean? = null,
+    @SerialName("viewerCommentOrder") val viewerCommentOrder: String? = null,
     @SerialName("viewerAutomaticTextTranslationEnabled")
     val viewerAutomaticTextTranslationEnabled: Boolean = false,
-    @field:SerializedName("viewerEnabledOcrLanguages")
     @SerialName("viewerEnabledOcrLanguages")
     val viewerEnabledOcrLanguages: List<String> = emptyList(),
-    @field:SerializedName("scenarioPreset")
     @SerialName("scenarioPreset")
     val scenarioPreset: String = ScenarioPreset.NORMAL.name,
-    @field:SerializedName("recommendationProfiles")
     @SerialName("recommendationProfiles")
     val recommendationProfiles: List<RecommendationProfileRecord>? = null,
-    @field:SerializedName("activeProfileId")
     @SerialName("activeProfileId")
     val activeProfileId: String? = null,
-    @field:SerializedName("activeProfile")
     @SerialName("activeProfile")
     val activeProfile: String? = null,
-    @field:SerializedName("forYouBlacklistByProfile")
     @SerialName("forYouBlacklistByProfile")
     val forYouBlacklistByProfile: Map<String, List<ForYouBlacklistEntryRecord>>? = null,
-    @field:SerializedName("favoriteTagsByProfile")
     @SerialName("favoriteTagsByProfile")
     val favoriteTagsByProfile: Map<String, List<FavoriteTagEntryRecord>>? = null,
-    @field:SerializedName("providerHealth")
     @SerialName("providerHealth")
     val providerHealth: List<ProviderHealthSnapshotRecord>? = null,
 ) {
@@ -221,22 +202,16 @@ internal data class SettingsStoreRecord(
 
 @Serializable
 internal data class ProviderHealthSnapshotRecord(
-    @field:SerializedName("source")
     @SerialName("source")
     val source: String? = null,
-    @field:SerializedName("status")
     @SerialName("status")
     val status: String? = null,
-    @field:SerializedName("checkedAtEpochMs")
     @SerialName("checkedAtEpochMs")
     val checkedAtEpochMs: Long? = null,
-    @field:SerializedName("latencyMs")
     @SerialName("latencyMs")
     val latencyMs: Long? = null,
-    @field:SerializedName("failureReason")
     @SerialName("failureReason")
     val failureReason: String? = null,
-    @field:SerializedName("message")
     @SerialName("message")
     val message: String? = null,
 ) {
@@ -282,16 +257,12 @@ internal data class ProviderHealthSnapshotRecord(
  */
 @Serializable
 internal data class FavoriteTagEntryRecord(
-    @field:SerializedName("source")
     @SerialName("source")
     val source: String? = null,
-    @field:SerializedName("tag")
     @SerialName("tag")
     val tag: String? = null,
-    @field:SerializedName("tags")
     @SerialName("tags")
     val tags: List<String>? = null,
-    @field:SerializedName("name")
     @SerialName("name")
     val name: String? = null,
 ) {
@@ -319,10 +290,8 @@ internal data class FavoriteTagEntryRecord(
 
 @Serializable
 internal data class ForYouBlacklistEntryRecord(
-    @field:SerializedName("source")
     @SerialName("source")
     val source: String? = null,
-    @field:SerializedName("tags")
     @SerialName("tags")
     val tags: List<String>? = null,
 ) {
@@ -349,10 +318,8 @@ internal data class ForYouBlacklistEntryRecord(
 
 @Serializable
 internal data class RecommendationProfileRecord(
-    @field:SerializedName("profileId")
     @SerialName("profileId")
     val profileId: String? = null,
-    @field:SerializedName("name")
     @SerialName("name")
     val name: String? = null,
 ) {

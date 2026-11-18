@@ -1,6 +1,5 @@
 package com.theoriacodex.data.repository
 
-import com.google.gson.annotations.SerializedName
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.SiteProfile
 import kotlinx.serialization.SerialName
@@ -16,13 +15,11 @@ const val MAX_PERSISTED_BLACKLIST_ENTRIES_PER_PROFILE = 250
 internal const val SETTINGS_DATASTORE_SCHEMA_VERSION = 3
 internal const val UI_RESTORE_DATASTORE_SCHEMA_VERSION = 2
 
-/** `settings_store_v3.json`. Developer profile copies still read it with Gson, so it keeps both names until they move. */
+/** `settings_store_v3.json`, also read by developer profile copies. */
 @Serializable
 internal data class SettingsDataStoreFile(
-    @field:SerializedName("schemaVersion")
     @SerialName("schemaVersion")
     val schemaVersion: Int = SETTINGS_DATASTORE_SCHEMA_VERSION,
-    @field:SerializedName("settings")
     @SerialName("settings")
     val settings: SettingsStoreRecord = SettingsStoreRecord.fromDomain(AppSettings()),
 ) {
