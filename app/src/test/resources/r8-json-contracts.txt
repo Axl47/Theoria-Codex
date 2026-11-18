@@ -1,2 +1,0 @@
-# Fully qualified class name | durable JSON field names. Keep this synchronized with
-# app/proguard-rules.pro. Transient in-process fields are intentionally absent.

@@ -2,7 +2,7 @@
 
 The module measures the isolated, R8-minified `com.theoriacodex.benchmark` app on physical
 hardware. `benchmarkRelease` explicitly inherits release configuration; packaged verification requires
-its AGP-produced R8 mapping and JSON wire contracts. Historical reports from the formerly unminified
+its AGP-produced R8 mapping. Historical reports from the formerly unminified
 benchmark target are incompatible and cannot serve as calibration baselines. Before a connected run, verify the task graph, packaged target and runner identities,
 signing lane, manifest and absence of a package-mutating listener. The production package and
 its data must never be installed, cleared or launched by this lane.

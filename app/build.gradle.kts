@@ -12,8 +12,6 @@ import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
 import org.gradle.api.tasks.testing.Test
-import org.gradle.process.ExecOperations
-import javax.inject.Inject
 import java.awt.image.BufferedImage
 import javax.imageio.ImageIO
 
@@ -93,39 +91,6 @@ abstract class GenerateMonochromeLauncherIconTask : DefaultTask() {
         val output = outputDirectory.file("drawable-nodpi/theoria_app_icon.png").get().asFile
         output.parentFile.mkdirs()
         check(ImageIO.write(monochrome, "png", output)) { "Cannot write launcher icon: $output" }
-    }
-}
-
-abstract class VerifyR8JsonContractsTask @Inject constructor(
-    private val execOperations: ExecOperations,
-) : DefaultTask() {
-    @get:InputFile
-    @get:PathSensitive(PathSensitivity.RELATIVE)
-    abstract val mappingFile: RegularFileProperty
-
-    @get:InputFile
-    @get:PathSensitive(PathSensitivity.RELATIVE)
-    abstract val seedsFile: RegularFileProperty
-
-    @get:InputFile
-    @get:PathSensitive(PathSensitivity.RELATIVE)
-    abstract val contractManifest: RegularFileProperty
-
-    @get:InputFile
-    @get:PathSensitive(PathSensitivity.RELATIVE)
-    abstract val verifierScript: RegularFileProperty
-
-    @TaskAction
-    fun verify() {
-        execOperations.exec {
-            commandLine(
-                "python3",
-                verifierScript.get().asFile,
-                mappingFile.get().asFile,
-                contractManifest.get().asFile,
-                seedsFile.get().asFile,
-            )
-        }
     }
 }
 
@@ -233,10 +198,8 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             buildConfigField("boolean", "UPDATER_ENABLED", "true")
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
+            // Saved data uses kotlinx.serialization, whose generated serializers need no app rules.
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
         }
         // Never add this source set to public release. Personal APKs are signed separately
         // with the existing production key; connected Gradle installation is forbidden.
@@ -420,35 +383,6 @@ androidComponents {
             mappingFile.set(variant.artifacts.get(SingleArtifact.OBFUSCATION_MAPPING_FILE))
         }
         tasks.matching { it.name == "assembleRelease" }.configureEach { finalizedBy(guard) }
-    }
-
-    setOf("release", "releaseAcceptance", "benchmarkRelease", "personalRelease").forEach { buildType ->
-        onVariants(selector().withBuildType(buildType)) { variant ->
-            val capitalizedVariant = variant.name.replaceFirstChar(Char::uppercaseChar)
-            val verification = tasks.register<VerifyR8JsonContractsTask>(
-                "verify${capitalizedVariant}JsonContracts",
-            ) {
-                group = "verification"
-                description = "Verifies stable Gson field names in the ${variant.name} R8 mapping."
-                mappingFile.set(
-                    variant.artifacts.get(SingleArtifact.OBFUSCATION_MAPPING_FILE),
-                )
-                seedsFile.set(
-                    layout.buildDirectory.file("outputs/mapping/${variant.name}/seeds.txt"),
-                )
-                contractManifest.set(
-                    layout.projectDirectory.file("src/test/resources/r8-json-contracts.txt"),
-                )
-                verifierScript.set(
-                    rootProject.layout.projectDirectory.file(
-                        "scripts/verify_r8_json_contract.py",
-                    ),
-                )
-            }
-            tasks.matching { task -> task.name == "assemble$capitalizedVariant" }.configureEach {
-                finalizedBy(verification)
-            }
-        }
     }
 }
 
