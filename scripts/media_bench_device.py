@@ -290,6 +290,7 @@ def command_record(args: argparse.Namespace) -> None:
         },
     })
     history.sort(key=lambda entry: entry["round"])
+    METRICS_FILE.parent.mkdir(parents=True, exist_ok=True)
     METRICS_FILE.write_text(json.dumps(history, indent=2) + "\n")
     print(f"recorded round {args.round} in {METRICS_FILE.relative_to(ROOT)}")
 
