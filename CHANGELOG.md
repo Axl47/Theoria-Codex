@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.9.2] - 2026-11-18
+
 ### Fixed
 
 - The post counts next to a saved nhentai gallery's tags could disappear after the gallery was opened while nhentai was only reachable through its backup copy, or after importing a shared collection that contained it. Saved counts now stay until nhentai reports new ones.
