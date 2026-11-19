@@ -48,4 +48,4 @@ Use **JDK 21** to run Gradle (Robolectric requires it) and keep JDK 17 installed
 
 - [.docs/DEVELOPMENT.md](.docs/DEVELOPMENT.md): architecture, storage layout, releases, device and performance testing, live provider checks, and copying a personal profile into Debug
 - [CHANGELOG.md](CHANGELOG.md): user-facing changes
-- [.docs/PLANS.md](.docs/PLANS.md): ExecPlan standard (plans live in `.docs/exec/`)
+- [.docs/PLANS.md](.docs/PLANS.md): ExecPlan standard (plans stay local in `.docs/exec/`)

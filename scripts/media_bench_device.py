@@ -13,7 +13,7 @@ fresh app process. The test serves that media from a throttled loopback server i
 summary is the median of every metric across runs. With `--variant NAME=DIR` (APK pairs saved from earlier
 builds), each run installs and measures every variant in turn, swapping their order every run, so variants share
 the phone's thermal and network conditions; one results file is written per variant. `record` writes a summary into
-`.docs/exec/media-buffering-metrics.json` as one round entry.
+the local, gitignored `.docs/exec/media-buffering-metrics.json` as one round entry.
 
 Only `com.theoriacodex.debug` and its test package are installed; no provider media is involved.
 """

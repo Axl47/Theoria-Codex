@@ -2,7 +2,7 @@
 
 This document defines the standard for VESTIGE execution plans. An ExecPlan is a self-contained implementation guide that a coding agent or human developer can open in a browser, read from top to bottom, and use to deliver a working feature or system change.
 
-New ExecPlans must be standalone `.html` files written to `.docs/exec/`.
+New ExecPlans must be standalone `.html` files written to `.docs/exec/`. That directory is gitignored: plans are local history and are never committed.
 
 ## Why HTML Plans
 

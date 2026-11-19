@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-"""Turn Perfetto traces of the benchmark app into the feed-player numbers of the B3 ExecPlan.
-
-The plan is .docs/exec/video-players-off-main-thread.html; its "What to measure" section owns these definitions.
+"""Turn Perfetto traces of the benchmark app into feed-player frame and main-thread numbers.
 
   frames      report [TRACE ...]      late frames, player-heavy late frames, section time per category,
                                       every player section's count, and time to first frame per presentation
