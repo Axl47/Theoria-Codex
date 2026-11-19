@@ -256,8 +256,8 @@ scripts/media_bench_device.py run --serial YOUR_PHONE_SERIAL --label ab --skip-b
 scripts/media_bench_device.py record --round N build/media-bench/my-change/results.json
 ```
 
-Results land in `build/media-bench/<label>/results.json`; rounds are tracked in
-`.docs/exec/media-buffering-metrics.json` (see `.docs/exec/media-buffering-and-paging.html`).
+Results land in `build/media-bench/<label>/results.json`; rounds are tracked locally in
+`.docs/exec/media-buffering-metrics.json`.
 
 For a quick cold-start loop, measure only that workload on a real library. Export Theoria Debug's library
 once as a profile backup (no credentials or media), then calibrate and compare with it. Each run clears only

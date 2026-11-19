@@ -36,7 +36,7 @@ Close any T3 `agent-device` session before `am instrument`: its accessibility he
 
 For complex features or significant refactors, use an ExecPlan from design through implementation.
 
-The current plan standard lives at `.docs/PLANS.md`. New ExecPlans should be standalone HTML files in `.docs/exec/<kebab-case-name>.html`. Older Markdown plans in `.docs/exec/execplans/` are historical unless explicitly reactivated.
+The current plan standard lives at `.docs/PLANS.md`. New ExecPlans should be standalone HTML files in `.docs/exec/<kebab-case-name>.html`. Plans are local history: `.docs/exec/` is gitignored, so never commit a plan or link one from committed files. From a worktree, write the plan to the main checkout's `.docs/exec/` (`$(git rev-parse --git-common-dir)/../.docs/exec/`), because worktrees are deleted after landing.
 
 Keep active ExecPlans current while working: progress, decisions, surprises, validation evidence, and outcomes should reflect reality before the work is closed.
 
