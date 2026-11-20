@@ -50,11 +50,28 @@ class DurationDemandSchedulerTest {
         scheduler.submit(demand("search", shared, DurationDemandPriority.VISIBLE))
         scheduler.submit(demand("creator", shared, DurationDemandPriority.NEAR_VIEWPORT))
 
-        scheduler.removeIdentity("search")
+        scheduler.removeIdentities(setOf("search"))
         assertTrue(scheduler.contains(shared))
 
-        scheduler.removeIdentity("creator")
+        scheduler.removeIdentities(setOf("creator"))
         assertFalse(scheduler.contains(shared))
+    }
+
+    @Test
+    fun `releasing several consumers at once reports every key that lost one and keeps the rest`() {
+        val scheduler = DurationDemandScheduler()
+        val shared = key("shared")
+        val owned = key("owned")
+        val other = key("other")
+        scheduler.submit(demand("search", shared, DurationDemandPriority.VISIBLE))
+        scheduler.submit(demand("creator", shared, DurationDemandPriority.NEAR_VIEWPORT))
+        scheduler.submit(demand("search", owned, DurationDemandPriority.VISIBLE))
+        scheduler.submit(demand("viewer", other, DurationDemandPriority.VISIBLE))
+
+        assertEquals(setOf(shared, owned), scheduler.removeIdentities(setOf("search", "creator")))
+        assertFalse(scheduler.contains(shared))
+        assertFalse(scheduler.contains(owned))
+        assertTrue(scheduler.contains(other))
     }
 
     @Test

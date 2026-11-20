@@ -184,19 +184,15 @@ class MediaDurationCoordinator(
     suspend fun releaseIdentities(identities: Set<String>) = withContext(coordinationContext) {
         lock.withLock {
             deferredDemands.removeIdentities(identities).forEach(::discardUnownedPendingKeyLocked)
-            identities.forEach { identity ->
-                require(identity.isNotBlank()) { "Duration demand identity must not be blank" }
-                val queuedAffected = scheduler.removeIdentity(identity)
-                queuedAffected.forEach(::discardUnownedPendingKeyLocked)
-
-                active.values.toList().forEach { work ->
-                    if (work.demands.remove(identity) == null) return@forEach
-                    if (work.demands.isEmpty()) {
-                        cancelActiveLocked(work, requeue = false)
-                        discardUnownedPendingKeyLocked(work.key)
-                    } else {
-                        work.priority = work.demands.values.minOf(DurationDemand::priority)
-                    }
+            identities.forEach { identity -> require(identity.isNotBlank()) { "Duration demand identity must not be blank" } }
+            scheduler.removeIdentities(identities).forEach(::discardUnownedPendingKeyLocked)
+            active.values.toList().forEach { work ->
+                if (!work.demands.keys.removeAll(identities)) return@forEach
+                if (work.demands.isEmpty()) {
+                    cancelActiveLocked(work, requeue = false)
+                    discardUnownedPendingKeyLocked(work.key)
+                } else {
+                    work.priority = work.demands.values.minOf(DurationDemand::priority)
                 }
             }
             pumpLocked()

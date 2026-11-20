@@ -87,12 +87,13 @@ class DurationDemandScheduler(
         )
     }
 
-    fun removeIdentity(identity: String): Set<MediaDurationKey> {
+    /** Drops [identities]' tickets in one pass; returns the keys that lost one, including keys left with none. */
+    fun removeIdentities(identities: Set<String>): Set<MediaDurationKey> {
         val affected = linkedSetOf<MediaDurationKey>()
         val iterator = entries.iterator()
         while (iterator.hasNext()) {
             val (_, entry) = iterator.next()
-            if (entry.tickets.remove(identity) != null) affected += entry.key
+            if (entry.tickets.keys.removeAll(identities)) affected += entry.key
             if (entry.tickets.isEmpty()) iterator.remove()
         }
         return affected
