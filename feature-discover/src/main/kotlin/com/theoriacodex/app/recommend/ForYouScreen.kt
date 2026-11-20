@@ -78,6 +78,7 @@ import com.theoriacodex.app.ui.components.FeedLoadingState
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.SourceSelector
 import com.theoriacodex.app.ui.components.TwoColumnProjectedPostStaggeredGrid
+import com.theoriacodex.app.ui.components.pagedFeedFooterMessage
 import com.theoriacodex.app.ui.components.FeedCardEnvironment
 import com.theoriacodex.app.ui.components.FeedPostActionSheet
 import com.theoriacodex.app.ui.components.FeedPostCard
@@ -470,7 +471,14 @@ private fun ForYouFeedBody(
                     state = gridState,
                     modifier = Modifier.fillMaxSize(),
                     showPagingTile = state.isPaging,
-                    footerMessage = if (feed.durationFilter.readiness.isResolving) "Resolving durations…" else null,
+                    footerMessage = pagedFeedFooterMessage(
+                        resolvingDurations = feed.durationFilter.readiness.isResolving,
+                        hasVisibleResults = feed.visibleResults.isNotEmpty(),
+                        canLoadMore = state.canLoadMore,
+                        requestRunning = state.isRefreshing || state.isPaging,
+                        // A source whose next page failed leaves paging until it is retried; that is not the end.
+                        failed = state.errorMessage != null || state.retryableSources.isNotEmpty(),
+                    ),
                     postContent = { _, post ->
                         FeedPostCard(
                             post = post,

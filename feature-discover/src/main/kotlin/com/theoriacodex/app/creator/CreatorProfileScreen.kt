@@ -73,6 +73,7 @@ import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.app.ui.components.TwoColumnProjectedPostStaggeredGrid
+import com.theoriacodex.app.ui.components.pagedFeedFooterMessage
 import com.theoriacodex.app.ui.components.FeedCardEnvironment
 import com.theoriacodex.app.ui.components.FeedPostCard
 import com.theoriacodex.app.ui.components.FeedRelatedPostsShelf
@@ -486,7 +487,13 @@ private fun CreatorGrid(
         projection = feed.related.projection,
         modifier = Modifier.fillMaxSize(),
         state = gridState,
-        footerMessage = if (feed.durationFilter.readiness.isResolving) "Resolving durations…" else null,
+        footerMessage = pagedFeedFooterMessage(
+            resolvingDurations = feed.durationFilter.readiness.isResolving,
+            hasVisibleResults = feed.visibleResults.isNotEmpty(),
+            canLoadMore = state.canLoadMore,
+            requestRunning = state.isRefreshing || state.isPaging,
+            failed = state.errorMessage != null,
+        ),
         postContent = { _, post ->
             FeedPostCard(
                 post = post,

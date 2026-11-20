@@ -135,10 +135,31 @@ fun FeedPagingTile(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    if (message != FEED_END_MESSAGE) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    }
                     Text(message, style = MaterialTheme.typography.labelMedium)
                 }
             }
         }
     }
 }
+
+/**
+ * The footer message for a grid that pages from providers: resolving durations wins, then the end message once
+ * posts are visible, no refresh or page is running, nothing failed and the feed has no further page.
+ */
+fun pagedFeedFooterMessage(
+    resolvingDurations: Boolean,
+    hasVisibleResults: Boolean,
+    canLoadMore: Boolean,
+    requestRunning: Boolean,
+    failed: Boolean,
+): String? = when {
+    resolvingDurations -> "Resolving durations…"
+    hasVisibleResults && !canLoadMore && !requestRunning && !failed -> FEED_END_MESSAGE
+    else -> null
+}
+
+/** The only footer message that reports a settled state, so its tile shows no progress indicator. */
+private const val FEED_END_MESSAGE = "No more results"
