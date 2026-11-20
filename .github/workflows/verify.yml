@@ -199,6 +199,10 @@ jobs:
             *-kit/build/reports/tests/
             *-kit/build/reports/lint-results-*
             *-kit/build/reports/detekt/
+            feature-*/build/test-results/
+            feature-*/build/reports/tests/
+            feature-*/build/reports/lint-results-*
+            feature-*/build/reports/detekt/
             build/reports/quality/
             build/reports/jscpd/
             build/reports/kover/
