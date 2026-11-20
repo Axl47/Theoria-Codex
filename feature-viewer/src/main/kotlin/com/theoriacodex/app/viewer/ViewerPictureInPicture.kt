@@ -7,10 +7,9 @@ import android.content.pm.PackageManager
 import android.graphics.Rect
 import android.util.Rational
 import android.view.View
-import com.theoriacodex.app.MainActivity
 
-internal fun Context.viewerActivity(): MainActivity? = when (this) {
-    is MainActivity -> this
+internal fun Context.viewerActivity(): ViewerHostActivity? = when (this) {
+    is ViewerHostActivity -> this
     is ContextWrapper -> baseContext.takeIf { it !== this }?.viewerActivity()
     else -> null
 }
@@ -24,7 +23,7 @@ internal fun viewerPictureInPictureRatio(width: Int?, height: Int?): Rational {
     return Rational((ratio.coerceIn(1.0 / 2.39, 2.39) * 10_000).toInt(), 10_000)
 }
 
-internal fun MainActivity.enterViewerPictureInPicture(width: Int?, height: Int?): Boolean {
+internal fun ViewerHostActivity.enterViewerPictureInPicture(width: Int?, height: Int?): Boolean {
     if (!supportsViewerPictureInPicture()) return false
     return requestViewerPictureInPicture(viewerAutoPictureInPicture.params(width, height))
 }
@@ -48,7 +47,7 @@ internal fun viewerPictureInPictureParams(
 }
 
 internal fun viewerPictureInPictureAction(
-    activity: MainActivity?,
+    activity: ViewerHostActivity?,
     post: com.theoriacodex.domain.model.Post,
     media: com.theoriacodex.domain.model.ImageRef?,
     failed: Boolean,

@@ -176,7 +176,7 @@ internal fun shouldDecodeStaticOverviewFrame(kind: ViewerMediaOverviewKind): Boo
     return kind != ViewerMediaOverviewKind.ANIMATED_IMAGE
 }
 
-internal enum class ViewerMediaOverviewKind(
+enum class ViewerMediaOverviewKind(
     val badgeLabel: String?,
     val accessibilityLabel: String,
 ) {
@@ -188,7 +188,7 @@ internal enum class ViewerMediaOverviewKind(
     UNKNOWN(badgeLabel = "Media", accessibilityLabel = "media"),
 }
 
-internal data class ViewerMediaOverviewItem(
+data class ViewerMediaOverviewItem(
     val mediaIndex: Int,
     val media: ImageRef,
     val kind: ViewerMediaOverviewKind,
@@ -197,7 +197,7 @@ internal data class ViewerMediaOverviewItem(
     val thumbnailLocation: String? = posterLocation,
 )
 
-internal fun viewerMediaOverviewItems(post: Post): List<ViewerMediaOverviewItem> {
+fun viewerMediaOverviewItems(post: Post): List<ViewerMediaOverviewItem> {
     return postMediaItems(post).mapIndexed { index, media ->
         val kind = viewerMediaOverviewKind(post, media)
         val posterLocation = viewerMediaOverviewPosterLocation(post, media, kind)

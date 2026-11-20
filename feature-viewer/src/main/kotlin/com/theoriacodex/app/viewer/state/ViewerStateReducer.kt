@@ -10,7 +10,7 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
-internal fun createViewerUiState(
+fun createViewerUiState(
     session: ViewerSessionIdentity,
     posts: List<Post>,
     initialPageIndex: Int = 0,
@@ -68,7 +68,7 @@ internal fun Post.toViewerPageState(
     )
 }
 
-internal fun ImageRef.toViewerMediaState(post: Post, mediaIndex: Int): ViewerMediaState {
+fun ImageRef.toViewerMediaState(post: Post, mediaIndex: Int): ViewerMediaState {
     val kind = viewerMediaKind(post, this)
     val location = bestViewerLocation()
     return ViewerMediaState(
@@ -94,7 +94,7 @@ internal fun viewerMediaKind(post: Post, media: ImageRef): ViewerMediaKind {
     }
 }
 
-internal fun reduceViewerState(state: ViewerUiState, action: ViewerAction): ViewerReduction {
+fun reduceViewerState(state: ViewerUiState, action: ViewerAction): ViewerReduction {
     if (action is ViewerAction.ReplaceSession) return state.replaceSession(action)
 
     val session = state.session ?: return ViewerReduction(state)

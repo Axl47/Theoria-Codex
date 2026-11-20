@@ -90,7 +90,7 @@ internal fun ViewerVideoScrubPreview(previews: ViewerScrubPreviews, positionMs: 
 private fun Int.even(): Int = this and 1.inv()
 
 /** Scrub previews of [player]'s stream from [source], read by a [ScrubPreviewPlayer] at [widthPx] × [heightPx]. */
-internal fun ViewerScrubPreviews(context: Context, player: ExoPlayer, source: SourceKey, widthPx: Int, heightPx: Int): ViewerScrubPreviews =
+fun ViewerScrubPreviews(context: Context, player: ExoPlayer, source: SourceKey, widthPx: Int, heightPx: Int): ViewerScrubPreviews =
     ViewerScrubPreviews(player) { location ->
         ScrubPreviewPlayer(context, context.videoPlaybackInfrastructure().bind(location, source.requestHeaders()), widthPx, heightPx)
     }
@@ -101,7 +101,7 @@ internal fun ViewerScrubPreviews(context: Context, player: ExoPlayer, source: So
  * [ScrubPreviewPlayer]), built on the first drag and kept, idle between drags, until [close], or until a drag fails,
  * so the next one starts afresh. When a drag is released, [seekReleased] seeks [player]. Use it on the main thread.
  */
-internal class ViewerScrubPreviews(
+class ViewerScrubPreviews(
     private val player: ExoPlayer,
     private val openFrames: (location: String) -> ScrubFrameSource,
 ) : AutoCloseable {

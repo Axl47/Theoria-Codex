@@ -39,7 +39,7 @@ private const val VIEWER_RETURN_TARGET_WAIT_MS = 300L
 
 /** Keep both destinations alive while the media moves between its card and fullscreen bounds. */
 @Composable
-internal fun ViewerReturnLifetime(scope: AnimatedVisibilityScope) {
+fun ViewerReturnLifetime(scope: AnimatedVisibilityScope) {
     scope.transition.animateFloat(
         transitionSpec = {
             tween(if (targetState == EnterExitState.PostExit) VIEWER_RETURN_HOLD_MS else VIEWER_RETURN_DURATION_MS)

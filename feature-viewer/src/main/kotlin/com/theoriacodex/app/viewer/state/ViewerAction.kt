@@ -5,7 +5,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 
-internal sealed interface ViewerAction {
+sealed interface ViewerAction {
     data class ReplaceSession(
         val session: ViewerSessionIdentity,
         val posts: List<Post>,
@@ -108,7 +108,7 @@ internal sealed interface ViewerAction {
     data object Dismiss : ViewerAction
 }
 
-internal sealed interface ViewerEffect {
+sealed interface ViewerEffect {
     val session: ViewerSessionIdentity
 
     data class ResolvePost(
@@ -163,7 +163,7 @@ internal sealed interface ViewerEffect {
     ) : ViewerEffect
 }
 
-internal data class ViewerReduction(
+data class ViewerReduction(
     val state: ViewerUiState,
     val effects: List<ViewerEffect> = emptyList(),
 )

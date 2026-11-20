@@ -45,14 +45,14 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
 /** Resolves a post without exposing a provider, repository, or Android handle to Viewer state. */
-internal fun interface ViewerPostResolver {
+fun interface ViewerPostResolver {
     suspend fun resolve(session: ViewerSessionIdentity, postId: PostId): Post?
     fun requiresResolution(post: Post): Boolean = false
 }
 
 /** Performs bounded media prefetch outside immutable state and platform playback ownership. */
 /** Warms one media item; [distance] is how many media items it sits from the one on screen. */
-internal fun interface ViewerMediaPrefetcher {
+fun interface ViewerMediaPrefetcher {
     suspend fun prefetch(session: ViewerSessionIdentity, media: ViewerMediaState, distance: Int): ViewerPrefetchResult
 }
 
@@ -63,7 +63,7 @@ internal fun interface ViewerMediaPrefetcher {
  * needed to ask the shell/repository layer to reconstruct the session after process recreation.
  * ExoPlayer, animated decoders, launchers, and other Android handles remain in renderers/holders.
  */
-internal class ViewerViewModel(
+class ViewerViewModel(
     private val savedStateHandle: SavedStateHandle,
     private val postResolver: ViewerPostResolver? = null,
     private val mediaPrefetcher: ViewerMediaPrefetcher? = null,

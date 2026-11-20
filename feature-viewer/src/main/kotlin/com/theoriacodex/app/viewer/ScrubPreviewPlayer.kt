@@ -170,10 +170,10 @@ internal class ScrubPreviewPlayer(
 }
 
 /** A preview frame and the position, in whole milliseconds, of the keyframe it shows. */
-internal class ScrubFrame(val positionMs: Long, val bitmap: Bitmap)
+class ScrubFrame(val positionMs: Long, val bitmap: Bitmap)
 
 /** Where a Viewer page's scrub previews come from ([ScrubPreviewPlayer]); use it on the main thread. */
-internal interface ScrubFrameSource : AutoCloseable {
+interface ScrubFrameSource : AutoCloseable {
     /** The frame of the keyframe nearest [positionMs]. A newer call replaces a pending one, which is cancelled. */
     suspend fun frameAt(positionMs: Long): ScrubFrame
 

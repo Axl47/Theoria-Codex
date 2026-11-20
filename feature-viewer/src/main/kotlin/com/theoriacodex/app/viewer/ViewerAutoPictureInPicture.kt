@@ -7,7 +7,7 @@ import androidx.media3.common.Player
 import java.io.Closeable
 
 /** Only the mounted Viewer video can arm automatic PiP; feed players never bind here. */
-internal class ViewerAutoPictureInPicture(private val activity: Activity) {
+class ViewerAutoPictureInPicture(private val activity: Activity) {
     private var currentPlayer: Player? = null
     private var currentView: () -> View? = { null }
     private var currentBinding: Any? = null

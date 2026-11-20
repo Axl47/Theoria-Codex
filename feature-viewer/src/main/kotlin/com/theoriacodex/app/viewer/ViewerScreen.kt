@@ -33,7 +33,6 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.app.MainActivity
 import com.theoriacodex.app.comments.ViewerComments
 import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.viewer.state.ViewerAction
@@ -47,7 +46,7 @@ import com.theoriacodex.domain.model.SourceKey
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-internal fun ViewerScreen(
+fun ViewerScreen(
     uiState: ViewerUiState,
     creatorBrowsingSources: Set<SourceKey>,
     onAction: (ViewerAction) -> Unit,
@@ -70,7 +69,7 @@ internal fun ViewerScreen(
     onGoToSearch: () -> Unit,
     onOpenCreatorFallback: ((Post) -> Unit)? = null,
     contextActions: ViewerContextActions = ViewerContextActions(),
-    playbackDiagnosticsEnabled: Boolean = com.theoriacodex.app.BuildConfig.BENCHMARK_FIXTURES_ENABLED,
+    playbackDiagnosticsEnabled: Boolean = false,
     onIncludeRelatedPosts: () -> Unit = {},
     onDismissRelatedPosts: () -> Unit = {},
     onRetryRelatedPosts: () -> Unit = {},
@@ -113,7 +112,7 @@ private fun ViewerLoadedScreen(
     returning: Boolean,
     opening: Boolean,
     dismissDrag: ViewerDismissDrag,
-    activity: MainActivity?,
+    activity: ViewerHostActivity?,
     quality: MutableState<com.theoriacodex.domain.model.VideoQuality>,
     qualityHeight: MutableState<Int?>,
     pendingPostId: MutableState<PostId?>,

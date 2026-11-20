@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.flowOf
  * The route's post durations as the Viewer uses them: [observe] gives a post's known length so a timeline can
  * show it before its player loads, and [onPlayerDuration] reports the length a player measured.
  */
-internal class ViewerPostDurations(
+class ViewerPostDurations(
     val observe: (Post) -> Flow<Long?> = { flowOf(null) },
     val onPlayerDuration: (Post, Long) -> Unit = { _, _ -> },
 ) {
