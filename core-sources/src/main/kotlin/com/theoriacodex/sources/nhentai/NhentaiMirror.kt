@@ -8,7 +8,7 @@ import com.theoriacodex.sources.http.RequestPacer
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import java.io.IOException
-import java.net.URLEncoder
+import com.theoriacodex.sources.common.percentEncode
 
 /**
  * Reaches nhentai through mirrors while its API answers with a Cloudflare challenge: search and reader pages
@@ -34,7 +34,7 @@ internal class NhentaiMirror(
             )
             mapMirrorSortParam(sort)?.let { params["sort"] = it }
             "/search/?" + params.entries.joinToString("&") { (key, value) ->
-                "${key.urlEncode()}=${value.urlEncode()}"
+                "${key.percentEncode()}=${value.percentEncode()}"
             }
         }
         return NhentaiMirrorParser.parseSearchPage(requestText(pathAndQuery))
@@ -107,7 +107,5 @@ internal class NhentaiMirror(
             "User-Agent" to "Mozilla/5.0",
             "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         )
-
-        fun String.urlEncode(): String = URLEncoder.encode(this, Charsets.UTF_8.name()).replace("+", "%20")
     }
 }

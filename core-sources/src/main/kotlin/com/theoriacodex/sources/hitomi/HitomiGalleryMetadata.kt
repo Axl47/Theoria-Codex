@@ -11,7 +11,6 @@ import com.theoriacodex.domain.model.canonicalHitomiArtistIdentity
 import com.theoriacodex.sources.common.FacetNamespaces
 import com.theoriacodex.sources.common.asStringOrNull
 import java.net.URI
-import java.net.URLEncoder
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
@@ -19,6 +18,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import com.theoriacodex.sources.common.percentEncode
 
 internal data class ParsedHitomiGallery(
     val id: Int,
@@ -81,7 +81,7 @@ private fun canonicalHitomiArtistUrl(
     providerRelativeUrl
         ?.takeIf { value -> value.isSafeHitomiArtistPathFor(artistIdentity) }
         ?.let { value -> return "https://hitomi.la$value" }
-    val encoded = URLEncoder.encode(artistIdentity, Charsets.UTF_8.name()).replace("+", "%20")
+    val encoded = artistIdentity.percentEncode()
     return "https://hitomi.la/artist/$encoded-all.html"
 }
 

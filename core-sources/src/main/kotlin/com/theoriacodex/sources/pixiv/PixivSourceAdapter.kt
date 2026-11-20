@@ -29,9 +29,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.pixivSearchToken
 import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.classifyHttpFailure
-import com.theoriacodex.sources.common.elementsOrEmpty
 import com.theoriacodex.sources.common.isSuccessful
-import com.theoriacodex.sources.common.optionalJsonArray
 import com.theoriacodex.sources.common.optionalJsonObject
 import com.theoriacodex.sources.common.parseJsonObject
 import com.theoriacodex.sources.common.sourceCall
@@ -51,6 +49,7 @@ import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import com.theoriacodex.sources.common.objects
 
 class PixivSourceAdapter(
     private val httpClient: SourceHttpClient,
@@ -113,13 +112,8 @@ class PixivSourceAdapter(
             query = mapOf("filter" to "for_android"),
         )
         val root = parseJsonObject(response, gson, "Pixiv")
-        val tags = root.optionalJsonArray("trend_tags").elementsOrEmpty()
-        tags.mapNotNull { item ->
-            val tag = item.takeIf { it.isJsonObject }
-                ?.asJsonObject
-                ?.optionalJsonObject("tag")
-                ?: return@mapNotNull null
-            parsePixivTagSuggestion(tag, type = "trending")
+        root.objects("trend_tags").mapNotNull { item ->
+            item.optionalJsonObject("tag")?.let { tag -> parsePixivTagSuggestion(tag, type = "trending") }
         }.take(limit)
     }
 
@@ -130,11 +124,7 @@ class PixivSourceAdapter(
             query = mapOf("word" to prefix),
         )
         val root = parseJsonObject(response, gson, "Pixiv")
-        val tags = root.optionalJsonArray("tags").elementsOrEmpty()
-        tags.mapNotNull { item ->
-            val tag = item.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
-            parsePixivTagSuggestion(tag, type = "tag")
-        }.take(limit)
+        root.objects("tags").mapNotNull { tag -> parsePixivTagSuggestion(tag, type = "tag") }.take(limit)
     }
 
     override suspend fun quickQuery(kind: QuickQueryKind): Query = sourceCall(callContext) {

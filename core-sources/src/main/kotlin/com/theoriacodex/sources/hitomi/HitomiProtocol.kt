@@ -3,11 +3,11 @@ package com.theoriacodex.sources.hitomi
 import com.theoriacodex.domain.diagnostics.OffMainWork
 import com.theoriacodex.sources.common.asIntOrNull
 import com.theoriacodex.sources.common.asStringOrNull
-import java.net.URLEncoder
 import java.util.Locale
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import com.theoriacodex.sources.common.percentEncode
 
 data class HitomiAutocompleteEntry(
     val name: String,
@@ -113,7 +113,7 @@ object HitomiProtocol {
         " " -> "_"
         "/" -> "slash"
         "." -> "dot"
-        else -> URLEncoder.encode(character, Charsets.UTF_8.name()).replace("+", "%20")
+        else -> character.percentEncode()
     }
 
     private fun parseJson(body: String, label: String) = try {

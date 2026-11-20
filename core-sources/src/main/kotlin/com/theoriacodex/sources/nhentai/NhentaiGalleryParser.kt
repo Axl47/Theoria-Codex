@@ -14,6 +14,7 @@ import com.theoriacodex.sources.common.elementsOrEmpty
 import com.theoriacodex.sources.common.optionalJsonArray
 import com.theoriacodex.sources.common.optionalJsonObject
 import com.theoriacodex.sources.media.mimeFromFileExt
+import com.theoriacodex.sources.common.objects
 
 /** Pure mapping of one API gallery record to a post. */
 internal fun parseNhentaiGallery(raw: JsonObject): Post? {
@@ -148,8 +149,7 @@ private fun parseNhentaiPages(pages: List<JsonElement>, mediaId: String): List<I
 }
 
 private fun parseNhentaiTags(raw: JsonObject): List<ParsedNhentaiTag> {
-    return raw.optionalJsonArray("tags").elementsOrEmpty().mapNotNull { tagElement ->
-        val tag = tagElement.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@mapNotNull null
+    return raw.objects("tags").mapNotNull { tag ->
         val name = tag.get("name").asStringOrNull()?.trim().orEmpty()
         if (name.isBlank()) return@mapNotNull null
         ParsedNhentaiTag(

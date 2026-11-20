@@ -9,20 +9,17 @@ import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.common.asLongOrNull
 import com.theoriacodex.sources.common.asStringOrNull
-import com.theoriacodex.sources.common.elementsOrEmpty
 import com.theoriacodex.sources.common.intValue
 import com.theoriacodex.sources.common.longValue
-import com.theoriacodex.sources.common.optionalJsonArray
 import com.theoriacodex.sources.common.optionalJsonObject
 import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.media.inferMimeFromUrl
 import java.time.Instant
+import com.theoriacodex.sources.common.objects
 
 /** The posts in a response's `illusts` array, skipping records that are not illustrations. */
 internal fun JsonObject.pixivIllusts(): List<Post> =
-    optionalJsonArray("illusts").elementsOrEmpty().mapNotNull { element ->
-        element.takeIf { it.isJsonObject }?.asJsonObject?.let(::parsePixivIllust)
-    }
+    objects("illusts").mapNotNull(::parsePixivIllust)
 
 internal fun parsePixivTagSuggestion(tag: JsonObject, type: String): TagSuggestion? {
     val name = tag.stringValue("name")?.trim().orEmpty()
@@ -72,14 +69,8 @@ internal fun parsePixivIllust(raw: JsonObject): Post? {
 /** Total playback time of a `/v1/ugoira/metadata` response, or null when it lists no frames. */
 internal fun parsePixivUgoiraDurationMs(root: JsonObject): Long? {
     val metadata = root.optionalJsonObject("ugoira_metadata") ?: return null
-    val frames = metadata.optionalJsonArray("frames").elementsOrEmpty()
-    return frames.sumOf { frame ->
-        frame.takeIf { it.isJsonObject }
-            ?.asJsonObject
-            ?.get("delay")
-            .asLongOrNull()
-            ?.coerceAtLeast(16L)
-            ?: 0L
+    return metadata.objects("frames").sumOf { frame ->
+        frame.get("delay").asLongOrNull()?.coerceAtLeast(16L) ?: 0L
     }.takeIf { it > 0L }
 }
 
@@ -158,9 +149,8 @@ private fun parsePixivMedia(raw: JsonObject): ParsedPixivMedia {
 }
 
 private fun parsePixivPages(raw: JsonObject): List<ImageRef> {
-    return raw.optionalJsonArray("meta_pages").elementsOrEmpty().mapNotNull { page ->
-        val pageObject = page.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
-        val pageUrls = pageObject.optionalJsonObject("image_urls") ?: return@mapNotNull null
+    return raw.objects("meta_pages").mapNotNull { page ->
+        val pageUrls = page.optionalJsonObject("image_urls") ?: return@mapNotNull null
         val mediumUrl = normalizedUrl(pageUrls.stringValue("medium"))
         val largeUrl = normalizedUrl(pageUrls.stringValue("large"))
         val originalUrl = normalizedUrl(pageUrls.stringValue("original"))
@@ -181,8 +171,7 @@ private fun parsePixivPages(raw: JsonObject): List<ImageRef> {
 private fun parsePixivTags(raw: JsonObject): ParsedPixivTags {
     val translationsByNative = linkedMapOf<String, String?>()
     val canonicalTags = linkedSetOf<String>()
-    raw.optionalJsonArray("tags").elementsOrEmpty().forEach { tagElement ->
-        val tagObject = tagElement.takeIf { it.isJsonObject }?.asJsonObject ?: return@forEach
+    raw.objects("tags").forEach { tagObject ->
         val name = tagObject.stringValue("name")?.trim().orEmpty()
         val translatedName = tagObject.get("translated_name").asStringOrNull()
             ?.trim()

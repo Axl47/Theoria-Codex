@@ -1,8 +1,8 @@
 package com.theoriacodex.sources.hitomi
 
 import java.net.URI
-import java.net.URLEncoder
 import java.util.Locale
+import com.theoriacodex.sources.common.percentEncode
 
 /** Hitomi's file hosts and data host (`ltn.`) are all subdomains of this one domain. */
 internal const val HITOMI_CDN_DOMAIN = "gold-usergeneratedcontent.net"
@@ -104,6 +104,5 @@ internal fun isHitomiThumbnailUrl(url: String): Boolean = HITOMI_THUMBNAIL_URL.c
 
 /** The streaming URL of a gallery video file. */
 internal fun hitomiVideoUrl(filename: String): String {
-    val encoded = URLEncoder.encode(filename, Charsets.UTF_8.name()).replace("+", "%20")
-    return "https://streaming.$HITOMI_CDN_DOMAIN/videos/$encoded"
+    return "https://streaming.$HITOMI_CDN_DOMAIN/videos/${filename.percentEncode()}"
 }

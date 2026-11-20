@@ -2,7 +2,6 @@ package com.theoriacodex.sources.nhentai
 
 import com.google.gson.Gson
 import com.google.gson.JsonArray
-import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.theoriacodex.domain.adapter.CommentsSourceAdapter
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
@@ -36,7 +35,6 @@ import com.theoriacodex.sources.common.asIntOrNull
 import com.theoriacodex.sources.common.asStringOrNull
 import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.classifyHttpFailure
-import com.theoriacodex.sources.common.elementsOrEmpty
 import com.theoriacodex.sources.common.isSuccessful
 import com.theoriacodex.sources.common.matchesChallenge
 import com.theoriacodex.sources.common.optionalJsonArray
@@ -51,6 +49,7 @@ import com.theoriacodex.sources.http.THEORIA_SOURCE_USER_AGENT
 import java.io.IOException
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
+import com.theoriacodex.sources.common.objects
 
 class NhentaiSourceAdapter(
     private val httpClient: SourceHttpClient,
@@ -180,16 +179,9 @@ class NhentaiSourceAdapter(
             url = NHENTAI_GALLERIES_URL,
             query = mapOf("page" to "1"),
         )
-        val galleryIds = root.optionalJsonArray("result")
-            .elementsOrEmpty()
+        val galleryIds = root.objects("result")
             .asSequence()
-            .mapNotNull { element ->
-                element
-                    .takeIf(JsonElement::isJsonObject)
-                    ?.asJsonObject
-                    ?.get("id")
-                    .asIntOrNull()
-            }
+            .mapNotNull { gallery -> gallery.get("id").asIntOrNull() }
             .distinct()
             .take(NHENTAI_TRENDING_GALLERY_SAMPLE_SIZE)
             .toList()
@@ -372,11 +364,7 @@ class NhentaiSourceAdapter(
         return requestJsonArrayPost(
             url = NHENTAI_TAGS_SEARCH_URL,
             body = body,
-        ).mapNotNull { element ->
-            element.takeIf(JsonElement::isJsonObject)
-                ?.asJsonObject
-                ?.let(::parseTagInfo)
-        }.also { tags ->
+        ).objects().mapNotNull(::parseTagInfo).also { tags ->
             tags.forEach(::cacheTagInfo)
         }
     }
@@ -515,9 +503,7 @@ internal fun SourceHttpResponse.ensureNhentaiOk(label: String = "NHentai"): Sour
 }
 
 /** API gallery records in [this] array, skipping entries that are not galleries. */
-private fun JsonArray?.galleryPosts(): List<Post> = elementsOrEmpty().mapNotNull { element ->
-    element.takeIf(JsonElement::isJsonObject)?.asJsonObject?.let(::parseNhentaiGallery)
-}
+private fun JsonArray?.galleryPosts(): List<Post> = objects().mapNotNull(::parseNhentaiGallery)
 
 internal fun imageExtension(type: String?): String {
     return when (type?.trim()?.lowercase()) {
